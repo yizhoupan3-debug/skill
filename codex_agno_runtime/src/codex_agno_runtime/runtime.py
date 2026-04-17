@@ -107,6 +107,15 @@ class CodexAgnoRuntime:
 
         self._middleware_chain = self._build_middleware_chain()
 
+    def _apply_control_plane_descriptor(self, descriptor: dict[str, Any]) -> None:
+        """Propagate the active Rust control-plane descriptor across runtime seams."""
+
+        self.control_plane_descriptor = dict(descriptor)
+        self.state_service.refresh_control_plane(self.control_plane_descriptor)
+        self.trace_service.refresh_control_plane(self.control_plane_descriptor)
+        self.memory_service.refresh_control_plane(self.control_plane_descriptor)
+        self.execution_service.refresh_control_plane(self.control_plane_descriptor)
+
     def startup(self) -> None:
         """Start runtime service boundaries."""
 
@@ -138,8 +147,27 @@ class CodexAgnoRuntime:
     def health(self) -> dict[str, Any]:
         """Return health information for each runtime service seam."""
 
+        services = self.control_plane_descriptor.get("services")
+        rust_owned_services = (
+            len(
+                [
+                    name
+                    for name, descriptor in services.items()
+                    if isinstance(name, str)
+                    and isinstance(descriptor, dict)
+                    and descriptor.get("authority")
+                ]
+            )
+            if isinstance(services, dict)
+            else 0
+        )
         return {
             "control_plane": self.control_plane_descriptor,
+            "rustification": {
+                "python_host_role": self.control_plane_descriptor.get("python_host_role"),
+                "rustification_status": self.control_plane_descriptor.get("rustification_status"),
+                "rust_owned_service_count": rust_owned_services,
+            },
             "router": self.router_service.health(),
             "state": self.state_service.health(),
             "trace": self.trace_service.health(),
@@ -217,6 +245,7 @@ class CodexAgnoRuntime:
         """Reload skill metadata and rebuild router-facing compatibility handles."""
 
         self.router_service.reload()
+        self._apply_control_plane_descriptor(self.router_service.control_plane_descriptor)
         self.skills = self.router_service.skills
         self.router = self.router_service._python_router
 
@@ -1175,8 +1204,17 @@ class CodexAgnoRuntime:
             return TraceSupervisorProjection(
                 supervisor_state_path=str(supervisor_state_path.resolve())
             )
-        delegation = payload.get("delegation") or {}
-        verification = payload.get("verification") or {}
+        delegation = payload.get("delegation")
+        if not isinstance(delegation, dict):
+            delegation = {
+                "delegation_plan_created": payload.get("delegation_plan_created"),
+                "spawn_attempted": payload.get("spawn_attempted"),
+                "fallback_mode": payload.get("fallback_mode"),
+                "delegated_sidecars": payload.get("delegated_sidecars"),
+            }
+        verification = payload.get("verification")
+        if not isinstance(verification, dict):
+            verification = {"verification_status": payload.get("verification_status")}
         delegated_sidecars = delegation.get("delegated_sidecars")
         if not isinstance(delegated_sidecars, list):
             delegated_sidecars = []

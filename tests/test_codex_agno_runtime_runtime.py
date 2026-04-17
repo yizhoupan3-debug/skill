@@ -99,6 +99,10 @@ def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> 
             live_model_override=False,
         )
         runtime = CodexAgnoRuntime(settings)
+        health = runtime.health()
+        assert health["rustification"]["python_host_role"] == "thin-projection"
+        assert health["rustification"]["rustification_status"]["runtime_primary_owner"] == "rust-control-plane"
+        assert health["rustification"]["rust_owned_service_count"] >= 8
 
         async def _run() -> None:
             response = await runtime.run_task(

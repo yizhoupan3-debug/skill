@@ -99,6 +99,8 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert router_service.health()["python_router_required"] is False
     assert router_service.health()["default_route_mode"] == "rust"
     assert router_service.health()["control_plane_authority"] == "rust-route-core"
+    assert router_service.health()["python_runtime_role"] == "thin-projection"
+    assert router_service.health()["rustification_status"]["runtime_primary_owner"] == "rust-control-plane"
     assert router_service.health()["route_policy"]["policy_schema_version"] == "router-rs-route-policy-v1"
     assert router_service.health()["rust_adapter"]["route_authority"] == "rust-route-core"
     assert router_service.health()["rust_adapter"]["compile_authority"] == "rust-route-compiler"
@@ -130,6 +132,10 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert memory_service.health()["control_plane_role"] == "memory-lifecycle"
     assert execution_service.health()["background_job_timeout_seconds"] == 30.0
     assert execution_service.health()["execution_mode_default"] == "dry_run"
+    assert execution_service.health()["control_plane_authority"] == "rust-runtime-control-plane"
+    assert execution_service.health()["control_plane_role"] == "execution-kernel-control"
+    assert execution_service.health()["control_plane_projection"] == "python-thin-projection"
+    assert execution_service.health()["control_plane_delegate_kind"] == "rust-execution-kernel-slice"
     assert execution_service.health()["kernel_adapter_kind"] == "rust-execution-kernel-slice"
     assert execution_service.health()["kernel_authority"] == "rust-execution-kernel-authority"
     assert execution_service.health()["kernel_owner_family"] == "rust"
