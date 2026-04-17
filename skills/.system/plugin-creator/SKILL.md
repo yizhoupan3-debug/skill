@@ -1,6 +1,11 @@
 ---
 name: plugin-creator
-description: Create and scaffold plugin directories for Codex with a required `.codex-plugin/plugin.json`, optional plugin folders/files, and baseline placeholders you can edit before publishing or testing. Use when Codex needs to create a new local plugin, add optional plugin structure, or generate or update repo-root `.agents/plugins/marketplace.json` entries for plugin ordering and availability metadata.
+description: Create a local Codex plugin scaffold with `.codex-plugin/plugin.json` and optional marketplace or companion files.
+routing_layer: L1
+routing_owner: owner
+routing_gate: none
+session_start: n/a
+source: system
 ---
 
 # Plugin Creator

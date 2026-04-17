@@ -1,14 +1,14 @@
 {
   "ts": "2026-04-15T10:46:46.102903+00:00",
   "summary": {
-    "total_skills": 138,
+    "total_skills": 139,
     "critical_skills": 0,
-    "avg_health": 96.2
+    "avg_health": 96.3
   },
   "skills": {
-    "imagegen-built-in": {
-      "dynamic_score": 100.0,
-      "static_score": 100.0,
+    "imagegen": {
+      "dynamic_score": 98.7,
+      "static_score": 96.8,
       "usage_30d": 0,
       "reroutes_30d": 0,
       "health_status": "Healthy"
@@ -205,6 +205,20 @@
     "code-review": {
       "dynamic_score": 94.7,
       "static_score": 86.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "slides": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "spreadsheets": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
       "usage_30d": 0,
       "reroutes_30d": 0,
       "health_status": "Healthy"
@@ -422,13 +436,6 @@
     "idea-to-plan": {
       "dynamic_score": 100.0,
       "static_score": 100.0,
-      "usage_30d": 0,
-      "reroutes_30d": 0,
-      "health_status": "Healthy"
-    },
-    "imagegen": {
-      "dynamic_score": 98.7,
-      "static_score": 96.8,
       "usage_30d": 0,
       "reroutes_30d": 0,
       "health_status": "Healthy"

@@ -7,7 +7,30 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.check_skills import _read_skill_document, validate_skill_document
+from scripts.check_skills import (
+    _read_skill_document,
+    iter_skill_dirs,
+    load_validation_state,
+    validate_skill_document,
+)
+
+
+def _write_skill(skill_dir: Path, name: str) -> None:
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(
+        f"""---
+name: {name}
+description: Fast skill
+routing_layer: L1
+routing_owner: owner
+routing_gate: none
+session_start: n/a
+---
+## When to use
+- test
+""",
+        encoding="utf-8",
+    )
 
 
 def test_validate_skill_document_uses_precomputed_link_targets(tmp_path: Path) -> None:
@@ -46,3 +69,39 @@ See [ok](references/ok.md).
     report = validate_skill_document(document)
 
     assert report.errors == []
+
+
+def test_iter_skill_dirs_discovers_nested_bundles_and_skips_containers(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    _write_skill(skills_root / "top-skill", "top-skill")
+    _write_skill(
+        skills_root / "codex-primary-runtime" / "spreadsheets",
+        "spreadsheets",
+    )
+    _write_skill(skills_root / ".system" / "openai-docs", "openai-docs")
+
+    container = skills_root / "junk-container"
+    (container / "nested").mkdir(parents=True)
+    (container / "README.md").write_text("not a skill", encoding="utf-8")
+
+    discovered = iter_skill_dirs(skills_root, include_system=False)
+    discovered_paths = {path.relative_to(skills_root).as_posix() for _, path in discovered}
+
+    assert discovered_paths == {
+        "codex-primary-runtime/spreadsheets",
+        "top-skill",
+    }
+
+    documents, reports, _ = load_validation_state(skills_root, include_system=False)
+
+    assert sorted(report.slug for report in reports) == ["spreadsheets", "top-skill"]
+    assert "openai-docs" in {document.slug for document in documents}
+    assert all("missing SKILL.md" not in report.errors for report in reports)
+    assert all(report.path != skills_root / "codex-primary-runtime" for report in reports)
+    assert all(report.path != container for report in reports)
+
+    discovered_with_system = iter_skill_dirs(skills_root, include_system=True)
+    discovered_system_paths = {
+        path.relative_to(skills_root).as_posix() for _, path in discovered_with_system
+    }
+    assert ".system/openai-docs" in discovered_system_paths

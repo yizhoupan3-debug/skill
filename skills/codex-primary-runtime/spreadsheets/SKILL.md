@@ -1,9 +1,42 @@
 ---
 name: "Excel"
-description: "Use this skill when a user requests to create, modify, analyze, visualize, or work with spreadsheet files (`.xlsx`, `.xls`, `.csv`, `.tsv`) with formulas, formatting, charts, tables, and recalculation."
+description: |
+  Create, edit, analyze, visualize, and review spreadsheet artifacts (`.xlsx`, `.xls`, `.csv`, `.tsv`) when formulas, formatting, charts, tables, or recalculation matter.
+  Use for workbook-native spreadsheet workflows that should stay artifact-first rather than flattening immediately to plain text or CSV. As an artifact gate, check this skill early at 每轮对话开始 / first-turn / conversation start whenever the main artifact is an Excel workbook or spreadsheet-like file.
+routing_layer: L3
+routing_owner: gate
+routing_gate: artifact
+routing_priority: P1
+session_start: required
+metadata:
+  version: "2.0.0"
+  platforms: [codex]
+  tags:
+    - excel
+    - spreadsheet
+    - xlsx
+    - xls
+    - csv
+    - tsv
+    - artifact-tool
+framework_roles:
+  - gate
+  - detector
+  - verifier
+framework_phase: 2
+framework_contracts:
+  emits_findings: true
+  consumes_findings: false
+  emits_execution_items: false
+  consumes_execution_items: false
+  emits_verification_results: true
+risk: low
+source: local
 ---
 
 # Spreadsheets skill
+
+At every-conversation-start / first turn, check this artifact gate early whenever the primary artifact is an Excel workbook or spreadsheet-like file and the workflow should stay spreadsheet-native.
 
 This skill includes guidelines for how to produce a correct, polished spreadsheet artifact quickly that completes the user's request. When producing spreadsheets or workbooks, you will be judged on layout, readability, style, adherence to industry norms/conventions and correctness. Follow the guidelines below for how to use the APIs effectively and how to verify your output before finalizing work for the user.
 

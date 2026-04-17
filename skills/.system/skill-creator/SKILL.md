@@ -1,6 +1,11 @@
 ---
 name: skill-creator
-description: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Codex's capabilities with specialized knowledge, workflows, or tool integrations.
+description: Create or update a Codex skill package with clear routing metadata, scope, and supporting resources.
+routing_layer: L1
+routing_owner: owner
+routing_gate: none
+session_start: n/a
+source: system
 metadata:
   short-description: Create or update a skill
 ---

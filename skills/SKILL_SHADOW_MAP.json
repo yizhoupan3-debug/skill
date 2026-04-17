@@ -1,2236 +1,2266 @@
 {
+  "version": 1,
   "resolution": "later-source-wins",
-  "skills": {
-    "academic-search": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/academic-search",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "academic-search",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "accessibility-auditor": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/accessibility-auditor",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "accessibility-auditor",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "agent-memory": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/agent-memory",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "agent-memory",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "agent-swarm-orchestration": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/agent-swarm-orchestration",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "agent-swarm-orchestration",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "ai-research": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/ai-research",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "ai-research",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "algo-trading": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/algo-trading",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "algo-trading",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "anti-laziness": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/anti-laziness",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "overlay",
-        "session_start": "preferred",
-        "slug": "anti-laziness",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "api-design": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/api-design",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "api-design",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "api-integration-debugging": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/api-integration-debugging",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "api-integration-debugging",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "api-load-tester": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/api-load-tester",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "api-load-tester",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "architect-review": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/architect-review",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "architect-review",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "assignment-compliance": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/assignment-compliance",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "assignment-compliance",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "auth-implementation": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/auth-implementation",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "auth-implementation",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "autoresearch": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/autoresearch",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "preferred",
-        "slug": "autoresearch",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "backend-runtime-debugging": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/backend-runtime-debugging",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "backend-runtime-debugging",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "brainstorm-research": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/brainstorm-research",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "preferred",
-        "slug": "brainstorm-research",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "build-tooling": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/build-tooling",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "build-tooling",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "chatgpt-apps": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/chatgpt-apps",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "chatgpt-apps",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "checklist-fixer": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/checklist-fixer",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "checklist-fixer",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "chrome-extension-dev": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/chrome-extension-dev",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "chrome-extension-dev",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "citation-management": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/citation-management",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "preferred",
-        "slug": "citation-management",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "cloudflare-deploy": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/cloudflare-deploy",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "cloudflare-deploy",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "code-acceleration": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/code-acceleration",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "code-acceleration",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "code-review": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/code-review",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "overlay",
-        "session_start": "n/a",
-        "slug": "code-review",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "coding-standards": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/coding-standards",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "overlay",
-        "session_start": "n/a",
-        "slug": "coding-standards",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "copywriting": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/copywriting",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "copywriting",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "css-pro": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/css-pro",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "css-pro",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "data-wrangling": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/data-wrangling",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "data-wrangling",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "datastore-cache-queue": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/datastore-cache-queue",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "datastore-cache-queue",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "dependency-migration": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/dependency-migration",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "dependency-migration",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "doc": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/doc",
-        "routing_gate": "artifact",
-        "routing_layer": "L3",
-        "routing_owner": "gate",
-        "session_start": "required",
-        "slug": "doc",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "docker": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/docker",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "docker",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "documentation-engineering": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/documentation-engineering",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "documentation-engineering",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "email-template": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/email-template",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "email-template",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "env-config-management": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/env-config-management",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "env-config-management",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "error-handling-patterns": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/error-handling-patterns",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "overlay",
-        "session_start": "n/a",
-        "slug": "error-handling-patterns",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "execution-audit-codex": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/execution-audit-codex",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "overlay",
-        "session_start": "n/a",
-        "slug": "execution-audit-codex",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "execution-controller-app": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/execution-controller-app",
-        "routing_gate": "APP一键优化, 全栈重构, 跨栈协同, 前后端联调优化, 自动化测试闭环, 性能全链路调优, 全栈安全审计, APP深度体检, 深度核查前端/后端/测试, 系统级 APP 优化",
-        "routing_layer": "L0",
-        "routing_owner": "@app-controller",
-        "session_start": "required",
-        "slug": "execution-controller-app",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "execution-controller-coding": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/execution-controller-coding",
-        "routing_gate": "高负载, 跨文件, 长运行周期, 系统指挥中心, SCR架构, 协同式确定性治理, 内核级控制器, 状态持久化, 纳米级心跳",
-        "routing_layer": "L0",
-        "routing_owner": "@kernel-controller",
-        "session_start": "required",
-        "slug": "execution-controller-coding",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "experiment-reproducibility": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/experiment-reproducibility",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "experiment-reproducibility",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "financial-data-fetching": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/financial-data-fetching",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "financial-data-fetching",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "frontend-code-quality": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/frontend-code-quality",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "overlay",
-        "session_start": "n/a",
-        "slug": "frontend-code-quality",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "frontend-debugging": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/frontend-debugging",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "frontend-debugging",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "frontend-design": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/frontend-design",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "frontend-design",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "gh-address-comments": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/gh-address-comments",
-        "routing_gate": "source",
-        "routing_layer": "L0",
-        "routing_owner": "gate",
-        "session_start": "required",
-        "slug": "gh-address-comments",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "gh-fix-ci": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/gh-fix-ci",
-        "routing_gate": "source",
-        "routing_layer": "L0",
-        "routing_owner": "gate",
-        "session_start": "required",
-        "slug": "gh-fix-ci",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "gh-pr-triage": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/gh-pr-triage",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "gh-pr-triage",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "git-workflow": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/git-workflow",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "git-workflow",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "github-actions-authoring": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/github-actions-authoring",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "github-actions-authoring",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "github-investigator": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/github-investigator",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "github-investigator",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "go-pro": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/go-pro",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "go-pro",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "graphviz-expert": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/graphviz-expert",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "graphviz-expert",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "humanizer": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/humanizer",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "humanizer",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "i18n-l10n": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/i18n-l10n",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "overlay",
-        "session_start": "n/a",
-        "slug": "i18n-l10n",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "idea-to-plan": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/idea-to-plan",
-        "routing_gate": "idea-to-plan, 战略编排, 意图到计划, 科研自动化, 试点验证, Pilot, Duo-Doc, outline.md, code_list.md, 蓝图设计",
-        "routing_layer": "L-1",
-        "routing_owner": "@strategic-orchestrator",
-        "session_start": "required",
-        "slug": "idea-to-plan",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "imagegen": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/imagegen",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "imagegen",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "imagegen-built-in": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/.system/imagegen-built-in",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "imagegen-built-in",
-        "source": "system",
-        "source_position": 0,
-        "source_priority": 100
-      }
-    },
-    "infographic": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/infographic",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "infographic",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "information-retrieval": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/information-retrieval",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "information-retrieval",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "iterative-optimizer": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/iterative-optimizer",
-        "routing_gate": "none",
-        "routing_layer": "L0",
-        "routing_owner": "overlay",
-        "session_start": "n/a",
-        "slug": "iterative-optimizer",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "javascript-pro": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/javascript-pro",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "javascript-pro",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "jupyter-notebook": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/jupyter-notebook",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "jupyter-notebook",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "latex-compile-acceleration": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/latex-compile-acceleration",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "preferred",
-        "slug": "latex-compile-acceleration",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "linux-server-ops": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/linux-server-ops",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "linux-server-ops",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "literature-synthesis": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/literature-synthesis",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "literature-synthesis",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "mac-memory-management": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/mac-memory-management",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "mac-memory-management",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "math-derivation": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/math-derivation",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "math-derivation",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "mcp-builder": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/mcp-builder",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "mcp-builder",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "mermaid-expert": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/mermaid-expert",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "mermaid-expert",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "monorepo-tooling": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/monorepo-tooling",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "monorepo-tooling",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "motion-design": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/motion-design",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "motion-design",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "native-app-debugging": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/native-app-debugging",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "native-app-debugging",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "nextjs": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/nextjs",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "nextjs",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "node-backend": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/node-backend",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "node-backend",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "npm-package-authoring": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/npm-package-authoring",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "npm-package-authoring",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "observability": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/observability",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "observability",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "openai-docs": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/.system/openai-docs",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "openai-docs",
-        "source": "system",
-        "source_position": 0,
-        "source_priority": 100
-      }
-    },
-    "paper-length-tuner": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/paper-length-tuner",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "paper-length-tuner",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "paper-logic": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/paper-logic",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "paper-logic",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "paper-notation-audit": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/paper-notation-audit",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "paper-notation-audit",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "paper-reviewer": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/paper-reviewer",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "paper-reviewer",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "paper-reviser": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/paper-reviser",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "paper-reviser",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "paper-visuals": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/paper-visuals",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "paper-visuals",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "paper-writing": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/paper-writing",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "paper-writing",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "pdf": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/pdf",
-        "routing_gate": "artifact",
-        "routing_layer": "L3",
-        "routing_owner": "gate",
-        "session_start": "required",
-        "slug": "pdf",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "performance-expert": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/performance-expert",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "performance-expert",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "plan-to-code": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/plan-to-code",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "preferred",
-        "slug": "plan-to-code",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "plan-writing": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/plan-writing",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "plan-writing",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "playwright": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/playwright",
-        "routing_gate": "evidence",
-        "routing_layer": "L3",
-        "routing_owner": "gate",
-        "session_start": "required",
-        "slug": "playwright",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "plugin-creator": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/.system/plugin-creator",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "plugin-creator",
-        "source": "system",
-        "source_position": 0,
-        "source_priority": 100
-      }
-    },
-    "ppt-beamer": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/ppt-beamer",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "ppt-beamer",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "ppt-html-export": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/ppt-html-export",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "ppt-html-export",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "ppt-markdown": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/ppt-markdown",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "ppt-markdown",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "ppt-pptx": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/ppt-pptx",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "ppt-pptx",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "prompt-engineer": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/prompt-engineer",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "prompt-engineer",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "python-pro": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/python-pro",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "python-pro",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "react": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/react",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "react",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "refactoring": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/refactoring",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "refactoring",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "release-engineering": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/release-engineering",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "release-engineering",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "research-engineer": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/research-engineer",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "research-engineer",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "rust-pro": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/rust-pro",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "rust-pro",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "scientific-figure-plotting": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/scientific-figure-plotting",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "scientific-figure-plotting",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "screenshot": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/screenshot",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "screenshot",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "security-audit": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/security-audit",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "overlay",
-        "session_start": "n/a",
-        "slug": "security-audit",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "security-threat-model": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/security-threat-model",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "security-threat-model",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "sentry": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/sentry",
-        "routing_gate": "source",
-        "routing_layer": "L0",
-        "routing_owner": "gate",
-        "session_start": "required",
-        "slug": "sentry",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "seo-web": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/seo-web",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "seo-web",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "shell-cli": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/shell-cli",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "shell-cli",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "skill-creator": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/.system/skill-creator",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "skill-creator",
-        "source": "system",
-        "source_position": 0,
-        "source_priority": 100
-      }
-    },
-    "skill-developer": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/skill-developer",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "skill-developer",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "skill-developer-codex": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/skill-developer-codex",
-        "routing_gate": "none",
-        "routing_layer": "L0",
-        "routing_owner": "owner",
-        "session_start": "preferred",
-        "slug": "skill-developer-codex",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "skill-installer": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/.system/skill-installer",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "skill-installer",
-        "source": "system",
-        "source_position": 0,
-        "source_priority": 100
-      }
-    },
-    "skill-installer-antigravity": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/skill-installer-antigravity",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "skill-installer-antigravity",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "skill-maintenance-codex": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/skill-maintenance-codex",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "overlay",
-        "session_start": "n/a",
-        "slug": "skill-maintenance-codex",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "skill-routing-repair-codex": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/skill-routing-repair-codex",
-        "routing_gate": "none",
-        "routing_layer": "L0",
-        "routing_owner": "overlay",
-        "session_start": "n/a",
-        "slug": "skill-routing-repair-codex",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "skill-scout": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/skill-scout",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "skill-scout",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "skill-writer": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/skill-writer",
-        "routing_gate": "none",
-        "routing_layer": "L0",
-        "routing_owner": "owner",
-        "session_start": "preferred",
-        "slug": "skill-writer",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "slides-source-first": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/slides-source-first",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "slides-source-first",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "sql-pro": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/sql-pro",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "sql-pro",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "statistical-analysis": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/statistical-analysis",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "statistical-analysis",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "subagent-delegation": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/subagent-delegation",
-        "routing_gate": "delegation",
-        "routing_layer": "L0",
-        "routing_owner": "gate",
-        "session_start": "required",
-        "slug": "subagent-delegation",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "sustech-mailer": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/sustech-mailer",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "sustech-mailer",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "svelte": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/svelte",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "svelte",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "systematic-debugging": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/systematic-debugging",
-        "routing_gate": "evidence",
-        "routing_layer": "L0",
-        "routing_owner": "gate",
-        "session_start": "required",
-        "slug": "systematic-debugging",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "tailwind-pro": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/tailwind-pro",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "tailwind-pro",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "tao-ci": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/tao-ci",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "tao-ci",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "tdd-workflow": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/tdd-workflow",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "overlay",
-        "session_start": "n/a",
-        "slug": "tdd-workflow",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "test-engineering": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/test-engineering",
-        "routing_gate": "none",
-        "routing_layer": "L1",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "test-engineering",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "typescript-pro": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/typescript-pro",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "typescript-pro",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "vercel-react-best-practices": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/vercel-react-best-practices",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "overlay",
-        "session_start": "n/a",
-        "slug": "vercel-react-best-practices",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "visual-review": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/visual-review",
-        "routing_gate": "evidence",
-        "routing_layer": "L3",
-        "routing_owner": "gate",
-        "session_start": "required",
-        "slug": "visual-review",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "vue": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/vue",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "vue",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "web-platform-basics": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/web-platform-basics",
-        "routing_gate": "none",
-        "routing_layer": "L2",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "web-platform-basics",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "web-scraping": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/web-scraping",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "web-scraping",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "webhook-security": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/webhook-security",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "webhook-security",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "writing-skills": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/writing-skills",
-        "routing_gate": "none",
-        "routing_layer": "L0",
-        "routing_owner": "overlay",
-        "session_start": "n/a",
-        "slug": "writing-skills",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "xlsx": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/xlsx",
-        "routing_gate": "artifact",
-        "routing_layer": "L3",
-        "routing_owner": "gate",
-        "session_start": "required",
-        "slug": "xlsx",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    },
-    "youtube-summarizer": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/youtube-summarizer",
-        "routing_gate": "none",
-        "routing_layer": "L4",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "youtube-summarizer",
-        "source": "project",
-        "source_position": 3,
-        "source_priority": 40
-      }
-    }
-  },
   "sources": [
     {
       "name": "system",
-      "position": 0,
-      "priority": 100
+      "priority": 100,
+      "position": 0
     },
     {
       "name": "vendor",
-      "position": 1,
-      "priority": 80
+      "priority": 80,
+      "position": 1
     },
     {
       "name": "user",
-      "position": 2,
-      "priority": 60
+      "priority": 60,
+      "position": 2
     },
     {
       "name": "project",
-      "position": 3,
-      "priority": 40
+      "priority": 40,
+      "position": 3
     }
   ],
-  "version": 1
+  "skills": {
+    "academic-search": {
+      "winner": {
+        "slug": "academic-search",
+        "path": "skills/academic-search",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "accessibility-auditor": {
+      "winner": {
+        "slug": "accessibility-auditor",
+        "path": "skills/accessibility-auditor",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "agent-memory": {
+      "winner": {
+        "slug": "agent-memory",
+        "path": "skills/agent-memory",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "agent-swarm-orchestration": {
+      "winner": {
+        "slug": "agent-swarm-orchestration",
+        "path": "skills/agent-swarm-orchestration",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "ai-research": {
+      "winner": {
+        "slug": "ai-research",
+        "path": "skills/ai-research",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "algo-trading": {
+      "winner": {
+        "slug": "algo-trading",
+        "path": "skills/algo-trading",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "anti-laziness": {
+      "winner": {
+        "slug": "anti-laziness",
+        "path": "skills/anti-laziness",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "preferred"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "api-design": {
+      "winner": {
+        "slug": "api-design",
+        "path": "skills/api-design",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "api-integration-debugging": {
+      "winner": {
+        "slug": "api-integration-debugging",
+        "path": "skills/api-integration-debugging",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "api-load-tester": {
+      "winner": {
+        "slug": "api-load-tester",
+        "path": "skills/api-load-tester",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "architect-review": {
+      "winner": {
+        "slug": "architect-review",
+        "path": "skills/architect-review",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "assignment-compliance": {
+      "winner": {
+        "slug": "assignment-compliance",
+        "path": "skills/assignment-compliance",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "auth-implementation": {
+      "winner": {
+        "slug": "auth-implementation",
+        "path": "skills/auth-implementation",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "autoresearch": {
+      "winner": {
+        "slug": "autoresearch",
+        "path": "skills/autoresearch",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "preferred"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "backend-runtime-debugging": {
+      "winner": {
+        "slug": "backend-runtime-debugging",
+        "path": "skills/backend-runtime-debugging",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "brainstorm-research": {
+      "winner": {
+        "slug": "brainstorm-research",
+        "path": "skills/brainstorm-research",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "preferred"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "build-tooling": {
+      "winner": {
+        "slug": "build-tooling",
+        "path": "skills/build-tooling",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "chatgpt-apps": {
+      "winner": {
+        "slug": "chatgpt-apps",
+        "path": "skills/chatgpt-apps",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "checklist-fixer": {
+      "winner": {
+        "slug": "checklist-fixer",
+        "path": "skills/checklist-fixer",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "chrome-extension-dev": {
+      "winner": {
+        "slug": "chrome-extension-dev",
+        "path": "skills/chrome-extension-dev",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "citation-management": {
+      "winner": {
+        "slug": "citation-management",
+        "path": "skills/citation-management",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "preferred"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "cloudflare-deploy": {
+      "winner": {
+        "slug": "cloudflare-deploy",
+        "path": "skills/cloudflare-deploy",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "code-acceleration": {
+      "winner": {
+        "slug": "code-acceleration",
+        "path": "skills/code-acceleration",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "code-review": {
+      "winner": {
+        "slug": "code-review",
+        "path": "skills/code-review",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "coding-standards": {
+      "winner": {
+        "slug": "coding-standards",
+        "path": "skills/coding-standards",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "copywriting": {
+      "winner": {
+        "slug": "copywriting",
+        "path": "skills/copywriting",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "css-pro": {
+      "winner": {
+        "slug": "css-pro",
+        "path": "skills/css-pro",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "data-wrangling": {
+      "winner": {
+        "slug": "data-wrangling",
+        "path": "skills/data-wrangling",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "datastore-cache-queue": {
+      "winner": {
+        "slug": "datastore-cache-queue",
+        "path": "skills/datastore-cache-queue",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "dependency-migration": {
+      "winner": {
+        "slug": "dependency-migration",
+        "path": "skills/dependency-migration",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "doc": {
+      "winner": {
+        "slug": "doc",
+        "path": "skills/doc",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "gate",
+        "routing_gate": "artifact",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "docker": {
+      "winner": {
+        "slug": "docker",
+        "path": "skills/docker",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "documentation-engineering": {
+      "winner": {
+        "slug": "documentation-engineering",
+        "path": "skills/documentation-engineering",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "email-template": {
+      "winner": {
+        "slug": "email-template",
+        "path": "skills/email-template",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "env-config-management": {
+      "winner": {
+        "slug": "env-config-management",
+        "path": "skills/env-config-management",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "error-handling-patterns": {
+      "winner": {
+        "slug": "error-handling-patterns",
+        "path": "skills/error-handling-patterns",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "execution-audit-codex": {
+      "winner": {
+        "slug": "execution-audit-codex",
+        "path": "skills/execution-audit-codex",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "execution-controller-app": {
+      "winner": {
+        "slug": "execution-controller-app",
+        "path": "skills/execution-controller-app",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L0",
+        "routing_owner": "@app-controller",
+        "routing_gate": "APP一键优化, 全栈重构, 跨栈协同, 前后端联调优化, 自动化测试闭环, 性能全链路调优, 全栈安全审计, APP深度体检, 深度核查前端/后端/测试, 系统级 APP 优化",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "execution-controller-coding": {
+      "winner": {
+        "slug": "execution-controller-coding",
+        "path": "skills/execution-controller-coding",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L0",
+        "routing_owner": "@kernel-controller",
+        "routing_gate": "高负载, 跨文件, 长运行周期, 系统指挥中心, SCR架构, 协同式确定性治理, 内核级控制器, 状态持久化, 纳米级心跳",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "experiment-reproducibility": {
+      "winner": {
+        "slug": "experiment-reproducibility",
+        "path": "skills/experiment-reproducibility",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "financial-data-fetching": {
+      "winner": {
+        "slug": "financial-data-fetching",
+        "path": "skills/financial-data-fetching",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "frontend-code-quality": {
+      "winner": {
+        "slug": "frontend-code-quality",
+        "path": "skills/frontend-code-quality",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "frontend-debugging": {
+      "winner": {
+        "slug": "frontend-debugging",
+        "path": "skills/frontend-debugging",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "frontend-design": {
+      "winner": {
+        "slug": "frontend-design",
+        "path": "skills/frontend-design",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "gh-address-comments": {
+      "winner": {
+        "slug": "gh-address-comments",
+        "path": "skills/gh-address-comments",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L0",
+        "routing_owner": "gate",
+        "routing_gate": "source",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "gh-fix-ci": {
+      "winner": {
+        "slug": "gh-fix-ci",
+        "path": "skills/gh-fix-ci",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L0",
+        "routing_owner": "gate",
+        "routing_gate": "source",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "gh-pr-triage": {
+      "winner": {
+        "slug": "gh-pr-triage",
+        "path": "skills/gh-pr-triage",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "git-workflow": {
+      "winner": {
+        "slug": "git-workflow",
+        "path": "skills/git-workflow",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "github-actions-authoring": {
+      "winner": {
+        "slug": "github-actions-authoring",
+        "path": "skills/github-actions-authoring",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "github-investigator": {
+      "winner": {
+        "slug": "github-investigator",
+        "path": "skills/github-investigator",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "go-pro": {
+      "winner": {
+        "slug": "go-pro",
+        "path": "skills/go-pro",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "graphviz-expert": {
+      "winner": {
+        "slug": "graphviz-expert",
+        "path": "skills/graphviz-expert",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "humanizer": {
+      "winner": {
+        "slug": "humanizer",
+        "path": "skills/humanizer",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "i18n-l10n": {
+      "winner": {
+        "slug": "i18n-l10n",
+        "path": "skills/i18n-l10n",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "idea-to-plan": {
+      "winner": {
+        "slug": "idea-to-plan",
+        "path": "skills/idea-to-plan",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L-1",
+        "routing_owner": "@strategic-orchestrator",
+        "routing_gate": "idea-to-plan, 战略编排, 意图到计划, 科研自动化, 试点验证, Pilot, Duo-Doc, outline.md, code_list.md, 蓝图设计",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "imagegen": {
+      "winner": {
+        "slug": "imagegen",
+        "path": "skills/imagegen",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [
+        {
+          "slug": "imagegen",
+          "path": "skills/.system/imagegen",
+          "source": "system",
+          "source_priority": 100,
+          "source_position": 0,
+          "routing_layer": "L1",
+          "routing_owner": "owner",
+          "routing_gate": "none",
+          "session_start": "n/a"
+        }
+      ],
+      "shadowed_by": [
+        "skills/imagegen"
+      ],
+      "has_shadow": true
+    },
+    "infographic": {
+      "winner": {
+        "slug": "infographic",
+        "path": "skills/infographic",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "information-retrieval": {
+      "winner": {
+        "slug": "information-retrieval",
+        "path": "skills/information-retrieval",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "iterative-optimizer": {
+      "winner": {
+        "slug": "iterative-optimizer",
+        "path": "skills/iterative-optimizer",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L0",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "javascript-pro": {
+      "winner": {
+        "slug": "javascript-pro",
+        "path": "skills/javascript-pro",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "jupyter-notebook": {
+      "winner": {
+        "slug": "jupyter-notebook",
+        "path": "skills/jupyter-notebook",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "latex-compile-acceleration": {
+      "winner": {
+        "slug": "latex-compile-acceleration",
+        "path": "skills/latex-compile-acceleration",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "preferred"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "linux-server-ops": {
+      "winner": {
+        "slug": "linux-server-ops",
+        "path": "skills/linux-server-ops",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "literature-synthesis": {
+      "winner": {
+        "slug": "literature-synthesis",
+        "path": "skills/literature-synthesis",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "mac-memory-management": {
+      "winner": {
+        "slug": "mac-memory-management",
+        "path": "skills/mac-memory-management",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "math-derivation": {
+      "winner": {
+        "slug": "math-derivation",
+        "path": "skills/math-derivation",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "mcp-builder": {
+      "winner": {
+        "slug": "mcp-builder",
+        "path": "skills/mcp-builder",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "mermaid-expert": {
+      "winner": {
+        "slug": "mermaid-expert",
+        "path": "skills/mermaid-expert",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "monorepo-tooling": {
+      "winner": {
+        "slug": "monorepo-tooling",
+        "path": "skills/monorepo-tooling",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "motion-design": {
+      "winner": {
+        "slug": "motion-design",
+        "path": "skills/motion-design",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "native-app-debugging": {
+      "winner": {
+        "slug": "native-app-debugging",
+        "path": "skills/native-app-debugging",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "nextjs": {
+      "winner": {
+        "slug": "nextjs",
+        "path": "skills/nextjs",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "node-backend": {
+      "winner": {
+        "slug": "node-backend",
+        "path": "skills/node-backend",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "npm-package-authoring": {
+      "winner": {
+        "slug": "npm-package-authoring",
+        "path": "skills/npm-package-authoring",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "observability": {
+      "winner": {
+        "slug": "observability",
+        "path": "skills/observability",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "openai-docs": {
+      "winner": {
+        "slug": "openai-docs",
+        "path": "skills/.system/openai-docs",
+        "source": "system",
+        "source_priority": 100,
+        "source_position": 0,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "paper-length-tuner": {
+      "winner": {
+        "slug": "paper-length-tuner",
+        "path": "skills/paper-length-tuner",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "paper-logic": {
+      "winner": {
+        "slug": "paper-logic",
+        "path": "skills/paper-logic",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "paper-notation-audit": {
+      "winner": {
+        "slug": "paper-notation-audit",
+        "path": "skills/paper-notation-audit",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "paper-reviewer": {
+      "winner": {
+        "slug": "paper-reviewer",
+        "path": "skills/paper-reviewer",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "paper-reviser": {
+      "winner": {
+        "slug": "paper-reviser",
+        "path": "skills/paper-reviser",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "paper-visuals": {
+      "winner": {
+        "slug": "paper-visuals",
+        "path": "skills/paper-visuals",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "paper-writing": {
+      "winner": {
+        "slug": "paper-writing",
+        "path": "skills/paper-writing",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "pdf": {
+      "winner": {
+        "slug": "pdf",
+        "path": "skills/pdf",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "gate",
+        "routing_gate": "artifact",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "performance-expert": {
+      "winner": {
+        "slug": "performance-expert",
+        "path": "skills/performance-expert",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "plan-to-code": {
+      "winner": {
+        "slug": "plan-to-code",
+        "path": "skills/plan-to-code",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "preferred"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "plan-writing": {
+      "winner": {
+        "slug": "plan-writing",
+        "path": "skills/plan-writing",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "playwright": {
+      "winner": {
+        "slug": "playwright",
+        "path": "skills/playwright",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "gate",
+        "routing_gate": "evidence",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "plugin-creator": {
+      "winner": {
+        "slug": "plugin-creator",
+        "path": "skills/.system/plugin-creator",
+        "source": "system",
+        "source_priority": 100,
+        "source_position": 0,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "ppt-beamer": {
+      "winner": {
+        "slug": "ppt-beamer",
+        "path": "skills/ppt-beamer",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "ppt-html-export": {
+      "winner": {
+        "slug": "ppt-html-export",
+        "path": "skills/ppt-html-export",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "ppt-markdown": {
+      "winner": {
+        "slug": "ppt-markdown",
+        "path": "skills/ppt-markdown",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "ppt-pptx": {
+      "winner": {
+        "slug": "ppt-pptx",
+        "path": "skills/ppt-pptx",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "prompt-engineer": {
+      "winner": {
+        "slug": "prompt-engineer",
+        "path": "skills/prompt-engineer",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "python-pro": {
+      "winner": {
+        "slug": "python-pro",
+        "path": "skills/python-pro",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "react": {
+      "winner": {
+        "slug": "react",
+        "path": "skills/react",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "refactoring": {
+      "winner": {
+        "slug": "refactoring",
+        "path": "skills/refactoring",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "release-engineering": {
+      "winner": {
+        "slug": "release-engineering",
+        "path": "skills/release-engineering",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "research-engineer": {
+      "winner": {
+        "slug": "research-engineer",
+        "path": "skills/research-engineer",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "rust-pro": {
+      "winner": {
+        "slug": "rust-pro",
+        "path": "skills/rust-pro",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "scientific-figure-plotting": {
+      "winner": {
+        "slug": "scientific-figure-plotting",
+        "path": "skills/scientific-figure-plotting",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "screenshot": {
+      "winner": {
+        "slug": "screenshot",
+        "path": "skills/screenshot",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "security-audit": {
+      "winner": {
+        "slug": "security-audit",
+        "path": "skills/security-audit",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "security-threat-model": {
+      "winner": {
+        "slug": "security-threat-model",
+        "path": "skills/security-threat-model",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "sentry": {
+      "winner": {
+        "slug": "sentry",
+        "path": "skills/sentry",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L0",
+        "routing_owner": "gate",
+        "routing_gate": "source",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "seo-web": {
+      "winner": {
+        "slug": "seo-web",
+        "path": "skills/seo-web",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "shell-cli": {
+      "winner": {
+        "slug": "shell-cli",
+        "path": "skills/shell-cli",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "skill-creator": {
+      "winner": {
+        "slug": "skill-creator",
+        "path": "skills/.system/skill-creator",
+        "source": "system",
+        "source_priority": 100,
+        "source_position": 0,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "skill-developer": {
+      "winner": {
+        "slug": "skill-developer",
+        "path": "skills/skill-developer",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "skill-developer-codex": {
+      "winner": {
+        "slug": "skill-developer-codex",
+        "path": "skills/skill-developer-codex",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L0",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "preferred"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "skill-installer": {
+      "winner": {
+        "slug": "skill-installer",
+        "path": "skills/.system/skill-installer",
+        "source": "system",
+        "source_priority": 100,
+        "source_position": 0,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "skill-installer-antigravity": {
+      "winner": {
+        "slug": "skill-installer-antigravity",
+        "path": "skills/skill-installer-antigravity",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "skill-maintenance-codex": {
+      "winner": {
+        "slug": "skill-maintenance-codex",
+        "path": "skills/skill-maintenance-codex",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "skill-routing-repair-codex": {
+      "winner": {
+        "slug": "skill-routing-repair-codex",
+        "path": "skills/skill-routing-repair-codex",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L0",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "skill-scout": {
+      "winner": {
+        "slug": "skill-scout",
+        "path": "skills/skill-scout",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "skill-writer": {
+      "winner": {
+        "slug": "skill-writer",
+        "path": "skills/skill-writer",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L0",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "preferred"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "slides": {
+      "winner": {
+        "slug": "slides",
+        "path": "skills/codex-primary-runtime/slides",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "gate",
+        "routing_gate": "artifact",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "slides-source-first": {
+      "winner": {
+        "slug": "slides-source-first",
+        "path": "skills/slides-source-first",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "spreadsheets": {
+      "winner": {
+        "slug": "spreadsheets",
+        "path": "skills/codex-primary-runtime/spreadsheets",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "gate",
+        "routing_gate": "artifact",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "sql-pro": {
+      "winner": {
+        "slug": "sql-pro",
+        "path": "skills/sql-pro",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "statistical-analysis": {
+      "winner": {
+        "slug": "statistical-analysis",
+        "path": "skills/statistical-analysis",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "subagent-delegation": {
+      "winner": {
+        "slug": "subagent-delegation",
+        "path": "skills/subagent-delegation",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L0",
+        "routing_owner": "gate",
+        "routing_gate": "delegation",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "sustech-mailer": {
+      "winner": {
+        "slug": "sustech-mailer",
+        "path": "skills/sustech-mailer",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "svelte": {
+      "winner": {
+        "slug": "svelte",
+        "path": "skills/svelte",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "systematic-debugging": {
+      "winner": {
+        "slug": "systematic-debugging",
+        "path": "skills/systematic-debugging",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L0",
+        "routing_owner": "gate",
+        "routing_gate": "evidence",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "tailwind-pro": {
+      "winner": {
+        "slug": "tailwind-pro",
+        "path": "skills/tailwind-pro",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "tao-ci": {
+      "winner": {
+        "slug": "tao-ci",
+        "path": "skills/tao-ci",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "tdd-workflow": {
+      "winner": {
+        "slug": "tdd-workflow",
+        "path": "skills/tdd-workflow",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "test-engineering": {
+      "winner": {
+        "slug": "test-engineering",
+        "path": "skills/test-engineering",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "typescript-pro": {
+      "winner": {
+        "slug": "typescript-pro",
+        "path": "skills/typescript-pro",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "vercel-react-best-practices": {
+      "winner": {
+        "slug": "vercel-react-best-practices",
+        "path": "skills/vercel-react-best-practices",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "visual-review": {
+      "winner": {
+        "slug": "visual-review",
+        "path": "skills/visual-review",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "gate",
+        "routing_gate": "evidence",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "vue": {
+      "winner": {
+        "slug": "vue",
+        "path": "skills/vue",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "web-platform-basics": {
+      "winner": {
+        "slug": "web-platform-basics",
+        "path": "skills/web-platform-basics",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "web-scraping": {
+      "winner": {
+        "slug": "web-scraping",
+        "path": "skills/web-scraping",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "webhook-security": {
+      "winner": {
+        "slug": "webhook-security",
+        "path": "skills/webhook-security",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "writing-skills": {
+      "winner": {
+        "slug": "writing-skills",
+        "path": "skills/writing-skills",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L0",
+        "routing_owner": "overlay",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "xlsx": {
+      "winner": {
+        "slug": "xlsx",
+        "path": "skills/xlsx",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L3",
+        "routing_owner": "gate",
+        "routing_gate": "artifact",
+        "session_start": "required"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
+    "youtube-summarizer": {
+      "winner": {
+        "slug": "youtube-summarizer",
+        "path": "skills/youtube-summarizer",
+        "source": "project",
+        "source_priority": 40,
+        "source_position": 3,
+        "routing_layer": "L4",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    }
+  }
 }

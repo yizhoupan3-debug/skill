@@ -27,6 +27,8 @@
 | `doc` | L3 | gate | artifact | Read, create, edit, repair, and review `.docx` Word documents when layout and Wo |
 | `pdf` | L3 | gate | artifact | Read, create, edit, repair, and review PDFs when rendering and page layout matte |
 | `playwright` | L3 | gate | evidence | Use a real browser when live evidence or page interaction is required |
+| `slides` | L3 | gate | artifact | Create, edit, render, verify, and export PowerPoint slide decks when the main ar |
+| `spreadsheets` | L3 | gate | artifact | Create, edit, analyze, visualize, and review spreadsheet artifacts (`.xlsx`, `.x |
 | `visual-review` | L3 | gate | evidence | Review screenshots, rendered pages, charts, and UI artifacts with image-grounded |
 | `xlsx` | L3 | gate | artifact | Read, create, edit, repair, and review Excel `.xlsx` workbooks when spreadsheet- |
 | `idea-to-plan` | L-1 | @strategic-orchestrator | idea-to-plan, 战略编排, 意图到计划, 科研自动化, 试点验证, Pilot, Duo-Doc, outline.md, code_list.md, 蓝图设计 | Turn ambiguous ideas into evidence-backed plans with branch routing and compress |
@@ -48,11 +50,11 @@
 | `error-handling-patterns` | L1 | overlay | none | Design cross-language error-handling architectures such as custom errors, retry/ |
 | `execution-audit-codex` | L1 | overlay | none | Audit execution quality with evidence, sidecar-first collection, and compressed  |
 | `frontend-debugging` | L1 | owner | none | Diagnose frontend runtime bugs with a five-layer model (component → state → rend |
-| `imagegen-built-in` | L1 | owner | none | Use the built-in image tool for raster image generation or edits instead of the  |
+| `imagegen` | L1 | owner | none | Use the built-in image tool for raster image generation or edits. Use the CLI on |
 | `information-retrieval` | L1 | owner | none | Run multi-round research before acting or recommending |
 | `openai-docs` | L1 | owner | none | Use OpenAI docs MCP tools for current OpenAI API, model, Apps SDK, Codex, and do |
 | `plan-writing` | L1 | owner | none | Write an execution-ready plan before implementation |
-| `plugin-creator` | L1 | owner | none | Create a local Codex plugin scaffold, including plugin.json and optional marketp |
+| `plugin-creator` | L1 | owner | none | Create a local Codex plugin scaffold with `.codex-plugin/plugin.json` and option |
 | `prompt-engineer` | L1 | owner | none | Transform vague instructions into structured prompts with explicit role, constra |
 | `refactoring` | L1 | owner | none | Plan and execute systematic code refactoring without changing behavior. Use when |
 | `skill-creator` | L1 | owner | none | Create or update a Codex skill package with clear routing metadata, scope, and s |
@@ -91,7 +93,6 @@
 | `github-actions-authoring` | L3 | owner | none | Produce GitHub Actions workflow YAML with minimal permissions, stable cache keys |
 | `graphviz-expert` | L3 | owner | none | Create Graphviz/DOT diagrams for precise, orthogonal, publication-quality flowch |
 | `i18n-l10n` | L3 | overlay | none | Internationalization and localization overlay for web/mobile projects. Covers ha |
-| `imagegen` | L3 | owner | none | Use when the user asks to generate or edit images via the OpenAI Image API, incl |
 | `infographic` | L3 | owner | none | Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge car |
 | `jupyter-notebook` | L3 | owner | none | Create, scaffold, refactor, and normalize Jupyter notebooks (`.ipynb`) for exper |
 | `linux-server-ops` | L3 | owner | none | Get services running and staying healthy on a Linux host — systemd units, revers |

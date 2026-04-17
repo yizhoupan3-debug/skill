@@ -140,21 +140,39 @@ def validate_codex_link(skills_root: Path, codex_link: Path) -> tuple[list[str],
     return errors, warnings
 
 
+def _iter_discovered_skill_dirs(root: Path) -> list[tuple[str, Path]]:
+    """Recursively collect directories that directly own a SKILL.md file."""
+
+    skill_dirs: list[tuple[str, Path]] = []
+    skill_file = root / "SKILL.md"
+    if skill_file.is_file():
+        skill_dirs.append((root.name, root))
+        return skill_dirs
+
+    for entry in sorted(root.iterdir(), key=lambda p: p.name):
+        if not entry.is_dir():
+            continue
+        if entry.name == "dist" or entry.name.startswith("."):
+            continue
+        skill_dirs.extend(_iter_discovered_skill_dirs(entry))
+    return skill_dirs
+
+
 def iter_skill_dirs(skills_root: Path, include_system: bool) -> list[tuple[str, Path]]:
     skill_dirs: list[tuple[str, Path]] = []
     for entry in sorted(skills_root.iterdir(), key=lambda p: p.name):
         if not entry.is_dir():
             continue
+        if entry.name == "dist":
+            continue
         if entry.name == ".system":
             if not include_system:
                 continue
-            for system_entry in sorted(entry.iterdir(), key=lambda p: p.name):
-                if system_entry.is_dir():
-                    skill_dirs.append((system_entry.name, system_entry))
+            skill_dirs.extend(_iter_discovered_skill_dirs(entry))
             continue
-        if entry.name == "dist":
+        if entry.name.startswith("."):
             continue
-        skill_dirs.append((entry.name, entry))
+        skill_dirs.extend(_iter_discovered_skill_dirs(entry))
     return skill_dirs
 
 

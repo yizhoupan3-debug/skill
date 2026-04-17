@@ -2,9 +2,9 @@
 
 | Skill | Status | P | Layer | Owner | Gate | Source | Health | Description |
 |---|---|---|---|---|---|---|---|---|
-| `imagegen-built-in` | Active | P2 | L1 | owner | none | system | ✓ 100.0 | Use the built-in image tool for raster image generation or edits instead of the  |
+| `imagegen` | Active | P2 | L1 | owner | none | project | ✓ 98.7 | Use the built-in image tool for raster image generation or edits. Use the CLI on |
 | `openai-docs` | Active | P2 | L1 | owner | none | system | ✓ 100.0 | Use OpenAI docs MCP tools for current OpenAI API, model, Apps SDK, Codex, and do |
-| `plugin-creator` | Active | P2 | L1 | owner | none | system | ✓ 100.0 | Create a local Codex plugin scaffold, including plugin.json and optional marketp |
+| `plugin-creator` | Active | P2 | L1 | owner | none | system | ✓ 100.0 | Create a local Codex plugin scaffold with `.codex-plugin/plugin.json` and option |
 | `skill-creator` | Active | P2 | L1 | owner | none | system | ✓ 96.4 | Create or update a Codex skill package with clear routing metadata, scope, and s |
 | `skill-installer` | Active | P2 | L1 | owner | none | system | ✓ 97.0 | Install Codex skills from curated sources or GitHub into `$CODEX_HOME/skills`. |
 | `academic-search` | Active | P2 | L3 | owner | none | project | ✓ 98.3 | Execute structured academic literature searches using Semantic Scholar, arXiv, G |
@@ -31,6 +31,8 @@
 | `cloudflare-deploy` | Active | P2 | L3 | owner | none | project | ✓ 98.7 | Deploy, publish, migrate, and operate applications on Cloudflare using Workers,  |
 | `code-acceleration` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Speed up code with measured rewrites, batching, caching, and parallel execution |
 | `code-review` | Active | P2 | L2 | overlay | none | project | ✓ 94.7 | Review code with structured findings and optional quality scoring. Use when the  |
+| `slides` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Create, edit, render, verify, and export PowerPoint slide decks when the main ar |
+| `spreadsheets` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Create, edit, analyze, visualize, and review spreadsheet artifacts (`.xlsx`, `.x |
 | `coding-standards` | Active | P2 | L1 | overlay | none | project | ✓ 97.7 | Enforce cross-stack coding standards: naming, readability, error handling, immut |
 | `copywriting` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Create persuasive commercial copy for landing pages, ads, product descriptions,  |
 | `css-pro` | Active | P2 | L2 | owner | none | project | ✓ 97.7 | Architect maintainable CSS layout, responsive, animation, and vibrant design-tok |

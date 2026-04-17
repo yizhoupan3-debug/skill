@@ -131,25 +131,45 @@ fn iter_skill_dirs(skills_root: &Path) -> Result<Vec<(String, PathBuf)>, String>
         if name == "dist" {
             continue;
         }
-        if name == ".system" {
-            let mut system_entries = fs::read_dir(&path)
-                .map_err(|err| format!("failed reading {}: {err}", path.display()))?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|err| format!("failed reading {}: {err}", path.display()))?;
-            system_entries.sort_by_key(|item| item.file_name());
-            for system_entry in system_entries {
-                let system_path = system_entry.path();
-                if system_path.is_dir() {
-                    let system_name = system_entry.file_name().to_string_lossy().to_string();
-                    entries.push((system_name, system_path));
-                }
-            }
+        if name.starts_with('.') && name != ".system" {
             continue;
         }
-        entries.push((name, path));
+        discover_skill_dirs(&path, &mut entries)?;
     }
 
     Ok(entries)
+}
+
+fn discover_skill_dirs(root: &Path, entries: &mut Vec<(String, PathBuf)>) -> Result<(), String> {
+    let skill_file = root.join("SKILL.md");
+    if skill_file.is_file() {
+        let slug = root
+            .file_name()
+            .map(|value| value.to_string_lossy().to_string())
+            .ok_or_else(|| format!("missing directory name for {}", root.display()))?;
+        entries.push((slug, root.to_path_buf()));
+        return Ok(());
+    }
+
+    let mut children = fs::read_dir(root)
+        .map_err(|err| format!("failed reading {}: {err}", root.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| format!("failed reading {}: {err}", root.display()))?;
+    children.sort_by_key(|entry| entry.file_name());
+
+    for child in children {
+        let child_path = child.path();
+        if !child_path.is_dir() {
+            continue;
+        }
+        let child_name = child.file_name().to_string_lossy().to_string();
+        if child_name == "dist" || child_name.starts_with('.') {
+            continue;
+        }
+        discover_skill_dirs(&child_path, entries)?;
+    }
+
+    Ok(())
 }
 
 fn parse_frontmatter(
@@ -901,4 +921,84 @@ fn english_token_regex() -> &'static Regex {
     REGEX.get_or_init(|| {
         Regex::new(r"\b[a-zA-Z][a-zA-Z0-9.+#/-]{2,}\b").expect("english token regex")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_skills_root(test_name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "skill-compiler-rs-{test_name}-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("create temp root");
+        root
+    }
+
+    fn write_skill(skill_dir: &Path, name: &str) {
+        fs::create_dir_all(skill_dir).expect("create skill dir");
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            format!(
+                "---\nname: {name}\ndescription: test\nrouting_layer: L1\nrouting_owner: owner\nrouting_gate: none\nsession_start: n/a\n---\n## When to use\n- test\n"
+            ),
+        )
+        .expect("write skill");
+    }
+
+    #[test]
+    fn iter_skill_dirs_discovers_nested_bundles_and_skips_containers() {
+        let skills_root = temp_skills_root("nested-discovery");
+        write_skill(&skills_root.join("top-skill"), "top-skill");
+        write_skill(
+            &skills_root.join("codex-primary-runtime").join("spreadsheets"),
+            "spreadsheets",
+        );
+        fs::create_dir_all(skills_root.join("junk-container").join("nested"))
+            .expect("create junk container");
+
+        let discovered = iter_skill_dirs(&skills_root).expect("discover skills");
+        let discovered_paths = discovered
+            .iter()
+            .map(|(_, path)| {
+                path.strip_prefix(&skills_root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            discovered_paths,
+            vec![
+                "codex-primary-runtime/spreadsheets".to_string(),
+                "top-skill".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn iter_skill_dirs_discovers_nested_system_skills() {
+        let skills_root = temp_skills_root("nested-system");
+        write_skill(&skills_root.join(".system").join("openai-docs"), "openai-docs");
+
+        let discovered = iter_skill_dirs(&skills_root).expect("discover skills");
+        let discovered_paths = discovered
+            .iter()
+            .map(|(_, path)| {
+                path.strip_prefix(&skills_root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(discovered_paths, vec![".system/openai-docs".to_string()]);
+    }
 }

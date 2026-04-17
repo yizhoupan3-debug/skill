@@ -94,3 +94,18 @@ def test_shadow_map_tracks_non_shadowed_skill_with_winner_metadata(tmp_path: Pat
     assert solo["has_shadow"] is False
     assert solo["winner"]["source"] == "project"
     assert solo["shadowed"] == []
+
+
+def test_shadow_map_discovers_nested_skill_dirs_without_container_entries(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    _write_skill(skills_root / "codex-primary-runtime" / "spreadsheets", name="spreadsheets")
+    (skills_root / "codex-primary-runtime" / "notes").mkdir(parents=True, exist_ok=True)
+
+    shadow_map = build_shadow_map(skills_root=skills_root)
+
+    assert "spreadsheets" in shadow_map["skills"]
+    assert "codex-primary-runtime" not in shadow_map["skills"]
+    assert (
+        shadow_map["skills"]["spreadsheets"]["winner"]["path"]
+        == str((skills_root / "codex-primary-runtime" / "spreadsheets"))
+    )

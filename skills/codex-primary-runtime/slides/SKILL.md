@@ -1,9 +1,41 @@
 ---
 name: "PowerPoint"
-description: "Create, edit, render, verify, and export PowerPoint slide decks. Use when Codex needs to build or modify a deck, presentation deck, slide deck, slides, PowerPoint, PPT, or visually ambitious editable .pptx file."
+description: |
+  Create, edit, render, verify, and export PowerPoint slide decks when the main artifact is a presentation, slide deck, PPT, or editable `.pptx` file.
+  Use for presentation-native workflows that need deck structure, rendered review, and final `.pptx` fidelity rather than a generic document or image-only path. As an artifact gate, check this skill early at 每轮对话开始 / first-turn / conversation start whenever the main artifact is a slide deck or presentation file.
+routing_layer: L3
+routing_owner: gate
+routing_gate: artifact
+routing_priority: P1
+session_start: required
+metadata:
+  version: "2.0.0"
+  platforms: [codex]
+  tags:
+    - powerpoint
+    - ppt
+    - pptx
+    - slides
+    - presentation
+    - artifact-tool
+framework_roles:
+  - gate
+  - detector
+  - verifier
+framework_phase: 2
+framework_contracts:
+  emits_findings: true
+  consumes_findings: false
+  emits_execution_items: false
+  consumes_execution_items: false
+  emits_verification_results: true
+risk: low
+source: local
 ---
 
 # PowerPoint
+
+At every-conversation-start / first turn, check this artifact gate early whenever the primary artifact is a slide deck, presentation, or editable `.pptx` file.
 
 Use this skill whenever the user asks Codex to create, generate, edit, revise, improve, render, verify, or export a deck, presentation deck, slide deck, slides, PowerPoint, PPT, or PPTX file, unless the user explicitly requests a different slide skill or tool.
 
