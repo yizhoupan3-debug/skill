@@ -1,0 +1,4 @@
+interface:
+  display_name: "Literature Synthesis"
+  short_description: "Review topics, check idea novelty, and draft related work"
+  default_prompt: "Use $literature-synthesis to turn this topic, paper set, or idea draft into a topic review, idea novelty check, related-work draft, and research-gap summary."

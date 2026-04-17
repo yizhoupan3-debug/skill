@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "framework-mcp": {
+      "command": "python3",
+      "args": [
+        "-m",
+        "scripts.framework_mcp"
+      ],
+      "cwd": "../.."
+    },
+    "browser-mcp": {
+      "command": "bash",
+      "args": [
+        "./tools/browser-mcp/scripts/start_browser_mcp.sh"
+      ],
+      "cwd": "../.."
+    }
+  }
+}

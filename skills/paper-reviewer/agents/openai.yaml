@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paper Reviewer"
+  short_description: "Reviewer-style whole-manuscript critique"
+  default_prompt: "Use $paper-reviewer to audit this manuscript like a reviewer, prioritize the highest-risk rejection points, and separate science, writing, visual, and layout issues."

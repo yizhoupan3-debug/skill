@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paper Writing"
+  short_description: "Polish academic paper prose"
+  default_prompt: "Use $paper-writing to rewrite or polish this paper text for stronger academic tone, cleaner flow, and better specificity without changing the science."

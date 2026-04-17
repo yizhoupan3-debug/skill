@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paper Logic"
+  short_description: "Review and repair paper science"
+  default_prompt: "Use $paper-logic to review or repair this paper's novelty, claims-vs-evidence alignment, and experiment framing without fabricating evidence."

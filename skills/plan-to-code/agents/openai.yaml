@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan to Code"
+  short_description: "Turn a plan or spec into shippable code with structured slices and local-supervisor fallback"
+  default_prompt: "Use $plan-to-code to turn this implementation plan into executable, feature-complete code, choosing fast path or structured path, coordinating with subagent delegation when useful, and preserving the same slice structure in local-supervisor mode if runtime policy blocks spawning."

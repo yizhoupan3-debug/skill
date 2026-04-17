@@ -1,0 +1,25 @@
+{
+  "name": "skill-framework-native",
+  "version": "0.1.0",
+  "description": "Native Codex integration for the local skill framework, memory system, and runtime artifacts.",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Skill Framework Native",
+    "shortDescription": "Local framework skill, memory, and MCP bundle for Codex.",
+    "longDescription": "Packages the repository's framework MCP server, browser MCP server, and a native integration skill so Codex can discover the local skill framework as a first-class plugin.",
+    "developerName": "Joe",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Use the local framework plugin to inspect memory and routing state.",
+      "Refresh the workspace bootstrap bundle before planning framework work.",
+      "Search the local skill graph instead of grepping the repo first."
+    ],
+    "brandColor": "#0F766E"
+  }
+}

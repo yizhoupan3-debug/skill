@@ -1,0 +1,978 @@
+{
+  "ts": "2026-04-15T10:46:46.102903+00:00",
+  "summary": {
+    "total_skills": 138,
+    "critical_skills": 0,
+    "avg_health": 96.2
+  },
+  "skills": {
+    "imagegen-built-in": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "openai-docs": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "plugin-creator": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "skill-creator": {
+      "dynamic_score": 96.4,
+      "static_score": 91.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "skill-installer": {
+      "dynamic_score": 97.0,
+      "static_score": 92.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "academic-search": {
+      "dynamic_score": 98.3,
+      "static_score": 95.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "accessibility-auditor": {
+      "dynamic_score": 92.1,
+      "static_score": 80.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "agent-memory": {
+      "dynamic_score": 92.1,
+      "static_score": 80.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "agent-swarm-orchestration": {
+      "dynamic_score": 91.5,
+      "static_score": 78.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "ai-research": {
+      "dynamic_score": 94.6,
+      "static_score": 86.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "algo-trading": {
+      "dynamic_score": 93.3,
+      "static_score": 83.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "anti-laziness": {
+      "dynamic_score": 95.0,
+      "static_score": 87.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "api-design": {
+      "dynamic_score": 96.7,
+      "static_score": 91.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "api-integration-debugging": {
+      "dynamic_score": 97.3,
+      "static_score": 93.3,
+      "usage_30d": 1,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "api-load-tester": {
+      "dynamic_score": 93.6,
+      "static_score": 84.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "architect-review": {
+      "dynamic_score": 94.0,
+      "static_score": 85.0,
+      "usage_30d": 1,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "assignment-compliance": {
+      "dynamic_score": 95.7,
+      "static_score": 89.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "auth-implementation": {
+      "dynamic_score": 97.3,
+      "static_score": 93.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "autoresearch": {
+      "dynamic_score": 96.1,
+      "static_score": 90.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "backend-runtime-debugging": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "brainstorm-research": {
+      "dynamic_score": 95.8,
+      "static_score": 89.6,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "build-tooling": {
+      "dynamic_score": 98.1,
+      "static_score": 95.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "chatgpt-apps": {
+      "dynamic_score": 94.7,
+      "static_score": 86.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "checklist-fixer": {
+      "dynamic_score": 96.5,
+      "static_score": 91.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "chrome-extension-dev": {
+      "dynamic_score": 97.0,
+      "static_score": 92.6,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "citation-management": {
+      "dynamic_score": 98.3,
+      "static_score": 95.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "cloudflare-deploy": {
+      "dynamic_score": 98.7,
+      "static_score": 96.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "code-acceleration": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "code-review": {
+      "dynamic_score": 94.7,
+      "static_score": 86.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "coding-standards": {
+      "dynamic_score": 97.7,
+      "static_score": 94.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "copywriting": {
+      "dynamic_score": 96.7,
+      "static_score": 91.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "css-pro": {
+      "dynamic_score": 97.7,
+      "static_score": 94.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "data-wrangling": {
+      "dynamic_score": 96.2,
+      "static_score": 90.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "datastore-cache-queue": {
+      "dynamic_score": 97.3,
+      "static_score": 93.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "dependency-migration": {
+      "dynamic_score": 97.2,
+      "static_score": 93.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "doc": {
+      "dynamic_score": 94.3,
+      "static_score": 85.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "docker": {
+      "dynamic_score": 90.9,
+      "static_score": 77.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "documentation-engineering": {
+      "dynamic_score": 97.2,
+      "static_score": 93.0,
+      "usage_30d": 1,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "email-template": {
+      "dynamic_score": 98.3,
+      "static_score": 95.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "env-config-management": {
+      "dynamic_score": 97.7,
+      "static_score": 94.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "error-handling-patterns": {
+      "dynamic_score": 97.2,
+      "static_score": 93.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "execution-audit-codex": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "execution-controller-app": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "execution-controller-coding": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "experiment-reproducibility": {
+      "dynamic_score": 96.2,
+      "static_score": 90.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "financial-data-fetching": {
+      "dynamic_score": 97.2,
+      "static_score": 93.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "frontend-code-quality": {
+      "dynamic_score": 95.8,
+      "static_score": 89.6,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "frontend-debugging": {
+      "dynamic_score": 95.8,
+      "static_score": 89.6,
+      "usage_30d": 1,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "frontend-design": {
+      "dynamic_score": 95.2,
+      "static_score": 88.0,
+      "usage_30d": 1,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "gh-address-comments": {
+      "dynamic_score": 94.0,
+      "static_score": 85.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "gh-fix-ci": {
+      "dynamic_score": 93.5,
+      "static_score": 83.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "gh-pr-triage": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "git-workflow": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 1,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "github-actions-authoring": {
+      "dynamic_score": 97.7,
+      "static_score": 94.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "github-investigator": {
+      "dynamic_score": 64.0,
+      "static_score": 85.0,
+      "usage_30d": 2,
+      "reroutes_30d": 1,
+      "health_status": "Stable"
+    },
+    "go-pro": {
+      "dynamic_score": 96.7,
+      "static_score": 91.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "graphviz-expert": {
+      "dynamic_score": 92.8,
+      "static_score": 82.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "humanizer": {
+      "dynamic_score": 95.8,
+      "static_score": 89.6,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "i18n-l10n": {
+      "dynamic_score": 96.8,
+      "static_score": 92.1,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "idea-to-plan": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "imagegen": {
+      "dynamic_score": 98.7,
+      "static_score": 96.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "infographic": {
+      "dynamic_score": 95.1,
+      "static_score": 87.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "information-retrieval": {
+      "dynamic_score": 97.2,
+      "static_score": 93.0,
+      "usage_30d": 1,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "iterative-optimizer": {
+      "dynamic_score": 66.4,
+      "static_score": 91.0,
+      "usage_30d": 10,
+      "reroutes_30d": 5,
+      "health_status": "Stable"
+    },
+    "javascript-pro": {
+      "dynamic_score": 97.3,
+      "static_score": 93.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "jupyter-notebook": {
+      "dynamic_score": 98.2,
+      "static_score": 95.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "latex-compile-acceleration": {
+      "dynamic_score": 96.1,
+      "static_score": 90.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "linux-server-ops": {
+      "dynamic_score": 97.7,
+      "static_score": 94.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "literature-synthesis": {
+      "dynamic_score": 95.6,
+      "static_score": 89.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "mac-memory-management": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "math-derivation": {
+      "dynamic_score": 99.2,
+      "static_score": 98.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "mcp-builder": {
+      "dynamic_score": 94.3,
+      "static_score": 85.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "mermaid-expert": {
+      "dynamic_score": 97.0,
+      "static_score": 92.6,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "monorepo-tooling": {
+      "dynamic_score": 97.3,
+      "static_score": 93.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "motion-design": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "native-app-debugging": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "nextjs": {
+      "dynamic_score": 98.1,
+      "static_score": 95.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "node-backend": {
+      "dynamic_score": 97.3,
+      "static_score": 93.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "npm-package-authoring": {
+      "dynamic_score": 97.7,
+      "static_score": 94.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "observability": {
+      "dynamic_score": 94.6,
+      "static_score": 86.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "paper-length-tuner": {
+      "dynamic_score": 97.8,
+      "static_score": 94.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "paper-logic": {
+      "dynamic_score": 95.7,
+      "static_score": 89.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "paper-notation-audit": {
+      "dynamic_score": 97.1,
+      "static_score": 92.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "paper-reviewer": {
+      "dynamic_score": 95.8,
+      "static_score": 89.6,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "paper-reviser": {
+      "dynamic_score": 97.3,
+      "static_score": 93.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "paper-visuals": {
+      "dynamic_score": 94.8,
+      "static_score": 87.1,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "paper-writing": {
+      "dynamic_score": 95.7,
+      "static_score": 89.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "pdf": {
+      "dynamic_score": 94.8,
+      "static_score": 87.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "performance-expert": {
+      "dynamic_score": 94.2,
+      "static_score": 85.5,
+      "usage_30d": 4,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "plan-to-code": {
+      "dynamic_score": 95.8,
+      "static_score": 89.6,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "plan-writing": {
+      "dynamic_score": 93.0,
+      "static_score": 82.5,
+      "usage_30d": 4,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "playwright": {
+      "dynamic_score": 98.7,
+      "static_score": 96.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "ppt-beamer": {
+      "dynamic_score": 95.3,
+      "static_score": 88.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "ppt-html-export": {
+      "dynamic_score": 95.7,
+      "static_score": 89.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "ppt-markdown": {
+      "dynamic_score": 95.2,
+      "static_score": 88.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "ppt-pptx": {
+      "dynamic_score": 95.7,
+      "static_score": 89.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "prompt-engineer": {
+      "dynamic_score": 95.8,
+      "static_score": 89.6,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "python-pro": {
+      "dynamic_score": 98.5,
+      "static_score": 96.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "react": {
+      "dynamic_score": 98.0,
+      "static_score": 95.0,
+      "usage_30d": 3,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "refactoring": {
+      "dynamic_score": 97.2,
+      "static_score": 93.0,
+      "usage_30d": 1,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "release-engineering": {
+      "dynamic_score": 97.3,
+      "static_score": 93.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "research-engineer": {
+      "dynamic_score": 96.6,
+      "static_score": 91.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "rust-pro": {
+      "dynamic_score": 96.7,
+      "static_score": 91.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "scientific-figure-plotting": {
+      "dynamic_score": 97.7,
+      "static_score": 94.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "screenshot": {
+      "dynamic_score": 95.6,
+      "static_score": 89.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "security-audit": {
+      "dynamic_score": 96.8,
+      "static_score": 92.1,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "security-threat-model": {
+      "dynamic_score": 90.7,
+      "static_score": 76.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "sentry": {
+      "dynamic_score": 95.7,
+      "static_score": 89.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "seo-web": {
+      "dynamic_score": 94.1,
+      "static_score": 85.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "shell-cli": {
+      "dynamic_score": 98.4,
+      "static_score": 96.0,
+      "usage_30d": 1,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "skill-developer": {
+      "dynamic_score": 96.2,
+      "static_score": 90.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "skill-developer-codex": {
+      "dynamic_score": 97.5,
+      "static_score": 93.8,
+      "usage_30d": 3,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "skill-installer-antigravity": {
+      "dynamic_score": 96.2,
+      "static_score": 90.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "skill-maintenance-codex": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "skill-routing-repair-codex": {
+      "dynamic_score": 97.0,
+      "static_score": 92.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "skill-scout": {
+      "dynamic_score": 98.0,
+      "static_score": 95.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "skill-writer": {
+      "dynamic_score": 95.5,
+      "static_score": 88.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "slides-source-first": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "sql-pro": {
+      "dynamic_score": 97.7,
+      "static_score": 94.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "statistical-analysis": {
+      "dynamic_score": 95.8,
+      "static_score": 89.6,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "subagent-delegation": {
+      "dynamic_score": 94.5,
+      "static_score": 86.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "sustech-mailer": {
+      "dynamic_score": 96.8,
+      "static_score": 92.1,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "svelte": {
+      "dynamic_score": 97.7,
+      "static_score": 94.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "systematic-debugging": {
+      "dynamic_score": 97.0,
+      "static_score": 92.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "tailwind-pro": {
+      "dynamic_score": 94.8,
+      "static_score": 87.1,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "tao-ci": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "tdd-workflow": {
+      "dynamic_score": 92.8,
+      "static_score": 82.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "test-engineering": {
+      "dynamic_score": 97.3,
+      "static_score": 93.3,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "typescript-pro": {
+      "dynamic_score": 96.3,
+      "static_score": 90.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "vercel-react-best-practices": {
+      "dynamic_score": 96.8,
+      "static_score": 92.1,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "visual-review": {
+      "dynamic_score": 95.0,
+      "static_score": 87.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "vue": {
+      "dynamic_score": 97.2,
+      "static_score": 93.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "web-platform-basics": {
+      "dynamic_score": 96.2,
+      "static_score": 90.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "web-scraping": {
+      "dynamic_score": 99.2,
+      "static_score": 98.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "webhook-security": {
+      "dynamic_score": 97.2,
+      "static_score": 93.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "writing-skills": {
+      "dynamic_score": 95.2,
+      "static_score": 88.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "xlsx": {
+      "dynamic_score": 98.3,
+      "static_score": 95.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "youtube-summarizer": {
+      "dynamic_score": 97.2,
+      "static_score": 93.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    }
+  },
+  "critical_outliers": [],
+  "source": "sync_skills_backfill"
+}

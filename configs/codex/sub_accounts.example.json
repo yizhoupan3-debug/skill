@@ -1,0 +1,25 @@
+{
+  "main_api": {
+    "name": "Codex Aggregated API",
+    "base_url": "https://your-codex-endpoint.example.com",
+    "provider": "codex-compatible"
+  },
+  "accounts": [
+    {
+      "id": "copilot-family-01",
+      "name": "Copilot Family 01",
+      "provider": "github-copilot",
+      "status": "active",
+      "channel_id": 101,
+      "limits": {
+        "limit_5h": 40,
+        "limit_7d": 1000
+      },
+      "auth": {
+        "access_token_env": "CODEX_ACCOUNT_01_ACCESS_TOKEN",
+        "refresh_token_env": "CODEX_ACCOUNT_01_REFRESH_TOKEN",
+        "session_token_env": "CODEX_ACCOUNT_01_SESSION_TOKEN"
+      }
+    }
+  ]
+}

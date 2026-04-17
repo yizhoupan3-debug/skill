@@ -1,0 +1,4 @@
+interface:
+  display_name: "Citation Management"
+  short_description: "Verify, normalize, and format academic citations and references."
+  default_prompt: "Check citation truthfulness, normalize references, and convert citation styles."

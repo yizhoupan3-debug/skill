@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paper Visuals"
+  short_description: "Upgrade paper figures, tables, and captions"
+  default_prompt: "Use $paper-visuals to review or improve these figures, tables, captions, legends, and axes for publication-grade quality, English-first defaults, and zero unresolved overlap."

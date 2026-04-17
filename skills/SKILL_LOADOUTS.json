@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "loadouts": {
+    "research_loadout": {
+      "owners": [
+        "information-retrieval",
+        "github-investigator",
+        "academic-search"
+      ],
+      "overlays": [
+        "anti-laziness"
+      ],
+      "exclude": [
+        "plan-to-code",
+        "react"
+      ],
+      "purpose": "Bounded research, repo investigation, and evidence gathering."
+    },
+    "implementation_loadout": {
+      "owners": [
+        "plan-to-code",
+        "typescript-pro",
+        "python-pro",
+        "react"
+      ],
+      "overlays": [
+        "test-engineering",
+        "frontend-code-quality"
+      ],
+      "exclude": [
+        "academic-search"
+      ],
+      "purpose": "Concrete implementation and refactor execution with test support."
+    },
+    "audit_loadout": {
+      "owners": [
+        "execution-audit-codex",
+        "code-review",
+        "security-audit"
+      ],
+      "overlays": [
+        "anti-laziness"
+      ],
+      "exclude": [
+        "brainstorm-research"
+      ],
+      "purpose": "Strict sign-off, audit, verification, and issue surfacing."
+    },
+    "framework_loadout": {
+      "owners": [
+        "skill-developer-codex",
+        "execution-controller-coding",
+        "idea-to-plan"
+      ],
+      "overlays": [
+        "execution-audit-codex"
+      ],
+      "exclude": [
+        "seo-web"
+      ],
+      "purpose": "Framework design, routing policy, and orchestrator evolution work."
+    },
+    "ops_loadout": {
+      "owners": [
+        "git-workflow",
+        "linux-server-ops",
+        "observability"
+      ],
+      "overlays": [
+        "execution-audit-codex"
+      ],
+      "exclude": [
+        "paper-writing"
+      ],
+      "purpose": "Operational changes, deployment support, and production diagnostics."
+    }
+  }
+}

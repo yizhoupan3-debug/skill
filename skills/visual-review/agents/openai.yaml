@@ -1,0 +1,4 @@
+interface:
+  display_name: "Visual Review"
+  short_description: "Run structured visual audits, accessibility checks, and fix rechecks on screenshots and rendered artifacts"
+  default_prompt: "Act as a senior visual quality analyst. Use $visual-review to inspect this screenshot, image, chart, table crop, or rendered page. First describe what you see, then identify issues with grounded evidence, accessibility concerns, and verdict labels."

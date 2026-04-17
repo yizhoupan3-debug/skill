@@ -1,0 +1,52 @@
+#!/bin/sh
+set -eu
+
+# Run skill sync (existing)
+python3 scripts/sync_skills.py --staged --apply --stage-generated
+
+# Quality score guard for changed skills
+CHANGED_SKILLS=$(git diff --cached --name-only --diff-filter=ACMR | grep '^skills/.*/SKILL\.md$' || true)
+if [ -n "$CHANGED_SKILLS" ]; then
+    SKILL_DIRS=""
+    for f in $CHANGED_SKILLS; do
+        dir=$(dirname "$f")
+        # Skip system and dist
+        case "$dir" in
+            skills/.system/*|skills/dist) continue ;;
+        esac
+        SKILL_DIRS="$SKILL_DIRS $dir"
+    done
+
+    if [ -n "$SKILL_DIRS" ]; then
+        echo "[pre-commit] Scoring changed skills..."
+        # shellcheck disable=SC2086
+        RESULT=$(python3 scripts/score_skills.py $SKILL_DIRS --json 2>&1) || true
+        
+        # Check for any skill below 40 (block commit)
+        POOR=$(echo "$RESULT" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    poor = [s for s in d.get('skills', []) if s.get('total', 0) < 40]
+    for s in poor:
+        print(f\"  BLOCKED: {s['name']} scored {s['total']}/100\")
+    sys.exit(1 if poor else 0)
+except: sys.exit(0)
+" 2>&1) || {
+            echo "[pre-commit] ⛔ Skill quality too low to commit:"
+            echo "$POOR"
+            exit 1
+        }
+
+        # Warn for skills below 60
+        echo "$RESULT" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    warn = [s for s in d.get('skills', []) if 40 <= s.get('total', 0) < 60]
+    for s in warn:
+        print(f'  ⚠ {s[\"name\"]} scored {s[\"total\"]}/100 — consider improving')
+except: pass
+" 2>&1 || true
+    fi
+fi

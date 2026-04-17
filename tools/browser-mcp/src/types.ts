@@ -1,0 +1,309 @@
+import type { BrowserContext, BrowserType, Page } from 'playwright';
+
+/** Describes the supported browser engines. */
+export type BrowserEngine = 'chromium' | 'firefox' | 'webkit';
+
+/** Describes the loading state surfaced to the agent. */
+export type LoadingState = 'loading' | 'domcontentloaded' | 'idle';
+
+/** Describes the supported wait condition kinds. */
+export type WaitConditionType =
+  | 'text_appears'
+  | 'text_disappears'
+  | 'element_appears'
+  | 'element_disappears'
+  | 'url_contains'
+  | 'network_idle';
+
+/** Captures a serialized error payload returned to tools. */
+export interface ErrorPayload {
+  code: string;
+  message: string;
+  recoverable: boolean;
+  suggestedNextActions: string[];
+}
+
+/** Captures a browser viewport. */
+export interface ViewportSize {
+  width: number;
+  height: number;
+}
+
+/** Captures one indexed interactive element. */
+export interface InteractiveElement {
+  ref: string;
+  pageRevision: number;
+  role: string;
+  name: string;
+  text: string;
+  visible: boolean;
+  enabled: boolean;
+  locatorHint: {
+    tag: string;
+    testId?: string;
+  };
+  fingerprint: string;
+}
+
+/** Raw descriptor returned from the DOM evaluation (before ref assignment). */
+export interface ElementDescriptor {
+  role: string;
+  name: string;
+  text: string;
+  visible: boolean;
+  enabled: boolean;
+  locatorHint: {
+    tag: string;
+    testId?: string;
+  };
+  ordinal: number;
+}
+
+/** Captures a compact page summary. */
+export interface PageSummary {
+  mainGoalArea: string;
+  visibleMessages: string[];
+  forms: number;
+  dialogs: number;
+}
+
+/** Captures one recent network event. */
+export interface NetworkEvent {
+  id: string;
+  method: string;
+  url: string;
+  status: number | null;
+  contentType: string | null;
+  resourceType: string;
+  timestamp: number;
+  ok: boolean;
+  /** POST/PUT request body if captureBody is enabled. */
+  postData?: string | null;
+  /** Failure description for failed requests (no response). */
+  errorText?: string | null;
+  /** Duration in ms from request start to response end. */
+  durationMs?: number | null;
+}
+
+/** Captures one tab snapshot used for diffing and stale-ref detection. */
+export interface PageSnapshot {
+  revision: number;
+  url: string;
+  title: string;
+  loadingState: LoadingState;
+  summary: PageSummary;
+  interactiveElements: InteractiveElement[];
+  textContent: string;
+  textLines: string[];
+  createdAt: number;
+}
+
+/** Captures incremental page change information. */
+export interface PageDelta {
+  fromRevision: number;
+  toRevision: number;
+  urlChanged: boolean;
+  titleChanged: boolean;
+  newElements: Array<Pick<InteractiveElement, 'ref' | 'role' | 'name'>>;
+  removedRefs: string[];
+  newText: string[];
+  alerts: string[];
+}
+
+/** Captures one browser tab tracked by the runtime. */
+export interface TabRecord {
+  id: string;
+  page: Page;
+  pageRevision: number;
+  loadingState: LoadingState;
+  indexedElements: Map<string, InteractiveElement>;
+  fingerprintToRef: Map<string, string>;
+  lastSnapshot: PageSnapshot | null;
+  snapshotHistory: PageSnapshot[];
+  networkEvents: NetworkEvent[];
+  /** Timestamp (ms) of last request start — used for duration calc. */
+  requestStartTimes: Map<string, number>;
+  disposeNetworkObserver?: () => void;
+}
+
+/** Captures one browser session tracked by the runtime. */
+export interface SessionRecord {
+  id: string;
+  browserType: BrowserType;
+  context: BrowserContext;
+  tabs: Map<string, TabRecord>;
+  currentTabId: string | null;
+  viewport: ViewportSize;
+  createdAt: string;
+}
+
+/** Captures runtime configuration. */
+export interface BrowserRuntimeOptions {
+  browserEngine: BrowserEngine;
+  headless: boolean;
+  viewport: ViewportSize;
+  screenshotDir: string;
+  /** When true, record POST request body and response body (up to 4 KB). Default: false. */
+  captureBody: boolean;
+  /** Maximum screenshot files kept in screenshotDir. Oldest removed when exceeded. Default: 100. */
+  maxScreenshots: number;
+}
+
+/** Captures the common tab identity returned to the agent. */
+export interface BrowserTabView {
+  tabId: string;
+  url: string;
+  title: string;
+  pageRevision: number;
+  loadingState: LoadingState;
+}
+
+/** Captures the common session identity returned to the agent. */
+export interface BrowserSessionView {
+  sessionId: string;
+  createdAt: string;
+  viewport: ViewportSize;
+  currentTabId: string | null;
+}
+
+/** Captures input for opening a page. */
+export interface OpenPageInput {
+  url: string;
+  newTab?: boolean;
+}
+
+/** Captures input for tab commands. */
+export interface TabsInput {
+  action: 'list' | 'select';
+  tabId?: string;
+}
+
+/** Captures input for close commands. */
+export interface CloseInput {
+  target: 'tab' | 'session';
+  tabId?: string;
+}
+
+/** Captures input for fetching compressed page state. */
+export interface GetStateInput {
+  tabId?: string;
+  include?: Array<'summary' | 'interactive_elements' | 'diff'>;
+  sinceRevision?: number;
+  maxElements?: number;
+  textBudget?: number;
+}
+
+/** Captures input for filtered element queries. */
+export interface GetElementsInput {
+  tabId?: string;
+  role?: string;
+  query?: string;
+  scopeRef?: string;
+  limit?: number;
+}
+
+/** Captures input for localized text extraction. */
+export interface GetTextInput {
+  tabId?: string;
+  scopeRef?: string;
+  maxChars?: number;
+}
+
+/** Captures input for network retrieval. */
+export interface GetNetworkInput {
+  tabId?: string;
+  sinceSeconds?: number;
+  resourceTypes?: string[];
+  limit?: number;
+}
+
+/** Captures input for screenshots. */
+export interface ScreenshotInput {
+  tabId?: string;
+  scopeRef?: string;
+  fullPage?: boolean;
+}
+
+/** Captures the result of a screenshot operation. */
+export interface ScreenshotResult {
+  imageId: string;
+  path: string;
+  /** PNG bytes — used by server layer to build inline image content. */
+  buffer: Buffer;
+}
+
+/** Captures input for clicking. */
+export interface ClickInput {
+  tabId?: string;
+  ref: string;
+  timeoutMs?: number;
+}
+
+/** Captures input for typing or filling. */
+export interface FillInput {
+  tabId?: string;
+  ref: string;
+  value: string;
+  submit?: boolean;
+}
+
+/** Captures input for key presses. */
+export interface PressInput {
+  tabId?: string;
+  key: string;
+}
+
+/** Captures one wait condition. */
+export interface WaitCondition {
+  type: WaitConditionType;
+  value?: string;
+}
+
+/** Captures input for explicit waits. */
+export interface WaitForInput {
+  tabId?: string;
+  condition: WaitCondition;
+  timeoutMs?: number;
+}
+
+/** Captures one action response. */
+export interface ActionResult {
+  ok: true;
+  action: string;
+  ref?: string;
+  tab: BrowserTabView;
+  delta: PageDelta;
+}
+
+/** Captures input for saving a session state snapshot. */
+export interface SaveSessionInput {
+  sessionPath?: string;
+}
+
+/** Captures the result of saving a session snapshot. */
+export interface SaveSessionResult {
+  ok: true;
+  path: string;
+  savedAt: string;
+}
+
+/** Captures input for restoring a session state snapshot. */
+export interface RestoreSessionInput {
+  sessionPath: string;
+}
+
+/** Captures the result of restoring a session snapshot. */
+export interface RestoreSessionResult {
+  ok: true;
+  restoredFrom: string;
+  sessionId: string;
+}
+
+/** Captures runtime diagnostic information. */
+export interface DiagnosticsResult {
+  sessions: number;
+  tabs: number;
+  networkEventBufferSize: number;
+  screenshotCount: number;
+  runtimeVersion: string;
+}

@@ -1,0 +1,141 @@
+{
+  "keys": [
+    "slug",
+    "layer",
+    "owner",
+    "gate",
+    "priority",
+    "description",
+    "session_start",
+    "triggers",
+    "health"
+  ],
+  "skills": [
+    [
+      "execution-controller-coding",
+      "L0",
+      "@kernel-controller",
+      "高负载,跨文件,sidecar,delegation",
+      "P0",
+      "Kernel orchestrator for high-load, cross-file execution.",
+      "required",
+      "高负载,跨文件,sidecar,delegation",
+      100.0
+    ],
+    [
+      "subagent-delegation",
+      "L0",
+      "gate",
+      "delegation",
+      "P1",
+      "Split complex tasks into bounded sidecars.",
+      "required",
+      "delegation,sidecar,并行",
+      94.5
+    ],
+    [
+      "plan-to-code",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Implement a concrete plan directly into code.",
+      "n/a",
+      "按方案实现,直接做代码,实现",
+      96.0
+    ],
+    [
+      "python-pro",
+      "L4",
+      "owner",
+      "none",
+      "P2",
+      "Deliver production-grade Python code with tests.",
+      "n/a",
+      "python 脚本,pytest,fastapi",
+      98.0
+    ],
+    [
+      "anti-laziness",
+      "L1",
+      "overlay",
+      "none",
+      "P1",
+      "Overlay to enforce evidence and prevent lazy execution.",
+      "preferred",
+      "别偷懒,严格落实",
+      95.0
+    ],
+    [
+      "iterative-optimizer",
+      "L0",
+      "overlay",
+      "none",
+      "P2",
+      "N-round iterative optimizer overlay.",
+      "n/a",
+      "自迭代,10轮,优化",
+      96.4
+    ],
+    [
+      "tie-skill-a",
+      "L2",
+      "owner",
+      "none",
+      "P2",
+      "Shared tie-break candidate.",
+      "n/a",
+      "并发构建,toolchain",
+      90.0
+    ],
+    [
+      "tie-skill-b",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Shared tie-break candidate.",
+      "n/a",
+      "并发构建,toolchain",
+      90.0
+    ]
+  ],
+  "cases": [
+    {
+      "name": "owner-selection",
+      "query": "帮我写一个 Python 脚本，并补 pytest 回归测试",
+      "expected": {
+        "selected_skill": "python-pro",
+        "overlay_skill": null,
+        "layer": "L4"
+      }
+    },
+    {
+      "name": "gate-precedence",
+      "query": "这是高负载跨文件任务，需要 sidecar delegation 并行处理",
+      "expected": {
+        "selected_skill": "execution-controller-coding",
+        "overlay_skill": "anti-laziness",
+        "layer": "L0"
+      }
+    },
+    {
+      "name": "overlay-selection",
+      "query": "按方案实现这个需求，直接做代码，使用 plan-to-code 主导，并附加 iterative-optimizer",
+      "expected": {
+        "selected_skill": "plan-to-code",
+        "overlay_skill": "iterative-optimizer",
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "layer-priority-tie-break",
+      "query": "并发构建 toolchain 需要稳定方案",
+      "expected": {
+        "selected_skill": "tie-skill-b",
+        "overlay_skill": null,
+        "layer": "L2"
+      }
+    }
+  ]
+}

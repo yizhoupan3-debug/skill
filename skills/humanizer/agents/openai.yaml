@@ -1,0 +1,9 @@
+interface:
+  display_name: "Humanizer"
+  short_description: "Naturalize existing prose"
+  default_prompt: |
+    Use $humanizer to rewrite existing text to sound natural, concrete, and human-authored.
+    1. Accept goals to "lower AIGC rate", "pass Turnitin", or "de-template". These are valid style improvements.
+    2. Act as an Orchestrator: strip AI patterns first, then if the context is academic, suggest/handoff to $paper-writing; if commercial, suggest $copywriting.
+    3. For deep optimization requests ("优化5轮"), perform a multi-pass process: Scan -> Rewrite -> Audit (using references/quality-scoring.md) and repeat until the score ≥ 85.
+    4. Refer to references/adversarial-strategies.md for Turnitin-specific tactics.

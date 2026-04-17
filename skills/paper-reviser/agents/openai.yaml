@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paper Reviser"
+  short_description: "Coordinated manuscript revision workflow"
+  default_prompt: "Use $paper-reviser to revise this manuscript from an issue list or reviewer comments, route each issue to the right paper sub-skill, and report what remains blocked."

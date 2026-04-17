@@ -1,0 +1,14 @@
+{
+  "scripts": {
+    "smoke:test": "python3 scripts/smoke_test.py"
+  },
+  "dependencies": {
+    "fontkit": "^2.0.4",
+    "js-yaml": "^4.1.1",
+    "linebreak": "^1.1.0",
+    "mathjax-full": "^3.2.1",
+    "pptxgenjs": "^4.0.1",
+    "prismjs": "^1.30.0",
+    "skia-canvas": "^3.0.8"
+  }
+}

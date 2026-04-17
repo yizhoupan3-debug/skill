@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codex 管理控制台</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --primary: #38bdf8;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --text: #f8fafc;
+        }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            font-weight: 800;
+            background: linear-gradient(to right, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 2rem;
+        }
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
+        }
+        .account-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .account-name {
+            font-weight: 600;
+            font-size: 1.2rem;
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .status-active { background-color: var(--success); box-shadow: 0 0 10px var(--success); }
+        .status-red { background-color: var(--danger); box-shadow: 0 0 10px var(--danger); }
+        
+        .metric {
+            margin-top: 1rem;
+        }
+        .metric-label {
+            font-size: 0.875rem;
+            color: #94a3b8;
+            margin-bottom: 0.25rem;
+        }
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        .progress-bar {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 1s;
+        }
+    </style>
+</head>
+<body>
+    <h1>Codex Multi-Account Hub</h1>
+    <div class="container" id="cards-container">
+        <!-- Cards will be injected here -->
+    </div>
+
+    <script>
+        async function fetchQuotas() {
+            try {
+                const response = await fetch('/api/quotas');
+                const data = await response.json();
+                renderCards(data);
+            } catch (err) {
+                console.error("Failed to fetch quotas:", err);
+            }
+        }
+
+        function renderCards(data) {
+            const container = document.getElementById('cards-container');
+            container.innerHTML = '';
+            
+            data.forEach(account => {
+                const perc5h = Math.min((account.used_5h / 50) * 100, 100); // 假设 50 为软限制
+                const perc7d = Math.min((account.used_7d / 1000) * 100, 100); // 假设 1000 为软限制
+                
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <div class="account-header">
+                        <div class="account-name">${account.name}</div>
+                        <div class="status-dot ${account.status === 'active' ? 'status-active' : 'status-red'}"></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">5小时请求数 (5h Usage)</div>
+                        <div class="metric-value">${account.used_5h}</div>
+                        <div class="progress-bar"><div class="progress-fill" style="width: ${perc5h}%"></div></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">7天请求数 (7d Usage)</div>
+                        <div class="metric-value">${account.used_7d}</div>
+                        <div class="progress-bar"><div class="progress-fill" style="width: ${perc7d}%"></div></div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        fetchQuotas();
+        setInterval(fetchQuotas, 30000); // Refresh every 30s
+    </script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:,">
+    <title>进化引擎仪表盘 | Codex 技能管理</title>
+    <link rel="stylesheet" href="/static/style.css?v=20260323a">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
+</head>
+<body class="dark-theme">
+    <div class="glass-container">
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">C</span>
+                <h1>Codex</h1>
+            </div>
+            <nav>
+                <ul>
+                    <li class="active" data-view="dashboard">控制面板</li>
+                    <li data-view="skills">技能目录</li>
+                    <li data-view="accounts">多账号管理</li>
+                    <li data-view="audit">审计中心</li>
+                    <li data-view="journal">日志查看器</li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="content">
+            <header class="page-header">
+                <div class="welcome">
+                    <div class="header-kicker">
+                        <h2>系统脉搏: <span id="system-status">正常运行</span></h2>
+                        <span id="snapshot-state" class="status-pill status-frozen">首页统计冻结</span>
+                    </div>
+                    <p class="header-note">刷新仅更新账号 / token 池；首页 health / journal 使用冻结快照，不会被刷新按钮触发。</p>
+                    <p id="current-ts" class="snapshot-timestamp"></p>
+                </div>
+                <div class="actions">
+                    <button id="refresh-btn" class="btn-primary" type="button">刷新 Token 池</button>
+                    <button id="sync-btn" class="btn-secondary" type="button">重绘快照</button>
+                </div>
+            </header>
+
+            <section id="dashboard-view" class="view active">
+                <div class="stats-grid">
+                    <div class="stat-card glass">
+                        <h3>全局健康度</h3>
+                        <div class="gauge-container">
+                            <div class="gauge" id="global-health-gauge">
+                                <span class="gauge-value" id="global-health-val">0%</span>
+                            </div>
+                        </div>
+                        <p id="dashboard-snapshot-ts" class="card-caption">—</p>
+                    </div>
+                    <div class="stat-card glass">
+                        <h3>技能总数</h3>
+                        <p class="big-num" id="total-skills">0</p>
+                        <p class="card-caption">冻结快照</p>
+                    </div>
+                    <div class="stat-card glass critical">
+                        <h3>风险技能</h3>
+                        <p class="big-num" id="critical-skills">0</p>
+                        <p class="card-caption">只读展示</p>
+                    </div>
+                    <div class="stat-card glass">
+                        <h3>30天调用量</h3>
+                        <p class="big-num" id="total-usage">0</p>
+                        <p class="card-caption">由 skills usage_30d 汇总</p>
+                    </div>
+                </div>
+
+                <div class="main-grid">
+                    <div class="card glass">
+                        <h3>风险预警</h3>
+                        <ul id="outliers-list" class="skill-list compact"></ul>
+                    </div>
+                    <div class="card glass">
+                        <h3>最近活动</h3>
+                        <ul id="recent-journal" class="journal-list compact"></ul>
+                    </div>
+                    <div class="card glass">
+                        <h3>Plus 到期倒计时</h3>
+                        <div id="plus-countdowns" class="countdowns-grid"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="skills-view" class="view">
+                <div class="search-bar glass">
+                    <input type="text" id="skill-search" placeholder="搜索技能...">
+                </div>
+                <div class="skill-table-container glass">
+                    <table id="skill-table">
+                        <thead>
+                            <tr>
+                                <th>技能名称</th>
+                                <th>状态</th>
+                                <th>健康分</th>
+                                <th>调用量</th>
+                                <th>重定向次数</th>
+                            </tr>
+                        </thead>
+                        <tbody id="skill-table-body"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="accounts-view" class="view">
+                <div class="accounts-header-main">
+                    <div class="main-api-card glass">
+                        <div class="label">主 API 配置</div>
+                        <div class="api-info">
+                            <span id="main-api-name">Codex Aggregated API</span>
+                            <code id="main-api-url">未配置</code>
+                        </div>
+                        <div class="api-meta">
+                            <div id="account-refresh-status" class="status-badge status-active">等待刷新</div>
+                            <p class="privacy-note">原始 token 不会展示，界面只显示掩码、状态与刷新时间。</p>
+                        </div>
+                    </div>
+                    <button id="add-account-btn" class="btn-add" type="button" aria-label="添加账号">+</button>
+                </div>
+                <p class="section-caption">刷新按钮只会更新 Token 池，不会重新拉取首页 health / journal 快照。</p>
+                <div class="accounts-grid" id="accounts-container">
+                    <!-- Account cards go here -->
+                </div>
+            </section>
+
+            <section id="audit-view" class="view">
+                <div class="audit-header">
+                    <h3>自动化审计报告</h3>
+                    <button id="run-audit-btn" class="btn-primary" type="button">立即审计</button>
+                </div>
+                <div id="audit-results" class="audit-terminal glass">
+                    <pre id="audit-log">等待分析...</pre>
+                </div>
+            </section>
+
+            <section id="journal-view" class="view">
+                <div class="journal-feed glass" id="journal-feed"></div>
+            </section>
+        </main>
+    </div>
+
+    <div id="skill-modal" class="modal glass">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="/static/app.js?v=20260323a"></script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+version: '3.4'
+
+services:
+  new-api:
+    image: calciumion/new-api:latest
+    container_name: new-api
+    restart: always
+    command: --log-dir /app/logs
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data/new-api:/data
+      - ./logs:/app/logs
+    environment:
+      - SQL_DSN=root:123456@tcp(db:3306)/oneapi
+      - REDIS_CONN_STR=redis://redis:6379
+      - SESSION_SECRET=random_session_secret
+      - TZ=Asia/Shanghai
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=123456
+      - MYSQL_DATABASE=oneapi
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    restart: always
+
+  copilot-proxy:
+    image: aaamoon/copilot-gpt4-service:latest
+    container_name: copilot-proxy
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - CACHE=true
+    volumes:
+      - ./data/copilot:/config
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: codex-dashboard
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASS=123456
+      - DB_NAME=oneapi
+    depends_on:
+      - db

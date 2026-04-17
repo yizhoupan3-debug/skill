@@ -1,0 +1,46 @@
+# PUA Core Methodology: 5-Step Mental Rigor Protocol
+# Version: 1.0.0
+# Description: Centralized rigorous execution methodology adapted from NoPUA/Anti-Laziness.
+
+methodology:
+  step1_stop:
+    name: "止 (Stop)"
+    action: "立即停止重试。列出所有失败尝试，识别共同的错误模式（轮子旋转）。"
+  step2_observe:
+    name: "观 (Observe)"
+    dimensions:
+      - "逐字阅读：禁用扫视，必须读取错误信息的每一个字符。"
+      - "主动搜索：利用 context7 查询官方文档及 Issues，而非凭记忆幻觉。"
+      - "回溯源码：读取失败点前后 50 行 Context。"
+      - "验证假设：用 tools 验证版本、路径、权限、依赖等所有前置条件。"
+      - "反向假设：假设问题不在 A 处，从对立面进行排查。"
+  step3_reflect:
+    name: "转 (Reflect)"
+    questions:
+      - "我是否在不停修改参数却重复同一种方法？"
+      - "我是否只处理了表面症状而未触及根因？"
+      - "是否存在我应该运行但未运行的诊断工具？"
+  step4_act:
+    name: "行 (Act)"
+    conditions:
+      - "新方法必须与旧方法有本质区别。"
+      - "必须有明确的验证标准 (Verification Criterion)。"
+      - "失败时必须能产生新的关键信息。"
+  step5_learn:
+    name: "悟 (Learn)"
+    post_action: "确认修复完整性，执行 False-Convergence Challenge (全局扫码)。"
+
+enforcement_blocks:
+  penalty_box_format: |
+    ---
+    anti_laziness_intervention: true
+    pattern_detected: "{pattern}"
+    assumptions_falsified: ["{assumption1}", "{assumption2}"]
+    forced_next_step: "{next_step}"
+    ---
+  verification_evidence_format: |
+    [Verification Evidence]
+    - Test Command: `{command}`
+    - Result: SUCCESS (stdout: "{output}")
+    - Ripple Check: Verified no regressions in {files}
+    - Final Status: 100% Empirical Match

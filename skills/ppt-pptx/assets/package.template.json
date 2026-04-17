@@ -1,0 +1,20 @@
+{
+  "name": "ppt-pptx-deck",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build": "node deck.js",
+    "render": "python3 scripts/render_slides.py deck.pptx --output_dir rendered",
+    "check:overflow": "python3 scripts/slides_test.py deck.pptx",
+    "check:fonts": "python3 scripts/detect_font.py deck.pptx --json"
+  },
+  "dependencies": {
+    "fontkit": "2.0.4",
+    "linebreak": "1.1.0",
+    "mathjax-full": "3.2.1",
+    "pptxgenjs": "4.0.1",
+    "prismjs": "1.30.0",
+    "skia-canvas": "3.0.8"
+  }
+}

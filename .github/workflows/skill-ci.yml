@@ -1,0 +1,78 @@
+name: Skill CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'skills/**'
+      - 'scripts/**'
+      - 'AGENT.md'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'GEMINI.md'
+      - '.mcp.json'
+      - '.claude/**'
+      - '.gemini/**'
+      - 'configs/claude/**'
+      - 'configs/codex/**'
+      - 'configs/gemini/**'
+  pull_request:
+    paths:
+      - 'skills/**'
+      - 'scripts/**'
+      - 'AGENT.md'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'GEMINI.md'
+      - '.mcp.json'
+      - '.claude/**'
+      - '.gemini/**'
+      - 'configs/claude/**'
+      - 'configs/codex/**'
+      - 'configs/gemini/**'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate skill structure
+        run: python3 scripts/check_skills.py --include-system --verify-sync
+
+      - name: Regenerate registry & validate changes
+        run: python3 scripts/sync_skills.py --apply
+
+      - name: Score all skills
+        run: |
+          python3 scripts/score_skills.py --all --json > /tmp/scores.json
+          python3 -c "
+          import json, sys
+          d = json.load(open('/tmp/scores.json'))
+          avg = d['avg_score']
+          poor = [s for s in d['skills'] if s.get('total',0) < 40]
+          print(f'Average: {avg:.1f}/100  |  Skills: {d[\"total_scored\"]}')
+          if poor:
+              print('BLOCKED — skills below 40:')
+              for s in poor:
+                  print(f'  {s[\"name\"]}: {s[\"total\"]}')
+              sys.exit(1)
+          warn = [s for s in d['skills'] if 40 <= s.get('total',0) < 60]
+          if warn:
+              print('Warnings:')
+              for s in warn:
+                  print(f'  {s[\"name\"]}: {s[\"total\"]}')
+          "
+
+      - name: Check generated artifact drift
+        run: |
+          python3 scripts/sync_skills.py --apply
+          if ! git diff --quiet -- skills/SKILL_ROUTING_REGISTRY.md skills/SKILL_MANIFEST.json skills/SKILL_ROUTING_INDEX.md skills/SKILL_ROUTING_RUNTIME.json AGENT.md AGENTS.md CLAUDE.md GEMINI.md .mcp.json .claude/CLAUDE.md .claude/settings.json .claude/agents/README.md .claude/hooks/README.md .gemini/settings.json configs/claude/CLAUDE.md configs/codex/AGENTS.md configs/gemini/GEMINI.md; then
+            echo "::error::Generated skill artifacts or shared CLI entrypoints are out of date — run sync_skills.py --apply locally"
+            exit 1
+          fi

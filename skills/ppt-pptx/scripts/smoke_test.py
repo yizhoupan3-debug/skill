@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+"""
+smoke_test.py
+
+End-to-end smoke test for the ppt-pptx skill.
+
+Verifies:
+- outline -> deck.js -> deck.pptx
+- template -> deck.pptx
+- sample deck.js -> deck.pptx
+- render, overflow, font, and structure checks where applicable
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = ROOT / "scripts"
+ASSETS = ROOT / "assets"
+EXAMPLES = ROOT / "examples"
+
+NODE_DEPS = [
+    "pptxgenjs",
+    "skia-canvas",
+    "linebreak",
+    "fontkit",
+    "prismjs",
+    "mathjax-full",
+    "js-yaml",
+]
+
+
+def run(cmd: list[str], cwd: Path, label: str) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.run(
+        cmd,
+        cwd=str(cwd),
+        text=True,
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"{label} failed\n"
+            f"cmd: {' '.join(cmd)}\n"
+            f"stdout:\n{proc.stdout}\n"
+            f"stderr:\n{proc.stderr}"
+        )
+    return proc
+
+
+def copy_common_python_tools(dest: Path) -> None:
+    for name in [
+        "render_slides.py",
+        "slides_test.py",
+        "detect_font.py",
+        "extract_pptx_structure.py",
+    ]:
+        shutil.copy2(SCRIPTS / name, dest / name)
+
+
+def npm_bootstrap(dest: Path) -> None:
+    run(["npm", "init", "-y"], dest, "npm init")
+    run(["npm", "install", *NODE_DEPS], dest, "npm install")
+
+
+def count_pngs(path: Path) -> int:
+    return len(list(path.glob("*.png")))
+
+
+def scenario_outline(root: Path) -> dict:
+    workdir = root / "outline"
+    workdir.mkdir(parents=True, exist_ok=True)
+
+    shutil.copy2(EXAMPLES / "outline_overload.yaml", workdir / "outline.yaml")
+    shutil.copy2(SCRIPTS / "outline_to_deck.js", workdir / "outline_to_deck.js")
+    shutil.copytree(ASSETS / "pptxgenjs_helpers", workdir / "pptxgenjs_helpers")
+    copy_common_python_tools(workdir)
+    npm_bootstrap(workdir)
+
+    run(["node", "outline_to_deck.js", "outline.yaml", "-o", "deck.js"], workdir, "outline_to_deck")
+    run(["node", "deck.js"], workdir, "generated deck.js")
+    run(
+        [sys.executable, "render_slides.py", "deck.pptx", "--output_dir", "rendered"],
+        workdir,
+        "render_slides",
+    )
+    run([sys.executable, "slides_test.py", "deck.pptx"], workdir, "slides_test")
+    run(
+        [sys.executable, "detect_font.py", "deck.pptx", "--include-missing", "--include-substituted"],
+        workdir,
+        "detect_font",
+    )
+    run([sys.executable, "extract_pptx_structure.py", "deck.pptx", "-o", "structure.json"], workdir, "extract_structure")
+
+    return {
+        "name": "outline_flow",
+        "workdir": str(workdir),
+        "deck_exists": (workdir / "deck.pptx").exists(),
+        "rendered_pngs": count_pngs(workdir / "rendered"),
+        "structure_json": (workdir / "structure.json").exists(),
+    }
+
+
+def scenario_template(root: Path) -> dict:
+    workdir = root / "template"
+    assets_dir = workdir / "assets"
+    workdir.mkdir(parents=True, exist_ok=True)
+    assets_dir.mkdir(parents=True, exist_ok=True)
+
+    shutil.copy2(ASSETS / "deck.template.js", workdir / "deck.js")
+    shutil.copytree(ASSETS / "pptxgenjs_helpers", workdir / "pptxgenjs_helpers")
+    copy_common_python_tools(workdir)
+    npm_bootstrap(workdir)
+
+    run(["node", "deck.js"], workdir, "template deck.js")
+    run(
+        [sys.executable, "render_slides.py", "deck.pptx", "--output_dir", "rendered"],
+        workdir,
+        "render_slides",
+    )
+    run([sys.executable, "slides_test.py", "deck.pptx"], workdir, "slides_test")
+    run(
+        [sys.executable, "detect_font.py", "deck.pptx", "--include-missing", "--include-substituted"],
+        workdir,
+        "detect_font",
+    )
+
+    return {
+        "name": "template_flow",
+        "workdir": str(workdir),
+        "deck_exists": (workdir / "deck.pptx").exists(),
+        "rendered_pngs": count_pngs(workdir / "rendered"),
+    }
+
+
+def scenario_sample_deck(root: Path) -> dict:
+    workdir = root / "sample_deck"
+    workdir.mkdir(parents=True, exist_ok=True)
+
+    shutil.copy2(ROOT / "deck.js", workdir / "deck.js")
+    shutil.copytree(ASSETS / "pptxgenjs_helpers", workdir / "pptxgenjs_helpers")
+    shutil.copy2(SCRIPTS / "render_slides.py", workdir / "render_slides.py")
+    npm_bootstrap(workdir)
+
+    run(["node", "deck.js"], workdir, "sample deck.js")
+    run(
+        [sys.executable, "render_slides.py", "deck.pptx", "--output_dir", "rendered"],
+        workdir,
+        "render_slides",
+    )
+
+    return {
+        "name": "sample_deck_flow",
+        "workdir": str(workdir),
+        "deck_exists": (workdir / "deck.pptx").exists(),
+        "rendered_pngs": count_pngs(workdir / "rendered"),
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run end-to-end smoke tests for skills/ppt-pptx.")
+    parser.add_argument("--keep-workdir", action="store_true", help="Keep the temporary workspace.")
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON summary.")
+    args = parser.parse_args()
+
+    temp_dir_obj = tempfile.TemporaryDirectory(prefix="pptx-smoke-")
+    temp_root = Path(temp_dir_obj.name)
+
+    try:
+        results = [
+            scenario_outline(temp_root),
+            scenario_template(temp_root),
+            scenario_sample_deck(temp_root),
+        ]
+        payload = {
+            "status": "pass",
+            "root": str(temp_root),
+            "results": results,
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(f"PASS: ppt-pptx smoke test ({temp_root})")
+            for item in results:
+                extras = ", ".join(f"{k}={v}" for k, v in item.items() if k not in {"name", "workdir"})
+                print(f"- {item['name']}: {extras}")
+
+        if args.keep_workdir:
+            print(f"Kept workspace: {temp_root}")
+        return 0
+    except Exception as exc:
+        if args.json:
+            print(json.dumps({"status": "fail", "root": str(temp_root), "error": str(exc)}, ensure_ascii=False, indent=2))
+        else:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            print(f"Workspace: {temp_root}", file=sys.stderr)
+        if args.keep_workdir:
+            print(f"Kept workspace: {temp_root}", file=sys.stderr)
+        return 1
+    finally:
+        if not args.keep_workdir:
+            temp_dir_obj.cleanup()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

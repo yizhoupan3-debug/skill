@@ -1,0 +1,294 @@
+\documentclass[12pt,aspectratio=169,xcolor={table}]{beamer}
+
+\usepackage[fontset=none]{ctex}
+\IfFontExistsTF{Songti SC}{\setCJKmainfont{Songti SC}}{\setCJKmainfont{STSong}}
+\IfFontExistsTF{PingFang SC}{\setCJKsansfont{PingFang SC}}{%
+  \IfFontExistsTF{Heiti SC}{\setCJKsansfont{Heiti SC}}{\setCJKsansfont{STSong}}%
+}
+\IfFontExistsTF{PingFang SC}{\setCJKmonofont{PingFang SC}}{%
+  \IfFontExistsTF{Heiti SC}{\setCJKmonofont{Heiti SC}}{\setCJKmonofont{STSong}}%
+}
+
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{tikz}
+\usepackage[most]{tcolorbox}
+\usetikzlibrary{calc,positioning,shadows}
+
+\graphicspath{{assets/}{./}}
+\usefonttheme{professionalfonts}
+\setbeamertemplate{navigation symbols}{}
+\setbeamersize{text margin left=0.95cm,text margin right=0.95cm}
+\setbeamertemplate{blocks}[rounded][shadow=false]
+\setbeamertemplate{items}[square]
+\captionsetup{font=scriptsize,labelformat=empty}
+\setlength{\abovedisplayskip}{5pt plus 1pt minus 2pt}
+\setlength{\belowdisplayskip}{5pt plus 1pt minus 2pt}
+
+\definecolor{ThemeNavy}{RGB}{27,49,79}
+\definecolor{ThemeAccent}{RGB}{94,135,183}
+\definecolor{ThemeGold}{RGB}{191,154,74}
+\definecolor{ThemeSlate}{RGB}{79,97,122}
+\definecolor{ThemePanel}{RGB}{244,247,251}
+\definecolor{ThemeLine}{RGB}{194,204,218}
+\definecolor{ThemeTextMuted}{RGB}{71,86,106}
+
+\setbeamercolor{background canvas}{bg=white}
+\setbeamercolor{normal text}{fg=black,bg=white}
+\setbeamercolor{structure}{fg=ThemeNavy}
+\setbeamercolor{frametitle}{fg=white,bg=ThemeNavy}
+\setbeamercolor{block title}{fg=white,bg=ThemeNavy}
+\setbeamercolor{block body}{fg=black,bg=ThemePanel}
+\setbeamercolor{block title example}{fg=white,bg=ThemeGold}
+\setbeamercolor{block body example}{fg=black,bg=white}
+\setbeamercolor{block title alerted}{fg=white,bg=ThemeSlate}
+\setbeamercolor{block body alerted}{fg=black,bg=ThemePanel}
+\setbeamerfont{title}{series=\bfseries,size=\LARGE}
+\setbeamerfont{subtitle}{size=\large}
+\setbeamerfont{frametitle}{series=\bfseries,size=\Large}
+\setbeamerfont{block title}{series=\bfseries}
+\setbeamerfont{footline}{size=\scriptsize}
+
+\setbeamertemplate{frametitle}{%
+  \nointerlineskip
+  \begin{beamercolorbox}[wd=\paperwidth,ht=0.78cm,dp=0.22cm,leftskip=0.82cm,rightskip=0.42cm]{frametitle}%
+    \usebeamerfont{frametitle}\insertframetitle
+  \end{beamercolorbox}%
+}
+
+\setbeamercolor{footline left}{fg=white,bg=ThemeNavy}
+\setbeamercolor{footline center}{fg=white,bg=ThemeAccent}
+\setbeamercolor{footline right}{fg=white,bg=ThemeNavy}
+\setbeamertemplate{footline}{%
+  \leavevmode
+  \hbox{%
+    \begin{beamercolorbox}[wd=.24\paperwidth,ht=2.65ex,dp=0.9ex,leftskip=1.1em]{footline left}%
+      \usebeamerfont{footline}\insertshortauthor
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.56\paperwidth,ht=2.65ex,dp=0.9ex,center]{footline center}%
+      \usebeamerfont{footline}\insertshorttitle
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.20\paperwidth,ht=2.65ex,dp=0.9ex,center]{footline right}%
+      \usebeamerfont{footline}\insertframenumber{} / \inserttotalframenumber
+    \end{beamercolorbox}%
+  }%
+}
+
+\newcommand{\plainfooter}[3]{%
+  \begin{tikzpicture}[remember picture,overlay]
+    \fill[ThemeNavy] ([yshift=.10cm]current page.south west) rectangle ([xshift=.24\paperwidth,yshift=.36cm]current page.south west);
+    \fill[ThemeAccent] ([xshift=.24\paperwidth,yshift=.10cm]current page.south west) rectangle ([xshift=.80\paperwidth,yshift=.36cm]current page.south west);
+    \fill[ThemeNavy] ([xshift=.80\paperwidth,yshift=.10cm]current page.south west) rectangle ([yshift=.36cm]current page.south east);
+    \node[anchor=south west,font=\fontsize{7}{8}\selectfont\color{white}] at ([xshift=.12cm,yshift=.15cm]current page.south west) {#1};
+    \node[anchor=south,font=\fontsize{7}{8}\selectfont\color{white}] at ([yshift=.15cm]current page.south) {#2};
+    \node[anchor=south east,font=\fontsize{7}{8}\selectfont\color{white}] at ([xshift=-.12cm,yshift=.15cm]current page.south east) {#3};
+  \end{tikzpicture}%
+}
+
+\newtcolorbox{highlightbox}[1]{%
+  enhanced,
+  colback=white,
+  colframe=ThemeGold,
+  colbacktitle=ThemeGold,
+  coltitle=white,
+  boxrule=0.85pt,
+  arc=3.5pt,
+  outer arc=3.5pt,
+  left=0.32cm,
+  right=0.32cm,
+  top=0.16cm,
+  bottom=0.18cm,
+  title={#1},
+  fonttitle=\bfseries,
+  toptitle=0.10cm,
+  bottomtitle=0.09cm,
+  lefttitle=0.28cm,
+  righttitle=0.16cm
+}
+
+\newcommand{\placeholder}[2]{%
+  \begin{beamercolorbox}[wd=\linewidth,rounded=true,sep=0.7em]{block body}
+    \centering
+    \vspace*{#1}
+    {\color{ThemeTextMuted}[Placeholder: #2]}
+    \vspace*{#1}
+  \end{beamercolorbox}
+}
+
+\title[Short Title]{Full Presentation Title}
+\subtitle{Optional framing line or research claim}
+\author[Author Name]{Author Name}
+\institute{Organization or Course}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}[plain]
+  \begin{tikzpicture}[remember picture,overlay]
+    \node[
+      fill=white,
+      rounded corners=8pt,
+      draw=ThemeLine,
+      minimum width=14.2cm,
+      minimum height=3.85cm,
+      drop shadow={shadow xshift=1.6mm,shadow yshift=-1.6mm,opacity=0.35},
+      anchor=north
+    ] at ([yshift=-1.15cm]current page.north) {};
+    \draw[line width=0.9pt,ThemeLine] ([xshift=-4.65cm,yshift=-4.52cm]current page.north) -- ([xshift=4.65cm,yshift=-4.52cm]current page.north);
+  \end{tikzpicture}
+
+  \vspace*{1.45cm}
+  \begin{center}
+    {\fontsize{23}{33}\selectfont\bfseries\color{ThemeNavy}\inserttitle\par}
+    \vspace{0.18cm}
+    {\Large\color{ThemeNavy!92!black}\insertsubtitle\par}
+  \end{center}
+
+  \vspace{2.15cm}
+  \begin{center}
+    {\Large\color{black!80}Presenter: \insertauthor\par}
+    \vspace{0.35cm}
+    {\large\color{ThemeTextMuted}\insertinstitute\par}
+  \end{center}
+\begin{tikzpicture}[remember picture,overlay]
+  \draw[line width=0.9pt,ThemeLine] ([xshift=-4.65cm,yshift=-4.52cm]current page.north) -- ([xshift=4.65cm,yshift=-4.52cm]current page.north);
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Overview}
+  \begin{itemize}
+    \item State the narrative in 3--5 sections, not a wall of subsections.
+    \item Use overview or progress frames sparingly and keep them visually light.
+    \item Highlight the current section by weight, not by introducing new colors.
+  \end{itemize}
+\end{frame}
+
+\section{Situation}
+
+\begin{frame}{Problem Framing}
+  \begin{block}{Why this matters}
+    Lead with one sentence that establishes the practical or scientific importance.
+  \end{block}
+
+  \vspace{0.4cm}
+  \begin{itemize}
+    \item Use 3 short bullets that read as claims.
+    \item Keep the left margin clean and preserve large whitespace.
+    \item Cite external quantitative claims in a small source line near the bottom.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Two-Column Comparison}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \begin{column}{0.49\textwidth}
+      \begin{block}{Current State}
+        \begin{itemize}
+          \item Summarize the baseline or conventional approach.
+          \item Add one limitation per bullet.
+          \item Avoid paragraph-sized prose inside the panel.
+        \end{itemize}
+      \end{block}
+    \end{column}
+    \begin{column}{0.49\textwidth}
+      \begin{highlightbox}{What changes}
+        \begin{itemize}
+          \item Use the right column for the improved view or takeaway.
+          \item Keep the language claim-like and scan-friendly.
+          \item Use gold only for selected emphasis, not the whole deck structure.
+        \end{itemize}
+      \end{highlightbox}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\section{Evidence}
+
+\begin{frame}{Architecture Or Workflow}
+  \begin{columns}[T,totalwidth=\textwidth]
+    \begin{column}{0.56\textwidth}
+      \begin{block}{Process}
+        \placeholder{2.0cm}{Replace with a Mermaid-rendered workflow or a simple diagram}
+      \end{block}
+    \end{column}
+    \begin{column}{0.40\textwidth}
+      \begin{highlightbox}{Interpretation}
+        Use the side panel for the one point the audience should remember from the figure.
+      \end{highlightbox}
+      \vspace{0.4cm}
+      \begin{block}{Guardrail}
+        If results are not available, say `Planned Evaluation` or `Pending Result` explicitly.
+      \end{block}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Decision-Relevant Table}
+  \begin{block}{Only show the slice that matters}
+    \small
+    \begin{tabularx}{\textwidth}{lXXr}
+      \toprule
+      Item & Observation & Implication & Score \\
+      \midrule
+      A & Keep only the comparison that supports the slide claim. & Faster scan path. & 92 \\
+      B & Move raw detail to appendix frames. & Cleaner main narrative. & 87 \\
+      C & Cite every external quantitative claim. & Higher trust. & 95 \\
+      \bottomrule
+    \end{tabularx}
+  \end{block}
+\end{frame}
+
+\section{Closing}
+
+\begin{frame}{Closing}
+  \begin{block}{What to remember}
+    Summarize the final decision or result in one sentence.
+  \end{block}
+  \vspace{0.5cm}
+  \begin{itemize}
+    \item Main conclusion
+    \item One risk or limitation
+    \item Next step or discussion point
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[plain]
+  \begin{tikzpicture}[remember picture,overlay]
+    \fill[ThemeNavy] (current page.north west) rectangle ([yshift=-2.3cm]current page.north east);
+    \fill[ThemePanel] ([xshift=-4.8cm,yshift=-2.6cm]current page.north east) rectangle ([xshift=-0.9cm,yshift=-5.9cm]current page.north east);
+    \fill[ThemeAccent] ([xshift=1.35cm,yshift=-2.75cm]current page.south west) rectangle ([xshift=8.2cm,yshift=-2.52cm]current page.south west);
+  \end{tikzpicture}
+
+  \vspace*{1.15cm}
+  \hspace*{0.7cm}{\fontsize{28}{32}\selectfont\bfseries\color{white}Q\&A / Discussion\par}
+
+  \vspace{2.0cm}
+  \hspace*{1.15cm}
+  \begin{minipage}[t]{0.56\textwidth}
+    {\large\color{black!82}End with a designed closing frame, not floating text.\par}
+    \vspace{0.3cm}
+    {\normalsize\color{black!82}
+      1. Repeat the deck topic or final claim.\par
+      2. Keep 2--3 discussion prompts if they help the room.\par
+      3. Preserve the same visual language as the cover.\par}
+  \end{minipage}
+
+  \begin{tikzpicture}[remember picture,overlay]
+    \node[anchor=north west,align=left,text width=3.1cm] at ([xshift=-4.45cm,yshift=-2.98cm]current page.north east) {%
+      {\small\bfseries\color{ThemeNavy}Discussion Focus\par}
+      \vspace{0.18cm}
+      {\small\color{black!80}Question 1\par}
+      {\small\color{black!80}Question 2\par}
+      {\small\color{black!80}Question 3\par}
+    };
+  \end{tikzpicture}
+
+  \plainfooter{\insertshortauthor}{\insertshorttitle}{\insertframenumber{} / \inserttotalframenumber}
+\end{frame}
+
+\end{document}
