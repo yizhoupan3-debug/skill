@@ -64,6 +64,9 @@ class RuntimeCheckpointControlPlaneDescriptor(BaseModel):
     trace_service: dict[str, Any]
     state_service: dict[str, Any]
     backend_family: str
+    supports_atomic_replace: bool
+    supports_compaction: bool
+    supports_snapshot_delta: bool
     supports_remote_event_transport: bool
     trace_output_path: str | None = None
     event_stream_path: str | None = None
@@ -119,6 +122,9 @@ def _build_checkpoint_control_plane_descriptor(
             defaults=_DEFAULT_STATE_SERVICE_DESCRIPTOR,
         ),
         "backend_family": capabilities.backend_family,
+        "supports_atomic_replace": capabilities.supports_atomic_replace,
+        "supports_compaction": capabilities.supports_compaction,
+        "supports_snapshot_delta": capabilities.supports_snapshot_delta,
         "supports_remote_event_transport": capabilities.supports_remote_event_transport,
         "trace_output_path": str(paths.trace_output_path) if paths.trace_output_path is not None else None,
         "event_stream_path": str(paths.event_stream_path) if paths.event_stream_path is not None else None,
@@ -168,6 +174,35 @@ class FilesystemRuntimeStorageBackend:
         tmp_path = path.with_suffix(f"{path.suffix}.tmp")
         tmp_path.write_text(payload, encoding="utf-8")
         tmp_path.replace(path)
+
+
+class InMemoryRuntimeStorageBackend:
+    """In-process backend used to validate backend-family-neutral runtime persistence."""
+
+    def __init__(self) -> None:
+        self._payloads: dict[str, str] = {}
+
+    def capabilities(self) -> RuntimeStoreCapabilities:
+        return RuntimeStoreCapabilities(
+            backend_family="memory",
+            supports_atomic_replace=False,
+            supports_compaction=False,
+            supports_snapshot_delta=False,
+            supports_remote_event_transport=True,
+        )
+
+    def exists(self, path: Path) -> bool:
+        return self._key(path) in self._payloads
+
+    def read_text(self, path: Path) -> str:
+        return self._payloads[self._key(path)]
+
+    def write_text(self, path: Path, payload: str) -> None:
+        self._payloads[self._key(path)] = payload
+
+    @staticmethod
+    def _key(path: Path) -> str:
+        return str(path)
 
 
 class RuntimeCheckpointer(Protocol):
@@ -250,6 +285,7 @@ class FilesystemRuntimeCheckpointer:
             JsonlTraceEventSink(
                 paths.event_stream_path,
                 control_plane_descriptor=self._control_plane.trace_service,
+                storage_backend=self.storage_backend,
             )
             if paths.event_stream_path is not None
             else None
@@ -258,6 +294,7 @@ class FilesystemRuntimeCheckpointer:
             output_path=paths.trace_output_path,
             event_sink=event_sink,
             event_bridge=event_bridge,
+            storage_backend=self.storage_backend,
             control_plane_descriptor=self._control_plane.trace_service,
         )
 
@@ -292,7 +329,6 @@ class FilesystemRuntimeCheckpointer:
             supervisor_projection=supervisor_projection,
             control_plane=self._control_plane.model_dump(mode="json"),
         )
-        paths.resume_manifest_path.parent.mkdir(parents=True, exist_ok=True)
         self.storage_backend.write_text(
             paths.resume_manifest_path,
             manifest.model_dump_json(indent=2) + "\n",
@@ -332,6 +368,9 @@ class FilesystemRuntimeCheckpointer:
                 "control_plane_delegate_kind": self._control_plane.trace_service.get("delegate_kind"),
                 "transport_health": {
                     "backend_family": self._control_plane.backend_family,
+                    "supports_atomic_replace": self._control_plane.supports_atomic_replace,
+                    "supports_compaction": self._control_plane.supports_compaction,
+                    "supports_snapshot_delta": self._control_plane.supports_snapshot_delta,
                     "supports_remote_event_transport": self._control_plane.supports_remote_event_transport,
                 },
             }
