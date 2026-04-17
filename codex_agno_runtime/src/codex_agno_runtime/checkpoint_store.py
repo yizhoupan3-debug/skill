@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Protocol
+from typing import Any, Iterable, Mapping, Protocol
+
+from pydantic import BaseModel
 
 from codex_agno_runtime.trace import (
     JsonlTraceEventSink,
@@ -14,6 +16,21 @@ from codex_agno_runtime.trace import (
     TraceReplayCursor,
     TraceResumeManifest,
 )
+
+
+RUNTIME_CHECKPOINT_CONTROL_PLANE_SCHEMA_VERSION = "runtime-checkpoint-control-plane-v1"
+_DEFAULT_TRACE_SERVICE_DESCRIPTOR = {
+    "authority": "rust-runtime-control-plane",
+    "role": "trace-and-handoff",
+    "projection": "python-thin-projection",
+    "delegate_kind": "filesystem-trace-store",
+}
+_DEFAULT_STATE_SERVICE_DESCRIPTOR = {
+    "authority": "rust-runtime-control-plane",
+    "role": "durable-background-state",
+    "projection": "python-thin-projection",
+    "delegate_kind": "filesystem-state-store",
+}
 
 
 @dataclass(frozen=True)
@@ -36,6 +53,80 @@ class RuntimeCheckpointPaths:
     resume_manifest_path: Path | None
     event_transport_dir: Path
     background_state_path: Path
+
+
+class RuntimeCheckpointControlPlaneDescriptor(BaseModel):
+    """Shared control-plane projection for checkpoint-backed trace/state artifacts."""
+
+    schema_version: str = RUNTIME_CHECKPOINT_CONTROL_PLANE_SCHEMA_VERSION
+    runtime_control_plane_schema_version: str | None = None
+    runtime_control_plane_authority: str = _DEFAULT_TRACE_SERVICE_DESCRIPTOR["authority"]
+    trace_service: dict[str, Any]
+    state_service: dict[str, Any]
+    backend_family: str
+    supports_remote_event_transport: bool
+    trace_output_path: str | None = None
+    event_stream_path: str | None = None
+    resume_manifest_path: str | None = None
+    background_state_path: str
+    event_transport_dir: str
+
+
+def _build_service_projection(
+    *,
+    control_plane_descriptor: Mapping[str, Any] | None,
+    service_name: str,
+    defaults: Mapping[str, Any],
+) -> dict[str, Any]:
+    payload = dict(defaults)
+    if isinstance(control_plane_descriptor, Mapping):
+        services = control_plane_descriptor.get("services")
+        if isinstance(services, Mapping):
+            service = services.get(service_name)
+            if isinstance(service, Mapping):
+                for field in ("authority", "role", "projection", "delegate_kind"):
+                    value = service.get(field)
+                    if value is not None:
+                        payload[field] = value
+    return payload
+
+
+def _build_checkpoint_control_plane_descriptor(
+    *,
+    control_plane_descriptor: Mapping[str, Any] | None,
+    paths: RuntimeCheckpointPaths,
+    capabilities: RuntimeStoreCapabilities,
+) -> RuntimeCheckpointControlPlaneDescriptor:
+    payload: dict[str, Any] = {
+        "runtime_control_plane_schema_version": (
+            control_plane_descriptor.get("schema_version")
+            if isinstance(control_plane_descriptor, Mapping)
+            else None
+        ),
+        "runtime_control_plane_authority": str(
+            control_plane_descriptor.get("authority")
+            if isinstance(control_plane_descriptor, Mapping) and control_plane_descriptor.get("authority") is not None
+            else _DEFAULT_TRACE_SERVICE_DESCRIPTOR["authority"]
+        ),
+        "trace_service": _build_service_projection(
+            control_plane_descriptor=control_plane_descriptor,
+            service_name="trace",
+            defaults=_DEFAULT_TRACE_SERVICE_DESCRIPTOR,
+        ),
+        "state_service": _build_service_projection(
+            control_plane_descriptor=control_plane_descriptor,
+            service_name="state",
+            defaults=_DEFAULT_STATE_SERVICE_DESCRIPTOR,
+        ),
+        "backend_family": capabilities.backend_family,
+        "supports_remote_event_transport": capabilities.supports_remote_event_transport,
+        "trace_output_path": str(paths.trace_output_path) if paths.trace_output_path is not None else None,
+        "event_stream_path": str(paths.event_stream_path) if paths.event_stream_path is not None else None,
+        "resume_manifest_path": str(paths.resume_manifest_path) if paths.resume_manifest_path is not None else None,
+        "background_state_path": str(paths.background_state_path),
+        "event_transport_dir": str(paths.event_transport_dir),
+    }
+    return RuntimeCheckpointControlPlaneDescriptor.model_validate(payload)
 
 
 class RuntimeStorageBackend(Protocol):
@@ -122,6 +213,7 @@ class FilesystemRuntimeCheckpointer:
         trace_output_path: Path | None = None,
         background_state_path: Path | None = None,
         storage_backend: RuntimeStorageBackend | None = None,
+        control_plane_descriptor: Mapping[str, Any] | None = None,
     ) -> None:
         self.data_dir = data_dir
         self.storage_backend = storage_backend or FilesystemRuntimeStorageBackend()
@@ -133,6 +225,11 @@ class FilesystemRuntimeCheckpointer:
             ),
             event_transport_dir=data_dir / "runtime_event_transports",
             background_state_path=background_state_path or (data_dir / "runtime_background_jobs.json"),
+        )
+        self._control_plane = _build_checkpoint_control_plane_descriptor(
+            control_plane_descriptor=control_plane_descriptor,
+            paths=self._paths,
+            capabilities=self.storage_backend.capabilities(),
         )
 
     def describe_paths(self) -> RuntimeCheckpointPaths:
@@ -149,11 +246,19 @@ class FilesystemRuntimeCheckpointer:
         """Construct the recorder against the current backend paths."""
 
         paths = self.describe_paths()
-        event_sink = JsonlTraceEventSink(paths.event_stream_path) if paths.event_stream_path is not None else None
+        event_sink = (
+            JsonlTraceEventSink(
+                paths.event_stream_path,
+                control_plane_descriptor=self._control_plane.trace_service,
+            )
+            if paths.event_stream_path is not None
+            else None
+        )
         return RuntimeTraceRecorder(
             output_path=paths.trace_output_path,
             event_sink=event_sink,
             event_bridge=event_bridge,
+            control_plane_descriptor=self._control_plane.trace_service,
         )
 
     def checkpoint(
@@ -185,6 +290,7 @@ class FilesystemRuntimeCheckpointer:
             latest_cursor=latest_cursor,
             artifact_paths=artifact_paths,
             supervisor_projection=supervisor_projection,
+            control_plane=self._control_plane.model_dump(mode="json"),
         )
         paths.resume_manifest_path.parent.mkdir(parents=True, exist_ok=True)
         self.storage_backend.write_text(
@@ -217,9 +323,27 @@ class FilesystemRuntimeCheckpointer:
         path = self.transport_binding_path(session_id=transport.session_id, job_id=transport.job_id)
         if path is None:
             return None
-        payload = transport.model_copy(update={"binding_artifact_path": str(path)}).model_dump_json(indent=2) + "\n"
+        projected = transport.model_copy(
+            update={
+                "binding_artifact_path": str(path),
+                "control_plane_authority": self._control_plane.trace_service.get("authority"),
+                "control_plane_role": self._control_plane.trace_service.get("role"),
+                "control_plane_projection": self._control_plane.trace_service.get("projection"),
+                "control_plane_delegate_kind": self._control_plane.trace_service.get("delegate_kind"),
+                "transport_health": {
+                    "backend_family": self._control_plane.backend_family,
+                    "supports_remote_event_transport": self._control_plane.supports_remote_event_transport,
+                },
+            }
+        )
+        payload = projected.model_dump_json(indent=2) + "\n"
         self.storage_backend.write_text(path, payload)
         return path
+
+    def control_plane_descriptor(self) -> RuntimeCheckpointControlPlaneDescriptor:
+        """Return the shared control-plane descriptor for checkpoint-backed artifacts."""
+
+        return self._control_plane.model_copy()
 
     def artifact_paths(
         self,
@@ -271,6 +395,9 @@ class FilesystemRuntimeCheckpointer:
         paths = self.describe_paths()
         capabilities = self.storage_capabilities()
         return {
+            "control_plane_authority": self._control_plane.runtime_control_plane_authority,
+            "trace_control_plane_projection": self._control_plane.trace_service.get("projection"),
+            "state_control_plane_projection": self._control_plane.state_service.get("projection"),
             "backend_family": capabilities.backend_family,
             "supports_atomic_replace": capabilities.supports_atomic_replace,
             "supports_compaction": capabilities.supports_compaction,

@@ -253,6 +253,22 @@ def _python_prompt_required(ctx: MiddlewareContext) -> bool:
     return True
 
 
+def _resolve_projection_prompt(
+    ctx: MiddlewareContext,
+    *,
+    prompt_builder: Any | None = None,
+) -> tuple[str, str]:
+    """Resolve Python-side prompt text from the Rust-first control plane."""
+
+    if ctx.prompt:
+        return ctx.prompt, "middleware-context"
+    if ctx.routing_result.prompt_preview:
+        return ctx.routing_result.prompt_preview, "routing-result-preview"
+    if prompt_builder is None:
+        return "", "missing-prompt-source"
+    return prompt_builder.build_prompt(ctx.routing_result), "python-compatibility-builder"
+
+
 class SkillInjectionMiddleware(Middleware):
     """Inject skill-based prompt into the context.
 
@@ -281,7 +297,11 @@ class SkillInjectionMiddleware(Middleware):
         """
         if not _python_prompt_required(ctx):
             return ctx
-        ctx.prompt = self._prompt_builder.build_prompt(ctx.routing_result)
+        ctx.prompt, source = _resolve_projection_prompt(
+            ctx,
+            prompt_builder=self._prompt_builder,
+        )
+        ctx.metadata["python_prompt_source"] = source
         return ctx
 
 
@@ -316,6 +336,9 @@ class ContextCompressionMiddleware(Middleware):
         """
         if not _python_prompt_required(ctx):
             return ctx
+        if not ctx.prompt and ctx.routing_result.prompt_preview:
+            ctx.prompt = ctx.routing_result.prompt_preview
+            ctx.metadata.setdefault("python_prompt_source", "routing-result-preview")
         from codex_agno_runtime.context import ContextEngineer
 
         estimated = _estimate_tokens(ctx.prompt)
@@ -359,6 +382,9 @@ class MemoryMiddleware(Middleware):
         """
         if not _python_prompt_required(ctx):
             return ctx
+        if not ctx.prompt and ctx.routing_result.prompt_preview:
+            ctx.prompt = ctx.routing_result.prompt_preview
+            ctx.metadata.setdefault("python_prompt_source", "routing-result-preview")
         facts = self._store.load_facts(ctx.user_id)
         if facts:
             ctx.memory_facts = facts
@@ -457,6 +483,9 @@ class SubagentLimitMiddleware(Middleware):
         ctx.metadata["subagent_timeout_seconds"] = self._timeout
 
         if _python_prompt_required(ctx):
+            if not ctx.prompt and ctx.routing_result.prompt_preview:
+                ctx.prompt = ctx.routing_result.prompt_preview
+                ctx.metadata.setdefault("python_prompt_source", "routing-result-preview")
             ctx.prompt += (
                 f"\n\n[Sub-Agent Limits] Hard limit: {self._max_concurrent} concurrent sub-agents. "
                 f"Timeout: {self._timeout}s per sub-agent. "

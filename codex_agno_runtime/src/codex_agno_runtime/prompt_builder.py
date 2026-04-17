@@ -80,23 +80,15 @@ class PromptBuilder:
         Returns:
             str: The injected prompt text.
         """
-        # Progressive loading: hydrate body if not yet loaded
+        if routing_result.prompt_preview:
+            return routing_result.prompt_preview
+
         selected = routing_result.selected_skill
         if not selected.body_loaded and self._loader is not None:
             self._loader.load_body(selected)
 
         parts = [
-            dedent(
-                f"""
-                You are the Codex Singleton running on Agno.
-                Use exactly one primary owner skill and at most one overlay.
-                The router already selected the active skill for this task.
-
-                Active owner skill: {selected.name}
-                Routing layer: {routing_result.layer}
-                Session id: {routing_result.session_id}
-                """
-            ).strip(),
+            self._render_route_header(routing_result),
             self._render_skill(selected, heading="Owner skill", is_overlay=False),
         ]
         if routing_result.overlay_skill is not None:
@@ -105,6 +97,43 @@ class PromptBuilder:
                 self._loader.load_body(overlay)
             parts.append(self._render_skill(overlay, heading="Overlay skill", is_overlay=True))
         return "\n\n".join(parts).strip()
+
+    def _render_route_header(self, routing_result: RoutingResult) -> str:
+        """Render the control-plane header for compatibility prompts."""
+
+        selected = routing_result.selected_skill
+        overlay_name = routing_result.overlay_skill.name if routing_result.overlay_skill else "none"
+        reasons = routing_result.reasons or ["Rust route decision already resolved upstream."]
+        reason_block = "\n".join(f"- {reason}" for reason in reasons[:5])
+        if routing_result.route_engine == "rust":
+            return dedent(
+                f"""
+                You are the Python compatibility projection for a Rust-routed Codex runtime.
+                The Rust control plane already selected the route. Do not reroute or reinterpret ownership.
+
+                Active owner skill: {selected.name}
+                Active overlay skill: {overlay_name}
+                Routing layer: {routing_result.layer}
+                Session id: {routing_result.session_id}
+                Route engine authority: rust-first
+                Compatibility role: prompt fallback / dry-run projection only
+
+                Route reasons:
+                {reason_block}
+                """
+            ).strip()
+        return dedent(
+            f"""
+            You are the Codex Singleton running on Agno.
+            Use exactly one primary owner skill and at most one overlay.
+            The active route is already selected for this task.
+
+            Active owner skill: {selected.name}
+            Active overlay skill: {overlay_name}
+            Routing layer: {routing_result.layer}
+            Session id: {routing_result.session_id}
+            """
+        ).strip()
 
     def _render_skill(self, skill: SkillMetadata, heading: str, is_overlay: bool = False) -> str:
         """Render a single skill into an instruction block.
@@ -129,13 +158,13 @@ class PromptBuilder:
                 sections.append(f"Do not use:\n{skill.do_not_use.strip()}")
 
         # Token budget: L0/L-1 controllers get full body; domain skills get key sections only
-        if skill.routing_layer in ("L0", "L-1"):
+        if skill.body.strip() and skill.routing_layer in ("L0", "L-1"):
             sections.append(f"Skill body:\n{skill.body.strip()}")
         else:
             key_content = self._extract_key_sections(skill.body)
             if key_content:
                 sections.append(f"Key instructions:\n{key_content}")
-            else:
+            elif skill.body.strip():
                 # Fallback: use full body if no key sections found
                 sections.append(f"Skill body:\n{skill.body.strip()}")
         return "\n\n".join(sections).strip()
@@ -160,4 +189,3 @@ class PromptBuilder:
                 end = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
                 extracted.append(body[start:end].strip())
         return "\n\n".join(extracted)
-

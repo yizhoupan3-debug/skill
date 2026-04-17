@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Mapping
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +22,14 @@ ACTIVE_JOB_STATUSES = {
 }
 TERMINAL_JOB_STATUSES = {"completed", "failed", "interrupted", "retry_exhausted"}
 BACKGROUND_STATE_SCHEMA_VERSION = "runtime-background-state-v4"
+BACKGROUND_STATE_CONTROL_PLANE_SCHEMA_VERSION = "runtime-background-state-control-plane-v1"
+_STATE_SERVICE_NAME = "state"
+_DEFAULT_STATE_SERVICE_DESCRIPTOR = {
+    "authority": "rust-runtime-control-plane",
+    "role": "durable-background-state",
+    "projection": "python-thin-projection",
+    "delegate_kind": "filesystem-state-store",
+}
 VALID_TRANSITIONS = {
     None: ACTIVE_JOB_STATUSES | TERMINAL_JOB_STATUSES,
     "queued": {"queued", "running", "interrupt_requested", "interrupted", "failed"},
@@ -83,9 +92,53 @@ class _PersistedBackgroundState(BaseModel):
 
     version: int = 2
     schema_version: str = BACKGROUND_STATE_SCHEMA_VERSION
+    control_plane: dict[str, Any] | None = None
     jobs: list[BackgroundRunStatus] = Field(default_factory=list)
     active_sessions: list[_PersistedActiveSession] = Field(default_factory=list)
     pending_session_takeovers: list[_PersistedPendingTakeover] = Field(default_factory=list)
+
+
+class BackgroundStateControlPlaneDescriptor(BaseModel):
+    """Rust-owned control-plane projection for the Python background-state host."""
+
+    schema_version: str = BACKGROUND_STATE_CONTROL_PLANE_SCHEMA_VERSION
+    runtime_control_plane_schema_version: str | None = None
+    runtime_control_plane_authority: str = _DEFAULT_STATE_SERVICE_DESCRIPTOR["authority"]
+    service: str = _STATE_SERVICE_NAME
+    authority: str = _DEFAULT_STATE_SERVICE_DESCRIPTOR["authority"]
+    role: str = _DEFAULT_STATE_SERVICE_DESCRIPTOR["role"]
+    projection: str = _DEFAULT_STATE_SERVICE_DESCRIPTOR["projection"]
+    delegate_kind: str = _DEFAULT_STATE_SERVICE_DESCRIPTOR["delegate_kind"]
+    transport_family: str = "checkpoint-artifact"
+    health_family: str = "runtime-health"
+    backend_family: str = "filesystem"
+    state_path: str | None = None
+
+
+def _build_state_control_plane_descriptor(
+    *,
+    control_plane_descriptor: Mapping[str, Any] | None,
+    storage_backend: RuntimeStorageBackend,
+    state_path: Path | None,
+) -> BackgroundStateControlPlaneDescriptor:
+    payload: dict[str, Any] = {
+        "backend_family": storage_backend.capabilities().backend_family,
+        "state_path": str(state_path) if state_path is not None else None,
+    }
+    if isinstance(control_plane_descriptor, Mapping):
+        payload["runtime_control_plane_schema_version"] = control_plane_descriptor.get("schema_version")
+        payload["runtime_control_plane_authority"] = str(
+            control_plane_descriptor.get("authority") or _DEFAULT_STATE_SERVICE_DESCRIPTOR["authority"]
+        )
+        services = control_plane_descriptor.get("services")
+        if isinstance(services, Mapping):
+            service = services.get(_STATE_SERVICE_NAME)
+            if isinstance(service, Mapping):
+                for field in ("authority", "role", "projection", "delegate_kind"):
+                    value = service.get(field)
+                    if value is not None:
+                        payload[field] = value
+    return BackgroundStateControlPlaneDescriptor.model_validate(payload)
 
 
 class BackgroundJobStore:
@@ -96,12 +149,18 @@ class BackgroundJobStore:
         *,
         state_path: Path | None = None,
         storage_backend: RuntimeStorageBackend | None = None,
+        control_plane_descriptor: Mapping[str, Any] | None = None,
     ) -> None:
         self._jobs: dict[str, BackgroundRunStatus] = {}
         self._active_sessions: dict[str, str] = {}
         self._pending_session_takeovers: dict[str, str] = {}
         self._state_path = state_path
         self._storage_backend = storage_backend or FilesystemRuntimeStorageBackend()
+        self._control_plane = _build_state_control_plane_descriptor(
+            control_plane_descriptor=control_plane_descriptor,
+            storage_backend=self._storage_backend,
+            state_path=self._state_path,
+        )
         self._load_state()
 
     def set_status(
@@ -297,6 +356,29 @@ class BackgroundJobStore:
 
         return sum(1 for job in self._jobs.values() if job.status in ACTIVE_JOB_STATUSES)
 
+    def control_plane_descriptor(self) -> BackgroundStateControlPlaneDescriptor:
+        """Return the Rust-owned control-plane projection for this Python store."""
+
+        return self._control_plane.model_copy()
+
+    def health(self) -> dict[str, Any]:
+        """Return store health using the shared control-plane boundary."""
+
+        descriptor = self.control_plane_descriptor()
+        return {
+            "control_plane_authority": descriptor.authority,
+            "control_plane_role": descriptor.role,
+            "control_plane_projection": descriptor.projection,
+            "control_plane_delegate_kind": descriptor.delegate_kind,
+            "runtime_control_plane_authority": descriptor.runtime_control_plane_authority,
+            "runtime_control_plane_schema_version": descriptor.runtime_control_plane_schema_version,
+            "backend_family": descriptor.backend_family,
+            "state_path": descriptor.state_path,
+            "job_count": len(self._jobs),
+            "active_job_count": self.active_job_count(),
+            "pending_session_takeovers": self.pending_session_takeovers(),
+        }
+
     def _assert_transition(self, previous_status: str | None, next_status: str) -> None:
         """Validate background job lifecycle transitions."""
 
@@ -338,6 +420,16 @@ class BackgroundJobStore:
 
         payload = json.loads(self._storage_backend.read_text(self._state_path))
         persisted = _PersistedBackgroundState.model_validate(payload)
+        if persisted.control_plane is not None:
+            merged = self._control_plane.model_dump(mode="json")
+            merged.update(
+                {
+                    key: value
+                    for key, value in persisted.control_plane.items()
+                    if value is not None
+                }
+            )
+            self._control_plane = BackgroundStateControlPlaneDescriptor.model_validate(merged)
         self._jobs = {job.job_id: job for job in persisted.jobs}
 
         if persisted.active_sessions:
@@ -367,6 +459,7 @@ class BackgroundJobStore:
             return
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
         persisted = _PersistedBackgroundState(
+            control_plane=self._control_plane.model_dump(mode="json"),
             jobs=[self._jobs[job_id] for job_id in sorted(self._jobs)],
             active_sessions=[
                 _PersistedActiveSession(session_id=session_id, job_id=job_id)

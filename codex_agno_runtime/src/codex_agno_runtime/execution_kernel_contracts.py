@@ -3,11 +3,28 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Mapping
 
 from .schemas import RoutingResult, RunTaskResponse, UsageMetrics
 
 EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY = "execution_kernel_fallback_reason"
+EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY = "execution_kernel_contract_mode"
+EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY = "execution_kernel_fallback_policy"
+EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY = (
+    "execution_kernel_compatibility_agent_contract"
+)
+EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY = (
+    "execution_kernel_compatibility_agent_kind"
+)
+EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY = (
+    "execution_kernel_compatibility_agent_authority"
+)
+EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE = "rust-live-primary"
+EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY = "infrastructure-only-explicit"
+EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION = (
+    "execution-kernel-compatibility-agent-v1"
+)
 EXECUTION_KERNEL_LIVE_PRIMARY_SCHEMA_VERSION = "router-rs-execute-response-v1"
 EXECUTION_KERNEL_LIVE_RESPONSE_SERIALIZATION_STATUS_CONTRACT = (
     "execution_kernel_live_response_serialization_contract_v1"
@@ -51,7 +68,11 @@ LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS = (
     "route_engine",
     "rollback_to_python",
 )
-DRY_RUN_RUNTIME_METADATA_FIELDS = ("reason",)
+DRY_RUN_RUNTIME_METADATA_FIELDS = (
+    "reason",
+    EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
+    EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
+)
 DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS = (
     *DRY_RUN_RUNTIME_METADATA_FIELDS,
     *RUNTIME_TRACE_METADATA_FIELDS,
@@ -59,9 +80,14 @@ DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS = (
 COMPATIBILITY_FALLBACK_RUNTIME_METADATA_FIELDS = (
     "run_id",
     "status",
+    EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
+    EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
     "execution_kernel_primary",
     "execution_kernel_primary_authority",
     EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
 )
 COMPATIBILITY_FALLBACK_REQUIRED_RUNTIME_METADATA_FIELDS = (
     "run_id",
@@ -74,6 +100,14 @@ COMPATIBILITY_FALLBACK_PROMPT_PREVIEW_OWNER = "python-agno-kernel-adapter"
 DRY_RUN_PROMPT_PREVIEW_OWNER = "rust-execution-cli"
 LIVE_PRIMARY_MODEL_ID_SOURCE = "aggregator-response.model"
 COMPATIBILITY_FALLBACK_MODEL_ID_SOURCE = "agno-run-output.model"
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionKernelCompatibilityAgentSpec:
+    """Python compatibility-agent contract emitted by Rust-primary execution lanes."""
+
+    instructions: tuple[str, ...]
+    metadata: dict[str, Any]
 
 
 def build_trace_runtime_metadata(
@@ -94,13 +128,32 @@ def build_compatibility_fallback_metadata(
     primary_adapter_kind: str,
     primary_authority: str,
     error: Exception | str,
-) -> dict[str, str]:
+    compatibility_agent_metadata: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Return the compatibility-only metadata added when Python handles a live fallback."""
 
-    return {
+    metadata: dict[str, Any] = {
+        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY: EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
+        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY: (
+            EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
+        ),
         "execution_kernel_primary": primary_adapter_kind,
         "execution_kernel_primary_authority": primary_authority,
         EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY: str(error),
+    }
+    if compatibility_agent_metadata:
+        metadata.update(dict(compatibility_agent_metadata))
+    return metadata
+
+
+def build_execution_kernel_compatibility_projection_metadata() -> dict[str, str]:
+    """Return shared metadata for Python compatibility projections of Rust-primary execution."""
+
+    return {
+        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY: EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
+        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY: (
+            EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
+        ),
     }
 
 
@@ -156,6 +209,10 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
             "dry_run_prompt_preview_owner": DRY_RUN_PROMPT_PREVIEW_OWNER,
             "live_primary_model_id_source": LIVE_PRIMARY_MODEL_ID_SOURCE,
             "compatibility_fallback_model_id_source": COMPATIBILITY_FALLBACK_MODEL_ID_SOURCE,
+            "compatibility_fallback_policy": EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
+            "compatibility_agent_contract_version": (
+                EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION
+            ),
             "compatibility_fallback_reason_metadata_key": (
                 EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY
             ),
@@ -223,16 +280,44 @@ def build_execution_kernel_compatibility_agent_instructions(
     *,
     routing_result: RoutingResult,
     build_prompt: Callable[[RoutingResult], str],
+    prompt_preview: str | None = None,
 ) -> list[str]:
     """Return shared fallback-agent instructions for Python compatibility execution."""
 
-    return [
-        resolve_execution_kernel_prompt_preview(
-            prompt_preview=routing_result.prompt_preview,
-            routing_result=routing_result,
-            build_prompt=build_prompt,
-        )
-    ]
+    spec = build_execution_kernel_compatibility_agent_spec(
+        routing_result=routing_result,
+        build_prompt=build_prompt,
+        prompt_preview=prompt_preview,
+    )
+    return [*spec.instructions]
+
+
+def build_execution_kernel_compatibility_agent_spec(
+    *,
+    routing_result: RoutingResult,
+    build_prompt: Callable[[RoutingResult], str],
+    prompt_preview: str | None = None,
+) -> ExecutionKernelCompatibilityAgentSpec:
+    """Return the explicit Python compatibility-agent construction contract."""
+
+    resolved_prompt_preview = resolve_execution_kernel_prompt_preview(
+        prompt_preview=prompt_preview or routing_result.prompt_preview,
+        routing_result=routing_result,
+        build_prompt=build_prompt,
+    )
+    return ExecutionKernelCompatibilityAgentSpec(
+        instructions=(resolved_prompt_preview,),
+        metadata={
+            **build_execution_kernel_compatibility_projection_metadata(),
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY: (
+                EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION
+            ),
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY: "python-agno",
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY: (
+                COMPATIBILITY_FALLBACK_PROMPT_PREVIEW_OWNER
+            ),
+        },
+    )
 
 
 def build_execution_kernel_dry_run_response(
@@ -249,6 +334,7 @@ def build_execution_kernel_dry_run_response(
     execution_kernel_authority: str,
     trace_event_count: int,
     trace_output_path: str | None,
+    extra_metadata: Mapping[str, Any] | None = None,
 ) -> RunTaskResponse:
     """Return the shared dry-run response shape for Python-owned execution-kernel paths."""
 
@@ -275,7 +361,8 @@ def build_execution_kernel_dry_run_response(
             trace_output_path=trace_output_path,
             extra_fields={
                 "reason": "Live model execution is disabled; returned a deterministic dry-run payload."
-            },
+            }
+            | dict(extra_metadata or {}),
         ),
     )
 
@@ -296,6 +383,7 @@ def build_execution_kernel_compatibility_live_response(
     execution_kernel_authority: str,
     trace_event_count: int,
     trace_output_path: str | None,
+    extra_metadata: Mapping[str, Any] | None = None,
 ) -> RunTaskResponse:
     """Return the shared compatibility live-response shape for Python-owned execution-kernel paths."""
 
@@ -317,6 +405,7 @@ def build_execution_kernel_compatibility_live_response(
             extra_fields={
                 "run_id": run_id,
                 "status": status,
-            },
+            }
+            | dict(extra_metadata or {}),
         ),
     )

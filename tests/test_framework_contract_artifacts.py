@@ -546,9 +546,14 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "status",
         "trace_event_count",
         "trace_output_path",
+        "execution_kernel_contract_mode",
+        "execution_kernel_fallback_policy",
         "execution_kernel_primary",
         "execution_kernel_primary_authority",
         "execution_kernel_fallback_reason",
+        "execution_kernel_compatibility_agent_contract",
+        "execution_kernel_compatibility_agent_kind",
+        "execution_kernel_compatibility_agent_authority",
     ]
     assert rust_response_serialization["retirement_gates"][
         "compatibility_live_response_serialization_still_python_owned"

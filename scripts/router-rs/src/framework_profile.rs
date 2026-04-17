@@ -3080,14 +3080,23 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         Value::Array(vec![
             Value::String("run_id".to_string()),
             Value::String("status".to_string()),
+            Value::String("execution_kernel_contract_mode".to_string()),
+            Value::String("execution_kernel_fallback_policy".to_string()),
             Value::String("execution_kernel_primary".to_string()),
             Value::String("execution_kernel_primary_authority".to_string()),
             Value::String("execution_kernel_fallback_reason".to_string()),
+            Value::String("execution_kernel_compatibility_agent_contract".to_string()),
+            Value::String("execution_kernel_compatibility_agent_kind".to_string()),
+            Value::String("execution_kernel_compatibility_agent_authority".to_string()),
         ]),
     );
     runtime_response_metadata_fields.insert(
         "dry_run".to_string(),
-        Value::Array(vec![Value::String("reason".to_string())]),
+        Value::Array(vec![
+            Value::String("reason".to_string()),
+            Value::String("execution_kernel_contract_mode".to_string()),
+            Value::String("execution_kernel_fallback_policy".to_string()),
+        ]),
     );
 
     let mut current_contract_truth = Map::new();
@@ -3118,6 +3127,14 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
     current_contract_truth.insert(
         "compatibility_fallback_model_id_source".to_string(),
         Value::String("agno-run-output.model".to_string()),
+    );
+    current_contract_truth.insert(
+        "compatibility_fallback_policy".to_string(),
+        Value::String("infrastructure-only-explicit".to_string()),
+    );
+    current_contract_truth.insert(
+        "compatibility_agent_contract_version".to_string(),
+        Value::String("execution-kernel-compatibility-agent-v1".to_string()),
     );
     current_contract_truth.insert(
         "compatibility_fallback_reason_metadata_key".to_string(),
@@ -3173,9 +3190,14 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
             Value::String("status".to_string()),
             Value::String("trace_event_count".to_string()),
             Value::String("trace_output_path".to_string()),
+            Value::String("execution_kernel_contract_mode".to_string()),
+            Value::String("execution_kernel_fallback_policy".to_string()),
             Value::String("execution_kernel_primary".to_string()),
             Value::String("execution_kernel_primary_authority".to_string()),
             Value::String("execution_kernel_fallback_reason".to_string()),
+            Value::String("execution_kernel_compatibility_agent_contract".to_string()),
+            Value::String("execution_kernel_compatibility_agent_kind".to_string()),
+            Value::String("execution_kernel_compatibility_agent_authority".to_string()),
         ]),
     );
     compatibility_fallback.insert("fallback_reason_present".to_string(), Value::Bool(true));
@@ -3199,6 +3221,8 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         "required_metadata_fields".to_string(),
         Value::Array(vec![
             Value::String("reason".to_string()),
+            Value::String("execution_kernel_contract_mode".to_string()),
+            Value::String("execution_kernel_fallback_policy".to_string()),
             Value::String("trace_event_count".to_string()),
             Value::String("trace_output_path".to_string()),
         ]),

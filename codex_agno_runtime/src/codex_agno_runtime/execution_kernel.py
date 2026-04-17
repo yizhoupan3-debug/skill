@@ -14,10 +14,12 @@ try:  # pragma: no cover - import is environment-dependent
 except Exception:  # pragma: no cover - local dev often runs without Agno installed
     AgnoRunOutput = None
 
-from codex_agno_runtime.agent_factory import AgentFactory
+from codex_agno_runtime.agent_factory import AgentFactory, CompatibilityAgentHandle
 from codex_agno_runtime.config import RuntimeSettings
 from codex_agno_runtime.execution_kernel_contracts import (
     build_compatibility_fallback_metadata,
+    build_execution_kernel_compatibility_agent_spec,
+    build_execution_kernel_compatibility_projection_metadata,
     build_execution_kernel_compatibility_live_response,
     build_execution_kernel_dry_run_response,
     resolve_execution_kernel_prompt_preview,
@@ -226,10 +228,10 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
     authority = "python-agno-kernel-adapter"
 
     def _live_fallback_enabled(self) -> bool:
-        return bool(getattr(self.settings, "rust_execute_fallback_to_python", True))
+        return bool(getattr(self.settings, "rust_execute_fallback_to_python", False))
 
     def _live_fallback_mode(self) -> str:
-        return "compatibility" if self._live_fallback_enabled() else "disabled"
+        return "compatibility-only-explicit" if self._live_fallback_enabled() else "disabled"
 
     def live_fallback_enabled(self) -> bool:
         """Expose whether the compatibility live fallback is currently allowed."""
@@ -307,7 +309,15 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
             routing_result=request.routing_result,
             build_prompt=self.prompt_builder.build_prompt,
         )
-        response = await self._live_run_response(request, prompt_preview=prompt_preview)
+        compatibility_handle = self._build_compatibility_agent_handle(
+            request=request,
+            prompt_preview=prompt_preview,
+        )
+        response = await self._live_run_response(
+            request,
+            prompt_preview=prompt_preview,
+            compatibility_handle=compatibility_handle,
+        )
         response.metadata.setdefault("execution_kernel", self.adapter_kind)
         response.metadata.setdefault("execution_kernel_authority", self.authority)
         response.metadata.update(
@@ -315,6 +325,7 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
                 primary_adapter_kind=self._rust_live_kernel.adapter_kind,
                 primary_authority=self._rust_live_kernel.authority,
                 error=error,
+                compatibility_agent_metadata=compatibility_handle.contract.metadata,
             )
         )
         return response
@@ -369,6 +380,7 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
             execution_kernel_authority=self.authority,
             trace_event_count=request.trace_event_count,
             trace_output_path=request.trace_output_path,
+            extra_metadata=build_execution_kernel_compatibility_projection_metadata(),
         )
 
     async def _live_run_response(
@@ -376,9 +388,14 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
         request: ExecutionKernelRequest,
         *,
         prompt_preview: str,
+        compatibility_handle: CompatibilityAgentHandle | None = None,
     ) -> RunTaskResponse:
         routing_result = request.routing_result
-        agent = self.agent_factory.build_compatibility_agent(routing_result, request.user_id)
+        compatibility_handle = compatibility_handle or self._build_compatibility_agent_handle(
+            request=request,
+            prompt_preview=prompt_preview,
+        )
+        agent = compatibility_handle.agent
         if prompt_preview:
             agent.instructions = [prompt_preview]
         run_output = await agent.arun(
@@ -408,6 +425,42 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
             execution_kernel_authority=self.authority,
             trace_event_count=request.trace_event_count,
             trace_output_path=request.trace_output_path,
+            extra_metadata=compatibility_handle.contract.metadata,
+        )
+
+    def _build_compatibility_agent_handle(
+        self,
+        *,
+        request: ExecutionKernelRequest,
+        prompt_preview: str,
+    ) -> CompatibilityAgentHandle:
+        build_handle = getattr(self.agent_factory, "build_compatibility_agent_handle", None)
+        if callable(build_handle):
+            return build_handle(
+                request.routing_result,
+                request.user_id,
+                prompt_preview=prompt_preview,
+            )
+        compatibility_spec = build_execution_kernel_compatibility_agent_spec(
+            routing_result=request.routing_result,
+            build_prompt=self.prompt_builder.build_prompt,
+            prompt_preview=prompt_preview,
+        )
+        build_agent = self.agent_factory.build_compatibility_agent
+        try:
+            agent = build_agent(
+                request.routing_result,
+                request.user_id,
+                prompt_preview=prompt_preview,
+            )
+        except TypeError:
+            agent = build_agent(
+                request.routing_result,
+                request.user_id,
+            )
+        return CompatibilityAgentHandle(
+            agent=agent,
+            contract=compatibility_spec,
         )
 
     @staticmethod

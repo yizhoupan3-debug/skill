@@ -160,6 +160,8 @@ def test_trace_recorder_writes_versioned_metadata(tmp_path: Path) -> None:
     assert data["trace_event_sink_schema_version"] == TRACE_EVENT_SINK_SCHEMA_VERSION
     assert data["reroute_count"] == 1
     assert data["retry_count"] == 1
+    assert data["control_plane"]["authority"] == "rust-runtime-control-plane"
+    assert data["control_plane"]["projection"] == "python-thin-projection"
     assert data["supervisor_projection"] == {
         "supervisor_state_path": "/tmp/.supervisor_state.json",
         "active_phase": "validated",
@@ -179,6 +181,8 @@ def test_trace_recorder_writes_versioned_metadata(tmp_path: Path) -> None:
     assert lines[0]["event"]["seq"] == 1
     assert lines[0]["event"]["cursor"].startswith("g0:s1:")
     assert data["stream"]["replay_supported"] is True
+    assert data["stream"]["control_plane_authority"] == "rust-runtime-control-plane"
+    assert data["stream"]["control_plane_projection"] == "python-thin-projection"
     assert data["stream"]["latest_seq"] == 4
     assert data["stream"]["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
 
@@ -412,6 +416,8 @@ def test_in_memory_event_bridge_supports_last_event_id_heartbeat_and_cleanup() -
     cleaned = bridge.subscribe(session_id="session-4", job_id="job-4", heartbeat=True)
     assert cleaned.events == []
     assert cleaned.heartbeat is not None
+    assert bridge.health()["control_plane_projection"] == "python-thin-projection"
+    assert bridge.health()["transport_family"] == "artifact-handoff"
     other_job = bridge.subscribe(session_id="session-4", job_id="job-5")
     assert [event.job_id for event in other_job.events] == ["job-5"]
 

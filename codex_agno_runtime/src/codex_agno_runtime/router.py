@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from typing import Any, Mapping
 
 from codex_agno_runtime.schemas import RoutingResult, ScoredSkill, SkillMetadata
 from codex_agno_runtime.utils import normalize_text, tokenize
@@ -40,27 +41,65 @@ SKILL_ALIAS_HINTS = {
 }
 
 
+def _router_service_descriptor(control_plane_descriptor: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Project the router slice from the shared runtime control plane."""
+
+    if not isinstance(control_plane_descriptor, Mapping):
+        return {}
+    services = control_plane_descriptor.get("services")
+    if not isinstance(services, Mapping):
+        return {}
+    router = services.get("router")
+    if not isinstance(router, Mapping):
+        return {}
+    return dict(router)
+
+
 class SkillRouter:
     """Select the best matching skill using Codex routing semantics."""
 
-    def __init__(self, skills: list[SkillMetadata]) -> None:
+    def __init__(
+        self,
+        skills: list[SkillMetadata],
+        *,
+        control_plane_descriptor: Mapping[str, Any] | None = None,
+    ) -> None:
         self.skills = skills
+        self.control_plane_descriptor = dict(control_plane_descriptor) if isinstance(control_plane_descriptor, Mapping) else {}
+        self._service_descriptor = _router_service_descriptor(control_plane_descriptor)
+
+    def projection_descriptor(self) -> dict[str, Any]:
+        """Describe the Python router as a Rust-control-plane projection."""
+
+        projection = str(self._service_descriptor.get("projection", "")).strip()
+        return {
+            "authority": self._service_descriptor.get("authority"),
+            "role": self._service_descriptor.get("role"),
+            "projection": projection or "python-local-router",
+            "delegate_kind": self._service_descriptor.get("delegate_kind"),
+            "compatibility_only": projection.startswith("python-"),
+        }
 
     def route(self, task: str, session_id: str, allow_overlay: bool = True, first_turn: bool = True) -> RoutingResult:
         scored_candidates = [self._score_skill(skill, task, first_turn) for skill in self.skills]
         viable_candidates = [candidate for candidate in scored_candidates if candidate.score > 0]
+        projection = self.projection_descriptor()
         if not viable_candidates:
             fallback_skill = min(
                 self.skills,
                 key=lambda skill: (LAYER_ORDER.get(skill.routing_layer, 99), PRIORITY_ORDER.get(skill.routing_priority, 99), skill.name),
             )
+            reasons = ["No explicit keyword hit; fell back to the highest-priority skill in layer order."]
+            if projection["compatibility_only"]:
+                reasons.append("Python router executed only as a thin compatibility projection under the Rust control plane.")
             return RoutingResult(
                 task=task,
                 session_id=session_id,
                 selected_skill=fallback_skill,
                 score=0,
                 layer=fallback_skill.routing_layer,
-                reasons=["No explicit keyword hit; fell back to the highest-priority skill in layer order."],
+                reasons=reasons,
+                route_engine="python",
             )
 
         by_layer: dict[str, list[ScoredSkill]] = defaultdict(list)
@@ -69,6 +108,9 @@ class SkillRouter:
 
         selected = self._pick_owner(by_layer)
         overlay = self._pick_overlay(task, allow_overlay, selected.skill)
+        reasons = list(selected.reasons)
+        if projection["compatibility_only"]:
+            reasons.append("Python router executed only as a thin compatibility projection under the Rust control plane.")
         return RoutingResult(
             task=task,
             session_id=session_id,
@@ -76,7 +118,8 @@ class SkillRouter:
             overlay_skill=overlay,
             score=selected.score,
             layer=selected.skill.routing_layer,
-            reasons=selected.reasons,
+            reasons=reasons,
+            route_engine="python",
         )
 
     def _pick_owner(self, by_layer: dict[str, list[ScoredSkill]]) -> ScoredSkill:

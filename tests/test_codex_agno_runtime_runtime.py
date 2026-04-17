@@ -81,9 +81,10 @@ def test_skill_loader_supports_lazy_body_hydration() -> None:
 
     target = next(skill for skill in skills if skill.name == "subagent-delegation")
     assert target.body_loaded is False
-    assert target.when_to_use
+    assert target.when_to_use == ""
     loader.load_body(target)
     assert target.body_loaded is True
+    assert target.when_to_use
     assert "Runtime-policy adaptation" in target.body
 
 
@@ -695,8 +696,12 @@ def test_runtime_background_queue_rejects_duplicate_session_ids(tmp_path: Path) 
         assert second.session_id == "shared-session"
         assert "already active" in (second.error or "")
 
-        await asyncio.sleep(0.05)
-        status = runtime.get_background_status(first.job_id)
+        status = None
+        for _ in range(20):
+            await asyncio.sleep(0.05)
+            status = runtime.get_background_status(first.job_id)
+            if status is not None and status.status == "completed":
+                break
         assert status is not None
         assert status.status == "completed"
 

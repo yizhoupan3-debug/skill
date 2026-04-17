@@ -6,7 +6,7 @@ import json
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable, Protocol
+from typing import Any, Iterable, Mapping, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -21,12 +21,63 @@ TRACE_RESUME_MANIFEST_SCHEMA_VERSION = "runtime-resume-manifest-v1"
 TRACE_EVENT_BRIDGE_SCHEMA_VERSION = "runtime-event-bridge-v1"
 TRACE_EVENT_TRANSPORT_SCHEMA_VERSION = "runtime-event-transport-v1"
 TRACE_EVENT_HANDOFF_SCHEMA_VERSION = "runtime-event-handoff-v1"
+TRACE_CONTROL_PLANE_SCHEMA_VERSION = "runtime-trace-control-plane-v1"
+_TRACE_SERVICE_NAME = "trace"
+_DEFAULT_TRACE_SERVICE_DESCRIPTOR = {
+    "authority": "rust-runtime-control-plane",
+    "role": "trace-and-handoff",
+    "projection": "python-thin-projection",
+    "delegate_kind": "filesystem-trace-store",
+}
 
 
 def _now_iso() -> str:
     """Return a canonical UTC timestamp."""
 
     return datetime.now(UTC).isoformat()
+
+
+class TraceControlPlaneDescriptor(BaseModel):
+    """Rust-owned trace descriptor consumed by the Python compatibility host."""
+
+    schema_version: str = TRACE_CONTROL_PLANE_SCHEMA_VERSION
+    runtime_control_plane_schema_version: str | None = None
+    runtime_control_plane_authority: str = _DEFAULT_TRACE_SERVICE_DESCRIPTOR["authority"]
+    service: str = _TRACE_SERVICE_NAME
+    authority: str = _DEFAULT_TRACE_SERVICE_DESCRIPTOR["authority"]
+    role: str = _DEFAULT_TRACE_SERVICE_DESCRIPTOR["role"]
+    projection: str = _DEFAULT_TRACE_SERVICE_DESCRIPTOR["projection"]
+    delegate_kind: str = _DEFAULT_TRACE_SERVICE_DESCRIPTOR["delegate_kind"]
+    transport_family: str = "artifact-handoff"
+    resume_mode: str = "after_event_id"
+    event_stream_path: str | None = None
+    trace_output_path: str | None = None
+
+
+def _build_trace_control_plane_descriptor(
+    *,
+    control_plane_descriptor: Mapping[str, Any] | None,
+    event_stream_path: Path | None,
+    trace_output_path: Path | None,
+) -> TraceControlPlaneDescriptor:
+    payload: dict[str, Any] = {
+        "event_stream_path": str(event_stream_path) if event_stream_path is not None else None,
+        "trace_output_path": str(trace_output_path) if trace_output_path is not None else None,
+    }
+    if isinstance(control_plane_descriptor, Mapping):
+        payload["runtime_control_plane_schema_version"] = control_plane_descriptor.get("schema_version")
+        payload["runtime_control_plane_authority"] = str(
+            control_plane_descriptor.get("authority") or _DEFAULT_TRACE_SERVICE_DESCRIPTOR["authority"]
+        )
+        services = control_plane_descriptor.get("services")
+        if isinstance(services, Mapping):
+            service = services.get(_TRACE_SERVICE_NAME)
+            if isinstance(service, Mapping):
+                for field in ("authority", "role", "projection", "delegate_kind"):
+                    value = service.get(field)
+                    if value is not None:
+                        payload[field] = value
+    return TraceControlPlaneDescriptor.model_validate(payload)
 
 
 class TraceEvent(BaseModel):
@@ -103,6 +154,7 @@ class TraceResumeManifest(BaseModel):
     latest_cursor: TraceReplayCursor | None = None
     artifact_paths: list[str] = Field(default_factory=list)
     supervisor_projection: TraceSupervisorProjection | None = None
+    control_plane: dict[str, Any] | None = None
     updated_at: str = Field(default_factory=_now_iso)
 
 
@@ -159,6 +211,11 @@ class RuntimeEventTransport(BaseModel):
     cursor_schema_version: str = TRACE_REPLAY_CURSOR_SCHEMA_VERSION
     latest_cursor: TraceReplayCursor | None = None
     replay_supported: bool = True
+    control_plane_authority: str | None = None
+    control_plane_role: str | None = None
+    control_plane_projection: str | None = None
+    control_plane_delegate_kind: str | None = None
+    transport_health: dict[str, Any] | None = None
 
 
 class RuntimeEventHandoff(BaseModel):
@@ -171,6 +228,7 @@ class RuntimeEventHandoff(BaseModel):
     checkpoint_backend_family: str
     trace_stream_path: str | None = None
     resume_manifest_path: str | None = None
+    control_plane: dict[str, Any] | None = None
     transport: RuntimeEventTransport
 
 
@@ -212,10 +270,20 @@ class RuntimeEventBridge(Protocol):
 class InMemoryRuntimeEventBridge:
     """In-memory event bridge with Last-Event-ID-style resume semantics."""
 
-    def __init__(self, *, schema_version: str = TRACE_EVENT_BRIDGE_SCHEMA_VERSION) -> None:
+    def __init__(
+        self,
+        *,
+        schema_version: str = TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
+        control_plane_descriptor: Mapping[str, Any] | None = None,
+    ) -> None:
         self.schema_version = schema_version
         self._events: list[TraceEvent] = []
         self._event_ids: set[str] = set()
+        self._control_plane = _build_trace_control_plane_descriptor(
+            control_plane_descriptor=control_plane_descriptor,
+            event_stream_path=None,
+            trace_output_path=None,
+        )
 
     def seed(self, events: Iterable[TraceEvent]) -> None:
         """Seed the bridge with persisted events without duplicating event ids."""
@@ -297,6 +365,40 @@ class InMemoryRuntimeEventBridge:
         self._events = retained
         self._event_ids = {event.event_id for event in retained}
 
+    def bind_control_plane(
+        self,
+        *,
+        control_plane_descriptor: Mapping[str, Any] | None = None,
+        event_stream_path: Path | None = None,
+        trace_output_path: Path | None = None,
+    ) -> None:
+        """Attach or refresh the Rust-owned trace projection used by the bridge."""
+
+        self._control_plane = _build_trace_control_plane_descriptor(
+            control_plane_descriptor=control_plane_descriptor,
+            event_stream_path=event_stream_path,
+            trace_output_path=trace_output_path,
+        )
+
+    def control_plane_descriptor(self) -> TraceControlPlaneDescriptor:
+        """Return the bridge-facing control-plane descriptor."""
+
+        return self._control_plane.model_copy()
+
+    def health(self) -> dict[str, Any]:
+        """Return bridge-local health derived from the shared trace contract."""
+
+        descriptor = self.control_plane_descriptor()
+        return {
+            "control_plane_authority": descriptor.authority,
+            "control_plane_role": descriptor.role,
+            "control_plane_projection": descriptor.projection,
+            "control_plane_delegate_kind": descriptor.delegate_kind,
+            "cached_event_count": len(self._events),
+            "resume_mode": descriptor.resume_mode,
+            "transport_family": descriptor.transport_family,
+        }
+
     def _filter_events(
         self,
         events: list[TraceEvent],
@@ -313,9 +415,20 @@ class InMemoryRuntimeEventBridge:
 class JsonlTraceEventSink:
     """Append trace events to a structured JSONL stream."""
 
-    def __init__(self, path: Path, *, schema_version: str = TRACE_EVENT_SINK_SCHEMA_VERSION) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        schema_version: str = TRACE_EVENT_SINK_SCHEMA_VERSION,
+        control_plane_descriptor: Mapping[str, Any] | None = None,
+    ) -> None:
         self.path = path
         self.schema_version = schema_version
+        self._control_plane = _build_trace_control_plane_descriptor(
+            control_plane_descriptor=control_plane_descriptor,
+            event_stream_path=path,
+            trace_output_path=None,
+        )
 
     def write_event(self, event: TraceEvent) -> None:
         """Persist one event as one deterministic JSON line."""
@@ -351,6 +464,11 @@ class JsonlTraceEventSink:
             events.append(TraceEvent.model_validate(event_payload))
         return events
 
+    def control_plane_descriptor(self) -> TraceControlPlaneDescriptor:
+        """Return the sink-local control-plane projection."""
+
+        return self._control_plane.model_copy()
+
 
 def _build_cursor(generation: int, seq: int, event_id: str) -> str:
     """Build a deterministic replay cursor from generation, sequence, and event id."""
@@ -371,6 +489,7 @@ class RuntimeTraceRecorder:
         event_sink: TraceEventSink | None = None,
         event_bridge: RuntimeEventBridge | None = None,
         event_stream_path: Path | None = None,
+        control_plane_descriptor: Mapping[str, Any] | None = None,
     ) -> None:
         self.output_path = output_path
         self.event_schema_version = event_schema_version
@@ -378,11 +497,31 @@ class RuntimeTraceRecorder:
         self.framework_version = framework_version
         self.event_sink = event_sink
         self.event_bridge = event_bridge
+        self._control_plane = _build_trace_control_plane_descriptor(
+            control_plane_descriptor=control_plane_descriptor,
+            event_stream_path=event_stream_path,
+            trace_output_path=output_path,
+        )
         if self.event_sink is None and event_stream_path is not None:
-            self.event_sink = JsonlTraceEventSink(event_stream_path)
+            self.event_sink = JsonlTraceEventSink(
+                event_stream_path,
+                control_plane_descriptor=control_plane_descriptor,
+            )
+        elif isinstance(self.event_sink, JsonlTraceEventSink):
+            self._control_plane = _build_trace_control_plane_descriptor(
+                control_plane_descriptor=control_plane_descriptor,
+                event_stream_path=self.event_sink.path,
+                trace_output_path=output_path,
+            )
         self._events: list[TraceEvent] = []
         self._generation = 0
         self._next_seq = 1
+        if isinstance(self.event_bridge, InMemoryRuntimeEventBridge):
+            self.event_bridge.bind_control_plane(
+                control_plane_descriptor=control_plane_descriptor,
+                event_stream_path=event_stream_path,
+                trace_output_path=output_path,
+            )
 
     @property
     def events(self) -> list[TraceEvent]:
@@ -429,6 +568,11 @@ class RuntimeTraceRecorder:
         """Return the active stream generation."""
 
         return self._generation
+
+    def control_plane_descriptor(self) -> TraceControlPlaneDescriptor:
+        """Return the Rust-owned trace control-plane descriptor for this recorder."""
+
+        return self._control_plane.model_copy()
 
     def latest_cursor(self, *, session_id: str, job_id: str | None = None) -> TraceReplayCursor | None:
         """Return the latest replay cursor for one session/job filter."""
@@ -545,6 +689,7 @@ class RuntimeTraceRecorder:
             "artifact_paths": artifact_paths,
             "verification_status": verification_status,
             "supervisor_projection": supervisor_projection,
+            "control_plane": self._control_plane.model_dump(mode="json"),
             "stream": stream_state,
             "events": [event.model_dump() for event in self._events],
         }
@@ -563,6 +708,12 @@ class RuntimeTraceRecorder:
             "event_bridge_schema_version": (
                 self.event_bridge.schema_version if self.event_bridge is not None else None
             ),
+            "control_plane_authority": self._control_plane.authority,
+            "control_plane_role": self._control_plane.role,
+            "control_plane_projection": self._control_plane.projection,
+            "control_plane_delegate_kind": self._control_plane.delegate_kind,
+            "transport_family": self._control_plane.transport_family,
+            "resume_mode": self._control_plane.resume_mode,
             "event_stream_path": (
                 str(self.event_sink.path)
                 if isinstance(self.event_sink, JsonlTraceEventSink)

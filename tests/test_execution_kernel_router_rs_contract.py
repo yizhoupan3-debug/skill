@@ -20,10 +20,21 @@ from codex_agno_runtime.execution_kernel import (
     PythonAgnoExecutionKernel,
     RouterRsExecutionKernel,
 )
+from codex_agno_runtime.agent_factory import AgentFactory
 from codex_agno_runtime.execution_kernel_contracts import (
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION,
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
+    EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
+    EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
     EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+    EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
+    EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
     build_compatibility_fallback_metadata,
     build_execution_kernel_compatibility_agent_instructions,
+    build_execution_kernel_compatibility_agent_spec,
+    build_execution_kernel_compatibility_projection_metadata,
     build_execution_kernel_compatibility_live_response,
     build_execution_kernel_dry_run_response,
     build_execution_kernel_live_response_serialization_contract_core,
@@ -193,8 +204,21 @@ def test_python_kernel_falls_back_only_when_router_rs_infrastructure_fails(monke
     assert response.metadata["status"] == "completed"
     assert response.metadata["trace_event_count"] == 9
     assert response.metadata["trace_output_path"] == "/tmp/TRACE_METADATA.json"
+    assert response.metadata[EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY] == (
+        EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE
+    )
+    assert response.metadata[EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY] == (
+        EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
+    )
     assert response.metadata["execution_kernel_primary"] == "router-rs"
     assert response.metadata["execution_kernel_primary_authority"] == "rust-execution-cli"
+    assert response.metadata[EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY] == (
+        EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION
+    )
+    assert response.metadata[EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY] == "python-agno"
+    assert response.metadata[EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY] == (
+        "python-agno-kernel-adapter"
+    )
     assert "router-rs execute could not be launched" in response.metadata[
         EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY
     ]
@@ -217,9 +241,21 @@ def test_execution_kernel_contract_helpers_define_compatibility_fallback_metadat
         "trace_output_path": "/tmp/TRACE_METADATA.json",
     }
     assert fallback_metadata == {
+        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY: EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
+        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY: (
+            EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
+        ),
         "execution_kernel_primary": "router-rs",
         "execution_kernel_primary_authority": "rust-execution-cli",
         EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY: "router-rs exploded",
+    }
+
+    compatibility_projection = build_execution_kernel_compatibility_projection_metadata()
+    assert compatibility_projection == {
+        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY: EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
+        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY: (
+            EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
+        ),
     }
 
     dry_run_metadata = build_execution_kernel_runtime_metadata(
@@ -244,9 +280,14 @@ def test_execution_kernel_contract_helpers_define_compatibility_fallback_metadat
     assert contract_core["runtime_response_metadata_fields"]["compatibility_fallback"] == [
         "run_id",
         "status",
+        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
+        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
         "execution_kernel_primary",
         "execution_kernel_primary_authority",
         EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+        EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
+        EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
+        EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
     ]
     assert contract_core["current_response_shape_truth"]["compatibility_fallback"][
         "required_metadata_fields"
@@ -255,9 +296,19 @@ def test_execution_kernel_contract_helpers_define_compatibility_fallback_metadat
         "status",
         "trace_event_count",
         "trace_output_path",
+        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
+        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
         "execution_kernel_primary",
         "execution_kernel_primary_authority",
         EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+        EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
+        EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
+        EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
+    ]
+    assert contract_core["runtime_response_metadata_fields"]["dry_run"] == [
+        "reason",
+        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
+        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
     ]
 
     dry_run_response = build_execution_kernel_dry_run_response(
@@ -273,11 +324,18 @@ def test_execution_kernel_contract_helpers_define_compatibility_fallback_metadat
         execution_kernel_authority="python-agno-kernel-adapter",
         trace_event_count=9,
         trace_output_path="/tmp/TRACE_METADATA.json",
+        extra_metadata=compatibility_projection,
     )
     assert dry_run_response.live_run is False
     assert dry_run_response.usage.mode == "estimated"
     assert dry_run_response.metadata["reason"] == (
         "Live model execution is disabled; returned a deterministic dry-run payload."
+    )
+    assert dry_run_response.metadata[EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY] == (
+        EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE
+    )
+    assert dry_run_response.metadata[EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY] == (
+        EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
     )
 
     live_response = build_execution_kernel_compatibility_live_response(
@@ -295,10 +353,26 @@ def test_execution_kernel_contract_helpers_define_compatibility_fallback_metadat
         execution_kernel_authority="python-agno-kernel-adapter",
         trace_event_count=9,
         trace_output_path="/tmp/TRACE_METADATA.json",
+        extra_metadata={
+            **compatibility_projection,
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY: (
+                EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION
+            ),
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY: "python-agno",
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY: (
+                "python-agno-kernel-adapter"
+            ),
+        },
     )
     assert live_response.live_run is True
     assert live_response.metadata["run_id"] == "py-fallback-run"
     assert live_response.metadata["status"] == "completed"
+    assert live_response.metadata[EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY] == (
+        EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION
+    )
+    assert live_response.metadata[EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY] == (
+        EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
+    )
 
 
 def test_execution_kernel_prompt_preview_resolution_prefers_existing_preview() -> None:
@@ -328,12 +402,82 @@ def test_execution_kernel_prompt_preview_resolution_prefers_existing_preview() -
     assert routing_result.prompt_preview == "Prompt for plan-to-code"
     assert builder_calls == 1
 
+    spec = build_execution_kernel_compatibility_agent_spec(
+        routing_result=routing_result,
+        build_prompt=_build_prompt,
+    )
+    assert spec.instructions == ("Prompt for plan-to-code",)
+    assert spec.metadata[EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY] == (
+        EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE
+    )
+    assert spec.metadata[EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY] == (
+        EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
+    )
+    assert spec.metadata[EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY] == (
+        EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION
+    )
     instructions = build_execution_kernel_compatibility_agent_instructions(
         routing_result=routing_result,
         build_prompt=_build_prompt,
     )
     assert instructions == ["Prompt for plan-to-code"]
     assert builder_calls == 1
+
+
+def test_agent_factory_exposes_compatibility_contract_handle() -> None:
+    factory = AgentFactory(SimpleNamespace(), _PromptBuilder())
+
+    handle = factory.build_compatibility_agent_handle(_routing_result(), "tester")
+
+    assert tuple(handle.contract.instructions) == ("Prompt for plan-to-code",)
+    assert handle.contract.metadata[EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY] == (
+        EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE
+    )
+    assert handle.contract.metadata[EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY] == (
+        EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
+    )
+    assert handle.contract.metadata[EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY] == (
+        EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION
+    )
+
+
+def test_python_kernel_health_defaults_to_explicitly_disabled_fallback() -> None:
+    settings = SimpleNamespace(
+        codex_home=PROJECT_ROOT,
+        rust_router_timeout_seconds=5.0,
+        default_output_tokens=512,
+        model_id="gpt-5.4",
+        aggregator_base_url="http://127.0.0.1:20128/v1",
+        aggregator_api_key="sk-test",
+    )
+    prompt_builder = _PromptBuilder()
+    agent_factory = AgentFactory(settings, prompt_builder)
+    kernel = PythonAgnoExecutionKernel(settings, prompt_builder, agent_factory=agent_factory)  # type: ignore[arg-type]
+
+    health = kernel.health()
+
+    assert health["kernel_live_fallback_enabled"] is False
+    assert health["kernel_live_fallback_mode"] == "disabled"
+
+
+def test_python_kernel_health_uses_explicit_compatibility_mode_when_enabled() -> None:
+    settings = SimpleNamespace(
+        codex_home=PROJECT_ROOT,
+        rust_router_timeout_seconds=5.0,
+        default_output_tokens=512,
+        model_id="gpt-5.4",
+        aggregator_base_url="http://127.0.0.1:20128/v1",
+        aggregator_api_key="sk-test",
+        rust_execute_fallback_to_python=True,
+    )
+    prompt_builder = _PromptBuilder()
+    agent_factory = AgentFactory(settings, prompt_builder)
+    kernel = PythonAgnoExecutionKernel(settings, prompt_builder, agent_factory=agent_factory)  # type: ignore[arg-type]
+
+    health = kernel.health()
+
+    assert health["kernel_live_fallback_enabled"] is True
+    assert health["kernel_live_fallback_mode"] == "compatibility-only-explicit"
 
 
 def test_python_kernel_omits_python_prompt_preview_on_rust_live_path(monkeypatch) -> None:

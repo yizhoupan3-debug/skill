@@ -1141,9 +1141,14 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
         "status",
         "trace_event_count",
         "trace_output_path",
+        "execution_kernel_contract_mode",
+        "execution_kernel_fallback_policy",
         "execution_kernel_primary",
         "execution_kernel_primary_authority",
         "execution_kernel_fallback_reason",
+        "execution_kernel_compatibility_agent_contract",
+        "execution_kernel_compatibility_agent_kind",
+        "execution_kernel_compatibility_agent_authority",
     ]
     assert payload["execution_kernel_live_response_serialization_contract"]["retirement_gates"][
         "compatibility_live_response_serialization_still_python_owned"
