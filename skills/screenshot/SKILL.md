@@ -10,6 +10,11 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+runtime_requirements:
+  commands:
+    - osascript
+    - screencapture
+    - swift
 metadata:
   version: "1.0.0"
   platforms: [codex]
@@ -66,4 +71,3 @@ The script prints one path per capture. When multiple windows/displays match, it
 - Browser automation to capture web page content → use `$playwright`
 - Generating or editing images with AI → use `$imagegen`
 - Web page screenshots needing navigation/login/interaction → use `$playwright`
-

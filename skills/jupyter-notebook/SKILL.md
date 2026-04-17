@@ -66,7 +66,21 @@ uv run --python 3.12 python "$JUPYTER_NOTEBOOK_CLI" \
 ```
 
 ```bash
+python3 "$JUPYTER_NOTEBOOK_CLI" \
+  --kind experiment \
+  --title "Compare prompt variants" \
+  --out output/jupyter-notebook/compare-prompt-variants.ipynb
+```
+
+```bash
 uv run --python 3.12 python "$JUPYTER_NOTEBOOK_CLI" \
+  --kind tutorial \
+  --title "Intro to embeddings" \
+  --out output/jupyter-notebook/intro-to-embeddings.ipynb
+```
+
+```bash
+python3 "$JUPYTER_NOTEBOOK_CLI" \
   --kind tutorial \
   --title "Intro to embeddings" \
   --out output/jupyter-notebook/intro-to-embeddings.ipynb
@@ -106,6 +120,7 @@ Script path:
 
 ## Dependencies (install only when needed)
 Prefer `uv` for dependency management.
+The scaffold helper itself is stdlib-only, so plain `python3` is a valid fallback when `uv` is unavailable.
 
 Optional Python packages for local notebook execution:
 

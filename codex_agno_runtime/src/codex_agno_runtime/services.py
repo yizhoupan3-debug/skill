@@ -5,14 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
-from codex_agno_runtime.agent_factory import AgentFactory
 from codex_agno_runtime.checkpoint_store import RuntimeCheckpointer
 from codex_agno_runtime.config import RuntimeSettings
-from codex_agno_runtime.execution_kernel import ExecutionKernelRequest, PythonAgnoExecutionKernel
+from codex_agno_runtime.execution_kernel import (
+    ExecutionKernelRequest,
+    RouterRsExecutionKernel,
+)
 from codex_agno_runtime.host_adapters import (
-    build_delegation_contract,
-    build_execution_controller_contract,
-    build_supervisor_state_contract,
+    build_control_plane_contract_descriptors,
 )
 from codex_agno_runtime.memory import FactMemoryStore
 from codex_agno_runtime.middleware import MiddlewareContext
@@ -50,17 +50,44 @@ _KERNEL_CONTRACT_FIELDS = (
 )
 
 
+def _runtime_control_plane_service_descriptor(
+    control_plane_descriptor: Mapping[str, Any] | None,
+    service_name: str,
+) -> dict[str, Any]:
+    if not isinstance(control_plane_descriptor, Mapping):
+        return {}
+    services = control_plane_descriptor.get("services")
+    if not isinstance(services, Mapping):
+        return {}
+    service = services.get(service_name)
+    if not isinstance(service, Mapping):
+        return {}
+    return dict(service)
+
+
+def _runtime_control_plane_rustification_status(
+    control_plane_descriptor: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if not isinstance(control_plane_descriptor, Mapping):
+        return {}
+    status = control_plane_descriptor.get("rustification_status")
+    if not isinstance(status, Mapping):
+        return {}
+    return dict(status)
+
+
 class RouterService:
     """Own skill loading plus route-engine selection."""
 
-    def __init__(self, settings: RuntimeSettings) -> None:
+    def __init__(self, settings: RuntimeSettings, *, rust_adapter: RustRouteAdapter | None = None) -> None:
         self.settings = settings
         self.loader = SkillLoader(settings.codex_home / "skills")
         self.prompt_builder = PromptBuilder(loader=self.loader)
-        self._rust_adapter = RustRouteAdapter(
+        self._rust_adapter = rust_adapter or RustRouteAdapter(
             settings.codex_home,
             timeout_seconds=settings.rust_router_timeout_seconds,
         )
+        self.control_plane_descriptor = self._rust_adapter.runtime_control_plane()
         self.skills = []
         self._python_router: SkillRouter | None = None
         self._last_route_report: RouteDiffReport | None = None
@@ -78,6 +105,7 @@ class RouterService:
     def reload(self) -> None:
         """Refresh runtime skill metadata and the Python router."""
 
+        self.control_plane_descriptor = self._rust_adapter.runtime_control_plane()
         self.skills = self.loader.load(
             refresh=True,
             load_bodies=not self.settings.progressive_skill_loading,
@@ -154,8 +182,18 @@ class RouterService:
         """Describe router-service health and the active route engine."""
 
         policy = self._resolve_route_policy()
+        service_descriptor = _runtime_control_plane_service_descriptor(
+            self.control_plane_descriptor,
+            "router",
+        )
+        rustification_status = _runtime_control_plane_rustification_status(self.control_plane_descriptor)
         return {
             "mode": self.settings.route_engine_mode,
+            "default_route_mode": self.control_plane_descriptor.get("default_route_mode", "rust"),
+            "default_route_authority": self.control_plane_descriptor.get(
+                "default_route_authority",
+                self._rust_adapter.route_authority,
+            ),
             "rollback_to_python": policy.rollback_active,
             "configured_rollback_to_python": self.settings.rust_route_rollback_to_python,
             "loaded_skill_count": len(self.skills),
@@ -165,6 +203,14 @@ class RouterService:
             "shadow_engine": policy.shadow_engine,
             "python_router_loaded": self._python_router is not None,
             "python_router_required": self._python_router_required(policy=policy),
+            "control_plane_authority": service_descriptor.get(
+                "authority",
+                self.control_plane_descriptor.get("authority"),
+            ),
+            "control_plane_projection": service_descriptor.get("projection"),
+            "control_plane_delegate_kind": service_descriptor.get("delegate_kind"),
+            "python_runtime_role": self.control_plane_descriptor.get("python_host_role"),
+            "rustification_status": rustification_status,
             "route_policy": policy.model_dump(mode="json"),
             "rust_adapter": self._rust_adapter.health(),
             "last_route_report": self._last_route_report.model_dump(mode="json") if self._last_route_report else None,
@@ -301,13 +347,22 @@ class RouterService:
 class StateService:
     """Own durable background-job state and session reservations."""
 
-    def __init__(self, checkpointer: RuntimeCheckpointer) -> None:
+    def __init__(
+        self,
+        checkpointer: RuntimeCheckpointer,
+        *,
+        control_plane_descriptor: Mapping[str, Any] | None = None,
+    ) -> None:
         self.checkpointer = checkpointer
+        self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "state")
         self.state_path = checkpointer.describe_paths().background_state_path
         self.store = BackgroundJobStore(
             state_path=self.state_path,
             storage_backend=getattr(checkpointer, "storage_backend", None),
         )
+
+    def refresh_control_plane(self, control_plane_descriptor: Mapping[str, Any] | None) -> None:
+        self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "state")
 
     def startup(self) -> None:
         """State service startup hook."""
@@ -329,6 +384,10 @@ class StateService:
 
     def health(self) -> dict[str, Any]:
         return {
+            "control_plane_authority": self._service_descriptor.get("authority"),
+            "control_plane_role": self._service_descriptor.get("role"),
+            "control_plane_projection": self._service_descriptor.get("projection"),
+            "control_plane_delegate_kind": self._service_descriptor.get("delegate_kind"),
             "checkpoint_backend_family": self.checkpointer.storage_capabilities().backend_family,
             "state_path": str(self.state_path),
             "job_count": len(self.store.snapshot()),
@@ -339,8 +398,14 @@ class StateService:
 class TraceService:
     """Own trace recorder wiring and filesystem paths."""
 
-    def __init__(self, checkpointer: RuntimeCheckpointer) -> None:
+    def __init__(
+        self,
+        checkpointer: RuntimeCheckpointer,
+        *,
+        control_plane_descriptor: Mapping[str, Any] | None = None,
+    ) -> None:
         self.checkpointer = checkpointer
+        self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "trace")
         paths = checkpointer.describe_paths()
         self.output_path = paths.trace_output_path
         self.event_stream_path = paths.event_stream_path
@@ -349,6 +414,9 @@ class TraceService:
         self.event_bridge = InMemoryRuntimeEventBridge()
         self.recorder = checkpointer.build_trace_recorder(event_bridge=self.event_bridge)
         self.event_bridge.seed(self.recorder.stream_events())
+
+    def refresh_control_plane(self, control_plane_descriptor: Mapping[str, Any] | None) -> None:
+        self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "trace")
 
     def startup(self) -> None:
         """Trace service startup hook."""
@@ -447,6 +515,10 @@ class TraceService:
     def health(self) -> dict[str, Any]:
         paths = self.checkpointer.describe_paths()
         return {
+            "control_plane_authority": self._service_descriptor.get("authority"),
+            "control_plane_role": self._service_descriptor.get("role"),
+            "control_plane_projection": self._service_descriptor.get("projection"),
+            "control_plane_delegate_kind": self._service_descriptor.get("delegate_kind"),
             "checkpoint_backend_family": self.checkpointer.storage_capabilities().backend_family,
             "trace_output_path": str(paths.trace_output_path) if paths.trace_output_path is not None else None,
             "event_stream_path": str(paths.event_stream_path) if paths.event_stream_path is not None else None,
@@ -466,12 +538,21 @@ class TraceService:
 class MemoryService:
     """Own memory store lifecycle and health surface."""
 
-    def __init__(self, settings: RuntimeSettings) -> None:
+    def __init__(
+        self,
+        settings: RuntimeSettings,
+        *,
+        control_plane_descriptor: Mapping[str, Any] | None = None,
+    ) -> None:
+        self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "memory")
         self.store = FactMemoryStore(
             memory_dir=settings.resolved_memory_dir,
             debounce_seconds=settings.memory_debounce_seconds,
         )
         self.memory_dir = settings.resolved_memory_dir
+
+    def refresh_control_plane(self, control_plane_descriptor: Mapping[str, Any] | None) -> None:
+        self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "memory")
 
     def startup(self) -> None:
         """Memory service startup hook."""
@@ -481,6 +562,10 @@ class MemoryService:
 
     def health(self) -> dict[str, Any]:
         return {
+            "control_plane_authority": self._service_descriptor.get("authority"),
+            "control_plane_role": self._service_descriptor.get("role"),
+            "control_plane_projection": self._service_descriptor.get("projection"),
+            "control_plane_delegate_kind": self._service_descriptor.get("delegate_kind"),
             "memory_dir": str(self.memory_dir),
         }
 
@@ -491,7 +576,7 @@ class _RustExecutionKernelAuthorityAdapter:
     adapter_kind = "rust-execution-kernel-slice"
     authority = "rust-execution-kernel-authority"
 
-    def __init__(self, delegate: PythonAgnoExecutionKernel) -> None:
+    def __init__(self, delegate: RouterRsExecutionKernel) -> None:
         self._delegate = delegate
 
     @staticmethod
@@ -501,58 +586,63 @@ class _RustExecutionKernelAuthorityAdapter:
     async def execute(self, request: ExecutionKernelRequest) -> RunTaskResponse:
         response = await self._delegate.execute(request)
         delegate_health = self._delegate.health()
-        if request.dry_run:
-            delegate_kind = delegate_health["kernel_adapter_kind"]
-            delegate_authority = delegate_health["kernel_authority"]
-        else:
-            delegate_kind = str(
-                response.metadata.get("execution_kernel")
-                or delegate_health.get("kernel_live_delegate_primary_kind")
-                or delegate_health["kernel_adapter_kind"]
-            )
-            delegate_authority = str(
-                response.metadata.get("execution_kernel_authority")
-                or delegate_health.get("kernel_live_delegate_primary_authority")
-                or delegate_health["kernel_authority"]
-            )
+
+        def _response_metadata(field: str, default: Any) -> Any:
+            if field in response.metadata:
+                return response.metadata[field]
+            return default
+
+        delegate_kind = str(
+            response.metadata.get("execution_kernel")
+            or delegate_health.get("kernel_live_delegate_primary_kind")
+            or delegate_health["kernel_adapter_kind"]
+        )
+        delegate_authority = str(
+            response.metadata.get("execution_kernel_authority")
+            or delegate_health.get("kernel_live_delegate_primary_authority")
+            or delegate_health["kernel_authority"]
+        )
+        delegate_family_default = delegate_health.get("kernel_live_backend_family")
+        delegate_impl_default = delegate_health.get("kernel_live_backend_impl")
+        live_fallback_enabled = False
+        live_fallback_mode = "disabled"
         response.metadata.update(
             {
                 "execution_kernel": self.adapter_kind,
                 "execution_kernel_authority": self.authority,
                 "execution_kernel_contract_mode": self._contract_mode(),
-                "execution_kernel_in_process_replacement_complete": False,
+                "execution_kernel_in_process_replacement_complete": True,
                 "execution_kernel_delegate": delegate_kind,
                 "execution_kernel_delegate_authority": delegate_authority,
-                "execution_kernel_live_primary": delegate_health.get("kernel_live_delegate_primary_kind"),
-                "execution_kernel_live_primary_authority": delegate_health.get(
-                    "kernel_live_delegate_primary_authority"
+                "execution_kernel_live_primary": _response_metadata(
+                    "execution_kernel_live_primary",
+                    response.metadata.get("execution_kernel_primary")
+                    or delegate_health.get("kernel_live_delegate_primary_kind")
+                    or delegate_health.get("kernel_adapter_kind"),
                 ),
-                "execution_kernel_live_fallback": delegate_health.get("kernel_live_delegate_fallback_kind"),
-                "execution_kernel_live_fallback_authority": delegate_health.get(
-                    "kernel_live_delegate_fallback_authority"
+                "execution_kernel_live_primary_authority": _response_metadata(
+                    "execution_kernel_live_primary_authority",
+                    response.metadata.get("execution_kernel_primary_authority")
+                    or delegate_health.get("kernel_live_delegate_primary_authority")
+                    or delegate_health.get("kernel_authority"),
                 ),
-                "execution_kernel_live_fallback_enabled": delegate_health.get("kernel_live_fallback_enabled", True),
-                "execution_kernel_live_fallback_mode": delegate_health.get(
-                    "kernel_live_fallback_mode",
-                    "compatibility" if delegate_health.get("kernel_live_fallback_enabled", True) else "disabled",
+                "execution_kernel_live_fallback": _response_metadata(
+                    "execution_kernel_live_fallback",
+                    None,
                 ),
+                "execution_kernel_live_fallback_authority": _response_metadata(
+                    "execution_kernel_live_fallback_authority",
+                    None,
+                ),
+                "execution_kernel_live_fallback_enabled": live_fallback_enabled,
+                "execution_kernel_live_fallback_mode": live_fallback_mode,
                 "execution_kernel_delegate_family": response.metadata.get(
                     "execution_kernel_delegate_family",
-                    (
-                        delegate_health.get("kernel_live_backend_family")
-                        if not request.dry_run
-                        else (
-                            delegate_health.get("kernel_live_delegate_fallback_family") or "python"
-                        )
-                    ),
+                    delegate_family_default,
                 ),
                 "execution_kernel_delegate_impl": response.metadata.get(
                     "execution_kernel_delegate_impl",
-                    (
-                        delegate_health.get("kernel_live_backend_impl")
-                        if not request.dry_run
-                        else delegate_health.get("kernel_live_delegate_fallback_impl") or "agno"
-                    ),
+                    delegate_impl_default,
                 ),
             }
         )
@@ -567,50 +657,34 @@ class _RustExecutionKernelAuthorityAdapter:
             "kernel_owner_impl": "execution-kernel-slice",
             "kernel_contract_mode": self._contract_mode(),
             "kernel_replace_ready": True,
-            "kernel_in_process_replacement_complete": False,
-            "kernel_live_backend_family": delegate_health.get("kernel_live_delegate_primary_family", "rust-cli"),
-            "kernel_live_backend_impl": delegate_health.get("kernel_live_delegate_primary_kind", "router-rs"),
-            "kernel_live_delegate_kind": delegate_health.get("kernel_live_delegate_primary_kind", "router-rs"),
-            "kernel_live_delegate_authority": delegate_health.get(
-                "kernel_live_delegate_primary_authority",
-                "rust-execution-cli",
-            ),
-            "kernel_live_delegate_family": delegate_health.get("kernel_live_delegate_primary_family", "rust-cli"),
-            "kernel_live_delegate_impl": delegate_health.get("kernel_live_delegate_primary_impl", "router-rs"),
-            "kernel_live_delegate_mode": delegate_health.get("kernel_live_delegate_mode", "rust-primary"),
-            "kernel_live_fallback_kind": delegate_health["kernel_live_delegate_fallback_kind"],
-            "kernel_live_fallback_authority": delegate_health["kernel_live_delegate_fallback_authority"],
-            "kernel_live_fallback_family": delegate_health.get("kernel_live_delegate_fallback_family"),
-            "kernel_live_fallback_impl": delegate_health.get("kernel_live_delegate_fallback_impl"),
-            "kernel_live_fallback_enabled": delegate_health.get("kernel_live_fallback_enabled", True),
-            "kernel_live_fallback_mode": delegate_health.get(
-                "kernel_live_fallback_mode",
-                "compatibility" if delegate_health.get("kernel_live_fallback_enabled", True) else "disabled",
-            ),
-            "kernel_mode_support": delegate_health.get("kernel_mode_support", ["dry_run", "live"]),
+            "kernel_in_process_replacement_complete": True,
+            "kernel_live_backend_family": delegate_health.get("kernel_live_backend_family", "rust-cli"),
+            "kernel_live_backend_impl": delegate_health.get("kernel_live_backend_impl", "router-rs"),
+            "kernel_live_delegate_kind": delegate_health.get("kernel_adapter_kind", "router-rs"),
+            "kernel_live_delegate_authority": delegate_health.get("kernel_authority", "rust-execution-cli"),
+            "kernel_live_delegate_family": delegate_health.get("kernel_live_backend_family", "rust-cli"),
+            "kernel_live_delegate_impl": delegate_health.get("kernel_live_backend_impl", "router-rs"),
+            "kernel_live_delegate_mode": "rust-primary",
+            "kernel_live_fallback_kind": None,
+            "kernel_live_fallback_authority": None,
+            "kernel_live_fallback_family": None,
+            "kernel_live_fallback_impl": None,
+            "kernel_live_fallback_enabled": False,
+            "kernel_live_fallback_mode": "disabled",
+            "kernel_mode_support": ["dry_run", "live"],
         }
 
     def contract_descriptor(self, *, dry_run: bool = False) -> dict[str, Any]:
         health = self.health()
-        dry_run_delegate_family = health["kernel_live_fallback_family"] or "python"
-        dry_run_delegate_impl = health["kernel_live_fallback_impl"] or "agno"
         return {
             "execution_kernel": health["kernel_adapter_kind"],
             "execution_kernel_authority": health["kernel_authority"],
             "execution_kernel_contract_mode": health["kernel_contract_mode"],
             "execution_kernel_in_process_replacement_complete": health["kernel_in_process_replacement_complete"],
-            "execution_kernel_delegate": (
-                self._delegate.adapter_kind if dry_run else health["kernel_live_delegate_kind"]
-            ),
-            "execution_kernel_delegate_authority": (
-                self._delegate.authority if dry_run else health["kernel_live_delegate_authority"]
-            ),
-            "execution_kernel_delegate_family": (
-                dry_run_delegate_family if dry_run else health["kernel_live_delegate_family"]
-            ),
-            "execution_kernel_delegate_impl": (
-                dry_run_delegate_impl if dry_run else health["kernel_live_delegate_impl"]
-            ),
+            "execution_kernel_delegate": health["kernel_live_delegate_kind"],
+            "execution_kernel_delegate_authority": health["kernel_live_delegate_authority"],
+            "execution_kernel_delegate_family": health["kernel_live_delegate_family"],
+            "execution_kernel_delegate_impl": health["kernel_live_delegate_impl"],
             "execution_kernel_live_primary": health["kernel_live_delegate_kind"],
             "execution_kernel_live_primary_authority": health["kernel_live_delegate_authority"],
             "execution_kernel_live_fallback": health["kernel_live_fallback_kind"],
@@ -630,18 +704,19 @@ class ExecutionEnvironmentService:
         *,
         max_background_jobs: int,
         background_job_timeout_seconds: float,
+        control_plane_descriptor: Mapping[str, Any] | None = None,
     ) -> None:
         self.settings = settings
-        self.agent_factory = AgentFactory(settings, prompt_builder)
-        self.kernel = _RustExecutionKernelAuthorityAdapter(
-            PythonAgnoExecutionKernel(
-                settings,
-                prompt_builder,
-                agent_factory=self.agent_factory,
-            )
-        )
+        self.control_plane_descriptor = dict(control_plane_descriptor or {})
+        self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "execution")
+        self.primary_kernel = RouterRsExecutionKernel(settings)
+        self.kernel = _RustExecutionKernelAuthorityAdapter(self.primary_kernel)
         self.max_background_jobs = max_background_jobs
         self.background_job_timeout_seconds = background_job_timeout_seconds
+
+    def refresh_control_plane(self, control_plane_descriptor: Mapping[str, Any] | None) -> None:
+        self.control_plane_descriptor = dict(control_plane_descriptor or {})
+        self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "execution")
 
     def startup(self) -> None:
         """Execution-environment startup hook."""
@@ -682,6 +757,13 @@ class ExecutionEnvironmentService:
             "max_background_jobs": self.max_background_jobs,
             "background_job_timeout_seconds": self.background_job_timeout_seconds,
             "execution_mode_default": "live" if self.settings.use_live_model else "dry_run",
+            "control_plane_authority": self._service_descriptor.get(
+                "authority",
+                self.control_plane_descriptor.get("authority"),
+            ),
+            "control_plane_role": self._service_descriptor.get("role"),
+            "control_plane_projection": self._service_descriptor.get("projection"),
+            "control_plane_delegate_kind": self._service_descriptor.get("delegate_kind"),
         }
         payload.update(self.kernel.health())
         payload["control_plane_contracts"] = self.describe_control_plane_contracts()
@@ -690,16 +772,36 @@ class ExecutionEnvironmentService:
     def describe_control_plane_contracts(self) -> dict[str, Any]:
         """Return control-plane-only descriptors for shared execution artifacts."""
 
-        return {
-            "execution_controller_contract": build_execution_controller_contract(),
-            "delegation_contract": build_delegation_contract(),
-            "supervisor_state_contract": build_supervisor_state_contract(),
-        }
+        payload = build_control_plane_contract_descriptors()
+        if self.control_plane_descriptor:
+            payload["runtime_control_plane"] = self.control_plane_descriptor
+        return payload
 
     def describe_kernel_contract(self, *, dry_run: bool = False) -> dict[str, Any]:
         """Return the stable kernel-owner descriptor used by runtime surfaces."""
 
         return self.kernel.contract_descriptor(dry_run=dry_run)
+
+    def preview_prompt(
+        self,
+        *,
+        task: str,
+        session_id: str,
+        user_id: str,
+        routing_result: RoutingResult,
+    ) -> str | None:
+        """Build the dry-run prompt preview through router-rs instead of Python prompt assembly."""
+
+        return self.primary_kernel.preview_prompt(
+            ExecutionKernelRequest(
+                task=task,
+                session_id=session_id,
+                user_id=user_id,
+                routing_result=routing_result,
+                prompt_preview=None,
+                dry_run=True,
+            )
+        )
 
     def kernel_payload(
         self,

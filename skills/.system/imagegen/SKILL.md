@@ -6,6 +6,12 @@ routing_owner: owner
 routing_gate: none
 session_start: n/a
 source: system
+runtime_requirements:
+  python:
+    - openai
+    - pillow
+  env:
+    - OPENAI_API_KEY
 ---
 
 # Image Generation Skill

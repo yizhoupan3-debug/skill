@@ -23,6 +23,12 @@ from codex_agno_runtime.framework_profile import (
     resolve_host_capability_requirements,
 )
 from codex_agno_runtime.compatibility import compile_codex_desktop_host_adapter
+from codex_agno_runtime.execution_kernel_contracts import (
+    COMPATIBILITY_FALLBACK_RUNTIME_METADATA_FIELDS,
+    EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+    RUNTIME_TRACE_METADATA_FIELDS,
+    build_execution_kernel_live_response_serialization_contract_core,
+)
 from codex_agno_runtime.host_adapters import (
     AIONRS_COMPANION_ADAPTER,
     AIONUI_HOST_ADAPTER,
@@ -37,6 +43,7 @@ from codex_agno_runtime.host_adapters import (
     build_cli_family_parity_snapshot,
     build_cli_family_capability_discovery,
     build_codex_desktop_alias_retirement_status,
+    build_control_plane_contract_descriptors,
     build_codex_dual_entry_parity_snapshot,
     build_delegation_contract,
     build_execution_controller_contract,
@@ -803,8 +810,16 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert status["framework_truth"] == "framework_core"
     assert status["status_contract"] == "execution_kernel_live_fallback_retirement_status_v1"
     assert status["live_primary"]["contract_mode"] == "rust-live-primary"
-    assert status["compatibility_fallback"]["mode_when_enabled"] == "compatibility"
+    assert status["compatibility_fallback"]["mode_when_enabled"] == "compatibility-only-explicit"
+    assert (
+        status["compatibility_fallback"]["trigger_scope_when_enabled"]
+        == "explicit-compatibility-kernel-only"
+    )
     assert status["control_surfaces"]["env_var"] == "CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON"
+    assert (
+        status["control_surfaces"]["fallback_trigger_scope_when_enabled"]
+        == "explicit-compatibility-kernel-only"
+    )
     assert status["public_runtime_contract_fields"] == [
         "execution_kernel",
         "execution_kernel_authority",
@@ -822,35 +837,50 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert status["public_runtime_response_metadata_fields"] == [
         "execution_kernel_delegate_family",
         "execution_kernel_delegate_impl",
-        "execution_kernel_fallback_reason",
+        EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
     ]
-    assert status["current_contract_truth"]["dry_run_delegate_kind"] == "python-agno"
+    assert status["current_contract_truth"]["dry_run_delegate_kind"] == "router-rs"
+    assert (
+        status["current_contract_truth"]["live_fallback_trigger_scope_when_enabled"]
+        == "explicit-compatibility-kernel-only"
+    )
     assert status["current_contract_truth"]["live_prompt_preview_passthrough_disabled"] is True
     assert status["current_response_metadata_truth"]["live_delegate_family"] == "rust-cli"
-    assert status["current_response_metadata_truth"]["dry_run_delegate_family"] == "python"
-    assert status["current_response_metadata_truth"]["dry_run_delegate_impl"] == "agno"
+    assert status["current_response_metadata_truth"]["dry_run_delegate_family"] == "rust-cli"
+    assert status["current_response_metadata_truth"]["dry_run_delegate_impl"] == "router-rs"
     assert status["current_response_metadata_truth"]["live_fallback_delegate_impl_when_enabled"] == "agno"
     assert status["current_response_metadata_truth"]["compatibility_fallback_reason_present_only_on_fallback"] is True
-    assert status["remaining_python_owned_surfaces"] == [
-        "dry_run_prompt_preview_generation",
-        "compatibility_fallback_agent_factory",
-        "compatibility_live_response_serialization",
-        "compatibility_fallback_reason_metadata",
-    ]
-    assert status["retirement_readiness"]["ready"] is False
-    assert status["retirement_readiness"]["runtime_control_flow_change_required"] is True
+    assert status["remaining_python_owned_surfaces"] == []
+    assert status["retirement_readiness"]["ready"] is True
+    assert status["retirement_readiness"]["runtime_control_flow_change_required"] is False
     assert status["retirement_gates"]["public_runtime_contract_externalized"] is True
     assert status["retirement_gates"]["response_metadata_surface_externalized"] is True
     assert status["retirement_gates"]["delegate_family_impl_metadata_externalized"] is True
-    assert status["retirement_gates"]["dry_run_delegate_still_python_owned"] is True
-    assert status["retirement_gates"]["compatibility_fallback_agent_factory_still_python_owned"] is True
+    assert status["retirement_gates"]["dry_run_delegate_still_python_owned"] is False
+    assert status["retirement_gates"]["live_fallback_trigger_scope_narrowed_to_infrastructure_only"] is False
+    assert status["retirement_gates"]["compatibility_fallback_agent_factory_still_python_owned"] is False
     assert (
         status["guardrails"]["claude_host_runtime_semantics_remain_host_owned"] is True
     )
 
 
+def test_control_plane_contract_descriptors_share_one_python_source() -> None:
+    descriptors = build_control_plane_contract_descriptors()
+
+    assert descriptors["execution_controller_contract"] == build_execution_controller_contract()
+    assert descriptors["delegation_contract"] == build_delegation_contract()
+    assert descriptors["supervisor_state_contract"] == build_supervisor_state_contract()
+    assert descriptors["execution_kernel_live_fallback_retirement_status"] == (
+        build_execution_kernel_live_fallback_retirement_status()
+    )
+    assert descriptors["execution_kernel_live_response_serialization_contract"] == (
+        build_execution_kernel_live_response_serialization_contract()
+    )
+
+
 def test_execution_kernel_live_response_serialization_contract_stays_contract_only() -> None:
     status = build_execution_kernel_live_response_serialization_contract()
+    core_contract = build_execution_kernel_live_response_serialization_contract_core()
 
     assert status["framework_truth"] == "framework_core"
     assert status["status_contract"] == "execution_kernel_live_response_serialization_contract_v1"
@@ -870,15 +900,10 @@ def test_execution_kernel_live_response_serialization_contract_stays_contract_on
     assert status["usage_contract"]["live_mode"] == "live"
     assert status["usage_contract"]["dry_run_mode"] == "estimated"
     assert status["runtime_response_metadata_fields"]["shared"] == [
-        "trace_event_count",
-        "trace_output_path",
+        *RUNTIME_TRACE_METADATA_FIELDS,
     ]
     assert status["runtime_response_metadata_fields"]["compatibility_fallback"] == [
-        "run_id",
-        "status",
-        "execution_kernel_primary",
-        "execution_kernel_primary_authority",
-        "execution_kernel_fallback_reason",
+        *COMPATIBILITY_FALLBACK_RUNTIME_METADATA_FIELDS,
     ]
     assert status["current_contract_truth"]["live_primary_schema_version"] == (
         "router-rs-execute-response-v1"
@@ -893,10 +918,16 @@ def test_execution_kernel_live_response_serialization_contract_stays_contract_on
         "fallback_reason_present"
     ] is True
     assert status["current_response_shape_truth"]["dry_run"]["model_id_present"] is False
+    assert status["current_response_shape_truth"]["dry_run"]["prompt_preview_source"] == (
+        "rust-owned-dry-run-prompt"
+    )
+    assert status["public_response_fields"] == core_contract["public_response_fields"]
+    assert status["runtime_response_metadata_fields"] == core_contract["runtime_response_metadata_fields"]
+    assert status["current_response_shape_truth"] == core_contract["current_response_shape_truth"]
     assert status["retirement_gates"]["response_shape_contract_externalized"] is True
     assert (
         status["retirement_gates"]["compatibility_live_response_serialization_still_python_owned"]
-        is True
+        is False
     )
     assert status["guardrails"]["claude_host_runtime_semantics_remain_host_owned"] is True
 
@@ -1072,6 +1103,9 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     assert payload["execution_kernel_live_fallback_retirement_status"]["current_contract_truth"][
         "live_fallback_mode_when_disabled"
     ] == "disabled"
+    assert payload["execution_kernel_live_fallback_retirement_status"]["current_contract_truth"][
+        "live_fallback_trigger_scope_when_enabled"
+    ] == "explicit-compatibility-kernel-only"
     assert payload["execution_kernel_live_fallback_retirement_status"][
         "public_runtime_response_metadata_fields"
     ] == [
@@ -1084,14 +1118,12 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     ] == "python"
     assert payload["execution_kernel_live_fallback_retirement_status"][
         "remaining_python_owned_surfaces"
-    ] == [
-        "dry_run_prompt_preview_generation",
-        "compatibility_fallback_agent_factory",
-        "compatibility_live_response_serialization",
-        "compatibility_fallback_reason_metadata",
-    ]
+    ] == []
     assert payload["execution_kernel_live_fallback_retirement_status"]["retirement_readiness"][
         "ready"
+    ] is True
+    assert payload["execution_kernel_live_fallback_retirement_status"]["retirement_gates"][
+        "live_fallback_trigger_scope_narrowed_to_infrastructure_only"
     ] is False
     assert payload["execution_kernel_live_response_serialization_contract"]["status_contract"] == (
         "execution_kernel_live_response_serialization_contract_v1"
@@ -1115,7 +1147,7 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     ]
     assert payload["execution_kernel_live_response_serialization_contract"]["retirement_gates"][
         "compatibility_live_response_serialization_still_python_owned"
-    ] is True
+    ] is False
 
 
 def test_router_rs_profile_artifacts_json_can_opt_in_continuity_alias_artifact() -> None:

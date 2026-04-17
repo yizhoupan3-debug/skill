@@ -8,6 +8,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.check_skills import (
+    _is_allowed_system_override,
     _read_skill_document,
     iter_skill_dirs,
     load_validation_state,
@@ -105,3 +106,86 @@ def test_iter_skill_dirs_discovers_nested_bundles_and_skips_containers(tmp_path:
         path.relative_to(skills_root).as_posix() for _, path in discovered_with_system
     }
     assert ".system/openai-docs" in discovered_system_paths
+
+
+def test_validate_skill_document_flags_missing_runtime_prerequisites(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "runtime-skill"
+    scripts_dir = skill_dir / "scripts"
+    scripts_dir.mkdir(parents=True)
+    (scripts_dir / "tool.py").write_text(
+        "import pandas\n",
+        encoding="utf-8",
+    )
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: runtime-skill
+description: Runtime checked skill
+routing_layer: L1
+routing_owner: owner
+routing_gate: none
+session_start: n/a
+---
+## When to use
+- test
+""",
+        encoding="utf-8",
+    )
+
+    document, error_report = _read_skill_document("runtime-skill", skill_dir)
+
+    assert document is not None
+    assert error_report is None
+
+    report = validate_skill_document(document)
+
+    assert any("runtime_requirements.python is required" in error for error in report.errors)
+
+
+def test_validate_skill_document_accepts_declared_runtime_prerequisites(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "runtime-skill"
+    scripts_dir = skill_dir / "scripts"
+    scripts_dir.mkdir(parents=True)
+    (scripts_dir / "tool.py").write_text(
+        "import pandas\n",
+        encoding="utf-8",
+    )
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: runtime-skill
+description: Runtime checked skill
+routing_layer: L1
+routing_owner: owner
+routing_gate: none
+session_start: n/a
+runtime_requirements:
+  python:
+    - pandas
+    - openpyxl
+---
+## When to use
+- test
+""",
+        encoding="utf-8",
+    )
+
+    document, error_report = _read_skill_document("runtime-skill", skill_dir)
+
+    assert document is not None
+    assert error_report is None
+
+    report = validate_skill_document(document)
+
+    assert report.errors == []
+
+
+def test_system_skill_override_is_not_treated_as_duplicate(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    _write_skill(skills_root / ".system" / "imagegen", "imagegen")
+    _write_skill(skills_root / "imagegen", "imagegen")
+
+    paths = [
+        skills_root / ".system" / "imagegen",
+        skills_root / "imagegen",
+    ]
+
+    assert _is_allowed_system_override(skills_root, paths) is True

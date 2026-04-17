@@ -57,7 +57,7 @@ class RoutingResult(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     route_snapshot: "RouteDecisionSnapshot | None" = None
     prompt_preview: str | None = None
-    route_engine: str = "python"
+    route_engine: str = "rust"
     rollback_to_python: bool = False
     shadow_route_report: "RouteDiffReport | None" = None
 
@@ -129,7 +129,7 @@ class PrepareSessionResponse(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     prompt_preview: str | None = None
     loaded_skill_count: int = 0
-    route_engine: str = "python"
+    route_engine: str = "rust"
     rollback_to_python: bool = False
     shadow_route_report: RouteDiffReport | None = None
 

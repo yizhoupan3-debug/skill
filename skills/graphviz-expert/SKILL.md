@@ -11,6 +11,9 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+runtime_requirements:
+  commands:
+    - dot
 metadata:
   version: "1.0.0"
   platforms: [codex]

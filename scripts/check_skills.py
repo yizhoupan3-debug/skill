@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import copy
 import functools
 import json
@@ -33,6 +34,12 @@ REQUIRED_FRONTMATTER_FIELDS = (
     "routing_gate",
     "session_start",
 )
+RUNTIME_REQUIREMENT_FIELDS = ("python", "commands", "env", "files")
+PYTHON_IMPORT_PACKAGE_ALIASES = {
+    "PIL": "pillow",
+    "pptx": "python-pptx",
+    "yaml": "pyyaml",
+}
 OPTIONAL_SOURCE_VALUES = {
     "system",
     "vendor",
@@ -174,6 +181,59 @@ def iter_skill_dirs(skills_root: Path, include_system: bool) -> list[tuple[str, 
             continue
         skill_dirs.extend(_iter_discovered_skill_dirs(entry))
     return skill_dirs
+
+
+def _iter_skill_python_files(skill_dir: Path) -> list[Path]:
+    python_files: list[Path] = []
+    for path in sorted(skill_dir.rglob("*.py")):
+        rel_parts = path.relative_to(skill_dir).parts
+        if any(part.startswith(".") for part in rel_parts):
+            continue
+        python_files.append(path)
+    return python_files
+
+
+def _discover_local_python_modules(skill_dir: Path) -> set[str]:
+    local_modules: set[str] = set()
+    for path in _iter_skill_python_files(skill_dir):
+        local_modules.add(path.stem)
+    for path in skill_dir.rglob("__init__.py"):
+        rel = path.parent.relative_to(skill_dir)
+        if rel.parts:
+            local_modules.add(rel.parts[0])
+    return local_modules
+
+
+def _normalize_python_dependency_name(module_name: str) -> str:
+    return PYTHON_IMPORT_PACKAGE_ALIASES.get(module_name, module_name)
+
+
+def discover_python_runtime_dependencies(skill_dir: Path) -> set[str]:
+    dependencies: set[str] = set()
+    stdlib_modules = set(getattr(sys, "stdlib_module_names", ()))
+    local_modules = _discover_local_python_modules(skill_dir)
+
+    for path in _iter_skill_python_files(skill_dir):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+
+        for node in ast.walk(tree):
+            module_names: list[str] = []
+            if isinstance(node, ast.Import):
+                module_names = [alias.name.split(".", 1)[0] for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                module_names = [node.module.split(".", 1)[0]]
+
+            for module_name in module_names:
+                if module_name == "__future__":
+                    continue
+                if module_name in stdlib_modules or module_name in local_modules:
+                    continue
+                dependencies.add(_normalize_python_dependency_name(module_name))
+
+    return dependencies
 
 
 def slugify(value: str) -> str:
@@ -446,6 +506,31 @@ def validate_skill_document(document: SkillDocument) -> SkillReport:
         ):
             report.errors.append(f"{list_field} must be a list of strings when provided")
 
+    runtime_requirements = metadata.get("runtime_requirements")
+    declared_python_requirements: set[str] = set()
+    if runtime_requirements is not None:
+        if not isinstance(runtime_requirements, dict):
+            report.errors.append("runtime_requirements must be a mapping when provided")
+        else:
+            for field_name, field_value in runtime_requirements.items():
+                if field_name not in RUNTIME_REQUIREMENT_FIELDS:
+                    report.warnings.append(
+                        f"runtime_requirements field '{field_name}' is not recognized"
+                    )
+                    continue
+                if field_value is not None and (
+                    not isinstance(field_value, list)
+                    or not all(isinstance(item, str) for item in field_value)
+                ):
+                    report.errors.append(
+                        f"runtime_requirements.{field_name} must be a list of strings when provided"
+                    )
+            python_requirements = runtime_requirements.get("python", [])
+            if isinstance(python_requirements, list):
+                declared_python_requirements = {
+                    _normalize_python_dependency_name(item) for item in python_requirements
+                }
+
     filesystem_scope = metadata.get("filesystem_scope")
     if filesystem_scope is not None and not isinstance(filesystem_scope, (str, list)):
         report.errors.append("filesystem_scope must be a string or list when provided")
@@ -511,6 +596,26 @@ def validate_skill_document(document: SkillDocument) -> SkillReport:
             report.warnings.append(msg)
 
     report.errors.extend(validate_links(skill_dir, document.link_targets))
+
+    discovered_python_requirements = discover_python_runtime_dependencies(skill_dir)
+    if discovered_python_requirements:
+        if runtime_requirements is None:
+            report.errors.append(
+                "runtime_requirements.python is required when skill-local Python files depend on "
+                f"non-stdlib packages: {', '.join(sorted(discovered_python_requirements))}"
+            )
+        elif not declared_python_requirements:
+            report.errors.append(
+                "runtime_requirements.python must declare detected Python package dependencies: "
+                f"{', '.join(sorted(discovered_python_requirements))}"
+            )
+        else:
+            missing_requirements = discovered_python_requirements - declared_python_requirements
+            if missing_requirements:
+                report.errors.append(
+                    "runtime_requirements.python is missing detected Python package dependencies: "
+                    f"{', '.join(sorted(missing_requirements))}"
+                )
     return report
 
 
@@ -521,6 +626,17 @@ def _is_system_skill_dir(skills_root: Path, skill_dir: Path) -> bool:
         return skill_dir.resolve().relative_to(skills_root.resolve()).parts[0] == ".system"
     except (ValueError, IndexError):
         return False
+
+
+def _is_allowed_system_override(skills_root: Path, paths: list[Path]) -> bool:
+    """Allow one local skill to intentionally override one system skill of the same slug."""
+
+    if len(paths) != 2:
+        return False
+
+    system_count = sum(1 for path in paths if _is_system_skill_dir(skills_root, path))
+    local_count = len(paths) - system_count
+    return system_count == 1 and local_count == 1
 
 
 def load_validation_state(
@@ -697,7 +813,7 @@ def main() -> int:
     )
 
     for slug, paths in sorted(slug_to_dirs.items()):
-        if len(paths) > 1:
+        if len(paths) > 1 and not _is_allowed_system_override(skills_root, paths):
             path_list = ", ".join(str(path) for path in paths)
             for report in reports:
                 if report.slug == slug:

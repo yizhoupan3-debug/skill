@@ -14,8 +14,10 @@ class RustRouteAdapter:
     route_decision_schema_version = "router-rs-route-decision-v1"
     route_policy_schema_version = "router-rs-route-policy-v1"
     route_snapshot_schema_version = "router-rs-route-snapshot-v1"
+    runtime_control_plane_schema_version = "router-rs-runtime-control-plane-v1"
     route_authority = "rust-route-core"
     compile_authority = "rust-route-compiler"
+    runtime_control_plane_authority = "rust-runtime-control-plane"
 
     def __init__(self, codex_home: Path, *, timeout_seconds: float = 5.0) -> None:
         self.codex_home = codex_home
@@ -216,6 +218,37 @@ class RustRouteAdapter:
             command.append("--include-legacy-alias-artifact")
         return self._run_json_command(command, failure_label="profile artifact compiler")
 
+    def runtime_control_plane(self) -> dict[str, Any]:
+        """Return the Rust-owned runtime control-plane authority descriptor."""
+
+        args = ["--runtime-control-plane-json"]
+        try:
+            payload = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="runtime control-plane compiler",
+            )
+        except RuntimeError:
+            payload = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="runtime control-plane compiler",
+            )
+        if payload.get("schema_version") != self.runtime_control_plane_schema_version:
+            payload = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="runtime control-plane compiler",
+            )
+            if payload.get("schema_version") != self.runtime_control_plane_schema_version:
+                raise RuntimeError(
+                    "Rust runtime control-plane compiler returned an unknown schema: "
+                    f"{payload.get('schema_version')!r}"
+                )
+        if payload.get("authority") != self.runtime_control_plane_authority:
+            raise RuntimeError(
+                "Rust runtime control-plane compiler returned an unexpected authority marker: "
+                f"{payload.get('authority')!r}"
+            )
+        return payload
+
     def health(self) -> dict[str, Any]:
         """Describe Rust route-adapter availability."""
 
@@ -227,9 +260,11 @@ class RustRouteAdapter:
             "available": resolved_binary is not None or (self.router_dir / "Cargo.toml").exists(),
             "route_authority": self.route_authority,
             "compile_authority": self.compile_authority,
+            "runtime_control_plane_authority": self.runtime_control_plane_authority,
             "route_decision_schema_version": self.route_decision_schema_version,
             "route_policy_schema_version": self.route_policy_schema_version,
             "route_snapshot_schema_version": self.route_snapshot_schema_version,
+            "runtime_control_plane_schema_version": self.runtime_control_plane_schema_version,
         }
 
     def _binary_command(self) -> list[str]:

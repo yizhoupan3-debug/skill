@@ -23,6 +23,7 @@ tmp/
 .workbuddy/
 archives/artifact-history/
 artifacts/current/
+artifacts/memory_automation/current/
 artifacts/tmp-*/
 uploads/
 aionui-webui-login.png

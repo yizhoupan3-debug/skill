@@ -12,6 +12,12 @@ routing_owner: gate
 routing_gate: artifact
 routing_priority: P1
 session_start: required
+runtime_requirements:
+  python:
+    - pdf2image
+  commands:
+    - soffice
+    - pdftoppm
 metadata:
   version: "2.0.0"
   platforms: [codex]

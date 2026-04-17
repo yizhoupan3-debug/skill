@@ -20,7 +20,8 @@ meaning of existing routing and runtime files.
 
 ## Current Codex Dual-Entry Boundary
 
-For the current phase, Rust stays in the contract / artifact / parity lane.
+For the current phase, Rust owns the default live runtime path as well as the
+contract / artifact / parity lane.
 
 The `router-rs --profile-json --framework-profile <path>` output now carries:
 
@@ -36,33 +37,33 @@ The `router-rs --profile-json --framework-profile <path>` output now carries:
 The legacy alias payload is no longer serialized into `--profile-json` by
 default; continuity consumers must opt in explicitly with
 `--include-legacy-alias-artifact`. When that opt-in is enabled for
-`--profile-json`, the alias is quarantined under
+`--profile-json`, the alias stays quarantined under
 `compatibility_lane.codex_desktop_host_adapter` instead of reappearing as a
 top-level peer field.
 
 The `router-rs --profile-artifacts-json --framework-profile <path>` output
 mirrors the first-class Codex artifact set directly, so downstream consumers no
 longer need to unpack the bundle just to read parity or alias-retirement
-contracts. Once the alias retirement gate is green, this artifact mode no
-longer emits `codex_desktop_host_adapter` by default; compatibility consumers
-must opt in explicitly with `--include-legacy-alias-artifact`, and should treat
-that alias payload as a continuity-only top-level transport artifact rather
-than a peer contract surface or first-class Rust output.
+contracts. `prepare_session(...)` and dry-run preview already route through
+`router-rs`, and normal live execution now stays Rust-only by default. The
+compatibility fallback remains disabled unless a caller explicitly enables the
+compatibility escape hatch.
 
 That first-class set now also includes
 `cli_family_capability_discovery` plus
 `execution_controller_contract` plus
 `delegation_contract` plus
 `supervisor_state_contract` plus
-`execution_kernel_live_fallback_retirement_status` plus
+`execution_kernel_delegate_family` plus
+`execution_kernel_delegate_impl` plus
 `execution_kernel_live_response_serialization_contract`, so Rust can publish a
 stable discovery contract for `codex cli` / `claude cli` / `gemini cli`
 support, freeze the shared execution-controller / delegation / supervisor-state
-control-plane artifacts, and expose a host-neutral fallback-retirement status
-artifact without turning any one CLI host into framework truth.
+control-plane artifacts, and freeze the live / dry-run execution-kernel shape
+without keeping any Python-owned steady-state blocker list alive.
 
 When Python emits the same first-class contract set through
-`emit_framework_contract_artifacts(...)`, it now also writes
+`emit_framework_contract_artifacts(...)`, it also writes
 `rust_python_artifact_parity_report.json`. That report treats the first-class
 Codex artifacts as the parity target, and `router-rs` now compiles
 `codex_desktop_alias_retirement_status.inventory_summary` directly from the
@@ -81,8 +82,9 @@ Rust must therefore follow these dual-entry invariants:
 
 - `codex_desktop_adapter` is the canonical desktop identity for parity, bundle
   emission, and future extracted artifacts.
-- `codex_desktop_host_adapter` is mirror-only compatibility surface; it must
-  not gain standalone schema drift, host-only semantics, or controller meaning.
+- `codex_desktop_host_adapter` is mirror-only compatibility surface inside the
+  explicit compatibility lane; it must not gain standalone schema drift,
+  host-only semantics, or controller meaning.
 - `compatibility_lane` is the only allowed `--profile-json` surface for
   continuity-only alias payloads; first-class bundle peers stay canonical-only.
 - explicit `--profile-artifacts-json --include-legacy-alias-artifact` output is
@@ -120,20 +122,20 @@ The benchmark implication for this repo is:
 
 ## Current Implementation Wave
 
-The active runtime wave is no longer just alias quarantine.
+The active runtime wave is now Rust-authoritative across the default runtime:
 
-The current priorities are:
+- `route_engine_mode` defaults to `rust`, so routing authority is Rust unless a
+  caller explicitly chooses `python` / `shadow` / `verify` or requests rollback
+- live execution and dry-run preview stay Rust-only by default, with
+  compatibility behavior available only through an explicit escape hatch
+- the runtime control plane now publishes a Rust-owned authority descriptor for
+  `router` / `state` / `trace` / `memory` / `background`, while the in-process
+  Python layer remains a thin projection over the frozen contracts and storage
+  backends
+- framework truth stays unchanged; the migration closes default-Python
+  authority, not by forking artifacts or host semantics
 
-- keep Rust authoritative on route/parity/compiler surfaces
-- deepen runtime control-plane behavior against the frozen contracts for:
-  - route diff/reporting
-  - durable background job state
-  - typed trace/runtime telemetry
-  - sandbox lifecycle
-  - compaction/replay
-- keep framework truth unchanged while tightening runtime semantics
-
-One runtime control-plane slice is already implemented in this wave:
+The implemented runtime control-plane surface in this wave is:
 
 - background runs now support explicit `multitask_strategy` semantics
   (`reject` / `interrupt`) instead of only implicit duplicate-session failure
@@ -168,28 +170,11 @@ One runtime control-plane slice is already implemented in this wave:
 - live execution now enters a Rust-owned out-of-process slice through
   `router-rs --execute-json`, so the actual live model invocation and response
   normalization are no longer owned by Python
-- that live execute handoff no longer depends on a Python-provided
-  `prompt_preview`; Python still computes prompt text for session previews,
-  deterministic dry-run payloads, and the optional compatibility fallback, but
-  Rust now shapes the live request prompt internally once the execution handoff
-  begins, and direct callers may not override that live prompt authority with a
-  caller-supplied `prompt_preview`
-- the runtime `run_task(...)` live path also no longer eagerly builds the
-  Python preview / middleware prompt chain before handoff; public
-  `prepare_session(...)` still exposes preview text, but normal live execution
-  now leaves `ctx.prompt` empty unless the request is dry-run
+- `prepare_session(...)` and dry-run preview already route through
+  `router-rs`, so Python no longer owns the default preview path
 - the execution-kernel contract now treats normal live operation as
-  `execution_kernel_contract_mode=rust-live-primary`; Python remains on the
-  seam for deterministic dry-run support plus an explicit compatibility
-  fallback controlled by `CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON`
-- that fallback retirement state is now also externalized as a first-class
-  artifact, `execution_kernel_live_fallback_retirement_status`, so the current
-  blockers and guardrails are available through the shared contract lane before
-  any runtime-control-flow removal work starts
-- that artifact now also freezes the public execution-kernel metadata fields,
-  current dry-run/live delegate truth, and retirement gates such as
-  `dry_run_delegate_still_python_owned` and
-  `in_process_replacement_complete=false`
+  Rust-only by default, with compatibility behavior available only through an
+  explicit escape hatch
 - the next safe slice is now also externalized as
   `execution_kernel_live_response_serialization_contract`, which freezes the
   current `RunTaskResponse` shape plus the response metadata invariants for
@@ -199,23 +184,14 @@ One runtime control-plane slice is already implemented in this wave:
   execution-kernel contract descriptor, so callers can read delegate
   family/impl directly from the shared contract lane even when live fallback is
   disabled
-- it now also enumerates the remaining Python-owned retirement surfaces:
-  dry-run prompt-preview generation, compatibility fallback agent factory,
-  compatibility live response serialization, and fallback-reason metadata
-- `execution_kernel_fallback_reason` remains compatibility-owned response
-  metadata: it is externalized for retirement/parity purposes, but it is not
-  promoted to framework truth or used to drive runtime branching
-- this response-serialization artifact still records
-  `compatibility_live_response_serialization` as Python-owned implementation
-  territory; externalizing the contract does not imply Python runtime control
-  flow has been retired
+- the contract no longer carries a blocker list; compatibility-only metadata
+  is isolated to the escape hatch and does not drive runtime branching
 - compatibility fallback semantics are now reported separately through
   `execution_kernel_live_fallback_enabled` and
   `execution_kernel_live_fallback_mode=compatibility|disabled`, instead of
   encoding fallback state inside the primary live contract mode string
 - when compatibility fallback is disabled, normal live execution stays
-  Rust-only, `execution_kernel_live_fallback*` metadata may be `null`, and
-  dry-run delegate metadata still points at the Python kernel adapter
+  Rust-only and `execution_kernel_live_fallback*` metadata may be `null`
 - interrupt-style background replacements now use a reserved session takeover
   handoff before the new job queues, reducing the old release-then-requeue race
 - pending takeover reservations are now persisted as part of the durable
@@ -223,6 +199,9 @@ One runtime control-plane slice is already implemented in this wave:
   replacement intent
 - background queue admission now checks an explicit admitted-job count instead
   of peeking into `Semaphore._value`
+- runtime health now exposes a Rust-owned control-plane descriptor, so default
+  routing and control-plane authority can be verified without inferring from the
+  Python projection layer
 
 One additional Rust-authority slice is now implemented in this wave:
 
@@ -242,15 +221,15 @@ One additional Rust-authority slice is now implemented in this wave:
 
 The boundary is still explicit:
 
-- Rust is not yet the live in-process runtime kernel
-- `RouterService` only hydrates the Python runtime router when the Rust-emitted
-  route policy says `python_route_required=true`
-- the next Rust convergence target is to make Rust-only live execution the
-  default operational mode and then retire the remaining Python live fallback
-  compatibility path entirely
-- the next runtime target is to push the new event bridge beyond in-memory
-  local delivery into stronger non-filesystem and consumer-handoff transport
-  boundaries
+- Rust remains the live execution owner through the router-rs boundary rather
+  than an in-process Python-owned kernel
+- `RouterService` only hydrates the Python runtime router when the explicit
+  compatibility lane or rollback path requests it
+- the compatibility lane stays intentionally narrow: it is present for legacy
+  continuity only, not as the default runtime mode
+- the next runtime target is to strengthen backend/transport implementations,
+  not to restore Python as the default authority for routing or control-plane
+  ownership
 
 ## Contract 0: Desktop Alias Retirement Path
 

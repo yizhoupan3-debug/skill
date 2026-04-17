@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from codex_agno_runtime.execution_kernel_contracts import (
+    build_execution_kernel_compatibility_agent_instructions,
+)
+
 
 class _UnavailableAgent:
     """Fallback agent returned when Agno is not installed."""
@@ -33,7 +37,10 @@ class AgentFactory:
             Any: Agent-like object with an async `arun()` method.
         """
 
-        instructions = [routing_result.prompt_preview or self.prompt_builder.build_prompt(routing_result)]
+        instructions = build_execution_kernel_compatibility_agent_instructions(
+            routing_result=routing_result,
+            build_prompt=self.prompt_builder.build_prompt,
+        )
 
         try:
             from agno.agent import Agent  # type: ignore

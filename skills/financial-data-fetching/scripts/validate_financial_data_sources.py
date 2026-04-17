@@ -7,7 +7,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
+try:
+    import pandas as pd
+except ImportError as exc:  # pragma: no cover - import guard
+    raise SystemExit(
+        "Missing Python package 'pandas'. Install it with "
+        "`python3 -m pip install pandas` and retry."
+    ) from exc
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:

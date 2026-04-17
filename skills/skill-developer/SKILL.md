@@ -68,5 +68,6 @@ activation quality.
 ## Validation
 
 ```bash
+cd /Users/joe/Documents/skill
 python3 scripts/check_skills.py --verify-codex-link
 ```

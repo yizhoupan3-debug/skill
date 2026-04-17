@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,36 @@ from codex_agno_runtime.state import (
 )
 
 
+_MINIMAL_SUPERVISOR_STATE = {
+    "version": 1,
+    "controller": "execution-controller-coding",
+    "active_phase": "completed",
+    "delegation": {
+        "delegation_plan_created": True,
+        "spawn_attempted": False,
+        "fallback_mode": "local-supervisor",
+        "delegated_sidecars": [],
+    },
+    "verification": {
+        "verification_status": "completed",
+    },
+}
+
+
+@contextmanager
+def _project_supervisor_state() -> Path:
+    path = PROJECT_ROOT / ".supervisor_state.json"
+    original = path.read_text(encoding="utf-8") if path.exists() else None
+    path.write_text(json.dumps(_MINIMAL_SUPERVISOR_STATE, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    try:
+        yield path
+    finally:
+        if original is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_text(original, encoding="utf-8")
+
+
 def test_skill_loader_supports_lazy_body_hydration() -> None:
     """Verify skills can be loaded without bodies and hydrated later."""
 
@@ -59,98 +90,111 @@ def test_skill_loader_supports_lazy_body_hydration() -> None:
 def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> None:
     """Verify the runtime remains usable when the Python-backed kernel delegate is unavailable."""
 
-    trace_path = tmp_path / "TRACE_METADATA.json"
-    settings = RuntimeSettings(
-        codex_home=PROJECT_ROOT,
-        data_dir=tmp_path / "runtime-data",
-        trace_output_path=trace_path,
-        live_model_override=False,
-    )
-    runtime = CodexAgnoRuntime(settings)
-
-    async def _run() -> None:
-        response = await runtime.run_task(
-            RunTaskRequest(
-                task="帮我写一个 Rust CLI 工具",
-                user_id="tester",
-                dry_run=True,
-            )
+    with _project_supervisor_state() as supervisor_state_path:
+        trace_path = tmp_path / "TRACE_METADATA.json"
+        settings = RuntimeSettings(
+            codex_home=PROJECT_ROOT,
+            data_dir=tmp_path / "runtime-data",
+            trace_output_path=trace_path,
+            live_model_override=False,
         )
-        assert response.live_run is False
-        assert response.skill
-        assert response.prompt_preview
-        assert response.metadata["trace_event_count"] >= 6
-        assert response.metadata["trace_event_schema_version"] == TRACE_EVENT_SCHEMA_VERSION
-        assert response.metadata["trace_metadata_schema_version"] == TRACE_METADATA_SCHEMA_VERSION
-        assert response.metadata["trace_event_sink_schema_version"] == TRACE_EVENT_SINK_SCHEMA_VERSION
-        assert response.metadata["trace_replay_cursor_schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
-        assert response.metadata["trace_replay_supported"] is True
-        assert response.metadata["trace_event_bridge_supported"] is True
-        assert response.metadata["trace_event_bridge_schema_version"] == "runtime-event-bridge-v1"
-        assert response.metadata["execution_kernel"] == "rust-execution-kernel-slice"
-        assert response.metadata["execution_kernel_authority"] == "rust-execution-kernel-authority"
-        assert response.metadata["execution_kernel_contract_mode"] == "rust-live-primary"
-        assert response.metadata["execution_kernel_in_process_replacement_complete"] is False
-        assert response.metadata["execution_kernel_delegate"] == "python-agno"
-        assert response.metadata["execution_kernel_delegate_authority"] == "python-agno-kernel-adapter"
-        assert response.metadata["execution_kernel_live_primary"] == "router-rs"
-        assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-        assert response.metadata["execution_kernel_live_fallback"] == "python-agno"
-        assert response.metadata["execution_kernel_live_fallback_authority"] == "python-agno-kernel-adapter"
-        assert response.metadata["execution_kernel_live_fallback_mode"] == "compatibility"
-        assert response.metadata["trace_generation"] == 0
-        assert response.metadata["trace_latest_seq"] >= 6
-        assert response.metadata["trace_resume_cursor"]["seq"] >= 6
-        assert response.metadata["reroute_count"] == 0
-        assert response.metadata["retry_count"] == 0
+        runtime = CodexAgnoRuntime(settings)
 
-    asyncio.run(_run())
+        async def _run() -> None:
+            response = await runtime.run_task(
+                RunTaskRequest(
+                    task="帮我写一个 Rust CLI 工具",
+                    user_id="tester",
+                    dry_run=True,
+                )
+            )
+            assert response.live_run is False
+            assert response.skill
+            assert response.prompt_preview
+            assert response.metadata["trace_event_count"] >= 6
+            assert response.metadata["trace_event_schema_version"] == TRACE_EVENT_SCHEMA_VERSION
+            assert response.metadata["trace_metadata_schema_version"] == TRACE_METADATA_SCHEMA_VERSION
+            assert response.metadata["trace_event_sink_schema_version"] == TRACE_EVENT_SINK_SCHEMA_VERSION
+            assert response.metadata["trace_replay_cursor_schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
+            assert response.metadata["trace_replay_supported"] is True
+            assert response.metadata["trace_event_bridge_supported"] is True
+            assert response.metadata["trace_event_bridge_schema_version"] == "runtime-event-bridge-v1"
+            assert response.metadata["execution_kernel"] == "rust-execution-kernel-slice"
+            assert response.metadata["execution_kernel_authority"] == "rust-execution-kernel-authority"
+            assert response.metadata["execution_kernel_contract_mode"] == "rust-live-primary"
+            assert response.metadata["execution_kernel_in_process_replacement_complete"] is True
+            assert response.metadata["execution_kernel_delegate"] == "router-rs"
+            assert response.metadata["execution_kernel_delegate_authority"] == "rust-execution-cli"
+            assert response.metadata["execution_kernel_delegate_family"] == "rust-cli"
+            assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
+            assert response.metadata["execution_kernel_live_primary"] == "router-rs"
+            assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
+            assert response.metadata["execution_kernel_live_fallback"] is None
+            assert response.metadata["execution_kernel_live_fallback_authority"] is None
+            assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
+            assert response.metadata["trace_generation"] == 0
+            assert response.metadata["trace_latest_seq"] >= 6
+            assert response.metadata["trace_resume_cursor"]["seq"] >= 6
+            assert response.metadata["reroute_count"] == 0
+            assert response.metadata["retry_count"] == 0
 
-    data = json.loads(trace_path.read_text(encoding="utf-8"))
-    assert data["task"] == "帮我写一个 Rust CLI 工具"
-    assert data["decision"]["owner"]
-    assert data["metadata_schema_version"] == TRACE_METADATA_SCHEMA_VERSION
-    assert data["trace_event_schema_version"] == TRACE_EVENT_SCHEMA_VERSION
-    assert data["trace_event_sink_schema_version"] == TRACE_EVENT_SINK_SCHEMA_VERSION
-    assert data["reroute_count"] == 0
-    assert data["retry_count"] == 0
-    assert str(trace_path) in data["artifact_paths"]
-    assert data["supervisor_projection"]["supervisor_state_path"] == str((PROJECT_ROOT / ".supervisor_state.json").resolve())
-    assert data["supervisor_projection"]["active_phase"] == "validated"
-    assert data["supervisor_projection"]["verification_status"] == "completed"
-    assert data["supervisor_projection"]["delegation"] == {
-        "plan_created": True,
-        "spawn_attempted": True,
-        "fallback_mode": "local-supervisor",
-        "sidecar_count": 2,
-    }
-    assert data["stream"]["replay_supported"] is True
-    assert data["stream"]["event_bridge_supported"] is True
-    assert data["stream"]["event_bridge_schema_version"] == "runtime-event-bridge-v1"
-    assert data["stream"]["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
-    assert any(event["kind"] == "route.selected" for event in data["events"])
-    assert any(event["kind"] == "middleware.enter" for event in data["events"])
-    assert any(event["kind"] == "middleware.exit" for event in data["events"])
-    assert any(event["kind"] == "run.completed" for event in data["events"])
+        asyncio.run(_run())
 
-    stream_path = trace_path.with_name("TRACE_EVENTS.jsonl")
-    lines = [json.loads(line) for line in stream_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    assert lines
-    assert lines[0]["sink_schema_version"] == TRACE_EVENT_SINK_SCHEMA_VERSION
-    assert lines[0]["event"]["schema_version"] == TRACE_EVENT_SCHEMA_VERSION
-    assert lines[0]["event"]["seq"] == 1
-    assert lines[-1]["event"]["cursor"].startswith("g0:s")
+        data = json.loads(trace_path.read_text(encoding="utf-8"))
+        assert data["task"] == "帮我写一个 Rust CLI 工具"
+        assert data["decision"]["owner"]
+        assert data["metadata_schema_version"] == TRACE_METADATA_SCHEMA_VERSION
+        assert data["trace_event_schema_version"] == TRACE_EVENT_SCHEMA_VERSION
+        assert data["trace_event_sink_schema_version"] == TRACE_EVENT_SINK_SCHEMA_VERSION
+        assert data["reroute_count"] == 0
+        assert data["retry_count"] == 0
+        assert str(trace_path) in data["artifact_paths"]
+        assert data["supervisor_projection"]["supervisor_state_path"] == str(supervisor_state_path.resolve())
+        supervisor_state = json.loads(supervisor_state_path.read_text(encoding="utf-8"))
+        assert data["supervisor_projection"]["active_phase"] == supervisor_state["active_phase"]
+        assert data["supervisor_projection"]["verification_status"] == supervisor_state["verification"][
+            "verification_status"
+        ]
+        assert data["supervisor_projection"]["delegation"] == {
+            "plan_created": supervisor_state["delegation"]["delegation_plan_created"],
+            "spawn_attempted": supervisor_state["delegation"]["spawn_attempted"],
+            "fallback_mode": supervisor_state["delegation"]["fallback_mode"],
+            "sidecar_count": len(supervisor_state["delegation"]["delegated_sidecars"]),
+        }
+        assert data["stream"]["replay_supported"] is True
+        assert data["stream"]["event_bridge_supported"] is True
+        assert data["stream"]["event_bridge_schema_version"] == "runtime-event-bridge-v1"
+        assert data["stream"]["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
+        assert any(event["kind"] == "route.selected" for event in data["events"])
+        assert any(event["kind"] == "middleware.enter" for event in data["events"])
+        assert any(event["kind"] == "middleware.exit" for event in data["events"])
+        assert any(event["kind"] == "run.completed" for event in data["events"])
 
-    resume_manifest = json.loads(trace_path.with_name("TRACE_RESUME_MANIFEST.json").read_text(encoding="utf-8"))
-    assert resume_manifest["schema_version"] == TRACE_RESUME_MANIFEST_SCHEMA_VERSION
-    assert resume_manifest["session_id"]
-    assert resume_manifest["status"] == "dry_run"
-    assert resume_manifest["trace_output_path"] == str(trace_path)
-    assert resume_manifest["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
-    assert resume_manifest["supervisor_projection"]["supervisor_state_path"] == str((PROJECT_ROOT / ".supervisor_state.json").resolve())
-    assert resume_manifest["supervisor_projection"]["active_phase"] == "validated"
-    assert resume_manifest["supervisor_projection"]["verification_status"] == "completed"
-    assert resume_manifest["supervisor_projection"]["delegation"]["sidecar_count"] == 2
+        stream_path = trace_path.with_name("TRACE_EVENTS.jsonl")
+        lines = [json.loads(line) for line in stream_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        assert lines
+        assert lines[0]["sink_schema_version"] == TRACE_EVENT_SINK_SCHEMA_VERSION
+        assert lines[0]["event"]["schema_version"] == TRACE_EVENT_SCHEMA_VERSION
+        assert lines[0]["event"]["seq"] == 1
+        assert lines[-1]["event"]["cursor"].startswith("g0:s")
+
+        resume_manifest = json.loads(trace_path.with_name("TRACE_RESUME_MANIFEST.json").read_text(encoding="utf-8"))
+        assert resume_manifest["schema_version"] == TRACE_RESUME_MANIFEST_SCHEMA_VERSION
+        assert resume_manifest["session_id"]
+        assert resume_manifest["status"] == "dry_run"
+        assert resume_manifest["trace_output_path"] == str(trace_path)
+        assert resume_manifest["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
+        assert resume_manifest["supervisor_projection"]["supervisor_state_path"] == str(
+            supervisor_state_path.resolve()
+        )
+        assert resume_manifest["supervisor_projection"]["active_phase"] == supervisor_state["active_phase"]
+        assert (
+            resume_manifest["supervisor_projection"]["verification_status"]
+            == supervisor_state["verification"]["verification_status"]
+        )
+        assert resume_manifest["supervisor_projection"]["delegation"]["sidecar_count"] == len(
+            supervisor_state["delegation"]["delegated_sidecars"]
+        )
 
 
 def test_runtime_dry_run_emits_empty_supervisor_projection_without_state_file(tmp_path: Path) -> None:
@@ -254,13 +298,15 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
         assert seen["trace_output_path"] == str(trace_path)
         assert response.metadata["execution_kernel"] == "fake-kernel"
         assert response.metadata["execution_kernel_authority"] == "test-adapter"
-        assert response.metadata["execution_kernel_delegate"] == "python-agno"
-        assert response.metadata["execution_kernel_delegate_authority"] == "python-agno-kernel-adapter"
+        assert response.metadata["execution_kernel_delegate"] == "router-rs"
+        assert response.metadata["execution_kernel_delegate_authority"] == "rust-execution-cli"
+        assert response.metadata["execution_kernel_delegate_family"] == "rust-cli"
+        assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-        assert response.metadata["execution_kernel_live_fallback"] == "python-agno"
-        assert response.metadata["execution_kernel_live_fallback_authority"] == "python-agno-kernel-adapter"
-        assert response.metadata["execution_kernel_live_fallback_mode"] == "compatibility"
+        assert "execution_kernel_live_fallback" not in response.metadata
+        assert "execution_kernel_live_fallback_authority" not in response.metadata
+        assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
         assert response.metadata["trace_event_schema_version"] == TRACE_EVENT_SCHEMA_VERSION
 
     asyncio.run(_run())
@@ -300,8 +346,8 @@ def test_runtime_live_path_tolerates_empty_python_prompt_context(tmp_path: Path)
                 "execution_kernel_delegate_authority": "rust-execution-cli",
                 "execution_kernel_live_primary": "router-rs",
                 "execution_kernel_live_primary_authority": "rust-execution-cli",
-                "execution_kernel_live_fallback": "python-agno",
-                "execution_kernel_live_fallback_authority": "python-agno-kernel-adapter",
+                "execution_kernel_live_fallback": None,
+                "execution_kernel_live_fallback_authority": None,
             },
         )
 
@@ -326,7 +372,7 @@ def test_runtime_live_path_tolerates_empty_python_prompt_context(tmp_path: Path)
         assert response.metadata["execution_kernel_delegate_authority"] == "rust-execution-cli"
         assert response.metadata["execution_kernel_live_primary"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-        assert response.metadata["execution_kernel_live_fallback_mode"] == "compatibility"
+        assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
 
     asyncio.run(_run())
 
@@ -355,8 +401,10 @@ def test_runtime_dry_run_keeps_working_when_live_fallback_is_disabled(tmp_path: 
         )
         assert response.live_run is False
         assert response.metadata["execution_kernel_contract_mode"] == "rust-live-primary"
-        assert response.metadata["execution_kernel_delegate"] == "python-agno"
-        assert response.metadata["execution_kernel_delegate_authority"] == "python-agno-kernel-adapter"
+        assert response.metadata["execution_kernel_delegate"] == "router-rs"
+        assert response.metadata["execution_kernel_delegate_authority"] == "rust-execution-cli"
+        assert response.metadata["execution_kernel_delegate_family"] == "rust-cli"
+        assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
         assert response.metadata["execution_kernel_live_fallback_enabled"] is False
@@ -370,110 +418,116 @@ def test_runtime_dry_run_keeps_working_when_live_fallback_is_disabled(tmp_path: 
 def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -> None:
     """Runtime should expose the event bridge for host-adapter style consumption."""
 
-    trace_path = tmp_path / "TRACE_METADATA.json"
-    runtime = CodexAgnoRuntime(
-        RuntimeSettings(
-            codex_home=PROJECT_ROOT,
-            data_dir=tmp_path / "runtime-data",
-            trace_output_path=trace_path,
-            live_model_override=False,
-        )
-    )
-
-    async def _run() -> None:
-        response = await runtime.run_task(
-            RunTaskRequest(
-                task="帮我写一个 Rust CLI 工具",
-                session_id="bridge-session",
-                user_id="tester",
-                dry_run=True,
+    with _project_supervisor_state() as supervisor_state_path:
+        trace_path = tmp_path / "TRACE_METADATA.json"
+        runtime = CodexAgnoRuntime(
+            RuntimeSettings(
+                codex_home=PROJECT_ROOT,
+                data_dir=tmp_path / "runtime-data",
+                trace_output_path=trace_path,
+                live_model_override=False,
             )
         )
-        first_window = runtime.subscribe_runtime_events(session_id=response.session_id, limit=2)
-        assert first_window["schema_version"] == "runtime-event-bridge-v1"
-        assert len(first_window["events"]) == 2
-        assert first_window["has_more"] is True
 
-        transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
-        assert transport["schema_version"] == TRACE_EVENT_TRANSPORT_SCHEMA_VERSION
-        assert transport["session_id"] == response.session_id
-        assert transport["transport_kind"] == "poll"
-        assert transport["transport_family"] == "host-facing-bridge"
-        assert transport["endpoint_kind"] == "runtime_method"
-        assert transport["remote_capable"] is True
-        assert transport["handoff_supported"] is True
-        assert transport["handoff_method"] == "describe_runtime_event_handoff"
-        assert transport["handoff_kind"] == "artifact_handoff"
-        assert transport["binding_refresh_mode"] == "describe_or_checkpoint"
-        assert transport["binding_artifact_format"] == "json"
-        assert transport["binding_backend_family"] == "filesystem"
-        assert transport["binding_artifact_path"].endswith(
-            f"runtime_event_transports/{response.session_id}__{response.session_id}.json"
-        )
-        assert transport["describe_method"] == "describe_runtime_event_transport"
-        assert transport["subscribe_method"] == "subscribe_runtime_events"
-        assert transport["cleanup_method"] == "cleanup_runtime_events"
-        assert transport["cleanup_semantics"] == "bridge_cache_only"
-        assert transport["cleanup_preserves_replay"] is True
-        assert transport["replay_reseed_supported"] is True
-        assert transport["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
-        persisted = json.loads(Path(transport["binding_artifact_path"]).read_text(encoding="utf-8"))
-        assert persisted["stream_id"] == transport["stream_id"]
-        assert persisted["session_id"] == response.session_id
-        assert persisted["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
+        async def _run() -> None:
+            response = await runtime.run_task(
+                RunTaskRequest(
+                    task="帮我写一个 Rust CLI 工具",
+                    session_id="bridge-session",
+                    user_id="tester",
+                    dry_run=True,
+                )
+            )
+            first_window = runtime.subscribe_runtime_events(session_id=response.session_id, limit=2)
+            assert first_window["schema_version"] == "runtime-event-bridge-v1"
+            assert len(first_window["events"]) == 2
+            assert first_window["has_more"] is True
 
-        handoff = runtime.describe_runtime_event_handoff(session_id=response.session_id)
-        assert handoff["schema_version"] == "runtime-event-handoff-v1"
-        assert handoff["stream_id"] == transport["stream_id"]
-        assert handoff["checkpoint_backend_family"] == "filesystem"
-        assert handoff["trace_stream_path"].endswith("TRACE_EVENTS.jsonl")
-        assert handoff["resume_manifest_path"].endswith("TRACE_RESUME_MANIFEST.json")
-        assert handoff["transport"]["binding_artifact_path"] == transport["binding_artifact_path"]
+            transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
+            assert transport["schema_version"] == TRACE_EVENT_TRANSPORT_SCHEMA_VERSION
+            assert transport["session_id"] == response.session_id
+            assert transport["transport_kind"] == "poll"
+            assert transport["transport_family"] == "host-facing-bridge"
+            assert transport["endpoint_kind"] == "runtime_method"
+            assert transport["remote_capable"] is True
+            assert transport["handoff_supported"] is True
+            assert transport["handoff_method"] == "describe_runtime_event_handoff"
+            assert transport["handoff_kind"] == "artifact_handoff"
+            assert transport["binding_refresh_mode"] == "describe_or_checkpoint"
+            assert transport["binding_artifact_format"] == "json"
+            assert transport["binding_backend_family"] == "filesystem"
+            assert transport["binding_artifact_path"].endswith(
+                f"runtime_event_transports/{response.session_id}__{response.session_id}.json"
+            )
+            assert transport["describe_method"] == "describe_runtime_event_transport"
+            assert transport["subscribe_method"] == "subscribe_runtime_events"
+            assert transport["cleanup_method"] == "cleanup_runtime_events"
+            assert transport["cleanup_semantics"] == "bridge_cache_only"
+            assert transport["cleanup_preserves_replay"] is True
+            assert transport["replay_reseed_supported"] is True
+            assert transport["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
+            persisted = json.loads(Path(transport["binding_artifact_path"]).read_text(encoding="utf-8"))
+            assert persisted["stream_id"] == transport["stream_id"]
+            assert persisted["session_id"] == response.session_id
+            assert persisted["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
 
-        after_event_id = first_window["events"][-1]["event_id"]
-        assert first_window["next_cursor"]["event_id"] == after_event_id
-        resumed = runtime.subscribe_runtime_events(
-            session_id=response.session_id,
-            after_event_id=after_event_id,
-            limit=20,
-        )
-        assert resumed["events"]
-        assert resumed["after_event_id"] == after_event_id
+            handoff = runtime.describe_runtime_event_handoff(session_id=response.session_id)
+            assert handoff["schema_version"] == "runtime-event-handoff-v1"
+            assert handoff["stream_id"] == transport["stream_id"]
+            assert handoff["checkpoint_backend_family"] == "filesystem"
+            assert handoff["trace_stream_path"].endswith("TRACE_EVENTS.jsonl")
+            assert handoff["resume_manifest_path"].endswith("TRACE_RESUME_MANIFEST.json")
+            assert handoff["transport"]["binding_artifact_path"] == transport["binding_artifact_path"]
 
-        tail_event_id = resumed["events"][-1]["event_id"]
-        idle = runtime.subscribe_runtime_events(
-            session_id=response.session_id,
-            after_event_id=tail_event_id,
-            heartbeat=True,
-        )
-        assert idle["events"] == []
-        assert idle["heartbeat"]["kind"] == "bridge.heartbeat"
-        assert idle["heartbeat"]["status"] == "idle"
+            after_event_id = first_window["events"][-1]["event_id"]
+            assert first_window["next_cursor"]["event_id"] == after_event_id
+            resumed = runtime.subscribe_runtime_events(
+                session_id=response.session_id,
+                after_event_id=after_event_id,
+                limit=20,
+            )
+            assert resumed["events"]
+            assert resumed["after_event_id"] == after_event_id
 
-        resumed_after_cleanup = runtime.subscribe_runtime_events(
-            session_id=response.session_id,
-            after_event_id=after_event_id,
-            limit=20,
-        )
-        assert resumed_after_cleanup["events"]
+            tail_event_id = resumed["events"][-1]["event_id"]
+            idle = runtime.subscribe_runtime_events(
+                session_id=response.session_id,
+                after_event_id=tail_event_id,
+                heartbeat=True,
+            )
+            assert idle["events"] == []
+            assert idle["heartbeat"]["kind"] == "bridge.heartbeat"
+            assert idle["heartbeat"]["status"] == "idle"
 
-        runtime.cleanup_runtime_events(session_id=response.session_id)
-        reseeded = runtime.subscribe_runtime_events(
-            session_id=response.session_id,
-            after_event_id=after_event_id,
-            limit=20,
-        )
-        assert reseeded["events"]
-        assert reseeded["after_event_id"] == after_event_id
+            resumed_after_cleanup = runtime.subscribe_runtime_events(
+                session_id=response.session_id,
+                after_event_id=after_event_id,
+                limit=20,
+            )
+            assert resumed_after_cleanup["events"]
 
-        resume_manifest = json.loads(trace_path.with_name("TRACE_RESUME_MANIFEST.json").read_text(encoding="utf-8"))
-        assert resume_manifest["event_transport_path"] == transport["binding_artifact_path"]
-        assert transport["binding_artifact_path"] in resume_manifest["artifact_paths"]
-        assert str((PROJECT_ROOT / ".supervisor_state.json").resolve()) in resume_manifest["artifact_paths"]
-        assert resume_manifest["supervisor_projection"]["supervisor_state_path"] == str((PROJECT_ROOT / ".supervisor_state.json").resolve())
-        assert resume_manifest["supervisor_projection"]["delegation"]["sidecar_count"] == 2
+            runtime.cleanup_runtime_events(session_id=response.session_id)
+            reseeded = runtime.subscribe_runtime_events(
+                session_id=response.session_id,
+                after_event_id=after_event_id,
+                limit=20,
+            )
+            assert reseeded["events"]
+            assert reseeded["after_event_id"] == after_event_id
 
-    asyncio.run(_run())
+            resume_manifest = json.loads(trace_path.with_name("TRACE_RESUME_MANIFEST.json").read_text(encoding="utf-8"))
+            assert resume_manifest["event_transport_path"] == transport["binding_artifact_path"]
+            assert transport["binding_artifact_path"] in resume_manifest["artifact_paths"]
+            assert str(supervisor_state_path.resolve()) in resume_manifest["artifact_paths"]
+            assert resume_manifest["supervisor_projection"]["supervisor_state_path"] == str(
+                supervisor_state_path.resolve()
+            )
+            supervisor_state = json.loads(supervisor_state_path.read_text(encoding="utf-8"))
+            assert resume_manifest["supervisor_projection"]["delegation"]["sidecar_count"] == len(
+                supervisor_state["delegation"]["delegated_sidecars"]
+            )
+
+        asyncio.run(_run())
 
 
 def test_runtime_tracks_reroute_count_for_reused_session(tmp_path: Path) -> None:

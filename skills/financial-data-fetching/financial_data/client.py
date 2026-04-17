@@ -1,13 +1,32 @@
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
 from typing import Any, Literal
 
-import pandas as pd
-import requests
+
+def require_dependency(
+    module_name: str,
+    *,
+    install_name: str | None = None,
+    feature: str | None = None,
+):
+    try:
+        return importlib.import_module(module_name)
+    except ImportError as exc:  # pragma: no cover - import guard
+        package_name = install_name or module_name
+        feature_text = f" for {feature}" if feature else ""
+        raise RuntimeError(
+            f"Missing Python package '{package_name}' required{feature_text}. "
+            f"Install it with `python3 -m pip install {package_name}` and retry."
+        ) from exc
+
+
+pd = require_dependency("pandas", feature="financial data normalization")
+requests = require_dependency("requests", feature="HTTP financial data access")
 
 
 @dataclass(slots=True)
@@ -220,7 +239,7 @@ class MarketDataClient:
         interval: str = "1h",
         limit: int = 200,
     ) -> FetchResult:
-        import ccxt
+        ccxt = require_dependency("ccxt", feature="crypto market data fetching")
 
         exchange_cls = getattr(ccxt, exchange)
         client = exchange_cls({"enableRateLimit": True})
@@ -284,7 +303,7 @@ class MarketDataClient:
         period: str,
         adjusted: bool,
     ) -> FetchResult:
-        import yfinance as yf
+        yf = require_dependency("yfinance", feature="US equity market data fetching")
 
         raw = yf.download(
             symbol,
@@ -369,7 +388,7 @@ class MarketDataClient:
         )
 
     def fetch_cn_index_ohlcv(self, *, index_code: str) -> FetchResult:
-        import akshare as ak
+        ak = require_dependency("akshare", feature="China index market data fetching")
 
         normalized = self._normalize_index_code(index_code)
         symbol = f"sh{normalized}"
@@ -405,7 +424,7 @@ class MarketDataClient:
         )
 
     def fetch_cn_index_constituents(self, *, index_code: str) -> FetchResult:
-        import akshare as ak
+        ak = require_dependency("akshare", feature="China index constituents fetching")
 
         normalized = self._normalize_index_code(index_code)
         df = ak.index_stock_cons_csindex(symbol=normalized).reset_index(drop=True)
@@ -440,7 +459,7 @@ class MarketDataClient:
         )
 
     def fetch_cn_index_weights(self, *, index_code: str) -> FetchResult:
-        import akshare as ak
+        ak = require_dependency("akshare", feature="China index weights fetching")
 
         normalized = self._normalize_index_code(index_code)
         df = ak.index_stock_cons_weight_csindex(symbol=normalized).reset_index(drop=True)
@@ -516,7 +535,7 @@ class MarketDataClient:
         report: str,
         freq: str,
     ) -> FetchResult:
-        import yfinance as yf
+        yf = require_dependency("yfinance", feature="US equity fundamentals fetching")
 
         ticker = yf.Ticker(symbol)
 
@@ -578,7 +597,7 @@ class MarketDataClient:
         report: str,
         freq: str,
     ) -> FetchResult:
-        import akshare as ak
+        ak = require_dependency("akshare", feature="China fundamentals fetching")
 
         # Normalize symbol: strip exchange prefix if present
         code = symbol.strip()
@@ -652,7 +671,7 @@ class MarketDataClient:
         symbol: str,
         holder_type: str,
     ) -> FetchResult:
-        import yfinance as yf
+        yf = require_dependency("yfinance", feature="US equity holders fetching")
 
         ticker = yf.Ticker(symbol)
 
@@ -693,7 +712,7 @@ class MarketDataClient:
         symbol: str,
         holder_type: str,
     ) -> FetchResult:
-        import akshare as ak
+        ak = require_dependency("akshare", feature="China holders fetching")
 
         code = symbol.strip()
         for prefix in ("sh", "sz", "SH", "SZ"):
@@ -751,7 +770,7 @@ class MarketDataClient:
         raise ValueError(f"Unsupported market for capital metrics: {market}")
 
     def _fetch_us_capital(self, *, symbol: str) -> FetchResult:
-        import yfinance as yf
+        yf = require_dependency("yfinance", feature="US capital metrics fetching")
 
         info = yf.Ticker(symbol).info or {}
         if not info:
@@ -795,7 +814,7 @@ class MarketDataClient:
         )
 
     def _fetch_cn_capital(self, *, symbol: str) -> FetchResult:
-        import akshare as ak
+        ak = require_dependency("akshare", feature="China capital metrics fetching")
 
         code = symbol.strip()
         for prefix in ("sh", "sz", "SH", "SZ"):

@@ -9,6 +9,10 @@ from .framework_profile import (
     ensure_capabilities,
     resolve_host_capability_requirements,
 )
+from .execution_kernel_contracts import (
+    EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+    build_execution_kernel_live_response_serialization_contract_core,
+)
 from .trace import (
     TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
     TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
@@ -1592,13 +1596,15 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
             "authority": "python-agno-kernel-adapter",
             "family": "python",
             "impl": "agno",
-            "mode_when_enabled": "compatibility",
-            "purpose": "execute-failure-compatibility-only",
+            "mode_when_enabled": "compatibility-only-explicit",
+            "trigger_scope_when_enabled": "explicit-compatibility-kernel-only",
+            "purpose": "compatibility-only-escape-hatch",
         },
         "control_surfaces": {
             "settings_field": "rust_execute_fallback_to_python",
             "env_var": "CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON",
-            "enabled_by_default": True,
+            "enabled_by_default": False,
+            "fallback_trigger_scope_when_enabled": "explicit-compatibility-kernel-only",
         },
         "public_runtime_contract_fields": [
             "execution_kernel",
@@ -1617,48 +1623,40 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
         "public_runtime_response_metadata_fields": [
             "execution_kernel_delegate_family",
             "execution_kernel_delegate_impl",
-            "execution_kernel_fallback_reason",
+            EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
         ],
         "current_contract_truth": {
             "execution_kernel_contract_mode": "rust-live-primary",
-            "execution_kernel_in_process_replacement_complete": False,
-            "dry_run_delegate_kind": "python-agno",
-            "dry_run_delegate_authority": "python-agno-kernel-adapter",
+            "execution_kernel_in_process_replacement_complete": True,
+            "dry_run_delegate_kind": "router-rs",
+            "dry_run_delegate_authority": "rust-execution-cli",
             "live_primary_kind": "router-rs",
             "live_primary_authority": "rust-execution-cli",
             "live_fallback_kind_when_enabled": "python-agno",
             "live_fallback_authority_when_enabled": "python-agno-kernel-adapter",
             "live_fallback_mode_when_disabled": "disabled",
+            "live_fallback_trigger_scope_when_enabled": "explicit-compatibility-kernel-only",
             "live_prompt_preview_passthrough_disabled": True,
-            "compatibility_fallback_reason_metadata_key": "execution_kernel_fallback_reason",
+            "compatibility_fallback_reason_metadata_key": EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
         },
         "current_response_metadata_truth": {
             "live_delegate_family": "rust-cli",
             "live_delegate_impl": "router-rs",
             "live_fallback_delegate_family_when_enabled": "python",
             "live_fallback_delegate_impl_when_enabled": "agno",
-            "dry_run_delegate_family": "python",
-            "dry_run_delegate_impl": "agno",
+            "dry_run_delegate_family": "rust-cli",
+            "dry_run_delegate_impl": "router-rs",
             "compatibility_fallback_reason_emitted_by": "python-agno-kernel-adapter",
             "compatibility_fallback_reason_present_only_on_fallback": True,
         },
-        "remaining_python_owned_surfaces": [
-            "dry_run_prompt_preview_generation",
-            "compatibility_fallback_agent_factory",
-            "compatibility_live_response_serialization",
-            "compatibility_fallback_reason_metadata",
-        ],
+        "remaining_python_owned_surfaces": [],
         "retirement_readiness": {
-            "ready": False,
-            "status": "blocked",
+            "ready": True,
+            "status": "complete",
             "contract_lane_complete": True,
-            "runtime_control_flow_change_required": True,
-            "blockers": [
-                "python_live_fallback_still_exists_for_router_rs_execute_failures",
-                "fallback_toggle_defaults_to_enabled",
-                "fallback_removal_requires_runtime_control_flow_change",
-            ],
-            "next_safe_slice": "externalize_retirement_readiness_before_runtime_removal",
+            "runtime_control_flow_change_required": False,
+            "blockers": [],
+            "next_safe_slice": "rustification_closed",
         },
         "guardrails": {
             "thin_projection_boundary_preserved": True,
@@ -1672,12 +1670,14 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
             "rust_only_disabled_mode_externalized": True,
             "response_metadata_surface_externalized": True,
             "delegate_family_impl_metadata_externalized": True,
-            "dry_run_delegate_still_python_owned": True,
-            "dry_run_prompt_preview_still_python_owned": True,
-            "compatibility_fallback_agent_factory_still_python_owned": True,
-            "compatibility_live_response_serialization_still_python_owned": True,
-            "compatibility_fallback_reason_metadata_still_python_owned": True,
-            "in_process_replacement_complete": False,
+            "dry_run_delegate_still_python_owned": False,
+            "live_fallback_trigger_scope_narrowed_to_infrastructure_only": False,
+            "dry_run_prompt_preview_still_python_owned": False,
+            "compatibility_fallback_agent_factory_still_python_owned": False,
+            "compatibility_live_response_serialization_still_python_owned": False,
+            "compatibility_fallback_reason_metadata_still_python_owned": False,
+            "default_runtime_python_fallback_retired": True,
+            "in_process_replacement_complete": True,
         },
     }
 
@@ -1685,7 +1685,6 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
 def build_execution_kernel_live_response_serialization_contract() -> Dict[str, Any]:
     return {
         "framework_truth": "framework_core",
-        "status_contract": "execution_kernel_live_response_serialization_contract_v1",
         "scope": "compatibility_live_response_serialization",
         "artifact_role": "shared-contract-evidence",
         "affected_host_projections": [
@@ -1694,123 +1693,28 @@ def build_execution_kernel_live_response_serialization_contract() -> Dict[str, A
             CLAUDE_CODE_ADAPTER_ID,
             GEMINI_CLI_ADAPTER_ID,
         ],
-        "public_response_fields": [
-            "session_id",
-            "user_id",
-            "skill",
-            "overlay",
-            "live_run",
-            "content",
-            "usage",
-            "prompt_preview",
-            "model_id",
-            "metadata",
-        ],
-        "usage_contract": {
-            "fields": [
-                "input_tokens",
-                "output_tokens",
-                "total_tokens",
-                "mode",
-            ],
-            "live_mode": "live",
-            "dry_run_mode": "estimated",
-        },
-        "runtime_response_metadata_fields": {
-            "shared": [
-                "trace_event_count",
-                "trace_output_path",
-            ],
-            "live_primary": [
-                "run_id",
-                "status",
-                "execution_mode",
-                "route_engine",
-                "rollback_to_python",
-            ],
-            "compatibility_fallback": [
-                "run_id",
-                "status",
-                "execution_kernel_primary",
-                "execution_kernel_primary_authority",
-                "execution_kernel_fallback_reason",
-            ],
-            "dry_run": [
-                "reason",
-            ],
-        },
-        "current_contract_truth": {
-            "public_response_model": "RunTaskResponse",
-            "live_primary_schema_version": "router-rs-execute-response-v1",
-            "live_primary_prompt_preview_owner": "rust-execution-cli",
-            "compatibility_fallback_prompt_preview_owner": "python-agno-kernel-adapter",
-            "dry_run_prompt_preview_owner": "python-agno-kernel-adapter",
-            "live_primary_model_id_source": "aggregator-response.model",
-            "compatibility_fallback_model_id_source": "agno-run-output.model",
-            "compatibility_fallback_reason_metadata_key": "execution_kernel_fallback_reason",
-        },
-        "current_response_shape_truth": {
-            "live_primary": {
-                "live_run": True,
-                "usage_mode": "live",
-                "content_type": "string",
-                "prompt_preview_source": "rust-owned-live-prompt",
-                "model_id_present": True,
-                "required_metadata_fields": [
-                    "run_id",
-                    "status",
-                    "trace_event_count",
-                    "trace_output_path",
-                ],
-                "pass_through_metadata_fields": [
-                    "execution_mode",
-                    "route_engine",
-                    "rollback_to_python",
-                ],
-            },
-            "compatibility_fallback": {
-                "live_run": True,
-                "usage_mode": "live",
-                "content_type": "string",
-                "prompt_preview_source": "python-prompt-builder",
-                "model_id_present": True,
-                "required_metadata_fields": [
-                    "run_id",
-                    "status",
-                    "trace_event_count",
-                    "trace_output_path",
-                    "execution_kernel_primary",
-                    "execution_kernel_primary_authority",
-                    "execution_kernel_fallback_reason",
-                ],
-                "fallback_reason_present": True,
-            },
-            "dry_run": {
-                "live_run": False,
-                "usage_mode": "estimated",
-                "content_type": "string",
-                "prompt_preview_source": "python-prompt-builder",
-                "model_id_present": False,
-                "required_metadata_fields": [
-                    "reason",
-                    "trace_event_count",
-                    "trace_output_path",
-                ],
-                "fallback_reason_present": False,
-            },
-        },
-        "retirement_gates": {
-            "response_shape_contract_externalized": True,
-            "live_primary_response_contract_externalized": True,
-            "compatibility_fallback_response_contract_externalized": True,
-            "compatibility_live_response_serialization_still_python_owned": True,
-            "runtime_control_flow_change_required_for_removal": True,
-        },
+        **build_execution_kernel_live_response_serialization_contract_core(),
         "guardrails": {
             "thin_projection_boundary_preserved": True,
             "cli_hosts_may_not_become_framework_truth": True,
             "claude_host_runtime_semantics_remain_host_owned": True,
         },
+    }
+
+
+def build_control_plane_contract_descriptors() -> Dict[str, Any]:
+    """Return the shared control-plane descriptor set used by runtime and artifacts."""
+
+    return {
+        EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID: build_execution_controller_contract(),
+        DELEGATION_CONTRACT_ARTIFACT_ID: build_delegation_contract(),
+        SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID: build_supervisor_state_contract(),
+        EXECUTION_KERNEL_LIVE_FALLBACK_RETIREMENT_ARTIFACT_ID: (
+            build_execution_kernel_live_fallback_retirement_status()
+        ),
+        EXECUTION_KERNEL_LIVE_RESPONSE_SERIALIZATION_ARTIFACT_ID: (
+            build_execution_kernel_live_response_serialization_contract()
+        ),
     }
 
 

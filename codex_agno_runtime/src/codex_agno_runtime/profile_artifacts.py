@@ -13,15 +13,11 @@ from codex_agno_runtime.host_adapters import (
     GENERIC_HOST_ADAPTER,
     SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID,
     adapt_framework_profile,
+    build_control_plane_contract_descriptors,
     build_cli_family_capability_discovery,
     build_codex_desktop_alias_retirement_status,
     build_cli_family_parity_snapshot,
     build_codex_dual_entry_parity_snapshot,
-    build_execution_controller_contract,
-    build_delegation_contract,
-    build_execution_kernel_live_fallback_retirement_status,
-    build_execution_kernel_live_response_serialization_contract,
-    build_supervisor_state_contract,
     build_upgrade_compatibility_matrix,
     compile_aionrs_companion_adapter,
     compile_aionui_host_adapter,
@@ -337,16 +333,8 @@ def emit_framework_contract_artifacts(
         "codex_desktop_alias_retirement_status": build_codex_desktop_alias_retirement_status(
             alias_inventory_summary=alias_inventory["summary"]
         ),
-        "execution_controller_contract": build_execution_controller_contract(),
-        "delegation_contract": build_delegation_contract(),
-        "supervisor_state_contract": build_supervisor_state_contract(),
-        "execution_kernel_live_fallback_retirement_status": (
-            build_execution_kernel_live_fallback_retirement_status()
-        ),
-        "execution_kernel_live_response_serialization_contract": (
-            build_execution_kernel_live_response_serialization_contract()
-        ),
     }
+    python_artifacts.update(build_control_plane_contract_descriptors())
     paths = {
         "framework_profile": _write_json(profile_path, python_artifacts["framework_profile"]),
         "cli_common_adapter": _write_json(output_dir / "cli_common_adapter.json", python_artifacts["cli_common_adapter"]),

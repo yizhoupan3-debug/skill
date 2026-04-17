@@ -11,7 +11,13 @@ import sys
 from typing import Sequence, cast
 from zipfile import ZipFile
 
-from pdf2image import convert_from_path, pdfinfo_from_path
+try:
+    from pdf2image import convert_from_path, pdfinfo_from_path
+except ImportError as exc:  # pragma: no cover - import guard
+    raise SystemExit(
+        "Missing Python package 'pdf2image'. Install it with "
+        "`python3 -m pip install pdf2image` and ensure Poppler is installed, then retry."
+    ) from exc
 
 TWIPS_PER_INCH: int = 1440
 

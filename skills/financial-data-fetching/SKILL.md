@@ -34,6 +34,13 @@ metadata:
     - backtrader
 risk: medium
 source: local
+runtime_requirements:
+  python:
+    - akshare
+    - ccxt
+    - pandas
+    - requests
+    - yfinance
 routing_layer: L4
 routing_owner: owner
 routing_gate: none

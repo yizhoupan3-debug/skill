@@ -18,6 +18,10 @@ metadata:
     - gh-cli
     - pull-request
 
+runtime_requirements:
+  commands:
+    - gh
+    - git
 routing_layer: L0
 routing_owner: gate
 routing_gate: source

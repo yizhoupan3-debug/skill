@@ -8,7 +8,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from openpyxl import load_workbook
+try:
+    from openpyxl import load_workbook
+except ImportError as exc:  # pragma: no cover - import guard
+    raise SystemExit(
+        "Missing Python package 'openpyxl'. Install it with "
+        "`python3 -m pip install openpyxl` and retry."
+    ) from exc
 
 
 def range_string(ws) -> str:

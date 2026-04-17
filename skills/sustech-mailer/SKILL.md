@@ -7,6 +7,17 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+runtime_requirements:
+  python:
+    - certifi
+  env:
+    - SUSTECH_SMTP_USER
+    - SUSTECH_SMTP_PASS
+  files:
+    - ~/.sustech-mailer-smtp.env
+    - ~/.tao-ci-smtp.env
+    - /Users/joe/Documents/套磁/CV_Yizhou_Pan.pdf
+    - /Users/joe/Documents/套磁/Academic transcript.pdf
 metadata:
   version: 2.1.0
   platforms:
@@ -127,11 +138,12 @@ When called without explicit subject/body, generate them from context:
 
 ### 3. Show confirmation preview
 
-**Always** show a preview before sending. To ensure accuracy, you **MUST** run the script with `--dry-run` to capture the final execution parameters (including default attachments).
+**Always** show a preview before sending. When SMTP credentials are configured and the path is SMTP send, use `--dry-run` to capture the final execution parameters (including default attachments). When credentials are missing and the user is using browser compose, preview by echoing the exact `open_compose.py` parameters instead of attempting SMTP auth.
 
 **Preview Protocol:**
-1.  Run the `send_email.py` script with `--dry-run` and all planned parameters.
-2.  Format the output into a clean preview block:
+1.  If SMTP credentials are available, run `send_email.py --dry-run` with all planned parameters.
+2.  If SMTP credentials are unavailable and the path is browser compose, format the preview directly from the resolved `to` / `subject` / `body` / attachment plan, then open `open_compose.py`.
+3.  Format the output into a clean preview block:
 
 ```
 ━━━━━━━━━━━ EMAIL PREVIEW (DRY-RUN) ━━━━━━━━━━━
@@ -148,7 +160,8 @@ Attach:  <file list with ✓/✗ status from dry-run output>
 Type "send" to confirm, or describe changes.
 ```
 
-- **Recipients, Subject, Body, and Attachments MUST match the dry-run output exactly.**
+- **Recipients, Subject, Body, and Attachments MUST match the dry-run output exactly when SMTP dry-run is used.**
+- In browser-compose fallback, the preview must match the exact values passed to `open_compose.py`.
 - If the user says "send", "发", "确认", or similar → proceed to step 4.
 - If the user requests changes → revise and show preview again.
 - **Never skip the preview step.**

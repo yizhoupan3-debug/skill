@@ -18,6 +18,40 @@ if [ -n "$CHANGED_SKILLS" ]; then
     done
 
     if [ -n "$SKILL_DIRS" ]; then
+        echo "[pre-commit] Validating changed skills..."
+        # shellcheck disable=SC2086
+        python3 - $SKILL_DIRS <<'PY'
+from pathlib import Path
+import sys
+
+from scripts.check_skills import _read_skill_document, validate_skill_document
+
+errors = 0
+
+for raw_dir in sys.argv[1:]:
+    skill_dir = Path(raw_dir)
+    slug = skill_dir.name
+    document, error_report = _read_skill_document(slug, skill_dir)
+    if document is None:
+        errors += 1
+        print(f"[{slug}] {skill_dir}")
+        for error in (error_report.errors if error_report else ["failed to read skill"]):
+            print(f"  ERROR: {error}")
+        continue
+
+    report = validate_skill_document(document)
+    if report.errors or report.warnings:
+        print(f"[{slug}] {skill_dir}")
+        for error in report.errors:
+            print(f"  ERROR: {error}")
+        for warning in report.warnings:
+            print(f"  WARN: {warning}")
+    if report.errors:
+        errors += len(report.errors)
+
+sys.exit(1 if errors else 0)
+PY
+
         echo "[pre-commit] Scoring changed skills..."
         # shellcheck disable=SC2086
         RESULT=$(python3 scripts/score_skills.py $SKILL_DIRS --json 2>&1) || true

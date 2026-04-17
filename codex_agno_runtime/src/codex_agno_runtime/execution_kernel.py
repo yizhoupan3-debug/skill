@@ -16,6 +16,12 @@ except Exception:  # pragma: no cover - local dev often runs without Agno instal
 
 from codex_agno_runtime.agent_factory import AgentFactory
 from codex_agno_runtime.config import RuntimeSettings
+from codex_agno_runtime.execution_kernel_contracts import (
+    build_compatibility_fallback_metadata,
+    build_execution_kernel_compatibility_live_response,
+    build_execution_kernel_dry_run_response,
+    resolve_execution_kernel_prompt_preview,
+)
 from codex_agno_runtime.prompt_builder import PromptBuilder
 from codex_agno_runtime.schemas import RoutingResult, RunTaskResponse, UsageMetrics
 from codex_agno_runtime.utils import estimate_tokens
@@ -55,6 +61,14 @@ class ExecutionKernel:
         }
 
 
+class RouterRsExecutionError(RuntimeError):
+    """Base error raised when router-rs execution cannot complete."""
+
+
+class RouterRsInfrastructureError(RouterRsExecutionError):
+    """Router-rs failed before a valid execution result could be produced."""
+
+
 class RouterRsExecutionKernel(ExecutionKernel):
     """Rust-owned execution slice invoked out-of-process through router-rs."""
 
@@ -73,6 +87,15 @@ class RouterRsExecutionKernel(ExecutionKernel):
         response_payload = await asyncio.to_thread(self._run_execute_command, payload)
         return self._decode_response(response_payload)
 
+    def preview_prompt(self, request: ExecutionKernelRequest) -> str | None:
+        """Synchronously ask router-rs for the dry-run prompt preview."""
+
+        if not request.dry_run:
+            raise ValueError("preview_prompt requires a dry-run execution request")
+        payload = self._build_payload(request)
+        response_payload = self._run_execute_command(payload)
+        return self._decode_response(response_payload).prompt_preview
+
     def health(self) -> dict[str, Any]:
         payload = super().health()
         payload.update(
@@ -80,7 +103,7 @@ class RouterRsExecutionKernel(ExecutionKernel):
                 "kernel_replace_ready": False,
                 "kernel_live_backend_family": "rust-cli",
                 "kernel_live_backend_impl": "router-rs",
-                "kernel_mode_support": ["live"],
+                "kernel_mode_support": ["dry_run", "live"],
                 "execution_schema_version": self.execution_schema_version,
                 "resolved_binary": str(self._resolved_binary()) if self._resolved_binary() is not None else None,
             }
@@ -136,28 +159,37 @@ class RouterRsExecutionKernel(ExecutionKernel):
             "--execute-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        completed = subprocess.run(
-            command,
-            cwd=self.settings.codex_home,
-            capture_output=True,
-            text=True,
-            timeout=self.settings.rust_router_timeout_seconds,
-            check=False,
-        )
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=self.settings.codex_home,
+                capture_output=True,
+                text=True,
+                timeout=self.settings.rust_router_timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RouterRsInfrastructureError(
+                "router-rs execute timed out before returning a response"
+            ) from exc
+        except OSError as exc:
+            raise RouterRsInfrastructureError(
+                f"router-rs execute could not be launched: {exc}"
+            ) from exc
         if completed.returncode != 0:
             stderr = completed.stderr.strip() or completed.stdout.strip() or "unknown router-rs failure"
-            raise RuntimeError(f"router-rs execute failed: {stderr}")
+            raise RouterRsExecutionError(f"router-rs execute failed: {stderr}")
         try:
             parsed = json.loads(completed.stdout)
         except json.JSONDecodeError as exc:  # pragma: no cover - defensive guard
-            raise RuntimeError(f"router-rs execute returned invalid JSON: {exc}") from exc
+            raise RouterRsInfrastructureError(f"router-rs execute returned invalid JSON: {exc}") from exc
         if parsed.get("execution_schema_version") != self.execution_schema_version:
-            raise RuntimeError(
+            raise RouterRsInfrastructureError(
                 "router-rs execute returned an unknown schema: "
                 f"{parsed.get('execution_schema_version')!r}"
             )
         if parsed.get("authority") != self.authority:
-            raise RuntimeError(
+            raise RouterRsInfrastructureError(
                 "router-rs execute returned an unexpected authority marker: "
                 f"{parsed.get('authority')!r}"
             )
@@ -199,6 +231,11 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
     def _live_fallback_mode(self) -> str:
         return "compatibility" if self._live_fallback_enabled() else "disabled"
 
+    def live_fallback_enabled(self) -> bool:
+        """Expose whether the compatibility live fallback is currently allowed."""
+
+        return self._live_fallback_enabled()
+
     def __init__(
         self,
         settings: RuntimeSettings,
@@ -213,12 +250,25 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
 
     async def execute(self, request: ExecutionKernelRequest) -> RunTaskResponse:
         if request.dry_run:
-            prompt_preview = (
-                request.prompt_preview
-                or request.routing_result.prompt_preview
-                or self.prompt_builder.build_prompt(request.routing_result)
+            prompt_preview = resolve_execution_kernel_prompt_preview(
+                prompt_preview=request.prompt_preview,
+                routing_result=request.routing_result,
+                build_prompt=self.prompt_builder.build_prompt,
             )
-            return self._dry_run_response(request, prompt_preview=prompt_preview)
+            dry_run_request = ExecutionKernelRequest(
+                task=request.task,
+                session_id=request.session_id,
+                user_id=request.user_id,
+                routing_result=request.routing_result,
+                prompt_preview=prompt_preview,
+                dry_run=True,
+                trace_event_count=request.trace_event_count,
+                trace_output_path=request.trace_output_path,
+            )
+            try:
+                return await self._rust_live_kernel.execute(dry_run_request)
+            except Exception:
+                return self._dry_run_response(request, prompt_preview=prompt_preview)
         live_request = ExecutionKernelRequest(
             task=request.task,
             session_id=request.session_id,
@@ -231,24 +281,43 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
         )
         try:
             return await self._rust_live_kernel.execute(live_request)
+        except RouterRsInfrastructureError as error:
+            return await self.execute_live_fallback(live_request, error=error)
         except Exception as error:
-            if not self._live_fallback_enabled():
-                raise RuntimeError(
-                    "router-rs execute failed while Python live fallback is disabled: "
-                    f"{error}"
-                ) from error
-            prompt_preview = (
-                request.prompt_preview
-                or request.routing_result.prompt_preview
-                or self.prompt_builder.build_prompt(request.routing_result)
+            raise RuntimeError(
+                "router-rs live execution failed without entering the Python compatibility fallback: "
+                f"{error}"
+            ) from error
+
+    async def execute_live_fallback(
+        self,
+        request: ExecutionKernelRequest,
+        *,
+        error: Exception | str,
+    ) -> RunTaskResponse:
+        """Execute only the Python compatibility live fallback lane."""
+
+        if not self._live_fallback_enabled():
+            raise RuntimeError(
+                "router-rs execute infrastructure failed while Python live fallback is disabled: "
+                f"{error}"
             )
-            response = await self._live_run_response(live_request, prompt_preview=prompt_preview)
-            response.metadata.setdefault("execution_kernel", self.adapter_kind)
-            response.metadata.setdefault("execution_kernel_authority", self.authority)
-            response.metadata["execution_kernel_primary"] = self._rust_live_kernel.adapter_kind
-            response.metadata["execution_kernel_primary_authority"] = self._rust_live_kernel.authority
-            response.metadata["execution_kernel_fallback_reason"] = str(error)
-            return response
+        prompt_preview = resolve_execution_kernel_prompt_preview(
+            prompt_preview=request.prompt_preview,
+            routing_result=request.routing_result,
+            build_prompt=self.prompt_builder.build_prompt,
+        )
+        response = await self._live_run_response(request, prompt_preview=prompt_preview)
+        response.metadata.setdefault("execution_kernel", self.adapter_kind)
+        response.metadata.setdefault("execution_kernel_authority", self.authority)
+        response.metadata.update(
+            build_compatibility_fallback_metadata(
+                primary_adapter_kind=self._rust_live_kernel.adapter_kind,
+                primary_authority=self._rust_live_kernel.authority,
+                error=error,
+            )
+        )
+        return response
 
     def health(self) -> dict[str, Any]:
         payload = super().health()
@@ -287,28 +356,19 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
             f"[dry-run] Routed to `{routing_result.selected_skill.name}` on {routing_result.layer}. "
             f"Session `{routing_result.session_id}` is ready for kernel execution."
         )
-        return RunTaskResponse(
+        return build_execution_kernel_dry_run_response(
             session_id=routing_result.session_id,
             user_id=request.user_id,
             skill=routing_result.selected_skill.name,
             overlay=routing_result.overlay_skill.name if routing_result.overlay_skill else None,
-            live_run=False,
             content=content,
-            usage=UsageMetrics(
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                total_tokens=input_tokens + output_tokens,
-                mode="estimated",
-            ),
             prompt_preview=prompt_preview,
-            model_id=None,
-            metadata={
-                "reason": "Live model execution is disabled; returned a deterministic dry-run payload.",
-                "trace_event_count": request.trace_event_count,
-                "trace_output_path": request.trace_output_path,
-                "execution_kernel": self.adapter_kind,
-                "execution_kernel_authority": self.authority,
-            },
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            execution_kernel=self.adapter_kind,
+            execution_kernel_authority=self.authority,
+            trace_event_count=request.trace_event_count,
+            trace_output_path=request.trace_output_path,
         )
 
     async def _live_run_response(
@@ -329,24 +389,25 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
         )
         if AgnoRunOutput is not None and not isinstance(run_output, AgnoRunOutput):
             raise TypeError("Expected Agno to return a RunOutput object.")
-        return RunTaskResponse(
+        return build_execution_kernel_compatibility_live_response(
             session_id=routing_result.session_id,
             user_id=request.user_id,
             skill=routing_result.selected_skill.name,
             overlay=routing_result.overlay_skill.name if routing_result.overlay_skill else None,
-            live_run=True,
             content=run_output.get_content_as_string() or "",
             usage=self._serialize_metrics(getattr(run_output, "metrics", None)),
             prompt_preview=prompt_preview,
             model_id=run_output.model,
-            metadata={
-                "run_id": run_output.run_id,
-                "status": run_output.status.value if hasattr(run_output.status, "value") else str(run_output.status),
-                "trace_event_count": request.trace_event_count,
-                "trace_output_path": request.trace_output_path,
-                "execution_kernel": self.adapter_kind,
-                "execution_kernel_authority": self.authority,
-            },
+            run_id=run_output.run_id,
+            status=(
+                run_output.status.value
+                if hasattr(run_output.status, "value")
+                else str(run_output.status)
+            ),
+            execution_kernel=self.adapter_kind,
+            execution_kernel_authority=self.authority,
+            trace_event_count=request.trace_event_count,
+            trace_output_path=request.trace_output_path,
         )
 
     @staticmethod

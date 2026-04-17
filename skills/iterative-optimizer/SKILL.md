@@ -97,11 +97,11 @@ into phases 1, 4, and 5 — not bolted on as a separate step.
 │  Evidence required: stdout, tests, rendered output │
 │  or equivalent. No “probably works” claims.        │
 │  Truncated code / placeholder → instant block.     │
-│  MANDATORY: Run `scripts/verify_turn.py <log>`.    │
+│  MANDATORY: Run `/Users/joe/Documents/skill/scripts/verify_turn.py <log>`. │
 ├─ Phase 5: CHECKPOINT ──────────────────────────────┤
 │  Fill the round checkpoint (below).                │
 │  Laziness self-check must PASS to mark Converged.  │
-│  Audit Score from `verify_turn.py` must be 0.      │
+│  Audit Score from `/Users/joe/Documents/skill/scripts/verify_turn.py` must be 0. │
 └────────────────────────────────────────────────────┘
 ```
 

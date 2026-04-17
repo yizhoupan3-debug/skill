@@ -267,8 +267,16 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "execution_kernel_live_fallback_retirement_status_v1"
     )
     assert fallback_retirement["live_primary"]["contract_mode"] == "rust-live-primary"
-    assert fallback_retirement["compatibility_fallback"]["mode_when_enabled"] == "compatibility"
-    assert fallback_retirement["current_contract_truth"]["dry_run_delegate_kind"] == "python-agno"
+    assert fallback_retirement["compatibility_fallback"]["mode_when_enabled"] == (
+        "compatibility-only-explicit"
+    )
+    assert fallback_retirement["compatibility_fallback"]["trigger_scope_when_enabled"] == (
+        "explicit-compatibility-kernel-only"
+    )
+    assert fallback_retirement["current_contract_truth"]["dry_run_delegate_kind"] == "router-rs"
+    assert fallback_retirement["current_contract_truth"]["live_fallback_trigger_scope_when_enabled"] == (
+        "explicit-compatibility-kernel-only"
+    )
     assert fallback_retirement["current_contract_truth"]["compatibility_fallback_reason_metadata_key"] == (
         "execution_kernel_fallback_reason"
     )
@@ -277,8 +285,8 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "execution_kernel_delegate_impl",
         "execution_kernel_fallback_reason",
     ]
-    assert fallback_retirement["current_response_metadata_truth"]["dry_run_delegate_family"] == "python"
-    assert fallback_retirement["current_response_metadata_truth"]["dry_run_delegate_impl"] == "agno"
+    assert fallback_retirement["current_response_metadata_truth"]["dry_run_delegate_family"] == "rust-cli"
+    assert fallback_retirement["current_response_metadata_truth"]["dry_run_delegate_impl"] == "router-rs"
     assert fallback_retirement["current_response_metadata_truth"]["live_delegate_impl"] == "router-rs"
     assert (
         fallback_retirement["current_response_metadata_truth"]["live_fallback_delegate_impl_when_enabled"]
@@ -290,16 +298,17 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         ]
         is True
     )
-    assert fallback_retirement["remaining_python_owned_surfaces"] == [
-        "dry_run_prompt_preview_generation",
-        "compatibility_fallback_agent_factory",
-        "compatibility_live_response_serialization",
-        "compatibility_fallback_reason_metadata",
-    ]
+    assert fallback_retirement["remaining_python_owned_surfaces"] == []
     assert fallback_retirement["retirement_gates"]["response_metadata_surface_externalized"] is True
     assert fallback_retirement["retirement_gates"]["delegate_family_impl_metadata_externalized"] is True
-    assert fallback_retirement["retirement_gates"]["dry_run_delegate_still_python_owned"] is True
-    assert fallback_retirement["retirement_readiness"]["ready"] is False
+    assert fallback_retirement["retirement_gates"]["dry_run_delegate_still_python_owned"] is False
+    assert (
+        fallback_retirement["retirement_gates"][
+            "live_fallback_trigger_scope_narrowed_to_infrastructure_only"
+        ]
+        is False
+    )
+    assert fallback_retirement["retirement_readiness"]["ready"] is True
 
     response_serialization = json.loads(
         Path(paths["execution_kernel_live_response_serialization_contract"]).read_text(
@@ -325,7 +334,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     ] is True
     assert response_serialization["retirement_gates"][
         "compatibility_live_response_serialization_still_python_owned"
-    ] is True
+    ] is False
     assert fallback_retirement["guardrails"]["thin_projection_boundary_preserved"] is True
 
     rust_bundle = json.loads(Path(paths["rust_profile_bundle"]).read_text(encoding="utf-8"))
@@ -408,7 +417,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert rust_bundle["supervisor_state_contract"]["state_artifact_path"] == ".supervisor_state.json"
     assert rust_bundle["execution_kernel_live_fallback_retirement_status"]["retirement_readiness"][
         "status"
-    ] == "blocked"
+    ] == "complete"
     assert rust_bundle["execution_kernel_live_fallback_retirement_status"]["retirement_gates"][
         "public_runtime_contract_externalized"
     ] is True
@@ -507,14 +516,20 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert rust_fallback_retirement["control_surfaces"]["settings_field"] == (
         "rust_execute_fallback_to_python"
     )
+    assert rust_fallback_retirement["control_surfaces"]["fallback_trigger_scope_when_enabled"] == (
+        "explicit-compatibility-kernel-only"
+    )
     assert rust_fallback_retirement["current_contract_truth"]["live_primary_kind"] == "router-rs"
     assert rust_fallback_retirement["retirement_gates"]["delegate_family_impl_metadata_externalized"] is True
     assert rust_fallback_retirement["retirement_gates"][
         "compatibility_live_response_serialization_still_python_owned"
-    ] is True
+    ] is False
+    assert rust_fallback_retirement["retirement_gates"][
+        "live_fallback_trigger_scope_narrowed_to_infrastructure_only"
+    ] is False
     assert rust_fallback_retirement["retirement_readiness"][
         "runtime_control_flow_change_required"
-    ] is True
+    ] is False
 
     rust_response_serialization = json.loads(
         Path(paths["rust_execution_kernel_live_response_serialization_contract"]).read_text(
@@ -537,7 +552,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     ]
     assert rust_response_serialization["retirement_gates"][
         "compatibility_live_response_serialization_still_python_owned"
-    ] is True
+    ] is False
 
     rust_parity_report = json.loads(
         Path(paths["rust_python_artifact_parity_report"]).read_text(encoding="utf-8")
@@ -683,7 +698,7 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
     assert payload["supervisor_state_contract"]["state_artifact_path"] == ".supervisor_state.json"
     assert payload["execution_kernel_live_fallback_retirement_status"]["retirement_readiness"][
         "next_safe_slice"
-    ] == "externalize_retirement_readiness_before_runtime_removal"
+    ] == "rustification_closed"
     assert payload["execution_kernel_live_fallback_retirement_status"][
         "public_runtime_response_metadata_fields"
     ] == [
@@ -691,15 +706,18 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
         "execution_kernel_delegate_impl",
         "execution_kernel_fallback_reason",
     ]
+    assert payload["execution_kernel_live_fallback_retirement_status"]["compatibility_fallback"][
+        "trigger_scope_when_enabled"
+    ] == "explicit-compatibility-kernel-only"
     assert payload["execution_kernel_live_fallback_retirement_status"]["current_response_metadata_truth"][
         "live_fallback_delegate_family_when_enabled"
     ] == "python"
     assert payload["execution_kernel_live_fallback_retirement_status"]["retirement_gates"][
         "dry_run_prompt_preview_still_python_owned"
-    ] is True
+    ] is False
     assert payload["execution_kernel_live_fallback_retirement_status"]["retirement_gates"][
         "in_process_replacement_complete"
-    ] is False
+    ] is True
     assert payload["execution_kernel_live_response_serialization_contract"]["status_contract"] == (
         "execution_kernel_live_response_serialization_contract_v1"
     )

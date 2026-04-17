@@ -31,6 +31,8 @@ const ROUTE_AUTHORITY: &str = "rust-route-core";
 const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
 const EXECUTION_SCHEMA_VERSION: &str = "router-rs-execute-response-v1";
 const EXECUTION_AUTHORITY: &str = "rust-execution-cli";
+const RUNTIME_CONTROL_PLANE_SCHEMA_VERSION: &str = "router-rs-runtime-control-plane-v1";
+const RUNTIME_CONTROL_PLANE_AUTHORITY: &str = "rust-runtime-control-plane";
 const OVERLAY_ONLY_SKILLS: [&str; 4] = [
     "execution-audit-codex",
     "humanizer",
@@ -62,6 +64,8 @@ struct Cli {
     route_snapshot_json: bool,
     #[arg(long)]
     execute_json: bool,
+    #[arg(long)]
+    runtime_control_plane_json: bool,
     #[arg(long)]
     profile_json: bool,
     #[arg(long)]
@@ -326,6 +330,7 @@ fn main() -> Result<(), String> {
         args.route_policy_json,
         args.route_snapshot_json,
         args.execute_json,
+        args.runtime_control_plane_json,
         args.profile_json,
         args.profile_artifacts_json,
         args.route_report_json,
@@ -336,9 +341,18 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --route-report-json, --profile-json, and --profile-artifacts-json"
+            "choose only one output mode among --json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --route-report-json, --profile-json, and --profile-artifacts-json"
                 .to_string(),
         );
+    }
+
+    if args.runtime_control_plane_json {
+        println!(
+            "{}",
+            serde_json::to_string(&build_runtime_control_plane_payload())
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
     }
 
     if args.profile_json {
@@ -1068,7 +1082,12 @@ fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponsePayl
         .clone()
         .filter(|value| !value.trim().is_empty());
     if payload.dry_run {
-        return Ok(build_dry_run_execute_response(&payload, prompt_preview));
+        let dry_run_prompt_preview =
+            Some(prompt_preview.unwrap_or_else(|| build_live_execute_prompt(&payload)));
+        return Ok(build_dry_run_execute_response(
+            &payload,
+            dry_run_prompt_preview,
+        ));
     }
     let live_prompt_preview = build_live_execute_prompt(&payload);
     if payload.aggregator_base_url.trim().is_empty() {
@@ -1286,11 +1305,105 @@ fn build_live_execute_response(
             "trace_output_path": payload.trace_output_path,
             "execution_kernel": "router-rs",
             "execution_kernel_authority": EXECUTION_AUTHORITY,
+            "execution_kernel_delegate_family": "rust-cli",
+            "execution_kernel_delegate_impl": "router-rs",
+            "execution_kernel_live_primary": "router-rs",
+            "execution_kernel_live_primary_authority": EXECUTION_AUTHORITY,
+            "execution_kernel_live_fallback": Value::Null,
+            "execution_kernel_live_fallback_authority": Value::Null,
+            "execution_kernel_live_fallback_enabled": false,
+            "execution_kernel_live_fallback_mode": "disabled",
             "execution_mode": "live",
             "route_engine": payload.route_engine,
             "rollback_to_python": payload.rollback_to_python,
         }),
     }
+}
+
+fn build_runtime_control_plane_payload() -> Value {
+    serde_json::json!({
+        "schema_version": RUNTIME_CONTROL_PLANE_SCHEMA_VERSION,
+        "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+        "default_route_mode": "rust",
+        "default_route_authority": ROUTE_AUTHORITY,
+        "python_authority_default": false,
+        "python_host_role": "thin-projection",
+        "rustification_status": {
+            "runtime_primary_owner": "rust-control-plane",
+            "runtime_primary_owner_authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+            "python_runtime_role": "compatibility-host",
+            "steady_state_python_allowed": false,
+            "hot_path_projection_mode": "descriptor-driven",
+        },
+        "services": {
+            "router": {
+                "authority": ROUTE_AUTHORITY,
+                "role": "route-selection",
+                "projection": "python-thin-projection",
+                "delegate_kind": "rust-route-adapter",
+            },
+            "skill_loader": {
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "role": "skill-registry-projection",
+                "projection": "python-thin-projection",
+                "delegate_kind": "rust-runtime-control-plane",
+            },
+            "prompt_builder": {
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "role": "prompt-contract-projection",
+                "projection": "python-thin-projection",
+                "delegate_kind": "rust-execution-cli",
+            },
+            "middleware": {
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "role": "middleware-policy-projection",
+                "projection": "python-thin-projection",
+                "delegate_kind": "rust-runtime-control-plane",
+            },
+            "state": {
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "role": "durable-background-state",
+                "projection": "python-thin-projection",
+                "delegate_kind": "filesystem-state-store",
+            },
+            "trace": {
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "role": "trace-and-handoff",
+                "projection": "python-thin-projection",
+                "delegate_kind": "filesystem-trace-store",
+            },
+            "memory": {
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "role": "memory-lifecycle",
+                "projection": "python-thin-projection",
+                "delegate_kind": "fact-memory-store",
+            },
+            "checkpoint": {
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "role": "checkpoint-artifact-projection",
+                "projection": "python-thin-projection",
+                "delegate_kind": "filesystem-checkpointer",
+            },
+            "execution": {
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "role": "execution-kernel-control",
+                "projection": "python-thin-projection",
+                "delegate_kind": "rust-execution-kernel-slice",
+            },
+            "agent_factory": {
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "role": "compatibility-fallback-factory",
+                "projection": "python-compatibility-only",
+                "delegate_kind": "python-agno-fallback",
+            },
+            "background": {
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "role": "background-orchestration",
+                "projection": "python-thin-projection",
+                "delegate_kind": "asyncio-background-supervisor",
+            },
+        },
+    })
 }
 
 fn normalize_chat_completions_endpoint(base_url: &str) -> String {
@@ -1876,6 +1989,43 @@ mod tests {
     }
 
     #[test]
+    fn runtime_control_plane_payload_is_rust_owned() {
+        let payload = build_runtime_control_plane_payload();
+
+        assert_eq!(
+            payload["schema_version"],
+            Value::String(RUNTIME_CONTROL_PLANE_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            payload["authority"],
+            Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
+        );
+        assert_eq!(payload["default_route_mode"], Value::String("rust".to_string()));
+        assert_eq!(payload["default_route_authority"], Value::String(ROUTE_AUTHORITY.to_string()));
+        assert_eq!(payload["python_authority_default"], Value::Bool(false));
+        assert_eq!(
+            payload["rustification_status"]["runtime_primary_owner"],
+            Value::String("rust-control-plane".to_string())
+        );
+        assert_eq!(
+            payload["rustification_status"]["python_runtime_role"],
+            Value::String("compatibility-host".to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["delegate_kind"],
+            Value::String("rust-execution-kernel-slice".to_string())
+        );
+        assert_eq!(
+            payload["services"]["checkpoint"]["delegate_kind"],
+            Value::String("filesystem-checkpointer".to_string())
+        );
+        assert_eq!(
+            payload["services"]["background"]["authority"],
+            Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
+        );
+    }
+
+    #[test]
     fn route_snapshot_builder_normalizes_score_bucket_and_reasons_class() {
         let snapshot = RouteSnapshotEnvelopePayload {
             snapshot_schema_version: ROUTE_SNAPSHOT_SCHEMA_VERSION.to_string(),
@@ -1971,6 +2121,37 @@ mod tests {
         assert_ne!(
             response.prompt_preview.as_deref(),
             Some("Python supplied live prompt")
+        );
+        assert_eq!(response.metadata["execution_kernel"], "router-rs");
+        assert_eq!(
+            response.metadata["execution_kernel_authority"],
+            EXECUTION_AUTHORITY
+        );
+        assert_eq!(
+            response.metadata["execution_kernel_delegate_family"],
+            "rust-cli"
+        );
+        assert_eq!(response.metadata["execution_kernel_delegate_impl"], "router-rs");
+        assert_eq!(response.metadata["execution_kernel_live_primary"], "router-rs");
+        assert_eq!(
+            response.metadata["execution_kernel_live_primary_authority"],
+            EXECUTION_AUTHORITY
+        );
+        assert_eq!(
+            response.metadata["execution_kernel_live_fallback"],
+            Value::Null
+        );
+        assert_eq!(
+            response.metadata["execution_kernel_live_fallback_authority"],
+            Value::Null
+        );
+        assert_eq!(
+            response.metadata["execution_kernel_live_fallback_enabled"],
+            Value::Bool(false)
+        );
+        assert_eq!(
+            response.metadata["execution_kernel_live_fallback_mode"],
+            "disabled"
         );
     }
 

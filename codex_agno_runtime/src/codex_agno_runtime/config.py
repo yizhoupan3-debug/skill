@@ -123,7 +123,7 @@ class RuntimeSettings(BaseSettings):
     )
 
     route_engine_mode: str = Field(
-        default="python",
+        default="rust",
         validation_alias=AliasChoices("CODEX_AGNO_ROUTE_ENGINE_MODE"),
     )
     rust_route_rollback_to_python: bool = Field(
@@ -135,7 +135,7 @@ class RuntimeSettings(BaseSettings):
         validation_alias=AliasChoices("CODEX_AGNO_RUST_ROUTER_TIMEOUT_SECONDS"),
     )
     rust_execute_fallback_to_python: bool = Field(
-        default=True,
+        default=False,
         validation_alias=AliasChoices("CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON"),
     )
 

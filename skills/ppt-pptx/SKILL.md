@@ -9,6 +9,22 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+runtime_requirements:
+  python:
+    - numpy
+    - pdf2image
+    - pillow
+    - python-pptx
+  commands:
+    - fc-list
+    - gs
+    - heif-convert
+    - inkscape
+    - libreoffice
+    - magick
+    - node
+    - npm
+    - soffice
 metadata:
   version: "1.0.0"
   platforms: [codex, antigravity]

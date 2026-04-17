@@ -7,6 +7,13 @@ routing_layer: L3
 routing_owner: gate
 routing_gate: artifact
 session_start: required
+runtime_requirements:
+  python:
+    - openpyxl
+    - pandas
+  commands:
+    - soffice
+    - pdftoppm
 metadata:
   version: "1.0.0"
   platforms: [codex]

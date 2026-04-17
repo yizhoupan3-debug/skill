@@ -73,17 +73,19 @@ discovery 这些稳定层持续 Rust 化。
 - `emit_framework_contract_artifacts(...)`
 
 它们为下一阶段 bridge / contract emission / runtime handshake 提供稳定入口，并把 nested override、host 能力解析和跨宿主复用边界固定在外层框架。
-目前默认 `emit_framework_contract_artifacts(...)` 会保留
+当前默认 `emit_framework_contract_artifacts(...)` 继续保留
 `cli_common_adapter` / `cli_family_parity_snapshot` /
-`codex_dual_entry_parity_snapshot` / inventory / retirement-status artifact /
-live-fallback retirement-status artifact，
-但不再默认写出 `codex_desktop_host_adapter` payload；兼容输出需要显式
-opt-in。
-同样，默认 runtime helper lookup 也保持 canonical-only：legacy alias 不再
-通过通用 registry / lookup surface 作为 peer adapter 暴露；兼容消费者必须
-显式走 compatibility escape hatch 或开启 legacy alias opt-in。
+`codex_dual_entry_parity_snapshot` / inventory / contract / parity artifacts，
+但 `codex_desktop_host_adapter` 只会出现在显式 compatibility escape hatch
+里，不再作为默认 peer 输出。
+默认 runtime helper lookup 也保持 canonical-only：legacy alias 不再通过通用
+registry / lookup surface 作为 peer adapter 暴露；需要兼容 payload 的调用方
+必须显式 opt-in compatibility lane。
+execution-kernel 相关 contract 现在以 Rust-only 默认执行、prepare_session /
+dry-run preview 走 router-rs、以及隔离的 compatibility lane 为主线，不再保留
+过渡期口径作为 steady-state 叙事。
 
-下一轮 runtime 深化会继续沿着这个边界推进：
+下一轮 runtime 深化仍然沿着这个边界推进：
 
 - `framework_profile` 仍只定义 host-neutral truth
 - runtime control plane 可以继续变强，但不能把宿主私有控制语义反写回
@@ -106,39 +108,27 @@ opt-in。
   `cli_family_capability_discovery` / `cli_family_parity_snapshot` /
   `execution_controller_contract` / `delegation_contract` /
   `supervisor_state_contract` /
-  `execution_kernel_live_fallback_retirement_status` /
+  `execution_kernel_delegate_family` /
+  `execution_kernel_delegate_impl` /
   `execution_kernel_live_response_serialization_contract`
 - 当 Python emitter 同时请求 Rust artifacts 时，
-  `emit_framework_contract_artifacts(...)` 现在还会额外产出
-  `rust_python_artifact_parity_report.json`，把 Python / Rust 一等 artifact
-  对齐关系外显成回归工件，而不是继续依赖人工抽查
-- Rust 现在也会在 contract/artifact lane 内直接编译
-  `codex_desktop_alias_retirement_status.inventory_summary`，通过仓库扫描把 alias
-  retirement summary 纳入 parity report，而不是继续把这部分留给 Python-only
-  emitter
-- Rust 现在还会把 live Python fallback 的退休准备状态外显成
-  `execution_kernel_live_fallback_retirement_status`，把“当前仍是 compatibility
-  fallback、删除会进入 runtime control-flow lane”固定成 shared contract，而不是
-  让这类判断继续散落在 runtime 代码注释里
-- 这个 artifact 现在还会固定公开的 execution-kernel metadata 字段、
-  dry-run/live delegate 关系，以及哪些 retirement gates 已满足或仍阻塞，
-  这样后续判断是否能删 fallback 时，不需要再把 `services.py` 当成隐式真源
-- 其中 `execution_kernel_delegate_family` /
-  `execution_kernel_delegate_impl` 现在已经进入稳定 execution-kernel contract
-  lane；调用方可以直接经由共享 contract 读取 dry-run/live delegate 的
-  family/impl，而不需要反推某个宿主实现细节
-- 它现在还会显式列出 remaining Python-owned surfaces，例如 dry-run prompt
-  preview、compatibility fallback agent factory、compatibility live response
-  serialization 与 fallback-reason metadata，方便后续一项项退休
-- 新的一等 artifact
-  `execution_kernel_live_response_serialization_contract` 还会把当前
-  `RunTaskResponse` 的 top-level fields、usage contract、以及 live primary /
-  compatibility fallback / dry-run 的 response metadata invariant 固定成 shared
-  contract evidence；这仍属于 artifact/parity lane，不是 runtime control-flow
-  rewrite
-- 它现在还会把 response-only runtime metadata surface 一并 contract 化，
-  其中 compatibility-owned 的 `execution_kernel_fallback_reason` 继续只停留在
-  fallback response metadata / retirement artifact，不提升成 framework truth
+  `emit_framework_contract_artifacts(...)` 也会写出
+  `rust_python_artifact_parity_report.json`，把 Python / Rust 一等 artifact 的
+  对齐关系外显成回归工件，而不是依赖人工抽查
+- Rust 现在会在 contract/artifact lane 内直接编译
+  `codex_desktop_alias_retirement_status.inventory_summary`，但这类结果只用于
+  parity / compatibility 证明，不再承载过渡期叙事
+- `prepare_session(...)` 和 dry-run preview 已经走 router-rs，因此 Rust 侧
+  现在是默认 runtime 路径，live execution 也以 Rust-only 为默认值
+- runtime control plane 现在也通过 Rust authority descriptor 对外声明
+  `router / state / trace / memory / background` 的默认 ownership；Python
+  仅保留 thin projection / backend bridge 角色，不再是 steady-state authority
+- compatibility lane 仍然保留，但只作为显式 continuity-only / compatibility-only
+  escape hatch；`codex_desktop_host_adapter` 不再回到默认 peer set
+- 共享 contract 现在只保留 compatibility-only metadata；steady-state truth 不再
+  维护过渡期清单
+- `execution_kernel_fallback_reason` 仅在 compatibility payload / legacy metadata
+  中保留语义，不进入 framework truth 或默认控制流
 - Claude hook path / policy / event metadata 只允许停留在 adapter
   `host_projection`；它们不是 canonical `framework_profile` 字段，也不能倒灌成
   shared runtime truth

@@ -11,6 +11,11 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+runtime_requirements:
+  commands:
+    - latexmk
+    - npx
+    - rsvg-convert
 metadata:
   version: "2.0.0"
   platforms: [codex, antigravity]

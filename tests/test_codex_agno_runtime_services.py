@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from contextlib import contextmanager
 from pathlib import Path
+
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
@@ -16,6 +19,7 @@ if str(RUNTIME_SRC) not in sys.path:
 
 from codex_agno_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
 from codex_agno_runtime.config import RuntimeSettings
+from codex_agno_runtime.execution_kernel import RouterRsInfrastructureError
 from codex_agno_runtime.middleware import MiddlewareContext
 from codex_agno_runtime.schemas import RunTaskResponse, UsageMetrics
 from codex_agno_runtime.services import (
@@ -25,6 +29,36 @@ from codex_agno_runtime.services import (
     StateService,
     TraceService,
 )
+
+
+_MINIMAL_SUPERVISOR_STATE = {
+    "version": 1,
+    "controller": "execution-controller-coding",
+    "active_phase": "completed",
+    "delegation": {
+        "delegation_plan_created": True,
+        "spawn_attempted": False,
+        "fallback_mode": "local-supervisor",
+        "delegated_sidecars": [],
+    },
+    "verification": {
+        "verification_status": "completed",
+    },
+}
+
+
+@contextmanager
+def _project_supervisor_state() -> Path:
+    path = PROJECT_ROOT / ".supervisor_state.json"
+    original = path.read_text(encoding="utf-8") if path.exists() else None
+    path.write_text(json.dumps(_MINIMAL_SUPERVISOR_STATE, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    try:
+        yield path
+    finally:
+        if original is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_text(original, encoding="utf-8")
 
 
 def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
@@ -42,14 +76,16 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
         trace_output_path=settings.resolved_trace_output_path,
     )
     router_service = RouterService(settings)
-    state_service = StateService(checkpointer)
-    trace_service = TraceService(checkpointer)
-    memory_service = MemoryService(settings)
+    control_plane_descriptor = router_service.control_plane_descriptor
+    state_service = StateService(checkpointer, control_plane_descriptor=control_plane_descriptor)
+    trace_service = TraceService(checkpointer, control_plane_descriptor=control_plane_descriptor)
+    memory_service = MemoryService(settings, control_plane_descriptor=control_plane_descriptor)
     execution_service = ExecutionEnvironmentService(
         settings,
         router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
+        control_plane_descriptor=control_plane_descriptor,
     )
 
     for service in (router_service, state_service, trace_service, memory_service, execution_service):
@@ -61,6 +97,8 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert router_service.health()["shadow_engine"] is None
     assert router_service.health()["python_router_loaded"] is False
     assert router_service.health()["python_router_required"] is False
+    assert router_service.health()["default_route_mode"] == "rust"
+    assert router_service.health()["control_plane_authority"] == "rust-route-core"
     assert router_service.health()["route_policy"]["policy_schema_version"] == "router-rs-route-policy-v1"
     assert router_service.health()["rust_adapter"]["route_authority"] == "rust-route-core"
     assert router_service.health()["rust_adapter"]["compile_authority"] == "rust-route-compiler"
@@ -73,6 +111,8 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
         == "router-rs-route-snapshot-v1"
     )
     assert state_service.health()["state_path"].endswith("runtime_background_jobs.json")
+    assert state_service.health()["control_plane_authority"] == "rust-runtime-control-plane"
+    assert state_service.health()["control_plane_role"] == "durable-background-state"
     assert state_service.health()["pending_session_takeovers"] == 0
     assert trace_service.health()["checkpoint_backend_family"] == "filesystem"
     assert trace_service.health()["trace_output_path"].endswith("TRACE_METADATA.json")
@@ -80,10 +120,14 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert trace_service.health()["resume_manifest_path"].endswith("TRACE_RESUME_MANIFEST.json")
     assert trace_service.health()["event_transport_dir"].endswith("runtime_event_transports")
     assert trace_service.health()["background_state_path"].endswith("runtime_background_jobs.json")
+    assert trace_service.health()["control_plane_authority"] == "rust-runtime-control-plane"
+    assert trace_service.health()["control_plane_role"] == "trace-and-handoff"
     assert trace_service.health()["replay_supported"] is True
     assert trace_service.health()["event_bridge_supported"] is True
     assert trace_service.health()["event_bridge_schema_version"] == "runtime-event-bridge-v1"
     assert memory_service.health()["memory_dir"].endswith("codex_agno_runtime/data/memory")
+    assert memory_service.health()["control_plane_authority"] == "rust-runtime-control-plane"
+    assert memory_service.health()["control_plane_role"] == "memory-lifecycle"
     assert execution_service.health()["background_job_timeout_seconds"] == 30.0
     assert execution_service.health()["execution_mode_default"] == "dry_run"
     assert execution_service.health()["kernel_adapter_kind"] == "rust-execution-kernel-slice"
@@ -92,18 +136,18 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert execution_service.health()["kernel_owner_impl"] == "execution-kernel-slice"
     assert execution_service.health()["kernel_contract_mode"] == "rust-live-primary"
     assert execution_service.health()["kernel_replace_ready"] is True
-    assert execution_service.health()["kernel_in_process_replacement_complete"] is False
+    assert execution_service.health()["kernel_in_process_replacement_complete"] is True
     assert execution_service.health()["kernel_live_backend_family"] == "rust-cli"
     assert execution_service.health()["kernel_live_backend_impl"] == "router-rs"
     assert execution_service.health()["kernel_live_delegate_kind"] == "router-rs"
     assert execution_service.health()["kernel_live_delegate_authority"] == "rust-execution-cli"
     assert execution_service.health()["kernel_live_delegate_family"] == "rust-cli"
     assert execution_service.health()["kernel_live_delegate_impl"] == "router-rs"
-    assert execution_service.health()["kernel_live_fallback_kind"] == "python-agno"
-    assert execution_service.health()["kernel_live_fallback_authority"] == "python-agno-kernel-adapter"
-    assert execution_service.health()["kernel_live_fallback_family"] == "python"
-    assert execution_service.health()["kernel_live_fallback_impl"] == "agno"
-    assert execution_service.health()["kernel_live_fallback_mode"] == "compatibility"
+    assert execution_service.health()["kernel_live_fallback_kind"] is None
+    assert execution_service.health()["kernel_live_fallback_authority"] is None
+    assert execution_service.health()["kernel_live_fallback_family"] is None
+    assert execution_service.health()["kernel_live_fallback_impl"] is None
+    assert execution_service.health()["kernel_live_fallback_mode"] == "disabled"
     assert execution_service.health()["kernel_mode_support"] == ["dry_run", "live"]
     assert execution_service.health()["control_plane_contracts"]["execution_controller_contract"]["controller"][
         "primary_owner"
@@ -114,6 +158,26 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert execution_service.health()["control_plane_contracts"]["supervisor_state_contract"][
         "state_artifact_path"
     ] == ".supervisor_state.json"
+    assert execution_service.health()["control_plane_contracts"][
+        "execution_kernel_live_fallback_retirement_status"
+    ]["status_contract"] == "execution_kernel_live_fallback_retirement_status_v1"
+    assert execution_service.health()["control_plane_contracts"][
+        "execution_kernel_live_fallback_retirement_status"
+    ]["retirement_readiness"]["next_safe_slice"] == (
+        "rustification_closed"
+    )
+    assert execution_service.health()["control_plane_contracts"][
+        "execution_kernel_live_response_serialization_contract"
+    ]["status_contract"] == "execution_kernel_live_response_serialization_contract_v1"
+    assert execution_service.health()["control_plane_contracts"][
+        "execution_kernel_live_response_serialization_contract"
+    ]["runtime_response_metadata_fields"]["shared"] == [
+        "trace_event_count",
+        "trace_output_path",
+    ]
+    assert execution_service.health()["control_plane_contracts"]["runtime_control_plane"]["authority"] == (
+        "rust-runtime-control-plane"
+    )
 
     for service in (execution_service, memory_service, trace_service, state_service, router_service):
         service.shutdown()
@@ -134,6 +198,7 @@ def test_execution_environment_service_routes_through_kernel_adapter(tmp_path: P
         router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
     )
     routing_result = router_service.route(
         task="帮我写一个 Rust CLI 工具",
@@ -162,16 +227,16 @@ def test_execution_environment_service_routes_through_kernel_adapter(tmp_path: P
         assert response.metadata["execution_kernel"] == "rust-execution-kernel-slice"
         assert response.metadata["execution_kernel_authority"] == "rust-execution-kernel-authority"
         assert response.metadata["execution_kernel_contract_mode"] == "rust-live-primary"
-        assert response.metadata["execution_kernel_in_process_replacement_complete"] is False
-        assert response.metadata["execution_kernel_delegate"] == "python-agno"
-        assert response.metadata["execution_kernel_delegate_authority"] == "python-agno-kernel-adapter"
-        assert response.metadata["execution_kernel_delegate_family"] == "python"
-        assert response.metadata["execution_kernel_delegate_impl"] == "agno"
+        assert response.metadata["execution_kernel_in_process_replacement_complete"] is True
+        assert response.metadata["execution_kernel_delegate"] == "router-rs"
+        assert response.metadata["execution_kernel_delegate_authority"] == "rust-execution-cli"
+        assert response.metadata["execution_kernel_delegate_family"] == "rust-cli"
+        assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-        assert response.metadata["execution_kernel_live_fallback"] == "python-agno"
-        assert response.metadata["execution_kernel_live_fallback_authority"] == "python-agno-kernel-adapter"
-        assert response.metadata["execution_kernel_live_fallback_mode"] == "compatibility"
+        assert response.metadata["execution_kernel_live_fallback"] is None
+        assert response.metadata["execution_kernel_live_fallback_authority"] is None
+        assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
         assert "execution_kernel_fallback_reason" not in response.metadata
         assert response.metadata["trace_event_count"] == 7
 
@@ -193,6 +258,7 @@ def test_execution_environment_service_live_mode_omits_python_prompt_preview(tmp
         router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
     )
     routing_result = router_service.route(
         task="帮我写一个 Rust CLI 工具",
@@ -262,6 +328,7 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
         router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
     )
 
     health = execution_service.health()
@@ -281,10 +348,10 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
     assert contract["execution_kernel_live_fallback_mode"] == "disabled"
     assert contract["execution_kernel_delegate_family"] == "rust-cli"
     assert contract["execution_kernel_delegate_impl"] == "router-rs"
-    assert dry_run_contract["execution_kernel_delegate"] == "python-agno"
-    assert dry_run_contract["execution_kernel_delegate_authority"] == "python-agno-kernel-adapter"
-    assert dry_run_contract["execution_kernel_delegate_family"] == "python"
-    assert dry_run_contract["execution_kernel_delegate_impl"] == "agno"
+    assert dry_run_contract["execution_kernel_delegate"] == "router-rs"
+    assert dry_run_contract["execution_kernel_delegate_authority"] == "rust-execution-cli"
+    assert dry_run_contract["execution_kernel_delegate_family"] == "rust-cli"
+    assert dry_run_contract["execution_kernel_delegate_impl"] == "router-rs"
     assert dry_run_contract["execution_kernel_live_fallback_enabled"] is False
     assert dry_run_contract["execution_kernel_live_fallback"] is None
     assert dry_run_contract["execution_kernel_live_fallback_authority"] is None
@@ -316,10 +383,10 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
         assert response.metadata["execution_kernel"] == "rust-execution-kernel-slice"
         assert response.metadata["execution_kernel_authority"] == "rust-execution-kernel-authority"
         assert response.metadata["execution_kernel_contract_mode"] == "rust-live-primary"
-        assert response.metadata["execution_kernel_delegate"] == "python-agno"
-        assert response.metadata["execution_kernel_delegate_authority"] == "python-agno-kernel-adapter"
-        assert response.metadata["execution_kernel_delegate_family"] == "python"
-        assert response.metadata["execution_kernel_delegate_impl"] == "agno"
+        assert response.metadata["execution_kernel_delegate"] == "router-rs"
+        assert response.metadata["execution_kernel_delegate_authority"] == "rust-execution-cli"
+        assert response.metadata["execution_kernel_delegate_family"] == "rust-cli"
+        assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
         assert response.metadata["execution_kernel_live_fallback"] is None
@@ -327,6 +394,206 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
         assert response.metadata["execution_kernel_live_fallback_enabled"] is False
         assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
         assert "execution_kernel_fallback_reason" not in response.metadata
+
+    asyncio.run(_run())
+
+
+def test_execution_service_prefers_rust_live_metadata_when_present(tmp_path: Path) -> None:
+    """Authority adapter should preserve Rust-emitted live metadata instead of rehydrating defaults."""
+
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=True,
+    )
+    router_service = RouterService(settings)
+    execution_service = ExecutionEnvironmentService(
+        settings,
+        router_service.prompt_builder,
+        max_background_jobs=4,
+        background_job_timeout_seconds=30.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
+    )
+    routing_result = router_service.route(
+        task="帮我写一个 Rust CLI 工具",
+        session_id="kernel-service-live-metadata-session",
+        allow_overlay=True,
+        first_turn=True,
+    )
+    ctx = MiddlewareContext(
+        task=routing_result.task,
+        session_id=routing_result.session_id,
+        user_id="tester",
+        routing_result=routing_result,
+        prompt="legacy-python-prompt",
+    )
+
+    async def fake_execute(request):
+        return RunTaskResponse(
+            session_id=request.session_id,
+            user_id=request.user_id,
+            skill=request.routing_result.selected_skill.name,
+            overlay=request.routing_result.overlay_skill.name if request.routing_result.overlay_skill else None,
+            live_run=True,
+            content="live result",
+            prompt_preview=None,
+            model_id="gpt-5.4",
+            usage=UsageMetrics(input_tokens=8, output_tokens=5, total_tokens=13, mode="live"),
+            metadata={
+                "execution_kernel": "router-rs",
+                "execution_kernel_authority": "rust-execution-cli",
+                "execution_kernel_delegate_family": "rust-direct-live",
+                "execution_kernel_delegate_impl": "router-rs-http",
+                "execution_kernel_live_primary": "router-rs-live-primary",
+                "execution_kernel_live_primary_authority": "rust-primary-authority",
+                "execution_kernel_live_fallback": None,
+                "execution_kernel_live_fallback_authority": None,
+                "execution_kernel_live_fallback_enabled": False,
+                "execution_kernel_live_fallback_mode": "disabled",
+            },
+        )
+
+    execution_service.kernel._delegate.execute = fake_execute  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        response = await execution_service.execute(
+            ctx=ctx,
+            dry_run=False,
+            trace_event_count=5,
+            trace_output_path="/tmp/TRACE_METADATA.json",
+        )
+        assert response.metadata["execution_kernel"] == "rust-execution-kernel-slice"
+        assert response.metadata["execution_kernel_authority"] == "rust-execution-kernel-authority"
+        assert response.metadata["execution_kernel_delegate"] == "router-rs"
+        assert response.metadata["execution_kernel_delegate_authority"] == "rust-execution-cli"
+        assert response.metadata["execution_kernel_delegate_family"] == "rust-direct-live"
+        assert response.metadata["execution_kernel_delegate_impl"] == "router-rs-http"
+        assert response.metadata["execution_kernel_live_primary"] == "router-rs-live-primary"
+        assert response.metadata["execution_kernel_live_primary_authority"] == "rust-primary-authority"
+        assert response.metadata["execution_kernel_live_fallback"] is None
+        assert response.metadata["execution_kernel_live_fallback_authority"] is None
+        assert response.metadata["execution_kernel_live_fallback_enabled"] is False
+        assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
+
+    asyncio.run(_run())
+
+
+def test_execution_service_live_path_uses_router_rs_before_python_fallback(tmp_path: Path) -> None:
+    """Default live composition should hit router-rs directly with no Python fallback lane."""
+
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=True,
+    )
+    router_service = RouterService(settings)
+    execution_service = ExecutionEnvironmentService(
+        settings,
+        router_service.prompt_builder,
+        max_background_jobs=4,
+        background_job_timeout_seconds=30.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
+    )
+    routing_result = router_service.route(
+        task="帮我写一个 Rust CLI 工具",
+        session_id="kernel-service-rust-primary-live-session",
+        allow_overlay=True,
+        first_turn=True,
+    )
+    ctx = MiddlewareContext(
+        task=routing_result.task,
+        session_id=routing_result.session_id,
+        user_id="tester",
+        routing_result=routing_result,
+        prompt="legacy-python-prompt",
+    )
+    async def fake_execute(request):
+        return RunTaskResponse(
+            session_id=request.session_id,
+            user_id=request.user_id,
+            skill=request.routing_result.selected_skill.name,
+            overlay=request.routing_result.overlay_skill.name if request.routing_result.overlay_skill else None,
+            live_run=True,
+            content="rust live result",
+            prompt_preview=None,
+            model_id="gpt-5.4",
+            usage=UsageMetrics(input_tokens=8, output_tokens=5, total_tokens=13, mode="live"),
+            metadata={
+                "execution_kernel": "router-rs",
+                "execution_kernel_authority": "rust-execution-cli",
+                "execution_kernel_delegate_family": "rust-cli",
+                "execution_kernel_delegate_impl": "router-rs",
+                "execution_kernel_live_primary": "router-rs",
+                "execution_kernel_live_primary_authority": "rust-execution-cli",
+            },
+        )
+
+    execution_service.kernel._delegate.execute = fake_execute  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        response = await execution_service.execute(
+            ctx=ctx,
+            dry_run=False,
+            trace_event_count=5,
+            trace_output_path="/tmp/TRACE_METADATA.json",
+        )
+        assert response.content == "rust live result"
+        assert response.metadata["execution_kernel_delegate"] == "router-rs"
+        assert response.metadata["execution_kernel_delegate_authority"] == "rust-execution-cli"
+        assert response.metadata["execution_kernel_live_primary"] == "router-rs"
+        assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
+        assert response.metadata["execution_kernel_live_fallback"] is None
+        assert response.metadata["execution_kernel_live_fallback_authority"] is None
+        assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
+
+    asyncio.run(_run())
+
+
+def test_execution_service_live_path_propagates_router_rs_infrastructure_errors(tmp_path: Path) -> None:
+    """Default live composition should surface router-rs infrastructure failures directly."""
+
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=True,
+    )
+    router_service = RouterService(settings)
+    execution_service = ExecutionEnvironmentService(
+        settings,
+        router_service.prompt_builder,
+        max_background_jobs=4,
+        background_job_timeout_seconds=30.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
+    )
+    routing_result = router_service.route(
+        task="帮我写一个 Rust CLI 工具",
+        session_id="kernel-service-fallback-live-session",
+        allow_overlay=True,
+        first_turn=True,
+    )
+    ctx = MiddlewareContext(
+        task=routing_result.task,
+        session_id=routing_result.session_id,
+        user_id="tester",
+        routing_result=routing_result,
+        prompt="legacy-python-prompt",
+    )
+    async def failing_execute(_request):
+        raise RouterRsInfrastructureError("router-rs missing")
+
+    execution_service.kernel._delegate.execute = failing_execute  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        with pytest.raises(RouterRsInfrastructureError, match="router-rs missing"):
+            await execution_service.execute(
+                ctx=ctx,
+                dry_run=False,
+                trace_event_count=5,
+                trace_output_path="/tmp/TRACE_METADATA.json",
+            )
 
     asyncio.run(_run())
 
@@ -347,6 +614,7 @@ def test_execution_service_kernel_payload_prefers_explicit_metadata(tmp_path: Pa
         router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
     )
 
     payload = execution_service.kernel_payload(
@@ -387,6 +655,7 @@ def test_execution_environment_service_exposes_control_plane_contract_descriptor
         router_service.prompt_builder,
         max_background_jobs=2,
         background_job_timeout_seconds=15.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
     )
 
     descriptors = execution_service.describe_control_plane_contracts()
@@ -412,6 +681,26 @@ def test_execution_environment_service_exposes_control_plane_contract_descriptor
     assert descriptors["supervisor_state_contract"]["compatibility_rules"][
         "no_shadow_replacement_artifact"
     ] is True
+    assert descriptors["execution_kernel_live_fallback_retirement_status"]["status_contract"] == (
+        "execution_kernel_live_fallback_retirement_status_v1"
+    )
+    assert descriptors["execution_kernel_live_fallback_retirement_status"]["live_primary"][
+        "authority"
+    ] == "rust-execution-cli"
+    blockers = descriptors["execution_kernel_live_fallback_retirement_status"][
+        "retirement_readiness"
+    ]["blockers"]
+    assert blockers == []
+    assert descriptors["execution_kernel_live_response_serialization_contract"][
+        "status_contract"
+    ] == "execution_kernel_live_response_serialization_contract_v1"
+    assert descriptors["execution_kernel_live_response_serialization_contract"][
+        "current_contract_truth"
+    ]["public_response_model"] == "RunTaskResponse"
+    assert descriptors["execution_kernel_live_response_serialization_contract"][
+        "retirement_gates"
+    ]["compatibility_live_response_serialization_still_python_owned"] is False
+    assert descriptors["runtime_control_plane"]["authority"] == "rust-runtime-control-plane"
 
 
     """Verify mode should compare Python and Rust route decisions at runtime."""
@@ -522,33 +811,34 @@ def test_router_service_rust_mode_supports_single_switch_python_rollback() -> No
 def test_runtime_checkpointer_round_trips_resume_manifest(tmp_path: Path) -> None:
     """The unified checkpointer seam should preserve the existing manifest contract."""
 
-    checkpointer = FilesystemRuntimeCheckpointer(
-        data_dir=tmp_path / "runtime-data",
-        trace_output_path=tmp_path / "TRACE_METADATA.json",
-    )
+    with _project_supervisor_state() as supervisor_state_path:
+        checkpointer = FilesystemRuntimeCheckpointer(
+            data_dir=tmp_path / "runtime-data",
+            trace_output_path=tmp_path / "TRACE_METADATA.json",
+        )
 
-    manifest = checkpointer.checkpoint(
-        session_id="checkpoint-session",
-        job_id="job-1",
-        status="completed",
-        generation=3,
-        latest_cursor=None,
-        event_transport_path=None,
-        artifact_paths=["/tmp/example.json"],
-    )
+        manifest = checkpointer.checkpoint(
+            session_id="checkpoint-session",
+            job_id="job-1",
+            status="completed",
+            generation=3,
+            latest_cursor=None,
+            event_transport_path=None,
+            artifact_paths=["/tmp/example.json"],
+        )
 
-    assert manifest is not None
-    loaded = checkpointer.load_checkpoint()
-    assert loaded is not None
-    assert loaded.session_id == "checkpoint-session"
-    assert loaded.job_id == "job-1"
-    assert loaded.status == "completed"
-    assert loaded.generation == 3
-    assert loaded.background_state_path.endswith("runtime_background_jobs.json")
-    artifact_paths = checkpointer.artifact_paths(codex_home=PROJECT_ROOT)
-    assert str((PROJECT_ROOT / ".supervisor_state.json").resolve()) in artifact_paths
-    assert checkpointer.storage_capabilities().backend_family == "filesystem"
-    assert checkpointer.health()["supports_snapshot_delta"] is False
+        assert manifest is not None
+        loaded = checkpointer.load_checkpoint()
+        assert loaded is not None
+        assert loaded.session_id == "checkpoint-session"
+        assert loaded.job_id == "job-1"
+        assert loaded.status == "completed"
+        assert loaded.generation == 3
+        assert loaded.background_state_path.endswith("runtime_background_jobs.json")
+        artifact_paths = checkpointer.artifact_paths(codex_home=PROJECT_ROOT)
+        assert str(supervisor_state_path.resolve()) in artifact_paths
+        assert checkpointer.storage_capabilities().backend_family == "filesystem"
+        assert checkpointer.health()["supports_snapshot_delta"] is False
 
 
 def test_trace_service_describes_host_facing_transport(tmp_path: Path) -> None:
@@ -565,7 +855,8 @@ def test_trace_service_describes_host_facing_transport(tmp_path: Path) -> None:
         data_dir=settings.resolved_data_dir,
         trace_output_path=settings.resolved_trace_output_path,
     )
-    trace_service = TraceService(checkpointer)
+    router_service = RouterService(settings)
+    trace_service = TraceService(checkpointer, control_plane_descriptor=router_service.control_plane_descriptor)
 
     trace_service.recorder.record(
         session_id="transport-session",

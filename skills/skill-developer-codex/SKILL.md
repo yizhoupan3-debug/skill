@@ -149,6 +149,7 @@ Default to **incumbent-first** repair:
 ## Validation
 
 ```bash
+cd /Users/joe/Documents/skill
 python3 scripts/check_skills.py --verify-codex-link
 python3 scripts/check_skills.py --include-system --verify-codex-link
 python3 scripts/sync_skills.py --apply

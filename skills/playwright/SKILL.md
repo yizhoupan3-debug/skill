@@ -7,6 +7,9 @@ routing_layer: L3
 routing_owner: gate
 routing_gate: evidence
 session_start: required
+runtime_requirements:
+  commands:
+    - npx
 short_description: Use a real browser when live evidence or page interaction is required
 trigger_phrases:
   - 浏览器自动化

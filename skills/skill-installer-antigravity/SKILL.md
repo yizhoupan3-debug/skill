@@ -54,6 +54,7 @@ into the shared library without creating a second live source of truth.
 ## Validation
 
 ```bash
+cd /Users/joe/Documents/skill
 python3 scripts/check_skills.py --verify-codex-link
 python3 scripts/check_skills.py --include-system --verify-codex-link
 ```

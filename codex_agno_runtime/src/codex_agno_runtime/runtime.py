@@ -20,6 +20,7 @@ from codex_agno_runtime.middleware import (
     SkillInjectionMiddleware,
     SubagentLimitMiddleware,
 )
+from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import (
     BackgroundRunRequest,
     BackgroundRunStatus,
@@ -60,19 +61,34 @@ class CodexAgnoRuntime:
     def __init__(self, settings: RuntimeSettings) -> None:
         self.settings = settings
 
+        self.rust_adapter = RustRouteAdapter(
+            settings.codex_home,
+            timeout_seconds=settings.rust_router_timeout_seconds,
+        )
         self.checkpointer = FilesystemRuntimeCheckpointer(
             data_dir=self.settings.resolved_data_dir,
             trace_output_path=self.settings.resolved_trace_output_path,
         )
-        self.router_service = RouterService(settings)
-        self.state_service = StateService(self.checkpointer)
-        self.trace_service = TraceService(self.checkpointer)
-        self.memory_service = MemoryService(settings)
+        self.router_service = RouterService(settings, rust_adapter=self.rust_adapter)
+        self.control_plane_descriptor = self.router_service.control_plane_descriptor
+        self.state_service = StateService(
+            self.checkpointer,
+            control_plane_descriptor=self.control_plane_descriptor,
+        )
+        self.trace_service = TraceService(
+            self.checkpointer,
+            control_plane_descriptor=self.control_plane_descriptor,
+        )
+        self.memory_service = MemoryService(
+            settings,
+            control_plane_descriptor=self.control_plane_descriptor,
+        )
         self.execution_service = ExecutionEnvironmentService(
             settings,
             self.router_service.prompt_builder,
             max_background_jobs=_MAX_BACKGROUND_JOBS,
             background_job_timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
+            control_plane_descriptor=self.control_plane_descriptor,
         )
 
         self.loader = self.router_service.loader
@@ -123,6 +139,7 @@ class CodexAgnoRuntime:
         """Return health information for each runtime service seam."""
 
         return {
+            "control_plane": self.control_plane_descriptor,
             "router": self.router_service.health(),
             "state": self.state_service.health(),
             "trace": self.trace_service.health(),
@@ -223,9 +240,14 @@ class CodexAgnoRuntime:
             allow_overlay=request.allow_overlay,
             first_turn=True,
         )
-        if include_prompt_preview:
-            routing_result.prompt_preview = self.prompt_builder.build_prompt(routing_result)
         user_id = request.user_id or request.project_id or "codex-user"
+        if include_prompt_preview:
+            routing_result.prompt_preview = self.execution_service.preview_prompt(
+                task=request.task,
+                session_id=session_id,
+                user_id=user_id,
+                routing_result=routing_result,
+            )
         self._trace.record(
             session_id=session_id,
             kind="session.prepared",
@@ -312,13 +334,14 @@ class CodexAgnoRuntime:
             session_id=prepared.session_id,
             user_id=prepared.user_id,
             routing_result=routing_result,
+            prompt=prepared.prompt_preview or "",
             execution_kernel=kernel_contract.get("execution_kernel"),
             execution_kernel_authority=kernel_contract.get("execution_kernel_authority"),
             execution_kernel_delegate=kernel_contract.get("execution_kernel_delegate"),
             execution_kernel_delegate_authority=kernel_contract.get("execution_kernel_delegate_authority"),
         )
         ctx.metadata["dry_run"] = execution_is_dry_run
-        ctx.metadata["python_prompt_required"] = execution_is_dry_run
+        ctx.metadata["python_prompt_required"] = False
 
         async def _core_agent_fn(mw_ctx: MiddlewareContext) -> RunTaskResponse:
             return await self.execution_service.execute(

@@ -207,8 +207,8 @@ def test_background_claim_records_rust_kernel_authority(tmp_path: Path) -> None:
         for event in (claimed, completed):
             assert event.payload["execution_kernel"] == "rust-execution-kernel-slice"
             assert event.payload["execution_kernel_authority"] == "rust-execution-kernel-authority"
-            assert event.payload["execution_kernel_delegate"] == "python-agno"
-            assert event.payload["execution_kernel_delegate_authority"] == "python-agno-kernel-adapter"
+            assert event.payload["execution_kernel_delegate"] == "router-rs"
+            assert event.payload["execution_kernel_delegate_authority"] == "rust-execution-cli"
 
     asyncio.run(_run())
 
