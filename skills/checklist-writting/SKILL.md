@@ -36,12 +36,12 @@ routing_gate: none
 routing_priority: P1
 session_start: n/a
 trigger_hints:
+  - 先写 checklist
+  - 写成 checklist md
+  - 写成 checklist 文件
+  - 放到 checklist 目录
   - 执行清单
-  - checklist
-  - 拆任务
   - 拆执行项
-  - 并行 lane
-  - 串行步骤
 ---
 # Checklist Writting
 
@@ -49,6 +49,10 @@ This skill owns checklist creation when the user needs an explicit,
 execution-ready markdown checklist before implementation or review work begins.
 Its output should be a versioned checklist file under a `checklist/` directory,
 using the naming pattern `cl_v<version>.md`.
+
+This skill is the file-backed downstream for:
+- [`$paper-reviewer`](/Users/joe/Documents/skill/skills/paper-reviewer/SKILL.md) when the user wants review findings materialized into a checklist file
+- [`$checklist-normalizer`](/Users/joe/Documents/skill/skills/checklist-normalizer/SKILL.md) when the checklist shape is already normalized and now needs a persisted checklist artifact
 
 ## When to use
 
@@ -113,6 +117,8 @@ Unless the user explicitly asks for chat-only output, write the checklist into a
 - `checklist/cl_v1.md`
 - `checklist/cl_v2.md`
 - `checklist/cl_v3.md`
+
+If `checklist/` does not exist, create it before writing.
 
 For review requests, inspect the latest checklist file first. Prefer `cl_v*.md`, and if no new-format file exists, fall back to legacy `checklist_v*.md`. Then decide one of:
 - `Continue` → write the next round checklist as `cl_v<next>.md`

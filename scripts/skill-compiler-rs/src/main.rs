@@ -569,7 +569,7 @@ fn build_runtime_index(manifest: &Value) -> Value {
                 string_at(&skill, 3),
                 string_at(&skill, 6),
                 summarize_text(&string_at(&skill, 5), 96),
-                string_at(&skill, 7),
+                value_at(&skill, 7),
                 value_at(&skill, 8),
             ])
         })
@@ -712,140 +712,90 @@ fn runtime_rank(skill: &[Value]) -> (i32, i32, i32) {
 fn extract_trigger_hints(
     metadata: &HashMap<String, Value>,
     description: &str,
-    body: &str,
+    _body: &str,
 ) -> Vec<String> {
-    let noise = [
-        "about", "after", "before", "check", "first", "from", "have", "help", "into", "make",
-        "need", "only", "that", "them", "then", "this", "use", "user", "when", "with", "work",
-        "task", "asks", "request", "using", "used", "best", "good", "real", "will",
-    ]
-    .into_iter()
-    .collect::<HashSet<_>>();
-
-    let mut samples = vec![description.to_string()];
+    let mut explicit_trigger_hints = Vec::new();
     if let Some(trigger_hints) = metadata
         .get("trigger_hints")
         .or_else(|| metadata.get("trigger_phrases"))
     {
         match trigger_hints {
-            Value::String(text) => samples.push(text.clone()),
+            Value::String(text) => explicit_trigger_hints.push(text.clone()),
             Value::Array(items) => {
                 for item in items {
                     let text = value_to_string(item);
                     if !text.trim().is_empty() {
-                        samples.push(text);
+                        explicit_trigger_hints.push(text);
                     }
                 }
             }
             _ => {}
         }
     }
-    samples.extend(body.lines().take(20).map(|line| line.to_string()));
-    let source = samples.join("\n");
 
     let mut phrases = Vec::new();
     let mut seen = HashSet::new();
-    let mut push = |phrase: String| {
-        let cleaned = collapse_whitespace(phrase.trim_matches(|c: char| {
-            matches!(
-                c,
-                ' ' | '-'
-                    | '–'
-                    | '—'
-                    | '•'
-                    | ','
-                    | ':'
-                    | ';'
-                    | '('
-                    | ')'
-                    | '['
-                    | ']'
-                    | '{'
-                    | '}'
-                    | '\''
-                    | '"'
-                    | '`'
-                    | '“'
-                    | '”'
-                    | '‘'
-                    | '’'
-                    | '/'
-            )
-        }));
-        if cleaned.chars().count() < 2 {
-            return;
-        }
-        let key = cleaned.to_lowercase();
-        if seen.insert(key) {
-            phrases.push(cleaned);
-        }
-    };
 
-    if let Some(trigger_hints) = metadata
-        .get("trigger_hints")
-        .or_else(|| metadata.get("trigger_phrases"))
-    {
-        match trigger_hints {
-            Value::String(text) => push(text.clone()),
-            Value::Array(items) => {
-                for item in items {
-                    push(value_to_string(item));
-                }
-            }
-            _ => {}
-        }
+    for item in explicit_trigger_hints {
+        push_trigger_phrase(&item, &mut seen, &mut phrases);
     }
+
+    // Explicit frontmatter trigger hints are canonical. Do not auto-enrich them
+    // from the skill body, or runtime artifacts will accumulate broad fragments
+    // that distort routing.
+    if !phrases.is_empty() {
+        return phrases.into_iter().take(16).collect();
+    }
+
+    // For skills without explicit trigger_hints, keep fallback extraction scoped
+    // to the frontmatter description. Mining arbitrary body lines produces broad
+    // fragments that destabilize routing.
+    let source = description.to_string();
 
     for capture in quote_regex().captures_iter(&source) {
         if let Some(found) = capture.get(1) {
-            push(found.as_str().to_string());
+            push_trigger_phrase(found.as_str(), &mut seen, &mut phrases);
         }
-    }
-
-    for chunk in chunk_split_regex().split(&source) {
-        let chunk = chunk.trim();
-        if chunk.is_empty() {
-            continue;
-        }
-        if cjk_chunk_regex().is_match(chunk) {
-            let len = chunk.chars().count();
-            if (2..=24).contains(&len) {
-                push(chunk.to_string());
-                continue;
-            }
-            for found in cjk_extract_regex().find_iter(chunk) {
-                push(found.as_str().to_string());
-            }
-        }
-        let english_tokens = english_token_regex()
-            .find_iter(chunk)
-            .map(|found| found.as_str().to_lowercase())
-            .collect::<Vec<_>>();
-        let meaningful_tokens = english_tokens
-            .into_iter()
-            .filter(|token| !noise.contains(token.as_str()))
-            .collect::<Vec<_>>();
-        if meaningful_tokens.is_empty() {
-            continue;
-        }
-        if meaningful_tokens.len() == 1 {
-            let token = &meaningful_tokens[0];
-            if token.chars().any(|ch| ch.is_ascii_digit())
-                || token.contains('.')
-                || token.contains('+')
-                || token.contains('#')
-                || token.contains('/')
-                || token.contains('-')
-            {
-                push(token.clone());
-            }
-            continue;
-        }
-        push(meaningful_tokens.into_iter().take(6).collect::<Vec<_>>().join(" "));
     }
 
     phrases.truncate(16);
     phrases
+}
+
+fn push_trigger_phrase(phrase: &str, seen: &mut HashSet<String>, phrases: &mut Vec<String>) {
+    let cleaned = collapse_whitespace(phrase.trim_matches(|c: char| {
+        matches!(
+            c,
+            ' ' | '-'
+                | '–'
+                | '—'
+                | '•'
+                | ','
+                | ':'
+                | ';'
+                | '('
+                | ')'
+                | '['
+                | ']'
+                | '{'
+                | '}'
+                | '\''
+                | '"'
+                | '`'
+                | '“'
+                | '”'
+                | '‘'
+                | '’'
+                | '/'
+        )
+    }));
+    if cleaned.chars().count() < 2 {
+        return;
+    }
+    let key = cleaned.to_lowercase();
+    if seen.insert(key) {
+        phrases.push(cleaned);
+    }
 }
 
 fn summarize_text(text: &str, limit: usize) -> String {
@@ -948,30 +898,6 @@ fn whitespace_regex() -> &'static Regex {
 fn quote_regex() -> &'static Regex {
     static REGEX: OnceLock<Regex> = OnceLock::new();
     REGEX.get_or_init(|| Regex::new(r#"[\"“](.+?)[\"”]"#).expect("quote regex"))
-}
-
-fn chunk_split_regex() -> &'static Regex {
-    static REGEX: OnceLock<Regex> = OnceLock::new();
-    REGEX.get_or_init(|| {
-        Regex::new(r"[\n/|,，。；;：:（）()【】\[\]·]+").expect("chunk split regex")
-    })
-}
-
-fn cjk_chunk_regex() -> &'static Regex {
-    static REGEX: OnceLock<Regex> = OnceLock::new();
-    REGEX.get_or_init(|| Regex::new(r"[\u{4e00}-\u{9fff}]").expect("cjk chunk regex"))
-}
-
-fn cjk_extract_regex() -> &'static Regex {
-    static REGEX: OnceLock<Regex> = OnceLock::new();
-    REGEX.get_or_init(|| Regex::new(r"[\u{4e00}-\u{9fff}]{2,12}").expect("cjk extract regex"))
-}
-
-fn english_token_regex() -> &'static Regex {
-    static REGEX: OnceLock<Regex> = OnceLock::new();
-    REGEX.get_or_init(|| {
-        Regex::new(r"\b[a-zA-Z][a-zA-Z0-9.+#/-]{2,}\b").expect("english token regex")
-    })
 }
 
 #[cfg(test)]
@@ -1095,6 +1021,7 @@ mod tests {
         assert_eq!(runtime["keys"][6], json!("trigger_hints"));
         assert_eq!(shadow_map["winning_rule"], json!("highest-position-wins"));
         assert!(manifest["skills"][0][7].is_array());
+        assert!(runtime["skills"][0][6].is_array());
     }
 
     #[test]

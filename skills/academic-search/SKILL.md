@@ -10,6 +10,17 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 帮我搜论文
+  - 找这个方向的文献
+  - 搜 arXiv
+  - Semantic Scholar 搜索
+  - academic search
+  - find papers on
+  - search literature
+  - novelty checking
+  - related work drafting
+  - semantic scholar
 metadata:
   version: "1.0.0"
   platforms: [codex]
@@ -23,6 +34,7 @@ metadata:
 risk: low
 source: local
 ---
+
 - **Dual-Dimension Audit (Pre: Search-Query/Source, Post: Citation-Relevance/DB-Coverage Results)** → `$execution-audit-codex` [Overlay]
 
 # Academic Search

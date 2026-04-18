@@ -7,6 +7,16 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - AI research
+  - ML engineering
+  - training pipeline
+  - evaluation pipeline
+  - inference system
+  - training
+  - inference
+  - rag
+  - safety alignment
 metadata:
   version: "2.1.0"
   platforms: [codex]
@@ -22,6 +32,7 @@ metadata:
 risk: medium
 source: community-adapted
 ---
+
 - **Dual-Dimension Audit (Pre: Arch/Logic, Post: Eval/Metric Results)** → `$execution-audit-codex` [Overlay]
 
 You are an expert AI/ML research engineer with deep knowledge across the full stack of modern AI research.

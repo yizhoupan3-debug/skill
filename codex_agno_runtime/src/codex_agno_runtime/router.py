@@ -14,7 +14,7 @@ LAYER_ORDER = {"L-1": -1, "L0": 0, "L1": 1, "L2": 2, "L3": 3, "L4": 4}
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 
 ROUTING_META_HINTS = {"skill", "router", "routing", "route", "触发", "路由", "skill.md"}
-COMMON_STOP_TOKENS = {"一个", "帮我", "帮我看", "我看", "先给", "给我", "给我一", "我一个", "写一", "写一个", "看这", "这张", "然后", "输出", "问题"}
+COMMON_STOP_TOKENS = {"一个", "帮我", "帮我看", "我看", "先给", "给我", "给我一", "我一个", "写一", "写一个", "看这", "这张", "然后", "输出", "问题", "checklist", "skill", "路由"}
 # Skills that should only be used as overlays, never as the primary owner.
 # Per AGENTS.md: iterative-optimizer does not count toward the overlay quota.
 OVERLAY_ONLY_SKILLS = {"iterative-optimizer", "execution-audit-codex", "i18n-l10n", "humanizer"}
@@ -37,7 +37,10 @@ OVERLAY_EXPLICIT_HINTS = {
 WORDLIKE_TOKEN_RE = re.compile(r"^[a-z0-9.+#/_-]+$")
 # Static alias hints supplement dynamic tag-based aliases
 SKILL_ALIAS_HINTS = {
-    "checklist-writting": {"checklist", "execution-ready", "拆解", "拆任务", "执行清单", "里程碑", "roadmap", "并行", "串行", "lane", "agent", "agent 数量", "路线已经定了", "不用再论证", "直接拆成", "review checklist", "复审checklist", "评估checklist", "检查是否结束"},
+    "checklist-writting": {"执行清单", "先写 checklist", "写成 checklist md", "写成 checklist 文件", "放到 checklist 目录", "路线已经定了", "不用再论证", "execution-ready checklist"},
+    "checklist-normalizer": {"规范化 checklist", "整理成可执行清单", "串行的写在一点", "并行的拆开", "lane 重写", "补齐验收和约束"},
+    "checklist-fixer": {"逐项修复", "fix list", "按 checklist 执行", "先做 1-3", "从 p0 开始", "只做第一个"},
+    "skill-routing-repair-codex": {"这次为什么没触发", "为什么没有触发", "是不是路由问题", "路由问题吗", "以后别再选错"},
     "idea-to-plan": {"方案", "先做方案", "技术方案", "路线比较", "tradeoff", "权衡", "先调研再给计划", "先别写代码", "先探索现状再提方案", "先探索代码库再出方案", "风险评估", "decision log", "open questions", "assumptions", "critical files", "explore-plan", "outline.md", "code_list.md", "收敛"},
     "python-pro": {"python", "脚本", "pytest", "fastapi", "mypy", "pyright"},
     "visual-review": {"截图", "看图", "视觉", "布局", "层级", "render", "渲染", "screenshot", "ui"},
@@ -62,9 +65,22 @@ SKILL_ALIAS_HINTS = {
 }
 GATE_HINTS = {
     "source": {"官方", "官方文档", "文档", "docs", "readme", "api", "openai", "github", "look up", "search"},
-    "artifact": {"pdf", "docx", "xlsx", "ppt", "pptx", "word", "excel", "artifact", "文档", "表格", "幻灯片", "文件"},
+    "artifact": {
+        "pdf",
+        "docx",
+        "xlsx",
+        "ppt",
+        "pptx",
+        "excel",
+        "spreadsheet",
+        "word 文档",
+        "word 文件",
+        "表格",
+        "工作簿",
+        "幻灯片",
+    },
     "evidence": {"报错", "失败", "崩", "截图", "渲染", "日志", "traceback", "error", "bug", "why", "为什么"},
-    "delegation": {"sidecar", "subagent", "delegation", "并行", "子代理", "主线程", "local-supervisor", "跨文件", "长运行"},
+    "delegation": {"sidecar", "subagent", "delegation", "并行 sidecar", "子代理", "主线程", "local-supervisor", "跨文件", "长运行"},
 }
 
 
@@ -317,6 +333,16 @@ class SkillRouter:
                 score=0.0,
                 reasons=["Suppressed: task still needs strategic planning rather than execution checklist writing."],
             )
+        if (
+            skill.name == "systematic-debugging"
+            and ("skill" in normalized_task or "skill.md" in normalized_task)
+            and any(marker in normalized_task for marker in ("路由", "触发", "routing", "router", "route"))
+        ):
+            return ScoredSkill(
+                skill=skill,
+                score=0.0,
+                reasons=["Suppressed: meta-routing repair request should not be treated as a generic runtime-debugging gate."],
+            )
 
         if skill.name.startswith("skill-") and not any(hint in normalized_task for hint in ROUTING_META_HINTS):
             return ScoredSkill(skill=skill, score=0.0, reasons=[])
@@ -339,6 +365,8 @@ class SkillRouter:
         for phrase in skill.trigger_hints:
             normalized_phrase = normalize_text(phrase)
             if len(normalized_phrase) < 2:
+                continue
+            if normalized_phrase in COMMON_STOP_TOKENS:
                 continue
             if normalized_phrase and _contains_phrase(task_token_list, normalized_phrase):
                 score += 20

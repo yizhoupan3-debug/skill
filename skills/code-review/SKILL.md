@@ -31,6 +31,17 @@ routing_layer: L2
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - code review
+  - PR review
+  - 代码审查
+  - code-quality scoring
+  - review→fix→re-score
+  - an iterative review→fix→re-score loop
+  - pull request
+  - review checklist
+  - score
+  - overlay
 allowed_tools:
   - shell
   - git

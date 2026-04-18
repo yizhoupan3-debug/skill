@@ -19,6 +19,16 @@ routing_layer: L0
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 批量 skill 改写
+  - skill 模板统一
+  - SKILL.md 批量规范化
+  - shared wording
+  - skill docs cleanup
+  - skill writing
+  - skill template
+  - standardization
+  - skill docs
 allowed_tools:
   - shell
   - git
@@ -29,6 +39,7 @@ artifact_outputs:
   - SESSION_SUMMARY.md
   - TRACE_METADATA.json
 ---
+
 - **Dual-Dimension Audit (Pre: Batch-Logic/Template, Post: Consistency/Sync Results)** → `$execution-audit-codex` [Overlay]
 
 # Writing Skills

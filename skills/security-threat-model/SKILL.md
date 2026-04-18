@@ -14,6 +14,17 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 威胁建模
+  - 攻击面分析
+  - trust boundary
+  - abuse path
+  - 资产梳理
+  - AppSec 风险盘点
+  - 给仓库做安全模型
+  - trust boundaries
+  - assets
+  - entry points
 metadata:
   version: "1.0.0"
   platforms: [codex]
@@ -22,6 +33,7 @@ metadata:
     - threat
     - model
 ---
+
 # security-threat-model
 
 This skill owns evidence-based threat modeling for code repositories, not

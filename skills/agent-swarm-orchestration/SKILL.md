@@ -9,6 +9,16 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 多 agent 协作
+  - agent 编排
+  - swarm
+  - orchestrator
+  - router
+  - planner-coder-reviewer
+  - 共享记忆
+  - agent
+  - orchestration
 metadata:
   version: "1.1.0"
   platforms: [codex]
@@ -17,6 +27,7 @@ metadata:
     - swarm
     - orchestration
 ---
+
 - **Dual-Dimension Audit (Pre: Swarm-Graph/Handoff-Logic, Post: Consensus/Task-Completion Results)** → `$execution-audit-codex` [Overlay]
 # agent-swarm-orchestration
 

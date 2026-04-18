@@ -7,6 +7,17 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 广告词
+  - 产品卖点
+  - 落地页
+  - 品牌故事
+  - CTA
+  - 小红书文案
+  - landing page copy
+  - product descriptions
+  - taglines
+  - copywriting
 metadata:
   version: "2.0.0"
   platforms: [codex, antigravity]

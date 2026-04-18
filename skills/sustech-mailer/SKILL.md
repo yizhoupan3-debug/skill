@@ -7,6 +7,17 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - SUSTech 邮件
+  - SMTP
+  - 发邮件
+  - 写邮件
+  - 12312411@mail.sustech.edu.cn
+  - draft
+  - compose an email from 12312411@mail
+  - email
+  - sustech
+  - mailer
 runtime_requirements:
   python:
     - certifi

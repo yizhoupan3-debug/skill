@@ -11,6 +11,17 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 检查缩写
+  - 缩写第一次要全称
+  - 符号有没有统一
+  - 符号冲突
+  - 公式编号对不对
+  - 方程引用错了
+  - notation audit
+  - acronym
+  - prose review
+  - paper
 metadata:
   version: "2.1.0"
   platforms: [codex]

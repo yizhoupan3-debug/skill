@@ -23,6 +23,15 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
+trigger_hints:
+  - 构建工具
+  - bundler
+  - package manager
+  - lockfile
+  - ESM/CJS
+  - build
+  - vite
+  - webpack
 allowed_tools:
   - shell
   - git
@@ -31,6 +40,7 @@ allowed_tools:
 approval_required_tools:
   - git push
 ---
+
 - **Dual-Dimension Audit (Pre: Config/Lockfile, Post: Bundle-Success/Dep-Graph Results)** → `$execution-audit-codex` [Overlay]
 # build-tooling
 

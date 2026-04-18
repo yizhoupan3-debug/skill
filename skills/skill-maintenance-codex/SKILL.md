@@ -8,6 +8,17 @@ routing_layer: L1
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - skill 维护
+  - sync health checks
+  - registry drift cleanup
+  - skill library maintenance
+  - validate skills
+  - skills
+  - maintenance
+  - sync
+  - validation
+  - drift
 metadata:
   version: "1.0.0"
   platforms: [codex]

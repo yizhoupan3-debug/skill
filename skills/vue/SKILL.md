@@ -22,7 +22,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - Vue 项目
+  - 组合式 API
+  - Pinia
+  - Nuxt
+  - composable 怎么写
+  - Vue development
+  - component design
+  - state management
+  - vue
+  - composition api
 ---
+
 # vue
 
 This skill owns Vue-first engineering work: Composition API, reactivity system, Pinia state management, and Nuxt 3 SSR.

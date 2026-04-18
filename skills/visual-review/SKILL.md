@@ -13,6 +13,14 @@ routing_owner: gate
 routing_gate: evidence
 routing_priority: P1
 session_start: required
+trigger_hints:
+  - 看图
+  - visual
+  - review
+  - screenshot
+  - UI
+  - chart
+  - audit
 metadata:
   version: "2.1.0"
   platforms: [codex]

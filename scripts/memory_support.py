@@ -91,6 +91,20 @@ TERMINAL_VERIFICATION_STATUSES = {
 }
 STALE_STORY_STATES = {"stale", "expired", "invalid"}
 ACTIVE_STORY_STATES = {"active", "in_progress", "running", "resumable"}
+DEFAULT_RUNTIME_PATH = Path(__file__).resolve().parents[1] / "skills" / "SKILL_ROUTING_RUNTIME.json"
+
+
+def load_routing_runtime_version(runtime_path: Path = DEFAULT_RUNTIME_PATH) -> int:
+    """Load the current routing runtime version from the generated route map."""
+
+    if not runtime_path.is_file():
+        return 1
+    try:
+        payload = json.loads(runtime_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return 1
+    value = payload.get("version")
+    return value if isinstance(value, int) else 1
 
 
 def resolve_effective_memory_dir(
@@ -412,6 +426,36 @@ def build_memory_state(snapshot: RuntimeSnapshot) -> dict[str, Any]:
     }
 
 
+def _memory_state_refresh_reasons(
+    state: dict[str, Any],
+    desired: dict[str, Any],
+) -> list[str]:
+    """Return reasons why `memory/state.json` should be refreshed."""
+
+    if not state:
+        return ["memory/state.json is missing"]
+
+    reasons: list[str] = []
+    if safe_slug(str(state.get("source_task_id") or "")) != safe_slug(
+        str(desired.get("source_task_id") or "")
+    ):
+        reasons.append("memory/state.json points at a different task id")
+
+    comparisons = {
+        "source_task": "memory/state.json tracks a different task summary",
+        "source_phase": "memory/state.json tracks a different phase",
+        "source_status": "memory/state.json tracks a different status",
+        "continuity_state": "memory/state.json tracks a different continuity state",
+        "artifact_root": "memory/state.json points at a different artifact root",
+        "content_hash": "runtime source hash is newer than memory/state.json",
+        "source_updated_at": "continuity timestamp is newer than memory/state.json",
+    }
+    for key, reason in comparisons.items():
+        if str(state.get(key) or "") != str(desired.get(key) or ""):
+            reasons.append(reason)
+    return reasons
+
+
 def evaluate_memory_freshness(snapshot: RuntimeSnapshot, state: dict[str, Any]) -> dict[str, Any]:
     """Decide whether active-task recall may use the current continuity snapshot."""
 
@@ -453,6 +497,34 @@ def evaluate_memory_freshness(snapshot: RuntimeSnapshot, state: dict[str, Any]) 
     }
 
 
+def refresh_memory_state_if_needed(snapshot: RuntimeSnapshot, memory_root: Path) -> dict[str, Any]:
+    """Self-heal `memory/state.json` when the runtime snapshot is authoritative enough."""
+
+    continuity = classify_runtime_continuity(snapshot)
+    state = read_memory_state(memory_root)
+    if continuity.get("state") not in {"active", "completed"}:
+        return {
+            "state": state,
+            "refreshed": False,
+            "continuity_state": continuity.get("state"),
+        }
+    payload = build_memory_state(snapshot)
+    refresh_reasons = _memory_state_refresh_reasons(state, payload)
+    if not refresh_reasons:
+        return {
+            "state": state,
+            "refreshed": False,
+            "continuity_state": continuity.get("state"),
+        }
+    write_json_if_changed(memory_state_path(memory_root), payload)
+    return {
+        "state": payload,
+        "refreshed": True,
+        "continuity_state": continuity.get("state"),
+        "reasons": refresh_reasons,
+    }
+
+
 def write_active_task_pointer(
     source_root: Path,
     *,
@@ -469,6 +541,289 @@ def write_active_task_pointer(
         "updated_at": updated_at or current_local_timestamp(),
     }
     return write_json_if_changed(active_task_pointer_path(source_root, artifact_root), payload)
+
+
+def _json_text(payload: dict[str, Any]) -> str:
+    """Serialize JSON payloads using the shared pretty-print contract."""
+
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+
+
+def _compatibility_mirror_outputs(
+    root: Path,
+    mirror_root: Path,
+    *,
+    summary_text: str,
+    next_actions_payload: dict[str, Any],
+    evidence_index: dict[str, Any],
+    trace_payload: dict[str, Any],
+) -> dict[Path, str]:
+    """Build the root and artifacts/current compatibility mirror writes."""
+
+    next_actions_text = _json_text(next_actions_payload)
+    evidence_text = _json_text(evidence_index)
+    trace_text = _json_text(trace_payload)
+    return {
+        root / ARTIFACT_NAMES["session_summary"]: summary_text,
+        root / ARTIFACT_NAMES["next_actions"]: next_actions_text,
+        root / ARTIFACT_NAMES["evidence_index"]: evidence_text,
+        root / ARTIFACT_NAMES["trace_metadata"]: trace_text,
+        mirror_root / ARTIFACT_NAMES["session_summary"]: summary_text,
+        mirror_root / ARTIFACT_NAMES["next_actions"]: next_actions_text,
+        mirror_root / ARTIFACT_NAMES["evidence_index"]: evidence_text,
+        mirror_root / ARTIFACT_NAMES["trace_metadata"]: trace_text,
+    }
+
+
+def _fallback_route_from_supervisor(supervisor_state: dict[str, Any]) -> list[str]:
+    """Derive a minimal route list when trace metadata is missing."""
+
+    controller = supervisor_state.get("controller")
+    controller = controller if isinstance(controller, dict) else {}
+    return stable_line_items(
+        [
+            _text(controller.get("gate")),
+            _text(controller.get("primary_owner")),
+            _text(controller.get("overlay")),
+            _text(controller.get("owner_lane")),
+            _text(supervisor_state.get("primary_owner")),
+        ]
+    )
+
+
+def _synthesized_status(supervisor_state: dict[str, Any]) -> str:
+    """Return the best available lifecycle status from the supervisor state."""
+
+    verification = supervisor_state.get("verification")
+    verification = verification if isinstance(verification, dict) else {}
+    continuity = supervisor_state.get("continuity")
+    continuity = continuity if isinstance(continuity, dict) else {}
+    return (
+        _text(verification.get("verification_status"))
+        or _text(continuity.get("story_state"))
+        or _text(supervisor_state.get("active_phase"))
+        or "in_progress"
+    )
+
+
+def _synthesized_summary(supervisor_state: dict[str, Any]) -> str:
+    """Build a minimal summary when task-scoped continuity files are missing."""
+
+    verification = supervisor_state.get("verification")
+    verification = verification if isinstance(verification, dict) else {}
+    continuity = supervisor_state.get("continuity")
+    continuity = continuity if isinstance(continuity, dict) else {}
+    contract = supervisor_contract(supervisor_state)
+    return (
+        _text(verification.get("last_verification_summary"))
+        or _text(continuity.get("state_reason"))
+        or _text(contract.get("goal"))
+        or "Recovered from the authoritative root supervisor state."
+    )
+
+
+def _synthesized_next_actions_payload(next_actions: list[str]) -> dict[str, Any]:
+    """Build the canonical next-actions payload from supervisor-derived actions."""
+
+    return {
+        "schema_version": NEXT_ACTIONS_SCHEMA_VERSION,
+        "next_actions": next_actions,
+    }
+
+
+def _synthesized_trace_payload(
+    *,
+    supervisor_state: dict[str, Any],
+    task: str,
+    task_root: Path,
+    route: list[str],
+    status: str,
+) -> dict[str, Any]:
+    """Build the canonical trace payload from the authoritative supervisor state."""
+
+    controller = supervisor_state.get("controller")
+    controller = controller if isinstance(controller, dict) else {}
+    return {
+        "schema_version": TRACE_METADATA_SCHEMA_VERSION,
+        "ts": current_local_timestamp(),
+        "task": task,
+        "framework_version": "phase1",
+        "routing_runtime_version": load_routing_runtime_version(),
+        "matched_skills": route,
+        "decision": {
+            "owner": _text(supervisor_state.get("primary_owner"))
+            or _text(controller.get("primary_owner"))
+            or _text(controller.get("owner_lane")),
+            "gate": _text(controller.get("gate")) or "none",
+            "overlay": _text(controller.get("overlay")) or None,
+        },
+        "reroute_count": 0,
+        "retry_count": 0,
+        "artifact_paths": [
+            ARTIFACT_NAMES["session_summary"],
+            ARTIFACT_NAMES["next_actions"],
+            ARTIFACT_NAMES["evidence_index"],
+            ARTIFACT_NAMES["trace_metadata"],
+            ARTIFACT_NAMES["supervisor_state"],
+            str(task_root / ARTIFACT_NAMES["session_summary"]),
+            str(task_root / ARTIFACT_NAMES["next_actions"]),
+            str(task_root / ARTIFACT_NAMES["evidence_index"]),
+            str(task_root / ARTIFACT_NAMES["trace_metadata"]),
+        ],
+        "verification_status": status,
+    }
+
+
+def repair_runtime_continuity_artifacts(
+    source_root: Path,
+    artifact_root: Path | None = None,
+    *,
+    supervisor_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Repair task-scoped continuity artifacts from the authoritative supervisor state.
+
+    This keeps `artifacts/current/active_task.json`, the task-scoped directory, and the
+    bridge mirror aligned to the same task identity instead of allowing mixed-task reads.
+    """
+
+    root = source_root.expanduser().resolve()
+    artifact_base = (artifact_root or root / "artifacts").resolve()
+    mirror_root = artifact_base / CURRENT_ARTIFACT_DIR
+    supervisor = normalize_supervisor_state(
+        supervisor_state or read_json_if_exists(root / ARTIFACT_NAMES["supervisor_state"])
+    )
+    continuity = supervisor.get("continuity")
+    continuity = dict(continuity) if isinstance(continuity, dict) else {}
+    verification = supervisor.get("verification")
+    verification = verification if isinstance(verification, dict) else {}
+    if (
+        _bool_or_none(continuity.get("resume_allowed")) is True
+        and (
+            _is_terminal(supervisor.get("active_phase"), TERMINAL_PHASES)
+            or _is_terminal(verification.get("verification_status"), TERMINAL_VERIFICATION_STATUSES)
+            or _is_terminal(continuity.get("story_state"), TERMINAL_STORY_STATES)
+        )
+    ):
+        continuity["resume_allowed"] = False
+        supervisor["continuity"] = continuity
+        write_json_if_changed(root / ARTIFACT_NAMES["supervisor_state"], supervisor)
+    task_id = safe_slug(_text(supervisor.get("task_id")))
+    task = _text(supervisor.get("task_summary")) or task_id
+    if not task_id or not task:
+        return {"repaired": False, "reason": "missing supervisor task identity"}
+
+    task_root = task_artifact_root(root, task_id, artifact_root)
+    pointer = read_active_task_pointer(root, artifact_root)
+    pointer_task_id = safe_slug(_text(pointer.get("task_id")))
+    route = _fallback_route_from_supervisor(supervisor)
+    phase = _text(supervisor.get("active_phase")) or "implementation"
+    status = _synthesized_status(supervisor)
+    next_actions = stable_line_items(
+        str(item).strip()
+        for item in supervisor.get("next_actions", [])
+        if str(item).strip()
+    )
+    evidence_index = {"schema_version": EVIDENCE_INDEX_SCHEMA_VERSION, "artifacts": []}
+    source_summary_path = task_root / ARTIFACT_NAMES["session_summary"]
+    source_next_actions_path = task_root / ARTIFACT_NAMES["next_actions"]
+    source_evidence_path = task_root / ARTIFACT_NAMES["evidence_index"]
+    source_trace_path = task_root / ARTIFACT_NAMES["trace_metadata"]
+    next_actions_payload = _synthesized_next_actions_payload(next_actions)
+    trace_payload = _synthesized_trace_payload(
+        supervisor_state=supervisor,
+        task=task,
+        task_root=task_root,
+        route=route,
+        status=status,
+    )
+    existing_summary = read_text_if_exists(source_summary_path)
+    existing_fields = parse_session_summary(existing_summary)
+    existing_conflicts = bool(
+        existing_summary.strip()
+        and (
+            not _looks_same_identity(existing_fields.get("task"), task)
+            or (
+                _text(existing_fields.get("phase"))
+                and _text(existing_fields.get("phase")) != phase
+            )
+            or (
+                _text(existing_fields.get("status"))
+                and _text(existing_fields.get("status")) != status
+            )
+        )
+    )
+    changed = False
+
+    if task_root.is_dir() and source_summary_path.is_file() and not existing_conflicts:
+        summary_text = existing_summary
+        existing_next_actions_payload = read_json_if_exists(source_next_actions_path)
+        if existing_next_actions_payload:
+            next_actions = normalize_next_actions(existing_next_actions_payload)
+            next_actions_payload = existing_next_actions_payload
+        else:
+            changed = write_json_if_changed(source_next_actions_path, next_actions_payload) or changed
+        evidence_payload = read_json_if_exists(source_evidence_path)
+        if evidence_payload:
+            evidence_index = evidence_payload
+        else:
+            changed = write_json_if_changed(source_evidence_path, evidence_index) or changed
+        existing_trace_payload = read_json_if_exists(source_trace_path)
+        if existing_trace_payload:
+            trace_payload = existing_trace_payload
+        else:
+            changed = write_json_if_changed(source_trace_path, trace_payload) or changed
+    else:
+        task_root.mkdir(parents=True, exist_ok=True)
+        summary_text = "\n".join(
+            [
+                "# SESSION_SUMMARY",
+                "",
+                f"- task: {task}",
+                f"- phase: {phase}",
+                f"- status: {status}",
+                "",
+                "## Summary",
+                _synthesized_summary(supervisor),
+                "",
+            ]
+        )
+        changed = write_text_if_changed(source_summary_path, summary_text) or changed
+        changed = write_json_if_changed(source_next_actions_path, next_actions_payload) or changed
+        changed = write_json_if_changed(source_evidence_path, evidence_index) or changed
+        changed = write_json_if_changed(source_trace_path, trace_payload) or changed
+        changed = write_json_if_changed(task_root / ARTIFACT_NAMES["supervisor_state"], supervisor) or changed
+
+    mirror_root.mkdir(parents=True, exist_ok=True)
+    repaired_paths = [
+        source_summary_path,
+        source_next_actions_path,
+        source_evidence_path,
+        source_trace_path,
+    ]
+    mirror_outputs = _compatibility_mirror_outputs(
+        root,
+        mirror_root,
+        summary_text=summary_text,
+        next_actions_payload=next_actions_payload,
+        evidence_index=evidence_index,
+        trace_payload=trace_payload,
+    )
+    for path, content in mirror_outputs.items():
+        changed = write_text_if_changed(path, content) or changed
+    changed = write_active_task_pointer(root, task_id=task_id, task=task, artifact_root=artifact_root) or changed
+    changed = write_json_if_changed(task_root / ARTIFACT_NAMES["supervisor_state"], supervisor) or changed
+
+    return {
+        "repaired": changed or pointer_task_id != task_id,
+        "task_id": task_id,
+        "task": task,
+        "task_root": str(task_root),
+        "mirror_root": str(mirror_root),
+        "pointer_task_id": pointer_task_id or None,
+        "route_fallback": route,
+        "repaired_paths": [str(path) for path in repaired_paths] + [str(path) for path in mirror_outputs],
+        "supervisor_state": supervisor,
+    }
 
 
 def resolve_active_task_id(
@@ -501,13 +856,36 @@ def load_runtime_snapshot(source_root: Path, artifact_root: Path | None = None) 
     supervisor_state = normalize_supervisor_state(
         read_json_if_exists(source_root / ARTIFACT_NAMES["supervisor_state"])
     )
+    repair_result = repair_runtime_continuity_artifacts(
+        source_root,
+        artifact_root,
+        supervisor_state=supervisor_state,
+    )
+    supervisor_state = normalize_supervisor_state(
+        (
+            repair_result.get("supervisor_state")
+            if isinstance(repair_result, dict)
+            else None
+        )
+        or read_json_if_exists(source_root / ARTIFACT_NAMES["supervisor_state"])
+    )
     active_task_id = resolve_active_task_id(
         source_root,
         artifact_root,
         supervisor_state=supervisor_state,
     )
     task_root = task_artifact_root(source_root, active_task_id, artifact_root) if active_task_id else mirror_root
-    preferred_root = task_root if task_root.exists() else mirror_root
+    pointer = read_active_task_pointer(source_root, artifact_root)
+    pointer_task_id = safe_slug(_text(pointer.get("task_id")))
+    mirror_matches_selected = bool(active_task_id and active_task_id == pointer_task_id)
+    if task_root.exists():
+        preferred_root = task_root
+    elif not active_task_id:
+        preferred_root = mirror_root
+    elif mirror_matches_selected:
+        preferred_root = mirror_root
+    else:
+        preferred_root = task_root
 
     def _read_task_or_mirror(name: str) -> Path:
         return _first_existing(

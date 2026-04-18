@@ -10,6 +10,14 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 总结视频
+  - 提取字幕
+  - 整理笔记
+  - 输出重点
+  - youtube
+  - summarization
+  - transcription
 metadata:
   version: "1.2.1"
   platforms: [codex]
@@ -20,6 +28,7 @@ metadata:
 risk: safe
 source: community
 ---
+
 # youtube-summarizer
 
 ## Purpose

@@ -9,6 +9,17 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 信息图
+  - infographic
+  - 一图读懂
+  - 知识卡片
+  - 数据长图
+  - summary poster
+  - exported to PDF
+  - PNG
+  - html
+  - data visualization
 metadata:
   version: "1.0.0"
   platforms: [codex, antigravity]

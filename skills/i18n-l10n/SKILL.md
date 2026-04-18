@@ -21,7 +21,15 @@ routing_layer: L3
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - i18n
+  - l10n
+  - internationalization
+  - localization
+  - translation
+  - multi language
 ---
+
 # i18n-l10n
 
 This skill owns internationalization and localization quality as an overlay:

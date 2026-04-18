@@ -11,6 +11,13 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - dependency
+  - npm audit
+  - pip audit
+  - cargo audit
+  - lockfile
+  - license
 metadata:
   version: "1.0.0"
   platforms: [codex]

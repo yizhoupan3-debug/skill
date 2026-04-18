@@ -12,6 +12,8 @@ trigger_hints:
   - Responses API
   - Apps SDK
   - Codex docs
+  - Codex 文档
+  - OpenAI docs
 allowed_tools:
   - browser
 approval_required_tools:
@@ -23,7 +25,6 @@ artifact_outputs:
   - EVIDENCE_INDEX.json
 source: system
 ---
-
 
 # OpenAI Docs
 

@@ -22,7 +22,14 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - webhook
+  - security
+  - signature verification
+  - replay protection
+  - idempotency
 ---
+
 # webhook-security
 
 This skill owns implementation and review of webhook receiver security and reliability boundaries.

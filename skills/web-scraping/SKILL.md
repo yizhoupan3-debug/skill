@@ -21,7 +21,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 抓取网页数据
+  - 爬虫
+  - 网页信息提取
+  - 批量抓取
+  - web crawler
+  - extract data from web pages
+  - crawl multiple pages
+  - build a spider
+  - says "抓取网页数据
+  - web scraping
 ---
+
 # web-scraping
 
 This skill owns web data extraction workflows: choosing the right scraping

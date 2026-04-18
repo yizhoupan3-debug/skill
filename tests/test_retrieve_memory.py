@@ -113,7 +113,7 @@ def test_render_context_active_mode_includes_matching_current_task_when_fresh(tm
     assert any(item["path"] == "runtime/current_task.md" for item in result["items"])
 
 
-def test_render_context_active_mode_blocks_stale_memory_state(tmp_path: Path) -> None:
+def test_render_context_active_mode_refreshes_stale_memory_state(tmp_path: Path) -> None:
     _seed_runtime(tmp_path)
     _seed_stable_memory(tmp_path)
     _write_json(
@@ -133,8 +133,28 @@ def test_render_context_active_mode_blocks_stale_memory_state(tmp_path: Path) ->
         mode="active",
     )
 
-    assert result["active_task_included"] is False
-    assert result["freshness"]["state"] == "stale"
+    assert result["active_task_included"] is True
+    assert result["freshness"]["state"] == "fresh"
+    state = json.loads((tmp_path / ".codex" / "memory" / "state.json").read_text(encoding="utf-8"))
+    assert state["source_task_id"] == "active-bootstrap-repair-20260418210000"
+
+
+def test_render_context_active_mode_self_heals_missing_memory_state(tmp_path: Path) -> None:
+    _seed_runtime(tmp_path)
+    memory_root = tmp_path / ".codex" / "memory"
+    _write_text(memory_root / "MEMORY.md", "# 项目长期记忆\n")
+    _write_text(memory_root / "preferences.md", "# preferences\n")
+
+    result = render_context(
+        workspace=tmp_path.name,
+        topic="active bootstrap repair",
+        repo_root=tmp_path,
+        mode="active",
+    )
+
+    assert result["active_task_included"] is True
+    assert (memory_root / "state.json").is_file()
+    assert result["freshness"]["state"] == "fresh"
 
 
 def test_render_context_history_mode_can_read_archive(tmp_path: Path) -> None:

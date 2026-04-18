@@ -22,7 +22,19 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 写个 shell 脚本
+  - 一行命令处理
+  - 批量改文件
+  - 命令行自动化
+  - shell commands
+  - bash
+  - zsh scripts
+  - batch file processing
+  - CLI automation
+  - shell
 ---
+
 # shell-cli
 
 This skill owns shell-first terminal work: commands, pipelines, scripts, and CLI ergonomics that should not be forced into a Python or Git skill.
@@ -124,7 +136,8 @@ Recommended structure:
 ## Hard constraints
 
 - Do not suggest broad destructive commands without a scoped preview path.
-- When generating commands that produce large output (e.g., `git status`, `cargo test`, `npm test`), PREFER injecting the `rtk` (Rust Token Killer) prefix (e.g., `rtk git status`) to compress tokens, unless raw output is explicitly requested.
+- In this repository, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) for repo-local RTK usage rules.
+- When generating commands that produce large output (e.g., `git status`, `cargo test`, `npm test`), PREFER the `rtk` form when `RTK.md` says compression is appropriate, unless raw output is explicitly requested.
 - Do not leave paths unquoted when spaces or special characters are plausible.
 - Do not assume GNU-specific flags on macOS without saying so.
 - Prefer explicit file selection over recursive wildcard commands when the blast radius matters.

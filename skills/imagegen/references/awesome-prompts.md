@@ -50,8 +50,8 @@ Style: editorial, premium, subtle, restrained.
 
 | Scenario | Model | Quality |
 |----------|-------|---------|
-| Default (most tasks) | `gpt-image-1.5` | auto |
-| Text-heavy | `gpt-image-1.5` | high |
-| Quick iteration | `gpt-image-1-mini` | low |
-| Detail-critical final | `gpt-image-1.5` | high |
-| Strict edits (identity lock) | `gpt-image-1.5` | high + input_fidelity=high |
+| Default (most tasks) | `gpt-5.4` | auto |
+| Text-heavy | `gpt-5.4` | high |
+| Quick iteration | `gpt-5.4` | low |
+| Detail-critical final | `gpt-5.4` | high |
+| Strict edits (identity lock) | `gpt-5.4` | high + input_fidelity=high |

@@ -1731,7 +1731,7 @@
         "path": "skills/skill-routing-repair-codex",
         "routing_gate": "none",
         "routing_layer": "L0",
-        "routing_owner": "overlay",
+        "routing_owner": "owner",
         "session_start": "n/a",
         "slug": "skill-routing-repair-codex",
         "source": "project",

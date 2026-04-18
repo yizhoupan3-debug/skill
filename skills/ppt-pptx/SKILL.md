@@ -9,6 +9,17 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - ppt
+  - pptx
+  - ppt pptx
+  - PowerPoint
+  - 做个PPT
+  - 生成演示文稿
+  - 从大纲生成 PPT
+  - 重做这份 deck
+  - 按这个内容出可编辑 pptx
+  - 给我一个可复用的 PPT 源码工作流
 runtime_requirements:
   python:
     - numpy

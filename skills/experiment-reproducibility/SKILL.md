@@ -12,6 +12,17 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 怎么保证可复现
+  - 环境管理
+  - 随机种子
+  - 数据版本控制
+  - 实验配置
+  - reproducibility
+  - environment snapshot
+  - seed management
+  - DVC
+  - MLflow tracking
 metadata:
   version: "1.0.0"
   platforms: [codex]

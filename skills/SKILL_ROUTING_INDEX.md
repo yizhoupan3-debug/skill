@@ -42,7 +42,7 @@
 | `autoresearch` | L4 | owner | none | Orchestrate autonomous research through a recoverable loop of hypothesis, experi |
 | `latex-compile-acceleration` | L4 | owner | none | Speed up LaTeX compile and preview workflows |
 | `iterative-optimizer` | L0 | overlay | none | N-round optimization loops with built-in laziness immunity |
-| `skill-routing-repair-codex` | L0 | overlay | none | Patch routing misses with the smallest safe skill fix |
+| `skill-routing-repair-codex` | L0 | owner | none | Patch routing misses with the smallest safe skill fix |
 | `writing-skills` | L0 | overlay | none | Standardize and strengthen multiple `SKILL.md` files and shared skill-writing do |
 | `api-integration-debugging` | L1 | owner | none | Diagnose and fix API integration failures at service boundaries. Produces reprod |
 | `backend-runtime-debugging` | L1 | owner | none | Diagnose backend runtime failures: crashes, tracebacks, OOM, deadlocks, hanging  |
@@ -52,7 +52,7 @@
 | `error-handling-patterns` | L1 | overlay | none | Design cross-language error-handling architectures such as custom errors, retry/ |
 | `execution-audit-codex` | L1 | overlay | none | Audit execution quality with evidence, sidecar-first collection, and compressed  |
 | `frontend-debugging` | L1 | owner | none | Diagnose frontend runtime bugs with a five-layer model (component → state → rend |
-| `imagegen` | L1 | owner | none | Use the built-in image tool for raster image generation or edits. |
+| `imagegen` | L1 | owner | none | Generate or edit raster images through VibeProxy Local /v1/responses using the b |
 | `information-retrieval` | L1 | owner | none | Run multi-round research before acting or recommending |
 | `plugin-creator` | L1 | owner | none | Create a local Codex plugin scaffold with `.codex-plugin/plugin.json` and option |
 | `prompt-engineer` | L1 | owner | none | Transform vague instructions into structured prompts with explicit role, constra |

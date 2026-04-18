@@ -21,7 +21,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - quant strategy design
+  - 回测
+  - 交易策略
+  - trading bot logic
+  - Sharpe
+  - drawdown analysis
+  - factor research
+  - execution
+  - risk rules
+  - algo trading
 ---
+
 # Algo Trading
 
 This skill owns **strategy logic, backtesting judgment, execution design, and risk management**.

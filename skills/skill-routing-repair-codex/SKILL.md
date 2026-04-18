@@ -6,7 +6,7 @@ description: |
   新加入 skill 没有走维护流程, 边界重叠后修改旧 skill, or gate 顺序修复.
   This is for concrete miss repair, not full framework redesign.
 routing_layer: L0
-routing_owner: overlay
+routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
@@ -16,7 +16,14 @@ trigger_hints:
   - 触发修复
   - 自提升
   - 顺手更新 skill
+  - 顺手修一下 skill
+  - 顺手把这个 skill 修一下
   - 这次为什么没触发
+  - 为什么没有触发
+  - 是不是路由问题
+  - 路由问题吗
+  - 路由没触发
+  - 修复这次 miss
   - 以后别再选错
   - 做完后更新 skill
   - 复盘这次 miss
@@ -86,6 +93,8 @@ python3 scripts/check_skills.py --verify-codex-link
 python3 scripts/check_skills.py --include-system --verify-codex-link
 python3 scripts/sync_skills.py --apply
 ```
+
+For local high-output verification runs, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) and prefer the equivalent `rtk ...` wrapper when compact output is sufficient.
 
 ## Quality bar
 

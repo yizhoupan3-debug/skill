@@ -5,6 +5,12 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 安装 skill
+  - 导入 skill
+  - GitHub skill
+  - $CODEX_HOME/skills
+  - install skill
 source: system
 metadata:
   short-description: Install curated skills from openai/skills or other repos

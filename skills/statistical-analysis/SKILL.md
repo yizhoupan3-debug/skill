@@ -7,6 +7,17 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 用什么检验
+  - 显著性怎么算
+  - p 值
+  - 效应量
+  - 贝叶斯
+  - 多重比较
+  - 统计功效
+  - 回归诊断
+  - running
+  - interpreting hypothesis tests
 metadata:
   version: "1.0.0"
   platforms: [codex]
@@ -20,6 +31,7 @@ metadata:
 risk: low
 source: local
 ---
+
 - **Dual-Dimension Audit (Pre: Test-Selection, Post: P-value/Effect-size Results)** → `$execution-audit-codex` [Overlay]
 
 # Statistical Analysis

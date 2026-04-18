@@ -11,6 +11,17 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 做个PPT
+  - 生成演示文稿
+  - 根据大纲做汇报 slides
+  - revise
+  - export a slide deck
+  - PPT
+  - presentation from an outline
+  - notes
+  - markdown
+  - research materials
 runtime_requirements:
   commands:
     - node

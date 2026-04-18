@@ -41,6 +41,10 @@ _Generated from shared runtime artifacts and `./.codex/memory/`. Do not edit man
 ## Artifact Anchors
 
 - root task mirror: `/Users/joe/Documents/skill/.supervisor_state.json`
+- `SESSION_SUMMARY.md`
+- `NEXT_ACTIONS.json`
+- `EVIDENCE_INDEX.json`
+- `TRACE_METADATA.json`
 - active task pointer: `/Users/joe/Documents/skill/artifacts/current/active_task.json`
 - current session mirror: `artifacts/current/SESSION_SUMMARY.md`
 - `artifacts/current/SESSION_SUMMARY.md`

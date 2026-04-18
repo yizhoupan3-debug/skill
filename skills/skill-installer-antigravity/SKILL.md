@@ -8,6 +8,11 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - antigravity
+  - skill
+  - installer
+  - sync
 metadata:
   version: "1.1.0"
   platforms: [antigravity]

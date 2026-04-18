@@ -9,6 +9,17 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - Premium UI
+  - Stunning
+  - WOW
+  - Glassmorphism
+  - Mesh Gradients
+  - Premium
+  - a page
+  - interface to look "Premium
+  - sophisticated micro-interactions
+  - ui design
 metadata:
   version: "1.1.0"
   platforms: [codex, antigravity, claude-code]
@@ -21,6 +32,7 @@ metadata:
 risk: low
 source: local
 ---
+
 - **Dual-Dimension Audit (Pre: Layout-Spec/Logic, Post: Visual-Fidelity/Responsive Results)** → `$execution-audit-codex` [Overlay]
 
 # frontend-design

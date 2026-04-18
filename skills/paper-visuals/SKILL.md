@@ -9,6 +9,13 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - paper
+  - visuals
+  - figures
+  - tables
+  - captions
+  - publication
 metadata:
   version: "2.1.0"
   platforms: [codex]
@@ -26,6 +33,7 @@ framework_contracts:
 risk: medium
 source: local
 ---
+
 - **Dual-Dimension Audit (Pre: Vector-Logic/Theme, Post: Resolution-DPI/Font-Fidelity Results)** → `$execution-audit-codex` [Overlay]
 
 # Paper Visuals

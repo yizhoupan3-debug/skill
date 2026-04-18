@@ -10,6 +10,17 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - Jupyter notebook
+  - ipynb
+  - 实验 notebook
+  - 分析 notebook
+  - tutorial notebook
+  - a notebook instead of a script
+  - jupyter
+  - notebook
+  - experiment
+  - analysis
 metadata:
   version: "2.0.0"
   platforms: [codex]
@@ -20,6 +31,7 @@ metadata:
     - analysis
     - tutorial
 ---
+
 - **Dual-Dimension Audit (Pre: Cell-Flow, Post: Run-Success/Reproducibility Results)** → `$execution-audit-codex` [Overlay]
 # Jupyter Notebook Skill
 

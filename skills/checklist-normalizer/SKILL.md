@@ -9,6 +9,13 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
+trigger_hints:
+  - 规范化 checklist
+  - 串行的写在一点
+  - 并行的拆开
+  - lane 重写
+  - 补齐验收和约束
+  - 整理成可执行清单
 short_description: Rewrite a messy checklist into an execution-ready form with explicit serial/parallel boundaries and acceptance rules.
 metadata:
   version: "1.1.0"
@@ -153,6 +160,15 @@ Recommended structure:
 - Do not invent facts that are not present in the source material
 - Do not treat checklist updates after execution as optional
 - Do not turn normalization into execution; stop at the rewritten checklist unless the user asks to continue
+
+## File-output rule
+
+Unless the user explicitly asks for chat-only output:
+
+- write the normalized checklist under `checklist/`
+- create `checklist/` if it does not exist
+- prefer continuing the existing `cl_v*.md` series; otherwise start from `checklist/cl_v1.md`
+- explicitly label which peer points are parallel and which ordered substeps stay serial inside one point
 
 ## Trigger examples
 

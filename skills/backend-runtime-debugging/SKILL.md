@@ -24,6 +24,13 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P2
 session_start: n/a
+trigger_hints:
+  - backend
+  - debugging
+  - runtime
+  - traceback
+  - oom
+  - deadlock
 allowed_tools:
   - shell
   - browser

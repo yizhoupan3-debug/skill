@@ -20,7 +20,19 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - API 设计
+  - 接口规范
+  - 版本策略
+  - 错误码设计
+  - OpenAPI
+  - Swagger specification work
+  - api
+  - rest
+  - graphql
+  - grpc
 ---
+
 # api-design
 
 This skill owns API interface design: resource modeling, endpoint conventions, error contracts, versioning, and documentation standards.

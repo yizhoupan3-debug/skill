@@ -5,6 +5,12 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 创建 skill
+  - 更新 skill
+  - skill package
+  - SKILL.md
+  - skill authoring
 source: system
 runtime_requirements:
   python:

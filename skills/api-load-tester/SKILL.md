@@ -13,6 +13,17 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 压测 API
+  - load test
+  - stress test
+  - soak test
+  - spike test
+  - RPS
+  - 并发
+  - 延迟阈值
+  - 找瓶颈
+  - k6
 metadata:
   version: "1.0.0"
   platforms: [codex]
@@ -21,6 +32,7 @@ metadata:
     - load
     - tester
 ---
+
 - **Dual-Dimension Audit (Pre: Load-Profile/Logic, Post: Latency-P99/Throughput Results)** → `$execution-audit-codex` [Overlay]
 # api-load-tester
 

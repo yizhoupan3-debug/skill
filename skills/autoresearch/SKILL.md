@@ -9,6 +9,15 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: preferred
+trigger_hints:
+  - autonomous research
+  - multi-hypothesis
+  - experiment loop
+  - reflection synthesis
+  - research state
+  - experiment orchestration
+  - two loop
+  - hypothesis testing
 metadata:
   version: "3.1.0"
   platforms: [codex]

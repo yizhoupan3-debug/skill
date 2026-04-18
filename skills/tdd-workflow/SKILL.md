@@ -37,7 +37,18 @@ routing_layer: L1
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 先写测试
+  - 补回归保护
+  - 按测试驱动修 bug
+  - 增量实现功能
+  - testing later
+  - tdd
+  - testing
+  - regression
+  - red green refactor
 ---
+
 # TDD Workflow
 
 This skill owns execution when the user wants the work to proceed through

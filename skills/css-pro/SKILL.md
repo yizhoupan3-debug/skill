@@ -22,7 +22,19 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - CSS 布局策略
+  - 响应式方案
+  - oklch 配色
+  - Grid subgrid
+  - CSS engineering
+  - aesthetic layouts
+  - animation optimization
+  - css
+  - layout
+  - responsive
 ---
+
 # css-pro
 
 This skill owns CSS engineering work: layout systems, responsive design, animation, architecture patterns, and CSS tooling.

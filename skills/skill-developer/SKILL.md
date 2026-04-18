@@ -8,6 +8,12 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - antigravity
+  - skill authoring
+  - skill debugging
+  - trigger wording
+  - skill library
 metadata:
   version: "2.1.0"
   platforms: [antigravity, codex]

@@ -11,6 +11,17 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 数据清洗
+  - 转换数据格式
+  - ETL
+  - schema mapping
+  - 正则提取
+  - 写 ETL 脚本
+  - 做正则提取
+  - 做 schema mapping
+  - 数据去重
+  - 数据校验
 metadata:
   version: "1.0.0"
   platforms: [codex]

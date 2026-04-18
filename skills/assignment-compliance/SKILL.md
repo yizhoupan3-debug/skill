@@ -8,6 +8,17 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 作业合规检查
+  - rubric 对照
+  - requirement mapping
+  - submission checklist
+  - score estimation
+  - assignment
+  - homework
+  - project
+  - rubric
+  - compliance
 metadata:
   version: "4.0.0"
   platforms: [antigravity, codex]

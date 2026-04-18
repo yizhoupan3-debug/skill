@@ -164,6 +164,16 @@ def write_artifacts(
         write_evidence_index(mirror_output_dir / "EVIDENCE_INDEX.json", evidence)
 
     if repo_root is not None:
+        repo_root.mkdir(parents=True, exist_ok=True)
+        write_session_summary(
+            repo_root / "SESSION_SUMMARY.md",
+            task=task,
+            phase=phase,
+            status=status,
+            summary=summary,
+        )
+        write_next_actions(repo_root / "NEXT_ACTIONS.json", next_actions)
+        write_evidence_index(repo_root / "EVIDENCE_INDEX.json", evidence)
         write_active_task_pointer(repo_root, task_id=resolved_task_id, task=task)
 
     return {

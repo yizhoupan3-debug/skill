@@ -26,6 +26,12 @@ routing_layer: L0
 routing_owner: gate
 routing_gate: source
 session_start: required
+trigger_hints:
+  - github
+  - ci
+  - github actions
+  - gh cli
+  - pull request
 allowed_tools:
   - shell
   - git
@@ -41,6 +47,7 @@ artifact_outputs:
   - EVIDENCE_INDEX.json
   - TRACE_METADATA.json
 ---
+
 # gh-fix-ci
 
 At conversation start or first turn, check this source gate before ordinary domain owners when the request is driven by external evidence such as Sentry data, PR comments, or failing checks.

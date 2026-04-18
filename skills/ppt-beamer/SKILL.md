@@ -11,6 +11,17 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - Beamer slides
+  - LaTeX 幻灯片
+  - 学术 PPT
+  - theme 调整
+  - Beamer 编译
+  - papers into slides
+  - adjust themes
+  - fix Beamer compile
+  - layout issues
+  - build a repeatable citation-aware slide workflow
 runtime_requirements:
   commands:
     - latexmk

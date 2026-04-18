@@ -9,6 +9,17 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 砍到 X 页
+  - 字数超了
+  - page limit
+  - 排版限制
+  - 需要扩展到 X 页
+  - 哪些地方该详写哪些该精简
+  - 详略调整
+  - 篇幅不够
+  - 超页了
+  - paper
 metadata:
   version: "1.0.0"
   platforms: [codex]

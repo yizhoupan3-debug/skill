@@ -32,6 +32,7 @@ from scripts.memory_support import (
     is_generic_query,
     load_runtime_snapshot,
     query_matches_task,
+    refresh_memory_state_if_needed,
     resolve_effective_memory_dir,
     workspace_dir,
     write_json_if_changed,
@@ -325,6 +326,7 @@ def build_framework_memory_bootstrap(
             changed_files.append(state_path)
         persist_memory_bundle(workspace, documents, resolved_dir=memory_workspace_root)
         consolidation_note = "memory_workspace was empty; bridge ran one-shot consolidation"
+    refresh_memory_state_if_needed(snapshot, memory_workspace_root)
     retrieval = render_context(
         workspace=workspace,
         topic=query,
@@ -335,6 +337,13 @@ def build_framework_memory_bootstrap(
     )
     continuity_layout = describe_continuity_layout(repo_root)
     memory_layout = describe_project_local_memory_layout(repo_root)
+    resume_task_id = (
+        active_task.get("task_id")
+        if continuity["state"] == "active" and query_matches_active_task
+        else None
+    )
+    bootstrap_task_id = resume_task_id or build_task_id(query or workspace, created_at=current_local_timestamp())
+    bootstrap_source_task = active_task.get("task") if resume_task_id else None
     return {
         "workspace": workspace,
         "using_project_local": True,
@@ -354,8 +363,8 @@ def build_framework_memory_bootstrap(
             "query": query,
             "query_matches_active_task": bool(query_matches_active_task),
             "ignored_root_continuity": bool(ignored_active_task),
-            "task_id": active_task.get("task_id") or build_task_id(query or workspace),
-            "source_task": active_task.get("task"),
+            "task_id": bootstrap_task_id,
+            "source_task": bootstrap_source_task,
             "mode": mode,
         },
         "source_artifacts": {

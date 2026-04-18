@@ -11,6 +11,17 @@ routing_gate: none
 routing_priority: P1
 session_start: n/a
 short_description: Audit execution quality with evidence, sidecar-first collection, and compressed sign-off
+trigger_hints:
+  - 强制验收
+  - 高质量闭环
+  - 100% 对齐检查
+  - 零容忍审计
+  - 最终 sign-off
+  - 主线程只保留结论
+  - audit
+  - quality gate
+  - robustness
+  - verification
 framework_roles:
   - verifier
   - quality-gate
@@ -55,6 +66,7 @@ artifact_outputs:
   - EVIDENCE_INDEX.json
 bridge_behavior: mobile_complete_once
 ---
+
 - **Dual-Dimension Audit (Pre: Spec-Integrity/Logic, Post: Result-Idealism/Runtime Evidence)** → `$execution-audit-codex` [Overlay]
 
 # execution-audit-codex

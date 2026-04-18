@@ -18,7 +18,19 @@ routing_layer: L4
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - React 最佳实践
+  - Next.js 最佳实践
+  - bundle 优化
+  - hydration
+  - re-render 优化
+  - react
+  - nextjs
+  - app router
+  - performance
+  - rendering strategy
 ---
+
 # vercel-react-best-practices
 
 This skill owns React/Next.js code-level rendering and data-flow best practices, especially where Vercel-style architecture guidance matters.

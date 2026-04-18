@@ -19,6 +19,42 @@ def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _task_scoped_runtime_roots(repo_root: Path) -> list[Path]:
+    """Return task-scoped and compatibility-mirror roots in preferred order."""
+
+    current_root = repo_root / "artifacts" / "current"
+    roots: list[Path] = []
+    pointer = _read_json(current_root / "active_task.json")
+    task_id = str(pointer.get("task_id") or "").strip()
+    if task_id:
+        task_root = current_root / task_id
+        if task_root.is_dir():
+            roots.append(task_root)
+    if current_root.is_dir():
+        roots.append(current_root)
+    return roots
+
+
+def _first_runtime_text(paths: list[Path]) -> str:
+    """Return the first non-empty runtime text payload."""
+
+    for path in paths:
+        text = _read_text(path).strip()
+        if text:
+            return text
+    return ""
+
+
+def _first_runtime_json(paths: list[Path]) -> dict:
+    """Return the first non-empty runtime JSON payload."""
+
+    for path in paths:
+        payload = _read_json(path)
+        if payload:
+            return payload
+    return {}
+
+
 def _parse_summary(summary_text: str) -> dict[str, str]:
     result: dict[str, str] = {}
     for line in summary_text.splitlines():
@@ -100,10 +136,22 @@ def _decision_hint(supervisor_state: dict, next_actions: dict, *, git_state: str
 
 
 def render_statusline(repo_root: Path) -> str:
-    session_summary = _parse_summary(_read_text(repo_root / "SESSION_SUMMARY.md"))
-    trace_metadata = _read_json(repo_root / "TRACE_METADATA.json")
+    runtime_roots = _task_scoped_runtime_roots(repo_root)
+    session_summary = _parse_summary(
+        _first_runtime_text(
+            [root / "SESSION_SUMMARY.md" for root in runtime_roots]
+            + [repo_root / "SESSION_SUMMARY.md"]
+        )
+    )
+    trace_metadata = _first_runtime_json(
+        [root / "TRACE_METADATA.json" for root in runtime_roots]
+        + [repo_root / "TRACE_METADATA.json"]
+    )
     supervisor_state = _read_json(repo_root / ".supervisor_state.json")
-    next_actions = _read_json(repo_root / "NEXT_ACTIONS.json")
+    next_actions = _first_runtime_json(
+        [root / "NEXT_ACTIONS.json" for root in runtime_roots]
+        + [repo_root / "NEXT_ACTIONS.json"]
+    )
 
     task = session_summary.get("task") or trace_metadata.get("task") or supervisor_state.get("task_summary") or "none"
     phase = session_summary.get("phase") or supervisor_state.get("active_phase") or "idle"

@@ -9,6 +9,17 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 按这些意见帮我改
+  - 修到能投
+  - 根据 reviewer comments 修改
+  - 写 rebuttal
+  - coordinated revision
+  - paper
+  - manuscript
+  - revise
+  - fix
+  - reviewer comments
 metadata:
   version: "2.1.1"
   platforms: [codex]

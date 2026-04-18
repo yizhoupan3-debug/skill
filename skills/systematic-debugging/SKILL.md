@@ -174,6 +174,7 @@ During investigation, choose the right evidence-gathering tool:
 - **No symptom suppression** presented as root-cause resolution.
 - **No passive finish**: never say "should work now" without showing stdout/stderr proof.
 - **No context-begging**: run `grep`, `cat`, or `run_command` before asking the user.
+- In this repository, use [`RTK.md`](/Users/joe/Documents/skill/RTK.md) only when the command is high-volume and compact output still preserves the needed evidence; prefer raw output when the exact failing line matters.
 - If reproduction is unconfirmed, say so explicitly — never assume it can be reproduced.
 - If three fix attempts fail, step back and challenge the premise or architecture.
 - **Anti-laziness checkpoint**: before handing off to a domain owner, the debugging record must show: symptom + evidence source + observed (not inferred) root cause.

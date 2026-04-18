@@ -10,6 +10,17 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: preferred
+trigger_hints:
+  - 文献引用管理
+  - 参考文献核查
+  - BibTeX
+  - DOI
+  - PMID
+  - Zotero-style cleanup
+  - 文中引用与参考文献表一致性检查
+  - APA
+  - IEEE
+  - ACM
 metadata:
   version: "2.0.0"
   platforms: [codex]

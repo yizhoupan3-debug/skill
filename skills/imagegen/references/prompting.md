@@ -1,6 +1,6 @@
 # Prompting best practices
 
-These prompting principles are for the built-in `image_gen` tool path.
+These prompting principles are for the direct VibeProxy Responses image path.
 
 ## Contents
 - [Structure](#structure)

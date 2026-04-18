@@ -21,7 +21,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 复杂 SQL
+  - 慢查询优化
+  - 报表分析
+  - 数据建模
+  - 索引设计
+  - sql
+  - postgresql
+  - mysql
+  - indexing
+  - query optimization
 ---
+
 # sql-pro
 
 This skill owns SQL-first engineering work: query design, schema modeling, index strategy, and EXPLAIN-driven performance tuning.

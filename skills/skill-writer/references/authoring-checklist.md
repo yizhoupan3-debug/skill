@@ -107,6 +107,8 @@ python3 scripts/check_skills.py --include-system --verify-codex-link
 python3 scripts/sync_skills.py --apply
 ```
 
+For local human runs where output volume is high, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) and use the equivalent `rtk ...` form when compact output is sufficient.
+
 If hooks are missing, install them once:
 
 ```bash

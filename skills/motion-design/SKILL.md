@@ -9,6 +9,17 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - motion design
+  - Framer Motion
+  - GSAP
+  - smooth transitions
+  - micro-interactions
+  - alive
+  - smooth
+  - WOW
+  - alive" interfaces
+  - smooth" transitions
 metadata:
   version: "1.0.0"
   platforms: [codex, antigravity, claude-code]
@@ -21,6 +32,7 @@ metadata:
 risk: low
 source: local
 ---
+
 - **Dual-Dimension Audit (Pre: Easing-Logic/Curve, Post: Frame-Rate/Interaction Results)** → `$execution-audit-codex` [Overlay]
 
 # motion-design

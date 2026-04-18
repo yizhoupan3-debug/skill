@@ -11,6 +11,17 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 管理环境变量
+  - 排查 .env 问题
+  - 多环境切换
+  - config validation
+  - config
+  - env
+  - dotenv
+  - secrets
+  - feature flags
+  - twelve factor
 metadata:
   version: "1.0.0"
   platforms: [codex]

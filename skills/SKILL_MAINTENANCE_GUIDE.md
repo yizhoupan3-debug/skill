@@ -16,6 +16,7 @@
    python3 scripts/check_skills.py --verify-codex-link
    python3 scripts/check_skills.py --include-system --verify-codex-link
    ```
+   本地人工执行这些高输出命令时，可按 [`RTK.md`](/Users/joe/Documents/skill/RTK.md) 改用 `rtk ...` 包装形式。
 5. 提交后 CI 自动验证（`.github/workflows/skill-ci.yml`）
 
 ## 改 Skill 必查

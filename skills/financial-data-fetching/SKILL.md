@@ -45,7 +45,15 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - financial data
+  - market data
+  - data fetching
+  - api validation
+  - fundamentals
+  - roe
 ---
+
 # financial-data-fetching
 
 This skill owns **real financial data acquisition and validation**. It should be selected before broad quant/trading skills when the main job is to fetch, verify, normalize, or export market data — including OHLCV, financial statements, shareholder structure, and capital/valuation metrics.

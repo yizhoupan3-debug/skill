@@ -22,7 +22,19 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 发 npm 包
+  - 写 package.json
+  - 库发布
+  - exports 怎么配
+  - publish a library
+  - fix `exports
+  - support ESM
+  - CJS
+  - ship a CLI
+  - npm
 ---
+
 - **Dual-Dimension Audit (Pre: Package-JSON/Exports, Post: Publish-DryRun/Bundle-Size Results)** → `$execution-audit-codex` [Overlay]
 # npm-package-authoring
 

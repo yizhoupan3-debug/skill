@@ -26,11 +26,20 @@ routing_layer: L1
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - coding standards
+  - 代码规范
+  - readability
+  - naming
+  - error handling
+  - backend
+  - full stack
 allowed_tools:
   - shell
   - python
 approval_required_tools: []
 ---
+
 # coding-standards
 
 This skill owns **cross-stack and backend coding standards** as an overlay:

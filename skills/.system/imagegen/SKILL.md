@@ -1,147 +1,137 @@
 ---
 name: "imagegen"
-description: "Use the built-in image tool for raster image generation or edits."
+description: "Generate or edit raster images through VibeProxy Local /v1/responses using the bundled CLI."
 routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 生成图片
+  - 编辑图片
+  - image generation
+  - VibeProxy
+  - Responses API
 source: system
 ---
 
 # Image Generation Skill
 
-Generates or edits images for the current project (for example website assets, game assets, UI mockups, product mockups, wireframes, logo design, photorealistic images, or infographics).
+Generates or edits raster images for the current project through the bundled CLI:
 
-## Built-in mode
+- `scripts/image_gen.py generate`
+- `scripts/image_gen.py edit`
+- `scripts/image_gen.py generate-batch`
 
-This skill is built around the built-in `image_gen` tool for normal image generation and editing.
+## Default execution path
 
-Rules:
-- Use the built-in `image_gen` tool for all raster image generation and editing requests handled by this skill.
-- Do not route through local API scripts or ask for manual API credentials for this skill.
-- If the runtime does not expose a usable built-in image tool, stop and tell the user that image generation is unavailable in the current session instead of falling back to a local CLI.
+Use the bundled CLI as the default and canonical path for this skill library.
 
-Built-in save-path policy:
-- In built-in tool mode, Codex saves generated images under `$CODEX_HOME/*` by default.
-- Do not describe or rely on OS temp as the default built-in destination.
-- Do not describe or rely on a destination-path argument (if any) on the built-in `image_gen` tool. If a specific location is needed, generate first and then move or copy the selected output from `$CODEX_HOME/generated_images/...`.
-- Save-path precedence in built-in mode:
-  1. If the user names a destination, move or copy the selected output there.
-  2. If the image is meant for the current project, move or copy the final selected image into the workspace before finishing.
-  3. If the image is only for preview or brainstorming, render it inline; the underlying file can remain at the default `$CODEX_HOME/*` path.
-- Never leave a project-referenced asset only at the default `$CODEX_HOME/*` path.
-- Do not overwrite an existing asset unless the user explicitly asked for replacement; otherwise create a sibling versioned filename such as `hero-v2.png` or `item-icon-edited.png`.
+- Endpoint: `http://127.0.0.1:8318/v1/responses`
+- Tool payload: `tools: [{"type": "image_generation"}]`
+- Default model: `gpt-5.4`
+- Override endpoint with `VIBEPROXY_RESPONSES_URL`
+- Optional bearer auth can be supplied with `VIBEPROXY_BEARER_TOKEN` or `VIBEPROXY_API_KEY`
 
-Shared prompt guidance lives in `references/prompting.md` and `references/sample-prompts.md`.
+Use the direct Responses path as the only execution path in this skill library.
+
+Reason:
+- this VibeProxy `/v1/responses` path has been locally verified to return `image_generation_call`
+- the goal here is deterministic local execution, not provider-surface guessing
+- keeping one canonical route avoids provider-surface drift
+
+## Rules
+
+- Use `scripts/image_gen.py` by default for all normal image generation and editing requests.
+- Do not ask for OpenAI API credentials; this path does not use them.
+- Do not create one-off image generation runners when the bundled CLI already fits.
+- Keep the existing command surface: `generate`, `edit`, `generate-batch`.
+- `edit` supports local images through `input_image` on the Responses API path.
+- `--mask` is currently unsupported on this direct path; do not imply otherwise.
+- For project-bound assets, save into the workspace rather than leaving finals in temp locations.
+- Do not overwrite an existing asset unless the user explicitly asked for replacement.
+
+Shared prompt guidance lives in:
+
+- `references/prompting.md`
+- `references/sample-prompts.md`
+
+CLI/runtime details live in:
+
+- `references/cli.md`
+- `references/image-api.md`
+- `references/codex-network.md`
+- `scripts/image_gen.py`
 
 ## When to use
-- Generate a new image (concept art, product shot, cover, website hero)
-- Generate a new image using one or more reference images for style, composition, or mood
-- Edit an existing image (inpainting, lighting or weather transformations, background replacement, object removal, compositing, transparent background)
-- Produce many assets or variants for one task
+
+- Generate a new bitmap image: hero image, product shot, mockup, concept art, comic, infographic
+- Edit an existing local bitmap image while preserving most of it
+- Produce several variants from one or many prompts
+- Use one or more images as edit/reference inputs on the direct Responses API path
 
 ## When not to use
-- Extending or matching an existing SVG/vector icon set, logo system, or illustration library inside the repo
-- Creating simple shapes, diagrams, wireframes, or icons that are better produced directly in SVG, HTML/CSS, or canvas
-- Making a small project-local asset edit when the source file already exists in an editable native format
-- Any task where the user clearly wants deterministic code-native output instead of a generated bitmap
+
+- Extending an existing SVG/icon/logo system that should stay vector-native
+- Simple shapes or diagrams that are better produced directly in SVG, HTML/CSS, or canvas
+- Small edits to a source asset that already exists in a deterministic native format
+- Any request where the user clearly wants code-native output instead of generated raster output
 
 ## Decision tree
 
 Think about two separate questions:
 
-1. **Intent:** is this a new image or an edit of an existing image?
-2. **Execution strategy:** is this one asset or many assets/variants?
+1. Is this `generate` or `edit`?
+2. Is this one asset or many?
 
 Intent:
-- If the user wants to modify an existing image while preserving parts of it, treat the request as **edit**.
-- If the user provides images only as references for style, composition, mood, or subject guidance, treat the request as **generate**.
-- If the user provides no images, treat the request as **generate**.
 
-Built-in edit semantics:
-- Built-in edit mode is for images already visible in the conversation context, such as attached images or images generated earlier in the thread.
-- If the user wants to edit a local image file with the built-in tool, first load it with built-in `view_image` tool so the image is visible in the conversation context, then proceed with the built-in edit flow.
-- Do not promise arbitrary filesystem-path editing through the built-in tool.
-- For edits, preserve invariants aggressively and save non-destructively by default.
+- If the user wants to modify an existing image while preserving most of it, use `edit`.
+- If the user provides images only as references for style, composition, or mood, still treat it as generation unless they explicitly want the existing image changed.
+- If the user provides no image, use `generate`.
 
 Execution strategy:
-- Produce many assets or variants by issuing one `image_gen` call per requested asset or variant.
 
-Assume the user wants a new image unless they clearly ask to change an existing one.
+- Use `generate` for one prompt -> one or more variants.
+- Use `generate-batch` for many prompts from JSONL.
+- Use `edit` when local image files need to be part of the request.
 
 ## Workflow
-1. Decide the intent: `generate` or `edit`.
-2. Decide whether the output is preview-only or meant to be consumed by the current project.
-3. Decide the execution strategy: single asset vs repeated built-in calls.
-5. Collect inputs up front: prompt(s), exact text (verbatim), constraints/avoid list, and any input images.
-6. For every input image, label its role explicitly:
-   - reference image
+
+1. Decide `generate`, `edit`, or `generate-batch`.
+2. Decide whether the output is preview-only or meant for the current project.
+3. Collect prompt, constraints, exact text, and any local input images up front.
+4. For each input image, label its role explicitly in the prompt:
    - edit target
-   - supporting insert/style/compositing input
-7. If the edit target is only on the local filesystem and you are staying on the built-in path, inspect it with `view_image` first so the image is available in conversation context.
-8. If the user asked for a photo, illustration, sprite, product image, banner, or other explicitly raster-style asset, use `image_gen` rather than substituting SVG/HTML/CSS placeholders. If the request is for an icon, logo, or UI graphic that should match existing repo-native SVG/vector/code assets, prefer editing those directly instead.
-9. Augment the prompt based on specificity:
-   - If the user's prompt is already specific and detailed, normalize it into a clear spec without adding creative requirements.
-   - If the user's prompt is generic, add tasteful augmentation only when it materially improves output quality.
-10. Use the built-in `image_gen` tool by default.
-11. Inspect outputs and validate: subject, style, composition, text accuracy, and invariants/avoid items.
-12. Iterate with a single targeted change, then re-check.
-13. For preview-only work, render the image inline; the underlying file may remain at the default `$CODEX_HOME/generated_images/...` path.
-14. For project-bound work, move or copy the selected artifact into the workspace and update any consuming code or references. Never leave a project-referenced asset only at the default `$CODEX_HOME/generated_images/...` path.
-15. For batches, persist only the selected finals in the workspace unless the user explicitly asked to keep discarded variants.
-16. Always report the final saved path for any workspace-bound asset, plus the final prompt and that the built-in tool path was used.
+   - style reference
+   - supporting insert/compositing input
+5. Normalize the prompt into a short structured spec when it helps.
+6. Run the bundled CLI against the VibeProxy Responses endpoint.
+7. Inspect the output for subject, text accuracy, composition, and preserved invariants.
+8. Iterate with one targeted change at a time.
+9. Persist only the selected finals into the workspace unless the user explicitly asked to keep discarded variants.
+10. Report the final saved path, final prompt, and that the request used the VibeProxy `/v1/responses` path.
 
 ## Prompt augmentation
 
-Reformat user prompts into a structured, production-oriented spec. Make the user's goal clearer and more actionable, but do not blindly add detail.
-
-Treat this as prompt-shaping guidance, not a closed schema. Use only the lines that help, and add a short extra labeled line when it materially improves clarity.
-
-### Specificity policy
-
 Use the user's prompt specificity to decide how much augmentation is appropriate:
 
-- If the prompt is already specific and detailed, preserve that specificity and only normalize/structure it.
-- If the prompt is generic, you may add tasteful augmentation when it will materially improve the result.
+- If the prompt is already specific, normalize it without inventing new creative requirements.
+- If the prompt is generic, add only the minimum structure needed to improve the output materially.
 
-Allowed augmentations:
-- composition or framing hints
-- polish level or intended-use hints
+Allowed augmentation:
+
+- composition/framing cues
+- intended-use hints
 - practical layout guidance
-- reasonable scene concreteness that supports the stated request
+- explicit invariants for edits
 
-Not allowed augmentations:
-- extra characters or objects that are not implied by the request
-- brand names, slogans, palettes, or narrative beats that are not implied
-- arbitrary side-specific placement unless the surrounding layout supports it
+Do not add:
 
-## Use-case taxonomy (exact slugs)
-
-Classify each request into one of these buckets and keep the slug consistent across prompts and references.
-
-Generate:
-- photorealistic-natural — candid/editorial lifestyle scenes with real texture and natural lighting.
-- product-mockup — product/packaging shots, catalog imagery, merch concepts.
-- ui-mockup — app/web interface mockups and wireframes; specify the desired fidelity.
-- infographic-diagram — diagrams/infographics with structured layout and text.
-- logo-brand — logo/mark exploration, vector-friendly.
-- illustration-story — comics, children’s book art, narrative scenes.
-- stylized-concept — style-driven concept art, 3D/stylized renders.
-- historical-scene — period-accurate/world-knowledge scenes.
-
-Edit:
-- text-localization — translate/replace in-image text, preserve layout.
-- identity-preserve — try-on, person-in-scene; lock face/body/pose.
-- precise-object-edit — remove/replace a specific element (including interior swaps).
-- lighting-weather — time-of-day/season/atmosphere changes only.
-- background-extraction — transparent background / clean cutout.
-- style-transfer — apply reference style while changing subject/scene.
-- compositing — multi-image insert/merge with matched lighting/perspective.
-- sketch-to-render — drawing/line art to photoreal render.
+- extra characters or objects that are not implied
+- arbitrary brand palettes or slogans
+- fake precision the user never asked for
 
 ## Shared prompt schema
-
-Use the following labeled spec as shared prompt scaffolding for both top-level modes:
 
 ```text
 Use case: <taxonomy slug>
@@ -159,57 +149,3 @@ Text (verbatim): "<exact text>"
 Constraints: <must keep/must avoid>
 Avoid: <negative constraints>
 ```
-
-Notes:
-- `Asset type` and `Input images` are prompt scaffolding, not dedicated tool arguments.
-- `Scene/backdrop` refers to the visual setting. Keep prompt scaffolding distinct from any built-in tool parameters.
-
-Augmentation rules:
-- Keep it short.
-- Add only the details needed to improve the prompt materially.
-- For edits, explicitly list invariants (`change only X; keep Y unchanged`).
-- If any critical detail is missing and blocks success, ask a question; otherwise proceed.
-
-## Examples
-
-### Generation example (hero image)
-```text
-Use case: product-mockup
-Asset type: landing page hero
-Primary request: a minimal hero image of a ceramic coffee mug
-Style/medium: clean product photography
-Composition/framing: wide composition with usable negative space for page copy if needed
-Lighting/mood: soft studio lighting
-Constraints: no logos, no text, no watermark
-```
-
-### Edit example (invariants)
-```text
-Use case: precise-object-edit
-Asset type: product photo background replacement
-Primary request: replace only the background with a warm sunset gradient
-Constraints: change only the background; keep the product and its edges unchanged; no text; no watermark
-```
-
-## Prompting best practices
-- Structure prompt as scene/backdrop -> subject -> details -> constraints.
-- Include intended use (ad, UI mock, infographic) to set the mode and polish level.
-- Use camera/composition language for photorealism.
-- Only use SVG/vector stand-ins when the user explicitly asked for vector output or a non-image placeholder.
-- Quote exact text and specify typography + placement.
-- For tricky words, spell them letter-by-letter and require verbatim rendering.
-- For multi-image inputs, reference images by index and describe how they should be used.
-- For edits, repeat invariants every iteration to reduce drift.
-- Iterate with single-change follow-ups.
-- If the prompt is generic, add only the extra detail that will materially help.
-- If the prompt is already detailed, normalize it instead of expanding it.
-
-More principles: `references/prompting.md`.
-Copy/paste specs: `references/sample-prompts.md`.
-
-## Guidance by asset type
-Asset-type templates (website assets, game assets, wireframes, logo) are consolidated in `references/sample-prompts.md`.
-
-## Reference map
-- `references/prompting.md`: prompting principles for the built-in path.
-- `references/sample-prompts.md`: copy/paste prompt recipes for the built-in path.

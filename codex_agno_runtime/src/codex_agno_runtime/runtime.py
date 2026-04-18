@@ -839,6 +839,7 @@ class CodexAgnoRuntime:
             overlay=routing_result.overlay_skill.name if routing_result.overlay_skill else None,
             artifact_paths=artifact_paths,
             verification_status="completed" if result.live_run else "dry_run",
+            session_id=result.session_id,
             supervisor_projection=self._build_supervisor_projection().model_dump(mode="json"),
             reroute_count=reroute_count,
             retry_count=retry_count,

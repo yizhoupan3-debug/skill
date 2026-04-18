@@ -9,6 +9,17 @@ routing_gate: none
 routing_priority: P1
 session_start: preferred
 short_description: Speed up LaTeX compile and preview workflows
+trigger_hints:
+  - preamble 预编译
+  - draft 加速
+  - 编译稳定性
+  - CI 缓存优化
+  - latexmk
+  - Tectonic
+  - live preview
+  - TikZ externalization
+  - \includeonly
+  - mylatexformat
 metadata:
   version: "2.0.0"
   platforms: [codex]
@@ -41,6 +52,7 @@ framework_contracts:
 risk: low
 source: local
 ---
+
 - **Dual-Dimension Audit (Pre: Tex-Structure/Logic, Post: PDF-Fidelity/Build-Speed Results)** → `$execution-audit-codex` [Overlay]
 
 # latex-compile-acceleration
