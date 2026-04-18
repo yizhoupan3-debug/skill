@@ -94,6 +94,8 @@ python3 scripts/check_skills.py --include-system --verify-codex-link
 python3 scripts/sync_skills.py --apply
 ```
 
+For local high-output verification runs, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) and prefer the equivalent `rtk ...` wrapper when compact output is sufficient.
+
 ## Quality bar
 
 A good repair should make the next similar task route correctly **without**
