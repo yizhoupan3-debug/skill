@@ -1,8 +1,11 @@
 # Codex 双入口执行清单
 
-> 这是当前四份文档的总入口。它服务于已经落地的战略前提：
-> 放弃 `aionrs` 和 `AionUI` 作为目标宿主，专注 `Codex Desktop + codexcli` 双入口；
-> `codex_dual_entry_parity_snapshot` 是主回归基线，`codex_desktop_host_adapter` 只保留为 compatibility-only mirror。
+> 这是当前双入口文档族的 compatibility-view 总入口。主线口径已经统一为
+> `thin projection + Rust contract-first migration`：
+> 放弃 `aionrs` 和 `AionUI` 作为未来主线宿主，专注 framework core 单真源 +
+> Desktop / CLI 薄投影；`codex_dual_entry_parity_snapshot` 保留为双入口兼容回归视图，
+> `upgrade_compatibility_matrix` 只保留 secondary compatibility inventory /
+> smoke 角色，`codex_desktop_host_adapter` 只保留为 compatibility-only mirror。
 
 ## 0. 最高优先级硬约束
 
@@ -70,11 +73,12 @@
 ## 4. 当前优先级最高的事项
 
 - [x] 冻结“主控不是 `codexcli`，而是 framework core”的结论
-- [ ] 清理仍滞后于现状的 checklist / outline 叙事
+- [x] 清理仍滞后于现状的 checklist / outline 叙事
 - [x] 为 `codex_desktop_host_adapter` 定义明确 alias retirement gate
-- [ ] 继续把旧的 `aionrs` / `upgrade_compatibility_matrix` 主线叙事改写为 parity-snapshot-first
-- [ ] 决定 `upgrade_compatibility_matrix` 只保留为 secondary compatibility inventory 还是继续收缩
-- [ ] 继续清理 Rust / Python / docs 中残留的 legacy 主线措辞
+- [x] 继续把旧的 `aionrs` / `upgrade_compatibility_matrix` 主线叙事改写为 parity-snapshot-first
+- [x] 决定 `upgrade_compatibility_matrix` 只保留为 secondary compatibility inventory / smoke 角色
+- [~] 继续清理 Rust / Python / docs 中残留的 legacy 主线措辞
+  文档叙事已收口；代码、tests、artifact 仍由后续 lane 继续清理
 - [ ] 启动下一轮 runtime control-plane 深化，优先做 run-manager / stream /
   persistence seams，而不是直接 runtime rewrite
 
@@ -103,8 +107,11 @@
 
 - [ ] `aionrs_companion_adapter`
 - [ ] `aionui_host_adapter`
-- [ ] 任何仍把 `upgrade_compatibility_matrix` 写成主回归基线的叙事
-- [ ] 任何继续假设 `aionrs` 是未来执行核的文档和测试
+- [~] 任何仍把 `upgrade_compatibility_matrix` 写成主回归基线的 artifact /
+  tests / legacy notes
+  文档面已改成 secondary compatibility inventory / smoke 语义
+- [~] 任何继续假设 `aionrs` 是未来执行核的 tests / legacy artifacts
+  文档面已明确降级为 legacy migration debt
 
 ## 7. 成功定义
 
