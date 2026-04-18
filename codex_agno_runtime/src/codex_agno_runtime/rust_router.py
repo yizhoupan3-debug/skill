@@ -22,7 +22,7 @@ class RustRouteAdapter:
     runtime_control_plane_authority = "rust-runtime-control-plane"
     background_control_authority = "rust-background-control"
 
-    def __init__(self, codex_home: Path, *, timeout_seconds: float = 5.0) -> None:
+    def __init__(self, codex_home: Path, *, timeout_seconds: float = 10.0) -> None:
         self.codex_home = codex_home
         self.timeout_seconds = timeout_seconds
         self.runtime_path = codex_home / "skills" / "SKILL_ROUTING_RUNTIME.json"

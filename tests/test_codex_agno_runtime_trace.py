@@ -306,6 +306,10 @@ def test_trace_recorder_writes_versioned_metadata(tmp_path: Path) -> None:
     assert data["metadata_schema_version"] == TRACE_METADATA_SCHEMA_VERSION
     assert data["trace_event_schema_version"] == TRACE_EVENT_SCHEMA_VERSION
     assert data["trace_event_sink_schema_version"] == TRACE_EVENT_SINK_SCHEMA_VERSION
+    runtime = json.loads(
+        (PROJECT_ROOT / "skills" / "SKILL_ROUTING_RUNTIME.json").read_text(encoding="utf-8")
+    )
+    assert data["routing_runtime_version"] == runtime["version"]
     assert data["reroute_count"] == 1
     assert data["retry_count"] == 1
     assert data["control_plane"]["authority"] == "rust-runtime-control-plane"
@@ -389,6 +393,10 @@ def test_trace_recorder_uses_storage_backend_for_events_metadata_and_replay(tmp_
     metadata = json.loads(backend.read_text(output))
     assert metadata["metadata_schema_version"] == TRACE_METADATA_SCHEMA_VERSION
     assert metadata["trace_event_sink_schema_version"] == TRACE_EVENT_SINK_SCHEMA_VERSION
+    runtime = json.loads(
+        (PROJECT_ROOT / "skills" / "SKILL_ROUTING_RUNTIME.json").read_text(encoding="utf-8")
+    )
+    assert metadata["routing_runtime_version"] == runtime["version"]
     assert metadata["events"][0]["schema_version"] == TRACE_EVENT_SCHEMA_VERSION
 
     replayed = RuntimeTraceRecorder(
@@ -399,6 +407,56 @@ def test_trace_recorder_uses_storage_backend_for_events_metadata_and_replay(tmp_
     assert [event.kind for event in replayed.events] == ["route.selected", "run.failed"]
     assert replayed.next_cursor is not None
     assert replayed.next_cursor.seq == 2
+
+
+def test_trace_recorder_flush_metadata_reloads_persisted_stream_after_restart(tmp_path: Path) -> None:
+    """Trace metadata should rebuild counts and events from the persisted stream."""
+
+    output = tmp_path / "TRACE_METADATA.json"
+    stream = tmp_path / "TRACE_EVENTS.jsonl"
+    recorder = RuntimeTraceRecorder(output_path=output, event_stream_path=stream)
+    recorder.record(
+        session_id="session-restart",
+        kind="route.selected",
+        stage="routing",
+        payload={"skill": "agent-memory"},
+    )
+    recorder.record(
+        session_id="session-restart",
+        kind="route.selected",
+        stage="routing",
+        payload={"skill": "execution-controller-coding"},
+    )
+    recorder.record(
+        session_id="session-restart",
+        kind="run.failed",
+        stage="execution",
+        payload={"error": "retry me"},
+    )
+
+    restarted = RuntimeTraceRecorder(output_path=output, event_stream_path=stream)
+    assert restarted.count_reroutes("session-restart") == 1
+    assert restarted.count_retries("session-restart") == 1
+
+    restarted.flush_metadata(
+        task="restart trace recovery",
+        matched_skills=["execution-controller-coding", "agent-memory"],
+        owner="agent-memory",
+        gate="subagent-delegation",
+        overlay=None,
+        artifact_paths=["TRACE_METADATA.json"],
+        verification_status="completed",
+        session_id="session-restart",
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["reroute_count"] == 1
+    assert payload["retry_count"] == 1
+    assert [event["kind"] for event in payload["events"]] == [
+        "route.selected",
+        "route.selected",
+        "run.failed",
+    ]
 
 
 def test_middleware_chain_emits_trace_events_and_skips_memory_write_on_dry_run() -> None:

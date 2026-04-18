@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from scripts.memory_support import (
     normalize_next_actions,
     normalize_supervisor_state,
     normalize_trace_skills,
+    repair_runtime_continuity_artifacts,
 )
 
 
@@ -105,6 +107,9 @@ def test_memory_and_continuity_layout_descriptors_are_explicit(tmp_path: Path) -
     assert "shared framework memory root" in memory_layout["mapping_note"]
     assert continuity["root_task_mirror"]["supervisor_state"].endswith(
         "/.supervisor_state.json"
+    )
+    assert continuity["root_task_mirror"]["session_summary"].endswith(
+        "/SESSION_SUMMARY.md"
     )
     assert continuity["bridge_mirror"]["session_summary"].endswith(
         "/artifacts/current/SESSION_SUMMARY.md"
@@ -230,6 +235,26 @@ def test_load_runtime_snapshot_prefers_task_scoped_current_root(tmp_path: Path) 
     assert snapshot.session_summary_text == "- task: task scoped\n"
 
 
+def test_load_runtime_snapshot_uses_repaired_supervisor_state_after_continuity_fix(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".supervisor_state.json").write_text(
+        (
+            '{"task_id":"demo-task-20260418220000","task_summary":"demo task",'
+            '"active_phase":"completed","verification":{"verification_status":"completed"},'
+            '"continuity":{"story_state":"completed","resume_allowed":true}}\n'
+        ),
+        encoding="utf-8",
+    )
+
+    snapshot = load_runtime_snapshot(tmp_path)
+    continuity = classify_runtime_continuity(snapshot)
+
+    assert snapshot.supervisor_state["continuity"]["resume_allowed"] is False
+    assert continuity["state"] == "completed"
+    assert continuity["inconsistency_reasons"] == []
+
+
 def test_load_runtime_snapshot_repairs_mixed_supervisor_and_mirror_truth(tmp_path: Path) -> None:
     old_task_id = "old-task-20260418210000"
     old_task_root = tmp_path / "artifacts" / "current" / old_task_id
@@ -266,3 +291,72 @@ def test_load_runtime_snapshot_repairs_mixed_supervisor_and_mirror_truth(tmp_pat
     assert (
         tmp_path / "artifacts" / "current" / "active_task.json"
     ).read_text(encoding="utf-8").find("new-task-20260418220000") != -1
+    assert "new task" in (tmp_path / "SESSION_SUMMARY.md").read_text(encoding="utf-8")
+    assert "new task" in (tmp_path / "TRACE_METADATA.json").read_text(encoding="utf-8")
+
+
+def test_repair_runtime_continuity_artifacts_uses_current_routing_runtime_version(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".supervisor_state.json").write_text(
+        (
+            '{"task_id":"route-audit-20260419","task_summary":"route audit",'
+            '"active_phase":"completed","verification":{"verification_status":"completed"},'
+            '"continuity":{"story_state":"completed","resume_allowed":false},'
+            '"controller":{"primary_owner":"skill-developer-codex","gate":"subagent-delegation"}}\n'
+        ),
+        encoding="utf-8",
+    )
+
+    repair_runtime_continuity_artifacts(tmp_path)
+
+    payload = json.loads((tmp_path / "TRACE_METADATA.json").read_text(encoding="utf-8"))
+    runtime = json.loads(
+        (PROJECT_ROOT / "skills" / "SKILL_ROUTING_RUNTIME.json").read_text(encoding="utf-8")
+    )
+    assert payload["routing_runtime_version"] == runtime["version"]
+
+
+def test_repair_runtime_continuity_artifacts_backfills_missing_scoped_json_from_supervisor(
+    tmp_path: Path,
+) -> None:
+    task_id = "memory-repair-20260419"
+    task_root = tmp_path / "artifacts" / "current" / task_id
+    task_root.mkdir(parents=True, exist_ok=True)
+    (task_root / "SESSION_SUMMARY.md").write_text(
+        (
+            "# SESSION_SUMMARY\n\n"
+            "- task: memory repair\n"
+            "- phase: implementation\n"
+            "- status: in_progress\n\n"
+            "## Summary\n"
+            "Keep the existing summary while missing JSON artifacts are repaired.\n"
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / ".supervisor_state.json").write_text(
+        (
+            '{"task_id":"memory-repair-20260419","task_summary":"memory repair",'
+            '"active_phase":"implementation","verification":{"verification_status":"in_progress"},'
+            '"continuity":{"story_state":"active","resume_allowed":true},'
+            '"next_actions":["restore next actions","restore trace"],'
+            '"controller":{"primary_owner":"agent-memory","gate":"subagent-delegation"}}\n'
+        ),
+        encoding="utf-8",
+    )
+
+    repair_runtime_continuity_artifacts(tmp_path)
+
+    task_next_actions = json.loads((task_root / "NEXT_ACTIONS.json").read_text(encoding="utf-8"))
+    task_trace = json.loads((task_root / "TRACE_METADATA.json").read_text(encoding="utf-8"))
+    root_next_actions = json.loads((tmp_path / "NEXT_ACTIONS.json").read_text(encoding="utf-8"))
+    mirror_trace = json.loads(
+        (tmp_path / "artifacts" / "current" / "TRACE_METADATA.json").read_text(encoding="utf-8")
+    )
+
+    assert task_next_actions["next_actions"] == ["restore next actions", "restore trace"]
+    assert root_next_actions == task_next_actions
+    assert task_trace["matched_skills"] == ["subagent-delegation", "agent-memory"]
+    assert task_trace["decision"]["owner"] == "agent-memory"
+    assert mirror_trace["matched_skills"] == ["subagent-delegation", "agent-memory"]
+    assert "existing summary" in (tmp_path / "SESSION_SUMMARY.md").read_text(encoding="utf-8").lower()

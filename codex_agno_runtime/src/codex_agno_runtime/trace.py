@@ -47,12 +47,26 @@ _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR = {
     "exporter_authority": "rust-runtime-control-plane",
 }
 _DEFAULT_TRACE_SCOPE_FIELDS = ("session_id", "job_id")
+_DEFAULT_ROUTING_RUNTIME_PATH = Path(__file__).resolve().parents[3] / "skills" / "SKILL_ROUTING_RUNTIME.json"
 
 
 def _now_iso() -> str:
     """Return a canonical UTC timestamp."""
 
     return datetime.now(UTC).isoformat()
+
+
+def _load_routing_runtime_version(runtime_path: Path = _DEFAULT_ROUTING_RUNTIME_PATH) -> int:
+    """Load the current routing runtime version for emitted trace metadata."""
+
+    if not runtime_path.is_file():
+        return 1
+    try:
+        payload = json.loads(runtime_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return 1
+    value = payload.get("version")
+    return value if isinstance(value, int) else 1
 
 
 def _coerce_scope_fields(value: Any, *, default: tuple[str, ...]) -> list[str]:
@@ -1196,18 +1210,43 @@ class RuntimeTraceRecorder:
             latest_cursor=latest_cursor,
         )
 
-    def count_reroutes(self, session_id: str) -> int:
-        """Return reroute count for a session based on route selection events."""
+    @staticmethod
+    def _count_reroutes_in(events: list[TraceEvent]) -> int:
+        """Return reroute count for one scoped event list."""
 
-        route_select_count = sum(
-            1 for event in self._events if event.session_id == session_id and event.kind == "route.selected"
-        )
+        route_select_count = sum(1 for event in events if event.kind == "route.selected")
         return max(0, route_select_count - 1)
 
-    def count_retries(self, session_id: str) -> int:
+    @staticmethod
+    def _count_retries_in(events: list[TraceEvent]) -> int:
+        """Return retry count for one scoped event list."""
+
+        return sum(1 for event in events if event.kind == "run.failed")
+
+    def _scoped_stream_events(
+        self,
+        *,
+        session_id: str | None = None,
+        job_id: str | None = None,
+    ) -> list[TraceEvent]:
+        """Return persisted stream events narrowed to the requested scope."""
+
+        events = self._load_stream_events()
+        if session_id is None and job_id is None:
+            return events
+        return self._filter_events(events, session_id=session_id, job_id=job_id)
+
+    def count_reroutes(self, session_id: str, job_id: str | None = None) -> int:
+        """Return reroute count for a session based on route selection events."""
+
+        events = self._scoped_stream_events(session_id=session_id, job_id=job_id)
+        return self._count_reroutes_in(events)
+
+    def count_retries(self, session_id: str, job_id: str | None = None) -> int:
         """Return retry count for a session based on prior run failures."""
 
-        return sum(1 for event in self._events if event.session_id == session_id and event.kind == "run.failed")
+        events = self._scoped_stream_events(session_id=session_id, job_id=job_id)
+        return self._count_retries_in(events)
 
     def flush_metadata(
         self,
@@ -1219,9 +1258,11 @@ class RuntimeTraceRecorder:
         overlay: str | None,
         artifact_paths: list[str],
         verification_status: str,
+        session_id: str | None = None,
+        job_id: str | None = None,
         supervisor_projection: dict[str, Any] | None = None,
-        reroute_count: int = 0,
-        retry_count: int = 0,
+        reroute_count: int | None = None,
+        retry_count: int | None = None,
     ) -> None:
         """Write a canonical trace metadata artifact when configured."""
 
@@ -1229,6 +1270,13 @@ class RuntimeTraceRecorder:
             return
 
         stream_state = self.describe_stream()
+        events = self._scoped_stream_events(session_id=session_id, job_id=job_id)
+        resolved_reroute_count = (
+            reroute_count if reroute_count is not None else self._count_reroutes_in(events)
+        )
+        resolved_retry_count = (
+            retry_count if retry_count is not None else self._count_retries_in(events)
+        )
 
         payload = {
             "version": 1,
@@ -1239,21 +1287,21 @@ class RuntimeTraceRecorder:
             "framework_version": self.framework_version,
             "trace_event_schema_version": self.event_schema_version,
             "trace_event_sink_schema_version": self.event_sink.schema_version if self.event_sink is not None else None,
-            "routing_runtime_version": 1,
+            "routing_runtime_version": _load_routing_runtime_version(),
             "matched_skills": matched_skills,
             "decision": {
                 "owner": owner,
                 "gate": gate,
                 "overlay": overlay,
             },
-            "reroute_count": reroute_count,
-            "retry_count": retry_count,
+            "reroute_count": resolved_reroute_count,
+            "retry_count": resolved_retry_count,
             "artifact_paths": artifact_paths,
             "verification_status": verification_status,
             "supervisor_projection": supervisor_projection,
             "control_plane": self._control_plane.model_dump(mode="json"),
             "stream": stream_state,
-            "events": [event.model_dump() for event in self._events],
+            "events": [event.model_dump() for event in events],
         }
         serialized = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
         if self.storage_backend is None:

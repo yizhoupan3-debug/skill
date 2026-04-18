@@ -142,6 +142,7 @@ Recommended structure:
 - Do not over-mock behavior that should be covered by a real integration boundary.
 - Do not paper over flaky tests with blind retries or long sleeps by default.
 - Do not couple assertions tightly to internal implementation details unless that is the contract.
+- In this repository, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) for broad `pytest` / `cargo test` / similar validation runs when the output is high-volume and raw fidelity is not the immediate need.
 - If a test gap remains, say exactly what confidence is still missing.
 - **Superior Quality Audit**: For high-fidelity testing frameworks, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
 

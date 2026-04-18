@@ -136,7 +136,8 @@ Recommended structure:
 ## Hard constraints
 
 - Do not suggest broad destructive commands without a scoped preview path.
-- When generating commands that produce large output (e.g., `git status`, `cargo test`, `npm test`), PREFER injecting the `rtk` (Rust Token Killer) prefix (e.g., `rtk git status`) to compress tokens, unless raw output is explicitly requested.
+- In this repository, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) for repo-local RTK usage rules.
+- When generating commands that produce large output (e.g., `git status`, `cargo test`, `npm test`), PREFER the `rtk` form when `RTK.md` says compression is appropriate, unless raw output is explicitly requested.
 - Do not leave paths unquoted when spaces or special characters are plausible.
 - Do not assume GNU-specific flags on macOS without saying so.
 - Prefer explicit file selection over recursive wildcard commands when the blast radius matters.

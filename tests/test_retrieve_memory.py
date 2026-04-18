@@ -113,7 +113,7 @@ def test_render_context_active_mode_includes_matching_current_task_when_fresh(tm
     assert any(item["path"] == "runtime/current_task.md" for item in result["items"])
 
 
-def test_render_context_active_mode_blocks_stale_memory_state(tmp_path: Path) -> None:
+def test_render_context_active_mode_refreshes_stale_memory_state(tmp_path: Path) -> None:
     _seed_runtime(tmp_path)
     _seed_stable_memory(tmp_path)
     _write_json(
@@ -133,8 +133,10 @@ def test_render_context_active_mode_blocks_stale_memory_state(tmp_path: Path) ->
         mode="active",
     )
 
-    assert result["active_task_included"] is False
-    assert result["freshness"]["state"] == "stale"
+    assert result["active_task_included"] is True
+    assert result["freshness"]["state"] == "fresh"
+    state = json.loads((tmp_path / ".codex" / "memory" / "state.json").read_text(encoding="utf-8"))
+    assert state["source_task_id"] == "active-bootstrap-repair-20260418210000"
 
 
 def test_render_context_active_mode_self_heals_missing_memory_state(tmp_path: Path) -> None:

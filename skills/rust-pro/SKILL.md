@@ -172,6 +172,7 @@ Recommended structure:
 - Do not use `unsafe` without documenting safety invariants.
 - Do not introduce nightly-only features without checking MSRV.
 - Do not ignore clippy warnings without `#[allow()]` with justification.
+- In this repository, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) for noisy `cargo check`, `cargo clippy`, and `cargo test` runs when compact output is enough.
 - Prefer `&str` over `String` in function parameters when ownership isn't needed.
 - **Superior Quality Audit**: For production Rust binaries, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
 - Do not clone to satisfy the borrow checker without exploring alternatives first.

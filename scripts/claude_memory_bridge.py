@@ -216,6 +216,10 @@ def build_claude_memory_projection(
     memory_layout = describe_project_local_memory_layout(repo_root)
     artifact_paths = [
         f"root task mirror: `{continuity['root_task_mirror']['supervisor_state']}`",
+        "`SESSION_SUMMARY.md`",
+        "`NEXT_ACTIONS.json`",
+        "`EVIDENCE_INDEX.json`",
+        "`TRACE_METADATA.json`",
         f"active task pointer: `{continuity['task_scoped_current']['active_task_pointer']}`",
         "current session mirror: `artifacts/current/SESSION_SUMMARY.md`",
         "`artifacts/current/SESSION_SUMMARY.md`",

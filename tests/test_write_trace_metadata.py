@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.write_trace_metadata import write_trace_metadata
+from scripts.write_trace_metadata import load_routing_runtime_version, write_trace_metadata
 
 
 def test_write_trace_metadata_emits_required_fields(tmp_path: Path) -> None:
@@ -90,5 +90,4 @@ def test_write_trace_metadata_loads_runtime_version_when_omitted(tmp_path: Path)
     )
 
     payload = json.loads(output.read_text(encoding="utf-8"))
-    assert isinstance(payload["routing_runtime_version"], int)
-    assert payload["routing_runtime_version"] >= 1
+    assert payload["routing_runtime_version"] == load_routing_runtime_version()

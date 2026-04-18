@@ -190,6 +190,7 @@ Recommended structure:
 - Do not suppress type errors with `# type: ignore` without a justifying comment.
 - If async is introduced, make the async/sync boundary explicit and intentional.
 - Do not use bare `except:` or `except Exception:` without re-raising or logging.
+- In this repository, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) for noisy `pytest`, lint, or tooling runs when compact output is enough.
 - Preserve public module contracts unless the user asks to break them.
 - **Superior Quality Audit**: For production-grade Python services, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
 
