@@ -2,9 +2,25 @@
 name: "openai-docs"
 description: "Use OpenAI docs MCP tools for current OpenAI API, model, Apps SDK, Codex, and documentation questions."
 routing_layer: L1
-routing_owner: owner
-routing_gate: none
-session_start: n/a
+routing_owner: gate
+routing_gate: source
+routing_priority: P1
+session_start: required
+trigger_hints:
+  - OpenAI API
+  - 官方文档
+  - Responses API
+  - Apps SDK
+  - Codex docs
+allowed_tools:
+  - browser
+approval_required_tools:
+  - web search fallback
+filesystem_scope:
+  - repo
+network_access: conditional
+artifact_outputs:
+  - EVIDENCE_INDEX.json
 source: system
 ---
 
@@ -12,6 +28,8 @@ source: system
 # OpenAI Docs
 
 Provide authoritative, current guidance from OpenAI developer docs using the developers.openai.com MCP server. Always prioritize the developer docs MCP tools over web.run for OpenAI-related questions. This skill may also load targeted files from `references/` for model-selection and GPT-5.4-specific requests, but current OpenAI docs remain authoritative. Only if the MCP server is installed and returns no meaningful results should you fall back to web search.
+
+At 每轮对话开始 / first-turn / conversation start, use this source gate whenever the task depends on current OpenAI product or API documentation.
 
 ## Quick start
 

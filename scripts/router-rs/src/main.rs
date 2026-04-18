@@ -43,6 +43,26 @@ const OVERLAY_ONLY_SKILLS: [&str; 4] = [
     "iterative-optimizer",
 ];
 
+fn overlay_explicit_hints(slug: &str) -> &'static [&'static str] {
+    match slug {
+        "anti-laziness" => &["anti-laziness", "防偷懒", "别糊弄", "别装死", "严格落实", "不许偷工减料"],
+        "code-review" => &["code-review", "code review", "pr review", "代码审查", "review"],
+        "coding-standards" => &["coding-standards", "编码规范", "代码风格", "持续改进", "standardize"],
+        "error-handling-patterns" => &["error-handling-patterns", "错误处理", "error propagation", "retry", "circuit breaker"],
+        "execution-audit-codex" => &["execution-audit-codex", "强制验收", "零容忍审计", "sign-off", "高质量闭环"],
+        "frontend-code-quality" => &["frontend-code-quality", "前端代码质量", "early return", "roro", "frontend quality"],
+        "humanizer" => &["humanizer", "humanize", "自然化", "降 ai 味", "去 ai 感", "像人写的"],
+        "i18n-l10n" => &["i18n", "l10n", "国际化", "多语言", "localization", "internationalization", "locale", "rtl"],
+        "iterative-optimizer" => &["iterative-optimizer", "多轮优化", "自迭代", "优化x轮", "review→fix→verify"],
+        "security-audit" => &["security-audit", "安全审计", "security review", "ssrf", "csrf", "鉴权"],
+        "skill-routing-repair-codex" => &["skill-routing-repair-codex", "路由修复", "触发修复", "以后别再选错", "顺手修一下 skill"],
+        "tdd-workflow" => &["tdd-workflow", "tdd", "red-green-refactor", "先写测试", "测试驱动"],
+        "vercel-react-best-practices" => &["vercel-react-best-practices", "react 最佳实践", "next.js 最佳实践", "hydration", "server component"],
+        "writing-skills" => &["writing-skills", "skill 文档统一", "批量改 skill", "template unification", "standardize skill docs"],
+        _ => &[],
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "router-rs")]
 #[command(about = "Fast Rust routing core for skill lookup")]
@@ -2196,6 +2216,33 @@ fn score_route_candidate(
         score += 2.0;
     }
 
+    if record.slug == "visual-review" && score > 0.0 {
+        let visual_evidence_markers = [
+            "看图",
+            "截图",
+            "渲染",
+            "render",
+            "screenshot",
+            "ui",
+            "layout",
+            "chart",
+            "视觉",
+        ];
+        if !visual_evidence_markers
+            .iter()
+            .any(|marker| query_text.contains(marker))
+        {
+            return RouteCandidate {
+                record: record.clone(),
+                score: 0.0,
+                reasons: vec![
+                    "Suppressed: visual-review requires visible evidence, not a generic review token."
+                        .to_string(),
+                ],
+            };
+        }
+    }
+
     if OVERLAY_ONLY_SKILLS.iter().any(|slug| slug == &record.slug) && score > 0.0 {
         score *= 0.15;
         reasons.push(format!(
@@ -2332,10 +2379,10 @@ fn pick_overlay(
             continue;
         }
         let explicit_name_match = query_text.contains(&record.slug_lower);
-        let explicit_trigger_match = record
-            .trigger_hints
+        let explicit_trigger_match = overlay_explicit_hints(&record.slug)
             .iter()
-            .any(|phrase| phrase.chars().count() > 3 && query_text.contains(phrase.as_str()));
+            .map(|phrase| normalize_text(phrase))
+            .any(|phrase| !phrase.is_empty() && query_text.contains(&phrase));
         if explicit_name_match || explicit_trigger_match {
             return Some(record.slug.clone());
         }

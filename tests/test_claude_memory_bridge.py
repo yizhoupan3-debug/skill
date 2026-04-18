@@ -11,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.claude_memory_bridge import run_bridge, sync_claude_memory_projection
+from scripts.session_lifecycle_hook import run_lifecycle_hook
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -167,6 +168,18 @@ def test_run_bridge_projection_only_commands_refresh_without_consolidation(tmp_p
         assert "consolidation" not in result
         assert (case_root / ".codex" / "memory" / "CLAUDE_MEMORY.md").is_file()
         assert not (case_root / ".codex" / "memory" / "MEMORY_AUTO.md").exists()
+
+
+def test_session_lifecycle_hook_supports_end_session_compatibility_alias(tmp_path: Path) -> None:
+    _seed_runtime_artifacts(tmp_path, mode="completed")
+    _seed_shared_memory(tmp_path)
+
+    result = run_lifecycle_hook("end-session", tmp_path)
+
+    assert result["wrapper_command"] == "end-session"
+    assert result["canonical_command"] == "session-end"
+    assert (tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md").is_file()
+    assert (tmp_path / ".codex" / "memory" / "state.json").is_file()
 
 
 def test_sync_claude_memory_projection_marks_completed_tasks_as_recent_completed(tmp_path: Path) -> None:

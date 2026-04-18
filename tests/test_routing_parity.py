@@ -34,6 +34,8 @@ REAL_TASK_REPLAY_QUERIES = [
     "帮我写一个 Rust CLI 工具",
     "把这份 runtime checklist 落成代码，并保留 Python host 接口",
     "review checklist 看这轮是否结束",
+    "这个 skill 框架 owner gate overlay 边界重叠了，顺手把路由策略修一下并减少 token 消耗。",
+    "帮我看 OpenAI Responses API 最新官方文档并说明怎么用。",
 ]
 
 
@@ -111,6 +113,46 @@ def test_real_task_replay_queries_match_shadow_diff_fields(query: str) -> None:
     assert rust_decision["layer"] == python_decision["layer"]
     assert rust_decision["route_snapshot"]["score_bucket"] == python_decision["route_snapshot"]["score_bucket"]
     assert rust_decision["route_snapshot"]["reasons_class"] == python_decision["route_snapshot"]["reasons_class"]
+
+
+@pytest.mark.parametrize(
+    ("query", "selected_skill", "overlay_skill"),
+    [
+        (
+            "深度review现在的路由系统和 skill 边界。",
+            "skill-developer-codex",
+            "code-review",
+        ),
+        (
+            "帮我看 OpenAI Responses API 最新官方文档并说明怎么用。",
+            "openai-docs",
+            "anti-laziness",
+        ),
+    ],
+)
+def test_live_route_expectations_hold_for_framework_and_openai_queries(
+    query: str,
+    selected_skill: str,
+    overlay_skill: str | None,
+) -> None:
+    """Framework-review and OpenAI-doc queries should keep stable live routing."""
+
+    python_decision = route_decision_json(
+        query,
+        session_id="live-expectation-session",
+        allow_overlay=True,
+        first_turn=True,
+    )
+    rust_decision = run_rust_route_json(
+        query,
+        session_id="live-expectation-session",
+        allow_overlay=True,
+        first_turn=True,
+    )
+
+    assert rust_decision == python_decision
+    assert rust_decision["selected_skill"] == selected_skill
+    assert rust_decision["overlay_skill"] == overlay_skill
 
 
 @pytest.mark.parametrize(

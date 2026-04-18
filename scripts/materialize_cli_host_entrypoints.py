@@ -269,8 +269,10 @@ Validation commands:
   Expected: audit-only stderr guidance about regenerating generated Claude host files; exit 0.
 - `printf '{"hook_event_name":"StopFailure","failure_type":"server_error"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/stop_failure.sh`
   Expected: host-private failure classification hint on stderr; exit 0.
-- `python3 scripts/claude_memory_bridge.py session-start --repo-root "$PWD" --json`
+- `python3 scripts/session_lifecycle_hook.py session-start --repo-root "$PWD" --json`
   Expected: JSON result with `canonical_command`, `contract`, and `projection`.
+- `python3 scripts/session_lifecycle_hook.py end-session --repo-root "$PWD" --json`
+  Expected: compatibility alias for `session-end`; same consolidation and projection contract.
 
 Shared routing policy still comes from `../../AGENT.md`.
 """
@@ -280,7 +282,7 @@ set -eu
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 
-python3 "$PROJECT_DIR/scripts/claude_memory_bridge.py" session-start \
+python3 "$PROJECT_DIR/scripts/session_lifecycle_hook.py" session-start \
   --repo-root "$PROJECT_DIR" >/dev/null
 """
 
@@ -289,7 +291,7 @@ set -eu
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 
-python3 "$PROJECT_DIR/scripts/claude_memory_bridge.py" session-stop \
+python3 "$PROJECT_DIR/scripts/session_lifecycle_hook.py" session-stop \
   --repo-root "$PROJECT_DIR" >/dev/null
 """
 
@@ -298,7 +300,7 @@ set -eu
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 
-python3 "$PROJECT_DIR/scripts/claude_memory_bridge.py" pre-compact \
+python3 "$PROJECT_DIR/scripts/session_lifecycle_hook.py" pre-compact \
   --repo-root "$PROJECT_DIR" >/dev/null
 """
 
@@ -307,7 +309,7 @@ set -eu
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 
-python3 "$PROJECT_DIR/scripts/claude_memory_bridge.py" subagent-stop \
+python3 "$PROJECT_DIR/scripts/session_lifecycle_hook.py" subagent-stop \
   --repo-root "$PROJECT_DIR" >/dev/null
 """
 
@@ -316,7 +318,7 @@ set -eu
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 
-python3 "$PROJECT_DIR/scripts/claude_memory_bridge.py" session-end \
+python3 "$PROJECT_DIR/scripts/session_lifecycle_hook.py" session-end \
   --repo-root "$PROJECT_DIR" >/dev/null
 """
 
@@ -347,6 +349,7 @@ CLAUDE_PROJECT_SETTINGS = {
             "Bash(git status)",
             "Bash(git diff)",
             "Bash(python3 scripts/check_skills.py --verify-sync)",
+            "Bash(python3 scripts/session_lifecycle_hook.py *)",
             "Bash(python3 scripts/claude_memory_bridge.py *)",
             "Bash(python3 scripts/claude_statusline.py --repo-root *)",
             "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",

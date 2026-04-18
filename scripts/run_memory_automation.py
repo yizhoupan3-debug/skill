@@ -51,6 +51,9 @@ def _summary_lines(
     sqlite_result: dict[str, Any],
     changed_files: list[str],
     archive_result: dict[str, Any],
+    planned_current_artifact_migrations: list[dict[str, str]],
+    planned_legacy_root_migrations: list[dict[str, str]],
+    apply_artifact_migrations: bool,
 ) -> list[str]:
     return [
         f"- workspace: {workspace}",
@@ -62,6 +65,10 @@ def _summary_lines(
         f"- sqlite_path: {sqlite_result.get('db_path', '')}",
         f"- sqlite_memory_items: {sqlite_result.get('memory_items', 0)}",
         f"- legacy_rows_archived: {archive_result.get('legacy_row_count', 0)}",
+        f"- legacy_memory_items_archived: {archive_result.get('legacy_memory_item_count', 0)}",
+        f"- apply_artifact_migrations: {apply_artifact_migrations}",
+        f"- planned_current_artifact_migrations: {len(planned_current_artifact_migrations)}",
+        f"- planned_legacy_root_migrations: {len(planned_legacy_root_migrations)}",
         "- changed_files:" if changed_files else "- changed_files: none",
         *([f"  - {path}" for path in changed_files] if changed_files else []),
     ]
@@ -73,6 +80,12 @@ def _top_recommendations(report: dict[str, Any]) -> list[str]:
         path = str(entry.get("path", ""))
         if "__pycache__" in path:
             rec.append(f"consider pruning cache: {path}")
+        elif path.endswith(("logs_1.sqlite", "logs_2.sqlite")):
+            rec.append(f"rotate or compact trace database: {path}")
+        elif "/sessions/" in path and path.endswith(".jsonl"):
+            rec.append(f"archive or compress old session trace: {path}")
+        elif "/tmp/arg0/" in path:
+            rec.append(f"clean stale tmp runtime wrappers: {path}")
         elif path.endswith(".sqlite3"):
             rec.append(f"monitor sqlite growth: {path}")
     return rec
@@ -87,56 +100,88 @@ def _move_path(source: Path, destination: Path) -> str:
     return str(destination)
 
 
-def migrate_current_artifact_clutter(repo_root: Path, active_task_id: str) -> list[str]:
-    """Move old non-continuity files out of artifacts/current/."""
+def _destination_for_current_artifact(repo_root: Path, path: Path, active_task_id: str) -> Path | None:
+    current_root = repo_root / "artifacts" / "current"
+    if not path.exists() or path.parent not in {current_root, current_root / active_task_id}:
+        return None
+    if path.name in CURRENT_ALLOWED_ARTIFACT_NAMES or path.name == active_task_id:
+        return None
+    if path.parent == current_root / active_task_id and path.name in TASK_ALLOWED_ARTIFACT_NAMES:
+        return None
+    if path.name in {"framework_default_bootstrap.json", "hermes_default_bootstrap.json"}:
+        suffix = [path.name] if path.parent == current_root else [active_task_id, path.name]
+        return repo_root / "artifacts" / "bootstrap" / "legacy-current" / Path(*suffix)
+    if path.name in {"run_summary.json", "storage_audit.json", "snapshot.json", "snapshot.md"}:
+        suffix = [path.name] if path.parent == current_root else [active_task_id, path.name]
+        return ops_memory_automation_root(repo_root) / "legacy-current" / Path(*suffix)
+    if path.name.startswith("tmp-"):
+        if path.parent == current_root:
+            return scratch_artifact_root(repo_root) / path.name
+        return scratch_artifact_root(repo_root, "legacy-current") / active_task_id / path.name
+    suffix = [path.name] if path.parent == current_root else [active_task_id, path.name]
+    return evidence_artifact_root(repo_root, "legacy-current") / Path(*suffix)
+
+
+def plan_current_artifact_clutter_migrations(repo_root: Path, active_task_id: str) -> list[dict[str, str]]:
+    """Describe which current-artifact paths would be migrated without mutating them."""
 
     current_root = repo_root / "artifacts" / "current"
     if not current_root.exists():
         return []
-    moved: list[str] = []
+    plans: list[dict[str, str]] = []
     for path in sorted(current_root.iterdir()):
-        if path.name in CURRENT_ALLOWED_ARTIFACT_NAMES or path.name == active_task_id:
-            continue
-        if path.name in {"framework_default_bootstrap.json", "hermes_default_bootstrap.json"}:
-            destination = repo_root / "artifacts" / "bootstrap" / "legacy-current" / path.name
-        elif path.name in {"run_summary.json", "storage_audit.json", "snapshot.json", "snapshot.md"}:
-            destination = ops_memory_automation_root(repo_root) / "legacy-current" / path.name
-        elif path.name.startswith("tmp-"):
-            destination = repo_root / "artifacts" / "scratch" / path.name
-        else:
-            destination = evidence_artifact_root(repo_root, "legacy-current") / path.name
-        moved.append(_move_path(path, destination))
+        destination = _destination_for_current_artifact(repo_root, path, active_task_id)
+        if destination is not None:
+            plans.append({"source": str(path), "destination": str(destination)})
     if active_task_id:
         task_root = current_root / active_task_id
         if task_root.is_dir():
             for path in sorted(task_root.iterdir()):
-                if path.name in TASK_ALLOWED_ARTIFACT_NAMES:
-                    continue
-                if path.name in {"framework_default_bootstrap.json", "hermes_default_bootstrap.json"}:
-                    destination = repo_root / "artifacts" / "bootstrap" / "legacy-current" / active_task_id / path.name
-                elif path.name in {"run_summary.json", "storage_audit.json", "snapshot.json", "snapshot.md"}:
-                    destination = ops_memory_automation_root(repo_root) / "legacy-current" / active_task_id / path.name
-                elif path.name.startswith("tmp-"):
-                    destination = scratch_artifact_root(repo_root, "legacy-current") / active_task_id / path.name
-                else:
-                    destination = evidence_artifact_root(repo_root, "legacy-current") / active_task_id / path.name
-                moved.append(_move_path(path, destination))
+                destination = _destination_for_current_artifact(repo_root, path, active_task_id)
+                if destination is not None:
+                    plans.append({"source": str(path), "destination": str(destination)})
+    return plans
+
+
+def plan_legacy_artifact_root_migrations(repo_root: Path) -> list[dict[str, str]]:
+    """Describe which legacy artifact roots would be relocated without mutating them."""
+
+    artifacts_root = repo_root / "artifacts"
+    plans: list[dict[str, str]] = []
+    legacy_memory_root = artifacts_root / "memory_automation"
+    if legacy_memory_root.exists():
+        plans.append(
+            {
+                "source": str(legacy_memory_root),
+                "destination": str(ops_memory_automation_root(repo_root) / "legacy-root"),
+            }
+        )
+    for path in sorted(artifacts_root.iterdir()):
+        if path.name.startswith("tmp-"):
+            plans.append(
+                {
+                    "source": str(path),
+                    "destination": str(scratch_artifact_root(repo_root) / path.name),
+                }
+            )
+    return plans
+
+
+def migrate_current_artifact_clutter(repo_root: Path, active_task_id: str) -> list[str]:
+    """Move old non-continuity files out of artifacts/current/."""
+
+    moved: list[str] = []
+    for plan in plan_current_artifact_clutter_migrations(repo_root, active_task_id):
+        moved.append(_move_path(Path(plan["source"]), Path(plan["destination"])))
     return moved
 
 
 def migrate_legacy_artifact_roots(repo_root: Path) -> list[str]:
     """Move legacy artifact roots into the new partitioned layout."""
 
-    artifacts_root = repo_root / "artifacts"
     moved: list[str] = []
-    legacy_memory_root = artifacts_root / "memory_automation"
-    if legacy_memory_root.exists():
-        destination = ops_memory_automation_root(repo_root) / "legacy-root"
-        moved.append(_move_path(legacy_memory_root, destination))
-    for path in sorted(artifacts_root.iterdir()):
-        if not path.name.startswith("tmp-"):
-            continue
-        moved.append(_move_path(path, scratch_artifact_root(repo_root) / path.name))
+    for plan in plan_legacy_artifact_root_migrations(repo_root):
+        moved.append(_move_path(Path(plan["source"]), Path(plan["destination"])))
     return moved
 
 
@@ -149,18 +194,33 @@ def run_pipeline(
     artifact_source_dir: Path | None = None,
     topic: str = "",
     top: int = 8,
+    apply_artifact_migrations: bool = False,
 ) -> dict[str, Any]:
     """Run the shared CLI memory maintenance pipeline."""
 
     repo_root = source_root.resolve()
     resolved_dir = resolve_effective_memory_dir(workspace=workspace, memory_root=memory_root, repo_root=repo_root)
     snapshot = load_runtime_snapshot(repo_root, artifact_root=artifact_source_dir)
-    moved_current_artifacts = (
+    planned_current_artifact_migrations = (
         []
         if artifact_source_dir is not None
-        else migrate_current_artifact_clutter(repo_root, snapshot.active_task_id)
+        else plan_current_artifact_clutter_migrations(repo_root, snapshot.active_task_id)
     )
-    moved_legacy_roots = [] if artifact_source_dir is not None else migrate_legacy_artifact_roots(repo_root)
+    planned_legacy_root_migrations = (
+        []
+        if artifact_source_dir is not None
+        else plan_legacy_artifact_root_migrations(repo_root)
+    )
+    moved_current_artifacts = (
+        migrate_current_artifact_clutter(repo_root, snapshot.active_task_id)
+        if apply_artifact_migrations and artifact_source_dir is None
+        else []
+    )
+    moved_legacy_roots = (
+        migrate_legacy_artifact_roots(repo_root)
+        if apply_artifact_migrations and artifact_source_dir is None
+        else []
+    )
     archive_result = archive_legacy_memory_bundle(workspace, resolved_dir, memory_root=memory_root)
     documents = build_memory_documents(workspace=workspace, snapshot=snapshot)
     changed_files = write_documents(documents, resolved_dir)
@@ -194,6 +254,9 @@ def run_pipeline(
                 sqlite_result=sqlite_result,
                 changed_files=changed_files,
                 archive_result=archive_result,
+                planned_current_artifact_migrations=planned_current_artifact_migrations,
+                planned_legacy_root_migrations=planned_legacy_root_migrations,
+                apply_artifact_migrations=apply_artifact_migrations,
             ),
             "",
             "## recommendations",
@@ -210,9 +273,12 @@ def run_pipeline(
             "generated_at": generated_at,
             "archive": archive_result,
             "changed_files": changed_files,
+            "planned_current_artifact_migrations": planned_current_artifact_migrations,
+            "planned_legacy_root_migrations": planned_legacy_root_migrations,
             "moved_current_artifacts": moved_current_artifacts,
             "moved_legacy_roots": moved_legacy_roots,
             "retrieval": retrieval,
+            "apply_artifact_migrations": apply_artifact_migrations,
         },
     )
     run_summary = {
@@ -225,8 +291,11 @@ def run_pipeline(
         "output_dir": str(out_dir),
         "changed_files": changed_files,
         "archive": archive_result,
+        "planned_current_artifact_migrations": planned_current_artifact_migrations,
+        "planned_legacy_root_migrations": planned_legacy_root_migrations,
         "moved_current_artifacts": moved_current_artifacts,
         "moved_legacy_roots": moved_legacy_roots,
+        "apply_artifact_migrations": apply_artifact_migrations,
         "sqlite_result": sqlite_result,
         "storage_total_mib": report.get("total_mib", 0),
         "top_storage_entries": report.get("top_entries", []),
@@ -246,8 +315,11 @@ def run_pipeline(
         "memory_root": str(resolved_dir),
         "changed_files": changed_files,
         "archive": archive_result,
+        "planned_current_artifact_migrations": planned_current_artifact_migrations,
+        "planned_legacy_root_migrations": planned_legacy_root_migrations,
         "moved_current_artifacts": moved_current_artifacts,
         "moved_legacy_roots": moved_legacy_roots,
+        "apply_artifact_migrations": apply_artifact_migrations,
         "report": report,
         "sqlite_result": sqlite_result,
         "retrieval": retrieval,
@@ -267,6 +339,11 @@ def main() -> int:
     parser.add_argument("--artifact-source-dir", type=Path, default=None, help="Optional isolated artifact directory used as the consolidation source instead of the repo root.")
     parser.add_argument("--topic", default="", help="Topic used for retrieval context filtering.")
     parser.add_argument("--top", type=int, default=8, help="Number of storage entries and retrieval snippets to keep.")
+    parser.add_argument(
+        "--apply-artifact-migrations",
+        action="store_true",
+        help="Actually migrate legacy artifact paths. Default is plan-only to avoid mutating live continuity during maintenance runs.",
+    )
     parser.add_argument("--json", action="store_true", dest="json_output", help="Output JSON summary.")
     args = parser.parse_args()
     results = run_pipeline(
@@ -277,6 +354,7 @@ def main() -> int:
         artifact_source_dir=args.artifact_source_dir,
         topic=args.topic,
         top=args.top,
+        apply_artifact_migrations=args.apply_artifact_migrations,
     )
     if args.json_output:
         print(json.dumps(results, ensure_ascii=False, indent=2))

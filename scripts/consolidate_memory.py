@@ -79,8 +79,10 @@ def _default_runbooks() -> str:
             "## 标准操作",
             "",
             "- 统一维护入口：python3 scripts/run_memory_automation.py --workspace <workspace>",
+            "- 需要迁移旧 artifact 布局时显式执行：python3 scripts/run_memory_automation.py --workspace <workspace> --apply-artifact-migrations",
             "- 合并稳定记忆：python3 scripts/consolidate_memory.py --workspace <workspace>",
             "- 召回上下文：python3 scripts/retrieve_memory.py --workspace <workspace> --mode stable|active|history|debug --topic <关键词>",
+            "- 生命周期收口：python3 scripts/session_lifecycle_hook.py session-end --repo-root <repo_root>",
             "- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。",
             "",
         ]
@@ -125,24 +127,29 @@ def archive_legacy_memory_bundle(
     if sessions_dir.exists():
         archived_paths.append(_move_to_archive(sessions_dir, archive_root / "sessions"))
     legacy_rows = store.export_legacy_rows()
+    legacy_memory_items = store.export_memory_items_excluding_sources(list(STABLE_DOCUMENTS))
     legacy_row_count = sum(len(rows) for rows in legacy_rows.values())
+    legacy_memory_item_count = len(legacy_memory_items)
     dump_path = archive_root / "sqlite_legacy_dump.json"
-    if legacy_row_count:
+    if legacy_row_count or legacy_memory_item_count:
         write_json_if_changed(
             dump_path,
             {
                 "schema_version": "memory-legacy-dump-v1",
                 "exported_at": current_local_timestamp(),
                 "workspace": workspace,
+                "memory_items": legacy_memory_items,
                 **legacy_rows,
             },
         )
         store.clear_legacy_rows()
+        store.delete_memory_items_not_in_sources(list(STABLE_DOCUMENTS))
         archived_paths.append(str(dump_path))
     return {
         "archive_root": str(archive_root),
         "archived_paths": archived_paths,
         "legacy_row_count": legacy_row_count,
+        "legacy_memory_item_count": legacy_memory_item_count,
     }
 
 
@@ -156,6 +163,7 @@ def persist_memory_bundle(
     """Persist only stable memory documents into the SQLite store."""
 
     store = open_workspace_store(workspace, memory_root=memory_root, resolved_dir=resolved_dir)
+    store.delete_memory_items_not_in_sources(list(documents))
     store.delete_memory_items_by_sources(list(documents))
     persisted_items = 0
     for file_name, text in documents.items():

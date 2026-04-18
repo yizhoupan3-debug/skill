@@ -58,6 +58,24 @@
       "first_turn": true
     },
     {
+      "id": "skill-developer-codex-generic-review-case",
+      "category": "should-trigger",
+      "task": "深度review现在的路由系统和 skill 边界。",
+      "focus_skill": "skill-developer-codex",
+      "expected_owner": "skill-developer-codex",
+      "expected_overlay": "code-review",
+      "first_turn": true
+    },
+    {
+      "id": "openai-docs-source-gate-case",
+      "category": "should-trigger",
+      "task": "帮我看 OpenAI Responses API 最新官方文档并说明怎么用。",
+      "focus_skill": "openai-docs",
+      "expected_owner": "openai-docs",
+      "expected_overlay": "anti-laziness",
+      "first_turn": true
+    },
+    {
       "id": "idea-to-plan-should-not-trigger",
       "category": "should-not-trigger",
       "task": "根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。",

@@ -2,7 +2,7 @@
 
 | Skill | Status | P | Layer | Owner | Gate | Source | Health | Description |
 |---|---|---|---|---|---|---|---|---|
-| `openai-docs` | Active | P2 | L1 | owner | none | system | ✓ 100.0 | Use OpenAI docs MCP tools for current OpenAI API, model, Apps SDK, Codex, and do |
+| `openai-docs` | Active | P1 | L1 | gate | source | system | ✓ 100.0 | Use OpenAI docs MCP tools for current OpenAI API, model, Apps SDK, Codex, and do |
 | `plugin-creator` | Active | P2 | L1 | owner | none | system | ✓ 100.0 | Create a local Codex plugin scaffold with `.codex-plugin/plugin.json` and option |
 | `skill-creator` | Active | P2 | L1 | owner | none | system | ✓ 96.4 | Create or update a Codex skill package with clear routing metadata, scope, and s |
 | `skill-installer` | Active | P2 | L1 | owner | none | system | ✓ 97.0 | Install Codex skills from curated sources or GitHub into `$CODEX_HOME/skills`. |
@@ -129,6 +129,7 @@
 | `svelte` | Active | P2 | L4 | owner | none | project | ✓ 97.7 | Deliver Svelte 5 applications using runes-based reactivity ($state, $derived, $e |
 | `systematic-debugging` | Active | P1 | L0 | gate | evidence | project | ✓ 97.0 | Investigate unknown failures before fixing |
 | `tailwind-pro` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Produce Tailwind CSS configurations with design tokens, plugin hooks, and framew |
+| `tao-ci` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Draft professor-specific summer research outreach emails from workbook data |
 | `tdd-workflow` | Active | P2 | L1 | overlay | none | project | ✓ 92.8 | Run a Test-Driven Development workflow centered on the RED-GREEN-REFACTOR loop w |
 | `test-engineering` | Active | P2 | L1 | owner | none | project | ✓ 97.3 | Choose the right test layer, write maintainable tests, and stabilize flaky behav |
 | `typescript-pro` | Active | P1 | L4 | owner | none | project | ✓ 96.3 | Deliver type-safe TypeScript 5.x+ code. Enforces strict mode, encodes domain con |

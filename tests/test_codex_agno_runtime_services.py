@@ -38,6 +38,7 @@ from codex_agno_runtime.services import (
     SandboxCapabilityViolation,
     StateService,
     TraceService,
+    _normalize_rusage_maxrss,
 )
 
 
@@ -218,6 +219,16 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     )
     assert memory_service.health()["fact_extraction_pattern_count"] > 0
     assert trace_service.health()["control_plane_contract"]["aligned"] is True
+
+
+def test_rusage_memory_normalization_matches_host_units(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ru_maxrss should be normalized to bytes before sandbox budget enforcement."""
+
+    monkeypatch.setattr("codex_agno_runtime.services.sys.platform", "darwin")
+    assert _normalize_rusage_maxrss(4096) == 4096.0
+
+    monkeypatch.setattr("codex_agno_runtime.services.sys.platform", "linux")
+    assert _normalize_rusage_maxrss(4096) == 4096.0 * 1024.0
     assert trace_service.health()["control_plane_contract"]["recorder"]["stream_scope_fields"] == [
         "session_id",
         "job_id",
