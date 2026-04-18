@@ -2,17 +2,17 @@
 
 _Generated from shared runtime artifacts and `./.codex/memory/`. Do not edit manually._
 
-- generated_at: 2026-04-19T01:08:06+08:00
+- generated_at: 2026-04-19T01:48:55+08:00
 - repo_root: `/Users/joe/Documents/skill`
 
 ## Recent Completed Task
 
-- task: Deep audit the imagegen skill, unify repo and ~/.codex/skills copies, and remove active built-in image runtime hooks.
+- task: Deep audit the current routing system and close verified drift in trace metadata versioning.
 - phase: completed
 - status: completed
-- route: execution-controller-coding / skill-maintenance-codex / imagegen
+- route: subagent-delegation / skill-developer-codex / execution-audit-codex
 - terminal_reasons: summary phase is terminal: completed / summary status is terminal: completed / supervisor phase is terminal: completed / verification status is terminal: completed / continuity story_state is terminal: completed
-- follow_up_notes: Restart Codex Desktop and Codex CLI when convenient so the removed model catalog and config hooks are guaranteed to be reloaded everywhere. / Only if requested, delete historical backup files that still preserve the older imagegen-enable experiment.
+- follow_up_notes: Watch for any other trace producers that bypass scripts/write_trace_metadata.py and require the same runtime-version contract. / If you want a broader policy cleanup pass, tighten entry docs around @RTK.md and other operator-facing references next.
 - current_execution_injection: blocked
 
 ## Stable Project Patterns
@@ -41,6 +41,10 @@ _Generated from shared runtime artifacts and `./.codex/memory/`. Do not edit man
 ## Artifact Anchors
 
 - root task mirror: `/Users/joe/Documents/skill/.supervisor_state.json`
+- `SESSION_SUMMARY.md`
+- `NEXT_ACTIONS.json`
+- `EVIDENCE_INDEX.json`
+- `TRACE_METADATA.json`
 - active task pointer: `/Users/joe/Documents/skill/artifacts/current/active_task.json`
 - current session mirror: `artifacts/current/SESSION_SUMMARY.md`
 - `artifacts/current/SESSION_SUMMARY.md`
