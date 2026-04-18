@@ -285,6 +285,16 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
         service.shutdown()
 
 
+def test_rusage_memory_normalization_matches_host_units(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ru_maxrss should be normalized to bytes before sandbox budget enforcement."""
+
+    monkeypatch.setattr("codex_agno_runtime.services.sys.platform", "darwin")
+    assert _normalize_rusage_maxrss(4096) == 4096.0
+
+    monkeypatch.setattr("codex_agno_runtime.services.sys.platform", "linux")
+    assert _normalize_rusage_maxrss(4096) == 4096.0 * 1024.0
+
+
 def test_memory_store_fact_extraction_follows_rust_first_contract_patterns(tmp_path: Path) -> None:
     """Memory extraction should use the contract-provided pattern list rather than the default heuristic set."""
 
