@@ -12,6 +12,17 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 看逻辑
+  - 修逻辑
+  - 创新性够不够
+  - 实验站不站得住
+  - claims 和 evidence 对不对齐
+  - 审稿人会怎么攻击
+  - paper
+  - logic
+  - novelty
+  - experiments
 metadata:
   version: "2.1.1"
   platforms: [codex]
@@ -29,6 +40,7 @@ framework_contracts:
 risk: medium
 source: local
 ---
+
 - **Dual-Dimension Audit (Pre: Argument-Chain/Logic, Post: Conclusion-Consistency/Data-Match Results)** → `$execution-audit-codex` [Overlay]
 
 # Paper Logic

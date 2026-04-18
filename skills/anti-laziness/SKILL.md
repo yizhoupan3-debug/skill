@@ -10,6 +10,17 @@ routing_gate: none
 routing_priority: P1
 session_start: preferred
 short_description: Fused overlay to detect/counter cognitive laziness and force empirical evidence.
+trigger_hints:
+  - anti-laziness
+  - 懒惰治理
+  - 执行力审计
+  - 质量防偷懒
+  - empirical verification
+  - pua
+  - anti laziness
+  - quality enforcement
+  - mental rigor
+  - token optimized
 allowed_tools:
   - shell
   - python

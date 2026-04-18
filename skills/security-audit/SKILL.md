@@ -7,6 +7,17 @@ routing_layer: L4
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 检查鉴权
+  - 授权漏洞
+  - 查注入风险
+  - 检查 SSRF
+  - 检查敏感信息泄露
+  - review auth implementation security
+  - audit input validation
+  - file upload security
+  - security
+  - auth
 metadata:
   version: "2.1.0"
   platforms: [codex]
@@ -31,6 +42,7 @@ framework_contracts:
 risk: medium
 source: local
 ---
+
 - **Dual-Dimension Audit (Pre: Vuln-Surface/Logic, Post: Penetration-Scan/OWASP-Compliance Results)** → `$execution-audit-codex` [Overlay]
 # security-audit
 

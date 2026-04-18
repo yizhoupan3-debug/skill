@@ -21,7 +21,19 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 写 workflow
+  - 搭 CI
+  - CD
+  - GitHub Actions
+  - 自动测试自动发布
+  - add CI
+  - set up test
+  - build
+  - release workflows
+  - ci
 ---
+
 # github-actions-authoring
 
 This skill owns GitHub Actions workflow authoring and pipeline structure: new workflows, refactors, job orchestration, caching, permissions, and release/deploy automation.

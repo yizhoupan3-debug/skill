@@ -32,7 +32,19 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 架构评审
+  - 系统设计
+  - 技术选型
+  - 服务拆分
+  - 重构方案
+  - 边界划分
+  - architecture
+  - system design
+  - clean architecture
+  - ddd
 ---
+
 # architect-review
 
 This skill owns software architecture review: evaluating system design, module boundaries, scalability, and long-term evolution.

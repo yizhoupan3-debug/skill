@@ -2,17 +2,17 @@
 
 _Generated from shared runtime artifacts and `./.codex/memory/`. Do not edit manually._
 
-- generated_at: 2026-04-18T22:10:36+08:00
+- generated_at: 2026-04-19T01:08:06+08:00
 - repo_root: `/Users/joe/Documents/skill`
 
 ## Recent Completed Task
 
-- task: checklist-series final closeout
-- phase: finalized
+- task: Deep audit the imagegen skill, unify repo and ~/.codex/skills copies, and remove active built-in image runtime hooks.
+- phase: completed
 - status: completed
-- route: execution-controller-coding / execution-audit-codex / checklist-fixer
-- terminal_reasons: summary phase is terminal: finalized / summary status is terminal: completed / supervisor phase is terminal: finalized / verification status is terminal: completed
-- follow_up_notes: No active checklist execution remains in the checklist_v1.md through checklist_v4.md chain. / If host or integration owners later provide no-probe evidence, open a new standalone removal task for rust_execute_fallback_to_python under the retained checklist_v2 policy contract. / Treat any future continuity or TRACE_METADATA divergence as a new regression rather than a continuation of the checklist_v1.md through checklist_v4.md chain.
+- route: execution-controller-coding / skill-maintenance-codex / imagegen
+- terminal_reasons: summary phase is terminal: completed / summary status is terminal: completed / supervisor phase is terminal: completed / verification status is terminal: completed / continuity story_state is terminal: completed
+- follow_up_notes: Restart Codex Desktop and Codex CLI when convenient so the removed model catalog and config hooks are guaranteed to be reloaded everywhere. / Only if requested, delete historical backup files that still preserve the older imagegen-enable experiment.
 - current_execution_injection: blocked
 
 ## Stable Project Patterns
@@ -40,12 +40,14 @@ _Generated from shared runtime artifacts and `./.codex/memory/`. Do not edit man
 
 ## Artifact Anchors
 
-- root continuity anchor: `/Users/joe/Documents/skill/.supervisor_state.json`
+- root task mirror: `/Users/joe/Documents/skill/.supervisor_state.json`
+- active task pointer: `/Users/joe/Documents/skill/artifacts/current/active_task.json`
 - current session mirror: `artifacts/current/SESSION_SUMMARY.md`
 - `artifacts/current/SESSION_SUMMARY.md`
 - `artifacts/current/NEXT_ACTIONS.json`
 - `artifacts/current/EVIDENCE_INDEX.json`
 - `artifacts/current/TRACE_METADATA.json`
+- `artifacts/current/<task_id>/`
 - `./.codex/memory/`
 - logical->physical memory mapping: `./.codex/memory/` -> `memory`
-- sync rule: Supervisor writes the root continuity artifacts and keeps artifacts/current mirrored for bridge and aggregation consumers.
+- sync rule: Supervisor writes task-scoped continuity under artifacts/current/<task_id>/ and keeps root plus artifacts/current compatibility mirrors aligned to the same task. artifacts/current/ should contain only the active-task pointer, four mirror files, and task-scoped continuity directories; bootstrap, ops, evidence, and scratch belong elsewhere.

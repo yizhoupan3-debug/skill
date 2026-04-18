@@ -23,7 +23,19 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
+trigger_hints:
+  - React 组件
+  - 状态管理
+  - 自定义 hook
+  - React 性能优化
+  - React development
+  - component design
+  - state management
+  - hook patterns
+  - react
+  - hooks
 ---
+
 # react
 
 This skill owns React-first engineering work: component design, hooks, state management, and rendering optimization.

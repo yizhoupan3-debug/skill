@@ -210,18 +210,7 @@ def extract_trigger_hints(
         list[str]: Ordered unique trigger phrases.
     """
 
-    noise = {
-        "about", "after", "before", "check", "first", "from", "have",
-        "help", "into", "make", "need", "only", "that", "them", "then",
-        "this", "use", "user", "when", "with", "work", "task", "asks",
-        "request", "using", "used", "best", "good", "real", "will",
-    }
-    samples: list[str] = [description]
     trigger_hints = check_skills.collect_trigger_hints(frontmatter)
-    samples.extend(trigger_hints)
-    samples.extend(body.splitlines()[:20])
-    source = "\n".join(samples)
-
     phrases: list[str] = []
     seen: set[str] = set()
 
@@ -238,23 +227,18 @@ def extract_trigger_hints(
     for item in trigger_hints:
         push(str(item))
 
+    # Explicit frontmatter trigger hints are canonical. Do not auto-enrich them
+    # from the skill body, or runtime artifacts will accumulate broad fragments
+    # like "write", "路由", or half-sentences that distort routing.
+    if phrases:
+        return phrases[:limit]
+
+    # For skills without explicit trigger_hints, keep fallback extraction scoped
+    # to the frontmatter description. Mining arbitrary body lines produces broad
+    # fragments like "这个" or "为什么" that destabilize routing.
+    source = description
+
     for match in re.findall(r'[\"“](.+?)[\"”]', source):
-        push(match)
-
-    for chunk in re.split(r"[\n/|,，。；;：:（）()【】\[\]·]+", source):
-        chunk = chunk.strip()
-        if not chunk:
-            continue
-        if re.search(r"[\u4e00-\u9fff]", chunk):
-            if 2 <= len(chunk) <= 24:
-                push(chunk)
-                continue
-            for match in re.findall(r"[\u4e00-\u9fff]{2,12}", chunk):
-                push(match)
-
-    for match in re.findall(r"\b[a-zA-Z][a-zA-Z0-9.+#/-]{2,}\b", source.lower()):
-        if match in noise:
-            continue
         push(match)
 
     return phrases[:limit]

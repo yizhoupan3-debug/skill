@@ -10,6 +10,12 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P2
 session_start: n/a
+trigger_hints:
+  - skill scouting
+  - external research
+  - gap analysis
+  - skill enhancement
+  - benchmarking
 metadata:
   version: "1.2.0"
   platforms: [codex, antigravity]

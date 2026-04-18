@@ -11,6 +11,17 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - Slidev
+  - Marp
+  - Markdown slides
+  - slides live preview
+  - PPT markdown
+  - 用 Markdown 做个 slides
+  - Slidev presentation
+  - Marp slides
+  - fast Markdown-authored slides with live preview
+  - export to HTML
 runtime_requirements:
   commands:
     - npm
@@ -26,6 +37,7 @@ metadata:
     - presentation
     - ppt
 ---
+
 - **Dual-Dimension Audit (Pre: Slide-Structure/Logic, Post: Layout-Fidelity/PDF-Export Results)** → `$execution-audit-codex` [Overlay]
 
 # PPT Markdown

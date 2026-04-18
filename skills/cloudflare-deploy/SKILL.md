@@ -10,6 +10,17 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - Cloudflare Workers
+  - Cloudflare Pages
+  - Wrangler
+  - bindings
+  - 边缘部署
+  - 发 Workers
+  - Pages
+  - 配绑定和环境变量
+  - 迁移到边缘运行时
+  - cloudflare
 metadata:
   version: "1.0.0"
   platforms: [codex]
@@ -17,6 +28,7 @@ metadata:
     - cloudflare
     - deploy
 ---
+
 - **Dual-Dimension Audit (Pre: Bindings/Config, Post: Live-URL/Edge-latency Results)** → `$execution-audit-codex` [Overlay]
 
 # Cloudflare Deploy

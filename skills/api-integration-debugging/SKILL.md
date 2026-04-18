@@ -23,6 +23,13 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P2
 session_start: n/a
+trigger_hints:
+  - api
+  - rest
+  - graphql
+  - websocket
+  - openapi
+  - cors
 allowed_tools:
   - shell
   - browser
@@ -31,6 +38,7 @@ allowed_tools:
 approval_required_tools:
   - gui automation
 ---
+
 # api-integration-debugging
 
 > [!NOTE]

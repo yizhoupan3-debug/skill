@@ -22,7 +22,19 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 写个 shell 脚本
+  - 一行命令处理
+  - 批量改文件
+  - 命令行自动化
+  - shell commands
+  - bash
+  - zsh scripts
+  - batch file processing
+  - CLI automation
+  - shell
 ---
+
 # shell-cli
 
 This skill owns shell-first terminal work: commands, pipelines, scripts, and CLI ergonomics that should not be forced into a Python or Git skill.

@@ -14,7 +14,7 @@ LAYER_ORDER = {"L-1": -1, "L0": 0, "L1": 1, "L2": 2, "L3": 3, "L4": 4}
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 
 ROUTING_META_HINTS = {"skill", "router", "routing", "route", "触发", "路由", "skill.md"}
-COMMON_STOP_TOKENS = {"一个", "帮我", "帮我看", "我看", "先给", "给我", "给我一", "我一个", "写一", "写一个", "看这", "这张", "然后", "输出", "问题"}
+COMMON_STOP_TOKENS = {"一个", "帮我", "帮我看", "我看", "先给", "给我", "给我一", "我一个", "写一", "写一个", "看这", "这张", "然后", "输出", "问题", "checklist", "skill", "路由"}
 # Skills that should only be used as overlays, never as the primary owner.
 # Per AGENTS.md: iterative-optimizer does not count toward the overlay quota.
 OVERLAY_ONLY_SKILLS = {"iterative-optimizer", "execution-audit-codex", "i18n-l10n", "humanizer"}
@@ -325,6 +325,16 @@ class SkillRouter:
                 score=0.0,
                 reasons=["Suppressed: task still needs strategic planning rather than execution checklist writing."],
             )
+        if (
+            skill.name == "systematic-debugging"
+            and ("skill" in normalized_task or "skill.md" in normalized_task)
+            and any(marker in normalized_task for marker in ("路由", "触发", "routing", "router", "route"))
+        ):
+            return ScoredSkill(
+                skill=skill,
+                score=0.0,
+                reasons=["Suppressed: meta-routing repair request should not be treated as a generic runtime-debugging gate."],
+            )
 
         if skill.name.startswith("skill-") and not any(hint in normalized_task for hint in ROUTING_META_HINTS):
             return ScoredSkill(skill=skill, score=0.0, reasons=[])
@@ -347,6 +357,8 @@ class SkillRouter:
         for phrase in skill.trigger_hints:
             normalized_phrase = normalize_text(phrase)
             if len(normalized_phrase) < 2:
+                continue
+            if normalized_phrase in COMMON_STOP_TOKENS:
                 continue
             if normalized_phrase and _contains_phrase(task_token_list, normalized_phrase):
                 score += 20

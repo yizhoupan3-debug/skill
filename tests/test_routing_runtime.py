@@ -16,8 +16,8 @@ from scripts.route import search_skills
 from scripts.sync_skills import extract_trigger_hints, normalize_health_manifest
 
 
-def test_extract_trigger_hints_preserves_multilingual_terms() -> None:
-    """Verify trigger extraction keeps Chinese and English routing hints.
+def test_extract_trigger_hints_respects_explicit_frontmatter_hints() -> None:
+    """Verify explicit trigger hints stay canonical and are not auto-enriched.
 
     Returns:
         None.
@@ -32,9 +32,27 @@ def test_extract_trigger_hints_preserves_multilingual_terms() -> None:
     )
 
     assert "github深度调研" in phrases
-    assert "repo对标" in phrases
     assert "issue PR 时间线" in phrases
-    assert "history" in " ".join(phrases).lower()
+    assert "repo对标" not in phrases
+    assert "history" not in " ".join(phrases).lower()
+
+
+def test_extract_trigger_hints_falls_back_to_description_examples_when_frontmatter_is_empty() -> None:
+    """Verify fallback extraction still keeps concrete description examples.
+
+    Returns:
+        None.
+    """
+
+    phrases = extract_trigger_hints(
+        {},
+        'Use for "多环境切换" and requests like “管理环境变量”.',
+        "## Trigger examples\n- \"排查 .env 问题\"\n",
+    )
+
+    assert "多环境切换" in phrases
+    assert "管理环境变量" in phrases
+    assert "排查 .env 问题" not in phrases
 
 
 def test_normalize_health_manifest_backfills_missing_skill_rows() -> None:

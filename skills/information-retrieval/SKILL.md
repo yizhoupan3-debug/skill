@@ -10,6 +10,13 @@ routing_owner: owner
 routing_gate: none
 session_start: n/a
 short_description: Run multi-round research before acting or recommending
+trigger_hints:
+  - information retrieval
+  - research
+  - deep research
+  - benchmarking
+  - option comparison
+  - investigation
 metadata:
   version: "1.3.0"
   platforms: [codex, antigravity, claude-code]

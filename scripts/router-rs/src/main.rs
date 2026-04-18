@@ -939,6 +939,36 @@ fn phrase_split_regex() -> &'static Regex {
     PHRASE_SPLIT_REGEX.get_or_init(|| Regex::new(r"[,\n/|，]+").expect("phrase split regex"))
 }
 
+fn common_route_stop_tokens() -> &'static [&'static str] {
+    &[
+        "一个",
+        "帮我",
+        "帮我看",
+        "我看",
+        "先给",
+        "给我",
+        "给我一",
+        "我一个",
+        "写一",
+        "写一个",
+        "看这",
+        "这张",
+        "然后",
+        "输出",
+        "问题",
+        "checklist",
+        "skill",
+        "路由",
+    ]
+}
+
+fn is_meta_routing_task(query_text: &str) -> bool {
+    (query_text.contains("skill") || query_text.contains("skill.md"))
+        && ["路由", "触发", "routing", "router", "route"]
+            .iter()
+            .any(|marker| query_text.contains(marker))
+}
+
 fn wordlike_token_regex() -> &'static Regex {
     static WORDLIKE_TOKEN_REGEX: OnceLock<Regex> = OnceLock::new();
     WORDLIKE_TOKEN_REGEX
@@ -1148,7 +1178,11 @@ fn route_task(
     }
     let normalized_query = normalize_text(query);
     let query_token_list = tokenize_route_text(query);
-    let query_tokens = query_token_list.iter().cloned().collect::<HashSet<String>>();
+    let query_tokens = query_token_list
+        .iter()
+        .filter(|token| !common_route_stop_tokens().contains(&token.as_str()))
+        .cloned()
+        .collect::<HashSet<String>>();
 
     let candidates = records
         .iter()
@@ -2171,6 +2205,17 @@ fn score_route_candidate(
     let mut score = 0.0f64;
     let mut reasons = Vec::new();
 
+    if record.slug == "systematic-debugging" && is_meta_routing_task(query_text) {
+        return RouteCandidate {
+            record: record.clone(),
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: meta-routing repair request should not be treated as a generic runtime-debugging gate."
+                    .to_string(),
+            ],
+        };
+    }
+
     if !record.slug_lower.is_empty() && query_text.contains(&record.slug_lower) {
         score += 100.0;
         reasons.push(format!("Exact skill name matched: {}.", record.slug));
@@ -2208,7 +2253,11 @@ fn score_route_candidate(
     let matched_trigger_hints = record
         .trigger_hints
         .iter()
-        .filter(|phrase| phrase.chars().count() >= 2 && text_matches_phrase(query_token_list, phrase))
+        .filter(|phrase| {
+            phrase.chars().count() >= 2
+                && !common_route_stop_tokens().contains(&phrase.as_str())
+                && text_matches_phrase(query_token_list, phrase)
+        })
         .cloned()
         .collect::<Vec<_>>();
     if !matched_trigger_hints.is_empty() {

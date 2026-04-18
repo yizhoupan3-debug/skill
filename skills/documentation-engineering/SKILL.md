@@ -11,6 +11,17 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 补 API 文档
+  - 写 ADR
+  - 生成 changelog
+  - 写 onboarding guide
+  - 审查文档完整性
+  - set up documentation-as-code
+  - doc generation pipelines
+  - documentation
+  - readme
+  - api docs
 allowed_tools:
   - shell
   - git
@@ -33,6 +44,7 @@ metadata:
 risk: low
 source: local
 ---
+
 - **Dual-Dimension Audit (Pre: Doc-Structure/Logic, Post: Links-Freshness/Completeness Results)** → `$execution-audit-codex` [Overlay]
 
 # documentation-engineering

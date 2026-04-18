@@ -9,6 +9,17 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 解耦模块
+  - 抽接口
+  - 消除重复
+  - 渐进迁移
+  - 清理死代码
+  - 降低复杂度
+  - 拆大函数
+  - 拆大类
+  - modernize legacy code
+  - refactoring
 allowed_tools:
   - shell
   - git

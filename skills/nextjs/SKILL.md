@@ -20,7 +20,14 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
+trigger_hints:
+  - nextjs
+  - app router
+  - server components
+  - ssr
+  - caching
 ---
+
 # nextjs
 
 This skill owns Next.js-first engineering work: App Router architecture, data fetching, caching, and deployment optimization.

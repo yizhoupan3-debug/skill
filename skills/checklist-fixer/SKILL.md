@@ -11,6 +11,13 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
+trigger_hints:
+  - 逐项修复
+  - fix list
+  - 按 checklist 执行
+  - 先做 1-3
+  - 从 P0 开始
+  - 只做第一个
 short_description: Execute fix lists and implementation plans with mandatory per-item verification and anti-laziness enforcement.
 metadata:
   version: "2.1.0"
@@ -80,6 +87,7 @@ Before this skill takes ownership, respect earlier gates:
 - User gives a single-digit or range reply selecting items to execute
 - User has a numbered list of known problems and wants them fixed
 - An upstream skill produced a problem list (audit, review, scan) needing execution
+- `$paper-reviewer` already produced a manuscript issue ledger and the user now wants selected items actually fixed
 - User provides a `PLAN.md`, `implementation_plan.md`, or audit report with `- [ ]` items
 - Fixes are mixed types (bugs, missing validation, dead code, config issues)
 - User wants progress tracking with checkpoint/resume capability
@@ -163,6 +171,10 @@ Supported input forms:
 
 When an upstream detector already provides `finding_id`, `severity_native`, or
 `verification_method`, preserve those fields instead of flattening them away.
+
+Common downstream sources:
+- `$paper-reviewer` issue ledgers for manuscript repair execution
+- audit / review / scan outputs that already decided the queue
 
 ## Required workflow
 

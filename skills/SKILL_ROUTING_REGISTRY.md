@@ -65,7 +65,7 @@
 | `humanizer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Naturalize existing prose into clearer, more human-sounding text. Use for: 精修, 文 |
 | `i18n-l10n` | Active | P2 | L3 | overlay | none | project | ✓ 96.8 | Internationalization and localization overlay for web/mobile projects. Use for m |
 | `idea-to-plan` | Active | P0 | L-1 | @strategic-orchestrator | delegation | project | ✓ 100.0 | Turn ambiguous ideas into evidence-backed plans with branch routing and compress |
-| `imagegen` | Active | P2 | L1 | owner | none | project | ✓ 98.7 | Use the built-in image tool for raster image generation or edits. |
+| `imagegen` | Active | P2 | L1 | owner | none | project | ✓ 98.7 | Generate or edit raster images through VibeProxy Local /v1/responses using the b |
 | `infographic` | Active | P2 | L3 | owner | none | project | ✓ 95.1 | Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge car |
 | `information-retrieval` | Active | P2 | L1 | owner | none | project | ✓ 97.2 | Run multi-round research before acting or recommending |
 | `iterative-optimizer` | Active | P1 | L0 | overlay | none | project | ⚠ 66.4 | N-round optimization loops with built-in laziness immunity |
@@ -118,7 +118,7 @@
 | `skill-developer-codex` | Active | P1 | L0 | owner | none | project | ✓ 97.5 | Design and tune Codex skill routing/framework behavior |
 | `skill-installer-antigravity` | Active | P2 | L3 | owner | none | project | ✓ 96.2 | Install Antigravity skills into the shared workspace skill library from local fo |
 | `skill-maintenance-codex` | Active | P2 | L1 | overlay | none | project | ✓ 100.0 | Maintain Codex skill-library operational health through validation, sync checks, |
-| `skill-routing-repair-codex` | Active | P1 | L0 | overlay | none | project | ✓ 97.0 | Patch routing misses with the smallest safe skill fix |
+| `skill-routing-repair-codex` | Active | P1 | L0 | owner | none | project | ✓ 97.0 | Patch routing misses with the smallest safe skill fix |
 | `skill-scout` | Active | P2 | L1 | owner | none | project | ✓ 98.0 | Research external skill ecosystems and produce gap-analysis proposals for the lo |
 | `skill-writer` | Active | P1 | L0 | owner | none | project | ✓ 95.5 | Shape one skill's wording, boundary, and token budget |
 | `slides-source-first` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Build or revise slide workflows where source-of-truth authoring and artifact con |
@@ -129,6 +129,7 @@
 | `svelte` | Active | P2 | L4 | owner | none | project | ✓ 97.7 | Deliver Svelte 5 applications using runes-based reactivity ($state, $derived, $e |
 | `systematic-debugging` | Active | P1 | L0 | gate | evidence | project | ✓ 97.0 | Investigate unknown failures before fixing |
 | `tailwind-pro` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Produce Tailwind CSS configurations with design tokens, plugin hooks, and framew |
+| `tao-ci` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Draft professor-specific summer research outreach emails from workbook data |
 | `tdd-workflow` | Active | P2 | L1 | overlay | none | project | ✓ 92.8 | Run a Test-Driven Development workflow centered on the RED-GREEN-REFACTOR loop w |
 | `test-engineering` | Active | P2 | L1 | owner | none | project | ✓ 97.3 | Choose the right test layer, write maintainable tests, and stabilize flaky behav |
 | `typescript-pro` | Active | P1 | L4 | owner | none | project | ✓ 96.3 | Deliver type-safe TypeScript 5.x+ code. Enforces strict mode, encodes domain con |

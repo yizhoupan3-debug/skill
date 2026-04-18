@@ -17,7 +17,19 @@ routing_layer: L3
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 代码质量
+  - 前端规范
+  - 编码风格
+  - 可读性
+  - DRY
+  - early return
+  - code quality
+  - frontend
+  - patterns
+  - readability
 ---
+
 # frontend-code-quality
 
 Cross-cutting quality overlay for frontend code. Layer this on top of any framework owner skill (`$react`, `$vue`, `$svelte`, `$nextjs`) when code quality, consistency, or readability is the primary concern.

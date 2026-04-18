@@ -12,6 +12,17 @@ routing_gate: none
 routing_priority: P2
 session_start: n/a
 short_description: Execute rigorous mathematical derivations and proofs
+trigger_hints:
+  - 数学推导
+  - 定理证明
+  - 公式推导
+  - 不等式证明
+  - ODE
+  - PDE 推导
+  - 收敛性证明
+  - 存在唯一性证明
+  - 变分推导
+  - 线性代数证明
 metadata:
   version: "2.0.0"
   platforms: [codex, antigravity]

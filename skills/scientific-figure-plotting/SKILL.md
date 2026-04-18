@@ -11,6 +11,13 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - scientific figures
+  - plotting
+  - matplotlib
+  - seaborn
+  - publication
+  - charts
 runtime_requirements:
   python:
     - matplotlib
@@ -23,6 +30,7 @@ metadata:
 risk: medium
 source: local
 ---
+
 - **Dual-Dimension Audit (Pre: Plotting-Logic, Post: Visual-Fidelity/Overlap Results)** → `$execution-audit-codex` [Overlay]
 
 # Scientific Figure Plotting

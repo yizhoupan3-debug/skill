@@ -7,6 +7,13 @@ routing_layer: L3
 routing_owner: gate
 routing_gate: artifact
 session_start: required
+trigger_hints:
+  - xlsx
+  - excel
+  - spreadsheet
+  - openpyxl
+  - pandas
+  - libreoffice
 runtime_requirements:
   python:
     - openpyxl

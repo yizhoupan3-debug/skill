@@ -22,7 +22,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - Go 项目
+  - goroutine
+  - 并发
+  - Go 微服务
+  - 错误处理策略
+  - Go development
+  - microservices
+  - CLI tools
+  - concurrency design
+  - go
 ---
+
 # go-pro
 
 This skill owns Go-first engineering work: concurrency design, interface-based abstraction, error handling, and production HTTP services.

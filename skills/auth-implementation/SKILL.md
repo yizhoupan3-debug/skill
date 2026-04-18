@@ -18,7 +18,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - auth
+  - 登录
+  - 注册
+  - 鉴权
+  - 权限控制
+  - token refresh
+  - JWT vs session
+  - 做登录
+  - 加权限控制
+  - route guard
 ---
+
 # auth-implementation
 
 This skill owns application-level authentication and authorization implementation so auth work does not get scattered across generic backend, frontend, or security skills.

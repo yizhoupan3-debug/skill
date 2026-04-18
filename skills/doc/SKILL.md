@@ -12,6 +12,16 @@ routing_owner: gate
 routing_gate: artifact
 routing_priority: P1
 session_start: required
+trigger_hints:
+  - structured Word edits
+  - 模板化文档生成
+  - 表格或版式修复
+  - render-aware
+  - docx
+  - word
+  - python docx
+  - pagination
+  - document layout
 runtime_requirements:
   python:
     - pdf2image
@@ -53,6 +63,7 @@ artifact_outputs:
   - docx_review.md
   - EVIDENCE_INDEX.json
 ---
+
 # doc
 
 At conversation start or first turn, check this artifact gate early whenever the main object is a `.docx` file or the workflow should stay Word-native.

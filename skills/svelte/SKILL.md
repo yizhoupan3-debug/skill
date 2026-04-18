@@ -22,7 +22,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - Svelte 项目
+  - SvelteKit
+  - runes 怎么用
+  - Svelte 5 迁移
+  - Svelte development
+  - SvelteKit SSR
+  - Svelte 4→5 migration
+  - svelte
+  - runes
+  - ssr
 ---
+
 # svelte
 
 This skill owns Svelte-first engineering work: runes-based reactivity, SvelteKit architecture, and compile-time optimization.

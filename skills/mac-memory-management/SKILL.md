@@ -5,6 +5,13 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - mac
+  - apple silicon
+  - mps
+  - memory
+  - unified memory
+  - oom
 metadata:
   version: "1.2.0"
   platforms: [codex]
@@ -22,6 +29,7 @@ metadata:
 risk: medium
 source: local
 ---
+
 # mac-memory-management
 
 This skill owns Mac-specific runtime optimization for ML workloads when unified memory, MPS behavior, DataLoader pressure, throughput limits, or device-path stability are the dominant constraint. It is the default Mac runtime owner for Apple Silicon training and inference loops; generic algorithmic rewrites still belong to `code-acceleration`.

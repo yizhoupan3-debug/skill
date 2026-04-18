@@ -23,6 +23,13 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P2
 session_start: n/a
+trigger_hints:
+  - frontend
+  - debugging
+  - runtime
+  - devtools
+  - hydration
+  - state management
 allowed_tools:
   - shell
   - browser

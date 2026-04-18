@@ -22,7 +22,19 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 配 systemd
+  - 看服务器日志
+  - Nginx 反代
+  - 服务起不来
+  - server logs
+  - reverse proxy setup
+  - process management
+  - bad gateway
+  - port conflicts
+  - linux
 ---
+
 # linux-server-ops
 
 This skill owns Linux service runtime and small-to-medium server operations when the problem is deployment behavior, process management, reverse proxies, or service health on a host.

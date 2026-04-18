@@ -21,7 +21,15 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - datastore
+  - redis
+  - cache
+  - queue
+  - worker
+  - migration
 ---
+
 # datastore-cache-queue
 
 This skill owns the application's data-runtime layer when the challenge is how services interact with databases, caches, queues, workers, and consistency boundaries in production.

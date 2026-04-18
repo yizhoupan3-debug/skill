@@ -18,6 +18,14 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - a ranked performance review
+  - optimization plan
+  - web performance
+  - core web vitals
+  - lighthouse
+  - bundle size
+  - frontend optimization
 ---
 
 # performance-expert

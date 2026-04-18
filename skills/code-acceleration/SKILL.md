@@ -7,6 +7,13 @@ routing_gate: none
 routing_priority: P1
 session_start: n/a
 short_description: Speed up code with measured rewrites, batching, caching, and parallel execution
+trigger_hints:
+  - performance
+  - optimization
+  - acceleration
+  - profiling
+  - batching
+  - caching
 metadata:
   version: "1.5.0"
   platforms: [codex]

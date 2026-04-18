@@ -8,6 +8,14 @@ routing_owner: gate
 routing_gate: artifact
 routing_priority: P1
 session_start: required
+trigger_hints:
+  - Excel
+  - spreadsheet
+  - xlsx
+  - csv
+  - sheet review
+  - xls
+  - tsv
 metadata:
   version: "2.0.0"
   platforms: [codex]

@@ -10,6 +10,15 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 截图
+  - 全屏截图
+  - 窗口截图
+  - 区域截图
+  - visual review
+  - bug reports
+  - documentation
+  - screenshot
 runtime_requirements:
   commands:
     - osascript
@@ -21,6 +30,7 @@ metadata:
   tags:
     - screenshot
 ---
+
 # Screenshot Capture
 
 Follow these save-location rules every time:

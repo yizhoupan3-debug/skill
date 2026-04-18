@@ -23,7 +23,15 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - release
+  - versioning
+  - semver
+  - changelog
+  - semantic release
+  - changesets
 ---
+
 # release-engineering
 
 This skill owns the end-to-end release lifecycle: from version strategy design through changelog generation, tagging, release note creation, artifact publishing, and release pipeline orchestration.

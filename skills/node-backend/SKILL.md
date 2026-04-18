@@ -18,7 +18,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 写后端接口
+  - Node 服务
+  - Express
+  - Fastify API
+  - 中间件怎么写
+  - 后端目录结构
+  - Node APIs
+  - backend route design
+  - middleware chains
+  - JWT
 ---
+
 # node-backend
 
 This skill owns practical Node.js backend engineering: API design, request handling, middleware, validation, auth integration, and maintainable server-side structure.

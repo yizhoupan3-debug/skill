@@ -18,7 +18,14 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
+trigger_hints:
+  - typescript
+  - type system
+  - generics
+  - tsconfig
+  - migration
 ---
+
 # typescript-pro
 
 This skill owns TypeScript-first engineering work: type system design, strict-mode enforcement, tsconfig strategy, and TS-specific refactoring.

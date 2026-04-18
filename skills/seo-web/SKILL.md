@@ -22,7 +22,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - SEO 优化
+  - 搜索引擎优化
+  - OG 标签
+  - 搜索排名
+  - search visibility
+  - meta descriptions
+  - structured data
+  - sitemap
+  - robots
+  - seo
 ---
+
 # seo-web
 
 This skill owns technical SEO: ensuring web pages are correctly structured,

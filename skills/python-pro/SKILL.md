@@ -18,7 +18,15 @@ routing_owner: owner
 routing_gate: none
 routing_priority: P1
 session_start: n/a
+trigger_hints:
+  - python
+  - fastapi
+  - async
+  - typing
+  - uv
+  - ruff
 ---
+
 # python-pro
 
 This skill owns Python-first engineering work across scripts, services, libraries, data pipelines, and tooling.

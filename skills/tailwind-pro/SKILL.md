@@ -18,7 +18,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - custom themes
+  - plugin authoring
+  - design tokens
+  - dark mode
+  - responsive utilities
+  - Tailwind 配置
+  - Tailwind 主题
+  - Tailwind 插件
+  - Tailwind v3 (`tailwind
+  - tailwind
 ---
+
 # tailwind-pro
 
 This skill owns Tailwind CSS-specific engineering: configuration, theming, plugin authoring, and integration patterns.

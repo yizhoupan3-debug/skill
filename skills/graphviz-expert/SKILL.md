@@ -11,6 +11,13 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - Graphviz
+  - DOT
+  - flowchart
+  - graph layout
+  - publication diagram
+  - dependency graph
 runtime_requirements:
   commands:
     - dot

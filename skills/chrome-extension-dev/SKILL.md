@@ -20,7 +20,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - Chrome 插件
+  - 浏览器扩展
+  - content script
+  - Manifest V3 migration
+  - content-script
+  - Service-Worker communication
+  - chrome extension
+  - manifest v3
+  - browser extension
+  - service worker
 ---
+
 # chrome-extension-dev
 
 This skill owns Chrome extension engineering: Manifest V3 architecture, Service Workers, content scripts, Chrome APIs, and extension publishing.

@@ -5,9 +5,14 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - OpenAI API
+  - Apps SDK
+  - Codex 文档
+  - 官方文档
+  - OpenAI docs
 source: system
 ---
-
 
 # OpenAI Docs
 

@@ -95,9 +95,54 @@
       "Write execution-ready checklists before implementation or review.",
       "n/a",
       [
-        "checklist",
-        "计划",
+        "先写 checklist",
+        "写成 checklist md",
         "review checklist"
+      ],
+      95.5
+    ],
+    [
+      "checklist-normalizer",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Rewrite messy checklists with explicit serial and parallel boundaries.",
+      "n/a",
+      [
+        "规范化 checklist",
+        "串行的写在一点",
+        "并行的拆开"
+      ],
+      95.5
+    ],
+    [
+      "checklist-fixer",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Execute a known checklist or fix list with per-item verification.",
+      "n/a",
+      [
+        "逐项修复",
+        "按 checklist 执行",
+        "先做 1-3"
+      ],
+      95.5
+    ],
+    [
+      "skill-routing-repair-codex",
+      "L0",
+      "owner",
+      "none",
+      "P1",
+      "Patch a routing miss after a task with the smallest safe skill fix.",
+      "n/a",
+      [
+        "为什么没有触发",
+        "是不是路由问题",
+        "顺手修一下 skill"
       ],
       95.5
     ],
@@ -268,6 +313,42 @@
         "selected_skill": "checklist-writting",
         "overlay_skill": "anti-laziness",
         "layer": "L1"
+      }
+    },
+    {
+      "name": "checklist-normalizer-routing",
+      "query": "把这份 checklist 规范一下，串行的写在一点，并行的拆开",
+      "expected": {
+        "selected_skill": "checklist-normalizer",
+        "overlay_skill": null,
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "checklist-fixer-routing",
+      "query": "按这份 checklist 逐项修复，先做 1-3",
+      "expected": {
+        "selected_skill": "checklist-fixer",
+        "overlay_skill": null,
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "skill-routing-repair-direct-owner",
+      "query": "这次为什么没触发，顺手修一下 skill，以后别再选错",
+      "expected": {
+        "selected_skill": "skill-routing-repair-codex",
+        "overlay_skill": "anti-laziness",
+        "layer": "L0"
+      }
+    },
+    {
+      "name": "skill-routing-repair-beats-debug-gate",
+      "query": "这个 skill 的路由没触发，帮我修复这次 miss",
+      "expected": {
+        "selected_skill": "skill-routing-repair-codex",
+        "overlay_skill": "anti-laziness",
+        "layer": "L0"
       }
     },
     {

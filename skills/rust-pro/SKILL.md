@@ -22,7 +22,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - Rust 项目
+  - 所有权
+  - 生命周期
+  - async Tokio
+  - Rust development
+  - systems programming
+  - async Tokio services
+  - CLI tools
+  - rust
+  - ownership
 ---
+
 # rust-pro
 
 This skill owns Rust-first engineering work: ownership-safe design, async runtime selection, trait-based abstraction, and systems-level optimization.
