@@ -32,6 +32,7 @@ class MiddlewareContext(BaseModel):
 
     task: str
     session_id: str
+    job_id: str | None = None
     user_id: str
     routing_result: RoutingResult
     prompt: str = ""

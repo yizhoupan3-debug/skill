@@ -4,14 +4,26 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-import resource
+import subprocess
 import sys
+import time
 from typing import Any, Mapping
 from uuid import uuid4
+
+try:
+    import resource as _resource
+except ImportError:  # pragma: no cover - exercised via monkeypatched fallback test.
+    _resource = None
+
+try:
+    import psutil as _psutil
+except ImportError:  # pragma: no cover - optional host probe dependency.
+    _psutil = None
 
 from codex_agno_runtime.checkpoint_store import RuntimeCheckpointer
 from codex_agno_runtime.config import RuntimeSettings
@@ -141,12 +153,52 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _fallback_usage_snapshot() -> dict[str, float]:
+    """Return the cross-platform fallback usage probe when getrusage is unavailable."""
+
+    return {
+        "self_cpu": float(time.process_time()),
+        "child_cpu": 0.0,
+        "self_memory": 0.0,
+        "child_memory": 0.0,
+        "self_peak_memory": 0.0,
+        "child_peak_memory": 0.0,
+    }
+
+
 def _normalize_rusage_maxrss(raw_value: float) -> float:
     """Normalize ``ru_maxrss`` to bytes across supported host platforms."""
 
     if sys.platform == "darwin":
         return float(raw_value)
     return float(raw_value) * 1024.0
+
+
+def _current_rss_bytes() -> float | None:
+    """Return the current process RSS in bytes when the host can provide it."""
+
+    if _psutil is not None:
+        try:
+            return float(_psutil.Process(os.getpid()).memory_info().rss)
+        except (AttributeError, OSError, ValueError):
+            pass
+
+    for ps_binary in ("/bin/ps", "ps"):
+        try:
+            output = subprocess.check_output(
+                [ps_binary, "-o", "rss=", "-p", str(os.getpid())],
+                text=True,
+            )
+        except (FileNotFoundError, OSError, subprocess.CalledProcessError):
+            continue
+        rss_kib = output.strip()
+        if not rss_kib:
+            continue
+        try:
+            return float(rss_kib) * 1024.0
+        except ValueError:
+            continue
+    return None
 
 
 _SANDBOX_LIFECYCLE_STATES = (
@@ -374,16 +426,29 @@ class SandboxLifecycleService:
         }
 
     def _usage_snapshot(self) -> dict[str, float]:
-        self_usage = resource.getrusage(resource.RUSAGE_SELF)
-        child_usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+        if _resource is None:
+            return _fallback_usage_snapshot()
+        try:
+            self_usage = _resource.getrusage(_resource.RUSAGE_SELF)
+            child_usage = _resource.getrusage(_resource.RUSAGE_CHILDREN)
+            self_cpu = float(self_usage.ru_utime + self_usage.ru_stime)
+            child_cpu = float(child_usage.ru_utime + child_usage.ru_stime)
+            self_peak_memory = _normalize_rusage_maxrss(self_usage.ru_maxrss)
+            child_peak_memory = _normalize_rusage_maxrss(child_usage.ru_maxrss)
+        except (AttributeError, OSError, TypeError, ValueError):
+            return _fallback_usage_snapshot()
+        current_rss = _current_rss_bytes()
         return {
-            "self_cpu": float(self_usage.ru_utime + self_usage.ru_stime),
-            "child_cpu": float(child_usage.ru_utime + child_usage.ru_stime),
-            "self_memory": _normalize_rusage_maxrss(self_usage.ru_maxrss),
-            "child_memory": _normalize_rusage_maxrss(child_usage.ru_maxrss),
+            "self_cpu": self_cpu,
+            "child_cpu": child_cpu,
+            "self_memory": self_peak_memory if current_rss is None else current_rss,
+            "child_memory": child_peak_memory,
+            "self_peak_memory": self_peak_memory,
+            "child_peak_memory": child_peak_memory,
         }
 
     def _acquire_record(self, request: ExecutionKernelRequest) -> _SandboxRecord:
+        request_job_id = request.job_id or request.session_id
         for record in self._sandboxes.values():
             if not self._matches_policy(record, request.sandbox_policy):
                 continue
@@ -393,11 +458,11 @@ class SandboxLifecycleService:
                 record.reuse_count += 1
                 self._transition(record, "warm", event_kind="sandbox.rewarmed", request=request)
                 record.current_session_id = request.session_id
-                record.current_job_id = request.session_id
+                record.current_job_id = request_job_id
                 return record
             if record.state == "warm":
                 record.current_session_id = request.session_id
-                record.current_job_id = request.session_id
+                record.current_job_id = request_job_id
                 return record
 
         record = _SandboxRecord(
@@ -405,7 +470,7 @@ class SandboxLifecycleService:
             policy=request.sandbox_policy,
             budget=request.sandbox_budget,
             current_session_id=request.session_id,
-            current_job_id=request.session_id,
+            current_job_id=request_job_id,
         )
         self._sandboxes[record.sandbox_id] = record
         self._record_event(
@@ -487,6 +552,10 @@ class SandboxLifecycleService:
         memory_used = max(
             usage_after["self_memory"] - usage_before["self_memory"],
             usage_after["child_memory"] - usage_before["child_memory"],
+            usage_after.get("self_peak_memory", usage_after["self_memory"])
+            - usage_before.get("self_peak_memory", usage_before["self_memory"]),
+            usage_after.get("child_peak_memory", usage_after["child_memory"])
+            - usage_before.get("child_peak_memory", usage_before["child_memory"]),
             0.0,
         )
         output_size = len((response.content or "").encode("utf-8"))
@@ -576,14 +645,14 @@ class SandboxLifecycleService:
             )
             return
         record.cleanup_pending = False
-        record.current_session_id = None
-        record.current_job_id = None
         self._transition(
             record,
             "recycled",
             event_kind="sandbox.cleanup_completed",
             request=None,
         )
+        record.current_session_id = None
+        record.current_job_id = None
 
     def _transition(
         self,
@@ -620,7 +689,11 @@ class SandboxLifecycleService:
             "capability_categories": list(record.policy.capability_categories),
             "dedicated_profile": record.policy.dedicated_profile,
             "session_id": request.session_id if request is not None else record.current_session_id,
-            "job_id": request.session_id if request is not None else record.current_job_id,
+            "job_id": (
+                (request.job_id or request.session_id)
+                if request is not None
+                else record.current_job_id
+            ),
         }
         if detail:
             event.update(detail)
@@ -1386,6 +1459,7 @@ class ExecutionEnvironmentService:
             ExecutionKernelRequest(
                 task=ctx.task,
                 session_id=ctx.session_id,
+                job_id=ctx.job_id,
                 user_id=ctx.user_id,
                 routing_result=ctx.routing_result,
                 prompt_preview=(ctx.prompt or None) if dry_run else None,
@@ -1465,6 +1539,7 @@ class ExecutionEnvironmentService:
             ExecutionKernelRequest(
                 task=task,
                 session_id=session_id,
+                job_id=None,
                 user_id=user_id,
                 routing_result=routing_result,
                 prompt_preview=None,
@@ -1780,7 +1855,7 @@ class BackgroundRuntimeHost:
 
                     try:
                         result = await asyncio.wait_for(
-                            run_task(request),
+                            run_task(request.model_copy(update={"job_id": job_id})),
                             timeout=self._background_job_timeout_seconds,
                         )
                     except asyncio.CancelledError:

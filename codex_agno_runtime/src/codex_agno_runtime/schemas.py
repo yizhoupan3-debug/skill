@@ -234,6 +234,7 @@ class RunTaskRequest(BaseModel):
     task: str
     project_id: str | None = None
     session_id: str | None = None
+    job_id: str | None = None
     user_id: str | None = None
     allow_overlay: bool = True
     dry_run: bool = False

@@ -367,6 +367,7 @@ class CodexAgnoRuntime:
         kernel_contract = self.execution_service.describe_kernel_contract(dry_run=execution_is_dry_run)
         self._trace.record(
             session_id=prepared.session_id,
+            job_id=request.job_id,
             kind="run.started",
             stage="execution",
             payload={
@@ -382,6 +383,7 @@ class CodexAgnoRuntime:
         ctx = MiddlewareContext(
             task=request.task,
             session_id=prepared.session_id,
+            job_id=request.job_id,
             user_id=prepared.user_id,
             routing_result=routing_result,
             prompt=prepared.prompt_preview or "",
@@ -408,6 +410,7 @@ class CodexAgnoRuntime:
         except Exception as error:
             self._trace.record(
                 session_id=prepared.session_id,
+                job_id=request.job_id,
                 kind="run.failed",
                 stage="execution",
                 payload={"error": str(error)},
@@ -416,6 +419,7 @@ class CodexAgnoRuntime:
 
         self._trace.record(
             session_id=prepared.session_id,
+            job_id=request.job_id,
             kind="run.completed",
             stage="execution",
             payload={

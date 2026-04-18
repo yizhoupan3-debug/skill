@@ -310,6 +310,57 @@ def test_background_retry_backoff_routes_through_state_service_host(tmp_path: Pa
     asyncio.run(_run())
 
 
+def test_background_runtime_sandbox_events_keep_background_job_id(tmp_path: Path) -> None:
+    """Sandbox event logs should preserve the real background job id through cleanup."""
+
+    runtime = _build_runtime(tmp_path)
+
+    async def fake_kernel_execute(request) -> RunTaskResponse:
+        return RunTaskResponse(
+            session_id=request.session_id,
+            user_id=request.user_id,
+            skill=request.routing_result.selected_skill.name,
+            overlay=request.routing_result.overlay_skill.name if request.routing_result.overlay_skill else None,
+            live_run=False,
+            content="background-ok",
+            prompt_preview=request.prompt_preview,
+            usage=UsageMetrics(input_tokens=3, output_tokens=2, total_tokens=5, mode="dry_run"),
+            metadata={
+                "execution_kernel": "rust-execution-kernel-slice",
+                "execution_kernel_authority": "rust-execution-kernel-authority",
+            },
+        )
+
+    runtime.execution_service.kernel.execute = fake_kernel_execute  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        status = await runtime.enqueue_background_run(
+            BackgroundRunRequest(
+                task="验证 background sandbox 日志 job_id",
+                user_id="tester",
+                session_id="background-sandbox-session",
+                dry_run=True,
+            )
+        )
+        final = await _wait_for_status(runtime, status.job_id, {"completed"})
+
+        assert final.status == "completed"
+        events_path = tmp_path / "runtime-data" / "runtime_sandbox_events.jsonl"
+        events = [
+            json.loads(line)
+            for line in events_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        scoped = [event for event in events if event["session_id"] == status.session_id]
+        assert scoped
+        assert {event["job_id"] for event in scoped} == {status.job_id}
+        cleanup_completed = next(event for event in scoped if event["kind"] == "sandbox.cleanup_completed")
+        assert cleanup_completed["session_id"] == status.session_id
+        assert cleanup_completed["job_id"] == status.job_id
+
+    asyncio.run(_run())
+
+
 def test_background_takeover_waits_through_rust_session_release_plan(tmp_path: Path) -> None:
     """A takeover should use the Rust session-release plan before claiming the slot."""
 
