@@ -16,6 +16,7 @@ from scripts.memory_support import (
     normalize_next_actions,
     normalize_trace_skills,
     parse_session_summary,
+    resolve_effective_memory_dir,
     supervisor_contract,
     workspace_name_from_root,
 )
@@ -411,7 +412,7 @@ class FrameworkMcpServer:
 
     def _read_resource(self, *, uri: str) -> dict[str, Any]:
         if uri == "framework://memory/project":
-            path = self._repo_root / "memory" / "MEMORY.md"
+            path = resolve_effective_memory_dir(repo_root=self._repo_root) / "MEMORY.md"
             text = self._read_text_file(path=path, missing_message="Project memory file not found.")
             return {"uri": uri, "mimeType": "text/markdown", "text": text}
         if uri == "framework://routing/runtime":

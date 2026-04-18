@@ -40,9 +40,30 @@ def test_write_artifacts_creates_all_phase1_contract_files(tmp_path: Path) -> No
     assert summary_path.exists()
     assert next_actions_path.exists()
     assert evidence_path.exists()
+    assert paths["task_id"] == "phase1-rollout"
     assert "phase1 rollout" in summary_path.read_text(encoding="utf-8")
     assert json.loads(next_actions_path.read_text(encoding="utf-8"))["next_actions"] == [
         "add loadouts",
         "wire approval middleware",
     ]
     assert json.loads(evidence_path.read_text(encoding="utf-8"))["artifacts"][0]["kind"] == "report"
+
+
+def test_write_artifacts_refreshes_active_task_pointer_when_repo_root_is_present(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    output_dir = repo_root / "artifacts" / "contracts" / "demo-task"
+
+    paths = write_artifacts(
+        output_dir,
+        task="demo task",
+        phase="implementation",
+        status="completed",
+        summary="Closed the continuity pointer gap.",
+        next_actions=["verify resume loader"],
+        evidence=[{"kind": "test", "path": "tests/test_write_session_artifacts.py"}],
+        repo_root=repo_root,
+    )
+
+    pointer_path = repo_root / "artifacts" / "current" / "active_task.json"
+    assert pointer_path.exists()
+    assert json.loads(pointer_path.read_text(encoding="utf-8"))["task_id"] == paths["task_id"]

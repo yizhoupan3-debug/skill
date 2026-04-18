@@ -26,6 +26,7 @@ from scripts.memory_support import (
 
 SQLITE_FILENAMES = ("memory.sqlite3", "memory.db", ".memory.sqlite3")
 CURRENT_STATE_CATEGORIES = {"task_state", "blocker", "constraint"}
+VALID_MODES = {"stable", "active", "history", "debug"}
 
 
 def _tokenizer(topic: str) -> list[str]:
@@ -248,38 +249,77 @@ def _load_sqlite_sections(
     return sections
 
 
+def _stable_sections(
+    memory_workspace_root: Path,
+    *,
+    topic: str,
+    max_items: int,
+) -> list[tuple[str, str]]:
+    sections: list[tuple[str, str]] = []
+    for name in ("MEMORY.md", "preferences.md", "decisions.md", "lessons.md", "runbooks.md"):
+        text = read_text_if_exists(memory_workspace_root / name).strip()
+        if not text:
+            continue
+        filtered = _filter_text(text, topic, max_items) if topic else text
+        if filtered:
+            sections.append((name, filtered))
+    return sections
+
+
+def _session_sections(
+    memory_workspace_root: Path,
+    *,
+    topic: str,
+    max_items: int,
+    latest_only: bool,
+) -> list[tuple[str, str]]:
+    sessions_root = memory_workspace_root / "sessions"
+    if not sessions_root.exists():
+        return []
+    session_paths = sorted(sessions_root.glob("*.md"))
+    if not session_paths:
+        return []
+    if latest_only:
+        session_paths = session_paths[-1:]
+    else:
+        session_paths = session_paths[-max_items:]
+    sections: list[tuple[str, str]] = []
+    for session_path in session_paths:
+        text = read_text_if_exists(session_path).strip()
+        if not text:
+            continue
+        filtered = _filter_text(text, topic, max_items) if topic else text
+        if filtered:
+            sections.append((f"sessions/{session_path.name}", filtered))
+    return sections
+
+
 def render_context(
     *,
     workspace: str,
     topic: str = "",
     max_items: int = 8,
+    mode: str = "stable",
     memory_root: Path | None = None,
     repo_root: Path | None = None,
 ) -> dict[str, Any]:
     """Render memory context for prompt injection."""
 
+    normalized_mode = str(mode or "stable").strip().lower()
+    if normalized_mode not in VALID_MODES:
+        raise ValueError(f"Unsupported memory render mode: {mode}")
+
     memory_workspace_root = resolve_effective_memory_dir(workspace=workspace, memory_root=memory_root, repo_root=repo_root)
     memory_workspace_root.mkdir(parents=True, exist_ok=True)
-    sections: list[tuple[str, str]] = []
+    sections = _stable_sections(memory_workspace_root, topic=topic, max_items=max_items)
     sqlite_path = _workspace_sqlite_path(memory_workspace_root)
-    if sqlite_path:
+    if normalized_mode == "active":
+        sections.extend(_session_sections(memory_workspace_root, topic=topic, max_items=max_items, latest_only=True))
+    elif normalized_mode in {"history", "debug"}:
+        sections.extend(_session_sections(memory_workspace_root, topic=topic, max_items=max_items, latest_only=False))
+    if normalized_mode == "debug" and sqlite_path:
         for section in _load_sqlite_sections(workspace, sqlite_path, topic=topic, max_items=max_items):
             sections.append((section["path"], section["content"]))
-    memory_md = read_text_if_exists(memory_workspace_root / "MEMORY.md")
-    if memory_md:
-        filtered = _filter_text(memory_md, topic, max_items) if topic else memory_md.strip()
-        if filtered:
-            sections.append(("MEMORY.md", filtered))
-    for name in ("preferences.md", "decisions.md", "lessons.md", "runbooks.md"):
-        text = read_text_if_exists(memory_workspace_root / name).strip()
-        if text:
-            sections.append((name, _filter_text(text, topic, max_items) if topic else text))
-    sessions_root = memory_workspace_root / "sessions"
-    latest_path = sorted(sessions_root.glob("*.md"))[-1] if sessions_root.exists() and list(sessions_root.glob("*.md")) else None
-    if latest_path:
-        latest_text = read_text_if_exists(latest_path).strip()
-        if latest_text:
-            sections.append((f"sessions/{latest_path.name}", _filter_text(latest_text, topic, max_items) if topic else latest_text))
     blocks = [f"## {path}\n{content.strip()}" for path, content in sections if content.strip()]
     return {
         "workspace": workspace,

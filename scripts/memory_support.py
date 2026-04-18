@@ -38,6 +38,7 @@ ARTIFACT_NAMES = {
     "trace_metadata": "TRACE_METADATA.json",
     "supervisor_state": ".supervisor_state.json",
 }
+ACTIVE_TASK_POINTER_NAME = "active_task.json"
 
 
 def resolve_effective_memory_dir(
@@ -119,6 +120,28 @@ def write_json_if_changed(path: Path, payload: dict[str, Any] | list[Any]) -> bo
 
     content = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     return write_text_if_changed(path, content)
+
+
+def current_artifact_root(repo_root: Path) -> Path:
+    """Return the canonical current artifact directory."""
+
+    return repo_root.expanduser().resolve() / "artifacts" / "current"
+
+
+def build_task_id(task: str, explicit_task_id: str | None = None) -> str:
+    """Return the resolved task identifier for continuity artifacts."""
+
+    if explicit_task_id and explicit_task_id.strip():
+        return explicit_task_id.strip()
+    return safe_slug(task, fallback="task")
+
+
+def write_active_task_pointer(repo_root: Path, task_id: str) -> Path:
+    """Persist the current active task pointer for continuity loading."""
+
+    pointer_path = current_artifact_root(repo_root) / ACTIVE_TASK_POINTER_NAME
+    write_json_if_changed(pointer_path, {"task_id": task_id})
+    return pointer_path
 
 
 def safe_slug(value: str, fallback: str = "unknown") -> str:

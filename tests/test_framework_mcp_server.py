@@ -88,6 +88,38 @@ def test_memory_recall_and_resource_read_return_repo_backed_content(tmp_path: Pa
     assert "项目长期记忆" in resource["result"]["contents"][0]["text"]
 
 
+def test_memory_project_resource_reads_logical_codex_memory_root(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / ".codex" / "memory").mkdir(parents=True, exist_ok=True)
+    (repo_root / ".codex" / "memory" / "MEMORY.md").write_text("# 项目长期记忆\n\n逻辑根生效。\n", encoding="utf-8")
+    server = FrameworkMcpServer(repo_root=repo_root, output_dir=tmp_path / "out")
+
+    resource = _call(
+        server=server,
+        request_id=10,
+        method="resources/read",
+        params={"uri": "framework://memory/project"},
+    )
+
+    assert "逻辑根生效" in resource["result"]["contents"][0]["text"]
+
+
+def test_memory_project_resource_does_not_fallback_to_physical_memory_dir(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / "memory").mkdir(parents=True, exist_ok=True)
+    (repo_root / "memory" / "MEMORY.md").write_text("# stray memory\n", encoding="utf-8")
+    server = FrameworkMcpServer(repo_root=repo_root, output_dir=tmp_path / "out")
+
+    resource = _call(
+        server=server,
+        request_id=11,
+        method="resources/read",
+        params={"uri": "framework://memory/project"},
+    )
+
+    assert resource["error"]["data"]["code"] == "MISSING_RESOURCE"
+
+
 def test_skill_search_and_runtime_snapshot_are_actionable(tmp_path: Path) -> None:
     server = FrameworkMcpServer(repo_root=PROJECT_ROOT, output_dir=tmp_path)
     search = _tool_call(
@@ -109,7 +141,44 @@ def test_skill_search_and_runtime_snapshot_are_actionable(tmp_path: Path) -> Non
 
 
 def test_contract_summary_and_artifact_index_are_compact_and_actionable(tmp_path: Path) -> None:
-    server = FrameworkMcpServer(repo_root=PROJECT_ROOT, output_dir=tmp_path)
+    repo_root = tmp_path / "repo"
+    current_root = repo_root / "artifacts" / "current"
+    current_root.mkdir(parents=True)
+    (repo_root / ".supervisor_state.json").write_text(
+        json.dumps(
+            {
+                "primary_owner": "execution-controller-coding",
+                "active_phase": "implementation",
+                "open_blockers": ["none"],
+                "execution_contract": {
+                    "goal": "Validate compact MCP contract summary",
+                    "scope": ["artifacts/current"],
+                    "acceptance_criteria": ["summary is actionable"],
+                    "evidence_required": ["artifact index"],
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (current_root / "NEXT_ACTIONS.json").write_text(
+        json.dumps({"next_actions": ["verify contract summary"]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (current_root / "EVIDENCE_INDEX.json").write_text(
+        json.dumps({"artifacts": [{"kind": "report", "path": "artifacts/report.md"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (current_root / "TRACE_METADATA.json").write_text(
+        json.dumps({"skills": ["execution-controller-coding", "git-workflow"]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (current_root / "SESSION_SUMMARY.md").write_text(
+        "- task: compact summary fixture\n- phase: implementation\n",
+        encoding="utf-8",
+    )
+
+    server = FrameworkMcpServer(repo_root=repo_root, output_dir=tmp_path / "out")
     contract = _tool_call(
         server=server,
         request_id=8,
@@ -124,9 +193,9 @@ def test_contract_summary_and_artifact_index_are_compact_and_actionable(tmp_path
     )
     payload = json.loads(resource["result"]["contents"][0]["text"])
     assert contract["ok"] is True
-    assert contract["primary_owner"]
+    assert contract["primary_owner"] == "execution-controller-coding"
     assert isinstance(contract["next_actions"], list)
-    assert payload["workspace"] == PROJECT_ROOT.name
+    assert payload["workspace"] == repo_root.name
     assert isinstance(payload["next_actions"], list)
     assert isinstance(payload["evidence"], list)
 
