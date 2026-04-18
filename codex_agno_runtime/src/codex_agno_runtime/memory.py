@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 USER_FACT_PATTERNS = [
@@ -33,6 +34,86 @@ def _slugify_user(user_id: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", user_id).strip("-") or "codex-user"
 
 
+def _compile_fact_patterns(patterns: list[str], *, ignore_case: bool) -> list[re.Pattern[str]]:
+    """Compile the control-plane contract's fact-extraction patterns."""
+
+    flags = re.IGNORECASE if ignore_case else 0
+    return [re.compile(pattern, flags) for pattern in patterns if pattern.strip()]
+
+
+def _clean_fact_value(value: object) -> str:
+    """Normalize one fact candidate for deterministic storage semantics."""
+
+    return " ".join(str(value).split()).strip()
+
+
+@dataclass(frozen=True)
+class DeterministicFactMemoryKernel:
+    """Rust-ready deterministic kernel for fact extraction, dedupe, and ranking.
+
+    This kernel deliberately excludes policy choices such as which patterns to
+    use or what facts should be extracted by an LLM. It only owns stable,
+    deterministic mechanics that a future Rust implementation can replace
+    without changing Python-owned policy surfaces.
+    """
+
+    patterns: tuple[re.Pattern[str], ...]
+
+    def dedupe_facts(self, facts: list[str]) -> list[str]:
+        """Apply stable case-insensitive dedupe while preserving first insertion."""
+
+        merged: list[str] = []
+        seen: set[str] = set()
+        for fact in facts:
+            cleaned = _clean_fact_value(fact)
+            lowered = cleaned.casefold()
+            if not cleaned or lowered in seen:
+                continue
+            seen.add(lowered)
+            merged.append(cleaned)
+        return merged
+
+    def extract_facts(self, conversation: str) -> list[str]:
+        """Extract user facts with deterministic normalization and dedupe."""
+
+        extracted: list[str] = []
+        for pattern in self.patterns:
+            for match in pattern.finditer(conversation):
+                value = _clean_fact_value(match.group("value"))
+                if value:
+                    extracted.append(value)
+        return self.dedupe_facts(extracted)
+
+    def retrieval_rows(
+        self,
+        facts: list[str],
+        *,
+        storage_path: Path,
+        provenance_kind: str,
+        control_plane_authority: str,
+        control_plane_projection: str,
+        limit: int | None = None,
+    ) -> list[dict[str, object]]:
+        """Build ranked retrieval rows before optional limit truncation."""
+
+        rows = [
+            {
+                "value": fact,
+                "rank": index + 1,
+                "provenance": {
+                    "kind": provenance_kind,
+                    "storage_path": str(storage_path),
+                    "control_plane_authority": control_plane_authority,
+                    "control_plane_projection": control_plane_projection,
+                },
+            }
+            for index, fact in enumerate(facts)
+        ]
+        if limit is not None:
+            return rows[:limit]
+        return rows
+
+
 class MemoryControlPlaneDescriptor(BaseModel):
     """Rust-owned memory descriptor consumed by the Python compatibility host."""
 
@@ -46,6 +127,11 @@ class MemoryControlPlaneDescriptor(BaseModel):
     delegate_kind: str = _DEFAULT_MEMORY_SERVICE_DESCRIPTOR["delegate_kind"]
     storage_family: str = "filesystem"
     extraction_kind: str = "regex-fact-extractor"
+    fact_extraction_strategy: str = "contract-regex-fact-extractor"
+    fact_extraction_ignore_case: bool = True
+    fact_extraction_patterns: list[str] = Field(
+        default_factory=lambda: [pattern.pattern for pattern in USER_FACT_PATTERNS]
+    )
     provenance_kind: str = MEMORY_PROVENANCE_KIND
     memory_dir: str
 
@@ -80,6 +166,13 @@ def _build_memory_control_plane_descriptor(
                     value = service.get(field)
                     if value is not None:
                         payload[field] = value
+                if service.get("fact_extraction_strategy") is not None:
+                    payload["fact_extraction_strategy"] = service.get("fact_extraction_strategy")
+                if service.get("fact_extraction_ignore_case") is not None:
+                    payload["fact_extraction_ignore_case"] = service.get("fact_extraction_ignore_case")
+                fact_patterns = service.get("fact_extraction_patterns")
+                if isinstance(fact_patterns, (list, tuple)):
+                    payload["fact_extraction_patterns"] = [str(pattern) for pattern in fact_patterns if str(pattern).strip()]
     return MemoryControlPlaneDescriptor.model_validate(payload)
 
 
@@ -99,6 +192,14 @@ class FactMemoryStore:
         self._control_plane = _build_memory_control_plane_descriptor(
             control_plane_descriptor=control_plane_descriptor,
             memory_dir=self.memory_dir,
+        )
+        self._kernel = DeterministicFactMemoryKernel(
+            patterns=tuple(
+                _compile_fact_patterns(
+                    self._control_plane.fact_extraction_patterns,
+                    ignore_case=self._control_plane.fact_extraction_ignore_case,
+                )
+            ),
         )
 
     def _facts_path(self, user_id: str) -> Path:
@@ -142,38 +243,21 @@ class FactMemoryStore:
     def dedupe_facts(self, facts: list[str]) -> list[str]:
         """Apply the stable dedupe contract while preserving insertion order."""
 
-        merged: list[str] = []
-        seen: set[str] = set()
-        for fact in facts:
-            cleaned = fact.strip()
-            lowered = cleaned.casefold()
-            if not cleaned or lowered in seen:
-                continue
-            seen.add(lowered)
-            merged.append(cleaned)
-        return merged
+        return self._kernel.dedupe_facts(facts)
 
     def retrieve_facts(self, user_id: str, *, limit: int | None = None) -> list[dict[str, object]]:
         """Return structured retrieval rows with deterministic rank and provenance."""
 
         path = self._facts_path(user_id)
         facts = self.load_facts(user_id)
-        rows = [
-            {
-                "value": fact,
-                "rank": index + 1,
-                "provenance": {
-                    "kind": self._control_plane.provenance_kind,
-                    "storage_path": str(path),
-                    "control_plane_authority": self._control_plane.authority,
-                    "control_plane_projection": self._control_plane.projection,
-                },
-            }
-            for index, fact in enumerate(facts)
-        ]
-        if limit is not None:
-            return rows[:limit]
-        return rows
+        return self._kernel.retrieval_rows(
+            facts,
+            storage_path=path,
+            provenance_kind=self._control_plane.provenance_kind,
+            control_plane_authority=self._control_plane.authority,
+            control_plane_projection=self._control_plane.projection,
+            limit=limit,
+        )
 
     def contract_snapshot(self, user_id: str) -> dict[str, object]:
         """Return a versioned memory contract snapshot for fixtures/tests."""
@@ -204,25 +288,13 @@ class FactMemoryStore:
             "runtime_control_plane_schema_version": descriptor.runtime_control_plane_schema_version,
             "storage_family": descriptor.storage_family,
             "extraction_kind": descriptor.extraction_kind,
+            "fact_extraction_strategy": descriptor.fact_extraction_strategy,
+            "fact_extraction_ignore_case": descriptor.fact_extraction_ignore_case,
+            "fact_extraction_pattern_count": len(descriptor.fact_extraction_patterns),
             "memory_dir": descriptor.memory_dir,
         }
 
     def extract_facts_sync(self, conversation: str) -> list[str]:
         """Extract explicit user facts from a conversation transcript."""
 
-        extracted: list[str] = []
-        for pattern in USER_FACT_PATTERNS:
-            for match in pattern.finditer(conversation):
-                value = " ".join(match.group("value").split())
-                if value:
-                    extracted.append(value)
-
-        unique: list[str] = []
-        seen: set[str] = set()
-        for fact in extracted:
-            lowered = fact.casefold()
-            if lowered in seen:
-                continue
-            seen.add(lowered)
-            unique.append(fact)
-        return unique
+        return self._kernel.extract_facts(conversation)

@@ -6,11 +6,15 @@ import asyncio
 import json
 import os
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from codex_agno_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
-from codex_agno_runtime.trace import TraceSupervisorProjection
+from codex_agno_runtime.trace import (
+    TRACE_EVENT_HANDOFF_SCHEMA_VERSION,
+    TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
+    TraceSupervisorProjection,
+)
 from codex_agno_runtime.config import RuntimeSettings
 from codex_agno_runtime.middleware import (
     ContextCompressionMiddleware,
@@ -31,13 +35,18 @@ from codex_agno_runtime.schemas import (
     RunTaskResponse,
 )
 from codex_agno_runtime.services import (
+    BackgroundRuntimeHost,
     ExecutionEnvironmentService,
     MemoryService,
     RouterService,
     StateService,
     TraceService,
 )
-from codex_agno_runtime.state import SessionConflictError, TERMINAL_JOB_STATUSES
+from codex_agno_runtime.state import (
+    BackgroundJobStatusMutation,
+    BackgroundSessionTakeoverArbitration,
+    SessionConflictError,
+)
 from codex_agno_runtime.utils import build_session_id
 
 # Maximum number of concurrently running background jobs.
@@ -45,9 +54,6 @@ _MAX_BACKGROUND_JOBS = int(os.environ.get("CODEX_MAX_BACKGROUND_JOBS", 16))
 
 # Timeout (seconds) for a single background job run.
 _BACKGROUND_JOB_TIMEOUT = float(os.environ.get("CODEX_BACKGROUND_JOB_TIMEOUT", 600))
-
-_SUPPORTED_BACKGROUND_MULTITASK_STRATEGIES = {"reject", "interrupt"}
-
 
 def _now_iso() -> str:
     """Return a canonical UTC timestamp."""
@@ -65,12 +71,13 @@ class CodexAgnoRuntime:
             settings.codex_home,
             timeout_seconds=settings.rust_router_timeout_seconds,
         )
+        self.router_service = RouterService(settings, rust_adapter=self.rust_adapter)
+        self.control_plane_descriptor = self.router_service.control_plane_descriptor
         self.checkpointer = FilesystemRuntimeCheckpointer(
             data_dir=self.settings.resolved_data_dir,
             trace_output_path=self.settings.resolved_trace_output_path,
+            control_plane_descriptor=self.control_plane_descriptor,
         )
-        self.router_service = RouterService(settings, rust_adapter=self.rust_adapter)
-        self.control_plane_descriptor = self.router_service.control_plane_descriptor
         self.state_service = StateService(
             self.checkpointer,
             control_plane_descriptor=self.control_plane_descriptor,
@@ -90,6 +97,19 @@ class CodexAgnoRuntime:
             background_job_timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
             control_plane_descriptor=self.control_plane_descriptor,
         )
+        self.background_service = BackgroundRuntimeHost(
+            state_service=self.state_service,
+            trace_service=self.trace_service,
+            execution_service=self.execution_service,
+            background_control_provider=lambda: self.rust_adapter.background_control,
+            background_control_schema_version=self.rust_adapter.background_control_schema_version,
+            background_control_authority=self.rust_adapter.background_control_authority,
+            max_background_jobs=_MAX_BACKGROUND_JOBS,
+            background_job_timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
+            artifact_paths_provider=self._runtime_artifact_paths,
+            supervisor_projection_provider=lambda: self._build_supervisor_projection().model_dump(mode="json"),
+            control_plane_descriptor=self.control_plane_descriptor,
+        )
 
         self.loader = self.router_service.loader
         self.prompt_builder = self.router_service.prompt_builder
@@ -100,10 +120,10 @@ class CodexAgnoRuntime:
         self._memory_store = self.memory_service.store
 
         self._max_background_jobs = _MAX_BACKGROUND_JOBS
-        self._jobs_lock: asyncio.Lock = asyncio.Lock()
-        self._job_semaphore: asyncio.Semaphore = asyncio.Semaphore(self._max_background_jobs)
-        self.background_jobs: dict[str, BackgroundRunStatus] = self.state_service.snapshot()
-        self._background_tasks: dict[str, asyncio.Task[None]] = {}
+        self._jobs_lock = self.background_service.jobs_lock
+        self._job_semaphore = self.background_service.job_semaphore
+        self.background_jobs = self.background_service.background_jobs
+        self._background_tasks = self.background_service.background_tasks
 
         self._middleware_chain = self._build_middleware_chain()
 
@@ -115,6 +135,7 @@ class CodexAgnoRuntime:
         self.trace_service.refresh_control_plane(self.control_plane_descriptor)
         self.memory_service.refresh_control_plane(self.control_plane_descriptor)
         self.execution_service.refresh_control_plane(self.control_plane_descriptor)
+        self.background_service.refresh_control_plane(self.control_plane_descriptor)
 
     def startup(self) -> None:
         """Start runtime service boundaries."""
@@ -125,6 +146,7 @@ class CodexAgnoRuntime:
             self.trace_service,
             self.memory_service,
             self.execution_service,
+            self.background_service,
         ):
             service.startup()
         self._refresh_router()
@@ -132,10 +154,8 @@ class CodexAgnoRuntime:
     def shutdown(self) -> None:
         """Shutdown runtime service boundaries."""
 
-        for task in list(self._background_tasks.values()):
-            if not task.done():
-                task.cancel()
         for service in (
+            self.background_service,
             self.execution_service,
             self.memory_service,
             self.trace_service,
@@ -173,6 +193,7 @@ class CodexAgnoRuntime:
             "trace": self.trace_service.health(),
             "memory": self.memory_service.health(),
             "execution_environment": self.execution_service.health(),
+            "background": self.background_service.health(),
             "checkpoint": self.checkpointer.health(),
         }
 
@@ -422,24 +443,27 @@ class CodexAgnoRuntime:
             request.session_id,
         )
         request = request.model_copy(update={"session_id": effective_session_id})
-        multitask_strategy = request.multitask_strategy.casefold().strip()
+        enqueue_policy = self._background_enqueue_policy(
+            multitask_strategy=request.multitask_strategy,
+            active_job_count=0,
+        )
+        multitask_strategy = str(enqueue_policy["normalized_multitask_strategy"])
+        requires_takeover = bool(enqueue_policy["requires_takeover"])
 
-        if multitask_strategy not in _SUPPORTED_BACKGROUND_MULTITASK_STRATEGIES:
-            status = self._job_store.set_status(
+        if not bool(enqueue_policy["strategy_supported"]):
+            status = self._apply_background_mutation(
                 job_id,
-                status="failed",
-                session_id=effective_session_id,
-                multitask_strategy=request.multitask_strategy,
-                error=(
-                    "Unsupported multitask strategy: "
-                    f"{request.multitask_strategy}. Supported strategies: "
-                    f"{', '.join(sorted(_SUPPORTED_BACKGROUND_MULTITASK_STRATEGIES))}"
+                self._background_mutation(
+                    status="failed",
+                    session_id=effective_session_id,
+                    multitask_strategy=multitask_strategy,
+                    error=str(enqueue_policy["error"]),
+                    timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
+                    max_attempts=request.max_attempts,
+                    backoff_base_seconds=request.backoff_base_seconds,
+                    backoff_multiplier=request.backoff_multiplier,
+                    max_backoff_seconds=request.max_backoff_seconds,
                 ),
-                timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                max_attempts=request.max_attempts,
-                backoff_base_seconds=request.backoff_base_seconds,
-                backoff_multiplier=request.backoff_multiplier,
-                max_backoff_seconds=request.max_backoff_seconds,
             )
             async with self._jobs_lock:
                 self.background_jobs[job_id] = status
@@ -448,28 +472,32 @@ class CodexAgnoRuntime:
                 job_id=job_id,
                 kind="job.failed",
                 stage="background",
-                payload={"error": status.error, "multitask_strategy": request.multitask_strategy},
+                payload={"error": status.error, "multitask_strategy": multitask_strategy},
             )
             return status
 
-        if multitask_strategy == "interrupt":
+        if requires_takeover:
             try:
-                active_job_id = await self._reserve_background_multitask_takeover(
+                takeover = await self._arbitrate_background_multitask_takeover(
                     session_id=effective_session_id,
                     incoming_job_id=job_id,
+                    operation="reserve",
                 )
+                active_job_id = takeover.previous_active_job_id
             except SessionConflictError as error:
-                status = self._job_store.set_status(
+                status = self._apply_background_mutation(
                     job_id,
-                    status="failed",
-                    session_id=effective_session_id,
-                    multitask_strategy=request.multitask_strategy,
-                    error=str(error),
-                    timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                    max_attempts=request.max_attempts,
-                    backoff_base_seconds=request.backoff_base_seconds,
-                    backoff_multiplier=request.backoff_multiplier,
-                    max_backoff_seconds=request.max_backoff_seconds,
+                    self._background_mutation(
+                        status="failed",
+                        session_id=effective_session_id,
+                        multitask_strategy=multitask_strategy,
+                        error=str(error),
+                        timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
+                        max_attempts=request.max_attempts,
+                        backoff_base_seconds=request.backoff_base_seconds,
+                        backoff_multiplier=request.backoff_multiplier,
+                        max_backoff_seconds=request.max_backoff_seconds,
+                    ),
                 )
                 async with self._jobs_lock:
                     self.background_jobs[job_id] = status
@@ -494,88 +522,97 @@ class CodexAgnoRuntime:
                     await self._wait_for_background_session_release(effective_session_id)
                 except Exception:
                     async with self._jobs_lock:
-                        self._job_store.release_session_takeover(
+                        self.state_service.arbitrate_session_takeover(
                             session_id=effective_session_id,
                             incoming_job_id=job_id,
+                            operation="release",
                         )
                     raise
-                async with self._jobs_lock:
-                    self._job_store.claim_session_takeover(
-                        session_id=effective_session_id,
-                        incoming_job_id=job_id,
-                    )
+                await self._arbitrate_background_multitask_takeover(
+                    session_id=effective_session_id,
+                    incoming_job_id=job_id,
+                    operation="claim",
+                )
 
         try:
             async with self._jobs_lock:
-                if self._job_store.active_job_count() >= self._max_background_jobs:
-                    if multitask_strategy == "interrupt":
-                        self._job_store.release_session_takeover(
+                admission_policy = self._background_enqueue_policy(
+                    multitask_strategy=multitask_strategy,
+                    active_job_count=self.state_service.active_job_count(),
+                )
+                if not bool(admission_policy["accepted"]):
+                    if requires_takeover:
+                        self.state_service.arbitrate_session_takeover(
                             session_id=effective_session_id,
                             incoming_job_id=job_id,
+                            operation="release",
                         )
-                    status = self._job_store.set_status(
+                    status = self._apply_background_mutation(
                         job_id,
-                        status="failed",
-                        session_id=effective_session_id,
-                        multitask_strategy=request.multitask_strategy,
-                        error=(
-                            "Too many admitted background jobs "
-                            f"({self._job_store.active_job_count()}/{self._max_background_jobs})"
+                        self._background_mutation(
+                            status="failed",
+                            session_id=effective_session_id,
+                            multitask_strategy=multitask_strategy,
+                            error=str(admission_policy["error"]),
+                            timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
+                            max_attempts=request.max_attempts,
+                            backoff_base_seconds=request.backoff_base_seconds,
+                            backoff_multiplier=request.backoff_multiplier,
+                            max_backoff_seconds=request.max_backoff_seconds,
                         ),
-                        timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                        max_attempts=request.max_attempts,
-                        backoff_base_seconds=request.backoff_base_seconds,
-                        backoff_multiplier=request.backoff_multiplier,
-                        max_backoff_seconds=request.max_backoff_seconds,
                     )
                 else:
-                    status = self._job_store.set_status(
+                    status = self._apply_background_mutation(
                         job_id,
-                        status="queued",
-                        session_id=effective_session_id,
-                        multitask_strategy=request.multitask_strategy,
-                        timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                        max_attempts=request.max_attempts,
-                        backoff_base_seconds=request.backoff_base_seconds,
-                        backoff_multiplier=request.backoff_multiplier,
-                        max_backoff_seconds=request.max_backoff_seconds,
+                        self._background_mutation(
+                            status="queued",
+                            session_id=effective_session_id,
+                            multitask_strategy=multitask_strategy,
+                            timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
+                            max_attempts=request.max_attempts,
+                            backoff_base_seconds=request.backoff_base_seconds,
+                            backoff_multiplier=request.backoff_multiplier,
+                            max_backoff_seconds=request.max_backoff_seconds,
+                        ),
                     )
-                self.background_jobs[job_id] = status
         except SessionConflictError as error:
-            if multitask_strategy == "interrupt":
+            if requires_takeover:
                 async with self._jobs_lock:
-                    self._job_store.release_session_takeover(
+                    self.state_service.arbitrate_session_takeover(
                         session_id=effective_session_id,
                         incoming_job_id=job_id,
+                        operation="release",
                     )
-                    status = self._job_store.set_status(
+                    status = self._apply_background_mutation(
                         job_id,
-                        status="failed",
-                        session_id=effective_session_id,
-                        multitask_strategy=request.multitask_strategy,
-                        error=str(error),
-                        timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                        max_attempts=request.max_attempts,
-                        backoff_base_seconds=request.backoff_base_seconds,
-                        backoff_multiplier=request.backoff_multiplier,
-                        max_backoff_seconds=request.max_backoff_seconds,
+                        self._background_mutation(
+                            status="failed",
+                            session_id=effective_session_id,
+                            multitask_strategy=multitask_strategy,
+                            error=str(error),
+                            timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
+                            max_attempts=request.max_attempts,
+                            backoff_base_seconds=request.backoff_base_seconds,
+                            backoff_multiplier=request.backoff_multiplier,
+                            max_backoff_seconds=request.max_backoff_seconds,
+                        ),
                     )
-                    self.background_jobs[job_id] = status
             else:
                 async with self._jobs_lock:
-                    status = self._job_store.set_status(
+                    status = self._apply_background_mutation(
                         job_id,
-                        status="failed",
-                        session_id=effective_session_id,
-                        multitask_strategy=request.multitask_strategy,
-                        error=str(error),
-                        timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                        max_attempts=request.max_attempts,
-                        backoff_base_seconds=request.backoff_base_seconds,
-                        backoff_multiplier=request.backoff_multiplier,
-                        max_backoff_seconds=request.max_backoff_seconds,
+                        self._background_mutation(
+                            status="failed",
+                            session_id=effective_session_id,
+                            multitask_strategy=multitask_strategy,
+                            error=str(error),
+                            timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
+                            max_attempts=request.max_attempts,
+                            backoff_base_seconds=request.backoff_base_seconds,
+                            backoff_multiplier=request.backoff_multiplier,
+                            max_backoff_seconds=request.max_backoff_seconds,
+                        ),
                     )
-                    self.background_jobs[job_id] = status
         if status.status == "failed":
             self._trace.record(
                 session_id=effective_session_id,
@@ -594,511 +631,124 @@ class CodexAgnoRuntime:
             kind="job.queued",
             stage="background",
             payload={
-                "multitask_strategy": request.multitask_strategy,
+                "multitask_strategy": multitask_strategy,
                 "timeout_seconds": _BACKGROUND_JOB_TIMEOUT,
                 "capacity_limit": self._max_background_jobs,
                 "max_attempts": request.max_attempts,
                 "backoff_base_seconds": request.backoff_base_seconds,
                 "backoff_multiplier": request.backoff_multiplier,
                 "max_backoff_seconds": request.max_backoff_seconds,
+                "background_policy_authority": self.rust_adapter.background_control_authority,
             },
         )
 
-        task = asyncio.create_task(self._run_background_job(job_id, request))
-        self._background_tasks[job_id] = task
+        self.background_service.configure_limits(
+            max_background_jobs=self._max_background_jobs,
+            job_semaphore=self._job_semaphore,
+        )
+        self.background_service.start_job(job_id, request, run_task=self.run_task)
         return status
 
-    async def _reserve_background_multitask_takeover(
+    async def _arbitrate_background_multitask_takeover(
         self,
         *,
         session_id: str,
         incoming_job_id: str,
-    ) -> str | None:
-        """Reserve a handoff slot so session preemption stays single-owner."""
+        operation: str,
+    ) -> BackgroundSessionTakeoverArbitration:
+        """Execute one state-owned takeover reducer step under the jobs lock."""
 
         async with self._jobs_lock:
-            return self._job_store.reserve_session_takeover(
+            return self.state_service.arbitrate_session_takeover(
                 session_id=session_id,
                 incoming_job_id=incoming_job_id,
+                operation=operation,
             )
+
+    def _background_mutation(
+        self,
+        *,
+        status: str,
+        current: BackgroundRunStatus | None = None,
+        **overrides: Any,
+    ) -> BackgroundJobStatusMutation:
+        """Build one descriptor-driven background mutation from the latest row snapshot."""
+
+        return self.background_service.mutation(status=status, current=current, **overrides)
+
+    def _apply_background_mutation(
+        self,
+        job_id: str,
+        mutation: BackgroundJobStatusMutation,
+    ) -> BackgroundRunStatus:
+        """Apply one durable mutation through the state service host lane."""
+
+        return self.background_service.apply_mutation(job_id, mutation)
 
     async def _wait_for_background_session_release(self, session_id: str, *, timeout_seconds: float = 5.0) -> None:
         """Wait until a session is no longer reserved by an active background job."""
 
-        deadline = asyncio.get_running_loop().time() + timeout_seconds
-        while asyncio.get_running_loop().time() < deadline:
-            if self._job_store.get_active_job(session_id) is None:
-                return
-            await asyncio.sleep(0.01)
-        raise RuntimeError(
-            f"Timed out waiting for background session {session_id!r} to become available."
+        release_policy = self._background_session_release_policy(session_id=session_id)
+        effect_plan = self._background_effect_plan(release_policy)
+        timeout_seconds = float(effect_plan.get("wait_timeout_seconds") or timeout_seconds)
+        poll_interval_seconds = float(effect_plan.get("wait_poll_interval_seconds") or 0.01)
+        await self.state_service.wait_for_session_release(
+            session_id=session_id,
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+        )
+
+    def _background_enqueue_policy(
+        self,
+        *,
+        multitask_strategy: str,
+        active_job_count: int,
+    ) -> dict[str, Any]:
+        """Resolve enqueue admission through the Rust background-control seam."""
+
+        return self.rust_adapter.background_control(
+            {
+                "schema_version": self.rust_adapter.background_control_schema_version,
+                "operation": "enqueue",
+                "multitask_strategy": multitask_strategy,
+                "active_job_count": active_job_count,
+                "capacity_limit": self._max_background_jobs,
+            }
+        )
+
+    def _background_effect_plan(self, policy: dict[str, Any]) -> dict[str, Any]:
+        """Extract the Rust-owned background effect plan from a control response."""
+
+        effect_plan = policy.get("effect_plan")
+        if not isinstance(effect_plan, dict):
+            raise RuntimeError("Rust background control response missing effect_plan.")
+        return effect_plan
+
+    def _background_session_release_policy(self, *, session_id: str) -> dict[str, Any]:
+        """Resolve background session-release timing through the Rust control seam."""
+
+        return self.rust_adapter.background_control(
+            {
+                "schema_version": self.rust_adapter.background_control_schema_version,
+                "operation": "session-release",
+                "current_status": "release_pending",
+                "task_active": False,
+                "task_done": False,
+                "active_job_count": self.state_service.active_job_count(),
+                "capacity_limit": self._max_background_jobs,
+                "session_id": session_id,
+            }
         )
 
     async def request_background_interrupt(self, job_id: str) -> BackgroundRunStatus | None:
         """Request interruption of a queued, running, or retry-scheduled job."""
 
-        async with self._jobs_lock:
-            current = self._job_store.get(job_id)
-            if current is None:
-                return None
-            if current.status in TERMINAL_JOB_STATUSES:
-                self.background_jobs[job_id] = current
-                return current
-
-            session_id = current.session_id or job_id
-            finalize_immediately = current.status in {"queued", "retry_scheduled"}
-            updated = self._job_store.set_status(
-                job_id,
-                status="interrupt_requested",
-                session_id=current.session_id,
-                result=current.result,
-                error=current.error,
-                timeout_seconds=current.timeout_seconds,
-                claimed_by=current.claimed_by,
-                attempt=current.attempt,
-                retry_count=current.retry_count,
-                max_attempts=current.max_attempts,
-                claimed_at=current.claimed_at,
-                backoff_base_seconds=current.backoff_base_seconds,
-                backoff_multiplier=current.backoff_multiplier,
-                max_backoff_seconds=current.max_backoff_seconds,
-                backoff_seconds=current.backoff_seconds,
-                next_retry_at=current.next_retry_at,
-                retry_scheduled_at=current.retry_scheduled_at,
-                retry_claimed_at=current.retry_claimed_at,
-                interrupt_requested_at=_now_iso(),
-                interrupted_at=current.interrupted_at,
-                last_attempt_started_at=current.last_attempt_started_at,
-                last_attempt_finished_at=current.last_attempt_finished_at,
-                last_failure_at=current.last_failure_at,
-            )
-            self.background_jobs[job_id] = updated
-
-        self._trace.record(
-            session_id=session_id,
-            job_id=job_id,
-            kind="job.interrupt_requested",
-            stage="background",
-            payload={"attempt": updated.attempt, "status": updated.status},
-        )
-
-        task = self._background_tasks.get(job_id)
-        if task is not None and not task.done():
-            task.cancel()
-        if finalize_immediately or task is None or task.done():
-            return await self._mark_background_interrupted(job_id, session_id=session_id, error="Interrupt requested")
-        return updated
+        return await self.background_service.request_interrupt(job_id)
 
     def get_background_status(self, job_id: str) -> BackgroundRunStatus | None:
         """Return the latest background job state."""
 
-        status = self._job_store.get(job_id)
-        if status is not None:
-            self.background_jobs[job_id] = status
-            return status
-        return self.background_jobs.get(job_id)
-
-    async def _run_background_job(self, job_id: str, request: BackgroundRunRequest) -> None:
-        """Execute one background job with explicit retry/backoff semantics."""
-
-        current_task = asyncio.current_task()
-        try:
-            while True:
-                current = self._job_store.get(job_id)
-                if current is None:
-                    return
-                if current.status == "interrupt_requested":
-                    await self._mark_background_interrupted(
-                        job_id,
-                        session_id=current.session_id or job_id,
-                        error="Interrupt requested before execution",
-                    )
-                    return
-
-                async with self._job_semaphore:
-                    started_at = _now_iso()
-                    async with self._jobs_lock:
-                        running = self._job_store.set_status(
-                            job_id,
-                            status="running",
-                            session_id=request.session_id,
-                            result=current.result,
-                            error=None,
-                            timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                            claimed_by=job_id,
-                            attempt=current.attempt,
-                            retry_count=current.retry_count,
-                            max_attempts=current.max_attempts,
-                            claimed_at=started_at,
-                            backoff_base_seconds=current.backoff_base_seconds,
-                            backoff_multiplier=current.backoff_multiplier,
-                            max_backoff_seconds=current.max_backoff_seconds,
-                            backoff_seconds=current.backoff_seconds,
-                            next_retry_at=current.next_retry_at,
-                            retry_scheduled_at=current.retry_scheduled_at,
-                            retry_claimed_at=current.retry_claimed_at,
-                            interrupt_requested_at=current.interrupt_requested_at,
-                            interrupted_at=current.interrupted_at,
-                            last_attempt_started_at=started_at,
-                            last_attempt_finished_at=current.last_attempt_finished_at,
-                            last_failure_at=current.last_failure_at,
-                        )
-                        self.background_jobs[job_id] = running
-                    self._trace.record(
-                        session_id=request.session_id or job_id,
-                        job_id=job_id,
-                        kind="job.claimed",
-                        stage="background",
-                        payload={
-                            "status": "running",
-                            "attempt": running.attempt,
-                            **self.execution_service.kernel_payload(
-                                dry_run=self.execution_service.resolve_dry_run(
-                                    request_dry_run=request.dry_run
-                                ),
-                            ),
-                        },
-                    )
-
-                    try:
-                        result = await asyncio.wait_for(
-                            self.run_task(request),
-                            timeout=_BACKGROUND_JOB_TIMEOUT,
-                        )
-                    except asyncio.CancelledError:
-                        await self._mark_background_interrupted(
-                            job_id,
-                            session_id=request.session_id or job_id,
-                            error="Interrupt requested",
-                        )
-                        raise
-                    except TimeoutError:
-                        if await self._schedule_retry_or_finalize(
-                            job_id,
-                            session_id=request.session_id or job_id,
-                            error=f"Job timed out after {_BACKGROUND_JOB_TIMEOUT}s",
-                        ):
-                            continue
-                        return
-                    except Exception as error:
-                        if await self._schedule_retry_or_finalize(
-                            job_id,
-                            session_id=request.session_id or job_id,
-                            error=str(error),
-                        ):
-                            continue
-                        return
-
-                    completed_at = _now_iso()
-                    should_interrupt = False
-                    async with self._jobs_lock:
-                        latest = self._job_store.get(job_id)
-                        if latest is None:
-                            return
-                        if latest.status == "interrupt_requested":
-                            should_interrupt = True
-                        else:
-                            completed = self._job_store.set_status(
-                                job_id,
-                                status="completed",
-                                session_id=result.session_id,
-                                result=result,
-                                timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                                claimed_by=job_id,
-                                attempt=latest.attempt,
-                                retry_count=latest.retry_count,
-                                max_attempts=latest.max_attempts,
-                                claimed_at=latest.claimed_at,
-                                backoff_base_seconds=latest.backoff_base_seconds,
-                                backoff_multiplier=latest.backoff_multiplier,
-                                max_backoff_seconds=latest.max_backoff_seconds,
-                                backoff_seconds=latest.backoff_seconds,
-                                next_retry_at=None,
-                                retry_scheduled_at=latest.retry_scheduled_at,
-                                retry_claimed_at=latest.retry_claimed_at,
-                                interrupt_requested_at=latest.interrupt_requested_at,
-                                interrupted_at=latest.interrupted_at,
-                                last_attempt_started_at=latest.last_attempt_started_at,
-                                last_attempt_finished_at=completed_at,
-                                last_failure_at=latest.last_failure_at,
-                            )
-                            self.background_jobs[job_id] = completed
-                    if should_interrupt:
-                        await self._mark_background_interrupted(
-                            job_id,
-                            session_id=result.session_id,
-                            error="Interrupt requested",
-                        )
-                        return
-                    self._trace.record(
-                        session_id=result.session_id,
-                        job_id=job_id,
-                        kind="job.completed",
-                        stage="background",
-                        payload={
-                            "status": "completed",
-                            "attempt": completed.attempt,
-                            **self.execution_service.kernel_payload(
-                                dry_run=not result.live_run,
-                                metadata=result.metadata,
-                            ),
-                        },
-                    )
-                    self._write_resume_manifest(
-                        session_id=result.session_id,
-                        job_id=job_id,
-                        status="completed",
-                    )
-                    return
-        except asyncio.CancelledError:
-            current = self._job_store.get(job_id)
-            if current is not None and current.status not in TERMINAL_JOB_STATUSES:
-                await self._mark_background_interrupted(
-                    job_id,
-                    session_id=current.session_id or job_id,
-                    error="Interrupt requested",
-                )
-            raise
-        finally:
-            if self._background_tasks.get(job_id) is current_task:
-                self._background_tasks.pop(job_id, None)
-
-    async def _schedule_retry_or_finalize(self, job_id: str, *, session_id: str, error: str) -> bool:
-        """Record failure, then either schedule deterministic retry or finalize."""
-
-        failed_at = _now_iso()
-        should_interrupt = False
-        async with self._jobs_lock:
-            current = self._job_store.get(job_id)
-            if current is None:
-                return False
-            if current.status == "interrupt_requested":
-                should_interrupt = True
-            else:
-                self._trace.record(
-                    session_id=session_id,
-                    job_id=job_id,
-                    kind="job.failed",
-                    stage="background",
-                    payload={"error": error, "attempt": current.attempt},
-                )
-
-            if should_interrupt:
-                pass
-            elif current.attempt >= current.max_attempts:
-                terminal_status = "retry_exhausted" if current.max_attempts > 1 else "failed"
-                finalized = self._job_store.set_status(
-                    job_id,
-                    status=terminal_status,
-                    session_id=current.session_id,
-                    result=current.result,
-                    error=error,
-                    timeout_seconds=current.timeout_seconds,
-                    claimed_by=current.claimed_by,
-                    attempt=current.attempt,
-                    retry_count=current.retry_count,
-                    max_attempts=current.max_attempts,
-                    claimed_at=current.claimed_at,
-                    backoff_base_seconds=current.backoff_base_seconds,
-                    backoff_multiplier=current.backoff_multiplier,
-                    max_backoff_seconds=current.max_backoff_seconds,
-                    backoff_seconds=current.backoff_seconds,
-                    next_retry_at=None,
-                    retry_scheduled_at=current.retry_scheduled_at,
-                    retry_claimed_at=current.retry_claimed_at,
-                    interrupt_requested_at=current.interrupt_requested_at,
-                    interrupted_at=current.interrupted_at,
-                    last_attempt_started_at=current.last_attempt_started_at,
-                    last_attempt_finished_at=failed_at,
-                    last_failure_at=failed_at,
-                )
-                self.background_jobs[job_id] = finalized
-                if terminal_status == "retry_exhausted":
-                    self._trace.record(
-                        session_id=session_id,
-                        job_id=job_id,
-                        kind="job.retry_exhausted",
-                        stage="background",
-                        payload={"attempt": finalized.attempt, "max_attempts": finalized.max_attempts, "error": error},
-                    )
-                self._write_resume_manifest(
-                    session_id=session_id,
-                    job_id=job_id,
-                    status=terminal_status,
-                )
-                return False
-            else:
-                next_retry_count = current.retry_count + 1
-                backoff_seconds = self._compute_backoff_seconds(
-                    base=current.backoff_base_seconds,
-                    multiplier=current.backoff_multiplier,
-                    retry_count=next_retry_count,
-                    maximum=current.max_backoff_seconds,
-                )
-                next_retry_at = (
-                    datetime.now(UTC) + timedelta(seconds=backoff_seconds)
-                ).isoformat()
-                scheduled = self._job_store.set_status(
-                    job_id,
-                    status="retry_scheduled",
-                    session_id=current.session_id,
-                    result=current.result,
-                    error=error,
-                    timeout_seconds=current.timeout_seconds,
-                    claimed_by=current.claimed_by,
-                    attempt=current.attempt,
-                    retry_count=next_retry_count,
-                    max_attempts=current.max_attempts,
-                    claimed_at=current.claimed_at,
-                    backoff_base_seconds=current.backoff_base_seconds,
-                    backoff_multiplier=current.backoff_multiplier,
-                    max_backoff_seconds=current.max_backoff_seconds,
-                    backoff_seconds=backoff_seconds,
-                    next_retry_at=next_retry_at,
-                    retry_scheduled_at=failed_at,
-                    retry_claimed_at=current.retry_claimed_at,
-                    interrupt_requested_at=current.interrupt_requested_at,
-                    interrupted_at=current.interrupted_at,
-                    last_attempt_started_at=current.last_attempt_started_at,
-                    last_attempt_finished_at=failed_at,
-                    last_failure_at=failed_at,
-                )
-                self.background_jobs[job_id] = scheduled
-
-        if should_interrupt:
-            await self._mark_background_interrupted(job_id, session_id=session_id, error="Interrupt requested")
-            return False
-
-        self._trace.record(
-            session_id=session_id,
-            job_id=job_id,
-            kind="job.retry_scheduled",
-            stage="background",
-            payload={
-                "attempt": scheduled.attempt,
-                "retry_count": scheduled.retry_count,
-                "backoff_seconds": scheduled.backoff_seconds,
-                "next_retry_at": scheduled.next_retry_at,
-                "error": error,
-            },
-        )
-
-        try:
-            await asyncio.sleep(scheduled.backoff_seconds or 0.0)
-        except asyncio.CancelledError:
-            await self._mark_background_interrupted(
-                job_id,
-                session_id=session_id,
-                error="Interrupt requested during retry backoff",
-            )
-            raise
-
-        should_interrupt = False
-        async with self._jobs_lock:
-            current = self._job_store.get(job_id)
-            if current is None:
-                return False
-            if current.status == "interrupt_requested":
-                should_interrupt = True
-            else:
-                retry_claimed_at = _now_iso()
-                claimed = self._job_store.set_status(
-                    job_id,
-                    status="retry_claimed",
-                    session_id=current.session_id,
-                    result=current.result,
-                    error=current.error,
-                    timeout_seconds=current.timeout_seconds,
-                    claimed_by=job_id,
-                    attempt=current.attempt + 1,
-                    retry_count=current.retry_count,
-                    max_attempts=current.max_attempts,
-                    claimed_at=current.claimed_at,
-                    backoff_base_seconds=current.backoff_base_seconds,
-                    backoff_multiplier=current.backoff_multiplier,
-                    max_backoff_seconds=current.max_backoff_seconds,
-                    backoff_seconds=current.backoff_seconds,
-                    next_retry_at=current.next_retry_at,
-                    retry_scheduled_at=current.retry_scheduled_at,
-                    retry_claimed_at=retry_claimed_at,
-                    interrupt_requested_at=current.interrupt_requested_at,
-                    interrupted_at=current.interrupted_at,
-                    last_attempt_started_at=current.last_attempt_started_at,
-                    last_attempt_finished_at=current.last_attempt_finished_at,
-                    last_failure_at=current.last_failure_at,
-                )
-                self.background_jobs[job_id] = claimed
-
-        if should_interrupt:
-            await self._mark_background_interrupted(job_id, session_id=session_id, error="Interrupt requested")
-            return False
-
-        self._trace.record(
-            session_id=session_id,
-            job_id=job_id,
-            kind="job.retry_claimed",
-            stage="background",
-            payload={"attempt": claimed.attempt, "retry_count": claimed.retry_count},
-        )
-        return True
-
-    async def _mark_background_interrupted(
-        self,
-        job_id: str,
-        *,
-        session_id: str,
-        error: str,
-    ) -> BackgroundRunStatus | None:
-        """Finalize a job as interrupted and emit the matching trace event."""
-
-        async with self._jobs_lock:
-            current = self._job_store.get(job_id)
-            if current is None:
-                return None
-            if current.status == "interrupted":
-                self.background_jobs[job_id] = current
-                return current
-            interrupted_at = _now_iso()
-            interrupted = self._job_store.set_status(
-                job_id,
-                status="interrupted",
-                session_id=current.session_id,
-                result=current.result,
-                error=error,
-                timeout_seconds=current.timeout_seconds,
-                claimed_by=current.claimed_by,
-                attempt=current.attempt,
-                retry_count=current.retry_count,
-                max_attempts=current.max_attempts,
-                claimed_at=current.claimed_at,
-                backoff_base_seconds=current.backoff_base_seconds,
-                backoff_multiplier=current.backoff_multiplier,
-                max_backoff_seconds=current.max_backoff_seconds,
-                backoff_seconds=current.backoff_seconds,
-                next_retry_at=current.next_retry_at,
-                retry_scheduled_at=current.retry_scheduled_at,
-                retry_claimed_at=current.retry_claimed_at,
-                interrupt_requested_at=current.interrupt_requested_at or interrupted_at,
-                interrupted_at=interrupted_at,
-                last_attempt_started_at=current.last_attempt_started_at,
-                last_attempt_finished_at=interrupted_at,
-                last_failure_at=current.last_failure_at,
-            )
-            self.background_jobs[job_id] = interrupted
-
-        self._trace.record(
-            session_id=session_id,
-            job_id=job_id,
-            kind="job.interrupted",
-            stage="background",
-            payload={"attempt": interrupted.attempt, "error": error},
-        )
-        self._write_resume_manifest(
-            session_id=session_id,
-            job_id=job_id,
-            status="interrupted",
-        )
-        return interrupted
+        return self.background_service.get_status(job_id)
 
     def _attach_trace_metadata(self, response: RunTaskResponse, routing_result: RoutingResult) -> None:
         """Stamp final trace metadata onto a response payload."""
@@ -1120,6 +770,12 @@ class CodexAgnoRuntime:
                 ),
                 "trace_event_bridge_supported": True,
                 "trace_event_bridge_schema_version": self.trace_service.event_bridge.schema_version,
+                "trace_event_transport_schema_version": TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
+                "trace_event_transport_family": "host-facing-bridge",
+                "trace_event_transport_endpoint_kind": "runtime_method",
+                "trace_event_transport_remote_capable": True,
+                "trace_event_transport_handoff_supported": True,
+                "trace_event_handoff_schema_version": TRACE_EVENT_HANDOFF_SCHEMA_VERSION,
                 "trace_event_schema_version": self._trace.event_schema_version,
                 "trace_metadata_schema_version": self._trace.metadata_schema_version,
                 "trace_event_sink_schema_version": (
@@ -1129,6 +785,8 @@ class CodexAgnoRuntime:
                     latest_cursor.schema_version if latest_cursor is not None else None
                 ),
                 "trace_replay_supported": stream_state["replay_supported"],
+                "trace_replay_anchor_kind": "trace_replay_cursor",
+                "trace_replay_resume_mode": stream_state["resume_mode"],
                 "trace_generation": stream_state["generation"],
                 "trace_latest_seq": stream_state["latest_seq"],
                 "trace_resume_cursor": latest_cursor.model_dump(mode="json") if latest_cursor is not None else None,
@@ -1192,6 +850,29 @@ class CodexAgnoRuntime:
             artifact_paths=artifact_paths,
         )
 
+    @staticmethod
+    def _normalize_supervisor_verification_status(value: Any) -> str | None:
+        """Reduce nested supervisor verification payloads to a stable summary string."""
+
+        if value is None or isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            nested_status = value.get("verification_status")
+            if isinstance(nested_status, str):
+                return nested_status
+            verdicts = [item.strip().lower() for item in value.values() if isinstance(item, str)]
+            if verdicts:
+                if all(verdict in {"passed", "completed", "ok"} or verdict.endswith(" passed") for verdict in verdicts):
+                    return "passed"
+                if any(
+                    token in verdict
+                    for verdict in verdicts
+                    for token in ("fail", "failed", "error", "timeout")
+                ):
+                    return "failed"
+            return "composite"
+        return str(value)
+
     def _build_supervisor_projection(self) -> TraceSupervisorProjection:
         """Project the minimal supervisor/control-plane descriptor for trace/resume artifacts."""
 
@@ -1204,8 +885,9 @@ class CodexAgnoRuntime:
             return TraceSupervisorProjection(
                 supervisor_state_path=str(supervisor_state_path.resolve())
             )
+        schema_version = payload.get("schema_version")
         delegation = payload.get("delegation")
-        if not isinstance(delegation, dict):
+        if schema_version != "supervisor-state-v2" and not isinstance(delegation, dict):
             delegation = {
                 "delegation_plan_created": payload.get("delegation_plan_created"),
                 "spawn_attempted": payload.get("spawn_attempted"),
@@ -1213,19 +895,20 @@ class CodexAgnoRuntime:
                 "delegated_sidecars": payload.get("delegated_sidecars"),
             }
         verification = payload.get("verification")
-        if not isinstance(verification, dict):
+        if schema_version != "supervisor-state-v2" and not isinstance(verification, dict):
             verification = {"verification_status": payload.get("verification_status")}
         delegated_sidecars = delegation.get("delegated_sidecars")
         if not isinstance(delegated_sidecars, list):
             delegated_sidecars = []
+        verification_status = (
+            verification.get("verification_status")
+            if isinstance(verification, dict)
+            else payload.get("verification_status")
+        )
         return TraceSupervisorProjection(
             supervisor_state_path=str(supervisor_state_path.resolve()),
             active_phase=payload.get("active_phase"),
-            verification_status=(
-                verification.get("verification_status")
-                if isinstance(verification, dict)
-                else payload.get("verification_status")
-            ),
+            verification_status=self._normalize_supervisor_verification_status(verification_status),
             delegation={
                 "plan_created": delegation.get("delegation_plan_created"),
                 "spawn_attempted": delegation.get("spawn_attempted"),
@@ -1257,23 +940,3 @@ class CodexAgnoRuntime:
             artifact_paths=artifact_paths,
             supervisor_projection=self._build_supervisor_projection().model_dump(mode="json"),
         )
-
-    def _compute_backoff_seconds(
-        self,
-        *,
-        base: float,
-        multiplier: float,
-        retry_count: int,
-        maximum: float | None,
-    ) -> float:
-        """Return deterministic backoff seconds for the next retry attempt."""
-
-        if retry_count <= 0:
-            return 0.0
-        if base <= 0:
-            return 0.0
-        multiplier = multiplier if multiplier > 0 else 1.0
-        delay = base * (multiplier ** max(0, retry_count - 1))
-        if maximum is not None:
-            delay = min(delay, maximum)
-        return delay

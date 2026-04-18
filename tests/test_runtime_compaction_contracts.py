@@ -74,6 +74,7 @@ def test_compaction_contract_freezes_required_sections() -> None:
         "## Contract 3: Generation Rollover Policy",
         "## Contract 4: Artifact Ref Strategy",
         "## Contract 5: Consistency Invariants",
+        "## Current Minimal Implementation Status",
     ]:
         assert heading in text
 
@@ -111,3 +112,15 @@ def test_compaction_contract_consistency_rules_are_non_negotiable() -> None:
     assert "fail closed" in text
     assert "cross-generation mutable aliasing" in text
     assert "state_digest" in text
+
+
+def test_compaction_contract_minimal_implementation_status_is_explicit() -> None:
+    """The doc should freeze activation and fail-closed behavior for the minimal live implementation."""
+
+    text = _doc_text()
+    assert "supports_compaction" in text
+    assert "supports_snapshot_delta" in text
+    assert "one stable snapshot for the old generation" in text
+    assert "exactly one successor generation" in text
+    assert "latest stable snapshot plus generation-local deltas" in text
+    assert "fail-closed / no-op" in text

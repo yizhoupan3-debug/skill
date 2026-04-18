@@ -12,6 +12,87 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.framework_mcp import FrameworkMcpServer
+from scripts.memory_support import build_memory_state, load_runtime_snapshot
+
+
+def _write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _write_json(path: Path, payload: dict[str, object]) -> None:
+    _write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+
+
+def _seed_runtime_artifacts(repo_root: Path, *, terminal: bool) -> None:
+    task_id = "checklist-series-final-closeout-20260418210000" if terminal else "active-bootstrap-repair-20260418210000"
+    task_root = repo_root / "artifacts" / "current" / task_id
+    if terminal:
+        summary_lines = [
+            "- task: checklist-series final closeout",
+            "- phase: finalized",
+            "- status: completed",
+        ]
+        supervisor_state = {
+            "task_id": task_id,
+            "task_summary": "checklist-series final closeout",
+            "active_phase": "finalized",
+            "verification": {"verification_status": "completed"},
+            "continuity": {"story_state": "completed", "resume_allowed": False},
+            "execution_contract": {
+                "goal": "Do not treat closeout as active continuity",
+                "scope": ["memory/CLAUDE_MEMORY.md"],
+            },
+        }
+        trace_metadata = {"task": "checklist-series final closeout", "matched_skills": ["checklist-fixer"]}
+        next_actions = {
+            "next_actions": ["Start a new standalone task before continuing related work"],
+        }
+    else:
+        summary_lines = [
+            "- task: active bootstrap repair",
+            "- phase: implementation",
+            "- status: in_progress",
+        ]
+        supervisor_state = {
+            "task_id": task_id,
+            "task_summary": "active bootstrap repair",
+            "active_phase": "implementation",
+            "verification": {"verification_status": "in_progress"},
+            "continuity": {"story_state": "active", "resume_allowed": True},
+            "primary_owner": "skill-developer-codex",
+            "execution_contract": {
+                "goal": "Repair stale bootstrap injection",
+                "scope": ["scripts/memory_support.py"],
+                "acceptance_criteria": ["completed tasks never appear as current execution"],
+            },
+            "blockers": {"open_blockers": ["Need regression coverage"]},
+        }
+        trace_metadata = {
+            "task": "active bootstrap repair",
+            "matched_skills": ["execution-controller-coding", "skill-developer-codex"],
+        }
+        next_actions = {"next_actions": ["Patch classifier", "Run MCP regression tests"]}
+    _write_text(task_root / "SESSION_SUMMARY.md", "\n".join(summary_lines) + "\n")
+    _write_json(task_root / "NEXT_ACTIONS.json", next_actions)
+    _write_json(task_root / "EVIDENCE_INDEX.json", {"artifacts": []})
+    _write_json(task_root / "TRACE_METADATA.json", trace_metadata)
+    _write_text(repo_root / "artifacts" / "current" / "SESSION_SUMMARY.md", "\n".join(summary_lines) + "\n")
+    _write_json(repo_root / "artifacts" / "current" / "NEXT_ACTIONS.json", next_actions)
+    _write_json(repo_root / "artifacts" / "current" / "EVIDENCE_INDEX.json", {"artifacts": []})
+    _write_json(repo_root / "artifacts" / "current" / "TRACE_METADATA.json", trace_metadata)
+    _write_json(
+        repo_root / "artifacts" / "current" / "active_task.json",
+        {"task_id": task_id, "task": supervisor_state["task_summary"]},
+    )
+    _write_json(repo_root / ".supervisor_state.json", supervisor_state)
+
+
+def _seed_memory_state(repo_root: Path) -> None:
+    memory_root = repo_root / ".codex" / "memory"
+    memory_root.mkdir(parents=True, exist_ok=True)
+    snapshot = load_runtime_snapshot(repo_root)
+    _write_json(memory_root / "state.json", build_memory_state(snapshot))
 
 
 def _call(server: FrameworkMcpServer, request_id: int, method: str, params: dict) -> dict:
@@ -65,16 +146,22 @@ def test_bootstrap_refresh_materializes_payload_in_requested_output_dir(tmp_path
     bootstrap_path = Path(payload["bootstrap_path"])
     assert payload["ok"] is True
     assert bootstrap_path.is_file()
-    assert bootstrap_path.parent == tmp_path
+    assert bootstrap_path.parent.parent == tmp_path
+    assert bootstrap_path.name == "framework_default_bootstrap.json"
+    assert payload["task_id"]
 
 
 def test_memory_recall_and_resource_read_return_repo_backed_content(tmp_path: Path) -> None:
-    server = FrameworkMcpServer(repo_root=PROJECT_ROOT, output_dir=tmp_path)
+    _seed_runtime_artifacts(tmp_path, terminal=False)
+    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
+    _write_text(tmp_path / "memory" / "MEMORY.md", "# 项目长期记忆\n")
+    _seed_memory_state(tmp_path)
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
     recall = _tool_call(
         server=server,
         request_id=4,
         name="framework_memory_recall",
-        arguments={"query": "长期记忆", "top": 3},
+        arguments={"query": "active bootstrap repair", "top": 3, "mode": "active"},
     )
     resource = _call(
         server=server,
@@ -84,12 +171,50 @@ def test_memory_recall_and_resource_read_return_repo_backed_content(tmp_path: Pa
     )
     assert recall["ok"] is True
     assert "memory_root" in recall
+    assert recall["continuity"]["state"] == "active"
+    assert recall["retrieval"]["active_task_included"] is True
     assert "source_artifacts" in recall
     assert "项目长期记忆" in resource["result"]["contents"][0]["text"]
 
 
+def test_memory_recall_defaults_to_stable_mode_and_blocks_active_injection(tmp_path: Path) -> None:
+    _seed_runtime_artifacts(tmp_path, terminal=False)
+    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
+    _seed_memory_state(tmp_path)
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
+
+    recall = _tool_call(
+        server=server,
+        request_id=40,
+        name="framework_memory_recall",
+        arguments={"query": "active bootstrap repair", "top": 3},
+    )
+
+    assert recall["retrieval"]["mode"] == "stable"
+    assert recall["retrieval"]["active_task_included"] is False
+
+
+def test_memory_recall_ignores_unrelated_active_task_continuity(tmp_path: Path) -> None:
+    _seed_runtime_artifacts(tmp_path, terminal=False)
+    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
+    _write_text(tmp_path / "memory" / "MEMORY.md", "# 项目长期记忆\n")
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
+
+    recall = _tool_call(
+        server=server,
+        request_id=41,
+        name="framework_memory_recall",
+        arguments={"query": "totally unrelated prompt", "top": 3, "mode": "active"},
+    )
+
+    assert recall["continuity"]["state"] == "query-mismatch"
+    assert recall["continuity_decision"]["ignored_root_continuity"] is True
+    assert recall["continuity"]["current_execution"] is None
+
+
 def test_skill_search_and_runtime_snapshot_are_actionable(tmp_path: Path) -> None:
-    server = FrameworkMcpServer(repo_root=PROJECT_ROOT, output_dir=tmp_path)
+    _seed_runtime_artifacts(tmp_path, terminal=False)
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
     search = _tool_call(
         server=server,
         request_id=6,
@@ -106,10 +231,13 @@ def test_skill_search_and_runtime_snapshot_are_actionable(tmp_path: Path) -> Non
     assert any(match["slug"] == "agent-memory" for match in search["matches"])
     assert snapshot["ok"] is True
     assert snapshot["paths"]["supervisor_state"].endswith(".supervisor_state.json")
+    assert snapshot["continuity"]["state"] == "active"
+    assert snapshot["continuity"]["current_execution"]["task"] == "active bootstrap repair"
 
 
 def test_contract_summary_and_artifact_index_are_compact_and_actionable(tmp_path: Path) -> None:
-    server = FrameworkMcpServer(repo_root=PROJECT_ROOT, output_dir=tmp_path)
+    _seed_runtime_artifacts(tmp_path, terminal=True)
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
     contract = _tool_call(
         server=server,
         request_id=8,
@@ -124,9 +252,11 @@ def test_contract_summary_and_artifact_index_are_compact_and_actionable(tmp_path
     )
     payload = json.loads(resource["result"]["contents"][0]["text"])
     assert contract["ok"] is True
-    assert contract["primary_owner"]
-    assert isinstance(contract["next_actions"], list)
-    assert payload["workspace"] == PROJECT_ROOT.name
+    assert contract["continuity"]["state"] == "completed"
+    assert contract["goal"] is None
+    assert contract["next_actions"] == []
+    assert contract["recent_completed_execution"]["task"] == "checklist-series final closeout"
+    assert payload["workspace"] == tmp_path.name
     assert isinstance(payload["next_actions"], list)
     assert isinstance(payload["evidence"], list)
 

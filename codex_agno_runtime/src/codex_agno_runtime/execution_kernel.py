@@ -3,30 +3,95 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import subprocess
 from pathlib import Path
 from typing import Any
 
-try:  # pragma: no cover - import is environment-dependent
-    from agno.run.agent import RunOutput as AgnoRunOutput
-except Exception:  # pragma: no cover - local dev often runs without Agno installed
-    AgnoRunOutput = None
-
-from codex_agno_runtime.agent_factory import AgentFactory, CompatibilityAgentHandle
+from codex_agno_runtime.agent_factory import AgentFactory
 from codex_agno_runtime.config import RuntimeSettings
 from codex_agno_runtime.execution_kernel_contracts import (
-    build_compatibility_fallback_metadata,
-    build_execution_kernel_compatibility_agent_spec,
-    build_execution_kernel_compatibility_projection_metadata,
-    build_execution_kernel_compatibility_live_response,
-    build_execution_kernel_dry_run_response,
     resolve_execution_kernel_prompt_preview,
 )
 from codex_agno_runtime.prompt_builder import PromptBuilder
 from codex_agno_runtime.schemas import RoutingResult, RunTaskResponse, UsageMetrics
-from codex_agno_runtime.utils import estimate_tokens
+
+
+SANDBOX_CAPABILITY_CATEGORIES = (
+    "read_only",
+    "workspace_mutating",
+    "networked",
+    "high_risk",
+)
+
+
+@dataclass(slots=True, frozen=True)
+class SandboxExecutionPolicy:
+    """Explicit sandbox capability policy carried with one kernel request."""
+
+    profile: str = "workspace-default"
+    capability_categories: tuple[str, ...] = ("read_only", "workspace_mutating", "networked")
+    dedicated_profile: bool = False
+    reusable: bool = True
+    schema_version: str = "runtime-sandbox-policy-v1"
+
+    def to_metadata(self) -> dict[str, Any]:
+        """Serialize the policy for response metadata and event logs."""
+
+        return {
+            "schema_version": self.schema_version,
+            "profile": self.profile,
+            "capability_categories": list(self.capability_categories),
+            "dedicated_profile": self.dedicated_profile,
+            "reusable": self.reusable,
+        }
+
+
+@dataclass(slots=True, frozen=True)
+class SandboxResourceBudget:
+    """Runtime sandbox resource budgets attached to one execution."""
+
+    cpu: float = 30.0
+    memory: int = 512 * 1024 * 1024
+    wall_clock: float = 30.0
+    output_size: int = 64 * 1024
+    schema_version: str = "runtime-sandbox-budget-v1"
+
+    def to_metadata(self) -> dict[str, Any]:
+        """Serialize the budget for response metadata and event logs."""
+
+        return {
+            "schema_version": self.schema_version,
+            "cpu": self.cpu,
+            "memory": self.memory,
+            "wall_clock": self.wall_clock,
+            "output_size": self.output_size,
+        }
+
+
+@dataclass(slots=True, frozen=True)
+class SandboxRuntimeProbe:
+    """Optional runtime measurements supplied by the host around kernel execution."""
+
+    cpu: float | None = None
+    memory: int | None = None
+    wall_clock: float | None = None
+    output_size: int | None = None
+    source: str = "host-runtime"
+    schema_version: str = "runtime-sandbox-runtime-probe-v1"
+
+    def to_metadata(self) -> dict[str, Any]:
+        """Serialize the runtime probe for metadata and logs."""
+
+        return {
+            "schema_version": self.schema_version,
+            "cpu": self.cpu,
+            "memory": self.memory,
+            "wall_clock": self.wall_clock,
+            "output_size": self.output_size,
+            "source": self.source,
+        }
 
 
 @dataclass(slots=True)
@@ -41,6 +106,10 @@ class ExecutionKernelRequest:
     dry_run: bool = False
     trace_event_count: int = 0
     trace_output_path: str | None = None
+    sandbox_policy: SandboxExecutionPolicy = field(default_factory=SandboxExecutionPolicy)
+    sandbox_budget: SandboxResourceBudget = field(default_factory=SandboxResourceBudget)
+    sandbox_tool_category: str = "workspace_mutating"
+    sandbox_runtime_probe: SandboxRuntimeProbe | None = None
 
 
 class ExecutionKernel:
@@ -222,21 +291,25 @@ class RouterRsExecutionKernel(ExecutionKernel):
 
 
 class PythonAgnoExecutionKernel(ExecutionKernel):
-    """Compatibility wrapper: Rust-first live kernel with a narrow Python fallback."""
+    """Thin Python projection over the Rust-owned execution kernel."""
 
     adapter_kind = "python-agno"
     authority = "python-agno-kernel-adapter"
 
+    @staticmethod
+    def _compatibility_fallback_requested(settings: RuntimeSettings) -> bool:
+        return bool(getattr(settings, "rust_execute_fallback_to_python", False))
+
     def _live_fallback_enabled(self) -> bool:
-        return bool(getattr(self.settings, "rust_execute_fallback_to_python", False))
+        return False
 
     def _live_fallback_mode(self) -> str:
-        return "compatibility-only-explicit" if self._live_fallback_enabled() else "disabled"
+        return "retired"
 
     def live_fallback_enabled(self) -> bool:
-        """Expose whether the compatibility live fallback is currently allowed."""
+        """Expose that the compatibility live fallback is no longer available."""
 
-        return self._live_fallback_enabled()
+        return False
 
     def __init__(
         self,
@@ -247,8 +320,20 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
     ) -> None:
         self.settings = settings
         self.prompt_builder = prompt_builder
+        # Keep the Python-side handle only as a retired compatibility-agent contract
+        # surface for older callers. The live kernel no longer delegates to it.
         self.agent_factory = agent_factory
         self._rust_live_kernel = RouterRsExecutionKernel(settings)
+
+    def _retired_fallback_error(self, *, phase: str, error: Exception | str) -> RuntimeError:
+        if self._compatibility_fallback_requested(self.settings):
+            return RuntimeError(
+                f"router-rs {phase} failed and the requested Python compatibility fallback "
+                f"is rejected after retirement: {error}"
+            )
+        return RuntimeError(
+            f"router-rs {phase} failed after Python compatibility fallback retirement: {error}"
+        )
 
     async def execute(self, request: ExecutionKernelRequest) -> RunTaskResponse:
         if request.dry_run:
@@ -266,11 +351,15 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
                 dry_run=True,
                 trace_event_count=request.trace_event_count,
                 trace_output_path=request.trace_output_path,
+                sandbox_policy=request.sandbox_policy,
+                sandbox_budget=request.sandbox_budget,
+                sandbox_tool_category=request.sandbox_tool_category,
+                sandbox_runtime_probe=request.sandbox_runtime_probe,
             )
             try:
                 return await self._rust_live_kernel.execute(dry_run_request)
-            except Exception:
-                return self._dry_run_response(request, prompt_preview=prompt_preview)
+            except Exception as error:
+                raise self._retired_fallback_error(phase="dry-run execution", error=error) from error
         live_request = ExecutionKernelRequest(
             task=request.task,
             session_id=request.session_id,
@@ -280,16 +369,15 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
             dry_run=False,
             trace_event_count=request.trace_event_count,
             trace_output_path=request.trace_output_path,
+            sandbox_policy=request.sandbox_policy,
+            sandbox_budget=request.sandbox_budget,
+            sandbox_tool_category=request.sandbox_tool_category,
+            sandbox_runtime_probe=request.sandbox_runtime_probe,
         )
         try:
             return await self._rust_live_kernel.execute(live_request)
-        except RouterRsInfrastructureError as error:
-            return await self.execute_live_fallback(live_request, error=error)
         except Exception as error:
-            raise RuntimeError(
-                "router-rs live execution failed without entering the Python compatibility fallback: "
-                f"{error}"
-            ) from error
+            raise self._retired_fallback_error(phase="live execution", error=error) from error
 
     async def execute_live_fallback(
         self,
@@ -297,42 +385,13 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
         *,
         error: Exception | str,
     ) -> RunTaskResponse:
-        """Execute only the Python compatibility live fallback lane."""
+        """Reject the retired Python compatibility fallback lane."""
 
-        if not self._live_fallback_enabled():
-            raise RuntimeError(
-                "router-rs execute infrastructure failed while Python live fallback is disabled: "
-                f"{error}"
-            )
-        prompt_preview = resolve_execution_kernel_prompt_preview(
-            prompt_preview=request.prompt_preview,
-            routing_result=request.routing_result,
-            build_prompt=self.prompt_builder.build_prompt,
-        )
-        compatibility_handle = self._build_compatibility_agent_handle(
-            request=request,
-            prompt_preview=prompt_preview,
-        )
-        response = await self._live_run_response(
-            request,
-            prompt_preview=prompt_preview,
-            compatibility_handle=compatibility_handle,
-        )
-        response.metadata.setdefault("execution_kernel", self.adapter_kind)
-        response.metadata.setdefault("execution_kernel_authority", self.authority)
-        response.metadata.update(
-            build_compatibility_fallback_metadata(
-                primary_adapter_kind=self._rust_live_kernel.adapter_kind,
-                primary_authority=self._rust_live_kernel.authority,
-                error=error,
-                compatibility_agent_metadata=compatibility_handle.contract.metadata,
-            )
-        )
-        return response
+        raise self._retired_fallback_error(phase="live execution", error=error)
 
     def health(self) -> dict[str, Any]:
         payload = super().health()
-        live_fallback_enabled = self._live_fallback_enabled()
+        compatibility_request_rejected = self._compatibility_fallback_requested(self.settings)
         payload.update(
             {
                 "kernel_replace_ready": True,
@@ -343,135 +402,19 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
                 "kernel_live_delegate_primary_authority": self._rust_live_kernel.authority,
                 "kernel_live_delegate_primary_family": "rust-cli",
                 "kernel_live_delegate_primary_impl": "router-rs",
-                "kernel_live_delegate_fallback_kind": self.adapter_kind if live_fallback_enabled else None,
-                "kernel_live_delegate_fallback_authority": self.authority if live_fallback_enabled else None,
-                "kernel_live_delegate_fallback_family": "python" if live_fallback_enabled else None,
-                "kernel_live_delegate_fallback_impl": "agno" if live_fallback_enabled else None,
-                "kernel_live_fallback_enabled": live_fallback_enabled,
-                "kernel_live_delegate_mode": "rust-primary",
+                "kernel_live_delegate_fallback_kind": None,
+                "kernel_live_delegate_fallback_authority": None,
+                "kernel_live_delegate_fallback_family": None,
+                "kernel_live_delegate_fallback_impl": None,
+                "kernel_live_fallback_enabled": False,
+                "kernel_live_delegate_mode": "rust-primary-only",
                 "kernel_live_fallback_mode": self._live_fallback_mode(),
+                "kernel_live_fallback_retired": True,
+                "kernel_live_fallback_request_status": (
+                    "explicit-request-rejected"
+                    if compatibility_request_rejected
+                    else "not-supported"
+                ),
             }
         )
         return payload
-
-    def _dry_run_response(
-        self,
-        request: ExecutionKernelRequest,
-        *,
-        prompt_preview: str,
-    ) -> RunTaskResponse:
-        routing_result = request.routing_result
-        input_tokens = estimate_tokens(routing_result.task + "\n" + prompt_preview)
-        output_tokens = min(self.settings.default_output_tokens, 96)
-        content = (
-            f"[dry-run] Routed to `{routing_result.selected_skill.name}` on {routing_result.layer}. "
-            f"Session `{routing_result.session_id}` is ready for kernel execution."
-        )
-        return build_execution_kernel_dry_run_response(
-            session_id=routing_result.session_id,
-            user_id=request.user_id,
-            skill=routing_result.selected_skill.name,
-            overlay=routing_result.overlay_skill.name if routing_result.overlay_skill else None,
-            content=content,
-            prompt_preview=prompt_preview,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            execution_kernel=self.adapter_kind,
-            execution_kernel_authority=self.authority,
-            trace_event_count=request.trace_event_count,
-            trace_output_path=request.trace_output_path,
-            extra_metadata=build_execution_kernel_compatibility_projection_metadata(),
-        )
-
-    async def _live_run_response(
-        self,
-        request: ExecutionKernelRequest,
-        *,
-        prompt_preview: str,
-        compatibility_handle: CompatibilityAgentHandle | None = None,
-    ) -> RunTaskResponse:
-        routing_result = request.routing_result
-        compatibility_handle = compatibility_handle or self._build_compatibility_agent_handle(
-            request=request,
-            prompt_preview=prompt_preview,
-        )
-        agent = compatibility_handle.agent
-        if prompt_preview:
-            agent.instructions = [prompt_preview]
-        run_output = await agent.arun(
-            request.task,
-            session_id=request.session_id,
-            user_id=request.user_id,
-            stream=False,
-        )
-        if AgnoRunOutput is not None and not isinstance(run_output, AgnoRunOutput):
-            raise TypeError("Expected Agno to return a RunOutput object.")
-        return build_execution_kernel_compatibility_live_response(
-            session_id=routing_result.session_id,
-            user_id=request.user_id,
-            skill=routing_result.selected_skill.name,
-            overlay=routing_result.overlay_skill.name if routing_result.overlay_skill else None,
-            content=run_output.get_content_as_string() or "",
-            usage=self._serialize_metrics(getattr(run_output, "metrics", None)),
-            prompt_preview=prompt_preview,
-            model_id=run_output.model,
-            run_id=run_output.run_id,
-            status=(
-                run_output.status.value
-                if hasattr(run_output.status, "value")
-                else str(run_output.status)
-            ),
-            execution_kernel=self.adapter_kind,
-            execution_kernel_authority=self.authority,
-            trace_event_count=request.trace_event_count,
-            trace_output_path=request.trace_output_path,
-            extra_metadata=compatibility_handle.contract.metadata,
-        )
-
-    def _build_compatibility_agent_handle(
-        self,
-        *,
-        request: ExecutionKernelRequest,
-        prompt_preview: str,
-    ) -> CompatibilityAgentHandle:
-        build_handle = getattr(self.agent_factory, "build_compatibility_agent_handle", None)
-        if callable(build_handle):
-            return build_handle(
-                request.routing_result,
-                request.user_id,
-                prompt_preview=prompt_preview,
-            )
-        compatibility_spec = build_execution_kernel_compatibility_agent_spec(
-            routing_result=request.routing_result,
-            build_prompt=self.prompt_builder.build_prompt,
-            prompt_preview=prompt_preview,
-        )
-        build_agent = self.agent_factory.build_compatibility_agent
-        try:
-            agent = build_agent(
-                request.routing_result,
-                request.user_id,
-                prompt_preview=prompt_preview,
-            )
-        except TypeError:
-            agent = build_agent(
-                request.routing_result,
-                request.user_id,
-            )
-        return CompatibilityAgentHandle(
-            agent=agent,
-            contract=compatibility_spec,
-        )
-
-    @staticmethod
-    def _serialize_metrics(metrics: Any | None) -> UsageMetrics:
-        """Normalize Agno metrics into the public API schema."""
-
-        if metrics is None:
-            return UsageMetrics(input_tokens=0, output_tokens=0, total_tokens=0, mode="live")
-        return UsageMetrics(
-            input_tokens=metrics.input_tokens,
-            output_tokens=metrics.output_tokens,
-            total_tokens=metrics.total_tokens,
-            mode="live",
-        )

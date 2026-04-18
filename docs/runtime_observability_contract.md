@@ -23,6 +23,21 @@ It is the contract source of truth for:
 - No signal may depend on unbounded high-cardinality labels beyond the shared
   runtime dimensions defined below.
 
+## Producer / Exporter Ownership
+
+The runtime observability producer and exporter are Rust contract-owned.
+
+- Python remains a thin projection for bridge delivery and persistence
+  plumbing; it does not own the canonical observability vocabulary.
+- The ownership boundary is expressed with
+  `ownership_lane = "rust-contract-lane"`,
+  `producer_owner = "rust-control-plane"`, and
+  `exporter_owner = "rust-control-plane"`.
+- `producer_authority` and `exporter_authority` remain rooted in
+  `rust-runtime-control-plane`.
+- This ownership shift does not change the JSONL vocabulary, the OTel
+  vocabulary, the replay seam, or the compaction seam.
+
 ## Runtime Resource Attributes
 
 All spans, metrics, and logs emitted by the runtime carry the same resource

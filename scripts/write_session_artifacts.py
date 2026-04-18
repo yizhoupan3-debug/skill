@@ -5,8 +5,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.memory_support import build_task_id, write_active_task_pointer
+
+
+NEXT_ACTIONS_SCHEMA_VERSION = "next-actions-v2"
+EVIDENCE_INDEX_SCHEMA_VERSION = "evidence-index-v2"
 
 
 def write_session_summary(
@@ -58,7 +68,7 @@ def write_next_actions(path: Path, actions: list[str]) -> None:
     """
 
     payload = {
-        "version": 1,
+        "schema_version": NEXT_ACTIONS_SCHEMA_VERSION,
         "next_actions": actions,
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -76,7 +86,7 @@ def write_evidence_index(path: Path, entries: list[dict[str, Any]]) -> None:
     """
 
     payload = {
-        "version": 1,
+        "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
         "artifacts": entries,
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -110,6 +120,9 @@ def write_artifacts(
     summary: str,
     next_actions: list[str],
     evidence: list[dict[str, Any]],
+    task_id: str | None = None,
+    mirror_output_dir: Path | None = None,
+    repo_root: Path | None = None,
 ) -> dict[str, str]:
     """Write the three standard session artifact files into a directory.
 
@@ -126,20 +139,38 @@ def write_artifacts(
         dict[str, str]: Mapping of artifact type to written file path.
     """
 
-    output_dir.mkdir(parents=True, exist_ok=True)
+    resolved_task_id = task_id or build_task_id(task)
+    primary_dir = output_dir / resolved_task_id if task_id else output_dir
+    primary_dir.mkdir(parents=True, exist_ok=True)
 
-    summary_path = output_dir / "SESSION_SUMMARY.md"
-    next_actions_path = output_dir / "NEXT_ACTIONS.json"
-    evidence_path = output_dir / "EVIDENCE_INDEX.json"
+    summary_path = primary_dir / "SESSION_SUMMARY.md"
+    next_actions_path = primary_dir / "NEXT_ACTIONS.json"
+    evidence_path = primary_dir / "EVIDENCE_INDEX.json"
 
     write_session_summary(summary_path, task=task, phase=phase, status=status, summary=summary)
     write_next_actions(next_actions_path, next_actions)
     write_evidence_index(evidence_path, evidence)
 
+    if mirror_output_dir is not None:
+        mirror_output_dir.mkdir(parents=True, exist_ok=True)
+        write_session_summary(
+            mirror_output_dir / "SESSION_SUMMARY.md",
+            task=task,
+            phase=phase,
+            status=status,
+            summary=summary,
+        )
+        write_next_actions(mirror_output_dir / "NEXT_ACTIONS.json", next_actions)
+        write_evidence_index(mirror_output_dir / "EVIDENCE_INDEX.json", evidence)
+
+    if repo_root is not None and task_id:
+        write_active_task_pointer(repo_root, task_id=resolved_task_id, task=task)
+
     return {
         "summary": str(summary_path),
         "next_actions": str(next_actions_path),
         "evidence": str(evidence_path),
+        "task_id": resolved_task_id,
     }
 
 
@@ -161,6 +192,9 @@ def main() -> int:
     parser.add_argument("--summary", default="", help="Summary text.")
     parser.add_argument("--next-action", action="append", default=[], help="Repeatable next-action item.")
     parser.add_argument("--evidence", action="append", default=[], help="Repeatable evidence item using kind=path.")
+    parser.add_argument("--task-id", default="", help="Optional task id for task-scoped artifact writes.")
+    parser.add_argument("--mirror-output-dir", type=Path, default=None, help="Optional compatibility mirror output directory.")
+    parser.add_argument("--repo-root", type=Path, default=None, help="Optional repo root used to refresh the active-task pointer.")
     args = parser.parse_args()
 
     paths = write_artifacts(
@@ -171,6 +205,9 @@ def main() -> int:
         summary=args.summary,
         next_actions=args.next_action,
         evidence=parse_evidence(args.evidence),
+        task_id=args.task_id or None,
+        mirror_output_dir=args.mirror_output_dir,
+        repo_root=args.repo_root,
     )
     print(json.dumps(paths, ensure_ascii=False, indent=2))
     return 0

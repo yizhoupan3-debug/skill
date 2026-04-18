@@ -38,6 +38,10 @@ def test_ensure_config_file_bootstraps_schema_header(tmp_path: Path) -> None:
 def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     (repo_root / ".codex").mkdir(parents=True)
+    (repo_root / ".codex" / "model_instructions.md").write_text(
+        "<!-- FRAMEWORK_DEFAULT_RUNTIME_START -->\nlegacy\n<!-- FRAMEWORK_DEFAULT_RUNTIME_END -->\n",
+        encoding="utf-8",
+    )
     plugin_root = repo_root / "plugins" / "skill-framework-native" / ".codex-plugin"
     plugin_root.mkdir(parents=True)
     (plugin_root / "plugin.json").write_text('{"name":"skill-framework-native"}\n', encoding="utf-8")
@@ -62,7 +66,8 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     )
 
     content = home_config_path.read_text(encoding="utf-8")
-    instructions = (repo_root / project_instructions_path).read_text(encoding="utf-8")
+    instructions_path = repo_root / project_instructions_path
+    instructions = instructions_path.read_text(encoding="utf-8") if instructions_path.exists() else ""
     marketplace = json.loads(home_marketplace_path.read_text(encoding="utf-8"))
     assert first["success"] is True
     assert second["success"] is True
@@ -70,7 +75,9 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert content.count("[mcp_servers.framework-mcp]") == 1
     assert (home_plugin_root / ".codex-plugin" / "plugin.json").is_file()
     assert [plugin["name"] for plugin in marketplace["plugins"]].count("skill-framework-native") == 1
-    assert "HERMES_DEFAULT_RUNTIME_START" in instructions
+    assert instructions == ""
+    assert first["framework_overlay_retirement"]["status"] in {"retired-file", "retired-managed-block"}
+    assert second["framework_overlay_retirement"]["status"] == "already-retired"
 
 
 def test_sync_directory_removes_stale_files_and_copies_updates(tmp_path: Path) -> None:

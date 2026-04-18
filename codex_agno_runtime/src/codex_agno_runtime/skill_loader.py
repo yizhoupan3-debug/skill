@@ -35,8 +35,8 @@ def _normalize_list(value: Any) -> list[str]:
     return [str(value).strip()]
 
 
-def _normalize_trigger_phrases(value: Any) -> list[str]:
-    """Normalize manifest/runtime trigger strings into phrase candidates."""
+def _normalize_trigger_hints(value: Any) -> list[str]:
+    """Normalize manifest/runtime trigger hints into phrase candidates."""
 
     if isinstance(value, list):
         return _normalize_list(value)
@@ -225,7 +225,10 @@ class SkillLoader:
             manifest_record = manifest_by_slug.get(slug, {})
             description = str(runtime_record.get("summary", "")).strip() or str(manifest_record.get("description", "")).strip()
             short_description = str(runtime_record.get("summary", "")).strip() or str(manifest_record.get("description", "")).strip()
-            trigger_source = runtime_record.get("triggers", manifest_record.get("triggers"))
+            trigger_source = runtime_record.get(
+                "trigger_hints",
+                manifest_record.get("trigger_hints", runtime_record.get("triggers", manifest_record.get("triggers"))),
+            )
             records.append(
                 SkillMetadata(
                     name=slug,
@@ -240,7 +243,7 @@ class SkillLoader:
                     session_start=str(runtime_record.get("session_start", manifest_record.get("session_start", "n/a"))).strip() or "n/a",
                     framework_roles=[],
                     tags=[],
-                    trigger_phrases=_normalize_trigger_phrases(trigger_source),
+                    trigger_hints=_normalize_trigger_hints(trigger_source),
                     metadata={
                         "compiled_index_source": "runtime" if runtime_record else "manifest",
                         "runtime_record": runtime_record,
@@ -301,7 +304,9 @@ class SkillLoader:
                 session_start=str(metadata.get("session_start", "n/a")).strip() or "n/a",
                 framework_roles=_normalize_list(metadata.get("framework_roles")),
                 tags=_normalize_list(metadata.get("tags")),
-                trigger_phrases=_normalize_list(metadata.get("trigger_phrases")),
+                trigger_hints=_normalize_trigger_hints(
+                    metadata.get("trigger_hints", metadata.get("trigger_phrases"))
+                ),
                 metadata=metadata,
                 health=float(metadata.get("health", 100.0) or 100.0),
                 body=body if load_bodies else "",
@@ -346,8 +351,10 @@ class SkillLoader:
             skill.description = str(metadata.get("description", "")).strip()
         if not skill.short_description:
             skill.short_description = str(metadata.get("short_description", "")).strip() or skill.description
-        if not skill.trigger_phrases:
-            skill.trigger_phrases = _normalize_list(metadata.get("trigger_phrases"))
+        if not skill.trigger_hints:
+            skill.trigger_hints = _normalize_trigger_hints(
+                metadata.get("trigger_hints", metadata.get("trigger_phrases"))
+            )
         merged_metadata = dict(skill.metadata)
         merged_metadata.update(metadata)
         skill.metadata = merged_metadata

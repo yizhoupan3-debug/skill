@@ -94,7 +94,8 @@ Primary sources:
   only the filesystem backend is concrete so far
 - no real sandbox control plane yet
 - no Rust live in-process kernel yet; live execution is now Rust-first through
-  `router-rs`, but Python compatibility fallback still exists
+  `router-rs`, while the old Python fallback survives only as a retired
+  explicit-request surface that returns rejection metadata
 - Python and Rust still duplicate some contract/compiler logic
 
 ## Immediate Next Wave
@@ -106,8 +107,10 @@ Priority order:
 
 1. keep collapsing the residual route metadata/canonicalization lane behind the
    Rust-owned route policy/compiler authority
-2. remove the remaining Python compatibility fallback beneath the
-   execution-kernel seam now that the Rust-owned live execution slice exists
+2. keep the `rust_execute_fallback_to_python` control surface explicitly
+   retired-and-rejected until external caller evidence shows probes have
+   stopped, then delete the request shim, settings/env exposure, and retirement
+   artifact together without reopening the Python live path
 3. decide which middleware transforms stay as Python host callbacks vs move
    behind the execution-kernel seam
 4. keep extending resumable persistence and backend-family seams without
@@ -164,7 +167,8 @@ What this changes in practice:
   redoing the same bridge in another local form
 - the next Rust slice should delete the remaining Python fallback and continue
   collapsing residual Python-side prompt-preview/result shaping behind the
-  Rust-owned execution contract
+  Rust-owned execution contract, but the current repo must not describe the
+  retired request shim as a runnable fallback path
 
 ## Decision
 

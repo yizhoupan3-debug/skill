@@ -100,6 +100,7 @@ COMPATIBILITY_FALLBACK_PROMPT_PREVIEW_OWNER = "python-agno-kernel-adapter"
 DRY_RUN_PROMPT_PREVIEW_OWNER = "rust-execution-cli"
 LIVE_PRIMARY_MODEL_ID_SOURCE = "aggregator-response.model"
 COMPATIBILITY_FALLBACK_MODEL_ID_SOURCE = "agno-run-output.model"
+EXECUTION_KERNEL_RETIRED_COMPATIBILITY_FALLBACK_MODE = "retired"
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,21 +197,26 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
         "runtime_response_metadata_fields": {
             "shared": [*RUNTIME_TRACE_METADATA_FIELDS],
             "live_primary": [*LIVE_PRIMARY_RUNTIME_METADATA_FIELDS],
-            "compatibility_fallback": [*COMPATIBILITY_FALLBACK_RUNTIME_METADATA_FIELDS],
             "dry_run": [*DRY_RUN_RUNTIME_METADATA_FIELDS],
+            "retired_compatibility_fallback": [*COMPATIBILITY_FALLBACK_RUNTIME_METADATA_FIELDS],
         },
         "current_contract_truth": {
             "public_response_model": "RunTaskResponse",
             "live_primary_schema_version": EXECUTION_KERNEL_LIVE_PRIMARY_SCHEMA_VERSION,
             "live_primary_prompt_preview_owner": LIVE_PRIMARY_PROMPT_PREVIEW_OWNER,
-            "compatibility_fallback_prompt_preview_owner": (
+            "steady_state_response_shapes": ["live_primary", "dry_run"],
+            "retired_compatibility_fallback_prompt_preview_owner": (
                 COMPATIBILITY_FALLBACK_PROMPT_PREVIEW_OWNER
             ),
             "dry_run_prompt_preview_owner": DRY_RUN_PROMPT_PREVIEW_OWNER,
             "live_primary_model_id_source": LIVE_PRIMARY_MODEL_ID_SOURCE,
-            "compatibility_fallback_model_id_source": COMPATIBILITY_FALLBACK_MODEL_ID_SOURCE,
-            "compatibility_fallback_policy": EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
-            "compatibility_agent_contract_version": (
+            "retired_compatibility_fallback_model_id_source": (
+                COMPATIBILITY_FALLBACK_MODEL_ID_SOURCE
+            ),
+            "compatibility_fallback_runtime_path": EXECUTION_KERNEL_RETIRED_COMPATIBILITY_FALLBACK_MODE,
+            "compatibility_fallback_request_behavior": "explicit-request-rejected",
+            "retired_compatibility_fallback_policy": EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
+            "retired_compatibility_agent_contract_version": (
                 EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION
             ),
             "compatibility_fallback_reason_metadata_key": (
@@ -229,16 +235,18 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
                     *LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS
                 ],
             },
-            "compatibility_fallback": {
-                "live_run": True,
-                "usage_mode": "live",
-                "content_type": "string",
-                "prompt_preview_source": "python-prompt-builder",
-                "model_id_present": True,
-                "required_metadata_fields": [
+            "retired_compatibility_fallback": {
+                "runtime_path_available": False,
+                "request_behavior": "explicit-request-rejected",
+                "legacy_live_run": True,
+                "legacy_usage_mode": "live",
+                "legacy_content_type": "string",
+                "legacy_prompt_preview_source": "python-prompt-builder",
+                "legacy_model_id_present": True,
+                "legacy_required_metadata_fields": [
                     *COMPATIBILITY_FALLBACK_REQUIRED_RUNTIME_METADATA_FIELDS
                 ],
-                "fallback_reason_present": True,
+                "legacy_fallback_reason_present": True,
             },
             "dry_run": {
                 "live_run": False,
@@ -254,6 +262,8 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
             "response_shape_contract_externalized": True,
             "live_primary_response_contract_externalized": True,
             "compatibility_fallback_response_contract_externalized": True,
+            "compatibility_fallback_runtime_path_removed": True,
+            "explicit_compatibility_requests_rejected": True,
             "compatibility_live_response_serialization_still_python_owned": False,
             "runtime_control_flow_change_required_for_removal": False,
         },

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import subprocess
 from dataclasses import dataclass
@@ -14,6 +15,37 @@ from typing import Any, Iterable
 DEFAULT_CODEX_ROOT = Path.home() / ".codex"
 DEFAULT_MEMORY_ROOT = DEFAULT_CODEX_ROOT / "memories"
 CODEX_MEMORY_SUBDIR = Path(".codex") / "memory"
+MEMORY_STATE_FILENAME = "state.json"
+MEMORY_ARCHIVE_DIRNAME = "archive"
+BOOTSTRAP_ARTIFACT_DIR = "bootstrap"
+OPS_ARTIFACT_DIR = Path("ops") / "memory_automation"
+EVIDENCE_ARTIFACT_DIR = "evidence"
+SCRATCH_ARTIFACT_DIR = "scratch"
+CURRENT_ALLOWED_ARTIFACT_NAMES = {
+    "SESSION_SUMMARY.md",
+    "NEXT_ACTIONS.json",
+    "EVIDENCE_INDEX.json",
+    "TRACE_METADATA.json",
+    "active_task.json",
+}
+TASK_ALLOWED_ARTIFACT_NAMES = {
+    "SESSION_SUMMARY.md",
+    "NEXT_ACTIONS.json",
+    "EVIDENCE_INDEX.json",
+    "TRACE_METADATA.json",
+    ".supervisor_state.json",
+}
+GENERIC_QUERY_TOKENS = {
+    "context",
+    "current",
+    "help",
+    "latest",
+    "memory",
+    "project",
+    "repo",
+    "state",
+    "status",
+}
 
 
 @dataclass(slots=True)
@@ -27,6 +59,9 @@ class RuntimeSnapshot:
     supervisor_state: dict[str, Any]
     artifact_base: Path
     current_root: Path
+    mirror_root: Path
+    task_root: Path
+    active_task_id: str
     snapshots: list[Path]
     collected_at: str
 
@@ -38,6 +73,24 @@ ARTIFACT_NAMES = {
     "trace_metadata": "TRACE_METADATA.json",
     "supervisor_state": ".supervisor_state.json",
 }
+CURRENT_ARTIFACT_DIR = "current"
+ACTIVE_TASK_POINTER_NAME = "active_task.json"
+NEXT_ACTIONS_SCHEMA_VERSION = "next-actions-v2"
+EVIDENCE_INDEX_SCHEMA_VERSION = "evidence-index-v2"
+TRACE_METADATA_SCHEMA_VERSION = "trace-metadata-v2"
+SUPERVISOR_STATE_SCHEMA_VERSION = "supervisor-state-v2"
+TERMINAL_STORY_STATES = {"completed", "finalized", "closed", "cancelled", "abandoned", "failed"}
+TERMINAL_PHASES = {"completed", "finalized", "closed", "cancelled", "abandoned", "failed", "done"}
+TERMINAL_VERIFICATION_STATUSES = {
+    "completed",
+    "passed",
+    "verified",
+    "cancelled",
+    "abandoned",
+    "failed",
+}
+STALE_STORY_STATES = {"stale", "expired", "invalid"}
+ACTIVE_STORY_STATES = {"active", "in_progress", "running", "resumable"}
 
 
 def resolve_effective_memory_dir(
@@ -45,7 +98,12 @@ def resolve_effective_memory_dir(
     memory_root: Path | None = None,
     repo_root: Path | None = None,
 ) -> Path:
-    """Return the effective memory directory for the shared CLI framework."""
+    """Return the effective memory directory for the shared CLI framework.
+
+    When `repo_root` is provided, callers should treat `./.codex/memory/` as the
+    logical framework memory root even if the path is currently backed by a
+    symlink to `./memory/`.
+    """
 
     if repo_root is not None:
         return repo_root.expanduser().resolve() / CODEX_MEMORY_SUBDIR
@@ -53,6 +111,60 @@ def resolve_effective_memory_dir(
     if workspace:
         return root / safe_slug(workspace)
     return root
+
+
+def describe_project_local_memory_layout(repo_root: Path) -> dict[str, Any]:
+    """Describe the logical and physical project-local memory roots."""
+
+    logical_root = (repo_root.expanduser().resolve() / CODEX_MEMORY_SUBDIR)
+    physical_root = logical_root.resolve() if logical_root.exists() else logical_root
+    return {
+        "logical_root": str(logical_root),
+        "physical_root": str(physical_root),
+        "is_symlink": logical_root.is_symlink(),
+        "mapping_note": (
+            "Treat the logical .codex/memory path and the physical target as one "
+            "shared framework memory root."
+        ),
+    }
+
+
+def describe_continuity_layout(repo_root: Path) -> dict[str, Any]:
+    """Describe the task-scoped continuity truth plus compatibility mirrors."""
+
+    root = repo_root.expanduser().resolve()
+    current_root = root / "artifacts" / CURRENT_ARTIFACT_DIR
+    return {
+        "task_scoped_current": {
+            "template": str(current_root / "<task_id>"),
+            "active_task_pointer": str(current_root / ACTIVE_TASK_POINTER_NAME),
+        },
+        "root_task_mirror": {
+            "supervisor_state": str(root / ARTIFACT_NAMES["supervisor_state"]),
+            "session_summary": str(root / ARTIFACT_NAMES["session_summary"]),
+            "next_actions": str(root / ARTIFACT_NAMES["next_actions"]),
+            "evidence_index": str(root / ARTIFACT_NAMES["evidence_index"]),
+            "trace_metadata": str(root / ARTIFACT_NAMES["trace_metadata"]),
+        },
+        "bridge_mirror": {
+            "session_summary": str(current_root / ARTIFACT_NAMES["session_summary"]),
+            "next_actions": str(current_root / ARTIFACT_NAMES["next_actions"]),
+            "evidence_index": str(current_root / ARTIFACT_NAMES["evidence_index"]),
+            "trace_metadata": str(current_root / ARTIFACT_NAMES["trace_metadata"]),
+        },
+        "artifact_lanes": {
+            "bootstrap": str(root / "artifacts" / BOOTSTRAP_ARTIFACT_DIR / "<task_id>"),
+            "ops_memory_automation": str(root / "artifacts" / OPS_ARTIFACT_DIR / "<run_id>"),
+            "evidence": str(root / "artifacts" / EVIDENCE_ARTIFACT_DIR / "<task_id>"),
+            "scratch": str(root / "artifacts" / SCRATCH_ARTIFACT_DIR / "<run_id>"),
+        },
+        "sync_responsibility": (
+            "Supervisor writes task-scoped continuity under artifacts/current/<task_id>/ "
+            "and keeps root plus artifacts/current compatibility mirrors aligned to the same task. "
+            "artifacts/current/ should contain only the active-task pointer, four mirror files, "
+            "and task-scoped continuity directories; bootstrap, ops, evidence, and scratch belong elsewhere."
+        ),
+    }
 
 
 def get_repo_root() -> Path:
@@ -121,12 +233,79 @@ def write_json_if_changed(path: Path, payload: dict[str, Any] | list[Any]) -> bo
     return write_text_if_changed(path, content)
 
 
+def bootstrap_artifact_root(source_root: Path) -> Path:
+    """Return the bootstrap artifact root."""
+
+    return source_root.expanduser().resolve() / "artifacts" / BOOTSTRAP_ARTIFACT_DIR
+
+
+def ops_memory_automation_root(source_root: Path) -> Path:
+    """Return the operations artifact root for memory automation runs."""
+
+    return source_root.expanduser().resolve() / "artifacts" / OPS_ARTIFACT_DIR
+
+
+def evidence_artifact_root(source_root: Path, task_id: str | None = None) -> Path:
+    """Return the evidence artifact root, optionally task-scoped."""
+
+    root = source_root.expanduser().resolve() / "artifacts" / EVIDENCE_ARTIFACT_DIR
+    return root / safe_slug(task_id) if task_id else root
+
+
+def scratch_artifact_root(source_root: Path, run_id: str | None = None) -> Path:
+    """Return the scratch artifact root, optionally run-scoped."""
+
+    root = source_root.expanduser().resolve() / "artifacts" / SCRATCH_ARTIFACT_DIR
+    return root / safe_slug(run_id) if run_id else root
+
+
+def memory_state_path(memory_root: Path) -> Path:
+    """Return the canonical memory freshness state path."""
+
+    return memory_root / MEMORY_STATE_FILENAME
+
+
+def read_memory_state(memory_root: Path) -> dict[str, Any]:
+    """Read the memory freshness state payload."""
+
+    return read_json_if_exists(memory_state_path(memory_root))
+
+
 def safe_slug(value: str, fallback: str = "unknown") -> str:
     """Create a filesystem-safe slug while preserving unicode letters."""
 
     slug = re.sub(r"[^\w.-]+", "-", value, flags=re.UNICODE)
     slug = re.sub(r"-{2,}", "-", slug).strip("._-")
     return slug or fallback
+
+
+def tokenize_query(query: str) -> list[str]:
+    """Tokenize a free-form query into normalized lower-case terms."""
+
+    return [part.lower() for part in re.split(r"[\s,/|]+", query) if part.strip()]
+
+
+def is_generic_query(query: str) -> bool:
+    """Return whether a query is too generic to justify active-task injection."""
+
+    tokens = tokenize_query(query)
+    if not tokens:
+        return True
+    if len(tokens) < 2:
+        return True
+    return all(token in GENERIC_QUERY_TOKENS for token in tokens)
+
+
+def query_matches_task(query: str, task: str) -> bool:
+    """Check whether a query clearly targets one task identity."""
+
+    query_tokens = {safe_slug(token.casefold()) for token in query.split() if safe_slug(token.casefold())}
+    task_tokens = {safe_slug(token.casefold()) for token in task.split() if safe_slug(token.casefold())}
+    if not query_tokens or not task_tokens:
+        return False
+    if query_tokens.issubset(task_tokens) or task_tokens.issubset(query_tokens):
+        return True
+    return bool(query_tokens & task_tokens)
 
 
 def workspace_name_from_root(repo_root: Path) -> str:
@@ -162,20 +341,193 @@ def _first_existing(paths: Iterable[Path]) -> Path | None:
     return None
 
 
-def load_runtime_snapshot(source_root: Path, artifact_root: Path | None = None) -> RuntimeSnapshot:
-    """Load the standard runtime artifacts used for consolidation."""
+def current_artifact_root(source_root: Path, artifact_root: Path | None = None) -> Path:
+    """Return the compatibility mirror root under artifacts/current."""
 
     artifact_base = (artifact_root or source_root / "artifacts").resolve()
-    current_root = artifact_base / "current"
+    return artifact_base / CURRENT_ARTIFACT_DIR
+
+
+def active_task_pointer_path(source_root: Path, artifact_root: Path | None = None) -> Path:
+    """Return the path to the active-task pointer file."""
+
+    return current_artifact_root(source_root, artifact_root) / ACTIVE_TASK_POINTER_NAME
+
+
+def task_artifact_root(
+    source_root: Path,
+    task_id: str,
+    artifact_root: Path | None = None,
+) -> Path:
+    """Return the task-scoped artifact directory for one task id."""
+
+    return current_artifact_root(source_root, artifact_root) / safe_slug(task_id)
+
+
+def read_active_task_pointer(source_root: Path, artifact_root: Path | None = None) -> dict[str, Any]:
+    """Read the active-task pointer if it exists."""
+
+    return read_json_if_exists(active_task_pointer_path(source_root, artifact_root))
+
+
+def build_task_id(task: str, *, created_at: str | None = None) -> str:
+    """Build a stable filesystem-safe task id."""
+
+    stamp = re.sub(r"[^0-9A-Za-z]+", "", (created_at or current_local_timestamp()))
+    base = safe_slug(task or "task")
+    return f"{base}-{stamp[-14:]}" if stamp else base
+
+
+def build_runtime_source_hash(snapshot: RuntimeSnapshot) -> str:
+    """Build a deterministic hash of the current runtime truth surfaces."""
+
+    payload = {
+        "active_task_id": snapshot.active_task_id,
+        "session_summary_text": snapshot.session_summary_text,
+        "next_actions": snapshot.next_actions,
+        "evidence_index": snapshot.evidence_index,
+        "trace_metadata": snapshot.trace_metadata,
+        "supervisor_state": snapshot.supervisor_state,
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def build_memory_state(snapshot: RuntimeSnapshot) -> dict[str, Any]:
+    """Build the persisted freshness state for stable memory consolidation."""
+
+    continuity = classify_runtime_continuity(snapshot)
+    source_updated_at = continuity.get("continuity", {}).get("last_updated_at") or snapshot.collected_at
+    return {
+        "schema_version": "memory-state-v1",
+        "source_task_id": snapshot.active_task_id,
+        "source_task": continuity.get("task"),
+        "source_phase": continuity.get("phase"),
+        "source_status": continuity.get("status"),
+        "continuity_state": continuity.get("state"),
+        "artifact_root": str(snapshot.current_root),
+        "source_updated_at": source_updated_at,
+        "content_hash": build_runtime_source_hash(snapshot),
+        "last_consolidated_at": current_local_timestamp(),
+    }
+
+
+def evaluate_memory_freshness(snapshot: RuntimeSnapshot, state: dict[str, Any]) -> dict[str, Any]:
+    """Decide whether active-task recall may use the current continuity snapshot."""
+
+    continuity = classify_runtime_continuity(snapshot)
+    reasons: list[str] = []
+    if continuity.get("state") != "active" or not continuity.get("current_execution"):
+        reasons.append("current continuity is not active")
+        return {
+            "state": "blocked",
+            "active_task_allowed": False,
+            "reasons": reasons,
+            "continuity_state": continuity.get("state"),
+        }
+    if not isinstance(state, dict) or not state:
+        reasons.append("memory/state.json is missing")
+        return {
+            "state": "missing",
+            "active_task_allowed": False,
+            "reasons": reasons,
+            "continuity_state": continuity.get("state"),
+        }
+    if safe_slug(str(state.get("source_task_id") or "")) != safe_slug(snapshot.active_task_id or ""):
+        reasons.append("memory/state.json points at a different task id")
+    expected_hash = build_runtime_source_hash(snapshot)
+    if str(state.get("content_hash") or "") != expected_hash:
+        reasons.append("runtime source hash is newer than memory/state.json")
+    state_updated_at = _parse_iso_timestamp(state.get("source_updated_at"))
+    continuity_updated_at = _parse_iso_timestamp(continuity.get("continuity", {}).get("last_updated_at"))
+    if continuity_updated_at and (state_updated_at is None or continuity_updated_at > state_updated_at):
+        reasons.append("continuity timestamp is newer than memory/state.json")
+    freshness = "fresh" if not reasons else "stale"
+    return {
+        "state": freshness,
+        "active_task_allowed": freshness == "fresh",
+        "reasons": reasons,
+        "continuity_state": continuity.get("state"),
+        "source_task_id": snapshot.active_task_id,
+        "state_task_id": state.get("source_task_id"),
+    }
+
+
+def write_active_task_pointer(
+    source_root: Path,
+    *,
+    task_id: str,
+    task: str,
+    artifact_root: Path | None = None,
+    updated_at: str | None = None,
+) -> bool:
+    """Write the active-task pointer into artifacts/current."""
+
+    payload = {
+        "task_id": safe_slug(task_id),
+        "task": task,
+        "updated_at": updated_at or current_local_timestamp(),
+    }
+    return write_json_if_changed(active_task_pointer_path(source_root, artifact_root), payload)
+
+
+def resolve_active_task_id(
+    source_root: Path,
+    artifact_root: Path | None = None,
+    *,
+    supervisor_state: dict[str, Any] | None = None,
+) -> str:
+    """Resolve the active task id from supervisor state first, then pointer."""
+
+    state = normalize_supervisor_state(supervisor_state or {})
+    direct = safe_slug(_text(state.get("task_id")))
+    if direct:
+        return direct
+    pointer = read_active_task_pointer(source_root, artifact_root)
+    return safe_slug(_text(pointer.get("task_id")))
+
+
+def load_runtime_snapshot(source_root: Path, artifact_root: Path | None = None) -> RuntimeSnapshot:
+    """Load the standard runtime artifacts used for consolidation.
+
+    The bridge-facing read path comes from `artifacts/current/*`, while
+    `.supervisor_state.json` remains the authoritative root-level execution
+    anchor.
+    """
+
+    artifact_base = (artifact_root or source_root / "artifacts").resolve()
+    mirror_root = artifact_base / CURRENT_ARTIFACT_DIR
     snapshots = sorted((artifact_base / "contracts").glob("*")) if (artifact_base / "contracts").exists() else []
+    supervisor_state = normalize_supervisor_state(
+        read_json_if_exists(source_root / ARTIFACT_NAMES["supervisor_state"])
+    )
+    active_task_id = resolve_active_task_id(
+        source_root,
+        artifact_root,
+        supervisor_state=supervisor_state,
+    )
+    task_root = task_artifact_root(source_root, active_task_id, artifact_root) if active_task_id else mirror_root
+    preferred_root = task_root if task_root.exists() else mirror_root
+
+    def _read_task_or_mirror(name: str) -> Path:
+        return _first_existing(
+            [
+                preferred_root / ARTIFACT_NAMES[name],
+                mirror_root / ARTIFACT_NAMES[name],
+            ]
+        ) or (preferred_root / ARTIFACT_NAMES[name])
+
     return RuntimeSnapshot(
-        session_summary_text=read_text_if_exists(current_root / ARTIFACT_NAMES["session_summary"]),
-        next_actions=read_json_if_exists(current_root / ARTIFACT_NAMES["next_actions"]),
-        evidence_index=read_json_if_exists(current_root / ARTIFACT_NAMES["evidence_index"]),
-        trace_metadata=read_json_if_exists(current_root / ARTIFACT_NAMES["trace_metadata"]),
-        supervisor_state=read_json_if_exists(source_root / ARTIFACT_NAMES["supervisor_state"]),
+        session_summary_text=read_text_if_exists(_read_task_or_mirror("session_summary")),
+        next_actions=read_json_if_exists(_read_task_or_mirror("next_actions")),
+        evidence_index=read_json_if_exists(_read_task_or_mirror("evidence_index")),
+        trace_metadata=read_json_if_exists(_read_task_or_mirror("trace_metadata")),
+        supervisor_state=supervisor_state,
         artifact_base=artifact_base,
-        current_root=current_root,
+        current_root=preferred_root,
+        mirror_root=mirror_root,
+        task_root=task_root,
+        active_task_id=active_task_id,
         snapshots=snapshots,
         collected_at=current_local_timestamp(),
     )
@@ -205,22 +557,86 @@ def parse_session_summary(text: str) -> dict[str, str]:
 def normalize_evidence_index(payload: dict[str, Any]) -> list[dict[str, Any]]:
     """Return evidence rows regardless of schema drift."""
 
-    items = payload.get("artifacts") or payload.get("evidence") or []
+    if payload.get("schema_version") == EVIDENCE_INDEX_SCHEMA_VERSION:
+        items = payload.get("artifacts") or []
+    else:
+        items = payload.get("artifacts") or payload.get("evidence") or []
     return [item for item in items if isinstance(item, dict)]
 
 
 def normalize_next_actions(payload: dict[str, Any]) -> list[str]:
     """Return next actions regardless of schema drift."""
 
-    actions = payload.get("next_actions") or payload.get("actions") or []
+    if payload.get("schema_version") == NEXT_ACTIONS_SCHEMA_VERSION:
+        actions = payload.get("next_actions") or []
+    else:
+        actions = payload.get("next_actions") or payload.get("actions") or []
     return [str(item).strip() for item in actions if str(item).strip()]
 
 
 def normalize_trace_skills(payload: dict[str, Any]) -> list[str]:
     """Return skill slugs from trace metadata."""
 
-    skills = payload.get("matched_skills") or payload.get("skills") or []
+    if payload.get("schema_version") == TRACE_METADATA_SCHEMA_VERSION:
+        skills = payload.get("matched_skills") or []
+    else:
+        skills = payload.get("matched_skills") or payload.get("skills") or []
     return [str(item).strip() for item in skills if str(item).strip()]
+
+
+def normalize_supervisor_state(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the supervisor state into the canonical nested v2 contract."""
+
+    if not isinstance(payload, dict):
+        return {}
+
+    normalized = dict(payload)
+    normalized["schema_version"] = SUPERVISOR_STATE_SCHEMA_VERSION
+
+    delegation = payload.get("delegation")
+    if not isinstance(delegation, dict):
+        delegation = {
+            "delegation_plan_created": payload.get("delegation_plan_created"),
+            "spawn_attempted": payload.get("spawn_attempted"),
+            "spawn_block_reason": payload.get("spawn_block_reason"),
+            "fallback_mode": payload.get("fallback_mode"),
+            "delegated_sidecars": payload.get("delegated_sidecars", []),
+        }
+    normalized["delegation"] = delegation
+
+    verification = payload.get("verification")
+    if not isinstance(verification, dict):
+        verification = {
+            "verification_status": payload.get("verification_status"),
+            "last_verification_summary": payload.get("last_verification_summary"),
+        }
+    normalized["verification"] = verification
+
+    continuity = payload.get("continuity")
+    if not isinstance(continuity, dict):
+        continuity = {
+            "story_state": payload.get("story_state"),
+            "resume_allowed": payload.get("resume_allowed"),
+            "last_updated_at": payload.get("last_updated_at"),
+            "active_lease_expires_at": payload.get("active_lease_expires_at"),
+            "state_reason": payload.get("state_reason"),
+        }
+    else:
+        continuity = dict(continuity)
+    continuity.setdefault("story_state", payload.get("story_state"))
+    continuity.setdefault("resume_allowed", payload.get("resume_allowed"))
+    continuity.setdefault("last_updated_at", payload.get("last_updated_at"))
+    continuity.setdefault("active_lease_expires_at", payload.get("active_lease_expires_at"))
+    continuity.setdefault("state_reason", payload.get("state_reason"))
+    normalized["continuity"] = continuity
+
+    blockers = payload.get("blockers")
+    if not isinstance(blockers, dict):
+        blockers = {
+            "open_blockers": payload.get("open_blockers", []),
+        }
+    normalized["blockers"] = blockers
+    return normalized
 
 
 def supervisor_contract(state: dict[str, Any]) -> dict[str, Any]:
@@ -228,6 +644,275 @@ def supervisor_contract(state: dict[str, Any]) -> dict[str, Any]:
 
     contract = state.get("execution_contract")
     return contract if isinstance(contract, dict) else {}
+
+
+def _text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _bool_or_none(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().casefold()
+        if lowered in {"true", "1", "yes"}:
+            return True
+        if lowered in {"false", "0", "no"}:
+            return False
+    return None
+
+
+def _normalized_token(value: Any) -> str:
+    text = _text(value)
+    return safe_slug(text.casefold()) if text else ""
+
+
+def _looks_same_identity(left: Any, right: Any) -> bool:
+    left_token = _normalized_token(left)
+    right_token = _normalized_token(right)
+    if not left_token or not right_token:
+        return True
+    return left_token == right_token or left_token in right_token or right_token in left_token
+
+
+def _parse_iso_timestamp(value: Any) -> datetime | None:
+    text = _text(value)
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _is_terminal(value: Any, terminal_values: set[str]) -> bool:
+    return _text(value).casefold() in terminal_values
+
+
+def classify_runtime_continuity(snapshot: RuntimeSnapshot) -> dict[str, Any]:
+    """Classify whether the current runtime snapshot is safe to inject as active continuity."""
+
+    summary = parse_session_summary(snapshot.session_summary_text)
+    supervisor = snapshot.supervisor_state if isinstance(snapshot.supervisor_state, dict) else {}
+    verification = supervisor.get("verification") if isinstance(supervisor.get("verification"), dict) else {}
+    continuity = supervisor.get("continuity") if isinstance(supervisor.get("continuity"), dict) else {}
+    contract = supervisor_contract(supervisor)
+    trace_task = _text(snapshot.trace_metadata.get("task")) if isinstance(snapshot.trace_metadata, dict) else ""
+    summary_task = _text(summary.get("task"))
+    supervisor_task = _text(supervisor.get("task_summary")) or _text(supervisor.get("task_id"))
+    task = summary_task or trace_task or supervisor_task
+    summary_phase = _text(summary.get("phase"))
+    supervisor_phase = _text(supervisor.get("active_phase"))
+    phase = summary_phase or supervisor_phase
+    verification_status = _text(verification.get("verification_status"))
+    summary_status = _text(summary.get("status"))
+    story_state = _text(continuity.get("story_state"))
+    status = summary_status or verification_status or story_state
+    route = normalize_trace_skills(snapshot.trace_metadata)
+    next_actions = normalize_next_actions(snapshot.next_actions)
+    if not next_actions:
+        next_actions = stable_line_items(
+            str(item).strip()
+            for item in supervisor.get("next_actions", [])
+            if str(item).strip()
+        )
+    blockers = stable_line_items(
+        str(item).strip()
+        for item in (supervisor.get("blockers", {}) or {}).get("open_blockers", [])
+        if str(item).strip()
+    )
+    scope = [str(item).strip() for item in contract.get("scope", []) if str(item).strip()]
+    forbidden_scope = [
+        str(item).strip() for item in contract.get("forbidden_scope", []) if str(item).strip()
+    ]
+    acceptance_criteria = [
+        str(item).strip()
+        for item in contract.get("acceptance_criteria", [])
+        if str(item).strip()
+    ]
+    evidence_required = [
+        str(item).strip()
+        for item in contract.get("evidence_required", [])
+        if str(item).strip()
+    ]
+    summary_terminal = _is_terminal(summary_phase, TERMINAL_PHASES) or _is_terminal(
+        summary_status, TERMINAL_VERIFICATION_STATUSES
+    )
+    supervisor_terminal = (
+        _is_terminal(supervisor_phase, TERMINAL_PHASES)
+        or _is_terminal(verification_status, TERMINAL_VERIFICATION_STATUSES)
+        or _is_terminal(story_state, TERMINAL_STORY_STATES)
+    )
+    terminal_reasons = stable_line_items(
+        [
+            f"summary phase is terminal: {summary_phase}" if _is_terminal(summary_phase, TERMINAL_PHASES) else "",
+            f"summary status is terminal: {summary_status}"
+            if _is_terminal(summary_status, TERMINAL_VERIFICATION_STATUSES)
+            else "",
+            f"supervisor phase is terminal: {supervisor_phase}"
+            if _is_terminal(supervisor_phase, TERMINAL_PHASES)
+            else "",
+            f"verification status is terminal: {verification_status}"
+            if _is_terminal(verification_status, TERMINAL_VERIFICATION_STATUSES)
+            else "",
+            f"continuity story_state is terminal: {story_state}"
+            if _is_terminal(story_state, TERMINAL_STORY_STATES)
+            else "",
+        ]
+    )
+    inconsistency_reasons = stable_line_items(
+        [
+            (
+                f"session summary task '{summary_task}' disagrees with trace task '{trace_task}'"
+                if summary_task and trace_task and not _looks_same_identity(summary_task, trace_task)
+                else ""
+            ),
+            (
+                "session summary marks the task terminal while supervisor still looks active"
+                if summary_terminal and not supervisor_terminal and (supervisor_phase or verification_status)
+                else ""
+            ),
+            (
+                "supervisor marks the task terminal while the session summary still looks active"
+                if supervisor_terminal and not summary_terminal and (summary_phase or summary_status)
+                else ""
+            ),
+            (
+                "continuity.resume_allowed=true conflicts with terminal lifecycle metadata"
+                if _bool_or_none(continuity.get("resume_allowed")) is True and terminal_reasons
+                else ""
+            ),
+        ]
+    )
+    active_lease_expires_at = _parse_iso_timestamp(continuity.get("active_lease_expires_at"))
+    stale_reasons = stable_line_items(
+        [
+            (
+                f"continuity story_state is stale: {story_state}"
+                if _is_terminal(story_state, STALE_STORY_STATES)
+                else ""
+            ),
+            (
+                "continuity explicitly disallows resume"
+                if _bool_or_none(continuity.get("resume_allowed")) is False and not terminal_reasons
+                else ""
+            ),
+            (
+                f"active lease expired at {continuity.get('active_lease_expires_at')}"
+                if active_lease_expires_at is not None
+                and active_lease_expires_at < datetime.now(active_lease_expires_at.tzinfo)
+                else ""
+            ),
+            (
+                "session summary mirror is missing while supervisor still looks active"
+                if not snapshot.session_summary_text.strip()
+                and not terminal_reasons
+                and (task or supervisor_phase or verification_status or next_actions)
+                else ""
+            ),
+            (
+                f"state reason: {_text(continuity.get('state_reason'))}"
+                if _text(continuity.get("state_reason"))
+                and (
+                    _is_terminal(story_state, STALE_STORY_STATES)
+                    or _bool_or_none(continuity.get("resume_allowed")) is False
+                )
+                else ""
+            ),
+        ]
+    )
+    current_execution = {
+        "task": task,
+        "phase": phase,
+        "status": status or ("in_progress" if task or next_actions or blockers else ""),
+        "route": route,
+        "next_actions": next_actions,
+        "blockers": blockers,
+        "scope": scope,
+        "forbidden_scope": forbidden_scope,
+        "acceptance_criteria": acceptance_criteria,
+        "evidence_required": evidence_required,
+    }
+    recent_completed_execution = {
+        "task": task,
+        "phase": phase or story_state or supervisor_phase,
+        "status": status or "completed",
+        "route": route,
+        "follow_up_notes": next_actions,
+        "terminal_reasons": terminal_reasons,
+    }
+    has_any_runtime_signal = any(
+        [
+            snapshot.session_summary_text.strip(),
+            snapshot.next_actions,
+            snapshot.evidence_index,
+            snapshot.trace_metadata,
+            supervisor,
+        ]
+    )
+    if not has_any_runtime_signal:
+        state = "missing"
+    elif inconsistency_reasons:
+        state = "inconsistent"
+    elif terminal_reasons:
+        state = "completed"
+    elif stale_reasons:
+        state = "stale"
+    else:
+        state = "active"
+    recovery_hints = {
+        "missing": [
+            "Refresh SESSION_SUMMARY.md, NEXT_ACTIONS.json, TRACE_METADATA.json, and .supervisor_state.json before injecting continuity.",
+        ],
+        "active": [],
+        "completed": [
+            "Keep this task only as recent-completed context; do not inject it as current execution.",
+            "Start a new standalone task before resuming related work.",
+        ],
+        "stale": [
+            "Re-read the live continuity artifacts and rebuild a fresh active task before injecting execution context.",
+            "Do not continue from the stale snapshot without a new supervisor-owned continuity refresh.",
+        ],
+        "inconsistent": [
+            "Reconcile SESSION_SUMMARY.md, TRACE_METADATA.json, and .supervisor_state.json before injecting continuity.",
+            "Treat the current snapshot as blocked until the supervisor rewrites a consistent continuity bundle.",
+        ],
+    }[state]
+    return {
+        "state": state,
+        "can_resume": state == "active",
+        "task": task,
+        "phase": phase,
+        "status": status,
+        "route": route,
+        "next_actions": next_actions,
+        "blockers": blockers,
+        "current_execution": current_execution if state == "active" and task else None,
+        "recent_completed_execution": recent_completed_execution if state == "completed" and task else None,
+        "stale_reasons": stale_reasons,
+        "terminal_reasons": terminal_reasons,
+        "inconsistency_reasons": inconsistency_reasons,
+        "recovery_hints": recovery_hints,
+        "continuity": {
+            "story_state": story_state or None,
+            "resume_allowed": _bool_or_none(continuity.get("resume_allowed")),
+            "last_updated_at": _text(continuity.get("last_updated_at")) or None,
+            "active_lease_expires_at": _text(continuity.get("active_lease_expires_at")) or None,
+            "state_reason": _text(continuity.get("state_reason")) or None,
+        },
+        "summary_fields": summary,
+        "paths": {
+            "session_summary": str(snapshot.current_root / ARTIFACT_NAMES["session_summary"]),
+            "next_actions": str(snapshot.current_root / ARTIFACT_NAMES["next_actions"]),
+            "evidence_index": str(snapshot.current_root / ARTIFACT_NAMES["evidence_index"]),
+            "trace_metadata": str(snapshot.current_root / ARTIFACT_NAMES["trace_metadata"]),
+            "task_root": str(snapshot.task_root),
+            "bridge_mirror_root": str(snapshot.mirror_root),
+            "supervisor_state": str(snapshot.artifact_base.parent / ARTIFACT_NAMES["supervisor_state"]),
+        },
+    }
 
 
 def stable_line_items(items: Iterable[str]) -> list[str]:

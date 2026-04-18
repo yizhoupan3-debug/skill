@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-way sync: Codex project memory to Hermes memories directory."""
+"""One-way sync: project memory into Codex-local export files."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.memory_support import (
+    DEFAULT_CODEX_ROOT,
     current_local_timestamp,
     get_repo_root,
     read_text_if_exists,
@@ -23,8 +24,7 @@ from scripts.memory_support import (
     write_text_if_changed,
 )
 
-HERMES_HOME = Path.home() / ".hermes"
-HERMES_MEMORIES_DIR = HERMES_HOME / "memories"
+EXPORTS_ROOT = DEFAULT_CODEX_ROOT / "memory_exports"
 SYNC_HEADER_TEMPLATE = """---
 source: codex-project-memory
 synced_at: {timestamp}
@@ -34,28 +34,20 @@ synced_at: {timestamp}
 
 
 def _extract_section(text: str, heading: str) -> str:
-    """Extract content under a ## heading."""
-
     pattern = re.compile(rf"^##\s+{re.escape(heading)}\s*\n(.*?)(?=^##\s|\Z)", re.MULTILINE | re.DOTALL)
     match = pattern.search(text)
     return match.group(1).strip() if match else ""
 
 
 def _extract_lessons(memory_md: str) -> str:
-    """Extract the Lessons section from MEMORY.md."""
-
     return _extract_section(memory_md, "Lessons")
 
 
 def _extract_decisions(memory_md: str) -> str:
-    """Extract stable decisions from MEMORY.md."""
-
     return _extract_section(memory_md, "稳定决策") or _extract_section(memory_md, "Decisions")
 
 
 def _extract_facts(memory_md: str) -> str:
-    """Extract project identity and active patterns from MEMORY.md."""
-
     lines: list[str] = []
     skip_sections = {"Lessons", "Decisions", "稳定决策"}
     in_skip = False
@@ -69,13 +61,12 @@ def _extract_facts(memory_md: str) -> str:
 
 
 def _collect_recent_logs(memory_dir: Path, days: int = 7) -> str:
-    """Collect and concatenate the last N days of daily logs."""
-
-    sessions = memory_dir / "sessions"
-    if not sessions.exists():
+    archive_root = memory_dir / "archive"
+    if not archive_root.exists():
         return ""
     sections: list[str] = []
-    for path in sorted(sessions.glob("*.md"))[-days:]:
+    session_paths = sorted(archive_root.rglob("sessions/*.md"))[-days:]
+    for path in session_paths:
         contents = read_text_if_exists(path).strip()
         if contents:
             sections.append(f"## {path.stem}\n{contents}")
@@ -83,20 +74,15 @@ def _collect_recent_logs(memory_dir: Path, days: int = 7) -> str:
 
 
 def _read_auto_state(source_root: Path) -> str:
-    """Read MEMORY_AUTO.md if it exists in the project workspace."""
-
-    auto_paths = [
-        source_root / ".codex" / "memory" / "MEMORY_AUTO.md",
-        source_root / "MEMORY_AUTO.md",
-    ]
-    for path in auto_paths:
-        if path.is_file():
-            return read_text_if_exists(path).strip()
-    return ""
+    ops_root = source_root / "artifacts" / "ops" / "memory_automation"
+    if not ops_root.exists():
+        return ""
+    latest = sorted(ops_root.rglob("snapshot.md"))
+    return read_text_if_exists(latest[-1]).strip() if latest else ""
 
 
-def sync_project_to_hermes(source_root: Path, *, dry_run: bool = False) -> dict[str, Any]:
-    """One-way sync: project memory to Hermes memories directory."""
+def sync_project_memory(source_root: Path, *, dry_run: bool = False) -> dict[str, Any]:
+    """One-way sync: project memory to Codex-local export directory."""
 
     repo_root = source_root.resolve()
     workspace = workspace_name_from_root(repo_root)
@@ -112,7 +98,7 @@ def sync_project_to_hermes(source_root: Path, *, dry_run: bool = False) -> dict[
         }
     memory_md = read_text_if_exists(memory_md_path)
     timestamp = current_local_timestamp()
-    target_dir = HERMES_MEMORIES_DIR / safe_slug(workspace)
+    target_dir = EXPORTS_ROOT / safe_slug(workspace)
     output_files = {
         "project-memory.md": _extract_facts(memory_md),
         "project-lessons.md": _extract_lessons(memory_md),
@@ -130,6 +116,7 @@ def sync_project_to_hermes(source_root: Path, *, dry_run: bool = False) -> dict[
             "dry_run": True,
             "files_total": len(files_planned),
             "source_memory_dir": str(memory_dir),
+            "target_dir": str(target_dir),
             "synced_at": timestamp,
         }
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -148,17 +135,18 @@ def sync_project_to_hermes(source_root: Path, *, dry_run: bool = False) -> dict[
         "dry_run": False,
         "files_total": len(files_planned),
         "source_memory_dir": str(memory_dir),
+        "target_dir": str(target_dir),
         "synced_at": timestamp,
     }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="One-way sync: project memory to Hermes memories directory.")
+    parser = argparse.ArgumentParser(description="One-way sync: project memory to Codex-local export directory.")
     parser.add_argument("--source-root", type=Path, default=None, help="Repository root (defaults to git root).")
     parser.add_argument("--dry-run", action="store_true", help="Print what would be synced without writing.")
     parser.add_argument("--json", action="store_true", dest="json_output", help="Output result as JSON.")
     args = parser.parse_args()
-    result = sync_project_to_hermes((args.source_root or get_repo_root()).resolve(), dry_run=args.dry_run)
+    result = sync_project_memory((args.source_root or get_repo_root()).resolve(), dry_run=args.dry_run)
     if args.json_output:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:

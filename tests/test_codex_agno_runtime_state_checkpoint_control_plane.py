@@ -16,6 +16,7 @@ if str(RUNTIME_SRC) not in sys.path:
 from codex_agno_runtime.checkpoint_store import (
     FilesystemRuntimeCheckpointer,
     InMemoryRuntimeStorageBackend,
+    SQLiteRuntimeStorageBackend,
 )
 from codex_agno_runtime.state import BackgroundJobStore
 from codex_agno_runtime.trace import RuntimeEventTransport
@@ -209,3 +210,86 @@ def test_checkpointer_uses_non_filesystem_backend_family(tmp_path: Path) -> None
     assert checkpointer.health()["supports_compaction"] is False
     assert checkpointer.health()["supports_snapshot_delta"] is False
     assert checkpointer.health()["supports_remote_event_transport"] is True
+
+
+def test_sqlite_backend_family_can_be_selected_and_round_tripped_via_config(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """The runtime should be able to promote sqlite to a concrete non-filesystem backend."""
+
+    monkeypatch.setenv("CODEX_AGNO_CHECKPOINT_STORAGE_BACKEND_FAMILY", "sqlite")
+    monkeypatch.setenv("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE", "runtime_checkpoint_store.sqlite3")
+
+    data_dir = tmp_path / "runtime-data"
+    state_path = data_dir / "runtime_background_jobs.json"
+    checkpointer = FilesystemRuntimeCheckpointer(
+        data_dir=data_dir,
+        trace_output_path=data_dir / "TRACE_METADATA.json",
+        control_plane_descriptor=CONTROL_PLANE_DESCRIPTOR,
+    )
+    store = BackgroundJobStore(
+        state_path=state_path,
+        control_plane_descriptor=CONTROL_PLANE_DESCRIPTOR,
+    )
+
+    assert isinstance(checkpointer.storage_backend, SQLiteRuntimeStorageBackend)
+    assert checkpointer.health()["backend_family"] == "sqlite"
+    assert checkpointer.health()["supports_atomic_replace"] is True
+    assert checkpointer.health()["supports_compaction"] is False
+    assert checkpointer.health()["supports_snapshot_delta"] is False
+    assert checkpointer.health()["supports_remote_event_transport"] is True
+
+    store.set_status("job-1", status="queued", session_id="session-1", timeout_seconds=30)
+    transport = RuntimeEventTransport(
+        stream_id="stream::session-1",
+        session_id="session-1",
+        job_id="job-1",
+        binding_backend_family=checkpointer.storage_capabilities().backend_family,
+    )
+    binding_path = checkpointer.write_transport_binding(transport)
+    manifest = checkpointer.checkpoint(
+        session_id="session-1",
+        job_id="job-1",
+        status="completed",
+        generation=1,
+        latest_cursor=None,
+        event_transport_path=str(binding_path) if binding_path is not None else None,
+        artifact_paths=[str(binding_path)] if binding_path is not None else [],
+    )
+    loaded = checkpointer.load_checkpoint()
+    recovered = BackgroundJobStore(
+        state_path=state_path,
+        control_plane_descriptor=CONTROL_PLANE_DESCRIPTOR,
+    )
+
+    assert binding_path is not None
+    assert manifest is not None
+    assert loaded is not None
+    assert recovered.get("job-1") is not None
+    assert recovered.get("job-1").status == "queued"
+    assert recovered.health()["backend_family"] == "sqlite"
+    assert state_path.exists() is False
+    assert checkpointer.describe_paths().resume_manifest_path is not None
+    assert checkpointer.describe_paths().resume_manifest_path.exists() is False
+    assert checkpointer.describe_paths().event_stream_path is not None
+    assert checkpointer.describe_paths().event_stream_path.exists() is False
+    assert binding_path.exists() is False
+    assert (
+        data_dir / "runtime_checkpoint_store.sqlite3"
+    ).exists(), "sqlite backend should materialize a concrete backing store file"
+
+    binding_payload = json.loads(checkpointer.storage_backend.read_text(binding_path))
+    assert binding_payload["transport_health"]["backend_family"] == "sqlite"
+    assert binding_payload["transport_health"]["supports_atomic_replace"] is True
+    assert binding_payload["transport_health"]["supports_compaction"] is False
+    assert binding_payload["transport_health"]["supports_snapshot_delta"] is False
+    assert binding_payload["transport_health"]["supports_remote_event_transport"] is True
+    assert loaded.control_plane is not None
+    assert loaded.control_plane["backend_family"] == "sqlite"
+    assert loaded.control_plane["supports_atomic_replace"] is True
+    assert loaded.control_plane["supports_compaction"] is False
+    assert loaded.control_plane["supports_snapshot_delta"] is False
+    assert loaded.control_plane["supports_remote_event_transport"] is True
+    assert manifest.control_plane is not None
+    assert manifest.control_plane["backend_family"] == "sqlite"

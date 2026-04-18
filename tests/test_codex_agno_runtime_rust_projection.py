@@ -43,7 +43,7 @@ def test_skill_loader_uses_compiled_indices_for_progressive_mode(tmp_path: Path)
         """---
 name: plan-to-code
 description: Full skill document
-trigger_phrases:
+trigger_hints:
   - 直接做代码
 ---
 # plan-to-code
@@ -65,9 +65,9 @@ Implement the spec directly.
     (skills_root / "SKILL_ROUTING_RUNTIME.json").write_text(
         """
 {
-  "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "triggers", "health"],
+  "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "health"],
   "skills": [
-    ["plan-to-code", "L2", "owner", "none", "preferred", "Lean compiled summary", "直接做代码 / 按文档开发", 95.8]
+    ["plan-to-code", "L2", "owner", "none", "preferred", "Lean compiled summary", ["直接做代码", "按文档开发"], 95.8]
   ]
 }
 """.strip(),
@@ -76,9 +76,9 @@ Implement the spec directly.
     (skills_root / "SKILL_MANIFEST.json").write_text(
         """
 {
-  "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "triggers", "health", "source", "source_priority"],
+  "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "health", "source", "source_position"],
   "skills": [
-    ["plan-to-code", "L2", "owner", "none", "P1", "Manifest description", "preferred", "直接做代码", 95.8, "project", 40]
+    ["plan-to-code", "L2", "owner", "none", "P1", "Manifest description", "preferred", ["直接做代码"], 95.8, "project", 3]
   ]
 }
 """.strip(),
@@ -155,6 +155,47 @@ Implement the task directly.
     assert "Key instructions:" in prompt
 
 
+def test_prompt_builder_uses_skill_body_without_extra_idea_to_plan_contract() -> None:
+    skill = SkillMetadata(
+        name="idea-to-plan",
+        description="Turn ambiguous ideas into evidence-backed plans",
+        routing_layer="L-1",
+        body="""
+## Output Contract
+
+- outline.md
+- decision_log.md
+- code_list.md
+""".strip(),
+        body_loaded=True,
+    )
+    overlay = SkillMetadata(
+        name="anti-laziness",
+        description="Anti laziness overlay",
+        routing_layer="L1",
+        body="",
+        body_loaded=True,
+    )
+    routing_result = RoutingResult(
+        task="先探索代码库现状，列出 critical files，再给我方案。",
+        session_id="session-plan",
+        selected_skill=skill,
+        overlay_skill=overlay,
+        layer="L-1",
+        reasons=["Trigger hint matched: 先探索代码库再出方案."],
+        route_engine="rust",
+    )
+
+    prompt = PromptBuilder().build_prompt(routing_result)
+
+    assert "outline.md" in prompt
+    assert "decision_log.md" in prompt
+    assert "code_list.md" in prompt
+    assert "Planning contract:" not in prompt
+    assert "READ-ONLY planning route" not in prompt
+    assert "<proposed_plan>" not in prompt
+
+
 def test_skill_injection_middleware_prefers_route_preview() -> None:
     class _PromptBuilder:
         def __init__(self) -> None:
@@ -191,7 +232,7 @@ def test_skill_router_reports_thin_projection_under_rust_control_plane() -> None
             routing_gate="none",
             routing_priority="P1",
             session_start="preferred",
-            trigger_phrases=["直接做代码"],
+            trigger_hints=["直接做代码"],
         )
     ]
     router = SkillRouter(

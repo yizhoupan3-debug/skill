@@ -1,0 +1,230 @@
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.memory_support import (
+    RuntimeSnapshot,
+    classify_runtime_continuity,
+    describe_continuity_layout,
+    describe_project_local_memory_layout,
+    load_runtime_snapshot,
+    normalize_evidence_index,
+    normalize_next_actions,
+    normalize_supervisor_state,
+    normalize_trace_skills,
+)
+
+
+def _snapshot(
+    tmp_path: Path,
+    *,
+    session_summary: str = "",
+    next_actions: dict[str, object] | None = None,
+    evidence_index: dict[str, object] | None = None,
+    trace_metadata: dict[str, object] | None = None,
+    supervisor_state: dict[str, object] | None = None,
+) -> RuntimeSnapshot:
+    artifact_base = tmp_path / "artifacts"
+    current_root = artifact_base / "current"
+    current_root.mkdir(parents=True, exist_ok=True)
+    return RuntimeSnapshot(
+        session_summary_text=session_summary,
+        next_actions=next_actions or {},
+        evidence_index=evidence_index or {},
+        trace_metadata=trace_metadata or {},
+        supervisor_state=normalize_supervisor_state(supervisor_state or {}),
+        artifact_base=artifact_base,
+        current_root=current_root,
+        mirror_root=current_root,
+        task_root=current_root,
+        active_task_id="demo-task",
+        snapshots=[],
+        collected_at="2026-04-18T21:00:00+08:00",
+    )
+
+
+def test_normalize_next_actions_accepts_next_actions_and_actions() -> None:
+    assert normalize_next_actions(
+        {"schema_version": "next-actions-v2", "next_actions": ["a", "b"]}
+    ) == ["a", "b"]
+    assert normalize_next_actions({"actions": ["legacy"]}) == ["legacy"]
+
+
+def test_normalize_evidence_index_accepts_artifacts_and_evidence() -> None:
+    assert normalize_evidence_index(
+        {"schema_version": "evidence-index-v2", "artifacts": [{"kind": "report"}]}
+    ) == [{"kind": "report"}]
+    assert normalize_evidence_index({"evidence": [{"kind": "legacy"}]}) == [{"kind": "legacy"}]
+
+
+def test_normalize_trace_skills_accepts_matched_skills_and_skills() -> None:
+    assert normalize_trace_skills(
+        {"schema_version": "trace-metadata-v2", "matched_skills": ["alpha", "beta"]}
+    ) == ["alpha", "beta"]
+    assert normalize_trace_skills({"skills": ["legacy"]}) == ["legacy"]
+
+
+def test_normalize_supervisor_state_upgrades_flat_legacy_fields() -> None:
+    normalized = normalize_supervisor_state(
+        {
+            "task_summary": "demo",
+            "delegation_plan_created": True,
+            "spawn_attempted": False,
+            "fallback_mode": "local-supervisor",
+            "delegated_sidecars": ["reader"],
+            "verification_status": "passed",
+            "open_blockers": ["none"],
+            "resume_allowed": False,
+        }
+    )
+
+    assert normalized["schema_version"] == "supervisor-state-v2"
+    assert normalized["delegation"]["delegation_plan_created"] is True
+    assert normalized["verification"]["verification_status"] == "passed"
+    assert normalized["blockers"]["open_blockers"] == ["none"]
+    assert normalized["continuity"]["resume_allowed"] is False
+
+
+def test_memory_and_continuity_layout_descriptors_are_explicit(tmp_path: Path) -> None:
+    memory_dir = tmp_path / ".codex" / "memory"
+    memory_dir.parent.mkdir(parents=True, exist_ok=True)
+    memory_dir.symlink_to(Path("../memory"))
+    (tmp_path / "memory").mkdir()
+
+    memory_layout = describe_project_local_memory_layout(tmp_path)
+    continuity = describe_continuity_layout(tmp_path)
+
+    assert memory_layout["logical_root"].endswith("/.codex/memory")
+    assert memory_layout["physical_root"].endswith("/memory")
+    assert memory_layout["is_symlink"] is True
+    assert "shared framework memory root" in memory_layout["mapping_note"]
+    assert continuity["root_task_mirror"]["supervisor_state"].endswith(
+        "/.supervisor_state.json"
+    )
+    assert continuity["bridge_mirror"]["session_summary"].endswith(
+        "/artifacts/current/SESSION_SUMMARY.md"
+    )
+    assert continuity["task_scoped_current"]["template"].endswith("/artifacts/current/<task_id>")
+    assert "task-scoped continuity" in continuity["sync_responsibility"]
+
+
+def test_classify_runtime_continuity_active_snapshot_stays_resumable(tmp_path: Path) -> None:
+    snapshot = _snapshot(
+        tmp_path,
+        session_summary="- task: Active routing repair\n- phase: implementation\n- status: in_progress\n",
+        next_actions={"next_actions": ["Patch classifier", "Run pytest"]},
+        trace_metadata={"matched_skills": ["execution-controller-coding", "skill-developer-codex"]},
+        supervisor_state={
+            "task_summary": "Active routing repair",
+            "active_phase": "implementation",
+            "verification": {"verification_status": "in_progress"},
+            "continuity": {"story_state": "active", "resume_allowed": True},
+            "execution_contract": {
+                "scope": ["scripts/memory_support.py"],
+                "acceptance_criteria": ["No stale injection"],
+            },
+        },
+    )
+
+    continuity = classify_runtime_continuity(snapshot)
+
+    assert continuity["state"] == "active"
+    assert continuity["can_resume"] is True
+    assert continuity["current_execution"]["task"] == "Active routing repair"
+    assert continuity["recent_completed_execution"] is None
+
+
+def test_classify_runtime_continuity_completed_snapshot_is_not_current_execution(tmp_path: Path) -> None:
+    snapshot = _snapshot(
+        tmp_path,
+        session_summary="- task: checklist-series final closeout\n- phase: finalized\n- status: completed\n",
+        next_actions={"next_actions": ["Start a new standalone task next time"]},
+        trace_metadata={"task": "checklist-series final closeout", "matched_skills": ["checklist-fixer"]},
+        supervisor_state={
+            "task_summary": "checklist-series final closeout",
+            "active_phase": "finalized",
+            "verification": {"verification_status": "completed"},
+            "continuity": {"story_state": "completed", "resume_allowed": False},
+        },
+    )
+
+    continuity = classify_runtime_continuity(snapshot)
+
+    assert continuity["state"] == "completed"
+    assert continuity["can_resume"] is False
+    assert continuity["current_execution"] is None
+    assert continuity["recent_completed_execution"]["task"] == "checklist-series final closeout"
+    assert continuity["terminal_reasons"]
+
+
+def test_classify_runtime_continuity_stale_snapshot_is_hard_blocked(tmp_path: Path) -> None:
+    snapshot = _snapshot(
+        tmp_path,
+        next_actions={"next_actions": ["Do not trust stale continuity"]},
+        supervisor_state={
+            "task_summary": "stale bootstrap lane",
+            "active_phase": "implementation",
+            "verification": {"verification_status": "in_progress"},
+            "continuity": {
+                "story_state": "active",
+                "resume_allowed": False,
+                "state_reason": "superseded by a newer supervisor-owned task",
+            },
+        },
+    )
+
+    continuity = classify_runtime_continuity(snapshot)
+
+    assert continuity["state"] == "stale"
+    assert continuity["can_resume"] is False
+    assert continuity["current_execution"] is None
+    assert any("disallows resume" in reason for reason in continuity["stale_reasons"])
+
+
+def test_classify_runtime_continuity_detects_inconsistent_task_identity(tmp_path: Path) -> None:
+    snapshot = _snapshot(
+        tmp_path,
+        session_summary="- task: bootstrap repair A\n- phase: implementation\n- status: in_progress\n",
+        trace_metadata={"task": "bootstrap repair B", "matched_skills": ["skill-developer-codex"]},
+        supervisor_state={
+            "task_summary": "bootstrap repair A",
+            "active_phase": "implementation",
+            "verification": {"verification_status": "in_progress"},
+            "continuity": {"story_state": "active", "resume_allowed": True},
+        },
+    )
+
+    continuity = classify_runtime_continuity(snapshot)
+
+    assert continuity["state"] == "inconsistent"
+    assert continuity["can_resume"] is False
+    assert continuity["current_execution"] is None
+    assert any("disagrees with trace task" in reason for reason in continuity["inconsistency_reasons"])
+
+
+def test_load_runtime_snapshot_prefers_task_scoped_current_root(tmp_path: Path) -> None:
+    task_id = "codex-first-convergence-20260418210000"
+    task_root = tmp_path / "artifacts" / "current" / task_id
+    mirror_root = tmp_path / "artifacts" / "current"
+    (task_root / "SESSION_SUMMARY.md").parent.mkdir(parents=True, exist_ok=True)
+    (task_root / "SESSION_SUMMARY.md").write_text("- task: task scoped\n", encoding="utf-8")
+    (task_root / "NEXT_ACTIONS.json").write_text('{"next_actions":["task root"]}\n', encoding="utf-8")
+    (task_root / "EVIDENCE_INDEX.json").write_text('{"artifacts":[]}\n', encoding="utf-8")
+    (task_root / "TRACE_METADATA.json").write_text('{"matched_skills":["skill-developer-codex"]}\n', encoding="utf-8")
+    (mirror_root / "SESSION_SUMMARY.md").write_text("- task: mirror only\n", encoding="utf-8")
+    (tmp_path / ".supervisor_state.json").write_text(
+        '{"task_id":"codex-first-convergence-20260418210000","task_summary":"task scoped"}\n',
+        encoding="utf-8",
+    )
+
+    snapshot = load_runtime_snapshot(tmp_path)
+
+    assert snapshot.active_task_id == task_id
+    assert snapshot.current_root == task_root
+    assert snapshot.task_root == task_root
+    assert snapshot.session_summary_text == "- task: task scoped\n"

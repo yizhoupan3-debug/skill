@@ -69,6 +69,10 @@ CLI_FAMILY_ENTRYPOINT_IDS = (
     CLAUDE_CODE_ADAPTER_ID,
     GEMINI_CLI_ADAPTER_ID,
 )
+DEFAULT_HOST_PEER_SET = (
+    CODEX_DESKTOP_ADAPTER_ID,
+    *CLI_FAMILY_ENTRYPOINT_IDS,
+)
 
 
 def _clone_json_like(value: Any) -> Any:
@@ -349,9 +353,15 @@ AIONRS_COMPANION_ADAPTER = HostAdapterSpec(
         "mode": "companion",
         "host_boundary": "outer-framework-owned",
         "deep_adaptation_not_fork": True,
+        "legacy_surface": True,
+        "legacy_lane": "fallback",
+        "default_host_peer_set_member": False,
         "works_without_aionrs": False,
     },
-    notes="Companion-side adapter only; does not modify aionrs internals.",
+    notes=(
+        "Legacy compatibility companion surface only; does not modify aionrs internals "
+        "and may not re-enter the default host peer set."
+    ),
 )
 
 AIONUI_HOST_ADAPTER = HostAdapterSpec(
@@ -372,9 +382,15 @@ AIONUI_HOST_ADAPTER = HostAdapterSpec(
         "ui_binding": "host-shell",
         "state_source": "framework_profile",
         "deep_adaptation_not_fork": True,
+        "legacy_surface": True,
+        "legacy_lane": "fallback",
+        "default_host_peer_set_member": False,
         "preferred_backend": "aionrs_companion_adapter",
     },
-    notes="Maps framework contract into AionUI host shell integration points only.",
+    notes=(
+        "Legacy compatibility host shell only; maps the framework contract into AionUI "
+        "without re-entering the default host peer set."
+    ),
 )
 
 CLI_COMMON_ADAPTER = HostAdapterSpec(
@@ -467,6 +483,9 @@ CODEX_DESKTOP_HOST_ADAPTER = HostAdapterSpec(
         **CODEX_DESKTOP_ADAPTER.protocol_hints,
         "canonical_adapter_id": CODEX_DESKTOP_ADAPTER_ID,
         "legacy_alias": True,
+        "legacy_surface": True,
+        "legacy_lane": "compatibility",
+        "default_host_peer_set_member": False,
     },
     notes="Compatibility alias for codex_desktop_adapter; preserves the legacy host-specific name.",
 )
@@ -534,7 +553,7 @@ CLAUDE_CODE_ADAPTER = HostAdapterSpec(
             ".claude/settings.json",
             ".claude/settings.local.json",
         ),
-        "mcp_config_paths": ("~/.claude.json", ".mcp.json"),
+        "mcp_config_paths": ("~/.claude.json",),
         "settings_scope_order": ("managed", "command_line", "local", "project", "user"),
         "settings_scopes": (
             {
@@ -559,7 +578,6 @@ CLAUDE_CODE_ADAPTER = HostAdapterSpec(
                     "CLAUDE.md",
                     ".claude/CLAUDE.md",
                     ".claude/agents/",
-                    ".mcp.json",
                 ),
                 "shared_with_team": True,
             },
@@ -578,7 +596,6 @@ CLAUDE_CODE_ADAPTER = HostAdapterSpec(
             ".claude/commands/",
             ".claude/rules/",
             ".claude/output-styles/",
-            ".mcp.json",
         ),
         "hook_event_names": (
             "PreToolUse",
@@ -733,8 +750,6 @@ GENERIC_HOST_ADAPTER = HostAdapterSpec(
 
 
 HOST_ADAPTERS: Dict[str, HostAdapterSpec] = {
-    AIONRS_COMPANION_ADAPTER.adapter_id: AIONRS_COMPANION_ADAPTER,
-    AIONUI_HOST_ADAPTER.adapter_id: AIONUI_HOST_ADAPTER,
     CLI_COMMON_ADAPTER.adapter_id: CLI_COMMON_ADAPTER,
     CODEX_COMMON_ADAPTER.adapter_id: CODEX_COMMON_ADAPTER,
     CODEX_DESKTOP_ADAPTER.adapter_id: CODEX_DESKTOP_ADAPTER,
@@ -745,6 +760,8 @@ HOST_ADAPTERS: Dict[str, HostAdapterSpec] = {
 }
 
 COMPATIBILITY_HOST_ADAPTERS: Dict[str, HostAdapterSpec] = {
+    AIONRS_COMPANION_ADAPTER.adapter_id: AIONRS_COMPANION_ADAPTER,
+    AIONUI_HOST_ADAPTER.adapter_id: AIONUI_HOST_ADAPTER,
     CODEX_DESKTOP_HOST_ADAPTER.adapter_id: CODEX_DESKTOP_HOST_ADAPTER,
 }
 
@@ -769,7 +786,7 @@ def get_host_adapter(
     except KeyError as exc:
         if not include_legacy_aliases and adapter_id in COMPATIBILITY_HOST_ADAPTERS:
             raise KeyError(
-                f"unknown host adapter: {adapter_id}; compatibility-only aliases require "
+                f"unknown host adapter: {adapter_id}; legacy compatibility surfaces require "
                 "include_legacy_aliases=True"
             ) from exc
         raise KeyError(f"unknown host adapter: {adapter_id}") from exc
@@ -868,7 +885,23 @@ def compile_aionrs_companion_adapter(
             "portable_core_preserved": list(CORE_CAPABILITIES),
             "fallback_adapter": CODEX_DESKTOP_ADAPTER_ID,
             "legacy_fallback_aliases": [LEGACY_CODEX_DESKTOP_ADAPTER_ID],
+            "default_host_peer_set": list(DEFAULT_HOST_PEER_SET),
         },
+    }
+    payload["metadata"]["legacy_surface"] = True
+    payload["legacy_boundary"] = {
+        "adapter_lifecycle": "legacy-compatibility",
+        "exposure_lane": "fallback-only-explicit",
+        "default_host_peer_set": list(DEFAULT_HOST_PEER_SET),
+        "default_host_peer_set_member": False,
+        "may_become_framework_truth": False,
+        "may_become_default_host_peer": False,
+        "removal_readiness": "blocked-on-upstream-consumer-retirement",
+        "migration_guardrails": [
+            "do_not_promote_aionrs_back_to_primary_host_path",
+            "keep_fallback_contract_mirror_only",
+            "preserve_framework_truth_in_shared_contract",
+        ],
     }
     return AdaptedHostProfile(
         framework_profile=adapted.framework_profile,
@@ -903,7 +936,23 @@ def compile_aionui_host_adapter(
         "fallback_semantics": {
             "degrade_to": "generic_host_adapter",
             "deep_adaptation_not_fork": True,
+            "default_host_peer_set": list(DEFAULT_HOST_PEER_SET),
         },
+    }
+    payload["metadata"]["legacy_surface"] = True
+    payload["legacy_boundary"] = {
+        "adapter_lifecycle": "legacy-compatibility",
+        "exposure_lane": "fallback-only-explicit",
+        "default_host_peer_set": list(DEFAULT_HOST_PEER_SET),
+        "default_host_peer_set_member": False,
+        "may_become_framework_truth": False,
+        "may_become_default_host_peer": False,
+        "removal_readiness": "blocked-on-aionui-shell-consumer-retirement",
+        "migration_guardrails": [
+            "do_not_promote_aionui_back_to_primary_host_path",
+            "keep_aionui_as_outer_contract_shell_only",
+            "preserve_aionrs_companion_as_preferred_backend_when_enabled",
+        ],
     }
     return AdaptedHostProfile(
         framework_profile=adapted.framework_profile,
@@ -1135,9 +1184,24 @@ def compile_codex_desktop_host_adapter(
     payload["metadata"]["adapter_id"] = CODEX_DESKTOP_HOST_ADAPTER.adapter_id
     payload["metadata"]["adapter_alias_of"] = CODEX_DESKTOP_ADAPTER.adapter_id
     payload["metadata"]["canonical_adapter_id"] = CODEX_DESKTOP_ADAPTER.adapter_id
+    payload["metadata"]["legacy_surface"] = True
     payload["entrypoint_contract"]["canonical_adapter_id"] = CODEX_DESKTOP_ADAPTER.adapter_id
     payload["entrypoint_contract"]["legacy_adapter_id"] = CODEX_DESKTOP_HOST_ADAPTER.adapter_id
     payload["fallback_semantics"]["legacy_adapter_id"] = CODEX_DESKTOP_HOST_ADAPTER.adapter_id
+    payload["legacy_boundary"] = {
+        "adapter_lifecycle": "legacy-compatibility",
+        "exposure_lane": "compatibility-only-explicit",
+        "default_host_peer_set": list(DEFAULT_HOST_PEER_SET),
+        "default_host_peer_set_member": False,
+        "may_become_framework_truth": False,
+        "may_become_default_host_peer": False,
+        "removal_readiness": "blocked-on-continuity-consumer-retirement",
+        "migration_guardrails": [
+            "keep_alias_mirror_only_to_codex_desktop_adapter",
+            "do_not_add_new_host_semantics_to_legacy_alias",
+            "require_explicit_compatibility_lane_opt_in",
+        ],
+    }
     return AdaptedHostProfile(
         framework_profile=canonical.framework_profile,
         adapter=CODEX_DESKTOP_HOST_ADAPTER,
@@ -1516,12 +1580,12 @@ def build_supervisor_state_contract() -> Dict[str, Any]:
     return {
         "framework_truth": "framework_core",
         "contract_artifact": SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID,
-        "status_contract": "supervisor_state_contract_v1",
+        "status_contract": "supervisor_state_contract_v2",
         "artifact_role": "shared-contract-evidence",
         "state_artifact_path": ".supervisor_state.json",
         "schema_expectations": {
             "top_level_fields": [
-                "version",
+                "schema_version",
                 "task_id",
                 "task_summary",
                 "controller",
@@ -1592,19 +1656,62 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
             "impl": "router-rs",
         },
         "compatibility_fallback": {
-            "adapter_kind": "python-agno",
-            "authority": "python-agno-kernel-adapter",
-            "family": "python",
-            "impl": "agno",
-            "mode_when_enabled": "compatibility-only-explicit",
-            "trigger_scope_when_enabled": "explicit-compatibility-kernel-only",
-            "purpose": "compatibility-only-escape-hatch",
+            "runtime_path_available": False,
+            "retired_mode": "retired",
+            "request_behavior": "explicit-request-rejected",
+            "former_adapter_kind": "python-agno",
+            "former_authority": "python-agno-kernel-adapter",
+            "former_family": "python",
+            "former_impl": "agno",
+            "purpose_before_retirement": "compatibility-only-escape-hatch",
         },
         "control_surfaces": {
             "settings_field": "rust_execute_fallback_to_python",
             "env_var": "CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON",
             "enabled_by_default": False,
-            "fallback_trigger_scope_when_enabled": "explicit-compatibility-kernel-only",
+            "accepted_after_retirement": False,
+            "request_behavior": "explicit-request-rejected",
+            "steady_state_mode": "retired",
+            "surface_role": "retired-explicit-request-surface",
+            "preserved_for": "backward-compatible explicit rejection and auditability",
+        },
+        "retirement_exit_contract": {
+            "surface_status": "pending-removal",
+            "current_decision": "keep-temporarily",
+            "removal_owner": "runtime-integrator-with-host-confirmation",
+            "remove_when": [
+                (
+                    "external host or integration evidence confirms no downstream "
+                    "caller still probes rust_execute_fallback_to_python"
+                ),
+                (
+                    "settings field, env var, explicit rejection shim, and retirement "
+                    "artifact exposure are removed in the same change"
+                ),
+                "targeted runtime and contract regression suites are rerun after removal",
+            ],
+            "observation_sources": {
+                "local_runtime_health": [
+                    "PythonAgnoExecutionKernel.health().kernel_live_fallback_request_status"
+                ],
+                "local_contract_artifacts": [
+                    "execution_kernel_live_fallback_retirement_status.control_surfaces",
+                    (
+                        "execution_kernel_live_fallback_retirement_status."
+                        "current_contract_truth.live_fallback_request_behavior"
+                    ),
+                ],
+                "external_confirmation": [
+                    (
+                        "host or integration owner evidence that no downstream caller "
+                        "still probes the retired request surface"
+                    )
+                ],
+            },
+            "stop_rule": (
+                "repo-only search is insufficient for deletion; without external caller "
+                "evidence the surface stays pending-removal"
+            ),
         },
         "public_runtime_contract_fields": [
             "execution_kernel",
@@ -1615,14 +1722,12 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
             "execution_kernel_delegate_authority",
             "execution_kernel_live_primary",
             "execution_kernel_live_primary_authority",
-            "execution_kernel_live_fallback",
-            "execution_kernel_live_fallback_authority",
-            "execution_kernel_live_fallback_enabled",
-            "execution_kernel_live_fallback_mode",
         ],
         "public_runtime_response_metadata_fields": [
             "execution_kernel_delegate_family",
             "execution_kernel_delegate_impl",
+        ],
+        "retired_runtime_response_metadata_fields": [
             EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
         ],
         "current_contract_truth": {
@@ -1632,27 +1737,27 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
             "dry_run_delegate_authority": "rust-execution-cli",
             "live_primary_kind": "router-rs",
             "live_primary_authority": "rust-execution-cli",
-            "live_fallback_kind_when_enabled": "python-agno",
-            "live_fallback_authority_when_enabled": "python-agno-kernel-adapter",
-            "live_fallback_mode_when_disabled": "disabled",
-            "live_fallback_trigger_scope_when_enabled": "explicit-compatibility-kernel-only",
+            "live_fallback_runtime_path_available": False,
+            "live_fallback_mode": "retired",
+            "live_fallback_request_behavior": "explicit-request-rejected",
+            "live_fallback_request_surface": "retired-explicit-request-only",
             "live_prompt_preview_passthrough_disabled": True,
             "compatibility_fallback_reason_metadata_key": EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
         },
         "current_response_metadata_truth": {
             "live_delegate_family": "rust-cli",
             "live_delegate_impl": "router-rs",
-            "live_fallback_delegate_family_when_enabled": "python",
-            "live_fallback_delegate_impl_when_enabled": "agno",
             "dry_run_delegate_family": "rust-cli",
             "dry_run_delegate_impl": "router-rs",
-            "compatibility_fallback_reason_emitted_by": "python-agno-kernel-adapter",
-            "compatibility_fallback_reason_present_only_on_fallback": True,
+            "compatibility_fallback_reason_present_in_steady_state": False,
+            "retired_response_metadata_fields": [
+                EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+            ],
         },
         "remaining_python_owned_surfaces": [],
         "retirement_readiness": {
             "ready": True,
-            "status": "complete",
+            "status": "retired",
             "contract_lane_complete": True,
             "runtime_control_flow_change_required": False,
             "blockers": [],
@@ -1671,7 +1776,8 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
             "response_metadata_surface_externalized": True,
             "delegate_family_impl_metadata_externalized": True,
             "dry_run_delegate_still_python_owned": False,
-            "live_fallback_trigger_scope_narrowed_to_infrastructure_only": False,
+            "compatibility_fallback_runtime_path_removed": True,
+            "explicit_compatibility_requests_rejected": True,
             "dry_run_prompt_preview_still_python_owned": False,
             "compatibility_fallback_agent_factory_still_python_owned": False,
             "compatibility_live_response_serialization_still_python_owned": False,
@@ -1734,6 +1840,7 @@ def should_emit_codex_desktop_alias_artifact(
 
 def _build_compatibility_snapshot_entry(spec: HostAdapterSpec) -> Dict[str, Any]:
     return {
+        "adapter_id": spec.adapter_id,
         "host_id": spec.host_id,
         "transport": spec.transport,
         "required_capabilities": list(spec.required_capabilities),
@@ -1741,6 +1848,10 @@ def _build_compatibility_snapshot_entry(spec: HostAdapterSpec) -> Dict[str, Any]
         "host_capabilities": list(spec.host_capabilities),
         "works_without_aionrs": spec.protocol_hints.get("works_without_aionrs", False),
         "upgrade_zone": spec.upgrade_zone,
+        "legacy_surface": bool(spec.protocol_hints.get("legacy_surface", False)),
+        "default_host_peer_set_member": bool(
+            spec.protocol_hints.get("default_host_peer_set_member", True)
+        ),
     }
 
 
@@ -1755,7 +1866,18 @@ def compatibility_snapshot(*, include_legacy_aliases: bool = False) -> Dict[str,
                 LEGACY_CODEX_DESKTOP_ADAPTER_ID: _build_compatibility_snapshot_entry(
                     CODEX_DESKTOP_HOST_ADAPTER
                 )
-            }
+            },
+            "default_host_peer_set": list(DEFAULT_HOST_PEER_SET),
+            "explicit_opt_in_required": True,
+        }
+        snapshot["fallback_lane"] = {
+            "legacy_adapters": {
+                adapter_id: _build_compatibility_snapshot_entry(spec)
+                for adapter_id, spec in COMPATIBILITY_HOST_ADAPTERS.items()
+                if adapter_id != LEGACY_CODEX_DESKTOP_ADAPTER_ID
+            },
+            "default_host_peer_set": list(DEFAULT_HOST_PEER_SET),
+            "explicit_opt_in_required": True,
         }
     return snapshot
 
@@ -1812,6 +1934,7 @@ def build_upgrade_compatibility_matrix(
     for spec in inventory_adapters:
         required = set(spec.required_capabilities)
         optional = set(spec.optional_capabilities)
+        legacy_surface = bool(spec.protocol_hints.get("legacy_surface", False))
         matrix[spec.adapter_id] = {
             "adapter_id": spec.adapter_id,
             "host_id": spec.host_id,
@@ -1829,6 +1952,13 @@ def build_upgrade_compatibility_matrix(
             ],
             "thin_patch_zone": list(spec.thin_patch_surfaces),
             "fork_danger_zone": list(spec.fork_danger_surfaces),
+            "legacy_surface": legacy_surface,
+            "exposure_lane": (
+                f"{spec.protocol_hints.get('legacy_lane', 'compatibility')}-only-explicit"
+                if legacy_surface
+                else "default-peer-set"
+            ),
+            "default_host_peer_set_member": spec.adapter_id in DEFAULT_HOST_PEER_SET,
             "compatible": compatibility.get(spec.adapter_id),
         }
     return matrix

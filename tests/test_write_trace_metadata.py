@@ -38,9 +38,57 @@ def test_write_trace_metadata_emits_required_fields(tmp_path: Path) -> None:
     )
 
     data = json.loads(output.read_text(encoding="utf-8"))
+    assert data["schema_version"] == "trace-metadata-v2"
     assert data["task"] == "full outline rollout"
+    assert data["matched_skills"] == [
+        "execution-controller-coding",
+        "execution-audit-codex",
+    ]
     assert data["decision"]["owner"] == "execution-controller-coding"
     assert data["reroute_count"] == 1
     assert data["retry_count"] == 2
     assert data["artifact_paths"] == ["artifacts/current/SESSION_SUMMARY.md"]
     assert data["verification_status"] == "passed"
+
+
+def test_write_trace_metadata_mirror_outputs_are_byte_identical(tmp_path: Path) -> None:
+    """Verify one materialization keeps root and mirror perfectly aligned."""
+
+    output = tmp_path / "TRACE_METADATA.json"
+    mirror = tmp_path / "artifacts" / "current" / "TRACE_METADATA.json"
+    write_trace_metadata(
+        output,
+        task="trace drift closure",
+        matched_skills=["execution-controller-coding", "checklist-fixer"],
+        owner="checklist-fixer",
+        gate="subagent-delegation",
+        overlay=None,
+        reroute_count=0,
+        retry_count=0,
+        artifact_paths=["TRACE_METADATA.json", "artifacts/current/TRACE_METADATA.json"],
+        verification_status="completed",
+        mirror_paths=[mirror],
+    )
+
+    assert output.read_text(encoding="utf-8") == mirror.read_text(encoding="utf-8")
+
+
+def test_write_trace_metadata_loads_runtime_version_when_omitted(tmp_path: Path) -> None:
+    output = tmp_path / "TRACE_METADATA.json"
+
+    write_trace_metadata(
+        output,
+        task="trace drift closure",
+        matched_skills=["execution-controller-coding"],
+        owner="execution-controller-coding",
+        gate="delegation",
+        overlay=None,
+        reroute_count=0,
+        retry_count=0,
+        artifact_paths=[],
+        verification_status="completed",
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert isinstance(payload["routing_runtime_version"], int)
+    assert payload["routing_runtime_version"] >= 1

@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Protocol
+from typing import TYPE_CHECKING, Any, Iterable, Mapping, Protocol
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from codex_agno_runtime.checkpoint_store import RuntimeStorageBackend
 
 
 TRACE_EVENT_SCHEMA_VERSION = "runtime-trace-v2"
@@ -22,6 +26,12 @@ TRACE_EVENT_BRIDGE_SCHEMA_VERSION = "runtime-event-bridge-v1"
 TRACE_EVENT_TRANSPORT_SCHEMA_VERSION = "runtime-event-transport-v1"
 TRACE_EVENT_HANDOFF_SCHEMA_VERSION = "runtime-event-handoff-v1"
 TRACE_CONTROL_PLANE_SCHEMA_VERSION = "runtime-trace-control-plane-v1"
+TRACE_COMPACTION_SNAPSHOT_SCHEMA_VERSION = "runtime-trace-compaction-snapshot-v1"
+TRACE_COMPACTION_DELTA_SCHEMA_VERSION = "runtime-trace-compaction-delta-v1"
+TRACE_COMPACTION_ARTIFACT_REF_SCHEMA_VERSION = "runtime-trace-artifact-ref-v1"
+TRACE_COMPACTION_MANIFEST_SCHEMA_VERSION = "runtime-trace-compaction-manifest-v1"
+TRACE_COMPACTION_RESULT_SCHEMA_VERSION = "runtime-trace-compaction-result-v1"
+TRACE_COMPACTION_RECOVERY_SCHEMA_VERSION = "runtime-trace-compaction-recovery-v1"
 _TRACE_SERVICE_NAME = "trace"
 _DEFAULT_TRACE_SERVICE_DESCRIPTOR = {
     "authority": "rust-runtime-control-plane",
@@ -29,12 +39,72 @@ _DEFAULT_TRACE_SERVICE_DESCRIPTOR = {
     "projection": "python-thin-projection",
     "delegate_kind": "filesystem-trace-store",
 }
+_DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR = {
+    "ownership_lane": "rust-contract-lane",
+    "producer_owner": "rust-control-plane",
+    "producer_authority": "rust-runtime-control-plane",
+    "exporter_owner": "rust-control-plane",
+    "exporter_authority": "rust-runtime-control-plane",
+}
+_DEFAULT_TRACE_SCOPE_FIELDS = ("session_id", "job_id")
 
 
 def _now_iso() -> str:
     """Return a canonical UTC timestamp."""
 
     return datetime.now(UTC).isoformat()
+
+
+def _coerce_scope_fields(value: Any, *, default: tuple[str, ...]) -> list[str]:
+    """Normalize a control-plane scope contract into an ordered field list."""
+
+    if not isinstance(value, (list, tuple)):
+        return list(default)
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        field = str(item).strip()
+        if not field or field in seen:
+            continue
+        seen.add(field)
+        normalized.append(field)
+    return normalized or list(default)
+
+
+def _stable_json_digest(payload: Any) -> str:
+    """Return a stable digest for one JSON-serializable payload."""
+
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _build_compaction_stream_key(session_id: str, job_id: str | None) -> str:
+    """Build a deterministic file-system-safe compaction key."""
+
+    parts = [session_id, job_id or "session"]
+    normalized = []
+    for part in parts:
+        normalized.append(
+            "".join(char if char.isalnum() or char in {"-", "_", "."} else "_" for char in part) or "stream"
+        )
+    return "__".join(normalized)
+
+
+def _event_matches_scope(
+    event: "TraceEvent",
+    *,
+    session_id: str | None,
+    job_id: str | None,
+    scope_fields: Iterable[str],
+) -> bool:
+    """Project event filtering through the Rust-owned scope contract."""
+
+    scope = set(scope_fields)
+    if session_id is not None and "session_id" in scope and event.session_id != session_id:
+        return False
+    if job_id is not None and "job_id" in scope and event.job_id != job_id:
+        return False
+    return True
 
 
 class TraceControlPlaneDescriptor(BaseModel):
@@ -48,8 +118,15 @@ class TraceControlPlaneDescriptor(BaseModel):
     role: str = _DEFAULT_TRACE_SERVICE_DESCRIPTOR["role"]
     projection: str = _DEFAULT_TRACE_SERVICE_DESCRIPTOR["projection"]
     delegate_kind: str = _DEFAULT_TRACE_SERVICE_DESCRIPTOR["delegate_kind"]
+    ownership_lane: str = _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR["ownership_lane"]
+    producer_owner: str = _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR["producer_owner"]
+    producer_authority: str = _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR["producer_authority"]
+    exporter_owner: str = _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR["exporter_owner"]
+    exporter_authority: str = _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR["exporter_authority"]
     transport_family: str = "artifact-handoff"
     resume_mode: str = "after_event_id"
+    stream_scope_fields: list[str] = Field(default_factory=lambda: list(_DEFAULT_TRACE_SCOPE_FIELDS))
+    cleanup_scope_fields: list[str] = Field(default_factory=lambda: list(_DEFAULT_TRACE_SCOPE_FIELDS))
     event_stream_path: str | None = None
     trace_output_path: str | None = None
 
@@ -77,6 +154,28 @@ def _build_trace_control_plane_descriptor(
                     value = service.get(field)
                     if value is not None:
                         payload[field] = value
+                for field in (
+                    "ownership_lane",
+                    "producer_owner",
+                    "producer_authority",
+                    "exporter_owner",
+                    "exporter_authority",
+                ):
+                    value = service.get(field)
+                    if value is not None:
+                        payload[field] = value
+                if service.get("resume_mode") is not None:
+                    payload["resume_mode"] = service.get("resume_mode")
+                if service.get("stream_scope_fields") is not None:
+                    payload["stream_scope_fields"] = _coerce_scope_fields(
+                        service.get("stream_scope_fields"),
+                        default=_DEFAULT_TRACE_SCOPE_FIELDS,
+                    )
+                if service.get("cleanup_scope_fields") is not None:
+                    payload["cleanup_scope_fields"] = _coerce_scope_fields(
+                        service.get("cleanup_scope_fields"),
+                        default=_DEFAULT_TRACE_SCOPE_FIELDS,
+                    )
     return TraceControlPlaneDescriptor.model_validate(payload)
 
 
@@ -119,6 +218,103 @@ class TraceReplayChunk(BaseModel):
     events: list[TraceEvent] = Field(default_factory=list)
     next_cursor: TraceReplayCursor | None = None
     has_more: bool = False
+
+
+class TraceArtifactRef(BaseModel):
+    """Immutable reference to a recovery-critical artifact."""
+
+    schema_version: str = TRACE_COMPACTION_ARTIFACT_REF_SCHEMA_VERSION
+    artifact_id: str
+    kind: str
+    uri: str
+    digest: str
+    size_bytes: int
+    created_at: str = Field(default_factory=_now_iso)
+    producer: str = "runtime-trace-recorder"
+
+
+class TraceCompactionSnapshot(BaseModel):
+    """Stable snapshot for one compacted generation."""
+
+    schema_version: str = TRACE_COMPACTION_SNAPSHOT_SCHEMA_VERSION
+    generation: int
+    snapshot_id: str
+    parent_generation: int | None = None
+    parent_snapshot_id: str | None = None
+    session_id: str
+    job_id: str | None = None
+    created_at: str = Field(default_factory=_now_iso)
+    watermark_event_id: str | None = None
+    state_digest: str
+    artifact_index_ref: TraceArtifactRef | None = None
+    state_ref: TraceArtifactRef | None = None
+    delta_cursor: str | None = None
+    summary: dict[str, Any] = Field(default_factory=dict)
+
+
+class TraceCompactionDelta(BaseModel):
+    """Generation-local delta that replays on top of the latest stable snapshot."""
+
+    schema_version: str = TRACE_COMPACTION_DELTA_SCHEMA_VERSION
+    generation: int
+    delta_id: str
+    parent_snapshot_id: str
+    seq: int
+    ts: str
+    kind: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    artifact_refs: list[TraceArtifactRef] = Field(default_factory=list)
+    applies_to: dict[str, Any] = Field(default_factory=dict)
+
+
+class TraceCompactionManifest(BaseModel):
+    """Manifest joining the latest stable snapshot and active delta generation."""
+
+    schema_version: str = TRACE_COMPACTION_MANIFEST_SCHEMA_VERSION
+    session_id: str
+    job_id: str | None = None
+    backend_family: str
+    compaction_supported: bool
+    snapshot_delta_supported: bool
+    latest_stable_snapshot: TraceCompactionSnapshot | None = None
+    active_generation: int = 0
+    active_parent_snapshot_id: str | None = None
+    manifest_path: str | None = None
+    snapshot_path: str | None = None
+    delta_path: str | None = None
+    artifact_index_path: str | None = None
+    state_path: str | None = None
+    updated_at: str = Field(default_factory=_now_iso)
+
+
+class TraceCompactionResult(BaseModel):
+    """Explicit result for compaction requests, including unsupported backends."""
+
+    schema_version: str = TRACE_COMPACTION_RESULT_SCHEMA_VERSION
+    applied: bool
+    status: str
+    reason: str | None = None
+    session_id: str
+    job_id: str | None = None
+    backend_family: str | None = None
+    current_generation: int = 0
+    next_generation: int = 0
+    latest_stable_snapshot: TraceCompactionSnapshot | None = None
+    manifest_path: str | None = None
+
+
+class TraceCompactionRecovery(BaseModel):
+    """Resolved compaction view used for recovery and replay."""
+
+    schema_version: str = TRACE_COMPACTION_RECOVERY_SCHEMA_VERSION
+    session_id: str
+    job_id: str | None = None
+    latest_recoverable_generation: int
+    snapshot: TraceCompactionSnapshot
+    deltas: list[TraceCompactionDelta] = Field(default_factory=list)
+    artifact_index: list[TraceArtifactRef] = Field(default_factory=list)
+    state: dict[str, Any] = Field(default_factory=dict)
+    latest_cursor: TraceReplayCursor | None = None
 
 
 class TraceDelegationSummary(BaseModel):
@@ -180,8 +376,30 @@ class RuntimeEventStreamChunk(BaseModel):
     heartbeat: RuntimeEventBridgeHeartbeat | None = None
 
 
+class RuntimeEventAttachTarget(BaseModel):
+    """Stable host-facing endpoint descriptor for one resumable stream."""
+
+    endpoint_kind: str = "runtime_method"
+    subscribe_method: str = "subscribe_runtime_events"
+    describe_method: str = "describe_runtime_event_transport"
+    cleanup_method: str = "cleanup_runtime_events"
+    handoff_method: str | None = "describe_runtime_event_handoff"
+    session_id: str
+    job_id: str | None = None
+
+
+class RuntimeEventReplayAnchor(BaseModel):
+    """Replay anchor contract a remote host can use without Python bridge state."""
+
+    anchor_kind: str = "trace_replay_cursor"
+    cursor_schema_version: str = TRACE_REPLAY_CURSOR_SCHEMA_VERSION
+    resume_mode: str = "after_event_id"
+    latest_cursor: TraceReplayCursor | None = None
+    replay_supported: bool = True
+
+
 class RuntimeEventTransport(BaseModel):
-    """Host-facing binding descriptor for one runtime event stream."""
+    """Host-facing binding descriptor for one runtime event stream and export lane."""
 
     schema_version: str = TRACE_EVENT_TRANSPORT_SCHEMA_VERSION
     stream_id: str
@@ -191,7 +409,13 @@ class RuntimeEventTransport(BaseModel):
     transport_family: str = "host-facing-bridge"
     transport_kind: str = "poll"
     endpoint_kind: str = "runtime_method"
+    ownership_lane: str = _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR["ownership_lane"]
+    producer_owner: str = _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR["producer_owner"]
+    producer_authority: str = _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR["producer_authority"]
+    exporter_owner: str = _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR["exporter_owner"]
+    exporter_authority: str = _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR["exporter_authority"]
     remote_capable: bool = True
+    remote_attach_supported: bool = True
     handoff_supported: bool = True
     handoff_method: str | None = "describe_runtime_event_handoff"
     subscribe_method: str = "subscribe_runtime_events"
@@ -211,11 +435,33 @@ class RuntimeEventTransport(BaseModel):
     cursor_schema_version: str = TRACE_REPLAY_CURSOR_SCHEMA_VERSION
     latest_cursor: TraceReplayCursor | None = None
     replay_supported: bool = True
+    attach_target: RuntimeEventAttachTarget | None = None
+    replay_anchor: RuntimeEventReplayAnchor | None = None
     control_plane_authority: str | None = None
     control_plane_role: str | None = None
     control_plane_projection: str | None = None
     control_plane_delegate_kind: str | None = None
     transport_health: dict[str, Any] | None = None
+
+    def model_post_init(self, __context: Any) -> None:
+        """Backfill the remote attach contract from the transport descriptor itself."""
+
+        if self.attach_target is None:
+            self.attach_target = RuntimeEventAttachTarget(
+                endpoint_kind=self.endpoint_kind,
+                subscribe_method=self.subscribe_method,
+                describe_method=self.describe_method,
+                cleanup_method=self.cleanup_method,
+                handoff_method=self.handoff_method,
+                session_id=self.session_id,
+                job_id=self.job_id,
+            )
+        if self.replay_anchor is None:
+            self.replay_anchor = RuntimeEventReplayAnchor(
+                resume_mode=self.resume_mode,
+                latest_cursor=self.latest_cursor,
+                replay_supported=self.replay_supported,
+            )
 
 
 class RuntimeEventHandoff(BaseModel):
@@ -228,8 +474,29 @@ class RuntimeEventHandoff(BaseModel):
     checkpoint_backend_family: str
     trace_stream_path: str | None = None
     resume_manifest_path: str | None = None
+    remote_attach_strategy: str = "transport_descriptor_then_replay"
+    cleanup_preserves_replay: bool = True
+    attach_target: RuntimeEventAttachTarget | None = None
+    replay_anchor: RuntimeEventReplayAnchor | None = None
+    recovery_artifacts: list[str] = Field(default_factory=list)
     control_plane: dict[str, Any] | None = None
     transport: RuntimeEventTransport
+
+    def model_post_init(self, __context: Any) -> None:
+        """Project a remote-resume handoff that survives bridge-cache cleanup."""
+
+        if self.attach_target is None:
+            self.attach_target = self.transport.attach_target
+        if self.replay_anchor is None:
+            self.replay_anchor = self.transport.replay_anchor
+        self.cleanup_preserves_replay = self.transport.cleanup_preserves_replay
+        if not self.recovery_artifacts:
+            ordered = [
+                self.transport.binding_artifact_path,
+                self.resume_manifest_path,
+                self.trace_stream_path,
+            ]
+            self.recovery_artifacts = [path for path in ordered if path is not None]
 
 
 class TraceEventSink(Protocol):
@@ -239,6 +506,9 @@ class TraceEventSink(Protocol):
 
     def write_event(self, event: TraceEvent) -> None:
         """Append one trace event to the sink backend."""
+
+    def read_events(self) -> list[TraceEvent]:
+        """Load persisted trace events from the sink backend."""
 
 
 class RuntimeEventBridge(Protocol):
@@ -357,9 +627,11 @@ class InMemoryRuntimeEventBridge:
         retained = [
             event
             for event in self._events
-            if not (
-                (session_id is None or event.session_id == session_id)
-                and (job_id is None or event.job_id == job_id)
+            if not _event_matches_scope(
+                event,
+                session_id=session_id,
+                job_id=job_id,
+                scope_fields=self._control_plane.cleanup_scope_fields,
             )
         ]
         self._events = retained
@@ -394,9 +666,16 @@ class InMemoryRuntimeEventBridge:
             "control_plane_role": descriptor.role,
             "control_plane_projection": descriptor.projection,
             "control_plane_delegate_kind": descriptor.delegate_kind,
+            "ownership_lane": descriptor.ownership_lane,
+            "producer_owner": descriptor.producer_owner,
+            "producer_authority": descriptor.producer_authority,
+            "exporter_owner": descriptor.exporter_owner,
+            "exporter_authority": descriptor.exporter_authority,
             "cached_event_count": len(self._events),
             "resume_mode": descriptor.resume_mode,
             "transport_family": descriptor.transport_family,
+            "stream_scope_fields": list(descriptor.stream_scope_fields),
+            "cleanup_scope_fields": list(descriptor.cleanup_scope_fields),
         }
 
     def _filter_events(
@@ -406,10 +685,16 @@ class InMemoryRuntimeEventBridge:
         session_id: str,
         job_id: str | None,
     ) -> list[TraceEvent]:
-        filtered = [event for event in events if event.session_id == session_id]
-        if job_id is not None:
-            filtered = [event for event in filtered if event.job_id == job_id]
-        return filtered
+        return [
+            event
+            for event in events
+            if _event_matches_scope(
+                event,
+                session_id=session_id,
+                job_id=job_id,
+                scope_fields=self._control_plane.stream_scope_fields,
+            )
+        ]
 
 
 class JsonlTraceEventSink:
@@ -421,9 +706,11 @@ class JsonlTraceEventSink:
         *,
         schema_version: str = TRACE_EVENT_SINK_SCHEMA_VERSION,
         control_plane_descriptor: Mapping[str, Any] | None = None,
+        storage_backend: "RuntimeStorageBackend | None" = None,
     ) -> None:
         self.path = path
         self.schema_version = schema_version
+        self.storage_backend = storage_backend
         self._control_plane = _build_trace_control_plane_descriptor(
             control_plane_descriptor=control_plane_descriptor,
             event_stream_path=path,
@@ -433,22 +720,37 @@ class JsonlTraceEventSink:
     def write_event(self, event: TraceEvent) -> None:
         """Persist one event as one deterministic JSON line."""
 
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "sink_schema_version": self.schema_version,
             "event": event.model_dump(mode="json"),
         }
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n"
+        if self.storage_backend is None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a", encoding="utf-8") as handle:
+                handle.write(serialized)
+            return
+
+        current = self.storage_backend.read_text(self.path) if self.storage_backend.exists(self.path) else ""
+        self.storage_backend.write_text(self.path, current + serialized)
 
     def read_events(self) -> list[TraceEvent]:
         """Load persisted events from the JSONL sink with v1 fallback hydration."""
 
-        if not self.path.exists():
+        if self.storage_backend is None:
+            if not self.path.exists():
+                return []
+            raw_text = self.path.read_text(encoding="utf-8")
+        else:
+            if not self.storage_backend.exists(self.path):
+                return []
+            raw_text = self.storage_backend.read_text(self.path)
+
+        if not raw_text:
             return []
 
         events: list[TraceEvent] = []
-        for line_number, raw_line in enumerate(self.path.read_text(encoding="utf-8").splitlines(), start=1):
+        for line_number, raw_line in enumerate(raw_text.splitlines(), start=1):
             if not raw_line.strip():
                 continue
             payload = json.loads(raw_line)
@@ -489,6 +791,7 @@ class RuntimeTraceRecorder:
         event_sink: TraceEventSink | None = None,
         event_bridge: RuntimeEventBridge | None = None,
         event_stream_path: Path | None = None,
+        storage_backend: "RuntimeStorageBackend | None" = None,
         control_plane_descriptor: Mapping[str, Any] | None = None,
     ) -> None:
         self.output_path = output_path
@@ -497,6 +800,7 @@ class RuntimeTraceRecorder:
         self.framework_version = framework_version
         self.event_sink = event_sink
         self.event_bridge = event_bridge
+        self.storage_backend = storage_backend
         self._control_plane = _build_trace_control_plane_descriptor(
             control_plane_descriptor=control_plane_descriptor,
             event_stream_path=event_stream_path,
@@ -506,8 +810,13 @@ class RuntimeTraceRecorder:
             self.event_sink = JsonlTraceEventSink(
                 event_stream_path,
                 control_plane_descriptor=control_plane_descriptor,
+                storage_backend=self.storage_backend,
             )
         elif isinstance(self.event_sink, JsonlTraceEventSink):
+            if self.storage_backend is None:
+                self.storage_backend = self.event_sink.storage_backend
+            elif self.event_sink.storage_backend is None:
+                self.event_sink.storage_backend = self.storage_backend
             self._control_plane = _build_trace_control_plane_descriptor(
                 control_plane_descriptor=control_plane_descriptor,
                 event_stream_path=self.event_sink.path,
@@ -541,6 +850,7 @@ class RuntimeTraceRecorder:
     ) -> TraceEvent:
         """Append one trace event."""
 
+        self._activate_generation_for_stream(session_id=session_id, job_id=job_id)
         seq = self._next_seq
         event_id = f"evt_{uuid.uuid4().hex[:12]}"
         event = TraceEvent(
@@ -562,6 +872,7 @@ class RuntimeTraceRecorder:
             self.event_sink.write_event(event)
         if self.event_bridge is not None:
             self.event_bridge.publish(event)
+        self._append_compaction_delta(event)
         return event
 
     def current_generation(self) -> int:
@@ -600,6 +911,42 @@ class RuntimeTraceRecorder:
     ) -> TraceReplayChunk:
         """Replay persisted or in-memory trace events from a stable resume cursor."""
 
+        recovery = (
+            self.recover_compacted_state(session_id=session_id, job_id=job_id)
+            if session_id is not None
+            else None
+        )
+        if recovery is not None:
+            source_events = [self._delta_to_event(delta) for delta in recovery.deltas]
+            if after is not None:
+                source_events = [
+                    event
+                    for event in source_events
+                    if (event.generation, event.seq) > (after.generation, after.seq)
+                ]
+            has_more = limit is not None and len(source_events) > limit
+            window = source_events[:limit] if limit is not None else source_events
+            next_cursor = None
+            if window:
+                tail = window[-1]
+                next_cursor = TraceReplayCursor(
+                    session_id=tail.session_id,
+                    job_id=tail.job_id,
+                    generation=tail.generation,
+                    seq=tail.seq,
+                    event_id=tail.event_id,
+                    cursor=tail.cursor,
+                )
+            generation = next_cursor.generation if next_cursor is not None else recovery.latest_recoverable_generation
+            return TraceReplayChunk(
+                session_id=session_id,
+                job_id=job_id,
+                generation=generation,
+                events=window,
+                next_cursor=next_cursor,
+                has_more=has_more,
+            )
+
         source_events = self._filter_events(self._load_stream_events(), session_id=session_id, job_id=job_id)
         if after is not None:
             source_events = [
@@ -634,6 +981,220 @@ class RuntimeTraceRecorder:
         """Return replayable events with optional filtering for bridge seeding."""
 
         return self._filter_events(self._load_stream_events(), session_id=session_id, job_id=job_id)
+
+    def compact(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None = None,
+        artifact_paths: Iterable[str] = (),
+    ) -> TraceCompactionResult:
+        """Persist a stable snapshot and roll the active stream into the next generation."""
+
+        capabilities = self._storage_capabilities()
+        if (
+            capabilities is None
+            or not capabilities.supports_compaction
+            or not capabilities.supports_snapshot_delta
+        ):
+            backend_family = capabilities.backend_family if capabilities is not None else None
+            return TraceCompactionResult(
+                applied=False,
+                status="unsupported",
+                reason="storage backend does not advertise compaction + snapshot-delta support",
+                session_id=session_id,
+                job_id=job_id,
+                backend_family=backend_family,
+                current_generation=self._generation,
+                next_generation=self._generation,
+            )
+
+        source_events = self._filter_events(self._load_stream_events(), session_id=session_id, job_id=job_id)
+        active_events = [event for event in source_events if event.generation == source_events[-1].generation] if source_events else []
+        if not active_events:
+            return TraceCompactionResult(
+                applied=False,
+                status="no_events",
+                reason="no matching events available for compaction",
+                session_id=session_id,
+                job_id=job_id,
+                backend_family=capabilities.backend_family,
+                current_generation=self._generation,
+                next_generation=self._generation,
+            )
+
+        previous_manifest = self.load_compaction_manifest(session_id=session_id, job_id=job_id)
+        parent_snapshot = previous_manifest.latest_stable_snapshot if previous_manifest is not None else None
+        paths = self._compaction_paths(session_id=session_id, job_id=job_id)
+        tail = active_events[-1]
+        state_payload = {
+            "session_id": session_id,
+            "job_id": job_id,
+            "generation": tail.generation,
+            "watermark_event_id": tail.event_id,
+            "delta_cursor": tail.cursor,
+            "latest_cursor": TraceReplayCursor(
+                session_id=tail.session_id,
+                job_id=tail.job_id,
+                generation=tail.generation,
+                seq=tail.seq,
+                event_id=tail.event_id,
+                cursor=tail.cursor,
+            ).model_dump(mode="json"),
+            "event_count": len(active_events),
+            "latest_event": tail.model_dump(mode="json"),
+            "control_plane": self._control_plane.model_dump(mode="json"),
+            "continuity_artifacts": list(dict.fromkeys(str(path) for path in artifact_paths)),
+        }
+        state_serialized = json.dumps(state_payload, ensure_ascii=False, indent=2) + "\n"
+        self._write_text(paths["state"], state_serialized)
+        state_ref = self._build_artifact_ref(kind="state_ref", path=paths["state"], payload=state_serialized)
+
+        artifact_index_refs = [
+            state_ref,
+            self._build_artifact_ref(
+                kind="trace_output",
+                path=self.output_path,
+            )
+            if self.output_path is not None
+            else None,
+            self._build_artifact_ref(
+                kind="trace_stream",
+                path=self.event_sink.path,
+            )
+            if isinstance(self.event_sink, JsonlTraceEventSink)
+            else None,
+        ]
+        artifact_index_refs.extend(
+            self._build_external_artifact_ref(path=artifact_path)
+            for artifact_path in list(dict.fromkeys(str(path) for path in artifact_paths))
+        )
+        artifact_index_payload = [ref.model_dump(mode="json") for ref in artifact_index_refs if ref is not None]
+        artifact_index_serialized = json.dumps(artifact_index_payload, ensure_ascii=False, indent=2) + "\n"
+        self._write_text(paths["artifact_index"], artifact_index_serialized)
+        artifact_index_ref = self._build_artifact_ref(
+            kind="artifact_index_ref",
+            path=paths["artifact_index"],
+            payload=artifact_index_serialized,
+        )
+
+        snapshot_summary = {
+            "latest_event_id": tail.event_id,
+            "latest_seq": tail.seq,
+            "event_count": len(active_events),
+            "latest_cursor": state_payload["latest_cursor"],
+            "kind": tail.kind,
+            "stage": tail.stage,
+            "status": tail.status,
+        }
+        snapshot = TraceCompactionSnapshot(
+            generation=tail.generation,
+            snapshot_id=f"snap_{uuid.uuid4().hex[:12]}",
+            parent_generation=parent_snapshot.generation if parent_snapshot is not None else None,
+            parent_snapshot_id=parent_snapshot.snapshot_id if parent_snapshot is not None else None,
+            session_id=session_id,
+            job_id=job_id,
+            watermark_event_id=tail.event_id,
+            state_digest=_stable_json_digest(state_payload),
+            artifact_index_ref=artifact_index_ref,
+            state_ref=state_ref,
+            delta_cursor=tail.cursor,
+            summary=snapshot_summary,
+        )
+        self._write_text(paths["snapshot"], snapshot.model_dump_json(indent=2) + "\n")
+        self._write_text(paths["deltas"], "")
+
+        next_generation = tail.generation + 1
+        manifest = TraceCompactionManifest(
+            session_id=session_id,
+            job_id=job_id,
+            backend_family=capabilities.backend_family,
+            compaction_supported=True,
+            snapshot_delta_supported=True,
+            latest_stable_snapshot=snapshot,
+            active_generation=next_generation,
+            active_parent_snapshot_id=snapshot.snapshot_id,
+            manifest_path=str(paths["manifest"]),
+            snapshot_path=str(paths["snapshot"]),
+            delta_path=str(paths["deltas"]),
+            artifact_index_path=str(paths["artifact_index"]),
+            state_path=str(paths["state"]),
+        )
+        self._write_text(paths["manifest"], manifest.model_dump_json(indent=2) + "\n")
+        self._generation = next_generation
+        self._next_seq = 1
+        return TraceCompactionResult(
+            applied=True,
+            status="compacted",
+            session_id=session_id,
+            job_id=job_id,
+            backend_family=capabilities.backend_family,
+            current_generation=snapshot.generation,
+            next_generation=next_generation,
+            latest_stable_snapshot=snapshot,
+            manifest_path=str(paths["manifest"]),
+        )
+
+    def load_compaction_manifest(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None = None,
+    ) -> TraceCompactionManifest | None:
+        """Load the compaction manifest for one session/job stream when present."""
+
+        path = self._compaction_paths(session_id=session_id, job_id=job_id)["manifest"]
+        if not self._exists(path):
+            return None
+        return TraceCompactionManifest.model_validate_json(self._read_text(path))
+
+    def recover_compacted_state(
+        self,
+        *,
+        session_id: str | None,
+        job_id: str | None = None,
+    ) -> TraceCompactionRecovery | None:
+        """Resolve the latest snapshot plus active-generation deltas without scanning old history."""
+
+        if session_id is None:
+            return None
+        manifest = self.load_compaction_manifest(session_id=session_id, job_id=job_id)
+        if manifest is None or manifest.latest_stable_snapshot is None:
+            return None
+
+        snapshot = manifest.latest_stable_snapshot
+        if snapshot.state_ref is None or snapshot.artifact_index_ref is None:
+            raise RuntimeError("Compaction manifest is missing required recovery artifact refs.")
+
+        state_path = Path(snapshot.state_ref.uri)
+        artifact_index_path = Path(snapshot.artifact_index_ref.uri)
+        if not self._exists(state_path) or not self._exists(artifact_index_path):
+            raise RuntimeError("Compaction recovery failed closed because a referenced artifact is missing.")
+
+        state_payload = json.loads(self._read_text(state_path))
+        artifact_index = [
+            TraceArtifactRef.model_validate(payload)
+            for payload in json.loads(self._read_text(artifact_index_path) or "[]")
+        ]
+        delta_path = Path(manifest.delta_path) if manifest.delta_path is not None else None
+        deltas = self._load_compaction_deltas(delta_path)
+        latest_cursor = None
+        if deltas:
+            tail = deltas[-1]
+            latest_cursor = self._cursor_from_delta(tail)
+        elif isinstance(state_payload.get("latest_cursor"), Mapping):
+            latest_cursor = TraceReplayCursor.model_validate(state_payload["latest_cursor"])
+        latest_generation = deltas[-1].generation if deltas else manifest.active_generation
+        return TraceCompactionRecovery(
+            session_id=session_id,
+            job_id=job_id,
+            latest_recoverable_generation=latest_generation,
+            snapshot=snapshot,
+            deltas=deltas,
+            artifact_index=artifact_index,
+            state=state_payload,
+            latest_cursor=latest_cursor,
+        )
 
     def count_reroutes(self, session_id: str) -> int:
         """Return reroute count for a session based on route selection events."""
@@ -671,6 +1232,7 @@ class RuntimeTraceRecorder:
 
         payload = {
             "version": 1,
+            "schema_version": self.metadata_schema_version,
             "metadata_schema_version": self.metadata_schema_version,
             "ts": _now_iso(),
             "task": task,
@@ -693,8 +1255,12 @@ class RuntimeTraceRecorder:
             "stream": stream_state,
             "events": [event.model_dump() for event in self._events],
         }
-        self.output_path.parent.mkdir(parents=True, exist_ok=True)
-        self.output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        serialized = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+        if self.storage_backend is None:
+            self.output_path.parent.mkdir(parents=True, exist_ok=True)
+            self.output_path.write_text(serialized, encoding="utf-8")
+        else:
+            self.storage_backend.write_text(self.output_path, serialized)
 
     def describe_stream(self) -> dict[str, Any]:
         """Describe the resumable event stream seam exposed by the recorder."""
@@ -712,13 +1278,21 @@ class RuntimeTraceRecorder:
             "control_plane_role": self._control_plane.role,
             "control_plane_projection": self._control_plane.projection,
             "control_plane_delegate_kind": self._control_plane.delegate_kind,
+            "ownership_lane": self._control_plane.ownership_lane,
+            "producer_owner": self._control_plane.producer_owner,
+            "producer_authority": self._control_plane.producer_authority,
+            "exporter_owner": self._control_plane.exporter_owner,
+            "exporter_authority": self._control_plane.exporter_authority,
             "transport_family": self._control_plane.transport_family,
             "resume_mode": self._control_plane.resume_mode,
+            "stream_scope_fields": list(self._control_plane.stream_scope_fields),
+            "cleanup_scope_fields": list(self._control_plane.cleanup_scope_fields),
             "event_stream_path": (
                 str(self.event_sink.path)
                 if isinstance(self.event_sink, JsonlTraceEventSink)
                 else None
             ),
+            "compaction_manifest_path": self._latest_compaction_manifest_path(),
             "event_count": len(source_events),
             "latest_seq": latest.seq if latest is not None else 0,
             "latest_event_id": latest.event_id if latest is not None else None,
@@ -739,7 +1313,7 @@ class RuntimeTraceRecorder:
     def _load_stream_events(self) -> list[TraceEvent]:
         """Return the best available source of replayable events."""
 
-        if isinstance(self.event_sink, JsonlTraceEventSink):
+        if self.event_sink is not None:
             persisted = self.event_sink.read_events()
             if persisted:
                 return persisted
@@ -754,9 +1328,185 @@ class RuntimeTraceRecorder:
     ) -> list[TraceEvent]:
         """Apply optional session/job filters to a replay source."""
 
-        filtered = events
-        if session_id is not None:
-            filtered = [event for event in filtered if event.session_id == session_id]
-        if job_id is not None:
-            filtered = [event for event in filtered if event.job_id == job_id]
-        return filtered
+        return [
+            event
+            for event in events
+            if _event_matches_scope(
+                event,
+                session_id=session_id,
+                job_id=job_id,
+                scope_fields=self._control_plane.stream_scope_fields,
+            )
+        ]
+
+    def _storage_capabilities(self) -> Any:
+        if self.storage_backend is None:
+            return None
+        return self.storage_backend.capabilities()
+
+    def _compaction_paths(self, *, session_id: str, job_id: str | None) -> dict[str, Path]:
+        root_candidate = (
+            self.event_sink.path.parent
+            if isinstance(self.event_sink, JsonlTraceEventSink)
+            else (self.output_path.parent if self.output_path is not None else Path.cwd())
+        )
+        root = root_candidate / "trace_compaction"
+        artifacts_dir = root / "artifacts"
+        stream_key = _build_compaction_stream_key(session_id, job_id)
+        return {
+            "manifest": root / f"{stream_key}.manifest.json",
+            "snapshot": root / f"{stream_key}.snapshot.json",
+            "deltas": root / f"{stream_key}.deltas.jsonl",
+            "artifact_index": artifacts_dir / f"{stream_key}.artifacts.json",
+            "state": artifacts_dir / f"{stream_key}.state.json",
+        }
+
+    def _write_text(self, path: Path, payload: str) -> None:
+        if self.storage_backend is not None:
+            self.storage_backend.write_text(path, payload)
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(payload, encoding="utf-8")
+
+    def _read_text(self, path: Path) -> str:
+        if self.storage_backend is not None:
+            return self.storage_backend.read_text(path)
+        return path.read_text(encoding="utf-8")
+
+    def _exists(self, path: Path) -> bool:
+        if self.storage_backend is not None:
+            return self.storage_backend.exists(path)
+        return path.exists()
+
+    def _build_artifact_ref(
+        self,
+        *,
+        kind: str,
+        path: Path | None,
+        payload: str | None = None,
+    ) -> TraceArtifactRef | None:
+        if path is None:
+            return None
+        if payload is None:
+            if not self._exists(path):
+                return None
+            payload = self._read_text(path)
+        return TraceArtifactRef(
+            artifact_id=f"art_{uuid.uuid4().hex[:12]}",
+            kind=kind,
+            uri=str(path),
+            digest=hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+            size_bytes=len(payload.encode("utf-8")),
+        )
+
+    def _build_external_artifact_ref(self, *, path: str) -> TraceArtifactRef:
+        encoded = path.encode("utf-8")
+        return TraceArtifactRef(
+            artifact_id=f"art_{uuid.uuid4().hex[:12]}",
+            kind="continuity_artifact",
+            uri=path,
+            digest=hashlib.sha256(encoded).hexdigest(),
+            size_bytes=len(encoded),
+            producer="runtime-trace-recorder-external",
+        )
+
+    def _append_compaction_delta(self, event: TraceEvent) -> None:
+        manifest = self.load_compaction_manifest(session_id=event.session_id, job_id=event.job_id)
+        if manifest is None or manifest.delta_path is None or manifest.active_parent_snapshot_id is None:
+            return
+        if event.generation != manifest.active_generation:
+            return
+        delta = TraceCompactionDelta(
+            generation=event.generation,
+            delta_id=f"delta_{uuid.uuid4().hex[:12]}",
+            parent_snapshot_id=manifest.active_parent_snapshot_id,
+            seq=event.seq,
+            ts=event.ts,
+            kind=event.kind,
+            payload={
+                "event_id": event.event_id,
+                "cursor": event.cursor,
+                "stage": event.stage,
+                "status": event.status,
+                "payload": event.payload,
+            },
+            artifact_refs=[],
+            applies_to={
+                "session_id": event.session_id,
+                "job_id": event.job_id,
+            },
+        )
+        path = Path(manifest.delta_path)
+        serialized = delta.model_dump_json() + "\n"
+        current = self._read_text(path) if self._exists(path) else ""
+        self._write_text(path, current + serialized)
+
+    def _load_compaction_deltas(self, path: Path | None) -> list[TraceCompactionDelta]:
+        if path is None or not self._exists(path):
+            return []
+        raw = self._read_text(path)
+        if not raw.strip():
+            return []
+        return [
+            TraceCompactionDelta.model_validate_json(line)
+            for line in raw.splitlines()
+            if line.strip()
+        ]
+
+    def _delta_to_event(self, delta: TraceCompactionDelta) -> TraceEvent:
+        payload = delta.payload
+        return TraceEvent(
+            event_id=str(payload["event_id"]),
+            seq=delta.seq,
+            generation=delta.generation,
+            cursor=str(payload["cursor"]),
+            ts=delta.ts,
+            session_id=str(delta.applies_to["session_id"]),
+            job_id=delta.applies_to.get("job_id"),
+            kind=delta.kind,
+            stage=str(payload["stage"]),
+            status=str(payload.get("status", "ok")),
+            payload=dict(payload.get("payload", {})),
+        )
+
+    def _cursor_from_delta(self, delta: TraceCompactionDelta) -> TraceReplayCursor:
+        payload = delta.payload
+        return TraceReplayCursor(
+            session_id=str(delta.applies_to["session_id"]),
+            job_id=delta.applies_to.get("job_id"),
+            generation=delta.generation,
+            seq=delta.seq,
+            event_id=str(payload["event_id"]),
+            cursor=str(payload["cursor"]),
+        )
+
+    def _activate_generation_for_stream(self, *, session_id: str, job_id: str | None) -> None:
+        manifest = self.load_compaction_manifest(session_id=session_id, job_id=job_id)
+        if manifest is None:
+            return
+        if manifest.active_generation < self._generation:
+            return
+        self._generation = manifest.active_generation
+        active_events = [
+            event
+            for event in self._filter_events(self._load_stream_events(), session_id=session_id, job_id=job_id)
+            if event.generation == self._generation
+        ]
+        active_deltas = self._load_compaction_deltas(Path(manifest.delta_path) if manifest.delta_path is not None else None)
+        last_seq = 0
+        if active_events:
+            last_seq = max(last_seq, active_events[-1].seq)
+        if active_deltas:
+            last_seq = max(last_seq, active_deltas[-1].seq)
+        self._next_seq = last_seq + 1 if last_seq else 1
+
+    def _latest_compaction_manifest_path(self) -> str | None:
+        root_candidate = (
+            self.event_sink.path.parent
+            if isinstance(self.event_sink, JsonlTraceEventSink)
+            else (self.output_path.parent if self.output_path is not None else None)
+        )
+        if root_candidate is None:
+            return None
+        candidate = root_candidate / "trace_compaction"
+        return str(candidate) if self._exists(candidate) else str(candidate)

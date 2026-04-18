@@ -218,3 +218,21 @@ The following schema is the canonical contract snapshot used by tests to detect 
 ## Drift Rule
 
 Any future implementation, schema, or runtime change that alters one of the machine-readable fields above must update this contract first, then update the corresponding implementation and tests in the same change.
+
+## Current Minimal Implementation Status
+
+R8 now lands a contract-backed minimal implementation in the Python host without re-promoting Python to default authority:
+
+- `ExecutionEnvironmentService` routes every kernel request through an explicit sandbox lifecycle manager instead of ad-hoc inline handling
+- lifecycle transitions are validated against the frozen state graph before the kernel delegate runs
+- capability policy is request-scoped, deny-by-default, and rejects high-risk execution unless the sandbox profile is dedicated
+- budgets are attached to every execution request; admission validates all four dimensions, while runtime enforcement checks wall-clock, output size, and host-visible CPU or memory probes
+- cleanup is asynchronous, observable, and recorded in `runtime_sandbox_events.jsonl`
+- cleanup success is the only path back to `recycled`; cleanup failure quarantines the sandbox as `failed`
+- failed sandboxes stay out of the reusable pool, while healthy sandboxes may only be reused under the same profile and capability set
+
+The current minimal implementation is intentionally scoped:
+
+- it provides deterministic lifecycle, policy, budget, and cleanup behavior for the execution seam
+- it does not yet claim a remote sandbox backend or a full out-of-process resource governor
+- future work may move this host into Rust, but that migration must preserve the frozen contract above instead of weakening it

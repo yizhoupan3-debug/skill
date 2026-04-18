@@ -133,6 +133,20 @@ def test_vocabulary_map_keeps_canonical_jsonl_to_otel_pairs() -> None:
     assert "external SSE bridge not yet exposed" in CONTRACT_TEXT
 
 
+def test_contract_records_rust_owned_producer_exporter_lane() -> None:
+    ownership_section = _section("Producer / Exporter Ownership")
+
+    assert "rust-contract-lane" in ownership_section
+    assert "producer_owner = \"rust-control-plane\"" in CONTRACT_TEXT
+    assert "exporter_owner = \"rust-control-plane\"" in CONTRACT_TEXT
+    assert "producer_authority" in CONTRACT_TEXT
+    assert "exporter_authority" in CONTRACT_TEXT
+    assert "JSONL vocabulary" in ownership_section
+    assert "OTel" in ownership_section
+    assert "replay seam" in ownership_section
+    assert "compaction seam" in ownership_section
+
+
 def test_metrics_catalog_and_dashboard_schema_are_stable() -> None:
     metrics_section = _section("Runtime Metrics Catalog")
     schema = _dashboard_schema()

@@ -37,7 +37,9 @@ from codex_agno_runtime.trace import (
 from codex_agno_runtime.skill_loader import SkillLoader
 from codex_agno_runtime.state import (
     BACKGROUND_STATE_SCHEMA_VERSION,
+    BACKGROUND_SESSION_TAKEOVER_ARBITRATION_SCHEMA_VERSION,
     BackgroundJobStore,
+    BackgroundJobStatusMutation,
     SessionConflictError,
 )
 
@@ -59,10 +61,10 @@ _MINIMAL_SUPERVISOR_STATE = {
 
 
 @contextmanager
-def _project_supervisor_state() -> Path:
+def _project_supervisor_state(state: dict | None = None) -> Path:
     path = PROJECT_ROOT / ".supervisor_state.json"
     original = path.read_text(encoding="utf-8") if path.exists() else None
-    path.write_text(json.dumps(_MINIMAL_SUPERVISOR_STATE, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(state or _MINIMAL_SUPERVISOR_STATE, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     try:
         yield path
     finally:
@@ -124,6 +126,14 @@ def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> 
             assert response.metadata["trace_replay_supported"] is True
             assert response.metadata["trace_event_bridge_supported"] is True
             assert response.metadata["trace_event_bridge_schema_version"] == "runtime-event-bridge-v1"
+            assert response.metadata["trace_event_transport_schema_version"] == TRACE_EVENT_TRANSPORT_SCHEMA_VERSION
+            assert response.metadata["trace_event_transport_family"] == "host-facing-bridge"
+            assert response.metadata["trace_event_transport_endpoint_kind"] == "runtime_method"
+            assert response.metadata["trace_event_transport_remote_capable"] is True
+            assert response.metadata["trace_event_transport_handoff_supported"] is True
+            assert response.metadata["trace_event_handoff_schema_version"] == "runtime-event-handoff-v1"
+            assert response.metadata["trace_replay_anchor_kind"] == "trace_replay_cursor"
+            assert response.metadata["trace_replay_resume_mode"] == "after_event_id"
             assert response.metadata["execution_kernel"] == "rust-execution-kernel-slice"
             assert response.metadata["execution_kernel_authority"] == "rust-execution-kernel-authority"
             assert response.metadata["execution_kernel_contract_mode"] == "rust-live-primary"
@@ -248,6 +258,40 @@ def test_runtime_dry_run_emits_empty_supervisor_projection_without_state_file(tm
         "delegation": None,
     }
     assert str((isolated_home / ".supervisor_state.json").resolve()) not in resume_manifest["artifact_paths"]
+
+
+def test_runtime_supervisor_projection_summarizes_top_level_verification_status_dict(tmp_path: Path) -> None:
+    """Top-level verification dictionaries should reduce to a stable overall verdict."""
+
+    supervisor_state = {
+        "active_phase": "background-policy-rustified-still-not-full-done",
+        "delegated_sidecars": [{"nickname": "Euler"}, {"nickname": "Gibbs"}],
+        "verification_status": {
+            "cargo_test_router_rs": "passed",
+            "pytest_targeted_suite": "background/runtime/services targeted passed",
+            "compileall_runtime": "passed",
+        },
+    }
+    with _project_supervisor_state(supervisor_state) as supervisor_state_path:
+        settings = RuntimeSettings(
+            codex_home=PROJECT_ROOT,
+            data_dir=tmp_path / "runtime-data",
+            trace_output_path=tmp_path / "TRACE_METADATA.json",
+            live_model_override=False,
+        )
+        runtime = CodexAgnoRuntime(settings)
+        projection = runtime._build_supervisor_projection()
+
+        assert projection.supervisor_state_path == str(supervisor_state_path.resolve())
+        assert projection.active_phase == supervisor_state["active_phase"]
+        assert projection.verification_status == "passed"
+        assert projection.delegation is not None
+        assert projection.delegation.model_dump(mode="json") == {
+            "plan_created": None,
+            "spawn_attempted": None,
+            "fallback_mode": None,
+            "sidecar_count": 2,
+        }
 
 
 def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) -> None:
@@ -455,6 +499,7 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             assert transport["transport_family"] == "host-facing-bridge"
             assert transport["endpoint_kind"] == "runtime_method"
             assert transport["remote_capable"] is True
+            assert transport["remote_attach_supported"] is True
             assert transport["handoff_supported"] is True
             assert transport["handoff_method"] == "describe_runtime_event_handoff"
             assert transport["handoff_kind"] == "artifact_handoff"
@@ -471,10 +516,15 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             assert transport["cleanup_preserves_replay"] is True
             assert transport["replay_reseed_supported"] is True
             assert transport["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
+            assert transport["attach_target"]["endpoint_kind"] == "runtime_method"
+            assert transport["attach_target"]["session_id"] == response.session_id
+            assert transport["replay_anchor"]["anchor_kind"] == "trace_replay_cursor"
+            assert transport["replay_anchor"]["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
             persisted = json.loads(Path(transport["binding_artifact_path"]).read_text(encoding="utf-8"))
             assert persisted["stream_id"] == transport["stream_id"]
             assert persisted["session_id"] == response.session_id
             assert persisted["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
+            assert persisted["attach_target"]["session_id"] == response.session_id
 
             handoff = runtime.describe_runtime_event_handoff(session_id=response.session_id)
             assert handoff["schema_version"] == "runtime-event-handoff-v1"
@@ -482,6 +532,15 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             assert handoff["checkpoint_backend_family"] == "filesystem"
             assert handoff["trace_stream_path"].endswith("TRACE_EVENTS.jsonl")
             assert handoff["resume_manifest_path"].endswith("TRACE_RESUME_MANIFEST.json")
+            assert handoff["remote_attach_strategy"] == "transport_descriptor_then_replay"
+            assert handoff["cleanup_preserves_replay"] is True
+            assert handoff["attach_target"]["session_id"] == response.session_id
+            assert handoff["replay_anchor"]["anchor_kind"] == "trace_replay_cursor"
+            assert handoff["recovery_artifacts"] == [
+                transport["binding_artifact_path"],
+                handoff["resume_manifest_path"],
+                handoff["trace_stream_path"],
+            ]
             assert handoff["transport"]["binding_artifact_path"] == transport["binding_artifact_path"]
 
             after_event_id = first_window["events"][-1]["event_id"]
@@ -595,24 +654,94 @@ def test_background_job_store_rejects_duplicate_active_sessions() -> None:
     assert store.get_active_job("shared-session") == "job-2"
 
 
-def test_background_job_store_serializes_interrupt_takeovers() -> None:
-    """Only one replacement job may reserve the next session handoff at a time."""
+def test_background_job_store_arbitrates_interrupt_takeovers() -> None:
+    """The state reducer should serialize reserve/claim handoffs for one session."""
 
     store = BackgroundJobStore()
     store.set_status("job-1", status="queued", session_id="shared-session", timeout_seconds=30)
 
+    decision = store.arbitrate_session_takeover(
+        session_id="shared-session",
+        incoming_job_id="job-2",
+        operation="reserve",
+    )
+    assert decision.schema_version == BACKGROUND_SESSION_TAKEOVER_ARBITRATION_SCHEMA_VERSION
+    assert decision.operation == "reserve"
+    assert decision.outcome == "pending"
+    assert decision.changed is True
+    assert decision.previous_active_job_id == "job-1"
+    assert decision.active_job_id == "job-1"
+    assert decision.previous_pending_job_id is None
+    assert decision.pending_job_id == "job-2"
     assert store.reserve_session_takeover(session_id="shared-session", incoming_job_id="job-2") == "job-1"
 
     with pytest.raises(SessionConflictError):
-        store.reserve_session_takeover(session_id="shared-session", incoming_job_id="job-3")
+        store.arbitrate_session_takeover(
+            session_id="shared-session",
+            incoming_job_id="job-3",
+            operation="reserve",
+        )
 
     store.set_status("job-1", status="interrupted", session_id="shared-session", timeout_seconds=30)
-    store.claim_session_takeover(session_id="shared-session", incoming_job_id="job-2")
+    claim = store.arbitrate_session_takeover(
+        session_id="shared-session",
+        incoming_job_id="job-2",
+        operation="claim",
+    )
+    assert claim.schema_version == BACKGROUND_SESSION_TAKEOVER_ARBITRATION_SCHEMA_VERSION
+    assert claim.operation == "claim"
+    assert claim.outcome == "claimed"
+    assert claim.changed is True
+    assert claim.previous_active_job_id is None
+    assert claim.previous_pending_job_id == "job-2"
+    assert claim.active_job_id == "job-2"
+    assert claim.pending_job_id is None
     queued = store.set_status("job-2", status="queued", session_id="shared-session", timeout_seconds=30)
+    noop_release = store.arbitrate_session_takeover(
+        session_id="shared-session",
+        incoming_job_id="job-2",
+        operation="release",
+    )
 
     assert queued.status == "queued"
     assert store.get_active_job("shared-session") == "job-2"
     assert store.pending_session_takeovers() == 0
+    assert noop_release.outcome == "noop"
+    assert noop_release.changed is False
+
+
+def test_background_job_store_release_only_clears_pending_takeover() -> None:
+    """Release should drop a pending takeover without tearing down the current owner."""
+
+    store = BackgroundJobStore()
+    store.set_status("job-1", status="queued", session_id="shared-session", timeout_seconds=30)
+
+    store.arbitrate_session_takeover(
+        session_id="shared-session",
+        incoming_job_id="job-2",
+        operation="reserve",
+    )
+    released = store.arbitrate_session_takeover(
+        session_id="shared-session",
+        incoming_job_id="job-2",
+        operation="release",
+    )
+
+    assert released.schema_version == BACKGROUND_SESSION_TAKEOVER_ARBITRATION_SCHEMA_VERSION
+    assert released.operation == "release"
+    assert released.outcome == "released"
+    assert released.changed is True
+    assert released.active_job_id == "job-1"
+    assert released.pending_job_id is None
+    assert store.get_active_job("shared-session") == "job-1"
+    assert store.pending_session_takeovers() == 0
+
+    with pytest.raises(SessionConflictError):
+        store.arbitrate_session_takeover(
+            session_id="shared-session",
+            incoming_job_id="job-2",
+            operation="claim",
+        )
 
 
 def test_background_job_store_persists_versioned_state(tmp_path: Path) -> None:
@@ -668,6 +797,55 @@ def test_background_job_store_persists_pending_takeovers(tmp_path: Path) -> None
 
     recovered = BackgroundJobStore(state_path=state_path)
     assert recovered.pending_session_takeovers() == 1
+
+
+def test_background_job_status_mutation_contract_defaults_and_merges() -> None:
+    """The state reducer should own creation defaults and update preservation."""
+
+    response = RunTaskResponse(
+        session_id="session-1",
+        user_id="tester",
+        skill="test-skill",
+        live_run=False,
+        content="done",
+        usage=UsageMetrics(total_tokens=3),
+    )
+    created = BackgroundJobStatusMutation(
+        status="queued",
+        session_id="session-1",
+        result=response,
+        timeout_seconds=30,
+    ).apply(job_id="job-1", existing=None)
+
+    assert created.job_id == "job-1"
+    assert created.session_id == "session-1"
+    assert created.status == "queued"
+    assert created.multitask_strategy == "reject"
+    assert created.attempt == 1
+    assert created.retry_count == 0
+    assert created.max_attempts == 1
+    assert created.backoff_base_seconds == 0.0
+    assert created.backoff_multiplier == 2.0
+    assert created.result == response
+
+    preserved_fields = created.model_dump(
+        mode="python",
+        exclude={"job_id", "status", "created_at", "updated_at", "result"},
+    )
+    updated = BackgroundJobStatusMutation(
+        status="running",
+        result=created.result,
+        **preserved_fields,
+    ).apply(job_id="job-1", existing=created)
+
+    assert updated.status == "running"
+    assert updated.created_at == created.created_at
+    assert updated.updated_at != created.updated_at
+    assert updated.result == created.result
+    assert updated.model_dump(mode="python", exclude={"status", "updated_at", "result"}) == created.model_dump(
+        mode="python",
+        exclude={"status", "updated_at", "result"},
+    )
 
 
 def test_runtime_background_queue_rejects_duplicate_session_ids(tmp_path: Path) -> None:
@@ -841,7 +1019,7 @@ def test_prepare_session_rust_route_mode_matches_python_mode(tmp_path: Path) -> 
 
 
 def test_prepare_session_shadow_mode_returns_soak_report(tmp_path: Path) -> None:
-    """Shadow mode should preserve the Python route while returning a stable parity report."""
+    """Shadow mode should keep Rust as the live route while returning a stable parity report."""
 
     runtime = CodexAgnoRuntime(
         RuntimeSettings(
@@ -860,13 +1038,17 @@ def test_prepare_session_shadow_mode_returns_soak_report(tmp_path: Path) -> None
         )
     )
 
-    assert prepared.route_engine == "python"
+    assert prepared.route_engine == "rust"
     assert prepared.rollback_to_python is False
     assert prepared.shadow_route_report is not None
+    assert prepared.shadow_route_report.report_schema_version == "router-rs-route-report-v1"
+    assert prepared.shadow_route_report.authority == "rust-route-core"
     assert prepared.shadow_route_report.mode == "shadow"
     assert prepared.shadow_route_report.selected_skill_match is True
     assert prepared.shadow_route_report.overlay_skill_match is True
     assert prepared.shadow_route_report.layer_match is True
+    assert prepared.shadow_route_report.primary_engine == "rust"
+    assert prepared.shadow_route_report.shadow_engine == "python"
 
 
 def test_runtime_metadata_includes_shadow_route_report(tmp_path: Path) -> None:
@@ -892,19 +1074,23 @@ def test_runtime_metadata_includes_shadow_route_report(tmp_path: Path) -> None:
             )
         )
         assert response.metadata["route_engine_mode"] == "shadow"
-        assert response.metadata["route_engine"] == "python"
+        assert response.metadata["route_engine"] == "rust"
         assert response.metadata["rollback_to_python"] is False
         report = response.metadata["shadow_route_report"]
         assert report is not None
+        assert report["report_schema_version"] == "router-rs-route-report-v1"
+        assert report["authority"] == "rust-route-core"
         assert report["selected_skill_match"] is True
         assert report["overlay_skill_match"] is True
         assert report["layer_match"] is True
-        assert report["primary_engine"] == "python"
-        assert report["shadow_engine"] == "rust"
+        assert report["primary_engine"] == "rust"
+        assert report["shadow_engine"] == "python"
 
     asyncio.run(_run())
 
     data = json.loads(trace_path.read_text(encoding="utf-8"))
     route_event = next(event for event in data["events"] if event["kind"] == "route.selected")
     assert route_event["payload"]["route_engine_mode"] == "shadow"
+    assert route_event["payload"]["shadow_route_report"]["report_schema_version"] == "router-rs-route-report-v1"
+    assert route_event["payload"]["shadow_route_report"]["authority"] == "rust-route-core"
     assert route_event["payload"]["shadow_route_report"]["selected_skill_match"] is True

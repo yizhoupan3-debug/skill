@@ -9,7 +9,7 @@ from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, Field
 
-from codex_agno_runtime.checkpoint_store import FilesystemRuntimeStorageBackend, RuntimeStorageBackend
+from codex_agno_runtime.checkpoint_store import RuntimeStorageBackend, select_runtime_storage_backend
 from codex_agno_runtime.schemas import BackgroundRunStatus, RunTaskResponse
 
 
@@ -329,7 +329,9 @@ class BackgroundJobStore:
         self._active_sessions: dict[str, str] = {}
         self._pending_session_takeovers: dict[str, str] = {}
         self._state_path = state_path
-        self._storage_backend = storage_backend or FilesystemRuntimeStorageBackend()
+        self._storage_backend = storage_backend or select_runtime_storage_backend(
+            storage_root=state_path.parent if state_path is not None else None
+        )
         self._control_plane = _build_state_control_plane_descriptor(
             control_plane_descriptor=control_plane_descriptor,
             storage_backend=self._storage_backend,

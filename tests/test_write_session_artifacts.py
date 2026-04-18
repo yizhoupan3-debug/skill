@@ -41,8 +41,30 @@ def test_write_artifacts_creates_all_phase1_contract_files(tmp_path: Path) -> No
     assert next_actions_path.exists()
     assert evidence_path.exists()
     assert "phase1 rollout" in summary_path.read_text(encoding="utf-8")
-    assert json.loads(next_actions_path.read_text(encoding="utf-8"))["next_actions"] == [
+    next_actions_payload = json.loads(next_actions_path.read_text(encoding="utf-8"))
+    evidence_payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+    assert next_actions_payload["schema_version"] == "next-actions-v2"
+    assert next_actions_payload["next_actions"] == [
         "add loadouts",
         "wire approval middleware",
     ]
-    assert json.loads(evidence_path.read_text(encoding="utf-8"))["artifacts"][0]["kind"] == "report"
+    assert evidence_payload["schema_version"] == "evidence-index-v2"
+    assert evidence_payload["artifacts"][0]["kind"] == "report"
+
+
+def test_write_artifacts_supports_task_scoped_output_and_mirror(tmp_path: Path) -> None:
+    paths = write_artifacts(
+        tmp_path / "artifacts" / "current",
+        task="codex-first convergence",
+        phase="implementation",
+        status="in_progress",
+        summary="Task-scoped continuity is now the source of truth.",
+        next_actions=["run sync", "refresh mirrors"],
+        evidence=[],
+        task_id="codex-first-convergence-20260418210000",
+        mirror_output_dir=tmp_path / "artifacts" / "current",
+    )
+
+    assert Path(paths["summary"]).parent.name == "codex-first-convergence-20260418210000"
+    assert (tmp_path / "artifacts" / "current" / "SESSION_SUMMARY.md").is_file()
+    assert paths["task_id"] == "codex-first-convergence-20260418210000"

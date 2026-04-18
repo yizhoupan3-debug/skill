@@ -48,6 +48,19 @@ def test_background_interrupt_while_queued(tmp_path: Path) -> None:
     """A queued job should expose interrupt_requested before becoming interrupted."""
 
     runtime = _build_runtime(tmp_path)
+    seen_operations: list[str] = []
+    original = runtime.rust_adapter.background_control
+
+    def wrapped(payload):
+        seen_operations.append(str(payload["operation"]))
+        resolved = original(payload)
+        if payload["operation"] == "interrupt":
+            resolved = dict(resolved)
+            resolved["effect_plan"] = dict(resolved["effect_plan"])
+            resolved["effect_plan"]["cancel_running_task"] = False
+        return resolved
+
+    runtime.rust_adapter.background_control = wrapped  # type: ignore[method-assign]
 
     async def _run() -> None:
         status = await runtime.enqueue_background_run(
@@ -66,6 +79,16 @@ def test_background_interrupt_while_queued(tmp_path: Path) -> None:
         assert final.status == "interrupted"
         assert final.interrupt_requested_at is not None
         assert final.interrupted_at is not None
+        interrupt_requested = next(
+            event for event in runtime._trace.events if event.job_id == status.job_id and event.kind == "job.interrupt_requested"
+        )
+        interrupted = next(
+            event for event in runtime._trace.events if event.job_id == status.job_id and event.kind == "job.interrupted"
+        )
+        assert interrupt_requested.payload["background_policy_authority"] == "rust-background-control"
+        assert interrupted.payload["background_policy_authority"] == "rust-background-control"
+        assert "interrupt" in seen_operations
+        assert "interrupt-finalize" in seen_operations
         assert [event.kind for event in runtime._trace.events if event.job_id == status.job_id][-2:] == [
             "job.interrupt_requested",
             "job.interrupted",
@@ -125,11 +148,74 @@ def test_background_interrupt_while_running(tmp_path: Path) -> None:
     asyncio.run(_run())
 
 
+def test_background_completion_race_is_finalized_by_rust_adapter(tmp_path: Path) -> None:
+    """A late interrupt should force the successful completion path through the Rust race reducer."""
+
+    runtime = _build_runtime(tmp_path)
+    seen_operations: list[str] = []
+    original = runtime.rust_adapter.background_control
+
+    def wrapped(payload):
+        seen_operations.append(str(payload["operation"]))
+        resolved = original(payload)
+        if payload["operation"] == "interrupt":
+            resolved = dict(resolved)
+            resolved["effect_plan"] = dict(resolved["effect_plan"])
+            resolved["effect_plan"]["cancel_running_task"] = False
+        return resolved
+
+    runtime.rust_adapter.background_control = wrapped  # type: ignore[method-assign]
+    started = asyncio.Event()
+
+    async def fake_run_task(_request: BackgroundRunRequest) -> RunTaskResponse:
+        started.set()
+        await asyncio.sleep(1.0)
+        return RunTaskResponse(
+            session_id="completion-race-session",
+            user_id="tester",
+            skill="test-skill",
+            live_run=False,
+            content="ok",
+            usage=UsageMetrics(),
+        )
+
+    runtime.run_task = fake_run_task  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        status = await runtime.enqueue_background_run(
+            BackgroundRunRequest(
+                task="完成与中断赛跑",
+                user_id="tester",
+                session_id="completion-race-session",
+                dry_run=True,
+            )
+        )
+        await started.wait()
+        interrupt_status = await runtime.request_background_interrupt(status.job_id)
+        assert interrupt_status is not None
+        final = await _wait_for_status(runtime, status.job_id, {"interrupted"})
+
+        assert final.status == "interrupted"
+        assert "interrupt" in seen_operations
+        assert "completion-race" in seen_operations
+        assert "interrupt-finalize" in seen_operations
+
+    asyncio.run(_run())
+
+
 def test_background_retry_after_failure(tmp_path: Path) -> None:
     """The runtime should schedule and claim a retry before succeeding."""
 
     runtime = _build_runtime(tmp_path)
     attempts: list[int] = []
+    seen_operations: list[str] = []
+    original = runtime.rust_adapter.background_control
+
+    def wrapped(payload):
+        seen_operations.append(str(payload["operation"]))
+        return original(payload)
+
+    runtime.rust_adapter.background_control = wrapped  # type: ignore[method-assign]
 
     async def fake_run_task(_request: BackgroundRunRequest) -> RunTaskResponse:
         attempts.append(1)
@@ -165,8 +251,194 @@ def test_background_retry_after_failure(tmp_path: Path) -> None:
         assert final.retry_count == 1
         assert final.retry_scheduled_at is not None
         assert final.retry_claimed_at is not None
+        assert "retry" in seen_operations
+        assert "retry-claim" in seen_operations
+        assert "completion-race" in seen_operations
         assert any(event.kind == "job.retry_scheduled" for event in runtime._trace.events if event.job_id == status.job_id)
         assert any(event.kind == "job.retry_claimed" for event in runtime._trace.events if event.job_id == status.job_id)
+
+    asyncio.run(_run())
+
+
+def test_background_retry_backoff_routes_through_state_service_host(tmp_path: Path) -> None:
+    """Retry backoff waits should be delegated through the state-service host lane."""
+
+    runtime = _build_runtime(tmp_path)
+    waits: list[float] = []
+    original_wait = runtime.state_service.wait_for_retry_backoff
+    attempts = 0
+
+    async def wrapped_wait(*, backoff_seconds: float) -> None:
+        waits.append(backoff_seconds)
+        await original_wait(backoff_seconds=backoff_seconds)
+
+    async def fake_run_task(_request: BackgroundRunRequest) -> RunTaskResponse:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("retry once through state service")
+        return RunTaskResponse(
+            session_id="retry-host-session",
+            user_id="tester",
+            skill="test-skill",
+            live_run=False,
+            content="ok",
+            usage=UsageMetrics(),
+        )
+
+    runtime.state_service.wait_for_retry_backoff = wrapped_wait  # type: ignore[method-assign]
+    runtime.run_task = fake_run_task  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        status = await runtime.enqueue_background_run(
+            BackgroundRunRequest(
+                task="retry host lane",
+                user_id="tester",
+                session_id="retry-host-session",
+                dry_run=True,
+                max_attempts=2,
+                backoff_base_seconds=0.01,
+                max_backoff_seconds=0.01,
+            )
+        )
+        final = await _wait_for_status(runtime, status.job_id, {"completed"})
+
+        assert final.status == "completed"
+        assert final.attempt == 2
+        assert waits == [0.01]
+
+    asyncio.run(_run())
+
+
+def test_background_takeover_waits_through_rust_session_release_plan(tmp_path: Path) -> None:
+    """A takeover should use the Rust session-release plan before claiming the slot."""
+
+    runtime = _build_runtime(tmp_path)
+    seen_operations: list[str] = []
+    original = runtime.rust_adapter.background_control
+
+    def wrapped(payload):
+        seen_operations.append(str(payload["operation"]))
+        resolved = original(payload)
+        if payload["operation"] == "interrupt":
+            resolved = dict(resolved)
+            resolved["effect_plan"] = dict(resolved["effect_plan"])
+            resolved["effect_plan"]["cancel_running_task"] = True
+        return resolved
+
+    runtime.rust_adapter.background_control = wrapped  # type: ignore[method-assign]
+    first_started = asyncio.Event()
+
+    async def fake_run_task(request: BackgroundRunRequest) -> RunTaskResponse:
+        if request.task == "primary takeover job":
+            first_started.set()
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                raise
+        return RunTaskResponse(
+            session_id=request.session_id or "takeover-session",
+            user_id="tester",
+            skill="test-skill",
+            live_run=False,
+            content="ok",
+            usage=UsageMetrics(),
+        )
+
+    runtime.run_task = fake_run_task  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        first = await runtime.enqueue_background_run(
+            BackgroundRunRequest(
+                task="primary takeover job",
+                user_id="tester",
+                session_id="takeover-session",
+                dry_run=True,
+            )
+        )
+        await first_started.wait()
+        second = await runtime.enqueue_background_run(
+            BackgroundRunRequest(
+                task="takeover follow-up",
+                user_id="tester",
+                session_id="takeover-session",
+                dry_run=True,
+                multitask_strategy="interrupt",
+            )
+        )
+
+        first_final = await _wait_for_status(runtime, first.job_id, {"interrupted"})
+        second_final = await _wait_for_status(runtime, second.job_id, {"completed"})
+
+        assert first_final.status == "interrupted"
+        assert second_final.status == "completed"
+        assert "interrupt" in seen_operations
+        assert "session-release" in seen_operations
+
+    asyncio.run(_run())
+
+
+def test_background_session_release_wait_routes_through_state_service_host(tmp_path: Path) -> None:
+    """Session release waits should be delegated through the state-service host lane."""
+
+    runtime = _build_runtime(tmp_path)
+    waits: list[tuple[str, float, float]] = []
+    original_wait = runtime.state_service.wait_for_session_release
+    first_started = asyncio.Event()
+
+    async def wrapped_wait(*, session_id: str, timeout_seconds: float, poll_interval_seconds: float) -> None:
+        waits.append((session_id, timeout_seconds, poll_interval_seconds))
+        await original_wait(
+            session_id=session_id,
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+        )
+
+    async def fake_run_task(request: BackgroundRunRequest) -> RunTaskResponse:
+        if request.task == "primary takeover job":
+            first_started.set()
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                raise
+        return RunTaskResponse(
+            session_id=request.session_id or "takeover-host-session",
+            user_id="tester",
+            skill="test-skill",
+            live_run=False,
+            content="ok",
+            usage=UsageMetrics(),
+        )
+
+    runtime.state_service.wait_for_session_release = wrapped_wait  # type: ignore[method-assign]
+    runtime.run_task = fake_run_task  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        first = await runtime.enqueue_background_run(
+            BackgroundRunRequest(
+                task="primary takeover job",
+                user_id="tester",
+                session_id="takeover-host-session",
+                dry_run=True,
+            )
+        )
+        await first_started.wait()
+        second = await runtime.enqueue_background_run(
+            BackgroundRunRequest(
+                task="takeover follow-up",
+                user_id="tester",
+                session_id="takeover-host-session",
+                dry_run=True,
+                multitask_strategy="interrupt",
+            )
+        )
+
+        first_final = await _wait_for_status(runtime, first.job_id, {"interrupted"})
+        second_final = await _wait_for_status(runtime, second.job_id, {"completed"})
+
+        assert first_final.status == "interrupted"
+        assert second_final.status == "completed"
+        assert waits == [("takeover-host-session", 5.0, 0.01)]
 
     asyncio.run(_run())
 
@@ -175,6 +447,9 @@ def test_background_claim_records_rust_kernel_authority(tmp_path: Path) -> None:
     """Background control should surface the Rust-owned kernel contract during admission/execution."""
 
     runtime = _build_runtime(tmp_path)
+    assert runtime.control_plane_descriptor["services"]["background"]["delegate_kind"] == (
+        "rust-background-control-policy"
+    )
 
     async def fake_run_task(_request: BackgroundRunRequest) -> RunTaskResponse:
         return RunTaskResponse(
@@ -213,6 +488,38 @@ def test_background_claim_records_rust_kernel_authority(tmp_path: Path) -> None:
     asyncio.run(_run())
 
 
+def test_background_interrupt_finalize_routes_mutations_through_state_service_host(tmp_path: Path) -> None:
+    """Interrupt request/finalize mutations should go through the state-service host lane."""
+
+    runtime = _build_runtime(tmp_path)
+    seen_statuses: list[str] = []
+    original_apply = runtime.state_service.apply_mutation
+
+    def wrapped_apply(job_id: str, mutation) -> object:
+        seen_statuses.append(mutation.status)
+        return original_apply(job_id, mutation)
+
+    runtime.state_service.apply_mutation = wrapped_apply  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        status = await runtime.enqueue_background_run(
+            BackgroundRunRequest(
+                task="interrupt through state service",
+                user_id="tester",
+                session_id="interrupt-host-session",
+                dry_run=True,
+            )
+        )
+        interrupted = await runtime.request_background_interrupt(status.job_id)
+        final = await _wait_for_status(runtime, status.job_id, {"interrupted"})
+
+        assert interrupted is not None
+        assert final.status == "interrupted"
+        assert seen_statuses[:3] == ["queued", "interrupt_requested", "interrupted"]
+
+    asyncio.run(_run())
+
+
 def test_background_backoff_state_is_persisted(tmp_path: Path) -> None:
     """Retry scheduling should persist deterministic backoff fields before the next claim."""
 
@@ -240,6 +547,10 @@ def test_background_backoff_state_is_persisted(tmp_path: Path) -> None:
         assert scheduled.backoff_seconds == 0.2
         assert scheduled.next_retry_at is not None
         assert scheduled.retry_scheduled_at is not None
+        retry_event = next(
+            event for event in runtime._trace.events if event.job_id == status.job_id and event.kind == "job.retry_scheduled"
+        )
+        assert retry_event.payload["background_policy_authority"] == "rust-background-control"
 
         payload = json.loads(
             (runtime.settings.resolved_data_dir / "runtime_background_jobs.json").read_text(encoding="utf-8")
@@ -252,6 +563,47 @@ def test_background_backoff_state_is_persisted(tmp_path: Path) -> None:
         await runtime.request_background_interrupt(status.job_id)
         final = await _wait_for_status(runtime, status.job_id, {"interrupted"})
         assert final.status == "interrupted"
+
+    asyncio.run(_run())
+
+
+def test_background_control_policy_routes_through_rust_adapter(tmp_path: Path) -> None:
+    """Admission and retry policy should be resolved through the Rust adapter seam."""
+
+    runtime = _build_runtime(tmp_path)
+    seen_operations: list[str] = []
+    original = runtime.rust_adapter.background_control
+
+    def wrapped(payload):
+        seen_operations.append(str(payload["operation"]))
+        return original(payload)
+
+    runtime.rust_adapter.background_control = wrapped  # type: ignore[method-assign]
+
+    async def fake_run_task(_request: BackgroundRunRequest) -> RunTaskResponse:
+        raise RuntimeError("force retry scheduling")
+
+    runtime.run_task = fake_run_task  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        status = await runtime.enqueue_background_run(
+            BackgroundRunRequest(
+                task="rust background policy seam",
+                user_id="tester",
+                session_id="rust-background-policy-session",
+                dry_run=True,
+                max_attempts=2,
+                backoff_base_seconds=0.01,
+            )
+        )
+        final = await _wait_for_status(runtime, status.job_id, {"retry_scheduled"})
+        assert final.status == "retry_scheduled"
+        assert seen_operations.count("enqueue") >= 2
+        assert "retry" in seen_operations
+        await runtime.request_background_interrupt(status.job_id)
+        interrupted = await _wait_for_status(runtime, status.job_id, {"interrupted"})
+        assert interrupted.status == "interrupted"
+        assert "interrupt" in seen_operations
 
     asyncio.run(_run())
 

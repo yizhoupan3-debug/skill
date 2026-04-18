@@ -34,11 +34,37 @@ framework policy instead of forking per-host routing or memory rules.
 - Complex tasks should externalize state into:
   `SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`,
   `TRACE_METADATA.json`, and `.supervisor_state.json`.
+- Task-scoped continuity lives under `artifacts/current/<task_id>/`.
+  Root-level continuity files and `artifacts/current/` are current-task mirrors
+  or pointer surfaces only; they must not act as cross-task global truth.
+  `artifacts/current/` may contain only `active_task.json`, the four mirror
+  files, and task-scoped continuity directories. Bootstrap payloads belong in
+  `artifacts/bootstrap/`, memory-automation diagnostics belong in
+  `artifacts/ops/memory_automation/`, evidence belongs in `artifacts/evidence/`,
+  and scratch or demo outputs belong in `artifacts/scratch/`.
+- Shared continuity artifacts are a **single-writer surface**. Only the active
+  supervisor / integrator may write `SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`,
+  `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`, and `.supervisor_state.json`.
+  Parallel lanes must emit lane-local summaries or delta artifacts and leave
+  global continuity flushes to the integration step.
+- Claude host hooks may refresh imported host projections, and `SessionEnd`
+  may consolidate the project-local memory bundle, but they must not rewrite
+  root continuity artifacts or take over supervisor integration.
 
 ## Memory Contract
 
 - Long-term framework memory remains project-local at `./.codex/memory/`
   unless tooling explicitly switches roots.
+- In this repository, `./.codex/memory/` is the logical framework path and
+  currently resolves via symlink to `./memory/`; treat that as one shared root,
+  not two independent memory trees.
+- Default recall reads only the stable layer: `MEMORY.md`, `preferences.md`,
+  `decisions.md`, `lessons.md`, `runbooks.md`, plus a freshness-gated active
+  task summary only when the query clearly targets the current task.
+- Historical/debug snapshots such as old session notes, legacy SQLite rows, and
+  previous automation snapshots must live under `memory/archive/` or
+  `artifacts/ops/memory_automation/`; they are not part of the normal prompt
+  path.
 - This path is shared framework state, not a Codex-only policy claim.
 - Host entry files may reference framework memory, but must not redefine its
   schema or ownership.
@@ -63,7 +89,7 @@ framework policy instead of forking per-host routing or memory rules.
 
 ## Host Entry Files
 
-- Codex: `AGENTS.md`, `.codex/model_instructions.md`
+- Codex: `AGENTS.md`
 - Claude Code: `CLAUDE.md`, `.claude/CLAUDE.md`, `.claude/settings.json`
 - Gemini CLI: `GEMINI.md`, `.gemini/settings.json`
 
