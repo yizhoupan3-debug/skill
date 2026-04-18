@@ -92,6 +92,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
 
     assert (tmp_path / "AGENT.md").is_file()
     assert "Shared Agent Policy" in (tmp_path / "AGENT.md").read_text(encoding="utf-8")
+    assert "RTK.md" in (tmp_path / "AGENT.md").read_text(encoding="utf-8")
     assert "AGENT.md" in (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     assert not (tmp_path / ".codex" / "model_instructions.md").exists()
     assert not (tmp_path / ".mcp.json").exists()

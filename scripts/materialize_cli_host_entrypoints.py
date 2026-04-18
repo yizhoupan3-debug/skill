@@ -21,6 +21,13 @@ framework policy instead of forking per-host routing or memory rules.
 - Execute safe read/search/test/build commands directly when the runtime allows.
 - Ask before destructive actions, external publishing, or account-impacting work.
 
+## Output Compaction
+
+- For high-output local commands where exact raw output is not required, follow
+  `RTK.md` and prefer the corresponding `rtk ...` wrapper.
+- Treat `RTK.md` as repo-local operator guidance only; shared routing and
+  policy truth still lives in this file plus the generated routing artifacts.
+
 ## Turn-Start Routing
 
 1. Extract `object / action / constraints / deliverable`.
