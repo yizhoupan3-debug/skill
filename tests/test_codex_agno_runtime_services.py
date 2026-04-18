@@ -111,6 +111,7 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
         trace_output_path=tmp_path / "TRACE_METADATA.json",
         live_model_override=False,
         route_engine_mode="rust",
+        rust_router_timeout_seconds=15.0,
     )
     checkpointer = FilesystemRuntimeCheckpointer(
         data_dir=settings.resolved_data_dir,
@@ -222,15 +223,6 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert memory_service.health()["fact_extraction_pattern_count"] > 0
     assert trace_service.health()["control_plane_contract"]["aligned"] is True
 
-
-def test_rusage_memory_normalization_matches_host_units(monkeypatch: pytest.MonkeyPatch) -> None:
-    """ru_maxrss should be normalized to bytes before sandbox budget enforcement."""
-
-    monkeypatch.setattr(runtime_services.sys, "platform", "darwin")
-    assert _normalize_rusage_maxrss(4096) == 4096.0
-
-    monkeypatch.setattr(runtime_services.sys, "platform", "linux")
-    assert _normalize_rusage_maxrss(4096) == 4096.0 * 1024.0
     assert trace_service.health()["control_plane_contract"]["recorder"]["stream_scope_fields"] == [
         "session_id",
         "job_id",
@@ -296,6 +288,16 @@ def test_rusage_memory_normalization_matches_host_units(monkeypatch: pytest.Monk
 
     for service in (execution_service, memory_service, trace_service, state_service, router_service):
         service.shutdown()
+
+
+def test_rusage_memory_normalization_matches_host_units(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ru_maxrss should be normalized to bytes before sandbox budget enforcement."""
+
+    monkeypatch.setattr(runtime_services.sys, "platform", "darwin")
+    assert _normalize_rusage_maxrss(4096) == 4096.0
+
+    monkeypatch.setattr(runtime_services.sys, "platform", "linux")
+    assert _normalize_rusage_maxrss(4096) == 4096.0 * 1024.0
 
 
 def test_memory_store_fact_extraction_follows_rust_first_contract_patterns(tmp_path: Path) -> None:

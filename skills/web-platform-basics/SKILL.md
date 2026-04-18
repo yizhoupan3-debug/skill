@@ -22,7 +22,19 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 原生 JS
+  - HTML
+  - CSS 布局
+  - DOM 操作
+  - 事件冒泡
+  - 表单行为
+  - z-index
+  - overflow
+  - Web APIs
+  - Service Worker
 ---
+
 # web-platform-basics
 
 This skill owns browser-native frontend fundamentals when the problem should be solved at the HTML/CSS/DOM/platform layer before reaching for a framework skill.

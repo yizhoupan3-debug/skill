@@ -113,6 +113,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         "Bash(git status)",
         "Bash(git diff)",
         "Bash(python3 scripts/check_skills.py --verify-sync)",
+        "Bash(python3 scripts/check_skills.py --verify-codex-link)",
         "Bash(python3 scripts/session_lifecycle_hook.py *)",
         "Bash(python3 scripts/claude_memory_bridge.py *)",
         "Bash(python3 scripts/claude_statusline.py --repo-root *)",
@@ -305,6 +306,68 @@ def test_claude_statusline_renders_runtime_summary(tmp_path: Path) -> None:
     assert "integration/in_progress" in statusline
     assert "route=execution-controller-coding+1" in statusline
     assert "git=nogit" in statusline
+
+
+def test_claude_statusline_prefers_task_scoped_runtime_over_stale_root_mirrors(tmp_path: Path) -> None:
+    task_root = tmp_path / "artifacts" / "current" / "fresh-task-20260419013000"
+    _write_json(
+        tmp_path / "artifacts" / "current" / "active_task.json",
+        {"task_id": "fresh-task-20260419013000", "task": "Fresh current task"},
+    )
+    _write_text(
+        task_root / "SESSION_SUMMARY.md",
+        "\n".join([
+            "# SESSION_SUMMARY",
+            "",
+            "- task: Fresh current task",
+            "- phase: integration",
+            "- status: in_progress",
+        ])
+        + "\n",
+    )
+    _write_json(task_root / "NEXT_ACTIONS.json", {"next_actions": ["Ship the fix"]})
+    _write_json(task_root / "EVIDENCE_INDEX.json", {"artifacts": []})
+    _write_json(
+        task_root / "TRACE_METADATA.json",
+        {
+            "matched_skills": ["execution-controller-coding", "agent-memory"],
+            "verification_status": "in_progress",
+        },
+    )
+    _write_text(
+        tmp_path / "SESSION_SUMMARY.md",
+        "\n".join([
+            "# SESSION_SUMMARY",
+            "",
+            "- task: Stale root task",
+            "- phase: finalized",
+            "- status: completed",
+        ])
+        + "\n",
+    )
+    _write_json(
+        tmp_path / "TRACE_METADATA.json",
+        {
+            "matched_skills": ["checklist-fixer"],
+            "verification_status": "completed",
+        },
+    )
+    _write_json(tmp_path / "NEXT_ACTIONS.json", {"next_actions": ["Ignore me"]})
+    _write_json(
+        tmp_path / ".supervisor_state.json",
+        {
+            "task_summary": "Fresh current task",
+            "active_phase": "integration",
+            "verification": {"verification_status": "in_progress"},
+        },
+    )
+
+    statusline = render_statusline(tmp_path)
+
+    assert "task=Fresh current task" in statusline
+    assert "integration/in_progress" in statusline
+    assert "route=execution-controller-coding+1" in statusline
+    assert "Stale root task" not in statusline
 
 
 def test_claude_hook_audit_reports_generated_surface_drift(tmp_path: Path, capsys) -> None:

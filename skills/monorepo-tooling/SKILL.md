@@ -20,7 +20,19 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - pnpm workspace
+  - Turborepo 结构
+  - monorepo 怎么组织
+  - 共享包引用有问题
+  - split apps
+  - shared packages
+  - fix workspace resolution
+  - debug cross-package imports
+  - monorepo
+  - workspace
 ---
+
 - **Dual-Dimension Audit (Pre: Workspace-Topo/Boundary, Post: DAG-Execution/Cache-Hits Results)** → `$execution-audit-codex` [Overlay]
 # monorepo-tooling
 

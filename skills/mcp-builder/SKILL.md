@@ -10,6 +10,12 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - mcp
+  - builder
+  - mcp builder
+  - 给模型设计可用工具界面
+  - 给人类写 SDK 文档
 metadata:
   version: "1.0.0"
   platforms: [codex]
@@ -17,6 +23,7 @@ metadata:
     - mcp
     - builder
 ---
+
 - **Dual-Dimension Audit (Pre: Schema/Contract, Post: Tool-Discoverability/Execution Results)** → `$execution-audit-codex` [Overlay]
 # mcp-builder
 

@@ -7,9 +7,13 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+if str(RUNTIME_SRC) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_SRC))
 
+from codex_agno_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
 from scripts.write_session_artifacts import write_artifacts
 
 
@@ -90,3 +94,12 @@ def test_write_artifacts_refreshes_active_task_pointer_when_repo_root_is_provide
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     assert pointer["task"] == "pointer refresh rollout"
     assert pointer["task_id"] == paths["task_id"]
+    assert (repo_root / "SESSION_SUMMARY.md").exists()
+    assert (repo_root / "NEXT_ACTIONS.json").exists()
+    assert (repo_root / "EVIDENCE_INDEX.json").exists()
+
+    checkpointer = FilesystemRuntimeCheckpointer(data_dir=repo_root / ".runtime")
+    artifact_paths = checkpointer.artifact_paths(codex_home=repo_root)
+    assert str((repo_root / "SESSION_SUMMARY.md").resolve()) in artifact_paths
+    assert str((repo_root / "NEXT_ACTIONS.json").resolve()) in artifact_paths
+    assert str((repo_root / "EVIDENCE_INDEX.json").resolve()) in artifact_paths

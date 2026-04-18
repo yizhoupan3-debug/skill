@@ -170,6 +170,9 @@ Use `论文问题总表`.
 
 - If fixes are broad, route the issue list to `$paper-reviser`.
 - If fixes are narrow, route each issue to its owner skill directly.
+- If the user wants the review output persisted as a checklist file under `checklist/`, route to [`$checklist-writting`](/Users/joe/Documents/skill/skills/checklist-writting/SKILL.md).
+- If the user already has a messy review issue list and wants explicit serial/parallel lanes plus acceptance rules, route to [`$checklist-normalizer`](/Users/joe/Documents/skill/skills/checklist-normalizer/SKILL.md).
+- If the review already produced an execution-ready issue queue and the user wants selected items actually carried out, route to [`$checklist-fixer`](/Users/joe/Documents/skill/skills/checklist-fixer/SKILL.md).
 
 ## Hard constraints
 

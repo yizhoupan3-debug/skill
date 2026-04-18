@@ -22,7 +22,14 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - research
+  - algorithm analysis
+  - formal reasoning
+  - critique
+  - experiment rigor
 ---
+
 # Research Engineer
 
 This skill owns rigorous research-grade technical judgment when correctness and defensibility matter more than friendliness or speed.

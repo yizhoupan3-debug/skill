@@ -17,6 +17,7 @@ configs/codex/sub_accounts.state.json
 .opencode/
 .rtk/
 tmp/
+output/
 .aionrs/sessions/
 .aionui_patch_tree
 .playwright-mcp/

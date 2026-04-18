@@ -156,6 +156,8 @@ python3 scripts/check_skills.py --include-system --verify-codex-link
 python3 scripts/sync_skills.py --apply
 ```
 
+For local high-output runs, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) and prefer the corresponding `rtk ...` wrapper when raw output is not required.
+
 ## Quality bar
 
 Before finishing, verify:

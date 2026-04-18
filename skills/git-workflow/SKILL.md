@@ -140,6 +140,7 @@ result needs more structure.
 - Do not discard or overwrite unrelated user changes without explicit approval.
 - Do not push blindly without understanding branch/remote state.
 - Do not use destructive Git operations by default.
+- In this repository, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) when `git status`, `git diff`, or similar commands would otherwise dump large low-signal output.
 - Use explicit branch and remote names in commands when publishing.
 - If the repo state is unclear, inspect first and say so.
 ```bash

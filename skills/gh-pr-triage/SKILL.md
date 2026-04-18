@@ -8,6 +8,16 @@ routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - a quick PR 状态梳理
+  - review summary
+  - reviewer feedback digest
+  - CI debugging
+  - github
+  - pr
+  - triage
+  - review
+  - summary
 metadata:
   version: "1.0.0"
   platforms: [codex]

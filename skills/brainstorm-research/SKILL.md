@@ -7,6 +7,17 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: preferred
+trigger_hints:
+  - 帮我 brainstorm 研究点
+  - 先发散研究思路
+  - 给我多个论文方向
+  - 把脑暴记录下来
+  - method
+  - dataset
+  - experiment plan
+  - paper framing
+  - research
+  - brainstorming
 metadata:
   version: "2.1.0"
   platforms: [codex]

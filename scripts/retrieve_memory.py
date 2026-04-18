@@ -22,6 +22,7 @@ from scripts.memory_support import (
     read_json_if_exists,
     read_memory_state,
     read_text_if_exists,
+    refresh_memory_state_if_needed,
     resolve_effective_memory_dir,
     safe_slug,
     tokenize_query,
@@ -249,6 +250,7 @@ def render_context(
         max_items=max_items,
     )
     snapshot = load_runtime_snapshot(repo_root or get_repo_root(), artifact_root=artifact_root)
+    refresh_memory_state_if_needed(snapshot, memory_workspace_root)
     active_section = None
     freshness = {
         "state": "not-requested",

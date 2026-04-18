@@ -10,6 +10,16 @@ routing_layer: L1
 routing_owner: overlay
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 设计错误处理体系
+  - 统一错误码
+  - error propagation
+  - circuit breaker
+  - error handling
+  - retry
+  - error boundary
+  - custom error
+  - graceful degradation
 allowed_tools:
   - shell
   - python

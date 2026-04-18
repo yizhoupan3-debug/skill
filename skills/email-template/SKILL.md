@@ -19,7 +19,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 邮件模板
+  - HTML 邮件
+  - Outlook 兼容
+  - MJML
+  - React Email
+  - email 排版
+  - HTML email compatibility
+  - newsletter markup
+  - email
+  - html email
 ---
+
 # email-template
 
 This skill owns HTML email development: an environment with unique rendering

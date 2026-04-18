@@ -11,6 +11,14 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - ChatGPT Apps
+  - Apps SDK
+  - MCP server
+  - widget UI
+  - window.openai
+  - chatgpt
+  - apps
 metadata:
   version: "1.0.0"
   platforms: [codex]

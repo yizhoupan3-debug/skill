@@ -12,6 +12,12 @@ routing_owner: gate
 routing_gate: artifact
 routing_priority: P1
 session_start: required
+trigger_hints:
+  - pdf
+  - rendering
+  - layout
+  - typography
+  - reportlab
 metadata:
   version: "2.1.0"
   platforms: [codex]

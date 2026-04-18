@@ -568,10 +568,16 @@ def validate_skill_document(document: SkillDocument) -> SkillReport:
         report.errors.append("loadouts must be a list of strings when provided")
 
     trigger_hints = metadata.get(CANONICAL_TRIGGER_HINT_FIELD)
-    if trigger_hints is not None and (
-        not isinstance(trigger_hints, list) or not all(isinstance(item, str) for item in trigger_hints)
+    if trigger_hints is None:
+        report.errors.append(
+            f"{CANONICAL_TRIGGER_HINT_FIELD} must be declared explicitly in frontmatter"
+        )
+    elif not isinstance(trigger_hints, list) or not all(
+        isinstance(item, str) for item in trigger_hints
     ):
-        report.errors.append(f"{CANONICAL_TRIGGER_HINT_FIELD} must be a list of strings when provided")
+        report.errors.append(f"{CANONICAL_TRIGGER_HINT_FIELD} must be a list of strings")
+    elif not normalize_string_list(trigger_hints):
+        report.errors.append(f"{CANONICAL_TRIGGER_HINT_FIELD} must be a non-empty list of strings")
 
     for legacy_field in LEGACY_TRIGGER_HINT_FIELDS:
         legacy_value = metadata.get(legacy_field)

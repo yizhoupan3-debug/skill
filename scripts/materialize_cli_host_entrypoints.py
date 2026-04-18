@@ -356,6 +356,7 @@ CLAUDE_PROJECT_SETTINGS = {
             "Bash(git status)",
             "Bash(git diff)",
             "Bash(python3 scripts/check_skills.py --verify-sync)",
+            "Bash(python3 scripts/check_skills.py --verify-codex-link)",
             "Bash(python3 scripts/session_lifecycle_hook.py *)",
             "Bash(python3 scripts/claude_memory_bridge.py *)",
             "Bash(python3 scripts/claude_statusline.py --repo-root *)",

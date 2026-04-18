@@ -11,11 +11,22 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 容器化
+  - 镜像构建
+  - Docker 部署
+  - 多阶段构建
+  - 镜像太大了
+  - containers
+  - Dockerfiles
+  - Compose
+  - image optimization
 metadata:
   model: inherit
 risk: medium
 source: community
 ---
+
 # docker
 
 This skill owns Docker containerization: image building, Compose orchestration, container debugging, security hardening, and CI/CD integration patterns.

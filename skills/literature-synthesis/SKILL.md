@@ -12,6 +12,17 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 文献梳理
+  - 主题综述
+  - 研究现状总结
+  - 帮我看看这个思路 别人做过没有
+  - 把这批论文做成对比表
+  - 写 related work
+  - 给我文章相关工作
+  - literature review
+  - novelty check
+  - related work
 metadata:
   version: "2.1.0"
   platforms: [codex]
@@ -24,6 +35,7 @@ metadata:
 risk: low
 source: local
 ---
+
 # Literature Synthesis
 
 ## Overview

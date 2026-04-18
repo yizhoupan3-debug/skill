@@ -26,6 +26,8 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - fast skill
 ---
 ## When to use
 - test
@@ -47,6 +49,8 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - sample trigger
 ---
 See [ok](references/ok.md).
 
@@ -124,6 +128,8 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - runtime check
 ---
 ## When to use
 - test
@@ -157,6 +163,8 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - runtime check
 runtime_requirements:
   python:
     - pandas
@@ -202,6 +210,8 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: fuzzy, freeform
 session_start: n/a
+trigger_hints:
+  - bad gate
 ---
 ## When to use
 - test
@@ -229,6 +239,8 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: always
+trigger_hints:
+  - bad session
 ---
 ## When to use
 - test
@@ -243,3 +255,64 @@ session_start: always
     report = validate_skill_document(document)
 
     assert any("session_start must be one of" in error for error in report.errors)
+
+
+def test_validate_skill_document_requires_explicit_trigger_hints(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "missing-triggers"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: missing-triggers
+description: Missing triggers
+routing_layer: L1
+routing_owner: owner
+routing_gate: none
+session_start: n/a
+---
+## When to use
+- test
+""",
+        encoding="utf-8",
+    )
+
+    document, error_report = _read_skill_document("missing-triggers", skill_dir)
+    assert document is not None
+    assert error_report is None
+
+    report = validate_skill_document(document)
+
+    assert any(
+        "trigger_hints must be declared explicitly in frontmatter" in error
+        for error in report.errors
+    )
+
+
+def test_validate_skill_document_rejects_empty_trigger_hints(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "empty-triggers"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: empty-triggers
+description: Empty triggers
+routing_layer: L1
+routing_owner: owner
+routing_gate: none
+session_start: n/a
+trigger_hints: []
+---
+## When to use
+- test
+""",
+        encoding="utf-8",
+    )
+
+    document, error_report = _read_skill_document("empty-triggers", skill_dir)
+    assert document is not None
+    assert error_report is None
+
+    report = validate_skill_document(document)
+
+    assert any(
+        "trigger_hints must be a non-empty list of strings" in error
+        for error in report.errors
+    )

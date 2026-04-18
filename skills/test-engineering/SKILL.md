@@ -18,6 +18,17 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 补测试
+  - 写 pytest
+  - Vitest
+  - Jest 怎么写
+  - 测试总是 flaky
+  - fixture 和 mock 怎么设计
+  - fix flaky tests
+  - design test strategy
+  - improve mocks
+  - fixtures
 allowed_tools:
   - shell
   - git
@@ -26,6 +37,7 @@ allowed_tools:
 approval_required_tools:
   - git push
 ---
+
 - **Dual-Dimension Audit (Pre: Test-Case/Logic, Post: Coverage-Metric/Mutation-Score Results)** → `$execution-audit-codex` [Overlay]
 # test-engineering
 
@@ -130,6 +142,7 @@ Recommended structure:
 - Do not over-mock behavior that should be covered by a real integration boundary.
 - Do not paper over flaky tests with blind retries or long sleeps by default.
 - Do not couple assertions tightly to internal implementation details unless that is the contract.
+- In this repository, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) for broad `pytest` / `cargo test` / similar validation runs when the output is high-volume and raw fidelity is not the immediate need.
 - If a test gap remains, say exactly what confidence is still missing.
 - **Superior Quality Audit**: For high-fidelity testing frameworks, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
 

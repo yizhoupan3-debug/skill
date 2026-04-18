@@ -255,3 +255,66 @@ def test_skill_router_reports_thin_projection_under_rust_control_plane() -> None
     assert result.route_engine == "python"
     assert any("thin compatibility projection" in reason for reason in result.reasons)
     assert router.projection_descriptor()["compatibility_only"] is True
+
+
+def test_skill_router_overlay_skill_cannot_be_selected_as_primary_owner() -> None:
+    router = SkillRouter(
+        [
+            SkillMetadata(
+                name="repo-review-owner",
+                description="Repository-wide review owner for audit and code review requests.",
+                routing_layer="L2",
+                routing_owner="owner",
+                routing_gate="none",
+                routing_priority="P1",
+                trigger_hints=["全面 review", "review 这个仓库", "仓库 review"],
+            ),
+            SkillMetadata(
+                name="code-review",
+                description="Structured code review overlay for audit and review requests.",
+                routing_layer="L1",
+                routing_owner="overlay",
+                routing_gate="none",
+                routing_priority="P1",
+                trigger_hints=["code review", "code-review"],
+            ),
+        ]
+    )
+
+    result = router.route("全面 review 这个仓库，做 code review", session_id="session-overlay")
+
+    assert result.selected_skill.name == "repo-review-owner"
+    assert result.overlay_skill is not None
+    assert result.overlay_skill.name == "code-review"
+
+
+def test_skill_router_wording_cleanup_query_does_not_hit_artifact_gate() -> None:
+    router = SkillRouter(
+        [
+            SkillMetadata(
+                name="doc",
+                description="Word document artifact owner for docx-oriented tasks.",
+                routing_layer="L3",
+                routing_owner="owner",
+                routing_gate="artifact",
+                routing_priority="P1",
+                trigger_hints=["word 文档", "docx"],
+            ),
+            SkillMetadata(
+                name="writing-skills",
+                description="Repository-wide wording cleanup and SKILL.md standardization owner.",
+                routing_layer="L2",
+                routing_owner="owner",
+                routing_gate="none",
+                routing_priority="P1",
+                trigger_hints=["wording cleanup", "措辞", "模板"],
+            ),
+        ]
+    )
+
+    result = router.route(
+        "请统一多个 SKILL.md 的措辞和模板，做仓库级 wording cleanup",
+        session_id="session-wording",
+    )
+
+    assert result.selected_skill.name == "writing-skills"

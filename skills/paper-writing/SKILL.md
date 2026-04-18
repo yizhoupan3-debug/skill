@@ -8,6 +8,13 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - paper
+  - writing
+  - rewrite
+  - rebuttal
+  - abstract
+  - prose
 metadata:
   version: "2.1.0"
   platforms: [codex]
@@ -25,6 +32,7 @@ framework_contracts:
 risk: low
 source: local
 ---
+
 - **Dual-Dimension Audit (Pre: Outline-Logic/Tone, Post: Argument-Fidelity/Citation-Accuracy Results)** → `$execution-audit-codex` [Overlay]
 
 # Paper Writing

@@ -95,9 +95,54 @@
       "Write execution-ready checklists before implementation or review.",
       "n/a",
       [
-        "checklist",
-        "计划",
+        "先写 checklist",
+        "写成 checklist md",
         "review checklist"
+      ],
+      95.5
+    ],
+    [
+      "checklist-normalizer",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Rewrite messy checklists with explicit serial and parallel boundaries.",
+      "n/a",
+      [
+        "规范化 checklist",
+        "串行的写在一点",
+        "并行的拆开"
+      ],
+      95.5
+    ],
+    [
+      "checklist-fixer",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Execute a known checklist or fix list with per-item verification.",
+      "n/a",
+      [
+        "逐项修复",
+        "按 checklist 执行",
+        "先做 1-3"
+      ],
+      95.5
+    ],
+    [
+      "skill-routing-repair-codex",
+      "L0",
+      "owner",
+      "none",
+      "P1",
+      "Patch a routing miss after a task with the smallest safe skill fix.",
+      "n/a",
+      [
+        "为什么没有触发",
+        "是不是路由问题",
+        "顺手修一下 skill"
       ],
       95.5
     ],
@@ -115,6 +160,94 @@
         "优化"
       ],
       96.4
+    ],
+    [
+      "code-review",
+      "L1",
+      "overlay",
+      "none",
+      "P1",
+      "Structured code review overlay for audit and review requests.",
+      "n/a",
+      [
+        "code review",
+        "code-review"
+      ],
+      95.0
+    ],
+    [
+      "repo-review-owner",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Repository-wide review owner for audit and code review requests.",
+      "n/a",
+      [
+        "全面 review",
+        "review 这个仓库",
+        "仓库 review"
+      ],
+      94.0
+    ],
+    [
+      "bug-implementation-owner",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Owner for bug fixes and implementation tasks with regression coverage.",
+      "n/a",
+      [
+        "修 bug",
+        "bug fix",
+        "补回归测试"
+      ],
+      93.0
+    ],
+    [
+      "tdd-workflow",
+      "L1",
+      "overlay",
+      "none",
+      "P1",
+      "TDD workflow overlay for failing-tests-first execution.",
+      "n/a",
+      [
+        "tdd workflow",
+        "tdd",
+        "先写测试"
+      ],
+      95.0
+    ],
+    [
+      "doc",
+      "L3",
+      "owner",
+      "artifact",
+      "P1",
+      "Word document artifact owner for docx-oriented tasks.",
+      "n/a",
+      [
+        "word 文档",
+        "docx"
+      ],
+      92.0
+    ],
+    [
+      "writing-skills",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Repository-wide wording cleanup and SKILL.md standardization owner.",
+      "n/a",
+      [
+        "wording cleanup",
+        "措辞",
+        "模板"
+      ],
+      96.0
     ],
     [
       "tie-skill-a",
@@ -183,12 +316,84 @@
       }
     },
     {
+      "name": "checklist-normalizer-routing",
+      "query": "把这份 checklist 规范一下，串行的写在一点，并行的拆开",
+      "expected": {
+        "selected_skill": "checklist-normalizer",
+        "overlay_skill": null,
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "checklist-fixer-routing",
+      "query": "按这份 checklist 逐项修复，先做 1-3",
+      "expected": {
+        "selected_skill": "checklist-fixer",
+        "overlay_skill": null,
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "skill-routing-repair-direct-owner",
+      "query": "这次为什么没触发，顺手修一下 skill，以后别再选错",
+      "expected": {
+        "selected_skill": "skill-routing-repair-codex",
+        "overlay_skill": "anti-laziness",
+        "layer": "L0"
+      }
+    },
+    {
+      "name": "skill-routing-repair-beats-debug-gate",
+      "query": "这个 skill 的路由没触发，帮我修复这次 miss",
+      "expected": {
+        "selected_skill": "skill-routing-repair-codex",
+        "overlay_skill": "anti-laziness",
+        "layer": "L0"
+      }
+    },
+    {
       "name": "layer-priority-tie-break",
       "query": "并发构建 toolchain 需要稳定方案",
       "expected": {
         "selected_skill": "tie-skill-b",
         "overlay_skill": null,
         "layer": "L2"
+      }
+    },
+    {
+      "name": "overlay-code-review-does-not-own",
+      "query": "全面 review 这个仓库，做 code review",
+      "expected": {
+        "selected_skill": "repo-review-owner",
+        "overlay_skill": "code-review",
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "overlay-tdd-does-not-own",
+      "query": "修这个 bug，用 TDD workflow 补回归测试",
+      "expected": {
+        "selected_skill": "bug-implementation-owner",
+        "overlay_skill": "tdd-workflow",
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "wording-cleanup-does-not-hit-doc-gate",
+      "query": "请统一多个 SKILL.md 的措辞和模板，做仓库级 wording cleanup",
+      "expected": {
+        "selected_skill": "writing-skills",
+        "overlay_skill": null,
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "explicit-word-doc-still-hits-artifact-gate",
+      "query": "帮我整理一个 Word 文档 模板，并导出 docx",
+      "expected": {
+        "selected_skill": "doc",
+        "overlay_skill": null,
+        "layer": "L3"
       }
     }
   ]

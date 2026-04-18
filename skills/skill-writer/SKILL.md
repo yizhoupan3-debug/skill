@@ -13,6 +13,12 @@ routing_gate: none
 routing_priority: P1
 session_start: preferred
 short_description: Shape one skill's wording, boundary, and token budget
+trigger_hints:
+  - skill writing
+  - skill authoring
+  - description design
+  - token budget
+  - boundary design
 allowed_tools:
   - shell
   - git

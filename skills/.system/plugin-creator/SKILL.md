@@ -5,6 +5,12 @@ routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 创建插件
+  - Codex plugin
+  - .codex-plugin/plugin.json
+  - plugin scaffold
+  - 插件脚手架
 source: system
 ---
 

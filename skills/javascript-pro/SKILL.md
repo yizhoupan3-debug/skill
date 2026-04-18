@@ -21,7 +21,19 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - 这是 JS 项目
+  - 不要上 TS
+  - require
+  - import 怎么处理
+  - pure JS
+  - vanilla JS
+  - ESM
+  - CJS migration
+  - javascript
+  - nodejs
 ---
+
 # javascript-pro
 
 This skill owns JavaScript-first engineering work that should not be forced into TypeScript-specific guidance or a framework-specific skill.

@@ -8,6 +8,13 @@ routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
+trigger_hints:
+  - writing
+  - rewrite
+  - prose
+  - naturalization
+  - style
+  - voice
 metadata:
   version: "3.1.0"
   platforms: [codex, antigravity]
