@@ -31,6 +31,7 @@ from scripts.memory_support import (
     normalize_trace_skills,
     parse_session_summary,
     read_text_if_exists,
+    refresh_memory_state_if_needed,
     resolve_effective_memory_dir,
     stable_line_items,
     supervisor_contract,
@@ -257,6 +258,8 @@ def sync_claude_memory_projection(
 ) -> dict[str, Any]:
     """Write the Claude memory projection into the shared project memory directory."""
 
+    memory_dir = resolve_effective_memory_dir(repo_root=repo_root)
+    refresh_memory_state_if_needed(load_runtime_snapshot(repo_root), memory_dir)
     target = repo_root / CLAUDE_MEMORY_PATH
     content = build_claude_memory_projection(repo_root, max_lines=max_lines)
     changed = write_text_if_changed(target, content)

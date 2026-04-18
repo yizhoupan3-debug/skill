@@ -228,3 +228,41 @@ def test_load_runtime_snapshot_prefers_task_scoped_current_root(tmp_path: Path) 
     assert snapshot.current_root == task_root
     assert snapshot.task_root == task_root
     assert snapshot.session_summary_text == "- task: task scoped\n"
+
+
+def test_load_runtime_snapshot_repairs_mixed_supervisor_and_mirror_truth(tmp_path: Path) -> None:
+    old_task_id = "old-task-20260418210000"
+    old_task_root = tmp_path / "artifacts" / "current" / old_task_id
+    mirror_root = tmp_path / "artifacts" / "current"
+    old_task_root.mkdir(parents=True, exist_ok=True)
+    (old_task_root / "SESSION_SUMMARY.md").write_text("- task: old task\n", encoding="utf-8")
+    (old_task_root / "NEXT_ACTIONS.json").write_text('{"next_actions":["legacy"]}\n', encoding="utf-8")
+    (old_task_root / "EVIDENCE_INDEX.json").write_text('{"artifacts":[]}\n', encoding="utf-8")
+    (old_task_root / "TRACE_METADATA.json").write_text('{"task":"old task","matched_skills":["legacy-skill"]}\n', encoding="utf-8")
+    (mirror_root / "SESSION_SUMMARY.md").write_text("- task: old task\n", encoding="utf-8")
+    (mirror_root / "NEXT_ACTIONS.json").write_text('{"next_actions":["legacy"]}\n', encoding="utf-8")
+    (mirror_root / "EVIDENCE_INDEX.json").write_text('{"artifacts":[]}\n', encoding="utf-8")
+    (mirror_root / "TRACE_METADATA.json").write_text('{"task":"old task","matched_skills":["legacy-skill"]}\n', encoding="utf-8")
+    (mirror_root / "active_task.json").write_text(
+        '{"task_id":"old-task-20260418210000","task":"old task"}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / ".supervisor_state.json").write_text(
+        (
+            '{"task_id":"new-task-20260418220000","task_summary":"new task",'
+            '"active_phase":"completed","verification":{"verification_status":"completed"},'
+            '"continuity":{"story_state":"completed","resume_allowed":false},'
+            '"controller":{"primary_owner":"execution-controller-coding","gate":"systematic-debugging"}}\n'
+        ),
+        encoding="utf-8",
+    )
+
+    snapshot = load_runtime_snapshot(tmp_path)
+
+    assert snapshot.active_task_id == "new-task-20260418220000"
+    assert snapshot.current_root == tmp_path / "artifacts" / "current" / "new-task-20260418220000"
+    assert "new task" in snapshot.session_summary_text
+    assert "old task" not in snapshot.session_summary_text
+    assert (
+        tmp_path / "artifacts" / "current" / "active_task.json"
+    ).read_text(encoding="utf-8").find("new-task-20260418220000") != -1

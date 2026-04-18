@@ -137,6 +137,24 @@ def test_render_context_active_mode_blocks_stale_memory_state(tmp_path: Path) ->
     assert result["freshness"]["state"] == "stale"
 
 
+def test_render_context_active_mode_self_heals_missing_memory_state(tmp_path: Path) -> None:
+    _seed_runtime(tmp_path)
+    memory_root = tmp_path / ".codex" / "memory"
+    _write_text(memory_root / "MEMORY.md", "# 项目长期记忆\n")
+    _write_text(memory_root / "preferences.md", "# preferences\n")
+
+    result = render_context(
+        workspace=tmp_path.name,
+        topic="active bootstrap repair",
+        repo_root=tmp_path,
+        mode="active",
+    )
+
+    assert result["active_task_included"] is True
+    assert (memory_root / "state.json").is_file()
+    assert result["freshness"]["state"] == "fresh"
+
+
 def test_render_context_history_mode_can_read_archive(tmp_path: Path) -> None:
     _seed_runtime(tmp_path)
     _seed_stable_memory(tmp_path)

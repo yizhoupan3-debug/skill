@@ -70,6 +70,38 @@ def test_build_framework_memory_bootstrap_respects_artifact_source_dir(tmp_path:
     assert payload["retrieval"]["active_task_included"] is True
 
 
+def test_build_framework_memory_bootstrap_does_not_reuse_completed_task_identity(tmp_path: Path) -> None:
+    repo_artifacts = tmp_path / "artifacts"
+    _seed_runtime(
+        tmp_path,
+        repo_artifacts,
+        task_id="completed-task-20260418220000",
+        task="finished repair lane",
+    )
+    _write_json(
+        tmp_path / ".supervisor_state.json",
+        {
+            "task_id": "completed-task-20260418220000",
+            "task_summary": "finished repair lane",
+            "active_phase": "completed",
+            "verification": {"verification_status": "completed"},
+            "continuity": {"story_state": "completed", "resume_allowed": False},
+        },
+    )
+    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
+
+    payload = build_framework_memory_bootstrap(
+        workspace=tmp_path.name,
+        query="fresh unrelated repair",
+        source_root=tmp_path,
+        mode="active",
+    )
+
+    assert payload["continuity"]["state"] == "completed"
+    assert payload["continuity_decision"]["source_task"] is None
+    assert payload["continuity_decision"]["task_id"] != "completed-task-20260418220000"
+
+
 def test_migrate_current_artifact_clutter_clears_non_continuity_entries(tmp_path: Path) -> None:
     current_root = tmp_path / "artifacts" / "current"
     current_root.mkdir(parents=True, exist_ok=True)
