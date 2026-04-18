@@ -1,9 +1,5 @@
 # Sample prompts (copy/paste)
 
-These prompt recipes are shared across both top-level modes of the skill:
-- built-in `image_gen` tool (default)
-- explicit `scripts/image_gen.py` CLI fallback
-
 Use these as starting points. They are intentionally complete prompt recipes, not the default amount of augmentation to add to every user request.
 
 When adapting a user's prompt:
@@ -11,9 +7,7 @@ When adapting a user's prompt:
 - only add detail according to the specificity policy in `SKILL.md`
 - do not treat every example below as permission to invent extra story elements
 
-The labeled lines are prompt scaffolding, not a closed schema. `Asset type` and `Input images` are prompt-only scaffolding; the CLI does not expose them as dedicated flags.
-
-Execution details such as explicit CLI flags, `quality`, `input_fidelity`, masks, output formats, and local output paths depend on mode. Use the built-in tool by default; only apply CLI-specific controls after the user explicitly opts into fallback mode.
+The labeled lines are prompt scaffolding, not a closed schema. `Asset type` and `Input images` are prompt-only scaffolding.
 
 For prompting principles (structure, specificity, invariants, iteration), see `references/prompting.md`.
 

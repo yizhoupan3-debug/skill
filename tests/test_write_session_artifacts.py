@@ -68,3 +68,25 @@ def test_write_artifacts_supports_task_scoped_output_and_mirror(tmp_path: Path) 
     assert Path(paths["summary"]).parent.name == "codex-first-convergence-20260418210000"
     assert (tmp_path / "artifacts" / "current" / "SESSION_SUMMARY.md").is_file()
     assert paths["task_id"] == "codex-first-convergence-20260418210000"
+
+
+def test_write_artifacts_refreshes_active_task_pointer_when_repo_root_is_provided(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    output_dir = repo_root / "artifacts" / "current"
+
+    paths = write_artifacts(
+        output_dir,
+        task="pointer refresh rollout",
+        phase="review",
+        status="in_progress",
+        summary="Refresh the active task pointer.",
+        next_actions=["verify pointer"],
+        evidence=[],
+        repo_root=repo_root,
+    )
+
+    pointer_path = repo_root / "artifacts" / "current" / "active_task.json"
+    assert pointer_path.exists()
+    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    assert pointer["task"] == "pointer refresh rollout"
+    assert pointer["task_id"] == paths["task_id"]

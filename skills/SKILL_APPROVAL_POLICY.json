@@ -1499,15 +1499,6 @@
       "bridge_behavior": "default",
       "artifact_outputs": []
     },
-    "tao-ci": {
-      "allowed_tools": [],
-      "approval_required_tools": [],
-      "filesystem_scope": [],
-      "network_access": "unspecified",
-      "destructive_risk": "unspecified",
-      "bridge_behavior": "default",
-      "artifact_outputs": []
-    },
     "tdd-workflow": {
       "allowed_tools": [
         "shell",

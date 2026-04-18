@@ -1,6 +1,6 @@
 # Non-AI Image Processing Reference
 
-Operations that do not require the OpenAI API (no `OPENAI_API_KEY` needed).
+Operations that do not require remote AI image generation.
 Use Pillow (PIL) for Python or ImageMagick for CLI.
 
 ## Dependencies

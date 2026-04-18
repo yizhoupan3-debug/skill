@@ -8,6 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.memory_store import MemoryItem, MemoryStore
 from scripts.memory_support import build_memory_state, load_runtime_snapshot
 from scripts.retrieve_memory import render_context
 
@@ -62,6 +63,20 @@ def _seed_stable_memory(repo_root: Path) -> None:
     _write_text(memory_root / "preferences.md", "# preferences\n\n- prefer compact recall\n")
     snapshot = load_runtime_snapshot(repo_root)
     _write_json(memory_root / "state.json", build_memory_state(snapshot))
+
+
+def _seed_sqlite_memory(repo_root: Path) -> None:
+    memory_root = repo_root / ".codex" / "memory"
+    store = MemoryStore.for_workspace(repo_root.name, resolved_dir=memory_root)
+    store.upsert_memory_item(
+        MemoryItem(
+            item_id="sqlite-item-1",
+            category="general",
+            source="sqlite",
+            summary="sqlite-only row",
+            notes="diagnostic row",
+        )
+    )
 
 
 def test_render_context_stable_mode_excludes_active_task_and_archive(tmp_path: Path) -> None:
@@ -138,3 +153,33 @@ def test_render_context_history_mode_can_read_archive(tmp_path: Path) -> None:
     )
 
     assert any("archive/" in item["path"] for item in result["items"])
+
+
+def test_default_modes_do_not_include_sqlite_sections(tmp_path: Path) -> None:
+    _seed_runtime(tmp_path)
+    _seed_stable_memory(tmp_path)
+    _seed_sqlite_memory(tmp_path)
+
+    for mode in ("stable", "active", "history"):
+        result = render_context(
+            workspace=tmp_path.name,
+            topic="sqlite",
+            repo_root=tmp_path,
+            mode=mode,
+        )
+        assert all(not item["path"].startswith("sqlite/") for item in result["items"])
+
+
+def test_debug_mode_exposes_sqlite_sections(tmp_path: Path) -> None:
+    _seed_runtime(tmp_path)
+    _seed_stable_memory(tmp_path)
+    _seed_sqlite_memory(tmp_path)
+
+    result = render_context(
+        workspace=tmp_path.name,
+        topic="sqlite",
+        repo_root=tmp_path,
+        mode="debug",
+    )
+
+    assert any(item["path"] == "sqlite/memory_items.md" for item in result["items"])

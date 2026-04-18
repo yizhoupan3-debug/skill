@@ -163,7 +163,7 @@ def write_artifacts(
         write_next_actions(mirror_output_dir / "NEXT_ACTIONS.json", next_actions)
         write_evidence_index(mirror_output_dir / "EVIDENCE_INDEX.json", evidence)
 
-    if repo_root is not None and task_id:
+    if repo_root is not None:
         write_active_task_pointer(repo_root, task_id=resolved_task_id, task=task)
 
     return {

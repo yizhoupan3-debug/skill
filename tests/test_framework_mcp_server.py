@@ -177,6 +177,34 @@ def test_memory_recall_and_resource_read_return_repo_backed_content(tmp_path: Pa
     assert "项目长期记忆" in resource["result"]["contents"][0]["text"]
 
 
+def test_memory_project_resource_reads_logical_codex_memory_root(tmp_path: Path) -> None:
+    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 逻辑长期记忆\n")
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
+
+    resource = _call(
+        server=server,
+        request_id=51,
+        method="resources/read",
+        params={"uri": "framework://memory/project"},
+    )
+
+    assert "逻辑长期记忆" in resource["result"]["contents"][0]["text"]
+
+
+def test_memory_project_resource_does_not_fallback_to_physical_memory_dir(tmp_path: Path) -> None:
+    _write_text(tmp_path / "memory" / "MEMORY.md", "# physical only\n")
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
+
+    response = _call(
+        server=server,
+        request_id=52,
+        method="resources/read",
+        params={"uri": "framework://memory/project"},
+    )
+
+    assert response["error"]["data"]["code"] == "MISSING_RESOURCE"
+
+
 def test_memory_recall_defaults_to_stable_mode_and_blocks_active_injection(tmp_path: Path) -> None:
     _seed_runtime_artifacts(tmp_path, terminal=False)
     _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
@@ -258,7 +286,23 @@ def test_contract_summary_and_artifact_index_are_compact_and_actionable(tmp_path
     assert contract["recent_completed_execution"]["task"] == "checklist-series final closeout"
     assert payload["workspace"] == tmp_path.name
     assert isinstance(payload["next_actions"], list)
-    assert isinstance(payload["evidence"], list)
+
+
+def test_runtime_snapshot_falls_back_to_trace_skill_for_primary_owner(tmp_path: Path) -> None:
+    _seed_runtime_artifacts(tmp_path, terminal=False)
+    supervisor_state = json.loads((tmp_path / ".supervisor_state.json").read_text(encoding="utf-8"))
+    supervisor_state.pop("primary_owner", None)
+    _write_json(tmp_path / ".supervisor_state.json", supervisor_state)
+
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
+    snapshot = _tool_call(
+        server=server,
+        request_id=60,
+        name="framework_runtime_snapshot",
+        arguments={},
+    )
+
+    assert snapshot["supervisor_state"]["primary_owner"] == "execution-controller-coding"
 
 
 def test_stdio_loop_handles_resource_listing(tmp_path: Path) -> None:

@@ -939,7 +939,7 @@
         "path": "skills/imagegen",
         "source": "project",
         "source_position": 3,
-        "routing_layer": "L3",
+        "routing_layer": "L1",
         "routing_owner": "owner",
         "routing_gate": "none",
         "session_start": "n/a"
@@ -2057,22 +2057,6 @@
         "source": "project",
         "source_position": 3,
         "routing_layer": "L4",
-        "routing_owner": "owner",
-        "routing_gate": "none",
-        "session_start": "n/a"
-      },
-      "shadowed": [],
-      "shadowed_by": [],
-      "has_shadow": false
-    },
-    "tao-ci": {
-      "winning_rule": "highest-position-wins",
-      "winner": {
-        "slug": "tao-ci",
-        "path": "skills/tao-ci",
-        "source": "project",
-        "source_position": 3,
-        "routing_layer": "L3",
         "routing_owner": "owner",
         "routing_gate": "none",
         "session_start": "n/a"

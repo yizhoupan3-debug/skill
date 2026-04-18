@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import re
 from typing import Any, Mapping
 
 from codex_agno_runtime.schemas import RoutingResult, ScoredSkill, SkillMetadata
@@ -23,6 +24,7 @@ OVERLAY_EXPLICIT_HINTS = {
     "i18n-l10n": {"i18n", "l10n", "国际化", "多语言", "localization", "internationalization", "locale", "rtl"},
     "humanizer": {"humanizer", "humanize", "自然化", "降 ai 味", "去 ai 感", "像人写的"},
 }
+WORDLIKE_TOKEN_RE = re.compile(r"^[a-z0-9.+#/_-]+$")
 # Static alias hints supplement dynamic tag-based aliases
 SKILL_ALIAS_HINTS = {
     "checklist-writting": {"checklist", "execution-ready", "拆解", "拆任务", "执行清单", "里程碑", "roadmap", "并行", "串行", "lane", "agent", "agent 数量", "路线已经定了", "不用再论证", "直接拆成", "review checklist", "复审checklist", "评估checklist", "检查是否结束"},
@@ -54,6 +56,51 @@ GATE_HINTS = {
     "evidence": {"报错", "失败", "崩", "截图", "渲染", "日志", "traceback", "error", "bug", "why", "为什么"},
     "delegation": {"sidecar", "subagent", "delegation", "并行", "子代理", "主线程", "local-supervisor", "跨文件", "长运行"},
 }
+
+
+def _normalized_owner(owner: str) -> str:
+    return normalize_text(owner)
+
+
+def _skill_is_overlay(skill: SkillMetadata) -> bool:
+    return _normalized_owner(skill.routing_owner) == "overlay" or skill.name in OVERLAY_ONLY_SKILLS
+
+
+def _can_be_primary_owner(skill: SkillMetadata) -> bool:
+    return _normalized_owner(skill.routing_owner) not in {"gate", "overlay"}
+
+
+def _token_matches_phrase_token(task_token: str, phrase_token: str) -> bool:
+    if WORDLIKE_TOKEN_RE.fullmatch(phrase_token):
+        return task_token == phrase_token
+    return phrase_token in task_token
+
+
+def _contains_phrase(task_tokens: list[str], phrase: str) -> bool:
+    phrase_tokens = tokenize(phrase)
+    if not phrase_tokens:
+        return False
+    if len(phrase_tokens) == 1:
+        return any(_token_matches_phrase_token(task_token, phrase_tokens[0]) for task_token in task_tokens)
+    token_limit = len(task_tokens) - len(phrase_tokens) + 1
+    for start in range(max(0, token_limit)):
+        if all(
+            _token_matches_phrase_token(task_tokens[start + offset], phrase_token)
+            for offset, phrase_token in enumerate(phrase_tokens)
+        ):
+            return True
+    return False
+
+
+def _gate_phrases(skill: SkillMetadata) -> list[str]:
+    normalized_gate = normalize_text(skill.routing_gate)
+    if normalized_gate in GATE_HINTS:
+        return sorted(GATE_HINTS[normalized_gate])
+    return [
+        part.strip()
+        for part in skill.routing_gate.split(",")
+        if part.strip() and normalize_text(part) != "none"
+    ]
 
 
 def _router_service_descriptor(control_plane_descriptor: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -100,8 +147,9 @@ class SkillRouter:
         viable_candidates = [candidate for candidate in scored_candidates if candidate.score > 0]
         projection = self.projection_descriptor()
         if not viable_candidates:
+            fallback_pool = [skill for skill in self.skills if _can_be_primary_owner(skill)] or self.skills
             fallback_skill = min(
-                self.skills,
+                fallback_pool,
                 key=lambda skill: (LAYER_ORDER.get(skill.routing_layer, 99), PRIORITY_ORDER.get(skill.routing_priority, 99), skill.name),
             )
             reasons = ["No explicit keyword hit; fell back to the highest-priority skill in layer order."]
@@ -140,26 +188,26 @@ class SkillRouter:
     def _pick_owner(self, by_layer: dict[str, list[ScoredSkill]]) -> ScoredSkill:
         # Rule 2, 3, 4, 5: Check source gates, artifact gates, evidence gates, delegation gate BEFORE owners.
         all_candidates = [candidate for layer_list in by_layer.values() for candidate in layer_list]
-        gate_candidates = [c for c in all_candidates if c.skill.routing_owner == "gate" or (c.skill.routing_gate and c.skill.routing_gate != "none")]
-        gate_candidates = sorted(gate_candidates, key=lambda c: (-c.score, PRIORITY_ORDER.get(c.skill.routing_priority, 99)))
-        owner_candidates = [
-            c
-            for c in all_candidates
-            if c.skill.routing_owner != "gate" and c.skill.routing_gate in {"", "none"}
+        gate_candidates = [
+            candidate
+            for candidate in all_candidates
+            if _normalized_owner(candidate.skill.routing_owner) == "gate"
+            or normalize_text(candidate.skill.routing_gate) != "none"
         ]
-        owner_candidates = sorted(
-            owner_candidates,
-            key=lambda c: (-c.score, PRIORITY_ORDER.get(c.skill.routing_priority, 99), c.skill.name),
-        )
+        gate_candidates = sorted(gate_candidates, key=lambda c: (-c.score, PRIORITY_ORDER.get(c.skill.routing_priority, 99)))
+        owner_candidates = [candidate for candidate in all_candidates if _can_be_primary_owner(candidate.skill)]
         top_owner_score = owner_candidates[0].score if owner_candidates else float("-inf")
         if gate_candidates and gate_candidates[0].score >= 30 and gate_candidates[0].score >= top_owner_score:
             gate_candidates[0].reasons.append("Prioritized via 6-rule gate checklist (Gate before Owner).")
             return gate_candidates[0]
 
         # Standard layer-precedence logic
-        for layer_name in sorted(by_layer, key=lambda value: LAYER_ORDER.get(value, 99)):
+        owner_by_layer: dict[str, list[ScoredSkill]] = defaultdict(list)
+        for candidate in owner_candidates:
+            owner_by_layer[candidate.skill.routing_layer].append(candidate)
+        for layer_name in sorted(owner_by_layer, key=lambda value: LAYER_ORDER.get(value, 99)):
             candidates = sorted(
-                by_layer[layer_name],
+                owner_by_layer[layer_name],
                 key=lambda candidate: (
                     -candidate.score,
                     PRIORITY_ORDER.get(candidate.skill.routing_priority, 99),
@@ -169,7 +217,7 @@ class SkillRouter:
             if candidates and candidates[0].score >= self._layer_threshold(layer_name):
                 return candidates[0]
         return sorted(
-            all_candidates,
+            owner_candidates or all_candidates,
             key=lambda candidate: (
                 LAYER_ORDER.get(candidate.skill.routing_layer, 99),
                 -candidate.score,
@@ -182,6 +230,7 @@ class SkillRouter:
         if not allow_overlay:
             return None
         task_text = normalize_text(task)
+        task_tokens = tokenize(task)
 
         # Rule: L0/L1 tasks auto-attach anti-laziness overlay unless user already
         # requested a different explicit overlay.
@@ -196,11 +245,13 @@ class SkillRouter:
             if skill.name == "anti-laziness":
                 anti_laziness_skill = skill
                 continue
-            is_overlay_by_role = "overlay" in [r.lower() for r in skill.framework_roles]
-            is_known_overlay = skill.name in {"iterative-optimizer", "execution-audit-codex", "i18n-l10n", "humanizer"}
             explicit_hints = OVERLAY_EXPLICIT_HINTS.get(skill.name, {skill.name})
-            is_explicitly_mentioned = any(normalize_text(hint) in task_text for hint in explicit_hints)
-            if (is_overlay_by_role or is_known_overlay) and is_explicitly_mentioned:
+            is_explicitly_mentioned = any(_contains_phrase(task_tokens, hint) for hint in explicit_hints) or any(
+                _contains_phrase(task_tokens, phrase)
+                for phrase in skill.trigger_hints
+                if len(normalize_text(phrase)) > 3
+            )
+            if _skill_is_overlay(skill) and is_explicitly_mentioned:
                 explicit_overlay = skill
                 break
 
@@ -223,7 +274,8 @@ class SkillRouter:
         """
         reasons: list[str] = []
         normalized_task = normalize_text(task)
-        task_tokens = {token for token in tokenize(task) if token not in COMMON_STOP_TOKENS}
+        task_token_list = tokenize(task)
+        task_tokens = {token for token in task_token_list if token not in COMMON_STOP_TOKENS}
         score = 0.0
 
         settled_strategy_markers = {
@@ -261,14 +313,11 @@ class SkillRouter:
         if skill.name.startswith("skill-") and not any(hint in normalized_task for hint in ROUTING_META_HINTS):
             return ScoredSkill(skill=skill, score=0.0, reasons=[])
 
-        if skill.name.lower() in normalized_task:
+        if _contains_phrase(task_token_list, skill.name):
             score += 100
             reasons.append(f"Exact skill name matched: {skill.name}.")
 
-        gate_phrases = sorted(
-            hint for hint in GATE_HINTS.get(skill.routing_gate, set()) if normalize_text(hint) in normalized_task
-        )
-        matched_gates = gate_phrases
+        matched_gates = [gate for gate in _gate_phrases(skill) if _contains_phrase(task_token_list, gate)]
         if matched_gates:
             score += 18 + min(12, (len(matched_gates) - 1) * 6)
             reasons.append(f"Routing gate matched: {', '.join(matched_gates)}.")
@@ -283,7 +332,7 @@ class SkillRouter:
             normalized_phrase = normalize_text(phrase)
             if len(normalized_phrase) < 2:
                 continue
-            if normalized_phrase and normalized_phrase in normalized_task:
+            if normalized_phrase and _contains_phrase(task_token_list, normalized_phrase):
                 score += 20
                 reasons.append(f"Trigger hint matched: {phrase}.")
 
@@ -308,7 +357,7 @@ class SkillRouter:
                 score += 3
                 reasons.append("Session-start preferred boost applied (+3).")
 
-        if skill.routing_owner == "gate" and score > 0:
+        if _normalized_owner(skill.routing_owner) == "gate" and score > 0:
             score += 2
 
         if skill.name == "execution-controller-coding":
@@ -346,7 +395,7 @@ class SkillRouter:
                 reasons.append("Single-skill-writer suppression applied: framework-policy signals dominate.")
 
         # Overlay-only skills must not become the primary owner
-        if skill.name in OVERLAY_ONLY_SKILLS and score > 0:
+        if _skill_is_overlay(skill) and score > 0:
             score = max(0, score * 0.15)
             reasons.append(f"Owner suppression applied: {skill.name} is overlay-only.")
 

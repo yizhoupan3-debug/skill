@@ -78,34 +78,64 @@ def _workspace_sqlite_path(memory_workspace_root: Path) -> Path | None:
     return None
 
 
-def _render_sqlite_memory_items(
+def _render_sqlite_sections(
     workspace: str,
     db_path: Path,
     *,
     topic: str,
     max_items: int,
-) -> tuple[str, str] | None:
+) -> list[tuple[str, str]]:
     store = MemoryStore(db_path, workspace, ensure_schema=False)
     items = (
         store.search_memory_items(topic, limit=max_items)
         if topic.strip()
         else store.list_memory_items(limit=max_items)
     )
-    if not items:
-        return None
-    lines = ["# sqlite:memory_items"]
-    for index, item in enumerate(items, start=1):
-        lines.extend(
-            [
-                f"### {item.get('summary') or f'item-{index}'}",
-                f"- source: {item.get('source', '')}",
-                f"- category: {item.get('category', '')}",
-                f"- status: {item.get('status', '')}",
-                f"- summary: {item.get('summary', '')}",
-                "",
-            ]
-        )
-    return "sqlite/memory_items.md", "\n".join(lines).strip()
+    sections: list[tuple[str, str]] = []
+    if items:
+        lines = ["# sqlite:memory_items"]
+        for index, item in enumerate(items, start=1):
+            lines.extend(
+                [
+                    f"### {item.get('summary') or f'item-{index}'}",
+                    f"- source: {item.get('source', '')}",
+                    f"- category: {item.get('category', '')}",
+                    f"- status: {item.get('status', '')}",
+                    f"- summary: {item.get('summary', '')}",
+                    f"- notes: {item.get('notes', '')}",
+                    "",
+                ]
+            )
+        sections.append(("sqlite/memory_items.md", "\n".join(lines).strip()))
+    notes = store.list_recent_session_notes(limit=max_items)
+    if notes:
+        lines = ["# sqlite:session_notes"]
+        for note in notes:
+            lines.extend(
+                [
+                    f"### {note.get('session_key', '')}#{note.get('position', '')}",
+                    f"- note_type: {note.get('note_type', '')}",
+                    f"- updated_at: {note.get('updated_at', '')}",
+                    f"- note: {note.get('note', '')}",
+                    "",
+                ]
+            )
+        sections.append(("sqlite/session_notes.md", "\n".join(lines).strip()))
+    evidence = store.list_evidence(limit=max_items)
+    if evidence:
+        lines = ["# sqlite:evidence_records"]
+        for artifact in evidence:
+            lines.extend(
+                [
+                    f"### {artifact.get('path', '') or artifact.get('kind', '') or 'evidence'}",
+                    f"- kind: {artifact.get('kind', '')}",
+                    f"- path: {artifact.get('path', '')}",
+                    f"- content: {artifact.get('content', '')}",
+                    "",
+                ]
+            )
+        sections.append(("sqlite/evidence_records.md", "\n".join(lines).strip()))
+    return sections
 
 
 def _stable_sections(
@@ -116,11 +146,6 @@ def _stable_sections(
     max_items: int,
 ) -> list[tuple[str, str]]:
     sections: list[tuple[str, str]] = []
-    sqlite_path = _workspace_sqlite_path(memory_workspace_root)
-    if sqlite_path:
-        section = _render_sqlite_memory_items(workspace, sqlite_path, topic=topic, max_items=max_items)
-        if section is not None:
-            sections.append(section)
     for name in STABLE_MEMORY_FILES:
         text = read_text_if_exists(memory_workspace_root / name).strip()
         if not text:
@@ -237,6 +262,9 @@ def render_context(
     if mode in {"history", "debug"}:
         sections.extend(_archive_sections(memory_workspace_root, topic=topic, max_items=max_items))
     if mode == "debug":
+        sqlite_path = _workspace_sqlite_path(memory_workspace_root)
+        if sqlite_path is not None:
+            sections.extend(_render_sqlite_sections(workspace, sqlite_path, topic=topic, max_items=max_items))
         state_payload = read_memory_state(memory_workspace_root)
         if state_payload:
             sections.append(("state.json", json.dumps(state_payload, ensure_ascii=False, indent=2)))
