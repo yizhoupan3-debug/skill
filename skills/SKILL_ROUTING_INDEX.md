@@ -50,6 +50,7 @@
 | `error-handling-patterns` | L1 | overlay | none | Design cross-language error-handling architectures such as custom errors, retry/ |
 | `execution-audit-codex` | L1 | overlay | none | Audit execution quality with evidence, sidecar-first collection, and compressed  |
 | `frontend-debugging` | L1 | owner | none | Diagnose frontend runtime bugs with a five-layer model (component → state → rend |
+| `imagegen` | L1 | owner | none | Use the built-in image tool for raster image generation or edits. |
 | `information-retrieval` | L1 | owner | none | Run multi-round research before acting or recommending |
 | `openai-docs` | L1 | owner | none | Use OpenAI docs MCP tools for current OpenAI API, model, Apps SDK, Codex, and do |
 | `plan-writing` | L1 | owner | none | Write an execution-ready plan before implementation |
@@ -92,7 +93,6 @@
 | `github-actions-authoring` | L3 | owner | none | Produce GitHub Actions workflow YAML with minimal permissions, stable cache keys |
 | `graphviz-expert` | L3 | owner | none | Create Graphviz/DOT diagrams for precise, orthogonal, publication-quality flowch |
 | `i18n-l10n` | L3 | overlay | none | Internationalization and localization overlay for web/mobile projects. Covers ha |
-| `imagegen` | L3 | owner | none | Use when the user asks to generate or edit images via the OpenAI Image API, incl |
 | `infographic` | L3 | owner | none | Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge car |
 | `jupyter-notebook` | L3 | owner | none | Create, scaffold, refactor, and normalize Jupyter notebooks (`.ipynb`) for exper |
 | `linux-server-ops` | L3 | owner | none | Get services running and staying healthy on a Linux host — systemd units, revers |
@@ -108,7 +108,6 @@
 | `security-threat-model` | L3 | owner | none | Repository-grounded threat modeling for applications, services, MCP servers, API |
 | `skill-developer` | L3 | owner | none | Create, improve, debug, and audit Antigravity skills and `SKILL.md` files. Use w |
 | `skill-installer-antigravity` | L3 | owner | none | Install Antigravity skills into the shared workspace skill library from local fo |
-| `tao-ci` | L3 | owner | none | Draft professor-specific summer research outreach emails from workbook data |
 | `agent-memory` | L4 | owner | none | Design persistent agent memory across sessions |
 | `agent-swarm-orchestration` | L4 | owner | none | Design and debug multi-agent systems with planners, routers, workers, reviewers, |
 | `ai-research` | L4 | owner | none | AI/ML research engineering for model training, experiment pipelines, evaluation, |

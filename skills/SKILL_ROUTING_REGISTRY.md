@@ -2,7 +2,7 @@
 
 | Skill | Status | P | Layer | Owner | Gate | Source | Health | Description |
 |---|---|---|---|---|---|---|---|---|
-| `imagegen` | Active | P2 | L1 | owner | none | system | ✓ 98.7 | Use the built-in image tool for raster image generation or edits. Use the CLI on |
+| `imagegen` | Active | P2 | L1 | owner | none | project | ✓ 98.7 | Use the built-in image tool for raster image generation or edits. |
 | `openai-docs` | Active | P2 | L1 | owner | none | system | ✓ 100.0 | Use OpenAI docs MCP tools for current OpenAI API, model, Apps SDK, Codex, and do |
 | `plugin-creator` | Active | P2 | L1 | owner | none | system | ✓ 100.0 | Create a local Codex plugin scaffold with `.codex-plugin/plugin.json` and option |
 | `skill-creator` | Active | P2 | L1 | owner | none | system | ✓ 96.4 | Create or update a Codex skill package with clear routing metadata, scope, and s |
@@ -64,7 +64,7 @@
 | `humanizer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Naturalize existing prose into clearer, more human-sounding text. Use for: 精修, 文 |
 | `i18n-l10n` | Active | P2 | L3 | overlay | none | project | ✓ 96.8 | Internationalization and localization overlay for web/mobile projects. Covers ha |
 | `idea-to-plan` | Active | P0 | L-1 | @strategic-orchestrator | idea-to-plan, 战略编排, 意图到计划, 科研自动化, 试点验证, Pilot, Duo-Doc, outline.md, code_list.md, 蓝图设计 | project | ✓ 100.0 | Turn ambiguous ideas into evidence-backed plans with branch routing and compress |
-| `imagegen` | Active | P2 | L3 | owner | none | project | ✓ 98.7 | Use when the user asks to generate or edit images via the OpenAI Image API, incl |
+| `imagegen` | Active | P2 | L1 | owner | none | project | ✓ 98.7 | Use the built-in image tool for raster image generation or edits. |
 | `infographic` | Active | P2 | L3 | owner | none | project | ✓ 95.1 | Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge car |
 | `information-retrieval` | Active | P2 | L1 | owner | none | project | ✓ 97.2 | Run multi-round research before acting or recommending |
 | `iterative-optimizer` | Active | P1 | L0 | overlay | none | project | ⚠ 66.4 | N-round optimization loops with built-in laziness immunity |
@@ -129,7 +129,6 @@
 | `svelte` | Active | P2 | L4 | owner | none | project | ✓ 97.7 | Deliver Svelte 5 applications using runes-based reactivity ($state, $derived, $e |
 | `systematic-debugging` | Active | P1 | L0 | gate | evidence | project | ✓ 97.0 | Investigate unknown failures before fixing |
 | `tailwind-pro` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Produce Tailwind CSS configurations with design tokens, plugin hooks, and framew |
-| `tao-ci` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Draft professor-specific summer research outreach emails from workbook data |
 | `tdd-workflow` | Active | P2 | L1 | overlay | none | project | ✓ 92.8 | Run a Test-Driven Development workflow centered on the RED-GREEN-REFACTOR loop w |
 | `test-engineering` | Active | P2 | L1 | owner | none | project | ✓ 97.3 | Choose the right test layer, write maintainable tests, and stabilize flaky behav |
 | `typescript-pro` | Active | P1 | L4 | owner | none | project | ✓ 96.3 | Deliver type-safe TypeScript 5.x+ code. Enforces strict mode, encodes domain con |

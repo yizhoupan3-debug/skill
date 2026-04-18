@@ -1,22 +1,68 @@
 {
+  "version": 1,
   "skills": {
+    "imagegen": {
+      "allowed_tools": [],
+      "approval_required_tools": [],
+      "filesystem_scope": [],
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
+    },
+    "openai-docs": {
+      "allowed_tools": [],
+      "approval_required_tools": [],
+      "filesystem_scope": [],
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
+    },
+    "plugin-creator": {
+      "allowed_tools": [],
+      "approval_required_tools": [],
+      "filesystem_scope": [],
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
+    },
+    "skill-creator": {
+      "allowed_tools": [],
+      "approval_required_tools": [],
+      "filesystem_scope": [],
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
+    },
+    "skill-installer": {
+      "allowed_tools": [],
+      "approval_required_tools": [],
+      "filesystem_scope": [],
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
+    },
     "academic-search": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "accessibility-auditor": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "agent-memory": {
       "allowed_tools": [
@@ -24,44 +70,44 @@
         "python"
       ],
       "approval_required_tools": [],
-      "artifact_outputs": [
-        "MEMORY.md",
-        "EVIDENCE_INDEX.json"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [
         "repo",
         "artifacts"
       ],
-      "network_access": "conditional"
+      "network_access": "conditional",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "mobile_complete_once",
+      "artifact_outputs": [
+        "MEMORY.md",
+        "EVIDENCE_INDEX.json"
+      ]
     },
     "agent-swarm-orchestration": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "ai-research": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "algo-trading": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "anti-laziness": {
       "allowed_tools": [
@@ -69,20 +115,20 @@
         "python"
       ],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "api-design": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "api-integration-debugging": {
       "allowed_tools": [
@@ -94,56 +140,56 @@
       "approval_required_tools": [
         "gui automation"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "api-load-tester": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "architect-review": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "assignment-compliance": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "auth-implementation": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "autoresearch": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "backend-runtime-debugging": {
       "allowed_tools": [
@@ -155,20 +201,20 @@
       "approval_required_tools": [
         "gui automation"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "brainstorm-research": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "build-tooling": {
       "allowed_tools": [
@@ -180,65 +226,65 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "chatgpt-apps": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "checklist-fixer": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "chrome-extension-dev": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "citation-management": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "cloudflare-deploy": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "code-acceleration": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "code-review": {
       "allowed_tools": [
@@ -247,11 +293,29 @@
         "python"
       ],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
+    },
+    "slides": {
+      "allowed_tools": [],
+      "approval_required_tools": [],
+      "filesystem_scope": [],
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
+    },
+    "spreadsheets": {
+      "allowed_tools": [],
+      "approval_required_tools": [],
+      "filesystem_scope": [],
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "coding-standards": {
       "allowed_tools": [
@@ -259,74 +323,74 @@
         "python"
       ],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "copywriting": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "css-pro": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "data-wrangling": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "datastore-cache-queue": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "dependency-migration": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "doc": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "docker": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "documentation-engineering": {
       "allowed_tools": [
@@ -337,29 +401,29 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "email-template": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "env-config-management": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "error-handling-patterns": {
       "allowed_tools": [
@@ -367,11 +431,11 @@
         "python"
       ],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "execution-audit-codex": {
       "allowed_tools": [
@@ -384,20 +448,20 @@
         "git push",
         "gui automation"
       ],
-      "artifact_outputs": [
-        "audit_report.md",
-        "SESSION_SUMMARY.md",
-        "NEXT_ACTIONS.json",
-        "EVIDENCE_INDEX.json"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [
         "repo",
         ".execution_audit_state.json",
         "artifacts"
       ],
-      "network_access": "conditional"
+      "network_access": "conditional",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "mobile_complete_once",
+      "artifact_outputs": [
+        "audit_report.md",
+        "SESSION_SUMMARY.md",
+        "NEXT_ACTIONS.json",
+        "EVIDENCE_INDEX.json"
+      ]
     },
     "execution-controller-app": {
       "allowed_tools": [
@@ -412,19 +476,19 @@
         "gui automation",
         "destructive shell"
       ],
-      "artifact_outputs": [
-        "SESSION_SUMMARY.md",
-        "NEXT_ACTIONS.json",
-        "EVIDENCE_INDEX.json"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [
         "repo",
         ".app_supervisor_state.json",
         "artifacts"
       ],
-      "network_access": "conditional"
+      "network_access": "conditional",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "mobile_complete_once",
+      "artifact_outputs": [
+        "SESSION_SUMMARY.md",
+        "NEXT_ACTIONS.json",
+        "EVIDENCE_INDEX.json"
+      ]
     },
     "execution-controller-coding": {
       "allowed_tools": [
@@ -439,46 +503,46 @@
         "gui automation",
         "destructive shell"
       ],
-      "artifact_outputs": [
-        "SESSION_SUMMARY.md",
-        "NEXT_ACTIONS.json",
-        "EVIDENCE_INDEX.json"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [
         "repo",
         ".supervisor_state.json",
         "artifacts"
       ],
-      "network_access": "conditional"
+      "network_access": "conditional",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "mobile_complete_once",
+      "artifact_outputs": [
+        "SESSION_SUMMARY.md",
+        "NEXT_ACTIONS.json",
+        "EVIDENCE_INDEX.json"
+      ]
     },
     "experiment-reproducibility": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "financial-data-fetching": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "frontend-code-quality": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "frontend-debugging": {
       "allowed_tools": [
@@ -490,20 +554,20 @@
       "approval_required_tools": [
         "gui automation"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "frontend-design": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "gh-address-comments": {
       "allowed_tools": [
@@ -514,11 +578,11 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "gh-fix-ci": {
       "allowed_tools": [
@@ -529,20 +593,20 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "gh-pr-triage": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "git-workflow": {
       "allowed_tools": [
@@ -553,24 +617,24 @@
         "git push",
         "destructive git"
       ],
-      "artifact_outputs": [
-        "SESSION_SUMMARY.md"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [
         "repo"
       ],
-      "network_access": "conditional"
+      "network_access": "conditional",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "mobile_complete_once",
+      "artifact_outputs": [
+        "SESSION_SUMMARY.md"
+      ]
     },
     "github-actions-authoring": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "github-investigator": {
       "allowed_tools": [
@@ -578,53 +642,53 @@
         "web"
       ],
       "approval_required_tools": [],
-      "artifact_outputs": [
-        "runtime_evidence.md",
-        "EVIDENCE_INDEX.json"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [
         "repo",
         "artifacts"
       ],
-      "network_access": "required"
+      "network_access": "required",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "mobile_complete_once",
+      "artifact_outputs": [
+        "runtime_evidence.md",
+        "EVIDENCE_INDEX.json"
+      ]
     },
     "go-pro": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "graphviz-expert": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "humanizer": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "i18n-l10n": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "idea-to-plan": {
       "allowed_tools": [
@@ -637,48 +701,39 @@
         "git push",
         "network install"
       ],
+      "filesystem_scope": [
+        "repo",
+        ".supervisor_strategy.json",
+        "artifacts"
+      ],
+      "network_access": "conditional",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "mobile_complete_once",
       "artifact_outputs": [
         "outline.md",
         "code_list.md",
         "SESSION_SUMMARY.md",
         "NEXT_ACTIONS.json",
         "EVIDENCE_INDEX.json"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
-      "filesystem_scope": [
-        "repo",
-        ".supervisor_strategy.json",
-        "artifacts"
-      ],
-      "network_access": "conditional"
-    },
-    "imagegen": {
-      "allowed_tools": [],
-      "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
-      "filesystem_scope": [],
-      "network_access": "unspecified"
+      ]
     },
     "infographic": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "information-retrieval": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "iterative-optimizer": {
       "allowed_tools": [
@@ -689,116 +744,116 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [
-        "SESSION_SUMMARY.md",
-        "TRACE_METADATA.json"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [
         "repo",
         "artifacts"
       ],
-      "network_access": "conditional"
+      "network_access": "conditional",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "mobile_complete_once",
+      "artifact_outputs": [
+        "SESSION_SUMMARY.md",
+        "TRACE_METADATA.json"
+      ]
     },
     "javascript-pro": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "jupyter-notebook": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "latex-compile-acceleration": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "linux-server-ops": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "literature-synthesis": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "mac-memory-management": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "math-derivation": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "mcp-builder": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "mermaid-expert": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "monorepo-tooling": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "motion-design": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "native-app-debugging": {
       "allowed_tools": [
@@ -809,143 +864,134 @@
       "approval_required_tools": [
         "gui automation"
       ],
-      "artifact_outputs": [
-        "runtime_evidence.md",
-        "EVIDENCE_INDEX.json"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [
         "repo",
         "artifacts"
       ],
-      "network_access": "conditional"
+      "network_access": "conditional",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "mobile_complete_once",
+      "artifact_outputs": [
+        "runtime_evidence.md",
+        "EVIDENCE_INDEX.json"
+      ]
     },
     "nextjs": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "node-backend": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "npm-package-authoring": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "observability": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
-    },
-    "openai-docs": {
-      "allowed_tools": [],
-      "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
+      "network_access": "unspecified",
       "destructive_risk": "unspecified",
-      "filesystem_scope": [],
-      "network_access": "unspecified"
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "paper-length-tuner": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "paper-logic": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "paper-notation-audit": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "paper-reviewer": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "paper-reviser": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "paper-visuals": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "paper-writing": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "pdf": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "performance-expert": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "plan-to-code": {
       "allowed_tools": [
@@ -957,18 +1003,18 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [
-        "SESSION_SUMMARY.md",
-        "NEXT_ACTIONS.json",
-        "EVIDENCE_INDEX.json"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [
         "repo",
         "artifacts"
       ],
-      "network_access": "conditional"
+      "network_access": "conditional",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "mobile_complete_once",
+      "artifact_outputs": [
+        "SESSION_SUMMARY.md",
+        "NEXT_ACTIONS.json",
+        "EVIDENCE_INDEX.json"
+      ]
     },
     "plan-writing": {
       "allowed_tools": [
@@ -979,11 +1025,11 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "playwright": {
       "allowed_tools": [
@@ -993,90 +1039,81 @@
       "approval_required_tools": [
         "gui automation"
       ],
-      "artifact_outputs": [
-        "screenshot.png",
-        "ui_verification.md",
-        "EVIDENCE_INDEX.json"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [
         "repo",
         "artifacts"
       ],
-      "network_access": "required"
-    },
-    "plugin-creator": {
-      "allowed_tools": [],
-      "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
+      "network_access": "required",
       "destructive_risk": "unspecified",
-      "filesystem_scope": [],
-      "network_access": "unspecified"
+      "bridge_behavior": "mobile_complete_once",
+      "artifact_outputs": [
+        "screenshot.png",
+        "ui_verification.md",
+        "EVIDENCE_INDEX.json"
+      ]
     },
     "ppt-beamer": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "ppt-html-export": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "ppt-markdown": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "ppt-pptx": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "prompt-engineer": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "python-pro": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "react": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "refactoring": {
       "allowed_tools": [
@@ -1088,74 +1125,74 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "release-engineering": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "research-engineer": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "rust-pro": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "scientific-figure-plotting": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "screenshot": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "security-audit": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "security-threat-model": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "sentry": {
       "allowed_tools": [
@@ -1164,47 +1201,38 @@
         "web"
       ],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "seo-web": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "shell-cli": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
-    },
-    "skill-creator": {
-      "allowed_tools": [],
-      "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
+      "network_access": "unspecified",
       "destructive_risk": "unspecified",
-      "filesystem_scope": [],
-      "network_access": "unspecified"
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "skill-developer": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "skill-developer-codex": {
       "allowed_tools": [
@@ -1215,44 +1243,35 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [
-        "SESSION_SUMMARY.md",
-        "TRACE_METADATA.json"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [
         "repo",
         "artifacts"
       ],
-      "network_access": "conditional"
-    },
-    "skill-installer": {
-      "allowed_tools": [],
-      "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
+      "network_access": "conditional",
       "destructive_risk": "unspecified",
-      "filesystem_scope": [],
-      "network_access": "unspecified"
+      "bridge_behavior": "mobile_complete_once",
+      "artifact_outputs": [
+        "SESSION_SUMMARY.md",
+        "TRACE_METADATA.json"
+      ]
     },
     "skill-installer-antigravity": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "skill-maintenance-codex": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "skill-routing-repair-codex": {
       "allowed_tools": [
@@ -1263,20 +1282,20 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "skill-scout": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "skill-writer": {
       "allowed_tools": [
@@ -1287,56 +1306,38 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
-    },
-    "slides": {
-      "allowed_tools": [],
-      "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
+      "network_access": "unspecified",
       "destructive_risk": "unspecified",
-      "filesystem_scope": [],
-      "network_access": "unspecified"
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "slides-source-first": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
-    },
-    "spreadsheets": {
-      "allowed_tools": [],
-      "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
+      "network_access": "unspecified",
       "destructive_risk": "unspecified",
-      "filesystem_scope": [],
-      "network_access": "unspecified"
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "sql-pro": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "statistical-analysis": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "subagent-delegation": {
       "allowed_tools": [
@@ -1344,36 +1345,36 @@
         "python"
       ],
       "approval_required_tools": [],
-      "artifact_outputs": [
-        "SESSION_SUMMARY.md",
-        "NEXT_ACTIONS.json"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [
         "repo",
         ".supervisor_state.json",
         "artifacts"
       ],
-      "network_access": "conditional"
+      "network_access": "conditional",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "mobile_complete_once",
+      "artifact_outputs": [
+        "SESSION_SUMMARY.md",
+        "NEXT_ACTIONS.json"
+      ]
     },
     "sustech-mailer": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "svelte": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "systematic-debugging": {
       "allowed_tools": [
@@ -1384,35 +1385,26 @@
       "approval_required_tools": [
         "gui automation"
       ],
-      "artifact_outputs": [
-        "runtime_evidence.md",
-        "EVIDENCE_INDEX.json"
-      ],
-      "bridge_behavior": "mobile_complete_once",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [
         "repo",
         "artifacts"
       ],
-      "network_access": "conditional"
+      "network_access": "conditional",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "mobile_complete_once",
+      "artifact_outputs": [
+        "runtime_evidence.md",
+        "EVIDENCE_INDEX.json"
+      ]
     },
     "tailwind-pro": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
-    },
-    "tao-ci": {
-      "allowed_tools": [],
-      "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
+      "network_access": "unspecified",
       "destructive_risk": "unspecified",
-      "filesystem_scope": [],
-      "network_access": "unspecified"
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "tdd-workflow": {
       "allowed_tools": [
@@ -1424,11 +1416,11 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "test-engineering": {
       "allowed_tools": [
@@ -1440,74 +1432,74 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "typescript-pro": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "vercel-react-best-practices": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "visual-review": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "vue": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "web-platform-basics": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "web-scraping": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "webhook-security": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "writing-skills": {
       "allowed_tools": [
@@ -1518,30 +1510,29 @@
       "approval_required_tools": [
         "git push"
       ],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "xlsx": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     },
     "youtube-summarizer": {
       "allowed_tools": [],
       "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
       "filesystem_scope": [],
-      "network_access": "unspecified"
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
     }
-  },
-  "version": 1
+  }
 }

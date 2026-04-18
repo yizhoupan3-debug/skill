@@ -1,9 +1,9 @@
 {
   "ts": "2026-04-15T10:46:46.102903+00:00",
   "summary": {
-    "total_skills": 139,
+    "total_skills": 138,
     "critical_skills": 0,
-    "avg_health": 96.3
+    "avg_health": 96.2
   },
   "skills": {
     "imagegen": {
@@ -884,13 +884,6 @@
     "tailwind-pro": {
       "dynamic_score": 94.8,
       "static_score": 87.1,
-      "usage_30d": 0,
-      "reroutes_30d": 0,
-      "health_status": "Healthy"
-    },
-    "tao-ci": {
-      "dynamic_score": 100.0,
-      "static_score": 100.0,
       "usage_30d": 0,
       "reroutes_30d": 0,
       "health_status": "Healthy"

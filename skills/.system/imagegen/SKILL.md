@@ -1,42 +1,25 @@
 ---
 name: "imagegen"
-description: "Use the built-in image tool for raster image generation or edits. Use the CLI only on explicit request."
+description: "Use the built-in image tool for raster image generation or edits."
 routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
 source: system
-runtime_requirements:
-  python:
-    - openai
-    - pillow
-  env:
-    - OPENAI_API_KEY
 ---
 
 # Image Generation Skill
 
 Generates or edits images for the current project (for example website assets, game assets, UI mockups, product mockups, wireframes, logo design, photorealistic images, or infographics).
 
-## Top-level modes and rules
+## Built-in mode
 
-This skill has exactly two top-level modes:
-
-- **Default built-in tool mode (preferred):** built-in `image_gen` tool for normal image generation and editing. Does not require `OPENAI_API_KEY`.
-- **Fallback CLI mode (explicit-only):** `scripts/image_gen.py` CLI. Use only when the user explicitly asks for the CLI path. Requires `OPENAI_API_KEY`.
-
-Within the explicit CLI fallback only, the CLI exposes three subcommands:
-
-- `generate`
-- `edit`
-- `generate-batch`
+This skill is built around the built-in `image_gen` tool for normal image generation and editing.
 
 Rules:
-- Use the built-in `image_gen` tool by default for all normal image generation and editing requests.
-- Never switch to CLI fallback automatically.
-- If the built-in tool fails or is unavailable, tell the user the CLI fallback exists and that it requires `OPENAI_API_KEY`. Proceed only if the user explicitly asks for that fallback.
-- If the user explicitly asks for CLI mode, use the bundled `scripts/image_gen.py` workflow. Do not create one-off SDK runners.
-- Never modify `scripts/image_gen.py`. If something is missing, ask the user before doing anything else.
+- Use the built-in `image_gen` tool for all raster image generation and editing requests handled by this skill.
+- Do not route through local API scripts or ask for manual API credentials for this skill.
+- If the runtime does not expose a usable built-in image tool, stop and tell the user that image generation is unavailable in the current session instead of falling back to a local CLI.
 
 Built-in save-path policy:
 - In built-in tool mode, Codex saves generated images under `$CODEX_HOME/*` by default.
@@ -49,13 +32,7 @@ Built-in save-path policy:
 - Never leave a project-referenced asset only at the default `$CODEX_HOME/*` path.
 - Do not overwrite an existing asset unless the user explicitly asked for replacement; otherwise create a sibling versioned filename such as `hero-v2.png` or `item-icon-edited.png`.
 
-Shared prompt guidance for both modes lives in `references/prompting.md` and `references/sample-prompts.md`.
-
-Fallback-only docs/resources for CLI mode:
-- `references/cli.md`
-- `references/image-api.md`
-- `references/codex-network.md`
-- `scripts/image_gen.py`
+Shared prompt guidance lives in `references/prompting.md` and `references/sample-prompts.md`.
 
 ## When to use
 - Generate a new image (concept art, product shot, cover, website hero)
@@ -85,20 +62,17 @@ Built-in edit semantics:
 - Built-in edit mode is for images already visible in the conversation context, such as attached images or images generated earlier in the thread.
 - If the user wants to edit a local image file with the built-in tool, first load it with built-in `view_image` tool so the image is visible in the conversation context, then proceed with the built-in edit flow.
 - Do not promise arbitrary filesystem-path editing through the built-in tool.
-- If a local file still needs direct file-path control, masks, or other explicit CLI-only parameters, use the explicit CLI fallback only when the user asks for it.
 - For edits, preserve invariants aggressively and save non-destructively by default.
 
 Execution strategy:
-- In the built-in default path, produce many assets or variants by issuing one `image_gen` call per requested asset or variant.
-- In the explicit CLI fallback path, use the CLI `generate-batch` subcommand only when the user explicitly chose CLI mode and needs many prompts/assets.
+- Produce many assets or variants by issuing one `image_gen` call per requested asset or variant.
 
 Assume the user wants a new image unless they clearly ask to change an existing one.
 
 ## Workflow
-1. Decide the top-level mode: built-in by default, fallback CLI only if explicitly requested.
-2. Decide the intent: `generate` or `edit`.
-3. Decide whether the output is preview-only or meant to be consumed by the current project.
-4. Decide the execution strategy: single asset vs repeated built-in calls vs CLI `generate-batch`.
+1. Decide the intent: `generate` or `edit`.
+2. Decide whether the output is preview-only or meant to be consumed by the current project.
+3. Decide the execution strategy: single asset vs repeated built-in calls.
 5. Collect inputs up front: prompt(s), exact text (verbatim), constraints/avoid list, and any input images.
 6. For every input image, label its role explicitly:
    - reference image
@@ -110,13 +84,12 @@ Assume the user wants a new image unless they clearly ask to change an existing 
    - If the user's prompt is already specific and detailed, normalize it into a clear spec without adding creative requirements.
    - If the user's prompt is generic, add tasteful augmentation only when it materially improves output quality.
 10. Use the built-in `image_gen` tool by default.
-11. If the user explicitly chooses the CLI fallback, then and only then use the fallback-only docs for quality, `input_fidelity`, masks, output format, output paths, and network setup.
-12. Inspect outputs and validate: subject, style, composition, text accuracy, and invariants/avoid items.
-13. Iterate with a single targeted change, then re-check.
-14. For preview-only work, render the image inline; the underlying file may remain at the default `$CODEX_HOME/generated_images/...` path.
-15. For project-bound work, move or copy the selected artifact into the workspace and update any consuming code or references. Never leave a project-referenced asset only at the default `$CODEX_HOME/generated_images/...` path.
-16. For batches, persist only the selected finals in the workspace unless the user explicitly asked to keep discarded variants.
-17. Always report the final saved path for any workspace-bound asset, plus the final prompt and whether the built-in tool or fallback CLI mode was used.
+11. Inspect outputs and validate: subject, style, composition, text accuracy, and invariants/avoid items.
+12. Iterate with a single targeted change, then re-check.
+13. For preview-only work, render the image inline; the underlying file may remain at the default `$CODEX_HOME/generated_images/...` path.
+14. For project-bound work, move or copy the selected artifact into the workspace and update any consuming code or references. Never leave a project-referenced asset only at the default `$CODEX_HOME/generated_images/...` path.
+15. For batches, persist only the selected finals in the workspace unless the user explicitly asked to keep discarded variants.
+16. Always report the final saved path for any workspace-bound asset, plus the final prompt and that the built-in tool path was used.
 
 ## Prompt augmentation
 
@@ -188,9 +161,8 @@ Avoid: <negative constraints>
 ```
 
 Notes:
-- `Asset type` and `Input images` are prompt scaffolding, not dedicated CLI flags.
-- `Scene/backdrop` refers to the visual setting. It is not the same as the fallback CLI `background` parameter, which controls output transparency behavior.
-- Fallback-only execution notes such as `Quality:`, `Input fidelity:`, masks, output format, and output paths belong in the explicit CLI path only. Do not treat them as built-in `image_gen` tool arguments.
+- `Asset type` and `Input images` are prompt scaffolding, not dedicated tool arguments.
+- `Scene/backdrop` refers to the visual setting. Keep prompt scaffolding distinct from any built-in tool parameters.
 
 Augmentation rules:
 - Keep it short.
@@ -231,60 +203,13 @@ Constraints: change only the background; keep the product and its edges unchange
 - Iterate with single-change follow-ups.
 - If the prompt is generic, add only the extra detail that will materially help.
 - If the prompt is already detailed, normalize it instead of expanding it.
-- For explicit CLI fallback only, see `references/cli.md` and `references/image-api.md` for `quality`, `input_fidelity`, masks, output format, and output-path guidance.
 
-More principles shared by both modes: `references/prompting.md`.
-Copy/paste specs shared by both modes: `references/sample-prompts.md`.
+More principles: `references/prompting.md`.
+Copy/paste specs: `references/sample-prompts.md`.
 
 ## Guidance by asset type
 Asset-type templates (website assets, game assets, wireframes, logo) are consolidated in `references/sample-prompts.md`.
 
-## Fallback CLI mode only
-
-### Temp and output conventions
-These conventions apply only to the explicit CLI fallback. They do not describe built-in `image_gen` output behavior.
-- Use `tmp/imagegen/` for intermediate files (for example JSONL batches); delete them when done.
-- Write final artifacts under `output/imagegen/`.
-- Use `--out` or `--out-dir` to control output paths; keep filenames stable and descriptive.
-
-### Dependencies
-Prefer `uv` for dependency management in this repo.
-
-Required Python package:
-```bash
-uv pip install openai
-```
-
-Optional for downscaling only:
-```bash
-uv pip install pillow
-```
-
-Portability note:
-- If you are using the installed skill outside this repo, install dependencies into that environment with its package manager.
-- In uv-managed environments, `uv pip install ...` remains the preferred path.
-
-### Environment
-- `OPENAI_API_KEY` must be set for live API calls.
-- Do not ask the user for `OPENAI_API_KEY` when using the built-in `image_gen` tool.
-- Never ask the user to paste the full key in chat. Ask them to set it locally and confirm when ready.
-
-If the key is missing, give the user these steps:
-1. Create an API key in the OpenAI platform UI: https://platform.openai.com/api-keys
-2. Set `OPENAI_API_KEY` as an environment variable in their system.
-3. Offer to guide them through setting the environment variable for their OS/shell if needed.
-
-If installation is not possible in this environment, tell the user which dependency is missing and how to install it into their active environment.
-
-### Script-mode notes
-- CLI commands + examples: `references/cli.md`
-- API parameter quick reference: `references/image-api.md`
-- Network approvals / sandbox settings for CLI mode: `references/codex-network.md`
-
 ## Reference map
-- `references/prompting.md`: shared prompting principles for both modes.
-- `references/sample-prompts.md`: shared copy/paste prompt recipes for both modes.
-- `references/cli.md`: fallback-only CLI usage via `scripts/image_gen.py`.
-- `references/image-api.md`: fallback-only API/CLI parameter reference.
-- `references/codex-network.md`: fallback-only network/sandbox troubleshooting for CLI mode.
-- `scripts/image_gen.py`: fallback-only CLI implementation. Do not load or use it unless the user explicitly chooses CLI mode.
+- `references/prompting.md`: prompting principles for the built-in path.
+- `references/sample-prompts.md`: copy/paste prompt recipes for the built-in path.
