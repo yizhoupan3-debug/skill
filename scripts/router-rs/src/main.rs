@@ -17,13 +17,6 @@ use framework_profile::{
     load_framework_profile,
 };
 
-const KNOWN_OVERLAY_SKILLS: [&str; 5] = [
-    "anti-laziness",
-    "execution-audit-codex",
-    "humanizer",
-    "i18n-l10n",
-    "iterative-optimizer",
-];
 const ROUTE_DECISION_SCHEMA_VERSION: &str = "router-rs-route-decision-v1";
 const ROUTE_POLICY_SCHEMA_VERSION: &str = "router-rs-route-policy-v1";
 const ROUTE_SNAPSHOT_SCHEMA_VERSION: &str = "router-rs-route-snapshot-v1";
@@ -41,6 +34,20 @@ const OVERLAY_ONLY_SKILLS: [&str; 4] = [
     "humanizer",
     "i18n-l10n",
     "iterative-optimizer",
+];
+const ARTIFACT_GATE_PHRASES: [&str; 12] = [
+    "pdf",
+    "docx",
+    "xlsx",
+    "ppt",
+    "pptx",
+    "excel",
+    "spreadsheet",
+    "word 文档",
+    "word 文件",
+    "表格",
+    "工作簿",
+    "幻灯片",
 ];
 
 #[derive(Parser, Debug)]
@@ -932,6 +939,19 @@ fn phrase_split_regex() -> &'static Regex {
     PHRASE_SPLIT_REGEX.get_or_init(|| Regex::new(r"[,\n/|，]+").expect("phrase split regex"))
 }
 
+fn wordlike_token_regex() -> &'static Regex {
+    static WORDLIKE_TOKEN_REGEX: OnceLock<Regex> = OnceLock::new();
+    WORDLIKE_TOKEN_REGEX
+        .get_or_init(|| Regex::new(r"^[a-z0-9.+#/_-]+$").expect("wordlike token regex"))
+}
+
+fn tokenize_route_text(text: &str) -> Vec<String> {
+    token_regex()
+        .find_iter(&normalize_text(text))
+        .map(|capture| capture.as_str().to_string())
+        .collect()
+}
+
 fn split_phrases(text: &str) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut phrases = Vec::new();
@@ -945,6 +965,46 @@ fn split_phrases(text: &str) -> Vec<String> {
         }
     }
     phrases
+}
+
+fn is_overlay_record(record: &SkillRecord) -> bool {
+    normalize_text(&record.owner) == "overlay"
+        || OVERLAY_ONLY_SKILLS.iter().any(|slug| slug == &record.slug)
+}
+
+fn can_be_primary_owner(record: &SkillRecord) -> bool {
+    !matches!(normalize_text(&record.owner).as_str(), "gate" | "overlay")
+}
+
+fn phrase_token_matches(task_token: &str, phrase_token: &str) -> bool {
+    if wordlike_token_regex().is_match(phrase_token) {
+        task_token == phrase_token
+    } else {
+        task_token.contains(phrase_token)
+    }
+}
+
+fn text_matches_phrase(task_tokens: &[String], phrase: &str) -> bool {
+    let phrase_tokens = tokenize_route_text(phrase);
+    if phrase_tokens.is_empty() {
+        return false;
+    }
+    if phrase_tokens.len() == 1 {
+        return task_tokens
+            .iter()
+            .any(|task_token| phrase_token_matches(task_token, &phrase_tokens[0]));
+    }
+    if phrase_tokens.len() > task_tokens.len() {
+        return false;
+    }
+    for start in 0..=(task_tokens.len() - phrase_tokens.len()) {
+        if phrase_tokens.iter().enumerate().all(|(offset, phrase_token)| {
+            phrase_token_matches(&task_tokens[start + offset], phrase_token)
+        }) {
+            return true;
+        }
+    }
+    false
 }
 
 fn gate_hint_phrases(gate: &str) -> Vec<String> {
@@ -961,20 +1021,10 @@ fn gate_hint_phrases(gate: &str) -> Vec<String> {
             "look up".to_string(),
             "search".to_string(),
         ],
-        "artifact" => vec![
-            "pdf".to_string(),
-            "docx".to_string(),
-            "xlsx".to_string(),
-            "ppt".to_string(),
-            "pptx".to_string(),
-            "word".to_string(),
-            "excel".to_string(),
-            "artifact".to_string(),
-            "文档".to_string(),
-            "表格".to_string(),
-            "幻灯片".to_string(),
-            "文件".to_string(),
-        ],
+        "artifact" => ARTIFACT_GATE_PHRASES
+            .iter()
+            .map(|phrase| (*phrase).to_string())
+            .collect(),
         "evidence" => vec![
             "报错".to_string(),
             "失败".to_string(),
@@ -992,7 +1042,7 @@ fn gate_hint_phrases(gate: &str) -> Vec<String> {
             "sidecar".to_string(),
             "subagent".to_string(),
             "delegation".to_string(),
-            "并行".to_string(),
+            "并行 sidecar".to_string(),
             "子代理".to_string(),
             "主线程".to_string(),
             "local-supervisor".to_string(),
@@ -1097,13 +1147,20 @@ fn route_task(
         return Err("No skill records available for route decision.".to_string());
     }
     let normalized_query = normalize_text(query);
-    let query_tokens = tokenize_query(query)
-        .into_iter()
-        .collect::<HashSet<String>>();
+    let query_token_list = tokenize_route_text(query);
+    let query_tokens = query_token_list.iter().cloned().collect::<HashSet<String>>();
 
     let candidates = records
         .iter()
-        .map(|record| score_route_candidate(record, &normalized_query, &query_tokens, first_turn))
+        .map(|record| {
+            score_route_candidate(
+                record,
+                &normalized_query,
+                &query_token_list,
+                &query_tokens,
+                first_turn,
+            )
+        })
         .collect::<Vec<_>>();
     let viable = candidates
         .into_iter()
@@ -1141,7 +1198,7 @@ fn route_task(
 
     let selected = pick_owner(viable);
     let overlay = if allow_overlay {
-        pick_overlay(records, &normalized_query, &selected.record)
+        pick_overlay(records, &query_token_list, &selected.record)
     } else {
         None
     };
@@ -2107,6 +2164,7 @@ fn build_route_policy(
 fn score_route_candidate(
     record: &SkillRecord,
     query_text: &str,
+    query_token_list: &[String],
     query_tokens: &HashSet<String>,
     first_turn: bool,
 ) -> RouteCandidate {
@@ -2121,7 +2179,7 @@ fn score_route_candidate(
     let matched_gates = record
         .gate_phrases
         .iter()
-        .filter(|phrase| query_text.contains(phrase.as_str()))
+        .filter(|phrase| text_matches_phrase(query_token_list, phrase))
         .cloned()
         .collect::<Vec<_>>();
     if !matched_gates.is_empty() {
@@ -2150,7 +2208,7 @@ fn score_route_candidate(
     let matched_trigger_hints = record
         .trigger_hints
         .iter()
-        .filter(|phrase| phrase.chars().count() >= 2 && query_text.contains(phrase.as_str()))
+        .filter(|phrase| phrase.chars().count() >= 2 && text_matches_phrase(query_token_list, phrase))
         .cloned()
         .collect::<Vec<_>>();
     if !matched_trigger_hints.is_empty() {
@@ -2196,7 +2254,7 @@ fn score_route_candidate(
         score += 2.0;
     }
 
-    if OVERLAY_ONLY_SKILLS.iter().any(|slug| slug == &record.slug) && score > 0.0 {
+    if is_overlay_record(record) && score > 0.0 {
         score *= 0.15;
         reasons.push(format!(
             "Owner suppression applied: {} is overlay-only.",
@@ -2212,8 +2270,16 @@ fn score_route_candidate(
 }
 
 fn fallback_owner(records: &[SkillRecord]) -> Result<&SkillRecord, String> {
-    records
+    let primary_owners = records
         .iter()
+        .filter(|record| can_be_primary_owner(record))
+        .collect::<Vec<_>>();
+    let pool = if primary_owners.is_empty() {
+        records.iter().collect::<Vec<_>>()
+    } else {
+        primary_owners
+    };
+    pool.into_iter()
         .min_by(|left, right| {
             layer_rank(&left.layer)
                 .cmp(&layer_rank(&right.layer))
@@ -2223,7 +2289,7 @@ fn fallback_owner(records: &[SkillRecord]) -> Result<&SkillRecord, String> {
         .ok_or_else(|| "No skill records available for fallback owner.".to_string())
 }
 
-fn pick_owner(mut candidates: Vec<RouteCandidate>) -> RouteCandidate {
+fn pick_owner(candidates: Vec<RouteCandidate>) -> RouteCandidate {
     let mut gate_candidates = candidates
         .iter()
         .filter(|candidate| {
@@ -2235,10 +2301,7 @@ fn pick_owner(mut candidates: Vec<RouteCandidate>) -> RouteCandidate {
     gate_candidates.sort_by(route_candidate_cmp);
     let mut owner_candidates = candidates
         .iter()
-        .filter(|candidate| {
-            normalize_text(&candidate.record.owner) != "gate"
-                && normalize_text(&candidate.record.gate) == "none"
-        })
+        .filter(|candidate| can_be_primary_owner(&candidate.record))
         .cloned()
         .collect::<Vec<_>>();
     owner_candidates.sort_by(route_candidate_cmp);
@@ -2256,7 +2319,13 @@ fn pick_owner(mut candidates: Vec<RouteCandidate>) -> RouteCandidate {
         }
     }
 
-    let mut layers = candidates
+    let owner_pool = if owner_candidates.is_empty() {
+        candidates.clone()
+    } else {
+        owner_candidates.clone()
+    };
+
+    let mut layers = owner_pool
         .iter()
         .map(|candidate| candidate.record.layer.clone())
         .collect::<HashSet<_>>()
@@ -2265,7 +2334,7 @@ fn pick_owner(mut candidates: Vec<RouteCandidate>) -> RouteCandidate {
     layers.sort_by_key(|layer| layer_rank(layer));
 
     for layer in layers {
-        let mut layer_candidates = candidates
+        let mut layer_candidates = owner_pool
             .iter()
             .filter(|candidate| candidate.record.layer == layer)
             .cloned()
@@ -2278,7 +2347,8 @@ fn pick_owner(mut candidates: Vec<RouteCandidate>) -> RouteCandidate {
         }
     }
 
-    candidates.sort_by(|left, right| {
+    let mut fallback_pool = owner_pool;
+    fallback_pool.sort_by(|left, right| {
         layer_rank(&left.record.layer)
             .cmp(&layer_rank(&right.record.layer))
             .then_with(|| {
@@ -2292,7 +2362,7 @@ fn pick_owner(mut candidates: Vec<RouteCandidate>) -> RouteCandidate {
             })
             .then_with(|| left.record.slug.cmp(&right.record.slug))
     });
-    candidates.remove(0)
+    fallback_pool.remove(0)
 }
 
 fn route_candidate_cmp(left: &RouteCandidate, right: &RouteCandidate) -> Ordering {
@@ -2308,7 +2378,7 @@ fn route_candidate_cmp(left: &RouteCandidate, right: &RouteCandidate) -> Orderin
 
 fn pick_overlay(
     records: &[SkillRecord],
-    query_text: &str,
+    query_tokens: &[String],
     selected_skill: &SkillRecord,
 ) -> Option<String> {
     let auto_anti_laziness = matches!(selected_skill.layer.as_str(), "L-1" | "L0" | "L1");
@@ -2326,16 +2396,14 @@ fn pick_overlay(
         if record.slug == selected_skill.slug {
             continue;
         }
-        let is_overlay = normalize_text(&record.owner) == "overlay"
-            || KNOWN_OVERLAY_SKILLS.iter().any(|slug| slug == &record.slug);
-        if !is_overlay {
+        if !is_overlay_record(&record) {
             continue;
         }
-        let explicit_name_match = query_text.contains(&record.slug_lower);
+        let explicit_name_match = text_matches_phrase(query_tokens, &record.slug_lower);
         let explicit_trigger_match = record
             .trigger_hints
             .iter()
-            .any(|phrase| phrase.chars().count() > 3 && query_text.contains(phrase.as_str()));
+            .any(|phrase| phrase.chars().count() > 3 && text_matches_phrase(query_tokens, phrase));
         if explicit_name_match || explicit_trigger_match {
             return Some(record.slug.clone());
         }

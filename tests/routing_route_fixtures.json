@@ -117,6 +117,94 @@
       96.4
     ],
     [
+      "code-review",
+      "L1",
+      "overlay",
+      "none",
+      "P1",
+      "Structured code review overlay for audit and review requests.",
+      "n/a",
+      [
+        "code review",
+        "code-review"
+      ],
+      95.0
+    ],
+    [
+      "repo-review-owner",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Repository-wide review owner for audit and code review requests.",
+      "n/a",
+      [
+        "全面 review",
+        "review 这个仓库",
+        "仓库 review"
+      ],
+      94.0
+    ],
+    [
+      "bug-implementation-owner",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Owner for bug fixes and implementation tasks with regression coverage.",
+      "n/a",
+      [
+        "修 bug",
+        "bug fix",
+        "补回归测试"
+      ],
+      93.0
+    ],
+    [
+      "tdd-workflow",
+      "L1",
+      "overlay",
+      "none",
+      "P1",
+      "TDD workflow overlay for failing-tests-first execution.",
+      "n/a",
+      [
+        "tdd workflow",
+        "tdd",
+        "先写测试"
+      ],
+      95.0
+    ],
+    [
+      "doc",
+      "L3",
+      "owner",
+      "artifact",
+      "P1",
+      "Word document artifact owner for docx-oriented tasks.",
+      "n/a",
+      [
+        "word 文档",
+        "docx"
+      ],
+      92.0
+    ],
+    [
+      "writing-skills",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Repository-wide wording cleanup and SKILL.md standardization owner.",
+      "n/a",
+      [
+        "wording cleanup",
+        "措辞",
+        "模板"
+      ],
+      96.0
+    ],
+    [
       "tie-skill-a",
       "L2",
       "owner",
@@ -189,6 +277,42 @@
         "selected_skill": "tie-skill-b",
         "overlay_skill": null,
         "layer": "L2"
+      }
+    },
+    {
+      "name": "overlay-code-review-does-not-own",
+      "query": "全面 review 这个仓库，做 code review",
+      "expected": {
+        "selected_skill": "repo-review-owner",
+        "overlay_skill": "code-review",
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "overlay-tdd-does-not-own",
+      "query": "修这个 bug，用 TDD workflow 补回归测试",
+      "expected": {
+        "selected_skill": "bug-implementation-owner",
+        "overlay_skill": "tdd-workflow",
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "wording-cleanup-does-not-hit-doc-gate",
+      "query": "请统一多个 SKILL.md 的措辞和模板，做仓库级 wording cleanup",
+      "expected": {
+        "selected_skill": "writing-skills",
+        "overlay_skill": null,
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "explicit-word-doc-still-hits-artifact-gate",
+      "query": "帮我整理一个 Word 文档 模板，并导出 docx",
+      "expected": {
+        "selected_skill": "doc",
+        "overlay_skill": null,
+        "layer": "L3"
       }
     }
   ]
