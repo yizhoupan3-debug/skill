@@ -66,6 +66,7 @@ Required budget dimensions:
 
 - CPU budget
 - memory budget
+- memory budget is tracked in bytes after host-specific runtime accounting normalization
 - wall-clock budget
 - output-size budget
 

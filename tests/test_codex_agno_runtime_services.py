@@ -18,6 +18,8 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
+import codex_agno_runtime.services as runtime_services
+
 from codex_agno_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
 from codex_agno_runtime.config import RuntimeSettings
 from codex_agno_runtime.execution_kernel import (
@@ -38,6 +40,7 @@ from codex_agno_runtime.services import (
     SandboxCapabilityViolation,
     StateService,
     TraceService,
+    _normalize_rusage_maxrss,
 )
 
 
@@ -288,10 +291,10 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
 def test_rusage_memory_normalization_matches_host_units(monkeypatch: pytest.MonkeyPatch) -> None:
     """ru_maxrss should be normalized to bytes before sandbox budget enforcement."""
 
-    monkeypatch.setattr("codex_agno_runtime.services.sys.platform", "darwin")
+    monkeypatch.setattr(runtime_services.sys, "platform", "darwin")
     assert _normalize_rusage_maxrss(4096) == 4096.0
 
-    monkeypatch.setattr("codex_agno_runtime.services.sys.platform", "linux")
+    monkeypatch.setattr(runtime_services.sys, "platform", "linux")
     assert _normalize_rusage_maxrss(4096) == 4096.0 * 1024.0
 
 
