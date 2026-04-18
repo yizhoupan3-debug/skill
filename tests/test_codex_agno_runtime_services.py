@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
+import importlib
 import json
 import sys
 from contextlib import contextmanager
@@ -300,6 +302,164 @@ def test_rusage_memory_normalization_matches_host_units(monkeypatch: pytest.Monk
     assert _normalize_rusage_maxrss(4096) == 4096.0 * 1024.0
 
 
+def test_usage_snapshot_falls_back_when_resource_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-POSIX hosts should still expose a stable usage snapshot."""
+
+    service = object.__new__(runtime_services.SandboxLifecycleService)
+    monkeypatch.setattr(runtime_services, "_resource", None)
+    monkeypatch.setattr(runtime_services.time, "process_time", lambda: 12.5)
+
+    snapshot = runtime_services.SandboxLifecycleService._usage_snapshot(service)
+
+    assert snapshot == {
+        "self_cpu": 12.5,
+        "child_cpu": 0.0,
+        "self_memory": 0.0,
+        "child_memory": 0.0,
+        "self_peak_memory": 0.0,
+        "child_peak_memory": 0.0,
+    }
+
+
+def test_usage_snapshot_falls_back_when_resource_api_is_partial(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Incomplete resource implementations should degrade to the safe fallback probe."""
+
+    service = object.__new__(runtime_services.SandboxLifecycleService)
+
+    class _BrokenResource:
+        RUSAGE_SELF = 0
+        RUSAGE_CHILDREN = 1
+
+        @staticmethod
+        def getrusage(_: object) -> object:
+            raise AttributeError("missing host rusage support")
+
+    monkeypatch.setattr(runtime_services, "_resource", _BrokenResource)
+    monkeypatch.setattr(runtime_services.time, "process_time", lambda: 7.25)
+
+    snapshot = runtime_services.SandboxLifecycleService._usage_snapshot(service)
+
+    assert snapshot == {
+        "self_cpu": 7.25,
+        "child_cpu": 0.0,
+        "self_memory": 0.0,
+        "child_memory": 0.0,
+        "self_peak_memory": 0.0,
+        "child_peak_memory": 0.0,
+    }
+
+
+def test_services_module_imports_when_resource_module_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Import-time absence of `resource` should still yield an importable services module."""
+
+    module_name = "codex_agno_runtime.services"
+    original_module = sys.modules.get(module_name)
+    original_resource = sys.modules.get("resource")
+    real_import = builtins.__import__
+
+    def _patched_import(name: str, globals=None, locals=None, fromlist=(), level: int = 0):
+        if name == "resource":
+            raise ImportError("resource unavailable")
+        return real_import(name, globals, locals, fromlist, level)
+
+    sys.modules.pop(module_name, None)
+    sys.modules.pop("resource", None)
+    monkeypatch.setattr(builtins, "__import__", _patched_import)
+    imported = importlib.import_module(module_name)
+    monkeypatch.undo()
+
+    try:
+        assert imported._resource is None
+        monkeypatch.setattr(imported.time, "process_time", lambda: 3.5)
+        snapshot = imported.SandboxLifecycleService._usage_snapshot(object.__new__(imported.SandboxLifecycleService))
+        assert snapshot == {
+            "self_cpu": 3.5,
+            "child_cpu": 0.0,
+            "self_memory": 0.0,
+            "child_memory": 0.0,
+            "self_peak_memory": 0.0,
+            "child_peak_memory": 0.0,
+        }
+    finally:
+        sys.modules.pop(module_name, None)
+        if original_module is not None:
+            sys.modules[module_name] = original_module
+        if original_resource is not None:
+            sys.modules["resource"] = original_resource
+        else:
+            sys.modules.pop("resource", None)
+
+
+def test_usage_snapshot_falls_back_when_rusage_payload_is_missing_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing rusage fields should not crash the execution service."""
+
+    service = object.__new__(runtime_services.SandboxLifecycleService)
+
+    class _PartialUsage:
+        ru_utime = 1.0
+
+    class _BrokenResource:
+        RUSAGE_SELF = 0
+        RUSAGE_CHILDREN = 1
+
+        @staticmethod
+        def getrusage(_: object) -> object:
+            return _PartialUsage()
+
+    monkeypatch.setattr(runtime_services, "_resource", _BrokenResource)
+    monkeypatch.setattr(runtime_services.time, "process_time", lambda: 9.0)
+
+    snapshot = runtime_services.SandboxLifecycleService._usage_snapshot(service)
+
+    assert snapshot == {
+        "self_cpu": 9.0,
+        "child_cpu": 0.0,
+        "self_memory": 0.0,
+        "child_memory": 0.0,
+        "self_peak_memory": 0.0,
+        "child_peak_memory": 0.0,
+    }
+
+
+def test_usage_snapshot_prefers_current_rss_for_self_memory(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Current RSS should supplement ru_maxrss so later runs do not rely only on lifetime peaks."""
+
+    service = object.__new__(runtime_services.SandboxLifecycleService)
+
+    class _Usage:
+        def __init__(self, *, user: float, system: float, maxrss: float) -> None:
+            self.ru_utime = user
+            self.ru_stime = system
+            self.ru_maxrss = maxrss
+
+    class _Resource:
+        RUSAGE_SELF = 0
+        RUSAGE_CHILDREN = 1
+
+        @staticmethod
+        def getrusage(target: object) -> object:
+            if target == _Resource.RUSAGE_SELF:
+                return _Usage(user=1.5, system=0.5, maxrss=4096)
+            return _Usage(user=0.25, system=0.25, maxrss=128)
+
+    monkeypatch.setattr(runtime_services, "_resource", _Resource)
+    monkeypatch.setattr(runtime_services.sys, "platform", "darwin")
+    monkeypatch.setattr(runtime_services, "_current_rss_bytes", lambda: 2048.0)
+
+    snapshot = runtime_services.SandboxLifecycleService._usage_snapshot(service)
+
+    assert snapshot == {
+        "self_cpu": 2.0,
+        "child_cpu": 0.5,
+        "self_memory": 2048.0,
+        "child_memory": 128.0,
+        "self_peak_memory": 4096.0,
+        "child_peak_memory": 128.0,
+    }
+
+
 def test_memory_store_fact_extraction_follows_rust_first_contract_patterns(tmp_path: Path) -> None:
     """Memory extraction should use the contract-provided pattern list rather than the default heuristic set."""
 
@@ -458,6 +618,7 @@ def test_execution_service_schedules_async_sandbox_cleanup(tmp_path: Path) -> No
     request = ExecutionKernelRequest(
         task=routing_result.task,
         session_id=routing_result.session_id,
+        job_id="job-sandbox-success",
         user_id="tester",
         routing_result=routing_result,
         dry_run=True,
@@ -503,6 +664,13 @@ def test_execution_service_schedules_async_sandbox_cleanup(tmp_path: Path) -> No
         assert "sandbox.execution_started" in kinds
         assert "sandbox.cleanup_started" in kinds
         assert "sandbox.cleanup_completed" in kinds
+        sandbox_events = [event for event in events if event["sandbox_id"] == sandbox_id]
+        assert {event["job_id"] for event in sandbox_events} == {"job-sandbox-success"}
+        cleanup_completed = next(
+            event for event in sandbox_events if event["kind"] == "sandbox.cleanup_completed"
+        )
+        assert cleanup_completed["session_id"] == "sandbox-success-session"
+        assert cleanup_completed["job_id"] == "job-sandbox-success"
 
     asyncio.run(_run())
 

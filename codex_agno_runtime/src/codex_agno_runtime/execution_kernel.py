@@ -102,6 +102,7 @@ class ExecutionKernelRequest:
     session_id: str
     user_id: str
     routing_result: RoutingResult
+    job_id: str | None = None
     prompt_preview: str | None = None
     dry_run: bool = False
     trace_event_count: int = 0
