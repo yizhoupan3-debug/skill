@@ -56,6 +56,50 @@
       98.0
     ],
     [
+      "repo-review-owner",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Primary owner for repository review and code review execution.",
+      "n/a",
+      "review,code review,仓库 review",
+      96.5
+    ],
+    [
+      "bug-implementation-owner",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Primary owner for bug fixing and implementation execution.",
+      "n/a",
+      "bug,修复,实现",
+      96.2
+    ],
+    [
+      "wording-owner",
+      "L2",
+      "owner",
+      "none",
+      "P1",
+      "Primary owner for wording cleanup and template normalization work.",
+      "n/a",
+      "wording cleanup,模板,措辞",
+      95.7
+    ],
+    [
+      "doc-gate",
+      "L3",
+      "gate",
+      "artifact",
+      "P1",
+      "Artifact gate for .docx and Word-native document work.",
+      "required",
+      "docx,word 文档",
+      95.1
+    ],
+    [
       "anti-laziness",
       "L1",
       "overlay",
@@ -76,6 +120,28 @@
       "n/a",
       "自迭代,10轮,优化",
       96.4
+    ],
+    [
+      "code-review",
+      "L2",
+      "overlay",
+      "none",
+      "P1",
+      "Structured code review overlay.",
+      "n/a",
+      "code review,review",
+      95.2
+    ],
+    [
+      "tdd-workflow",
+      "L1",
+      "overlay",
+      "none",
+      "P1",
+      "TDD workflow overlay.",
+      "n/a",
+      "tdd workflow,tdd",
+      95.0
     ],
     [
       "tie-skill-a",
@@ -126,6 +192,42 @@
         "selected_skill": "plan-to-code",
         "overlay_skill": "iterative-optimizer",
         "layer": "L2"
+      }
+    },
+    {
+      "name": "overlay-code-review-does-not-own",
+      "query": "全面 review 这个仓库，做 code review",
+      "expected": {
+        "selected_skill": "repo-review-owner",
+        "overlay_skill": "code-review",
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "overlay-tdd-does-not-own",
+      "query": "帮我做 TDD workflow，并把这个 bug 实现修好",
+      "expected": {
+        "selected_skill": "bug-implementation-owner",
+        "overlay_skill": "tdd-workflow",
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "artifact-gate-wording-boundary",
+      "query": "请统一多个 SKILL.md 的措辞和模板，做仓库级 wording cleanup",
+      "expected": {
+        "selected_skill": "wording-owner",
+        "overlay_skill": null,
+        "layer": "L2"
+      }
+    },
+    {
+      "name": "artifact-gate-still-matches-docx",
+      "query": "帮我修这个 docx 文件 的版式",
+      "expected": {
+        "selected_skill": "doc-gate",
+        "overlay_skill": null,
+        "layer": "L3"
       }
     },
     {

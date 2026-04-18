@@ -14,6 +14,7 @@ from typing import Any, Iterable
 DEFAULT_CODEX_ROOT = Path.home() / ".codex"
 DEFAULT_MEMORY_ROOT = DEFAULT_CODEX_ROOT / "memories"
 CODEX_MEMORY_SUBDIR = Path(".codex") / "memory"
+ACTIVE_TASK_POINTER_NAME = "active_task.json"
 
 
 @dataclass(slots=True)
@@ -155,11 +156,44 @@ def ensure_workspace_memory_dir(workspace: str, memory_root: Path | None = None)
     return path
 
 
+def build_task_id(task: str, *, created_at: str | None = None) -> str:
+    """Build a stable filesystem-safe task id."""
+
+    stamp = re.sub(r"[^0-9A-Za-z]+", "", (created_at or current_local_timestamp()))
+    base = safe_slug(task or "task")
+    return f"{base}-{stamp[-14:]}" if stamp else base
+
+
 def _first_existing(paths: Iterable[Path]) -> Path | None:
     for path in paths:
         if path.exists():
             return path
     return None
+
+
+def current_artifact_root(source_root: Path, artifact_root: Path | None = None) -> Path:
+    """Return the compatibility mirror root under artifacts/current."""
+
+    artifact_base = (artifact_root or source_root / "artifacts").resolve()
+    return artifact_base / "current"
+
+
+def write_active_task_pointer(
+    source_root: Path,
+    *,
+    task_id: str,
+    task: str,
+    artifact_root: Path | None = None,
+    updated_at: str | None = None,
+) -> bool:
+    """Write the active-task pointer into artifacts/current."""
+
+    payload = {
+        "task_id": safe_slug(task_id),
+        "task": task,
+        "updated_at": updated_at or current_local_timestamp(),
+    }
+    return write_json_if_changed(current_artifact_root(source_root, artifact_root) / ACTIVE_TASK_POINTER_NAME, payload)
 
 
 def load_runtime_snapshot(source_root: Path, artifact_root: Path | None = None) -> RuntimeSnapshot:

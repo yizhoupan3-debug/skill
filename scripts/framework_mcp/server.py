@@ -16,6 +16,7 @@ from scripts.memory_support import (
     normalize_next_actions,
     normalize_trace_skills,
     parse_session_summary,
+    resolve_effective_memory_dir,
     supervisor_contract,
     workspace_name_from_root,
 )
@@ -271,6 +272,8 @@ class FrameworkMcpServer:
     def _runtime_snapshot(self) -> JSONDict:
         snapshot = load_runtime_snapshot(self._repo_root)
         supervisor = snapshot.supervisor_state
+        trace_skills = normalize_trace_skills(snapshot.trace_metadata)
+        primary_owner = supervisor.get("primary_owner") or (trace_skills[0] if trace_skills else None)
         return {
             "ok": True,
             "workspace": self._workspace,
@@ -285,7 +288,7 @@ class FrameworkMcpServer:
                 "task_id": supervisor.get("task_id"),
                 "task_summary": supervisor.get("task_summary"),
                 "active_phase": supervisor.get("active_phase"),
-                "primary_owner": supervisor.get("primary_owner"),
+                "primary_owner": primary_owner,
                 "verification_status": (
                     supervisor.get("verification", {}).get("verification_status")
                     if isinstance(supervisor.get("verification"), dict)
@@ -306,6 +309,8 @@ class FrameworkMcpServer:
         contract = supervisor_contract(snapshot.supervisor_state)
         blockers = snapshot.supervisor_state.get("open_blockers")
         blocker_list = [str(item).strip() for item in blockers if str(item).strip()] if isinstance(blockers, list) else []
+        trace_skills = normalize_trace_skills(snapshot.trace_metadata)
+        primary_owner = snapshot.supervisor_state.get("primary_owner") or (trace_skills[0] if trace_skills else None)
         return {
             "ok": True,
             "workspace": self._workspace,
@@ -315,10 +320,10 @@ class FrameworkMcpServer:
             "acceptance_criteria": contract.get("acceptance_criteria", []),
             "evidence_required": contract.get("evidence_required", []),
             "active_phase": snapshot.supervisor_state.get("active_phase"),
-            "primary_owner": snapshot.supervisor_state.get("primary_owner"),
+            "primary_owner": primary_owner,
             "next_actions": normalize_next_actions(snapshot.next_actions),
             "open_blockers": blocker_list,
-            "trace_skills": normalize_trace_skills(snapshot.trace_metadata),
+            "trace_skills": trace_skills,
             "session_summary": parse_session_summary(snapshot.session_summary_text),
             "evidence_count": len(normalize_evidence_index(snapshot.evidence_index)),
             "artifacts_root": str(snapshot.current_root),
@@ -411,7 +416,7 @@ class FrameworkMcpServer:
 
     def _read_resource(self, *, uri: str) -> dict[str, Any]:
         if uri == "framework://memory/project":
-            path = self._repo_root / "memory" / "MEMORY.md"
+            path = resolve_effective_memory_dir(repo_root=self._repo_root) / "MEMORY.md"
             text = self._read_text_file(path=path, missing_message="Project memory file not found.")
             return {"uri": uri, "mimeType": "text/markdown", "text": text}
         if uri == "framework://routing/runtime":

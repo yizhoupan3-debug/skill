@@ -17,13 +17,6 @@ use framework_profile::{
     load_framework_profile,
 };
 
-const KNOWN_OVERLAY_SKILLS: [&str; 5] = [
-    "anti-laziness",
-    "execution-audit-codex",
-    "humanizer",
-    "i18n-l10n",
-    "iterative-optimizer",
-];
 const ROUTE_DECISION_SCHEMA_VERSION: &str = "router-rs-route-decision-v1";
 const ROUTE_POLICY_SCHEMA_VERSION: &str = "router-rs-route-policy-v1";
 const ROUTE_SNAPSHOT_SCHEMA_VERSION: &str = "router-rs-route-snapshot-v1";
@@ -38,6 +31,31 @@ const OVERLAY_ONLY_SKILLS: [&str; 4] = [
     "humanizer",
     "i18n-l10n",
     "iterative-optimizer",
+];
+const ARTIFACT_GATE_HINTS: [&str; 7] = ["pdf", "docx", "word 文档", "xlsx", "excel", "ppt", "pptx"];
+const SOURCE_GATE_HINTS: [&str; 7] = ["官方", "官方文档", "docs", "readme", "api", "openai", "github"];
+const EVIDENCE_GATE_HINTS: [&str; 11] = [
+    "报错",
+    "失败",
+    "崩",
+    "截图",
+    "渲染",
+    "日志",
+    "traceback",
+    "error",
+    "bug",
+    "why",
+    "为什么",
+];
+const DELEGATION_GATE_HINTS: [&str; 8] = [
+    "sidecar",
+    "subagent",
+    "delegation",
+    "并行",
+    "子代理",
+    "主线程",
+    "local-supervisor",
+    "跨文件",
 ];
 
 #[derive(Parser, Debug)]
@@ -279,7 +297,7 @@ impl SkillRecord {
         fuzzy_source.push(' ');
         fuzzy_source.push_str(&summary_lower);
 
-        let gate_phrases = split_phrases(&gate);
+        let gate_phrases = gate_default_phrases(&gate).unwrap_or_else(|| split_phrases(&gate));
         let trigger_phrases = split_phrases(&triggers);
         let name_tokens = tokenize_query(&slug.replace('-', " "))
             .into_iter()
@@ -831,6 +849,62 @@ fn split_phrases(text: &str) -> Vec<String> {
     phrases
 }
 
+fn gate_default_phrases(gate: &str) -> Option<Vec<String>> {
+    let phrases = match normalize_text(gate).as_str() {
+        "artifact" => ARTIFACT_GATE_HINTS.as_slice(),
+        "source" => SOURCE_GATE_HINTS.as_slice(),
+        "evidence" => EVIDENCE_GATE_HINTS.as_slice(),
+        "delegation" => DELEGATION_GATE_HINTS.as_slice(),
+        _ => return None,
+    };
+    Some(phrases.iter().map(|phrase| normalize_text(phrase)).collect())
+}
+
+fn is_overlay_record(record: &SkillRecord) -> bool {
+    normalize_text(&record.owner) == "overlay" || OVERLAY_ONLY_SKILLS.iter().any(|slug| slug == &record.slug)
+}
+
+fn can_be_primary_owner(record: &SkillRecord) -> bool {
+    let owner = normalize_text(&record.owner);
+    owner != "gate" && owner != "overlay"
+}
+
+fn phrase_token_matches(task_token: &str, phrase_token: &str) -> bool {
+    let word_like = phrase_token
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ".+#/_-".contains(ch));
+    if word_like {
+        task_token == phrase_token
+    } else {
+        task_token.contains(phrase_token)
+    }
+}
+
+fn text_matches_phrase(query_tokens: &[String], phrase: &str) -> bool {
+    let phrase_tokens = tokenize_query(phrase);
+    if phrase_tokens.is_empty() {
+        return false;
+    }
+    if phrase_tokens.len() == 1 {
+        return query_tokens
+            .iter()
+            .any(|task_token| phrase_token_matches(task_token, &phrase_tokens[0]));
+    }
+    if query_tokens.len() < phrase_tokens.len() {
+        return false;
+    }
+    for start in 0..=(query_tokens.len() - phrase_tokens.len()) {
+        if phrase_tokens
+            .iter()
+            .enumerate()
+            .all(|(offset, phrase_token)| phrase_token_matches(&query_tokens[start + offset], phrase_token))
+        {
+            return true;
+        }
+    }
+    false
+}
+
 fn term_score(term: &str, record: &SkillRecord) -> f64 {
     if term == record.slug_lower {
         return 16.0;
@@ -925,13 +999,16 @@ fn route_task(
         return Err("No skill records available for route decision.".to_string());
     }
     let normalized_query = normalize_text(query);
-    let query_tokens = tokenize_query(query)
+    let query_token_list = tokenize_query(query);
+    let query_tokens = query_token_list
+        .iter()
+        .cloned()
         .into_iter()
         .collect::<HashSet<String>>();
 
     let candidates = records
         .iter()
-        .map(|record| score_route_candidate(record, &normalized_query, &query_tokens, first_turn))
+        .map(|record| score_route_candidate(record, &normalized_query, &query_token_list, &query_tokens, first_turn))
         .collect::<Vec<_>>();
     let viable = candidates
         .into_iter()
@@ -969,7 +1046,7 @@ fn route_task(
 
     let selected = pick_owner(viable);
     let overlay = if allow_overlay {
-        pick_overlay(records, &normalized_query, &selected.record)
+        pick_overlay(records, &query_token_list, &selected.record)
     } else {
         None
     };
@@ -1527,14 +1604,15 @@ fn build_route_policy(
 
 fn score_route_candidate(
     record: &SkillRecord,
-    query_text: &str,
+    _query_text: &str,
+    query_token_list: &[String],
     query_tokens: &HashSet<String>,
     first_turn: bool,
 ) -> RouteCandidate {
     let mut score = 0.0f64;
     let mut reasons = Vec::new();
 
-    if !record.slug_lower.is_empty() && query_text.contains(&record.slug_lower) {
+    if text_matches_phrase(query_token_list, &record.slug.replace('-', " ")) {
         score += 100.0;
         reasons.push(format!("Exact skill name matched: {}.", record.slug));
     }
@@ -1542,7 +1620,7 @@ fn score_route_candidate(
     let matched_gates = record
         .gate_phrases
         .iter()
-        .filter(|phrase| query_text.contains(phrase.as_str()))
+        .filter(|phrase| text_matches_phrase(query_token_list, phrase))
         .cloned()
         .collect::<Vec<_>>();
     if !matched_gates.is_empty() {
@@ -1571,7 +1649,7 @@ fn score_route_candidate(
     let matched_trigger_phrases = record
         .trigger_phrases
         .iter()
-        .filter(|phrase| phrase.chars().count() >= 2 && query_text.contains(phrase.as_str()))
+        .filter(|phrase| phrase.chars().count() >= 2 && text_matches_phrase(query_token_list, phrase))
         .cloned()
         .collect::<Vec<_>>();
     if !matched_trigger_phrases.is_empty() {
@@ -1617,7 +1695,7 @@ fn score_route_candidate(
         score += 2.0;
     }
 
-    if OVERLAY_ONLY_SKILLS.iter().any(|slug| slug == &record.slug) && score > 0.0 {
+    if is_overlay_record(record) && score > 0.0 {
         score *= 0.15;
         reasons.push(format!(
             "Owner suppression applied: {} is overlay-only.",
@@ -1633,7 +1711,12 @@ fn score_route_candidate(
 }
 
 fn fallback_owner(records: &[SkillRecord]) -> Result<&SkillRecord, String> {
-    records
+    let eligible = records
+        .iter()
+        .filter(|record| can_be_primary_owner(record))
+        .collect::<Vec<_>>();
+    let fallback_pool = if eligible.is_empty() { records.iter().collect::<Vec<_>>() } else { eligible };
+    fallback_pool
         .iter()
         .min_by(|left, right| {
             layer_rank(&left.layer)
@@ -1641,10 +1724,11 @@ fn fallback_owner(records: &[SkillRecord]) -> Result<&SkillRecord, String> {
                 .then_with(|| priority_rank(&left.priority).cmp(&priority_rank(&right.priority)))
                 .then_with(|| left.slug.cmp(&right.slug))
         })
+        .copied()
         .ok_or_else(|| "No skill records available for fallback owner.".to_string())
 }
 
-fn pick_owner(mut candidates: Vec<RouteCandidate>) -> RouteCandidate {
+fn pick_owner(candidates: Vec<RouteCandidate>) -> RouteCandidate {
     let mut gate_candidates = candidates
         .iter()
         .filter(|candidate| {
@@ -1654,8 +1738,18 @@ fn pick_owner(mut candidates: Vec<RouteCandidate>) -> RouteCandidate {
         .cloned()
         .collect::<Vec<_>>();
     gate_candidates.sort_by(route_candidate_cmp);
+    let mut owner_candidates = candidates
+        .iter()
+        .filter(|candidate| can_be_primary_owner(&candidate.record))
+        .cloned()
+        .collect::<Vec<_>>();
+    owner_candidates.sort_by(route_candidate_cmp);
+    let top_owner_score = owner_candidates
+        .first()
+        .map(|candidate| candidate.score)
+        .unwrap_or(f64::NEG_INFINITY);
     if let Some(top_gate) = gate_candidates.first().cloned() {
-        if top_gate.score >= 30.0 {
+        if top_gate.score >= 30.0 && top_gate.score >= top_owner_score {
             let mut selected = top_gate;
             selected
                 .reasons
@@ -1666,6 +1760,7 @@ fn pick_owner(mut candidates: Vec<RouteCandidate>) -> RouteCandidate {
 
     let mut layers = candidates
         .iter()
+        .filter(|candidate| can_be_primary_owner(&candidate.record))
         .map(|candidate| candidate.record.layer.clone())
         .collect::<HashSet<_>>()
         .into_iter()
@@ -1686,7 +1781,11 @@ fn pick_owner(mut candidates: Vec<RouteCandidate>) -> RouteCandidate {
         }
     }
 
-    candidates.sort_by(|left, right| {
+    let mut fallback_candidates = owner_candidates;
+    if fallback_candidates.is_empty() {
+        fallback_candidates = candidates;
+    }
+    fallback_candidates.sort_by(|left, right| {
         layer_rank(&left.record.layer)
             .cmp(&layer_rank(&right.record.layer))
             .then_with(|| {
@@ -1700,7 +1799,7 @@ fn pick_owner(mut candidates: Vec<RouteCandidate>) -> RouteCandidate {
             })
             .then_with(|| left.record.slug.cmp(&right.record.slug))
     });
-    candidates.remove(0)
+    fallback_candidates.remove(0)
 }
 
 fn route_candidate_cmp(left: &RouteCandidate, right: &RouteCandidate) -> Ordering {
@@ -1716,7 +1815,7 @@ fn route_candidate_cmp(left: &RouteCandidate, right: &RouteCandidate) -> Orderin
 
 fn pick_overlay(
     records: &[SkillRecord],
-    query_text: &str,
+    query_tokens: &[String],
     selected_skill: &SkillRecord,
 ) -> Option<String> {
     let auto_anti_laziness = matches!(selected_skill.layer.as_str(), "L-1" | "L0" | "L1");
@@ -1734,16 +1833,15 @@ fn pick_overlay(
         if record.slug == selected_skill.slug {
             continue;
         }
-        let is_overlay = normalize_text(&record.owner) == "overlay"
-            || KNOWN_OVERLAY_SKILLS.iter().any(|slug| slug == &record.slug);
-        if !is_overlay {
+        if !is_overlay_record(&record) {
             continue;
         }
-        let explicit_name_match = query_text.contains(&record.slug_lower);
+        let explicit_name_match = text_matches_phrase(query_tokens, &record.slug)
+            || text_matches_phrase(query_tokens, &record.slug.replace('-', " "));
         let explicit_trigger_match = record
             .trigger_phrases
             .iter()
-            .any(|phrase| phrase.chars().count() > 3 && query_text.contains(phrase.as_str()));
+            .any(|phrase| phrase.chars().count() > 3 && text_matches_phrase(query_tokens, phrase));
         if explicit_name_match || explicit_trigger_match {
             return Some(record.slug.clone());
         }

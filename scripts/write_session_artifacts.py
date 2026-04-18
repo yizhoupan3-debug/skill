@@ -5,8 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.memory_support import build_task_id, write_active_task_pointer
 
 
 def write_session_summary(
@@ -110,6 +116,9 @@ def write_artifacts(
     summary: str,
     next_actions: list[str],
     evidence: list[dict[str, Any]],
+    task_id: str | None = None,
+    mirror_output_dir: Path | None = None,
+    repo_root: Path | None = None,
 ) -> dict[str, str]:
     """Write the three standard session artifact files into a directory.
 
@@ -126,6 +135,7 @@ def write_artifacts(
         dict[str, str]: Mapping of artifact type to written file path.
     """
 
+    resolved_task_id = task_id or build_task_id(task)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     summary_path = output_dir / "SESSION_SUMMARY.md"
@@ -136,10 +146,26 @@ def write_artifacts(
     write_next_actions(next_actions_path, next_actions)
     write_evidence_index(evidence_path, evidence)
 
+    if mirror_output_dir is not None:
+        mirror_output_dir.mkdir(parents=True, exist_ok=True)
+        write_session_summary(
+            mirror_output_dir / "SESSION_SUMMARY.md",
+            task=task,
+            phase=phase,
+            status=status,
+            summary=summary,
+        )
+        write_next_actions(mirror_output_dir / "NEXT_ACTIONS.json", next_actions)
+        write_evidence_index(mirror_output_dir / "EVIDENCE_INDEX.json", evidence)
+
+    if repo_root is not None:
+        write_active_task_pointer(repo_root, task_id=resolved_task_id, task=task)
+
     return {
         "summary": str(summary_path),
         "next_actions": str(next_actions_path),
         "evidence": str(evidence_path),
+        "task_id": resolved_task_id,
     }
 
 
