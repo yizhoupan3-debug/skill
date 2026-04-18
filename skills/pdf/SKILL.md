@@ -34,6 +34,18 @@ framework_contracts:
   emits_verification_results: true
 risk: low
 source: local
+allowed_tools:
+  - shell
+  - python
+approval_required_tools:
+  - file overwrite
+filesystem_scope:
+  - repo
+  - artifacts
+network_access: conditional
+artifact_outputs:
+  - pdf_review.md
+  - EVIDENCE_INDEX.json
 ---
 
 # pdf

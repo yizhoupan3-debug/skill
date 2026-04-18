@@ -14,7 +14,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.install_browser_mcp_codex import install_server as install_browser_server
-from scripts.install_codex_hermes_default import install_block as install_hermes_block
+from scripts.install_codex_framework_default import retire_overlay as retire_framework_overlay
 from scripts.memory_support import get_repo_root, read_json_if_exists, write_json_if_changed, write_text_if_changed
 
 HOME_CONFIG_PATH = Path.home() / ".codex" / "config.toml"
@@ -177,7 +177,7 @@ def install_native_integration(
     project_instructions_path: Path = PROJECT_INSTRUCTIONS_PATH,
     install_browser_mcp: bool = True,
     install_framework_mcp: bool = True,
-    install_hermes: bool = True,
+    retire_framework_overlay_file: bool = True,
     install_personal_plugin: bool = True,
     install_personal_marketplace_entry: bool = True,
 ) -> dict[str, Any]:
@@ -189,7 +189,7 @@ def install_native_integration(
     framework_changed = False
     personal_plugin_changed = False
     personal_marketplace_changed = False
-    hermes_result: dict[str, Any] | None = None
+    framework_overlay_result: dict[str, Any] | None = None
     if install_browser_mcp:
         browser_changed = install_browser_server(config_path=home_config_path, repo_root=resolved_repo_root)
     if install_framework_mcp:
@@ -201,8 +201,10 @@ def install_native_integration(
             marketplace_path=home_marketplace_path,
             plugin_root=home_plugin_root,
         )
-    if install_hermes:
-        hermes_result = install_hermes_block((resolved_repo_root / project_instructions_path).resolve())
+    if retire_framework_overlay_file:
+        framework_overlay_result = retire_framework_overlay(
+            (resolved_repo_root / project_instructions_path).resolve()
+        )
     return {
         "success": True,
         "repo_root": str(resolved_repo_root),
@@ -215,7 +217,7 @@ def install_native_integration(
         "framework_mcp_changed": framework_changed,
         "personal_plugin_changed": personal_plugin_changed,
         "personal_marketplace_changed": personal_marketplace_changed,
-        "hermes": hermes_result,
+        "framework_overlay_retirement": framework_overlay_result,
     }
 
 
@@ -228,7 +230,7 @@ def main() -> int:
     parser.add_argument("--repo-root", type=Path, default=None)
     parser.add_argument("--skip-browser-mcp", action="store_true")
     parser.add_argument("--skip-framework-mcp", action="store_true")
-    parser.add_argument("--skip-hermes", action="store_true")
+    parser.add_argument("--skip-framework-overlay-retirement", action="store_true")
     parser.add_argument("--skip-personal-plugin", action="store_true")
     parser.add_argument("--skip-personal-marketplace", action="store_true")
     parser.add_argument("--json", action="store_true", dest="json_output")
@@ -241,7 +243,7 @@ def main() -> int:
         project_instructions_path=args.project_instructions_path,
         install_browser_mcp=not args.skip_browser_mcp,
         install_framework_mcp=not args.skip_framework_mcp,
-        install_hermes=not args.skip_hermes,
+        retire_framework_overlay_file=not args.skip_framework_overlay_retirement,
         install_personal_plugin=not args.skip_personal_plugin,
         install_personal_marketplace_entry=not args.skip_personal_marketplace,
     )

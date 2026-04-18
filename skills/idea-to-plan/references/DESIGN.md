@@ -6,7 +6,7 @@
 
 ## 2. 架构设计：Stratospheric Orchestrator (平流层编排器)
 
-该 Skill 将作为所有复杂任务的“漏斗”入口，位于 `brainstorm-research` (发散) 和 `plan-writing` (收敛) 之上。
+该 Skill 将作为所有复杂任务的“漏斗”入口，位于 `brainstorm-research` (发散) 和 `checklist-writting` (执行拆解收敛) 之上。
 
 ### 2.1 核心阶段 (The 5-Stage Blueprinting Loop)
 
@@ -26,10 +26,10 @@
     - **Stage 3.6: Pivot Decision Layer**：基于 Pilot 结果触发以下逻辑：回滚/微调/合并。
 4.  **Scientific & Integration Synthesis (科研与工程双重综合)**
     - **Gap-Grounded Synthesis**：调用 `$literature-synthesis` (Mode E) 产出证据关联图。
-    - **Spec Alignment**：调用 `$plan-writing` 确保 `implementation_plan.md` 符合 L4 成熟度。
+    - **Spec Alignment**：只有在战略路径已经固定后，才调用 `$checklist-writting` 产出 execution checklist；不要让 checklist 反向替代战略 plan。
 5.  **Handoff Contract (交付契约与标准化产出)**
     - 输出包含引用列表的 `.supervisor_strategy.json`。
-    - **标准化交付双文档 (The Duo-Doc Delivery)**：`outline.md` 与 `code_list.md`。
+    - **标准化交付六文档 (The Planning Delivery Set)**：`outline.md`、`assumptions.md`、`open_questions.md`、`decision_log.md`、`plan_rubric.md` 与 `code_list.md`。
 
 ## 3. 技能协同矩阵 (Planning Synergy Matrix - 120+ Core)
 
@@ -41,7 +41,7 @@
 
 -   **Agentic Tree Search**：并行探索分支。
 -   **Internal Peer Reviewer**：恶意评审层。
--   **Anti-Laziness Enforcement**：强制要求 `code_list.md` 不含任何 Placeholder。
+-   **Anti-Laziness Enforcement**：强制要求 `code_list.md` 不含任何 Placeholder，同时要求 assumptions / open questions / rejected routes 不得缺席。
 
 ## 5. 状态持久化：`.supervisor_strategy.json` Schema
 
@@ -51,6 +51,10 @@
   "root_idea": "string",
   "handoff_contract": {
     "outline_path": "outline.md",
+    "assumptions_path": "assumptions.md",
+    "open_questions_path": "open_questions.md",
+    "decision_log_path": "decision_log.md",
+    "plan_rubric_path": "plan_rubric.md",
     "code_list_path": "code_list.md",
     "maturity_level": 4
   }

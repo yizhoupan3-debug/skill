@@ -9,7 +9,7 @@ routing_gate: none
 routing_priority: P1
 session_start: preferred
 short_description: Implement a concrete plan or spec into integrated code
-trigger_phrases:
+trigger_hints:
   - 根据方案实现
   - 按文档开发
   - PRD 落地
@@ -57,9 +57,10 @@ If the user's primary artifact is a plan, PRD, spec, or task breakdown **and** t
 
 ## Do not use
 
-- The user only wants a plan or breakdown → use `$plan-writing`
+- The user only wants a plan, checklist, or breakdown → use `$checklist-writting`
 - The task is debugging an unknown failure → use `$systematic-debugging`
 - Fixing a numbered issue list item by item → use `$checklist-fixer`
+- The source is still a messy checklist / phase blueprint and the main need is to stabilize serial/parallel boundaries, goals, constraints, acceptance, or update rules before coding → use `$checklist-normalizer`
 - The request is a review or summary of a document with no implementation intent.
 
 ## Primary operating principle

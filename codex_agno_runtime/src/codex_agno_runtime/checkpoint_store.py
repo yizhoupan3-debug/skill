@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import sqlite3
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Protocol
 
@@ -205,6 +206,130 @@ class InMemoryRuntimeStorageBackend:
         return str(path)
 
 
+class SQLiteRuntimeStorageBackend:
+    """SQLite-backed storage backend for runtime-usable non-filesystem persistence."""
+
+    _TABLE_NAME = "runtime_storage_payloads"
+
+    def __init__(self, *, db_path: Path) -> None:
+        self._db_path = db_path.expanduser().resolve()
+        self._ensure_schema()
+
+    def capabilities(self) -> RuntimeStoreCapabilities:
+        return RuntimeStoreCapabilities(
+            backend_family="sqlite",
+            supports_atomic_replace=True,
+            supports_compaction=False,
+            supports_snapshot_delta=False,
+            supports_remote_event_transport=True,
+        )
+
+    def exists(self, path: Path) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                f"SELECT 1 FROM {self._TABLE_NAME} WHERE payload_key = ? LIMIT 1",
+                (self._key(path),),
+            ).fetchone()
+        return row is not None
+
+    def read_text(self, path: Path) -> str:
+        with self._connect() as conn:
+            row = conn.execute(
+                f"SELECT payload_text FROM {self._TABLE_NAME} WHERE payload_key = ?",
+                (self._key(path),),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"No payload stored for path {path!s}")
+        return row[0]
+
+    def write_text(self, path: Path, payload: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                f"""
+                INSERT INTO {self._TABLE_NAME} (payload_key, payload_text)
+                VALUES (?, ?)
+                ON CONFLICT(payload_key) DO UPDATE SET payload_text = excluded.payload_text
+                """,
+                (self._key(path), payload),
+            )
+            conn.commit()
+
+    def _connect(self) -> sqlite3.Connection:
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(self._db_path, timeout=30.0)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        self._ensure_schema(conn)
+        return conn
+
+    def _ensure_schema(self, conn: sqlite3.Connection | None = None) -> None:
+        owns_connection = conn is None
+        if conn is None:
+            self._db_path.parent.mkdir(parents=True, exist_ok=True)
+            connection = sqlite3.connect(self._db_path, timeout=30.0)
+        else:
+            connection = conn
+        try:
+            connection.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {self._TABLE_NAME} (
+                    payload_key TEXT PRIMARY KEY,
+                    payload_text TEXT NOT NULL
+                )
+                """
+            )
+            connection.commit()
+        finally:
+            if owns_connection:
+                connection.close()
+
+    @staticmethod
+    def _key(path: Path) -> str:
+        return str(path.expanduser().resolve())
+
+
+def _runtime_settings() -> "RuntimeSettings":
+    from codex_agno_runtime.config import RuntimeSettings
+
+    return RuntimeSettings()
+
+
+def _normalized_backend_family(value: str) -> str:
+    return value.strip().lower().replace("-", "_")
+
+
+def select_runtime_storage_backend(
+    *,
+    backend_family: str | None = None,
+    storage_root: Path | None = None,
+    sqlite_db_path: Path | None = None,
+) -> RuntimeStorageBackend:
+    """Select a concrete backend from config or an explicit family override."""
+
+    settings = None
+    resolved_family = backend_family
+    if resolved_family is None:
+        settings = _runtime_settings()
+        resolved_family = settings.checkpoint_storage_backend_family
+    normalized_family = _normalized_backend_family(resolved_family)
+
+    if normalized_family in {"filesystem", "file"}:
+        return FilesystemRuntimeStorageBackend()
+    if normalized_family in {"memory", "in_memory", "regression", "regression_double"}:
+        return InMemoryRuntimeStorageBackend()
+    if normalized_family in {"sqlite", "sqlite3"}:
+        if sqlite_db_path is None:
+            if settings is None:
+                settings = _runtime_settings()
+            db_file = settings.checkpoint_storage_db_file
+            if storage_root is not None and not db_file.is_absolute():
+                sqlite_db_path = (storage_root / db_file).resolve()
+            else:
+                sqlite_db_path = settings.resolved_checkpoint_storage_db_file
+        return SQLiteRuntimeStorageBackend(db_path=sqlite_db_path)
+    raise ValueError(f"Unsupported runtime storage backend family: {resolved_family!r}")
+
+
 class RuntimeCheckpointer(Protocol):
     """Backend seam for checkpoint path discovery and resume manifest IO."""
 
@@ -251,7 +376,7 @@ class FilesystemRuntimeCheckpointer:
         control_plane_descriptor: Mapping[str, Any] | None = None,
     ) -> None:
         self.data_dir = data_dir
-        self.storage_backend = storage_backend or FilesystemRuntimeStorageBackend()
+        self.storage_backend = storage_backend or select_runtime_storage_backend(storage_root=data_dir)
         self._paths = RuntimeCheckpointPaths(
             trace_output_path=trace_output_path,
             event_stream_path=(trace_output_path.with_name("TRACE_EVENTS.jsonl") if trace_output_path else None),
@@ -390,7 +515,12 @@ class FilesystemRuntimeCheckpointer:
         codex_home: Path,
         extra_paths: Iterable[Path | None] = (),
     ) -> list[str]:
-        """Return the canonical recovery artifact set for the current runtime."""
+        """Return the canonical recovery artifact set for the current runtime.
+
+        This recovery surface intentionally lists the root continuity artifacts.
+        `artifacts/current/*` remains the bridge-facing mirror and should stay in
+        sync, but it is not the recovery anchor returned here.
+        """
 
         paths = self.describe_paths()
         always_include = [

@@ -6,7 +6,7 @@ description: |
   fixing. Triggers: 为什么不工作、报错了、崩了、不对、失败了、帮我修（无 stack trace）、程序挂了、
   flaky test、build failure、prod issue. Do not use when root cause is already proven.
 short_description: Investigate unknown failures before fixing
-trigger_phrases:
+trigger_hints:
   - 为什么不工作
   - 帮我修
   - root cause

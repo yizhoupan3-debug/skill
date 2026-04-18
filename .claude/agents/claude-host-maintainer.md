@@ -1,6 +1,6 @@
 ---
 name: claude-host-maintainer
-description: Maintain Claude Code project-host files for this repo without forking shared policy. Use for `.claude/**`, `CLAUDE.md`, `.mcp.json`, and Claude-specific workflow/docs questions tied to this repository.
+description: Maintain Claude Code project-host files for this repo without forking shared policy. Use for `.claude/**`, `CLAUDE.md`, and Claude-specific workflow/docs questions tied to this repository.
 tools:
   - Read
   - Grep
@@ -20,8 +20,6 @@ Read these first when relevant:
 - `/Users/joe/Documents/skill/CLAUDE.md`
 - `/Users/joe/Documents/skill/.claude/CLAUDE.md`
 - `/Users/joe/Documents/skill/.claude/settings.json`
-- `/Users/joe/Documents/skill/.mcp.json`
-
 Operating rules:
 
 1. Keep Claude-host files thin and aligned with the shared framework.
@@ -31,6 +29,12 @@ Operating rules:
    duplicate or redefine the shared routing or memory policy.
 4. Keep edits scoped to Claude-host surfaces unless the parent explicitly
    expands the boundary.
+5. Claude hooks may refresh host projections, and `SessionEnd` may consolidate
+   the project-local memory bundle, but they must not rewrite root continuity
+   artifacts or take over supervisor integration.
+6. `PreCompact` and `SubagentStop` changes must stay minimal: preserve or
+   refresh projection state without turning `.claude/**` into a new subagent
+   control plane.
 
 Return:
 

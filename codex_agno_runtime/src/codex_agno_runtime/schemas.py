@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 
 def _now_iso() -> str:
@@ -29,12 +29,22 @@ class SkillMetadata(BaseModel):
     session_start: str = "n/a"
     framework_roles: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
-    trigger_phrases: list[str] = Field(default_factory=list)
+    trigger_hints: list[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("trigger_hints", "trigger_phrases"),
+        serialization_alias="trigger_hints",
+    )
     metadata: dict[str, Any] = Field(default_factory=dict)
     health: float = 100.0
     body: str = ""
     body_loaded: bool = True
     source_path: str | None = None
+
+    @property
+    def trigger_phrases(self) -> list[str]:
+        """Backward-compatible alias for legacy callers during the migration window."""
+
+        return self.trigger_hints
 
 
 class ScoredSkill(BaseModel):
@@ -76,13 +86,18 @@ class RouteDecisionSnapshot(BaseModel):
 
 
 class RouteExecutionPolicy(BaseModel):
-    """Stable route-mode policy owned by the Rust routing core."""
+    """Stable route-mode policy owned by the Rust routing core.
+
+    `python_route_required` only covers the explicit legacy primary-authority lane.
+    `diagnostic_python_lane` marks compare-only shadow/verify/rollback lanes.
+    """
 
     policy_schema_version: str
     authority: str
     mode: str
     rollback_active: bool = False
     python_route_required: bool = False
+    diagnostic_python_lane: bool = False
     primary_authority: str
     route_result_engine: str
     shadow_engine: str | None = None
@@ -93,6 +108,8 @@ class RouteExecutionPolicy(BaseModel):
 class RouteDiffReport(BaseModel):
     """Stable parity and soak payload shared by shadow/verify/rust modes."""
 
+    report_schema_version: str
+    authority: str
     mode: str
     primary_engine: str
     shadow_engine: str | None = None
@@ -106,6 +123,74 @@ class RouteDiffReport(BaseModel):
     rollback_active: bool = False
     python: RouteDecisionSnapshot
     rust: RouteDecisionSnapshot
+
+
+class FrameworkSessionContract(BaseModel):
+    """Host-neutral session contract derived from framework truth."""
+
+    mode: str = "default"
+    approval_mode: str = "inherit"
+    history_policy: str = "host-managed"
+    takeover: bool = False
+    extras: dict[str, Any] = Field(default_factory=dict)
+
+
+class FrameworkSharedContractSurface(BaseModel):
+    """Shared outer-contract surface owned by the framework profile."""
+
+    artifact_contract: dict[str, Any] = Field(default_factory=dict)
+    memory_mounts: list[dict[str, Any]] = Field(default_factory=list)
+    mcp_servers: list[dict[str, Any]] = Field(default_factory=list)
+    tool_policy: dict[str, Any] = Field(default_factory=dict)
+    approval_policy: dict[str, Any] = Field(default_factory=dict)
+    loadout_policy: dict[str, Any] = Field(default_factory=dict)
+    workspace_bootstrap: dict[str, Any] = Field(default_factory=dict)
+    session_contract: FrameworkSessionContract = Field(default_factory=FrameworkSessionContract)
+
+
+class FrameworkSharedContract(BaseModel):
+    """Canonical host-neutral shared contract for common adapters."""
+
+    schema_version: str
+    authority: str
+    framework_truth: str = "framework_core"
+    profile_id: str
+    framework_profile_version: str
+    shared_contract_fields: list[str] = Field(default_factory=list)
+    shared_contract: FrameworkSharedContractSurface = Field(
+        default_factory=FrameworkSharedContractSurface
+    )
+
+
+class FrameworkSharedContractProjection(BaseModel):
+    """One adapter projection compared against the canonical shared contract."""
+
+    adapter_id: str
+    projection_field: str
+    shared_contract_match: bool = True
+    shared_contract_mismatch_fields: list[str] = Field(default_factory=list)
+    projected_contract: FrameworkSharedContractSurface = Field(
+        default_factory=FrameworkSharedContractSurface
+    )
+    runtime_surface_match: bool | None = None
+    runtime_surface_mismatch_fields: list[str] = Field(default_factory=list)
+    runtime_surface: FrameworkSharedContractSurface | None = None
+
+
+class FrameworkSharedContractProjectionReport(BaseModel):
+    """Projection parity report for Desktop/CLI-family adapters."""
+
+    schema_version: str
+    authority: str
+    profile_id: str
+    framework_profile_version: str
+    shared_contract_schema_version: str
+    projection_fields: list[str] = Field(default_factory=list)
+    canonical_shared_contract: FrameworkSharedContractSurface = Field(
+        default_factory=FrameworkSharedContractSurface
+    )
+    adapter_projections: list[FrameworkSharedContractProjection] = Field(default_factory=list)
+    all_shared_contract_projections_match: bool = True
 
 
 class PrepareSessionRequest(BaseModel):

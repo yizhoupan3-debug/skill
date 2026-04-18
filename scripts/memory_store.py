@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import uuid
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -308,6 +307,19 @@ class MemoryStore:
                 ),
             )
 
+    def delete_memory_items_by_sources(self, sources: list[str]) -> None:
+        """Delete memory items for one workspace/source list before a full resync."""
+
+        cleaned = [str(source).strip() for source in sources if str(source).strip()]
+        if not cleaned:
+            return
+        placeholders = ", ".join("?" for _ in cleaned)
+        with self.connect() as conn:
+            conn.execute(
+                f"DELETE FROM memory_items WHERE workspace = ? AND source IN ({placeholders})",
+                [self.workspace, *cleaned],
+            )
+
     def sync_session_notes(self, session_key: str, notes: list[str]) -> None:
         """Replace one session note stream."""
 
@@ -396,6 +408,38 @@ class MemoryStore:
                 (self.workspace, limit),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def export_legacy_rows(self) -> dict[str, list[dict[str, Any]]]:
+        """Export the legacy non-authoritative tables for archival before cutover."""
+
+        with self.connect() as conn:
+            session_rows = conn.execute(
+                """
+                SELECT * FROM session_notes
+                WHERE workspace = ?
+                ORDER BY updated_at DESC, session_key DESC, position ASC
+                """,
+                (self.workspace,),
+            ).fetchall()
+            evidence_rows = conn.execute(
+                """
+                SELECT * FROM evidence_records
+                WHERE workspace = ?
+                ORDER BY updated_at DESC
+                """,
+                (self.workspace,),
+            ).fetchall()
+        return {
+            "session_notes": [dict(row) for row in session_rows],
+            "evidence_records": [dict(row) for row in evidence_rows],
+        }
+
+    def clear_legacy_rows(self) -> None:
+        """Clear the legacy non-authoritative tables after archival."""
+
+        with self.connect() as conn:
+            conn.execute("DELETE FROM session_notes WHERE workspace = ?", (self.workspace,))
+            conn.execute("DELETE FROM evidence_records WHERE workspace = ?", (self.workspace,))
 
 
 def open_workspace_store(

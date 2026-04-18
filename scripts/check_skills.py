@@ -35,6 +35,11 @@ REQUIRED_FRONTMATTER_FIELDS = (
     "session_start",
 )
 RUNTIME_REQUIREMENT_FIELDS = ("python", "commands", "env", "files")
+VALID_ROUTING_GATES = {"none", "source", "artifact", "evidence", "delegation"}
+VALID_SESSION_START_VALUES = {"required", "preferred", "n/a"}
+CONTROL_ROUTING_LAYERS = {"L-1", "L0"}
+CANONICAL_TRIGGER_HINT_FIELD = "trigger_hints"
+LEGACY_TRIGGER_HINT_FIELDS = ("trigger_phrases",)
 PYTHON_IMPORT_PACKAGE_ALIASES = {
     "PIL": "pillow",
     "pptx": "python-pptx",
@@ -206,6 +211,52 @@ def _discover_local_python_modules(skill_dir: Path) -> set[str]:
 
 def _normalize_python_dependency_name(module_name: str) -> str:
     return PYTHON_IMPORT_PACKAGE_ALIASES.get(module_name, module_name)
+
+
+def normalize_string_list(value: Any) -> list[str]:
+    """Normalize frontmatter fields that should behave like string lists."""
+
+    if value is None:
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [str(value).strip()]
+
+
+def collect_trigger_hints(metadata: dict[str, Any]) -> list[str]:
+    """Collect canonical trigger hints with one legacy compatibility window."""
+
+    hints: list[str] = []
+    seen: set[str] = set()
+    for field_name in (CANONICAL_TRIGGER_HINT_FIELD, *LEGACY_TRIGGER_HINT_FIELDS):
+        for hint in normalize_string_list(metadata.get(field_name)):
+            lowered = hint.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            hints.append(hint)
+    return hints
+
+
+def requires_artifact_outputs(metadata: dict[str, Any]) -> bool:
+    """Return whether one skill must declare artifact outputs."""
+
+    routing_layer = str(metadata.get("routing_layer", "")).strip()
+    routing_owner = str(metadata.get("routing_owner", "")).strip()
+    routing_layer = str(metadata.get("routing_layer", "")).strip()
+    routing_gate = str(metadata.get("routing_gate", "")).strip()
+    filesystem_scope = normalize_string_list(metadata.get("filesystem_scope"))
+    scope_joined = " ".join(filesystem_scope).lower()
+    return (
+        routing_gate == "artifact"
+        or routing_layer in CONTROL_ROUTING_LAYERS
+        or routing_owner == "gate"
+        or "artifacts" in scope_joined
+        or ".supervisor" in scope_joined
+    )
 
 
 def discover_python_runtime_dependencies(skill_dir: Path) -> set[str]:
@@ -490,14 +541,48 @@ def validate_skill_document(document: SkillDocument) -> SkillReport:
         )
 
     source_priority = metadata.get("source_priority")
-    if source_priority is not None and not isinstance(source_priority, (int, float)):
-        report.errors.append("source_priority must be numeric when provided")
+    if source_priority is not None:
+        if not isinstance(source_priority, (int, float)):
+            report.errors.append("source_priority must be numeric when provided")
+        report.warnings.append(
+            "source_priority is deprecated; source precedence is governed by skills/SKILL_SOURCE_MANIFEST.json"
+        )
+
+    routing_layer = str(metadata.get("routing_layer", "")).strip()
+    routing_gate = str(metadata.get("routing_gate", "")).strip()
+    if routing_gate and routing_gate not in VALID_ROUTING_GATES:
+        report.errors.append(
+            f"routing_gate must be one of {sorted(VALID_ROUTING_GATES)}, got '{routing_gate}'"
+        )
+
+    session_start = str(metadata.get("session_start", "")).strip()
+    if session_start and session_start not in VALID_SESSION_START_VALUES:
+        report.errors.append(
+            f"session_start must be one of {sorted(VALID_SESSION_START_VALUES)}, got '{session_start}'"
+        )
 
     loadouts = metadata.get("loadouts")
     if loadouts is not None and (
         not isinstance(loadouts, list) or not all(isinstance(item, str) for item in loadouts)
     ):
         report.errors.append("loadouts must be a list of strings when provided")
+
+    trigger_hints = metadata.get(CANONICAL_TRIGGER_HINT_FIELD)
+    if trigger_hints is not None and (
+        not isinstance(trigger_hints, list) or not all(isinstance(item, str) for item in trigger_hints)
+    ):
+        report.errors.append(f"{CANONICAL_TRIGGER_HINT_FIELD} must be a list of strings when provided")
+
+    for legacy_field in LEGACY_TRIGGER_HINT_FIELDS:
+        legacy_value = metadata.get(legacy_field)
+        if legacy_value is not None and (
+            not isinstance(legacy_value, list) or not all(isinstance(item, str) for item in legacy_value)
+        ):
+            report.errors.append(f"{legacy_field} must be a list of strings when provided")
+        if legacy_value is not None:
+            report.warnings.append(
+                f"{legacy_field} is deprecated; migrate to {CANONICAL_TRIGGER_HINT_FIELD}"
+            )
 
     for list_field in ("allowed_tools", "approval_required_tools", "artifact_outputs"):
         value = metadata.get(list_field)
@@ -542,6 +627,35 @@ def validate_skill_document(document: SkillDocument) -> SkillReport:
     bridge_behavior = metadata.get("bridge_behavior")
     if bridge_behavior is not None and not isinstance(bridge_behavior, (str, dict)):
         report.errors.append("bridge_behavior must be a string or mapping when provided")
+
+    allowed_tools = normalize_string_list(metadata.get("allowed_tools"))
+    approval_required_tools = normalize_string_list(metadata.get("approval_required_tools"))
+    artifact_outputs = normalize_string_list(metadata.get("artifact_outputs"))
+    filesystem_scope_values = normalize_string_list(filesystem_scope)
+    network_access_value = metadata.get("network_access")
+
+    if session_start == "required":
+        if not allowed_tools:
+            report.errors.append("session_start=required skills must declare allowed_tools")
+        if not filesystem_scope_values:
+            report.errors.append("session_start=required skills must declare filesystem_scope")
+        if network_access_value in (None, "", "unspecified"):
+            report.errors.append("session_start=required skills must declare network_access")
+
+    is_gate_or_control = (
+        str(metadata.get("routing_owner", "")).strip() == "gate"
+        or routing_layer in CONTROL_ROUTING_LAYERS
+        or routing_gate in VALID_ROUTING_GATES - {"none"}
+    )
+    if is_gate_or_control and not approval_required_tools:
+        report.errors.append(
+            "control-layer or gate skills must declare non-empty approval_required_tools"
+        )
+
+    if requires_artifact_outputs(metadata) and not artifact_outputs:
+        report.errors.append(
+            "artifact-producing skills must declare non-empty artifact_outputs"
+        )
 
     declared_name = metadata.get("name", "").strip()
     if declared_name:

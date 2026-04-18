@@ -26,7 +26,8 @@
 | `gh-address-comments` | L0 | source | Triage and address GitHub PR review comments and review threads for the |
 | `gh-fix-ci` | L0 | source | Triage failing GitHub Actions PR checks with `gh` and |
 | `iterative-optimizer` | L0 | none | N-round optimize→verify loops with built-in laziness immunity. |
-| `plan-writing` | L1 | none | Write concise, structured execution plans with clear task breakdowns, |
+| `checklist-writting` | L1 | none | Write a versioned execution-ready checklist before implementation, treating peer |
+| `checklist-normalizer` | L2 | none | Normalize existing checklists, phase plans, or execution blueprints into execution-ready checklist shape with clear serial grouping, parallel isolation, acceptance, and update rules. |
 | `prompt-engineer` | L1 | none | Transform vague or underspecified instructions into structured, controllable |
 | `sentry` | L0 | source | Inspect Sentry issues, events, releases, environments, and recent production exc |
 | `systematic-debugging` | L0 | evidence | Diagnose bugs, failing tests, flaky behavior, build failures, and unexpected out |

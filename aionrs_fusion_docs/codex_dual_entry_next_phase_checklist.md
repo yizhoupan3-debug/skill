@@ -4,7 +4,8 @@
 > `thin projection + Rust contract-first migration`，并从 Codex-only 双入口
 > 推广到 CLI-family（`codex cli` / `claude code cli` / `gemini cli`）共享
 > contract；而本文只描述 `codex_dual_entry_parity_snapshot` 仍然作为兼容
-> 回归视图时的收口方式。
+> 回归视图时的收口方式。`upgrade_compatibility_matrix` 在这条线里也只能保留
+> secondary compatibility inventory / smoke 角色，不再是主回归基线。
 
 ## 1. 下一阶段总目标
 
@@ -38,7 +39,8 @@ parity 和迁移顺序”。
 
 ## Wave C1: Core Contract Normalization
 
-- [ ] 把旧文档、artifact、测试中的 `aionrs` 主线叙事移除
+- [~] 把旧文档、artifact、测试中的 `aionrs` 主线叙事移除
+  文档口径已统一；artifact / 测试侧仍待后续 lane 收口
 - [ ] 冻结 Desktop / CLI 共用的 core contract
 - [ ] 明确 common adapter 和 host-specific adapter 的边界
 
@@ -82,7 +84,8 @@ parity 和迁移顺序”。
 
 ## Wave C4: Parity Snapshot / Regression Lane
 
-- [ ] 继续把剩余文档 / 测试 / 脚本迁到 parity-snapshot-first 叙事
+- [~] 继续把剩余文档 / 测试 / 脚本迁到 parity-snapshot-first 叙事
+  文档面已完成；测试 / 脚本仍待后续 lane 收口
 - [ ] 保持 artifact layout baseline
 - [ ] 保持双入口 regression checklist
 
@@ -126,14 +129,16 @@ contract emission lane；这里记录的是 dual-entry compatibility view 的收
   已落地一刀：`ExecutionEnvironmentService` 现在拥有单一 `ExecutionKernel`
   入口，`runtime.py` 不再内联 dry/live 分支与 Agno run-response serialization。
   已落地第二刀：live execution 现在优先进入 `router-rs --execute-json`，Python
-  只保留 dry-run 与 live 失败时的 compatibility fallback。当前更安全的 Rust
+  只保留 prompt preview / compatibility-agent contract handle 等 thin
+  projection；`rust_execute_fallback_to_python` 也已收口为 retired request
+  surface，显式请求只会被拒绝。当前更安全的 Rust
   slice 已先把 alias retirement inventory summary 收进 shared contract/parity lane；
   已落地第三刀：live Python fallback 的退休准备状态也已进入一等 shared artifact，
   会外显 primary/fallback authority、控制开关与退休阻塞条件；已落地第四刀：
   `compatibility_live_response_serialization` 的 response shape / invariant 也已
   固定成 shared contract artifact，覆盖 live primary / compatibility fallback /
   dry-run 三种 response surface；
-  删除 live fallback 仍属于后续 runtime control-flow lane，不应和 multi-end
+  是否彻底删除 retired request surface 仍属于后续 cleanup lane，不应和 multi-end
   改造并轨推进
 - [~] 把 route diff / reporting / rollback 语义继续从文档推进到实现
   已落地一刀：`RouteDiffReport` 的 compare path 已进入 `router-rs`，Python

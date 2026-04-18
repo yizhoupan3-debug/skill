@@ -1354,10 +1354,7 @@ fn build_claude_host_projection() -> Map<String, Value> {
     );
     projection.insert(
         "mcp_config_paths".to_string(),
-        Value::Array(vec![
-            Value::String("~/.claude.json".to_string()),
-            Value::String(".mcp.json".to_string()),
-        ]),
+        Value::Array(vec![Value::String("~/.claude.json".to_string())]),
     );
     projection.insert(
         "config_root_env_var".to_string(),
@@ -1395,8 +1392,7 @@ fn build_claude_host_projection() -> Map<String, Value> {
                     ".claude/settings.json",
                     "CLAUDE.md",
                     ".claude/CLAUDE.md",
-                    ".claude/agents/",
-                    ".mcp.json"
+                    ".claude/agents/"
                 ],
                 "shared_with_team": true
             },
@@ -1423,8 +1419,7 @@ fn build_claude_host_projection() -> Map<String, Value> {
             ".claude/agents/",
             ".claude/commands/",
             ".claude/rules/",
-            ".claude/output-styles/",
-            ".mcp.json"
+            ".claude/output-styles/"
         ]),
     );
     projection.insert(
@@ -2553,7 +2548,10 @@ fn build_delegation_contract() -> Map<String, Value> {
         "gate_skill".to_string(),
         Value::String("subagent-delegation".to_string()),
     );
-    gate.insert("gate_type".to_string(), Value::String("delegation".to_string()));
+    gate.insert(
+        "gate_type".to_string(),
+        Value::String("delegation".to_string()),
+    );
     gate.insert("decision_before_spawn".to_string(), Value::Bool(true));
     gate.insert("spawn_is_optional".to_string(), Value::Bool(true));
 
@@ -2562,10 +2560,7 @@ fn build_delegation_contract() -> Map<String, Value> {
         "preserves_sidecar_boundaries".to_string(),
         Value::Bool(true),
     );
-    local_supervisor_mode.insert(
-        "preserves_output_contracts".to_string(),
-        Value::Bool(true),
-    );
+    local_supervisor_mode.insert("preserves_output_contracts".to_string(), Value::Bool(true));
     local_supervisor_mode.insert(
         "allowed_when_runtime_blocks_spawning".to_string(),
         Value::Bool(true),
@@ -2578,7 +2573,10 @@ fn build_delegation_contract() -> Map<String, Value> {
         Value::Bool(true),
     );
     sidecar_contract.insert("integration_remains_local".to_string(), Value::Bool(true));
-    sidecar_contract.insert("worker_traces_sink_to_artifacts".to_string(), Value::Bool(true));
+    sidecar_contract.insert(
+        "worker_traces_sink_to_artifacts".to_string(),
+        Value::Bool(true),
+    );
 
     let mut payload = Map::new();
     payload.insert(
@@ -2632,7 +2630,7 @@ fn build_supervisor_state_contract() -> Map<String, Value> {
     schema_expectations.insert(
         "top_level_fields".to_string(),
         json!([
-            "version",
+            "schema_version",
             "task_id",
             "task_summary",
             "controller",
@@ -2649,7 +2647,13 @@ fn build_supervisor_state_contract() -> Map<String, Value> {
     );
     schema_expectations.insert(
         "execution_contract_fields".to_string(),
-        json!(["goal", "scope", "forbidden_scope", "acceptance_criteria", "evidence_required"]),
+        json!([
+            "goal",
+            "scope",
+            "forbidden_scope",
+            "acceptance_criteria",
+            "evidence_required"
+        ]),
     );
     schema_expectations.insert(
         "delegation_fields".to_string(),
@@ -2663,7 +2667,13 @@ fn build_supervisor_state_contract() -> Map<String, Value> {
     );
     schema_expectations.insert(
         "workers_fields".to_string(),
-        json!(["running", "completed_unintegrated", "integrated", "failed", "stalled"]),
+        json!([
+            "running",
+            "completed_unintegrated",
+            "integrated",
+            "failed",
+            "stalled"
+        ]),
     );
     schema_expectations.insert(
         "verification_fields".to_string(),
@@ -2683,8 +2693,14 @@ fn build_supervisor_state_contract() -> Map<String, Value> {
 
     let mut compatibility_rules = Map::new();
     compatibility_rules.insert("rust_may_validate_or_emit".to_string(), Value::Bool(true));
-    compatibility_rules.insert("python_may_continue_to_author".to_string(), Value::Bool(true));
-    compatibility_rules.insert("no_shadow_replacement_artifact".to_string(), Value::Bool(true));
+    compatibility_rules.insert(
+        "python_may_continue_to_author".to_string(),
+        Value::Bool(true),
+    );
+    compatibility_rules.insert(
+        "no_shadow_replacement_artifact".to_string(),
+        Value::Bool(true),
+    );
 
     let mut payload = Map::new();
     payload.insert(
@@ -2697,7 +2713,7 @@ fn build_supervisor_state_contract() -> Map<String, Value> {
     );
     payload.insert(
         "status_contract".to_string(),
-        Value::String("supervisor_state_contract_v1".to_string()),
+        Value::String("supervisor_state_contract_v2".to_string()),
     );
     payload.insert(
         "artifact_role".to_string(),
@@ -2740,26 +2756,30 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
     live_primary.insert("impl".to_string(), Value::String("router-rs".to_string()));
 
     let mut compatibility_fallback = Map::new();
+    compatibility_fallback.insert("runtime_path_available".to_string(), Value::Bool(false));
     compatibility_fallback.insert(
-        "adapter_kind".to_string(),
+        "retired_mode".to_string(),
+        Value::String("retired".to_string()),
+    );
+    compatibility_fallback.insert(
+        "request_behavior".to_string(),
+        Value::String("explicit-request-rejected".to_string()),
+    );
+    compatibility_fallback.insert(
+        "former_adapter_kind".to_string(),
         Value::String("python-agno".to_string()),
     );
     compatibility_fallback.insert(
-        "authority".to_string(),
+        "former_authority".to_string(),
         Value::String("python-agno-kernel-adapter".to_string()),
     );
-    compatibility_fallback.insert("family".to_string(), Value::String("python".to_string()));
-    compatibility_fallback.insert("impl".to_string(), Value::String("agno".to_string()));
     compatibility_fallback.insert(
-        "mode_when_enabled".to_string(),
-        Value::String("compatibility-only-explicit".to_string()),
+        "former_family".to_string(),
+        Value::String("python".to_string()),
     );
+    compatibility_fallback.insert("former_impl".to_string(), Value::String("agno".to_string()));
     compatibility_fallback.insert(
-        "trigger_scope_when_enabled".to_string(),
-        Value::String("explicit-compatibility-kernel-only".to_string()),
-    );
-    compatibility_fallback.insert(
-        "purpose".to_string(),
+        "purpose_before_retirement".to_string(),
         Value::String("compatibility-only-escape-hatch".to_string()),
     );
 
@@ -2773,9 +2793,86 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         Value::String("CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON".to_string()),
     );
     control_surfaces.insert("enabled_by_default".to_string(), Value::Bool(false));
+    control_surfaces.insert("accepted_after_retirement".to_string(), Value::Bool(false));
     control_surfaces.insert(
-        "fallback_trigger_scope_when_enabled".to_string(),
-        Value::String("explicit-compatibility-kernel-only".to_string()),
+        "request_behavior".to_string(),
+        Value::String("explicit-request-rejected".to_string()),
+    );
+    control_surfaces.insert(
+        "steady_state_mode".to_string(),
+        Value::String("retired".to_string()),
+    );
+    control_surfaces.insert(
+        "surface_role".to_string(),
+        Value::String("retired-explicit-request-surface".to_string()),
+    );
+    control_surfaces.insert(
+        "preserved_for".to_string(),
+        Value::String("backward-compatible explicit rejection and auditability".to_string()),
+    );
+
+    let mut retirement_exit_contract = Map::new();
+    retirement_exit_contract.insert(
+        "surface_status".to_string(),
+        Value::String("pending-removal".to_string()),
+    );
+    retirement_exit_contract.insert(
+        "current_decision".to_string(),
+        Value::String("keep-temporarily".to_string()),
+    );
+    retirement_exit_contract.insert(
+        "removal_owner".to_string(),
+        Value::String("runtime-integrator-with-host-confirmation".to_string()),
+    );
+    retirement_exit_contract.insert(
+        "remove_when".to_string(),
+        Value::Array(vec![
+            Value::String(
+                "external host or integration evidence confirms no downstream caller still probes rust_execute_fallback_to_python".to_string(),
+            ),
+            Value::String(
+                "settings field, env var, explicit rejection shim, and retirement artifact exposure are removed in the same change".to_string(),
+            ),
+            Value::String(
+                "targeted runtime and contract regression suites are rerun after removal".to_string(),
+            ),
+        ]),
+    );
+    let mut retirement_exit_observation_sources = Map::new();
+    retirement_exit_observation_sources.insert(
+        "local_runtime_health".to_string(),
+        Value::Array(vec![Value::String(
+            "PythonAgnoExecutionKernel.health().kernel_live_fallback_request_status"
+                .to_string(),
+        )]),
+    );
+    retirement_exit_observation_sources.insert(
+        "local_contract_artifacts".to_string(),
+        Value::Array(vec![
+            Value::String(
+                "execution_kernel_live_fallback_retirement_status.control_surfaces"
+                    .to_string(),
+            ),
+            Value::String(
+                "execution_kernel_live_fallback_retirement_status.current_contract_truth.live_fallback_request_behavior".to_string(),
+            ),
+        ]),
+    );
+    retirement_exit_observation_sources.insert(
+        "external_confirmation".to_string(),
+        Value::Array(vec![Value::String(
+            "host or integration owner evidence that no downstream caller still probes the retired request surface".to_string(),
+        )]),
+    );
+    retirement_exit_contract.insert(
+        "observation_sources".to_string(),
+        Value::Object(retirement_exit_observation_sources),
+    );
+    retirement_exit_contract.insert(
+        "stop_rule".to_string(),
+        Value::String(
+            "repo-only search is insufficient for deletion; without external caller evidence the surface stays pending-removal".to_string(),
+        ),
     );
 
     let public_runtime_contract_fields = Value::Array(vec![
@@ -2787,16 +2884,14 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         Value::String("execution_kernel_delegate_authority".to_string()),
         Value::String("execution_kernel_live_primary".to_string()),
         Value::String("execution_kernel_live_primary_authority".to_string()),
-        Value::String("execution_kernel_live_fallback".to_string()),
-        Value::String("execution_kernel_live_fallback_authority".to_string()),
-        Value::String("execution_kernel_live_fallback_enabled".to_string()),
-        Value::String("execution_kernel_live_fallback_mode".to_string()),
     ]);
     let public_runtime_response_metadata_fields = Value::Array(vec![
         Value::String("execution_kernel_delegate_family".to_string()),
         Value::String("execution_kernel_delegate_impl".to_string()),
-        Value::String("execution_kernel_fallback_reason".to_string()),
     ]);
+    let retired_runtime_response_metadata_fields = Value::Array(vec![Value::String(
+        "execution_kernel_fallback_reason".to_string(),
+    )]);
 
     let mut current_contract_truth = Map::new();
     current_contract_truth.insert(
@@ -2824,20 +2919,20 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         Value::String("rust-execution-cli".to_string()),
     );
     current_contract_truth.insert(
-        "live_fallback_kind_when_enabled".to_string(),
-        Value::String("python-agno".to_string()),
+        "live_fallback_runtime_path_available".to_string(),
+        Value::Bool(false),
     );
     current_contract_truth.insert(
-        "live_fallback_authority_when_enabled".to_string(),
-        Value::String("python-agno-kernel-adapter".to_string()),
+        "live_fallback_mode".to_string(),
+        Value::String("retired".to_string()),
     );
     current_contract_truth.insert(
-        "live_fallback_mode_when_disabled".to_string(),
-        Value::String("disabled".to_string()),
+        "live_fallback_request_behavior".to_string(),
+        Value::String("explicit-request-rejected".to_string()),
     );
     current_contract_truth.insert(
-        "live_fallback_trigger_scope_when_enabled".to_string(),
-        Value::String("explicit-compatibility-kernel-only".to_string()),
+        "live_fallback_request_surface".to_string(),
+        Value::String("retired-explicit-request-only".to_string()),
     );
     current_contract_truth.insert(
         "live_prompt_preview_passthrough_disabled".to_string(),
@@ -2858,14 +2953,6 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         Value::String("router-rs".to_string()),
     );
     current_response_metadata_truth.insert(
-        "live_fallback_delegate_family_when_enabled".to_string(),
-        Value::String("python".to_string()),
-    );
-    current_response_metadata_truth.insert(
-        "live_fallback_delegate_impl_when_enabled".to_string(),
-        Value::String("agno".to_string()),
-    );
-    current_response_metadata_truth.insert(
         "dry_run_delegate_family".to_string(),
         Value::String("rust-cli".to_string()),
     );
@@ -2874,19 +2961,19 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         Value::String("router-rs".to_string()),
     );
     current_response_metadata_truth.insert(
-        "compatibility_fallback_reason_emitted_by".to_string(),
-        Value::String("python-agno-kernel-adapter".to_string()),
+        "compatibility_fallback_reason_present_in_steady_state".to_string(),
+        Value::Bool(false),
     );
     current_response_metadata_truth.insert(
-        "compatibility_fallback_reason_present_only_on_fallback".to_string(),
-        Value::Bool(true),
+        "retired_response_metadata_fields".to_string(),
+        retired_runtime_response_metadata_fields.clone(),
     );
 
     let remaining_python_owned_surfaces = Value::Array(vec![]);
 
     let mut retirement_readiness = Map::new();
     retirement_readiness.insert("ready".to_string(), Value::Bool(true));
-    retirement_readiness.insert("status".to_string(), Value::String("complete".to_string()));
+    retirement_readiness.insert("status".to_string(), Value::String("retired".to_string()));
     retirement_readiness.insert("contract_lane_complete".to_string(), Value::Bool(true));
     retirement_readiness.insert(
         "runtime_control_flow_change_required".to_string(),
@@ -2942,8 +3029,12 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         Value::Bool(false),
     );
     retirement_gates.insert(
-        "live_fallback_trigger_scope_narrowed_to_infrastructure_only".to_string(),
-        Value::Bool(false),
+        "compatibility_fallback_runtime_path_removed".to_string(),
+        Value::Bool(true),
+    );
+    retirement_gates.insert(
+        "explicit_compatibility_requests_rejected".to_string(),
+        Value::Bool(true),
     );
     retirement_gates.insert(
         "dry_run_prompt_preview_still_python_owned".to_string(),
@@ -2998,12 +3089,20 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         Value::Object(control_surfaces),
     );
     payload.insert(
+        "retirement_exit_contract".to_string(),
+        Value::Object(retirement_exit_contract),
+    );
+    payload.insert(
         "public_runtime_contract_fields".to_string(),
         public_runtime_contract_fields,
     );
     payload.insert(
         "public_runtime_response_metadata_fields".to_string(),
         public_runtime_response_metadata_fields,
+    );
+    payload.insert(
+        "retired_runtime_response_metadata_fields".to_string(),
+        retired_runtime_response_metadata_fields,
     );
     payload.insert(
         "current_contract_truth".to_string(),
@@ -3076,7 +3175,7 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         ]),
     );
     runtime_response_metadata_fields.insert(
-        "compatibility_fallback".to_string(),
+        "retired_compatibility_fallback".to_string(),
         Value::Array(vec![
             Value::String("run_id".to_string()),
             Value::String("status".to_string()),
@@ -3113,7 +3212,11 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         Value::String("rust-execution-cli".to_string()),
     );
     current_contract_truth.insert(
-        "compatibility_fallback_prompt_preview_owner".to_string(),
+        "steady_state_response_shapes".to_string(),
+        json!(["live_primary", "dry_run"]),
+    );
+    current_contract_truth.insert(
+        "retired_compatibility_fallback_prompt_preview_owner".to_string(),
         Value::String("python-agno-kernel-adapter".to_string()),
     );
     current_contract_truth.insert(
@@ -3125,15 +3228,23 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         Value::String("aggregator-response.model".to_string()),
     );
     current_contract_truth.insert(
-        "compatibility_fallback_model_id_source".to_string(),
+        "retired_compatibility_fallback_model_id_source".to_string(),
         Value::String("agno-run-output.model".to_string()),
     );
     current_contract_truth.insert(
-        "compatibility_fallback_policy".to_string(),
+        "compatibility_fallback_runtime_path".to_string(),
+        Value::String("retired".to_string()),
+    );
+    current_contract_truth.insert(
+        "compatibility_fallback_request_behavior".to_string(),
+        Value::String("explicit-request-rejected".to_string()),
+    );
+    current_contract_truth.insert(
+        "retired_compatibility_fallback_policy".to_string(),
         Value::String("infrastructure-only-explicit".to_string()),
     );
     current_contract_truth.insert(
-        "compatibility_agent_contract_version".to_string(),
+        "retired_compatibility_agent_contract_version".to_string(),
         Value::String("execution-kernel-compatibility-agent-v1".to_string()),
     );
     current_contract_truth.insert(
@@ -3172,19 +3283,27 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
     );
 
     let mut compatibility_fallback = Map::new();
-    compatibility_fallback.insert("live_run".to_string(), Value::Bool(true));
-    compatibility_fallback.insert("usage_mode".to_string(), Value::String("live".to_string()));
+    compatibility_fallback.insert("runtime_path_available".to_string(), Value::Bool(false));
     compatibility_fallback.insert(
-        "content_type".to_string(),
+        "request_behavior".to_string(),
+        Value::String("explicit-request-rejected".to_string()),
+    );
+    compatibility_fallback.insert("legacy_live_run".to_string(), Value::Bool(true));
+    compatibility_fallback.insert(
+        "legacy_usage_mode".to_string(),
+        Value::String("live".to_string()),
+    );
+    compatibility_fallback.insert(
+        "legacy_content_type".to_string(),
         Value::String("string".to_string()),
     );
     compatibility_fallback.insert(
-        "prompt_preview_source".to_string(),
+        "legacy_prompt_preview_source".to_string(),
         Value::String("python-prompt-builder".to_string()),
     );
-    compatibility_fallback.insert("model_id_present".to_string(), Value::Bool(true));
+    compatibility_fallback.insert("legacy_model_id_present".to_string(), Value::Bool(true));
     compatibility_fallback.insert(
-        "required_metadata_fields".to_string(),
+        "legacy_required_metadata_fields".to_string(),
         Value::Array(vec![
             Value::String("run_id".to_string()),
             Value::String("status".to_string()),
@@ -3200,7 +3319,10 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
             Value::String("execution_kernel_compatibility_agent_authority".to_string()),
         ]),
     );
-    compatibility_fallback.insert("fallback_reason_present".to_string(), Value::Bool(true));
+    compatibility_fallback.insert(
+        "legacy_fallback_reason_present".to_string(),
+        Value::Bool(true),
+    );
 
     let mut dry_run = Map::new();
     dry_run.insert("live_run".to_string(), Value::Bool(false));
@@ -3232,7 +3354,7 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
     let mut current_response_shape_truth = Map::new();
     current_response_shape_truth.insert("live_primary".to_string(), Value::Object(live_primary));
     current_response_shape_truth.insert(
-        "compatibility_fallback".to_string(),
+        "retired_compatibility_fallback".to_string(),
         Value::Object(compatibility_fallback),
     );
     current_response_shape_truth.insert("dry_run".to_string(), Value::Object(dry_run));
@@ -3248,6 +3370,14 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
     );
     retirement_gates.insert(
         "compatibility_fallback_response_contract_externalized".to_string(),
+        Value::Bool(true),
+    );
+    retirement_gates.insert(
+        "compatibility_fallback_runtime_path_removed".to_string(),
+        Value::Bool(true),
+    );
+    retirement_gates.insert(
+        "explicit_compatibility_requests_rejected".to_string(),
         Value::Bool(true),
     );
     retirement_gates.insert(
@@ -3663,6 +3793,23 @@ mod tests {
             Value::String("cli_family_host_capability_contract_v1".to_string())
         );
         assert_eq!(
+            bundle.cli_family_capability_discovery["controller_boundary"]["host_entrypoints"],
+            json!([
+                "codex_desktop_adapter",
+                "codex_cli_adapter",
+                "claude_code_adapter",
+                "gemini_cli_adapter"
+            ])
+        );
+        assert_eq!(
+            bundle.cli_family_capability_discovery["controller_boundary"]["cli_family_entrypoints"],
+            json!([
+                "codex_cli_adapter",
+                "claude_code_adapter",
+                "gemini_cli_adapter"
+            ])
+        );
+        assert_eq!(
             bundle.cli_family_capability_discovery["cli_hosts"]["codex_cli_adapter"]
                 ["supports_cron"],
             Value::Bool(true)
@@ -3747,13 +3894,14 @@ mod tests {
         );
         assert_eq!(
             bundle.execution_kernel_live_fallback_retirement_status
-                ["current_response_metadata_truth"]["compatibility_fallback_reason_emitted_by"],
-            Value::String("python-agno-kernel-adapter".to_string())
+                ["current_response_metadata_truth"]
+                ["compatibility_fallback_reason_present_in_steady_state"],
+            Value::Bool(false)
         );
         assert_eq!(
             bundle.execution_kernel_live_fallback_retirement_status
-                ["current_response_metadata_truth"]["live_fallback_delegate_impl_when_enabled"],
-            Value::String("agno".to_string())
+                ["retired_runtime_response_metadata_fields"],
+            json!(["execution_kernel_fallback_reason"])
         );
         assert_eq!(
             bundle.execution_kernel_live_response_serialization_contract["status_contract"],
@@ -3766,9 +3914,9 @@ mod tests {
         );
         assert_eq!(
             bundle.execution_kernel_live_response_serialization_contract
-                ["current_response_shape_truth"]["compatibility_fallback"]
-                ["fallback_reason_present"],
-            Value::Bool(true)
+                ["current_response_shape_truth"]["retired_compatibility_fallback"]
+                ["runtime_path_available"],
+            Value::Bool(false)
         );
     }
 
@@ -3872,6 +4020,15 @@ mod tests {
             Value::Bool(true)
         );
         assert_eq!(
+            artifacts["cli_family_capability_discovery"]["controller_boundary"]["host_entrypoints"],
+            json!([
+                "codex_desktop_adapter",
+                "codex_cli_adapter",
+                "claude_code_adapter",
+                "gemini_cli_adapter"
+            ])
+        );
+        assert_eq!(
             artifacts["cli_family_capability_discovery"]["cli_hosts"]["codex_cli_adapter"]
                 ["supports_cron"],
             Value::Bool(true)
@@ -3954,8 +4111,9 @@ mod tests {
         );
         assert_eq!(
             artifacts["execution_kernel_live_fallback_retirement_status"]
-                ["current_response_metadata_truth"]["live_fallback_delegate_family_when_enabled"],
-            Value::String("python".to_string())
+                ["current_response_metadata_truth"]
+                ["compatibility_fallback_reason_present_in_steady_state"],
+            Value::Bool(false)
         );
         assert_eq!(
             artifacts["execution_kernel_live_response_serialization_contract"]["status_contract"],
@@ -4017,8 +4175,8 @@ mod tests {
         );
         assert_eq!(
             artifacts["execution_kernel_live_fallback_retirement_status"]["compatibility_fallback"]
-                ["mode_when_enabled"],
-            Value::String("compatibility-only-explicit".to_string())
+                ["retired_mode"],
+            Value::String("retired".to_string())
         );
         assert_eq!(
             artifacts["execution_kernel_live_fallback_retirement_status"]
@@ -4031,11 +4189,7 @@ mod tests {
                 "execution_kernel_delegate",
                 "execution_kernel_delegate_authority",
                 "execution_kernel_live_primary",
-                "execution_kernel_live_primary_authority",
-                "execution_kernel_live_fallback",
-                "execution_kernel_live_fallback_authority",
-                "execution_kernel_live_fallback_enabled",
-                "execution_kernel_live_fallback_mode"
+                "execution_kernel_live_primary_authority"
             ])
         );
         assert_eq!(
@@ -4043,9 +4197,13 @@ mod tests {
                 ["public_runtime_response_metadata_fields"],
             json!([
                 "execution_kernel_delegate_family",
-                "execution_kernel_delegate_impl",
-                "execution_kernel_fallback_reason"
+                "execution_kernel_delegate_impl"
             ])
+        );
+        assert_eq!(
+            artifacts["execution_kernel_live_fallback_retirement_status"]
+                ["retired_runtime_response_metadata_fields"],
+            json!(["execution_kernel_fallback_reason"])
         );
         assert_eq!(
             artifacts["execution_kernel_live_fallback_retirement_status"]["retirement_gates"]

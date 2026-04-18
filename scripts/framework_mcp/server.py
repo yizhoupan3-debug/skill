@@ -7,9 +7,11 @@ import sys
 from pathlib import Path
 from typing import Any, TextIO
 
-from scripts.hermes_bridge import build_memory_bootstrap, export_skills_for_hermes
-from scripts.hermes_default_bootstrap import run_default_bootstrap
+from scripts.default_bootstrap import resolve_bootstrap_path, run_default_bootstrap
+from scripts.framework_bridge import build_framework_memory_bootstrap, export_framework_skills
 from scripts.memory_support import (
+    bootstrap_artifact_root,
+    classify_runtime_continuity,
     get_repo_root,
     load_runtime_snapshot,
     normalize_evidence_index,
@@ -65,7 +67,7 @@ class FrameworkMcpServer:
     ) -> None:
         self._repo_root = (repo_root or get_repo_root()).resolve()
         self._workspace = workspace_name_from_root(self._repo_root)
-        self._output_dir = (output_dir or self._repo_root / "artifacts" / "current").resolve()
+        self._output_dir = (output_dir or bootstrap_artifact_root(self._repo_root)).resolve()
         self._server_name = server_name
         self._server_version = server_version
         self._tools = self._build_tool_definitions()
@@ -193,6 +195,7 @@ class FrameworkMcpServer:
             return self._memory_recall(
                 query=self._optional_str(arguments=arguments, key="query", default=""),
                 top=self._optional_int(arguments=arguments, key="top", default=8, minimum=1),
+                mode=self._optional_str(arguments=arguments, key="mode", default="stable"),
             )
         if tool_name == "framework_skill_search":
             return self._skill_search(
@@ -222,22 +225,24 @@ class FrameworkMcpServer:
             "workspace": self._workspace,
             "query": query,
             "bootstrap_path": result["bootstrap_path"],
+            "task_id": result["payload"]["bootstrap"]["task_id"],
             "paths": result["paths"],
             "memory_items": result["memory_items"],
             "proposal_count": result["proposal_count"],
         }
 
-    def _memory_recall(self, *, query: str, top: int) -> JSONDict:
-        payload = build_memory_bootstrap(
+    def _memory_recall(self, *, query: str, top: int, mode: str) -> JSONDict:
+        payload = build_framework_memory_bootstrap(
             workspace=self._workspace,
             query=query,
             source_root=self._repo_root,
             top=top,
+            mode=mode,
         )
         return {"ok": True, **payload}
 
     def _skill_search(self, *, query: str, limit: int) -> JSONDict:
-        exported = export_skills_for_hermes()
+        exported = export_framework_skills()
         skills = exported.get("skills", [])
         rows = [item for item in skills if isinstance(item, dict)]
         if query.strip():
@@ -251,7 +256,10 @@ class FrameworkMcpServer:
                         str(row.get("owner", "")),
                         str(row.get("gate", "")),
                         str(row.get("summary", "")),
-                        " ".join(str(item) for item in row.get("triggers", [])),
+                        " ".join(
+                            str(item)
+                            for item in row.get("trigger_hints", row.get("triggers", []))
+                        ),
                     ]
                 ).casefold()
                 score = sum(token in haystack for token in tokens)
@@ -271,16 +279,21 @@ class FrameworkMcpServer:
     def _runtime_snapshot(self) -> JSONDict:
         snapshot = load_runtime_snapshot(self._repo_root)
         supervisor = snapshot.supervisor_state
+        continuity = classify_runtime_continuity(snapshot)
         return {
             "ok": True,
             "workspace": self._workspace,
             "artifact_base": str(snapshot.artifact_base),
             "current_root": str(snapshot.current_root),
+            "mirror_root": str(snapshot.mirror_root),
+            "task_root": str(snapshot.task_root),
+            "active_task_id": snapshot.active_task_id or None,
             "collected_at": snapshot.collected_at,
             "session_summary_present": bool(snapshot.session_summary_text.strip()),
             "next_action_count": len(snapshot.next_actions.get("next_actions", snapshot.next_actions.get("actions", []))),
             "evidence_count": len(snapshot.evidence_index.get("artifacts", snapshot.evidence_index.get("evidence", []))),
             "trace_skill_count": len(snapshot.trace_metadata.get("skills", snapshot.trace_metadata.get("matched_skills", []))),
+            "continuity": continuity,
             "supervisor_state": {
                 "task_id": supervisor.get("task_id"),
                 "task_summary": supervisor.get("task_summary"),
@@ -297,31 +310,38 @@ class FrameworkMcpServer:
                 "next_actions": str(snapshot.current_root / "NEXT_ACTIONS.json"),
                 "evidence_index": str(snapshot.current_root / "EVIDENCE_INDEX.json"),
                 "trace_metadata": str(snapshot.current_root / "TRACE_METADATA.json"),
+                "bridge_mirror_root": str(snapshot.mirror_root),
                 "supervisor_state": str(self._repo_root / ".supervisor_state.json"),
             },
         }
 
     def _contract_summary(self) -> JSONDict:
         snapshot = load_runtime_snapshot(self._repo_root)
+        continuity = classify_runtime_continuity(snapshot)
         contract = supervisor_contract(snapshot.supervisor_state)
-        blockers = snapshot.supervisor_state.get("open_blockers")
+        blocker_source = snapshot.supervisor_state.get("blockers", {})
+        blockers = blocker_source.get("open_blockers") if isinstance(blocker_source, dict) else snapshot.supervisor_state.get("open_blockers")
         blocker_list = [str(item).strip() for item in blockers if str(item).strip()] if isinstance(blockers, list) else []
+        is_active = continuity["state"] == "active" and continuity["can_resume"]
         return {
             "ok": True,
             "workspace": self._workspace,
-            "goal": contract.get("goal"),
-            "scope": contract.get("scope", []),
-            "forbidden_scope": contract.get("forbidden_scope", []),
-            "acceptance_criteria": contract.get("acceptance_criteria", []),
-            "evidence_required": contract.get("evidence_required", []),
-            "active_phase": snapshot.supervisor_state.get("active_phase"),
+            "continuity": continuity,
+            "goal": contract.get("goal") if is_active else None,
+            "scope": contract.get("scope", []) if is_active else [],
+            "forbidden_scope": contract.get("forbidden_scope", []) if is_active else [],
+            "acceptance_criteria": contract.get("acceptance_criteria", []) if is_active else [],
+            "evidence_required": contract.get("evidence_required", []) if is_active else [],
+            "active_phase": snapshot.supervisor_state.get("active_phase") if is_active else None,
             "primary_owner": snapshot.supervisor_state.get("primary_owner"),
-            "next_actions": normalize_next_actions(snapshot.next_actions),
-            "open_blockers": blocker_list,
+            "next_actions": normalize_next_actions(snapshot.next_actions) if is_active else [],
+            "open_blockers": blocker_list if is_active else [],
             "trace_skills": normalize_trace_skills(snapshot.trace_metadata),
             "session_summary": parse_session_summary(snapshot.session_summary_text),
             "evidence_count": len(normalize_evidence_index(snapshot.evidence_index)),
             "artifacts_root": str(snapshot.current_root),
+            "recent_completed_execution": continuity.get("recent_completed_execution"),
+            "recovery_hints": continuity.get("recovery_hints", []),
         }
 
     def _build_tool_definitions(self) -> dict[str, dict[str, Any]]:
@@ -329,7 +349,7 @@ class FrameworkMcpServer:
             "framework_bootstrap_refresh": {
                 "name": "framework_bootstrap_refresh",
                 "description": (
-                    "Refresh the local Hermes bootstrap bundle that packages skill routing, "
+                    "Refresh the local framework bootstrap bundle that packages skill routing, "
                     "memory recall, and evolution proposals for this workspace."
                 ),
                 "inputSchema": {
@@ -342,12 +362,17 @@ class FrameworkMcpServer:
             },
             "framework_memory_recall": {
                 "name": "framework_memory_recall",
-                "description": "Recall long-term framework memory plus current execution artifacts for this workspace.",
+                "description": "Recall stable framework memory, with optional active/history/debug expansion modes.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "query": {"type": "string", "description": "Topic or keyword to retrieve."},
                         "top": {"type": "integer", "minimum": 1, "description": "Maximum retrieved items."},
+                        "mode": {
+                            "type": "string",
+                            "enum": ["stable", "active", "history", "debug"],
+                            "description": "Recall mode. Defaults to stable.",
+                        },
                     },
                 },
             },
@@ -392,7 +417,7 @@ class FrameworkMcpServer:
             "framework://bootstrap/default": {
                 "uri": "framework://bootstrap/default",
                 "name": "Default Bootstrap",
-                "description": "Current Hermes bootstrap payload for this workspace.",
+                "description": "Current framework bootstrap payload for this workspace.",
                 "mimeType": "application/json",
             },
             "framework://supervisor/state": {
@@ -419,7 +444,7 @@ class FrameworkMcpServer:
             text = self._read_text_file(path=path, missing_message="Routing runtime file not found.")
             return {"uri": uri, "mimeType": "application/json", "text": text}
         if uri == "framework://bootstrap/default":
-            path = self._output_dir / "hermes_default_bootstrap.json"
+            path = resolve_bootstrap_path(self._output_dir)
             if not path.is_file():
                 self._bootstrap_refresh(query="", top=8)
             text = self._read_text_file(path=path, missing_message="Bootstrap payload not found after refresh.")

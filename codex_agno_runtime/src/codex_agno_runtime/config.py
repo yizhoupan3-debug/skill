@@ -49,6 +49,14 @@ class RuntimeSettings(BaseSettings):
     )
     data_dir: Path = Field(default=Path("data"), validation_alias=AliasChoices("CODEX_AGNO_DATA_DIR"))
     db_file: Path = Field(default=Path("data/codex.db"), validation_alias=AliasChoices("CODEX_AGNO_DB_FILE"))
+    checkpoint_storage_backend_family: str = Field(
+        default="filesystem",
+        validation_alias=AliasChoices("CODEX_AGNO_CHECKPOINT_STORAGE_BACKEND_FAMILY"),
+    )
+    checkpoint_storage_db_file: Path = Field(
+        default=Path("runtime_checkpoint_store.sqlite3"),
+        validation_alias=AliasChoices("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE"),
+    )
 
     # Model and aggregator settings
     model_id: str = Field(
@@ -137,6 +145,10 @@ class RuntimeSettings(BaseSettings):
     rust_execute_fallback_to_python: bool = Field(
         default=False,
         validation_alias=AliasChoices("CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON"),
+        description=(
+            "Retired explicit-request surface only. When enabled, the runtime still "
+            "rejects the old Python fallback path instead of reopening it."
+        ),
     )
 
     trace_output_path: Optional[Path] = Field(
@@ -185,6 +197,14 @@ class RuntimeSettings(BaseSettings):
             Path: The absolute SQLite database file path.
         """
         return (self.codex_home / "codex_agno_runtime" / self.db_file).resolve()
+
+    @property
+    def resolved_checkpoint_storage_db_file(self) -> Path:
+        """Resolve the optional SQLite-backed checkpoint storage file path."""
+
+        if self.checkpoint_storage_db_file.is_absolute():
+            return self.checkpoint_storage_db_file.expanduser().resolve()
+        return (self.resolved_data_dir / self.checkpoint_storage_db_file).resolve()
 
     @property
     def resolved_trace_output_path(self) -> Path | None:

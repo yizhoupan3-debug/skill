@@ -59,14 +59,14 @@ def build_policy(
         skills[slug] = {
             "allowed_tools": normalize_list(metadata.get("allowed_tools")),
             "approval_required_tools": normalize_list(metadata.get("approval_required_tools")),
-            "filesystem_scope": metadata.get("filesystem_scope", []),
+            "filesystem_scope": normalize_list(metadata.get("filesystem_scope")),
             "network_access": metadata.get("network_access", "unspecified"),
             "destructive_risk": metadata.get("destructive_risk", "unspecified"),
             "bridge_behavior": metadata.get("bridge_behavior", "default"),
             "artifact_outputs": normalize_list(metadata.get("artifact_outputs")),
         }
 
-    return {"version": 1, "skills": skills}
+    return {"version": 2, "schema_version": "skill-approval-policy-v2", "skills": skills}
 
 
 def write_policy(path: Path, payload: dict[str, Any]) -> None:

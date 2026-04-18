@@ -33,5 +33,5 @@ Constraints:
 - Do not revert unrelated changes in the worktree.
 - Report changed files, verification, and residual risks back to the parent.
 
-When the task is mostly about `.claude/**`, `CLAUDE.md`, or `.mcp.json`, hand
+When the task is mostly about `.claude/**` or `CLAUDE.md`, hand
 off to `claude-host-maintainer` instead of absorbing that scope here.

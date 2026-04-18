@@ -2,7 +2,6 @@
 
 | Skill | Status | P | Layer | Owner | Gate | Source | Health | Description |
 |---|---|---|---|---|---|---|---|---|
-| `imagegen` | Active | P2 | L1 | owner | none | system | ✓ 98.7 | Use the built-in image tool for raster image generation or edits. Use the CLI on |
 | `openai-docs` | Active | P2 | L1 | owner | none | system | ✓ 100.0 | Use OpenAI docs MCP tools for current OpenAI API, model, Apps SDK, Codex, and do |
 | `plugin-creator` | Active | P2 | L1 | owner | none | system | ✓ 100.0 | Create a local Codex plugin scaffold with `.codex-plugin/plugin.json` and option |
 | `skill-creator` | Active | P2 | L1 | owner | none | system | ✓ 96.4 | Create or update a Codex skill package with clear routing metadata, scope, and s |
@@ -18,14 +17,16 @@
 | `api-integration-debugging` | Active | P2 | L1 | owner | none | project | ✓ 97.3 | Diagnose and fix API integration failures at service boundaries. Produces reprod |
 | `api-load-tester` | Active | P2 | L3 | owner | none | project | ✓ 93.6 | Design and run API load, stress, soak, and spike tests with k6, wrk, or autocann |
 | `architect-review` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Review software architecture, system design, and major structural code changes w |
-| `assignment-compliance` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Check whether a homework or course-project submission satisfies every requiremen |
+| `assignment-compliance` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Check whether a homework or course-project submission satisfies the stated requi |
 | `auth-implementation` | Active | P2 | L4 | owner | none | project | ✓ 97.3 | Produce server-enforced auth flows with clean separation between authentication, |
-| `autoresearch` | Active | P2 | L4 | owner | none | project | ✓ 96.1 | Orchestrate autonomous research through a recoverable two-loop cycle: hypothesis |
+| `autoresearch` | Active | P2 | L4 | owner | none | project | ✓ 96.1 | Orchestrate autonomous research through a recoverable loop of hypothesis, experi |
 | `backend-runtime-debugging` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Diagnose backend runtime failures: crashes, tracebacks, OOM, deadlocks, hanging  |
 | `brainstorm-research` | Active | P2 | L3 | owner | none | project | ✓ 95.8 | Expand early research ideas into multiple comparable directions and preserve the |
 | `build-tooling` | Active | P1 | L2 | owner | none | project | ✓ 98.1 | Debug and design JS/TS/Python build tooling across package managers, lockfiles,  |
 | `chatgpt-apps` | Active | P2 | L4 | owner | none | project | ✓ 94.7 | Build, scaffold, refactor, and troubleshoot ChatGPT Apps SDK applications that c |
 | `checklist-fixer` | Active | P1 | L2 | owner | none | project | ✓ 96.5 | Execute fix lists and implementation plans with mandatory per-item verification  |
+| `checklist-normalizer` | Active | P1 | L2 | owner | none | project | ✓ 100.0 | Rewrite a messy checklist into an execution-ready form with explicit serial/para |
+| `checklist-writting` | Active | P1 | L1 | owner | none | project | ✓ 100.0 | Write a versioned execution-ready checklist once the strategy is fixed. |
 | `chrome-extension-dev` | Active | P2 | L4 | owner | none | project | ✓ 97.0 | Produce Chrome extensions for Manifest V3: Service Workers, minimal permissions, |
 | `citation-management` | Active | P2 | L1 | owner | none | project | ✓ 98.3 | Verify, normalize, de-duplicate, complete, and format academic citations and ref |
 | `cloudflare-deploy` | Active | P2 | L3 | owner | none | project | ✓ 98.7 | Deploy, publish, migrate, and operate applications on Cloudflare using Workers,  |
@@ -37,7 +38,7 @@
 | `copywriting` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Create persuasive commercial copy for landing pages, ads, product descriptions,  |
 | `css-pro` | Active | P2 | L2 | owner | none | project | ✓ 97.7 | Architect maintainable CSS layout, responsive, animation, and vibrant design-tok |
 | `data-wrangling` | Active | P2 | L2 | owner | none | project | ✓ 96.2 | Clean, transform, validate, and pipeline structured or semi-structured data acro |
-| `datastore-cache-queue` | Active | P2 | L2 | owner | none | project | ✓ 97.3 | Diagnose and fix data-runtime correctness problems across stores, caches, queues |
+| `datastore-cache-queue` | Active | P2 | L2 | owner | none | project | ✓ 97.3 | Diagnose and fix correctness issues across stores, caches, queues, and ORM-backe |
 | `dependency-migration` | Active | P2 | L2 | owner | none | project | ✓ 97.2 | Manage, audit, upgrade, and migrate project dependencies across npm, pip, Cargo, |
 | `doc` | Active | P1 | L3 | gate | artifact | project | ✓ 94.3 | Read, create, edit, repair, and review `.docx` Word documents when layout and Wo |
 | `docker` | Active | P2 | L3 | owner | none | project | ✓ 90.9 | Produce minimal, secure Docker images with correct layer caching, multi-stage bu |
@@ -46,8 +47,8 @@
 | `env-config-management` | Active | P2 | L2 | owner | none | project | ✓ 97.7 | Design, audit, debug, and implement app configuration across env vars, `.env`, s |
 | `error-handling-patterns` | Active | P2 | L1 | overlay | none | project | ✓ 97.2 | Design cross-language error-handling architectures such as custom errors, retry/ |
 | `execution-audit-codex` | Active | P1 | L1 | overlay | none | project | ✓ 100.0 | Audit execution quality with evidence, sidecar-first collection, and compressed  |
-| `execution-controller-app` | Active | P0 | L0 | @app-controller | APP一键优化, 全栈重构, 跨栈协同, 前后端联调优化, 自动化测试闭环, 性能全链路调优, 全栈安全审计, APP深度体检, 深度核查前端/后端/测试, 系统级 APP 优化 | project | ✓ 100.0 | Master orchestrator for production-grade app optimization, refactor, and full-st |
-| `execution-controller-coding` | Active | P0 | L0 | @kernel-controller | 高负载, 跨文件, 长运行周期, 系统指挥中心, SCR架构, 协同式确定性治理, 内核级控制器, 状态持久化, 纳米级心跳 | project | ✓ 100.0 | Orchestrate complex execution with aggressive routing, state, delegation, and co |
+| `execution-controller-app` | Active | P0 | L0 | @app-controller | delegation | project | ✓ 100.0 | Master orchestrator for production-grade app optimization, refactor, and full-st |
+| `execution-controller-coding` | Active | P0 | L0 | @kernel-controller | delegation | project | ✓ 100.0 | Orchestrate complex execution with aggressive routing, state, delegation, and co |
 | `experiment-reproducibility` | Active | P2 | L3 | owner | none | project | ✓ 96.2 | Ensure and manage research experiment reproducibility: environment capture, rand |
 | `financial-data-fetching` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Fetch, validate, normalize, and export real financial market data: OHLCV, financ |
 | `frontend-code-quality` | Active | P2 | L3 | overlay | none | project | ✓ 95.8 | Enforce frontend code-quality rules such as ≤150-line files, early returns, and  |
@@ -62,8 +63,8 @@
 | `go-pro` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Deliver safe concurrent Go code with managed goroutine lifecycles, composable in |
 | `graphviz-expert` | Active | P2 | L3 | owner | none | project | ✓ 92.8 | Create Graphviz/DOT diagrams for precise, orthogonal, publication-quality flowch |
 | `humanizer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Naturalize existing prose into clearer, more human-sounding text. Use for: 精修, 文 |
-| `i18n-l10n` | Active | P2 | L3 | overlay | none | project | ✓ 96.8 | Internationalization and localization overlay for web/mobile projects. Covers ha |
-| `idea-to-plan` | Active | P0 | L-1 | @strategic-orchestrator | idea-to-plan, 战略编排, 意图到计划, 科研自动化, 试点验证, Pilot, Duo-Doc, outline.md, code_list.md, 蓝图设计 | project | ✓ 100.0 | Turn ambiguous ideas into evidence-backed plans with branch routing and compress |
+| `i18n-l10n` | Active | P2 | L3 | overlay | none | project | ✓ 96.8 | Internationalization and localization overlay for web/mobile projects. Use for m |
+| `idea-to-plan` | Active | P0 | L-1 | @strategic-orchestrator | delegation | project | ✓ 100.0 | Turn ambiguous ideas into evidence-backed plans with branch routing and compress |
 | `imagegen` | Active | P2 | L3 | owner | none | project | ✓ 98.7 | Use when the user asks to generate or edit images via the OpenAI Image API, incl |
 | `infographic` | Active | P2 | L3 | owner | none | project | ✓ 95.1 | Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge car |
 | `information-retrieval` | Active | P2 | L1 | owner | none | project | ✓ 97.2 | Run multi-round research before acting or recommending |
@@ -75,12 +76,12 @@
 | `literature-synthesis` | Active | P2 | L4 | owner | none | project | ✓ 95.6 | Systematically screen, cluster, compare, and synthesize academic literature into |
 | `mac-memory-management` | Active | P2 | L4 | owner | none | project | ✓ 100.0 | Optimize Apple Silicon ML runtimes for memory pressure, throughput, and MPS stab |
 | `math-derivation` | Active | P2 | L4 | owner | none | project | ✓ 99.2 | Execute rigorous mathematical derivations and proofs |
-| `mcp-builder` | Active | P2 | L3 | owner | none | project | ✓ 94.3 | Design, build, review, and improve MCP (Model Context Protocol) servers and agen |
+| `mcp-builder` | Active | P2 | L3 | owner | none | project | ✓ 94.3 | Design, build, review, and improve MCP servers and agent-facing tool interfaces. |
 | `mermaid-expert` | Active | P2 | L3 | owner | none | project | ✓ 97.0 | Create Mermaid diagrams for flowcharts, process diagrams, sequence diagrams, ERD |
 | `monorepo-tooling` | Active | P2 | L3 | owner | none | project | ✓ 97.3 | Design clean package boundaries and task orchestration for multi-package reposit |
 | `motion-design` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Design and implement high-end web animations, micro-interactions, and staggered  |
 | `native-app-debugging` | Active | P3 | L3 | owner | none | project | ✓ 100.0 | Debug desktop app issues across the Web-Native boundary |
-| `nextjs` | Active | P1 | L4 | owner | none | project | ✓ 98.1 | Deliver Next.js 14/15 applications with correct Server Component boundaries, opt |
+| `nextjs` | Active | P1 | L4 | owner | none | project | ✓ 98.1 | Deliver Next.js 14/15 applications with correct App Router, Server Component, an |
 | `node-backend` | Active | P2 | L4 | owner | none | project | ✓ 97.3 | Produce well-layered Node.js backend services with thin handlers, boundary valid |
 | `npm-package-authoring` | Active | P2 | L3 | owner | none | project | ✓ 97.7 | Build, refactor, and publish npm packages and JavaScript/TypeScript libraries in |
 | `observability` | Active | P2 | L2 | owner | none | project | ✓ 94.6 | Make production systems observable through logs, metrics, traces, dashboards, an |
@@ -89,12 +90,11 @@
 | `paper-notation-audit` | Active | P2 | L4 | owner | none | project | ✓ 97.1 | Audit and enforce notation consistency across an academic paper: abbreviations,  |
 | `paper-reviewer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Review a paper or manuscript at whole-paper level and return prioritized finding |
 | `paper-reviser` | Active | P2 | L4 | owner | none | project | ✓ 97.3 | Revise an academic paper or manuscript from reviewer comments, issue lists, rebu |
-| `paper-visuals` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Audit and improve academic paper figures, tables, captions, legends, axes, notes |
-| `paper-writing` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Polish academic paper prose — abstract, introduction, related work, method, capt |
+| `paper-visuals` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Audit and improve paper figures, tables, captions, legends, axes, notes, and res |
+| `paper-writing` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Polish academic paper prose without changing scientific claims. Use for abstract |
 | `pdf` | Active | P1 | L3 | gate | artifact | project | ✓ 94.8 | Read, create, edit, repair, and review PDFs when rendering and page layout matte |
 | `performance-expert` | Active | P2 | L3 | owner | none | project | ✓ 94.2 | Audit and improve web performance with emphasis on Core Web Vitals, asset weight |
 | `plan-to-code` | Active | P1 | L2 | owner | none | project | ✓ 95.8 | Implement a concrete plan or spec into integrated code |
-| `plan-writing` | Active | P1 | L1 | owner | none | project | ✓ 93.0 | Write an execution-ready plan before implementation |
 | `playwright` | Active | P2 | L3 | gate | evidence | project | ✓ 98.7 | Use a real browser when live evidence or page interaction is required |
 | `ppt-beamer` | Active | P2 | L4 | owner | none | project | ✓ 95.3 | Create, revise, and compile presentation decks with LaTeX Beamer when you want e |
 | `ppt-html-export` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Use when the user wants to create, revise, or export a slide deck / PPT / presen |
@@ -104,7 +104,7 @@
 | `python-pro` | Active | P1 | L4 | owner | none | project | ✓ 98.5 | Deliver production-grade Python 3.12+ code with clean async boundaries, strict t |
 | `react` | Active | P1 | L4 | owner | none | project | ✓ 98.0 | Deliver React 19+ components with correct hook dependencies, optimal Server Comp |
 | `refactoring` | Active | P2 | L1 | owner | none | project | ✓ 97.2 | Plan and execute systematic code refactoring without changing behavior. Use when |
-| `release-engineering` | Active | P2 | L3 | owner | none | project | ✓ 97.3 | Build end-to-end release pipelines from commit to published artifact. Produces v |
+| `release-engineering` | Active | P2 | L3 | owner | none | project | ✓ 97.3 | Build release pipelines from commit to published artifact. Use for versioning st |
 | `research-engineer` | Active | P2 | L4 | owner | none | project | ✓ 96.6 | Provide rigorous technical critique, algorithm analysis, formal reasoning, compl |
 | `rust-pro` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Deliver ownership-correct Rust code that compiles without unnecessary clones, ma |
 | `scientific-figure-plotting` | Active | P2 | L4 | owner | none | project | ✓ 97.7 | Create, refactor, and review code-generated scientific figures for papers using  |

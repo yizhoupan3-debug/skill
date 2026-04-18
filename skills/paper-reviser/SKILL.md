@@ -10,7 +10,7 @@ routing_owner: owner
 routing_gate: none
 session_start: n/a
 metadata:
-  version: "2.1.0"
+  version: "2.1.1"
   platforms: [codex]
   tags: [paper, manuscript, revise, fix, reviewer-comments, submission, rebuttal, response-letter]
 framework_roles:
@@ -66,7 +66,7 @@ This skill does not own:
 
 This skill is a **Phase-1 planner / executor / verifier anchor** in the shared finding-driven framework. It consumes structured findings from upstream paper review skills or reviewer comments normalized into the shared schema in [`../SKILL_FRAMEWORK_PROTOCOLS.md`](../SKILL_FRAMEWORK_PROTOCOLS.md).
 
-Before editing, normalize raw reviewer comments into finding entries whenever possible. For each execution batch, materialize queue items with:
+Before editing, normalize raw reviewer comments into finding entries whenever possible. Preserve richer upstream fields instead of flattening them away. For each execution batch, materialize queue items with:
 - `execution_item_id`
 - `source_findings`
 - `owner_skill`
@@ -76,7 +76,7 @@ Before editing, normalize raw reviewer comments into finding entries whenever po
 - `recheck_scope`
 - `status`
 
-After edits, update finding status to `resolved`, `partial`, or `blocked`, and record residual risk explicitly.
+After edits, update finding status to `resolved`, `partial`, or `blocked`, and record residual risk explicitly. When incoming findings include `repair_leverage`, preserve it through execution planning and final reporting rather than collapsing it into severity.
 
 ## Required workflow
 
@@ -85,22 +85,24 @@ After edits, update finding status to `resolved`, `partial`, or `blocked`, and r
 > This skill is typically driven by output from `$paper-reviewer` (issue list) or external reviewer comments. When no structured issue list exists, derive one first with `$paper-reviewer`.
 
 1. Start from reviewer comments or derive an issue list with `$paper-reviewer`.
-2. Preserve incoming `finding_id` values when present; normalize only missing fields into finding entries with `severity`, `fixability`, recommended owner/executor skill, and `verification_method`.
-3. Group issues by owner:
+2. Preserve incoming `finding_id` values when present, including dimension-coded IDs such as `NOV-01`, `THY-02`, `EXP-03`, `RES-04`, `WRT-05`, `REF-06`, and `VIS-07`; normalize only missing fields into finding entries with `severity`, `fixability`, recommended owner/executor skill, and `verification_method`.
+3. Preserve and consume upstream planning hints when present, especially `repair_leverage`, shortest repair path, and any note that the best next step is to reorganize underexploited evidence already present instead of generating entirely new content.
+4. Group issues by owner:
    - logic → `$paper-logic`
    - writing → `$paper-writing`
    - visuals → `$paper-visuals`
    - rendered layout → `$pdf`
-4. Build an execution queue. For each batch, record: `execution_item_id`, `source_findings`, executor, change scope, verification strategy, and recheck scope.
+5. Build an execution queue. For each batch, record: `execution_item_id`, `source_findings`, executor, change scope, verification strategy, and recheck scope.
 
 ### Phase 2: Surgical Execution
 
-5. Fix highest-risk issues first (P0 → A → B → C).
-6. **Execution discipline**: only modify regions directly related to the fix. All other text, structure, and punctuation remain frozen.
-7. Severity markers determine depth:
+6. Fix highest-risk issues first (P0 → A → B → C), using `repair_leverage` to break ties inside the same severity bucket so high-yield / low-cost revisions land first.
+7. If the shortest credible repair path says the issue can be solved by reorganizing underexploited evidence already present in the manuscript, appendix, figures, tables, or analysis drafts, prefer that path before requesting genuinely new experiments or assets.
+8. **Execution discipline**: only modify regions directly related to the fix. All other text, structure, and punctuation remain frozen.
+9. Severity markers determine depth:
    - Single marker (✅) = standard fix
    - Multiple markers (✅✅✅) = deep rewrite and thorough rework of that point
-8. After every 3 fixes, pause and verify:
+10. After every 3 fixes, pause and verify:
    - Was the fix actually applied correctly?
    - Did the fix introduce any side effects?
    - **Context Integrity**: Did the surgical edit leave orphaned text or create a duplicate heading (e.g., `\paragraph`)?
@@ -143,9 +145,11 @@ After edits, update finding status to `resolved`, `partial`, or `blocked`, and r
 
 ### For revisions: `论文修订记录`
 
-| Finding ID | Exec ID | Severity | Action Taken | Owner Skill | Verification | Remaining Risk | Status |
-|---|---|---|---|---|---|---|---|
-| PR-01 | EXEC-01 | P0/A/B/C | ... | ... | ... | ... | 已解决/部分解决/受阻 |
+| Finding ID | Exec ID | Severity | Repair Leverage | Action Taken | Owner Skill | Verification | Remaining Risk | Status |
+|---|---|---|---|---|---|---|---|---|
+| NOV-01 | EXEC-01 | P0/A/B/C | high/medium/low | ... | ... | ... | ... | 已解决/部分解决/受阻 |
+
+When useful, add one short line under an entry noting whether the fix used `existing evidence reorganized` or `new evidence created`.
 
 ### For rebuttal: `审稿意见回复`
 

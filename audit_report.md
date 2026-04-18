@@ -1,60 +1,45 @@
-# PPTX Skill Audit Report
+# Execution Audit Report
 
-Date: 2026-04-15
-Target: `skills/ppt-pptx`
-Mode: local-supervisor audit
-Verdict: PASS
+## 1. Verdict
+- Status: PASS
+- Scope: checklist series final closeout for `checklist_v1.md` → `checklist_v4.md`, plus backlog boundary clarification for `checklist_claude_v1.md` / `checklist_claude_v2.md`
+- Confidence: high
 
-## Acceptance Contract
+## 2. Final Authority
+- Current active checklist execution: none
+- Final execution closeout record: `checklist_v4.md`
+- Retained long-term policy record: `checklist_v2.md`
+- Current authority for repository state: root continuity artifacts and `artifacts/current/*`
+- Claude hooks lane status: `checklist_claude_v1.md` is closed; `checklist_claude_v2.md` remains backlog-only and is not part of the current continuity story
 
-- `ppt-pptx` must support a clean authoring path from template or outline to real editable `.pptx`.
-- The generated deck must survive rendered QA, overflow checks, and structure extraction.
-- Missing sample images must not crash first-run bootstrap.
-- Existing deck lane boundaries must remain clear: source-first rebuild stays in `ppt-pptx`, in-place edits stay in `officecli`.
+## 3. Lifecycle Status
+- `checklist_v1.md`: archived historical execution record, superseded by later re-audits
+- `checklist_v2.md`: retained policy record, not an active execution checklist
+- `checklist_v3.md`: archived historical execution record; its claimed closure only became true after `checklist_v4.md` fixed TRACE_METADATA mirror drift
+- `checklist_v4.md`: final execution closeout record for the main checklist chain; completed and not a rolling lane anymore
+- `checklist_claude_v1.md`: archived / closed historical record
+- `checklist_claude_v2.md`: backlog-only planning slice; not sign-off blocking for the main checklist chain
 
-## Evidence Summary
+## 4. Policy Still In Force
+- `rust_execute_fallback_to_python` remains `keep-temporarily` rather than deleted now
+- The retirement contract remains `pending-removal`
+- Deletion authority remains `runtime-integrator-with-host-confirmation`
+- Required trigger remains external no-probe evidence from host or integration owners
+- When that evidence exists, the removal must happen in a new standalone change rather than by reviving the `checklist_v1.md` → `checklist_v4.md` chain
 
-- `outline_to_deck.js --help` now prints usage and exits cleanly.
-- Freshly regenerated outline/template/sample-deck outputs now request `Arial` as the authored font family.
-- Outline flow passed:
-  - `outline.yaml -> deck.js -> deck.pptx`
-  - render succeeded
-  - overflow test passed
-  - font audit reported no issues
-  - structure extraction succeeded
-- Template flow passed:
-  - `deck.template.js -> deck.pptx`
-  - render succeeded
-  - overflow test passed
-  - font audit reported no issues
-- Example `deck.js` passed:
-  - `deck.js -> deck.pptx`
-  - render succeeded
+## 5. Evidence
+- Historical checklist archive: `archives/artifact-history/completed-tasks-2026-q2/root-checklist-history-20260418/`
+- Policy source: `archives/artifact-history/completed-tasks-2026-q2/root-checklist-history-20260418/checklist_v2.md`
+- Final closure source: `archives/artifact-history/completed-tasks-2026-q2/root-checklist-history-20260418/checklist_v4.md`
+- Continuity authority: `SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`, `.supervisor_state.json`
+- Mirror authority: `artifacts/current/SESSION_SUMMARY.md`, `artifacts/current/NEXT_ACTIONS.json`, `artifacts/current/EVIDENCE_INDEX.json`, `artifacts/current/TRACE_METADATA.json`
+- Verification:
+  - `cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json`
+  - `python3 scripts/claude_memory_bridge.py refresh-projection --repo-root "$PWD" --json`
+  - `rg -n "checklist-series final closeout|no active checklist|keep-temporarily|pending-removal|runtime-integrator-with-host-confirmation" audit_report.md archives/artifact-history/completed-tasks-2026-q2/root-checklist-history-20260418/checklist_v2.md archives/artifact-history/completed-tasks-2026-q2/root-checklist-history-20260418/checklist_v4.md SESSION_SUMMARY.md NEXT_ACTIONS.json EVIDENCE_INDEX.json TRACE_METADATA.json .supervisor_state.json artifacts/current/SESSION_SUMMARY.md artifacts/current/NEXT_ACTIONS.json artifacts/current/EVIDENCE_INDEX.json artifacts/current/TRACE_METADATA.json memory/CLAUDE_MEMORY.md`
 
-## Fixes Applied
-
-1. Hardened `outline_to_deck.js`
-   - added `--help` handling
-   - fixed `totalSlides` to use reflowed slide count
-   - skipped dominant-color extraction when cover image is absent
-   - generated decks now tolerate missing optional images
-2. Hardened `assets/deck.template.js`
-   - template no longer crashes when sample images are absent
-   - fixed fallback branch to avoid duplicate overlay/label overlap
-3. Hardened sample `deck.js`
-   - sample deck now builds without bundled image files
-4. Repaired docs
-   - `references/install.md` now includes `js-yaml`
-   - install/workflow docs now explain optional image fallback behavior
-5. Added repeatable regression entrypoint
-   - `scripts/smoke_test.py` now codifies the outline/template/sample-deck authoring checks
-   - `package.json` now exposes `npm run smoke:test`
-6. Enforced cross-platform font defaults
-   - default authored sans-serif changed to `Arial`
-   - default authored monospace changed to `Courier New`
-   - platform-specific defaults were removed from templates and helper typography
-
-## Residual Risks
-
-- Fallback placeholder panels are structurally valid but not presentation-final; real decks should still supply local images before delivery.
-- The audit did not run `$visual-review`; rendered PNGs were verified by script-based checks only.
+## 6. Final Quality Note
+- The checklist series no longer has an active execution lane.
+- `checklist_v4.md` is the last closure record, not the current ongoing task.
+- `checklist_v2.md` remains authoritative only for the retained retirement policy and future no-probe gate.
+- Any future continuity drift is a new regression; any future removal work is a new standalone task.

@@ -16,6 +16,8 @@ if str(RUNTIME_SRC) not in sys.path:
 
 from codex_agno_runtime.framework_profile import (
     CORE_CAPABILITIES,
+    FRAMEWORK_SHARED_CONTRACT_FIELDS,
+    FRAMEWORK_SHARED_CONTRACT_SCHEMA_VERSION,
     FrameworkProfile,
     build_framework_profile,
     ensure_capabilities,
@@ -112,6 +114,84 @@ def test_framework_profile_requires_portable_core_contract() -> None:
         "artifact_contract",
         "automation_bridge",
     ]
+
+
+def test_framework_profile_emits_host_neutral_shared_contract_surface() -> None:
+    profile = build_framework_profile(
+        profile_id="fusion-shared-contract",
+        display_name="Fusion Shared Contract",
+        session_policy={
+            "mode": "bounded",
+            "approval_mode": "manual",
+            "history_policy": "append-only",
+            "resume": "cursor",
+        },
+        tool_policy={"shell": "allow"},
+        approval_policy={"mode": "manual"},
+        loadout_policy={"default": "framework"},
+        artifact_contract={"layout": "stable-v1"},
+        memory_mounts=(
+            {"mount_id": "project", "source": ".codex/memory"},
+            "user",
+        ),
+        mcp_servers=({"server_id": "local-memory", "transport": "stdio"},),
+        workspace_bootstrap={
+            "skill_bridge": {"project_dir": ".codex/skills"},
+        },
+    )
+
+    payload = profile.shared_contract_payload()
+
+    assert payload["schema_version"] == FRAMEWORK_SHARED_CONTRACT_SCHEMA_VERSION
+    assert payload["framework_truth"] == "framework_core"
+    assert payload["shared_contract_fields"] == list(FRAMEWORK_SHARED_CONTRACT_FIELDS)
+    assert payload["shared_contract"]["artifact_contract"] == {"layout": "stable-v1"}
+    assert payload["shared_contract"]["memory_mounts"] == [
+        {"mount_id": "project", "source": ".codex/memory"},
+        {
+            "mount_id": "user",
+            "source": "user",
+            "bridge_kind": "framework-memory-mount",
+        },
+    ]
+    assert payload["shared_contract"]["mcp_servers"] == [
+        {"server_id": "local-memory", "transport": "stdio"},
+    ]
+    assert payload["shared_contract"]["session_contract"] == {
+        "mode": "bounded",
+        "approval_mode": "manual",
+        "history_policy": "append-only",
+        "takeover": False,
+        "extras": {"resume": "cursor"},
+    }
+    assert payload["shared_contract"]["workspace_bootstrap"]["bridges"]["skills"] == {
+        "project_dir": ".codex/skills",
+    }
+    assert payload["shared_contract"]["workspace_bootstrap"]["bridges"]["memory"] == {
+        "bridge_dir": ".aionrs-memory-bridge",
+        "mounts": [
+            {"mount_id": "project", "source": ".codex/memory"},
+            {
+                "mount_id": "user",
+                "source": "user",
+                "bridge_kind": "framework-memory-mount",
+            },
+        ],
+    }
+
+
+def test_framework_profile_rejects_host_specific_metadata_in_framework_truth() -> None:
+    try:
+        build_framework_profile(
+            profile_id="bad-metadata",
+            display_name="Bad Metadata",
+            metadata={"transport": "headless-exec"},
+        )
+    except ValueError as exc:
+        assert "host-neutral" in str(exc)
+        assert "transport" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
 
 
 def test_framework_profile_rejects_aionrs_pinned_host_core() -> None:
@@ -212,6 +292,16 @@ def test_aionrs_companion_adapter_compiles_host_neutral_profile() -> None:
     assert contract["sessionMode"]["mode"] == "bounded"
     assert contract["aionrsConfig"]["config"]["provider"] == "openai"
     assert contract["fallbackSemantics"]["fallback_adapter"] == "codex_desktop_adapter"
+    assert contract["fallbackSemantics"]["default_host_peer_set"] == [
+        "codex_desktop_adapter",
+        "codex_cli_adapter",
+        "claude_code_adapter",
+        "gemini_cli_adapter",
+    ]
+    assert adapted.host_payload["metadata"]["legacy_surface"] is True
+    assert adapted.host_payload["legacy_boundary"]["adapter_lifecycle"] == "legacy-compatibility"
+    assert adapted.host_payload["legacy_boundary"]["exposure_lane"] == "fallback-only-explicit"
+    assert adapted.host_payload["legacy_boundary"]["default_host_peer_set_member"] is False
     assert adapted.host_payload["host_capability_requirements"] == {
         "required_host_capabilities": ["session_mode", "tool_approval"],
     }
@@ -265,6 +355,10 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     assert aionui.adapter == AIONUI_HOST_ADAPTER
     assert aionui.host_payload["host_session_create"]["sessionMode"]["mode"] == "team"
     assert aionui.host_payload["host_runtime_contract"]["preferred_backend"] == "aionrs_companion_adapter"
+    assert aionui.host_payload["metadata"]["legacy_surface"] is True
+    assert aionui.host_payload["legacy_boundary"]["adapter_lifecycle"] == "legacy-compatibility"
+    assert aionui.host_payload["legacy_boundary"]["exposure_lane"] == "fallback-only-explicit"
+    assert aionui.host_payload["legacy_boundary"]["default_host_peer_set_member"] is False
     event_transport = aionui.host_payload["host_runtime_contract"]["event_transport"]
     assert event_transport["schema_version"] == TRACE_EVENT_TRANSPORT_SCHEMA_VERSION
     assert event_transport["bridge_kind"] == "runtime_event_bridge"
@@ -303,6 +397,8 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     assert legacy_alias.adapter == CODEX_DESKTOP_HOST_ADAPTER
     assert legacy_alias.host_payload["metadata"]["adapter_alias_of"] == "codex_desktop_adapter"
     assert legacy_alias.host_payload["entrypoint_contract"]["canonical_adapter_id"] == "codex_desktop_adapter"
+    assert legacy_alias.host_payload["legacy_boundary"]["exposure_lane"] == "compatibility-only-explicit"
+    assert legacy_alias.host_payload["legacy_boundary"]["default_host_peer_set_member"] is False
     assert legacy_alias.host_payload["runtime_surface"] == desktop.host_payload["runtime_surface"]
 
     assert cli.adapter == CODEX_CLI_ADAPTER
@@ -346,10 +442,7 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     ]
     assert claude.host_payload["host_projection"]["config_root_env_var"] == "CLAUDE_CONFIG_DIR"
     assert claude.host_payload["execution_surface"]["supports_cron"] is False
-    assert claude.host_payload["host_projection"]["mcp_config_paths"] == [
-        "~/.claude.json",
-        ".mcp.json",
-    ]
+    assert claude.host_payload["host_projection"]["mcp_config_paths"] == ["~/.claude.json"]
     assert claude.host_payload["host_projection"]["settings_scope_order"] == [
         "managed",
         "command_line",
@@ -363,7 +456,6 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
         "CLAUDE.md",
         ".claude/CLAUDE.md",
         ".claude/agents/",
-        ".mcp.json",
     ]
     assert claude.host_payload["host_projection"]["subagent_paths"] == [
         "~/.claude/agents/",
@@ -475,10 +567,11 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
     assert snapshot["codex_desktop_adapter"]["host_id"] == "codex-desktop"
     assert snapshot["claude_code_adapter"]["host_id"] == "claude-code"
     assert snapshot["gemini_cli_adapter"]["host_id"] == "gemini-cli"
+    assert "aionrs_companion_adapter" not in snapshot
+    assert "aionui_host_adapter" not in snapshot
     assert "codex_desktop_host_adapter" not in snapshot
     assert "compatibility_lane" not in snapshot["codex_desktop_adapter"]
     assert snapshot["codex_cli_adapter"]["host_id"] == "codex-cli"
-    assert snapshot["aionrs_companion_adapter"]["upgrade_zone"] == "upstream-safe-zone"
     compatibility_snapshot_with_alias = compatibility_snapshot(include_legacy_aliases=True)
     assert "codex_desktop_host_adapter" not in compatibility_snapshot_with_alias
     legacy_alias = compatibility_snapshot_with_alias["codex_desktop_adapter"]["compatibility_lane"][
@@ -486,6 +579,20 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
     ]["codex_desktop_host_adapter"]
     assert legacy_alias["host_id"] == "codex-desktop"
     assert legacy_alias["transport"] == "local-bridge"
+    assert legacy_alias["legacy_surface"] is True
+    fallback_lane = compatibility_snapshot_with_alias["fallback_lane"]
+    assert fallback_lane["default_host_peer_set"] == [
+        "codex_desktop_adapter",
+        "codex_cli_adapter",
+        "claude_code_adapter",
+        "gemini_cli_adapter",
+    ]
+    assert fallback_lane["explicit_opt_in_required"] is True
+    assert fallback_lane["legacy_adapters"]["aionrs_companion_adapter"]["upgrade_zone"] == (
+        "upstream-safe-zone"
+    )
+    assert fallback_lane["legacy_adapters"]["aionrs_companion_adapter"]["legacy_surface"] is True
+    assert fallback_lane["legacy_adapters"]["aionui_host_adapter"]["legacy_surface"] is True
 
     validation = validate_adapter_compatibility(
         profile,
@@ -585,6 +692,23 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
     assert cli_discovery["framework_truth"] == "framework_core"
     assert cli_discovery["shared_adapter"] == "cli_common_adapter"
     assert cli_discovery["discovery_contract"] == "cli_family_host_capability_contract_v1"
+    assert set(cli_discovery["cli_hosts"]) == {
+        "codex_cli_adapter",
+        "claude_code_adapter",
+        "gemini_cli_adapter",
+    }
+    assert cli_discovery["controller_boundary"]["host_entrypoints"] == [
+        "codex_desktop_adapter",
+        "codex_cli_adapter",
+        "claude_code_adapter",
+        "gemini_cli_adapter",
+    ]
+    assert cli_discovery["controller_boundary"]["cli_family_entrypoints"] == [
+        "codex_cli_adapter",
+        "claude_code_adapter",
+        "gemini_cli_adapter",
+    ]
+    assert cli_discovery["controller_boundary"]["codexcli_is_controller"] is False
     assert cli_discovery["cli_hosts"]["codex_cli_adapter"]["transport"] == "headless-exec"
     assert cli_discovery["cli_hosts"]["codex_cli_adapter"]["supports_cron"] is True
     assert cli_discovery["cli_hosts"]["claude_code_adapter"]["transport"] == "headless-exec"
@@ -665,14 +789,27 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
     assert matrix["codex_cli_adapter"]["compatible"] is True
     assert matrix["claude_code_adapter"]["compatible"] is True
     assert matrix["gemini_cli_adapter"]["compatible"] is True
+    assert "aionrs_companion_adapter" not in matrix
+    assert "aionui_host_adapter" not in matrix
     assert "codex_desktop_host_adapter" not in matrix
-    assert "aionrs_session_protocol" in matrix["aionrs_companion_adapter"]["fork_danger_zone"]
 
     compatibility_matrix_with_alias = build_upgrade_compatibility_matrix(
         profile,
         include_legacy_aliases=True,
     )
     assert compatibility_matrix_with_alias["codex_desktop_host_adapter"]["compatible"] is True
+    assert compatibility_matrix_with_alias["codex_desktop_host_adapter"]["legacy_surface"] is True
+    assert compatibility_matrix_with_alias["aionrs_companion_adapter"]["compatible"] is True
+    assert compatibility_matrix_with_alias["aionrs_companion_adapter"]["exposure_lane"] == (
+        "fallback-only-explicit"
+    )
+    assert compatibility_matrix_with_alias["aionrs_companion_adapter"][
+        "default_host_peer_set_member"
+    ] is False
+    assert "aionrs_session_protocol" in compatibility_matrix_with_alias["aionrs_companion_adapter"][
+        "fork_danger_zone"
+    ]
+    assert compatibility_matrix_with_alias["aionui_host_adapter"]["legacy_surface"] is True
 
 
 def test_host_adapter_lookup_defaults_to_canonical_registry() -> None:
@@ -680,21 +817,32 @@ def test_host_adapter_lookup_defaults_to_canonical_registry() -> None:
     assert "cli_common_adapter" in adapter_ids
     assert "claude_code_adapter" in adapter_ids
     assert "gemini_cli_adapter" in adapter_ids
+    assert "aionrs_companion_adapter" not in adapter_ids
+    assert "aionui_host_adapter" not in adapter_ids
     assert "codex_desktop_host_adapter" not in adapter_ids
 
-    try:
-        get_host_adapter("codex_desktop_host_adapter")
-    except KeyError as exc:
-        assert "include_legacy_aliases=True" in str(exc)
-    else:
-        raise AssertionError("expected compatibility-only alias lookup to require explicit opt-in")
+    for adapter_id in (
+        "aionrs_companion_adapter",
+        "aionui_host_adapter",
+        "codex_desktop_host_adapter",
+    ):
+        try:
+            get_host_adapter(adapter_id)
+        except KeyError as exc:
+            assert "include_legacy_aliases=True" in str(exc)
+        else:
+            raise AssertionError("expected legacy surface lookup to require explicit opt-in")
 
     legacy_alias = get_host_adapter("codex_desktop_host_adapter", include_legacy_aliases=True)
     assert legacy_alias is CODEX_DESKTOP_HOST_ADAPTER
+    legacy_companion = get_host_adapter("aionrs_companion_adapter", include_legacy_aliases=True)
+    assert legacy_companion is AIONRS_COMPANION_ADAPTER
 
     expanded_adapter_ids = {
         spec.adapter_id for spec in list_host_adapters(include_legacy_aliases=True)
     }
+    assert "aionrs_companion_adapter" in expanded_adapter_ids
+    assert "aionui_host_adapter" in expanded_adapter_ids
     assert "codex_desktop_host_adapter" in expanded_adapter_ids
 
 
@@ -709,18 +857,24 @@ def test_validate_adapter_compatibility_requires_opt_in_for_legacy_alias_strings
     )
 
     try:
-        validate_adapter_compatibility(profile, ["codex_desktop_host_adapter"])
+        validate_adapter_compatibility(
+            profile,
+            ["aionrs_companion_adapter", "codex_desktop_host_adapter"],
+        )
     except KeyError as exc:
         assert "include_legacy_aliases=True" in str(exc)
     else:
-        raise AssertionError("expected legacy alias validation to require explicit opt-in")
+        raise AssertionError("expected legacy surface validation to require explicit opt-in")
 
     validation = validate_adapter_compatibility(
         profile,
-        ["codex_desktop_host_adapter"],
+        ["aionrs_companion_adapter", "codex_desktop_host_adapter"],
         include_legacy_aliases=True,
     )
-    assert validation == {"codex_desktop_host_adapter": True}
+    assert validation == {
+        "aionrs_companion_adapter": True,
+        "codex_desktop_host_adapter": True,
+    }
 
 
 def test_codex_desktop_alias_retirement_status_tracks_parity_first_exit_gate() -> None:
@@ -784,10 +938,10 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
         "delegated_sidecars",
     ]
 
-    assert supervisor["status_contract"] == "supervisor_state_contract_v1"
+    assert supervisor["status_contract"] == "supervisor_state_contract_v2"
     assert supervisor["state_artifact_path"] == ".supervisor_state.json"
     assert supervisor["schema_expectations"]["top_level_fields"] == [
-        "version",
+        "schema_version",
         "task_id",
         "task_summary",
         "controller",
@@ -810,16 +964,21 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert status["framework_truth"] == "framework_core"
     assert status["status_contract"] == "execution_kernel_live_fallback_retirement_status_v1"
     assert status["live_primary"]["contract_mode"] == "rust-live-primary"
-    assert status["compatibility_fallback"]["mode_when_enabled"] == "compatibility-only-explicit"
-    assert (
-        status["compatibility_fallback"]["trigger_scope_when_enabled"]
-        == "explicit-compatibility-kernel-only"
-    )
+    assert status["compatibility_fallback"]["runtime_path_available"] is False
+    assert status["compatibility_fallback"]["retired_mode"] == "retired"
+    assert status["compatibility_fallback"]["request_behavior"] == "explicit-request-rejected"
     assert status["control_surfaces"]["env_var"] == "CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON"
-    assert (
-        status["control_surfaces"]["fallback_trigger_scope_when_enabled"]
-        == "explicit-compatibility-kernel-only"
+    assert status["control_surfaces"]["accepted_after_retirement"] is False
+    assert status["control_surfaces"]["request_behavior"] == "explicit-request-rejected"
+    assert status["control_surfaces"]["surface_role"] == "retired-explicit-request-surface"
+    assert status["retirement_exit_contract"]["surface_status"] == "pending-removal"
+    assert status["retirement_exit_contract"]["current_decision"] == "keep-temporarily"
+    assert status["retirement_exit_contract"]["removal_owner"] == (
+        "runtime-integrator-with-host-confirmation"
     )
+    assert status["retirement_exit_contract"]["observation_sources"]["local_runtime_health"] == [
+        "PythonAgnoExecutionKernel.health().kernel_live_fallback_request_status"
+    ]
     assert status["public_runtime_contract_fields"] == [
         "execution_kernel",
         "execution_kernel_authority",
@@ -829,27 +988,29 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
         "execution_kernel_delegate_authority",
         "execution_kernel_live_primary",
         "execution_kernel_live_primary_authority",
-        "execution_kernel_live_fallback",
-        "execution_kernel_live_fallback_authority",
-        "execution_kernel_live_fallback_enabled",
-        "execution_kernel_live_fallback_mode",
     ]
     assert status["public_runtime_response_metadata_fields"] == [
         "execution_kernel_delegate_family",
         "execution_kernel_delegate_impl",
+    ]
+    assert status["retired_runtime_response_metadata_fields"] == [
         EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
     ]
     assert status["current_contract_truth"]["dry_run_delegate_kind"] == "router-rs"
+    assert status["current_contract_truth"]["live_fallback_runtime_path_available"] is False
+    assert status["current_contract_truth"]["live_fallback_mode"] == "retired"
+    assert status["current_contract_truth"]["live_fallback_request_behavior"] == (
+        "explicit-request-rejected"
+    )
     assert (
-        status["current_contract_truth"]["live_fallback_trigger_scope_when_enabled"]
-        == "explicit-compatibility-kernel-only"
+        status["current_contract_truth"]["live_fallback_request_surface"]
+        == "retired-explicit-request-only"
     )
     assert status["current_contract_truth"]["live_prompt_preview_passthrough_disabled"] is True
     assert status["current_response_metadata_truth"]["live_delegate_family"] == "rust-cli"
     assert status["current_response_metadata_truth"]["dry_run_delegate_family"] == "rust-cli"
     assert status["current_response_metadata_truth"]["dry_run_delegate_impl"] == "router-rs"
-    assert status["current_response_metadata_truth"]["live_fallback_delegate_impl_when_enabled"] == "agno"
-    assert status["current_response_metadata_truth"]["compatibility_fallback_reason_present_only_on_fallback"] is True
+    assert status["current_response_metadata_truth"]["compatibility_fallback_reason_present_in_steady_state"] is False
     assert status["remaining_python_owned_surfaces"] == []
     assert status["retirement_readiness"]["ready"] is True
     assert status["retirement_readiness"]["runtime_control_flow_change_required"] is False
@@ -857,7 +1018,8 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert status["retirement_gates"]["response_metadata_surface_externalized"] is True
     assert status["retirement_gates"]["delegate_family_impl_metadata_externalized"] is True
     assert status["retirement_gates"]["dry_run_delegate_still_python_owned"] is False
-    assert status["retirement_gates"]["live_fallback_trigger_scope_narrowed_to_infrastructure_only"] is False
+    assert status["retirement_gates"]["compatibility_fallback_runtime_path_removed"] is True
+    assert status["retirement_gates"]["explicit_compatibility_requests_rejected"] is True
     assert status["retirement_gates"]["compatibility_fallback_agent_factory_still_python_owned"] is False
     assert (
         status["guardrails"]["claude_host_runtime_semantics_remain_host_owned"] is True
@@ -902,20 +1064,27 @@ def test_execution_kernel_live_response_serialization_contract_stays_contract_on
     assert status["runtime_response_metadata_fields"]["shared"] == [
         *RUNTIME_TRACE_METADATA_FIELDS,
     ]
-    assert status["runtime_response_metadata_fields"]["compatibility_fallback"] == [
+    assert status["runtime_response_metadata_fields"]["retired_compatibility_fallback"] == [
         *COMPATIBILITY_FALLBACK_RUNTIME_METADATA_FIELDS,
     ]
     assert status["current_contract_truth"]["live_primary_schema_version"] == (
         "router-rs-execute-response-v1"
     )
-    assert status["current_contract_truth"]["compatibility_fallback_model_id_source"] == (
+    assert status["current_contract_truth"]["steady_state_response_shapes"] == [
+        "live_primary",
+        "dry_run",
+    ]
+    assert status["current_contract_truth"]["retired_compatibility_fallback_model_id_source"] == (
         "agno-run-output.model"
     )
     assert status["current_response_shape_truth"]["live_primary"]["prompt_preview_source"] == (
         "rust-owned-live-prompt"
     )
-    assert status["current_response_shape_truth"]["compatibility_fallback"][
-        "fallback_reason_present"
+    assert status["current_response_shape_truth"]["retired_compatibility_fallback"][
+        "runtime_path_available"
+    ] is False
+    assert status["current_response_shape_truth"]["retired_compatibility_fallback"][
+        "legacy_fallback_reason_present"
     ] is True
     assert status["current_response_shape_truth"]["dry_run"]["model_id_present"] is False
     assert status["current_response_shape_truth"]["dry_run"]["prompt_preview_source"] == (
@@ -1101,21 +1270,23 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
         "contract_mode"
     ] == "rust-live-primary"
     assert payload["execution_kernel_live_fallback_retirement_status"]["current_contract_truth"][
-        "live_fallback_mode_when_disabled"
-    ] == "disabled"
+        "live_fallback_mode"
+    ] == "retired"
     assert payload["execution_kernel_live_fallback_retirement_status"]["current_contract_truth"][
-        "live_fallback_trigger_scope_when_enabled"
-    ] == "explicit-compatibility-kernel-only"
+        "live_fallback_request_behavior"
+    ] == "explicit-request-rejected"
     assert payload["execution_kernel_live_fallback_retirement_status"][
         "public_runtime_response_metadata_fields"
     ] == [
         "execution_kernel_delegate_family",
         "execution_kernel_delegate_impl",
-        "execution_kernel_fallback_reason",
     ]
+    assert payload["execution_kernel_live_fallback_retirement_status"][
+        "retired_runtime_response_metadata_fields"
+    ] == ["execution_kernel_fallback_reason"]
     assert payload["execution_kernel_live_fallback_retirement_status"]["current_response_metadata_truth"][
-        "live_fallback_delegate_family_when_enabled"
-    ] == "python"
+        "compatibility_fallback_reason_present_in_steady_state"
+    ] is False
     assert payload["execution_kernel_live_fallback_retirement_status"][
         "remaining_python_owned_surfaces"
     ] == []
@@ -1123,8 +1294,8 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
         "ready"
     ] is True
     assert payload["execution_kernel_live_fallback_retirement_status"]["retirement_gates"][
-        "live_fallback_trigger_scope_narrowed_to_infrastructure_only"
-    ] is False
+        "compatibility_fallback_runtime_path_removed"
+    ] is True
     assert payload["execution_kernel_live_response_serialization_contract"]["status_contract"] == (
         "execution_kernel_live_response_serialization_contract_v1"
     )
@@ -1136,7 +1307,7 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     ]
     assert payload["execution_kernel_live_response_serialization_contract"][
         "current_response_shape_truth"
-    ]["compatibility_fallback"]["required_metadata_fields"] == [
+    ]["retired_compatibility_fallback"]["legacy_required_metadata_fields"] == [
         "run_id",
         "status",
         "trace_event_count",

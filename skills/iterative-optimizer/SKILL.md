@@ -19,7 +19,7 @@ routing_gate: none
 routing_priority: P1
 session_start: n/a
 short_description: N-round optimization loops with built-in laziness immunity
-trigger_phrases:
+trigger_hints:
   - 自迭代
   - 优化X轮
   - 优化10轮

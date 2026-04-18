@@ -11,7 +11,7 @@ routing_gate: delegation
 routing_priority: P1
 session_start: required
 short_description: Decide whether to split a complex task across sidecars or preserve the same structure locally
-trigger_phrases:
+trigger_hints:
   - 子代理派发
   - sidecar
   - 并行 sidecar
@@ -44,7 +44,8 @@ source: local
 allowed_tools:
   - shell
   - python
-approval_required_tools: []
+approval_required_tools:
+  - destructive shell
 filesystem_scope:
   - repo
   - .supervisor_state.json
@@ -53,6 +54,8 @@ network_access: conditional
 artifact_outputs:
   - SESSION_SUMMARY.md
   - NEXT_ACTIONS.json
+  - EVIDENCE_INDEX.json
+  - TRACE_METADATA.json
 bridge_behavior: mobile_complete_once
 ---
 - **Dual-Dimension Audit (Pre: Complexity-Rubric/Logic, Post: Integration-Fidelity/Trace Results)** → `$execution-audit-codex` [Overlay]
@@ -74,6 +77,8 @@ This skill owns the **runtime delegation decision** inside the current Codex ses
 - The task is tiny, tightly coupled, or vague
 - The immediate blocker is faster to do locally
 - Multiple workers would need overlapping write scopes
+- Multiple workers would need to co-edit shared continuity artifacts such as `SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`, or `.supervisor_state.json`
+- The task already has a checklist / phase plan, but the main need is still to normalize serial/parallel lanes, scope, acceptance, or update rules before any sidecar split → use `$checklist-normalizer`
 - The request is about multi-agent product architecture rather than runtime delegation
 
 ## Primary operating principle
@@ -98,6 +103,7 @@ The main thread should contain only:
 - whether the controller continues locally or waits
 
 Detailed task prompts, evidence payloads, and worker traces should live in artifacts, sidecar outputs, or local-supervisor notes.
+Shared continuity artifacts stay local to the supervisor / integrator. Sidecars should return lane-local outputs or delta payloads instead of mutating global continuity files.
 
 ## Runtime-policy adaptation
 
@@ -134,11 +140,12 @@ Delegate or preserve sidecar structure when at least two are true, or one is tru
 1. Normalize the task and decide the **main-thread next step first**.
 2. Identify what must stay local on the critical path.
 3. Define bounded sidecars with explicit output contracts.
-4. Record the delegation plan in state or artifacts before any runtime branch.
-5. Check runtime policy and attempt spawning when the plan is valid.
-6. If spawning is allowed, dispatch sidecars with non-overlapping write scopes.
-7. If spawning is not allowed, keep the same sidecar plan as a local-supervisor queue.
-8. Review and integrate returned or queued outputs before treating the task as done.
+4. Mark shared continuity artifacts as forbidden scope for every non-integrator lane.
+5. Record the delegation plan in state or artifacts before any runtime branch.
+6. Check runtime policy and attempt spawning when the plan is valid.
+7. If spawning is allowed, dispatch sidecars with non-overlapping write scopes and lane-local output paths.
+8. If spawning is not allowed, keep the same sidecar plan as a local-supervisor queue.
+9. Review and integrate returned or queued outputs before treating the task as done.
 
 ## Output defaults
 
@@ -151,6 +158,8 @@ State:
 - why spawning was blocked when it did not happen
 - which fallback mode was used
 - what was delegated vs kept local
+- whether shared continuity remained supervisor-only
+- which lane-local outputs or delta artifacts were collected
 - whether the main thread waited or continued
 
 ## References

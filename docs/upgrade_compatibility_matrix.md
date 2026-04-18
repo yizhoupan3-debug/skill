@@ -1,11 +1,16 @@
 # Upgrade Compatibility Matrix
 
+This document is a secondary compatibility inventory / smoke view.
+It is not framework truth, not the primary regression baseline, and not the
+place where runtime or host authority gets redefined. Primary regression still
+lives in parity snapshots and first-class shared contract artifacts.
+
 | Adapter | Lifecycle | Host | Transport | Requires aionrs | Core runtime | Memory | Artifact | Orchestration | Notes |
 |---|---|---|---|---:|---:|---:|---:|---:|---|
-| `codex_common_adapter` | shared canonical | Codex shared contract | `host-neutral-contract` | No | Yes | Yes | Yes | Yes | Shared projection layer for Desktop / CLI; keeps framework core as the only controller |
+| `codex_common_adapter` | compatibility view | Codex shared contract | `host-neutral-contract` | No | Yes | Yes | Yes | Yes | Codex naming compatibility view over shared contract projection; does not replace `cli_common_adapter` as the canonical shared contract |
 | `generic_host_adapter` | fallback baseline | generic | `inproc` | No | Yes | Yes | Yes | Yes | Portable fallback baseline; keeps the outer-framework runtime surface alive |
 | `codex_desktop_adapter` | canonical desktop | Codex Desktop | `local-bridge` | No | Yes | Yes | Yes | Yes | Primary interactive desktop entrypoint and the desktop parity identity |
-| `codex_desktop_host_adapter` | temporary alias | Codex Desktop | `local-bridge` | No | Yes | Yes | Yes | Yes | Compatibility bridge only; mirrors `codex_desktop_adapter`, stays opt-in for continuity lanes, and remains a retirement candidate |
+| `codex_desktop_host_adapter` | temporary alias | Codex Desktop | `local-bridge` | No | Yes | Yes | Yes | Yes | Compatibility bridge only; mirrors `codex_desktop_adapter`, stays opt-in for continuity lanes, is omitted from default artifact emission, and remains a retirement candidate |
 | `codex_cli_adapter` | canonical headless | codexcli | `headless-exec` | No | Yes | Yes | Yes | Yes | Formal headless entrypoint for batch / cron / CI without becoming framework truth |
 | `aionui_host_adapter` | legacy debt | AionUI host shell | `bridge-contract` | No | Yes | Yes | Yes | Yes | Upstream-facing compatibility surface only; not a forward roadmap anchor |
 | `aionrs_companion_adapter` | legacy debt | aionrs companion sidecar | `stdio-jsonl` | Optional companion | Yes | Optional | Yes | Optional | Companion integration only; deep adaptation, not deep fork |
@@ -19,8 +24,9 @@
 5. Any new host must prove portability against `framework_profile` before gaining host-specific extensions.
 6. Resolve `host_capability_requirements` from `framework_profile` before introducing host-specific branching.
 7. Use Desktop / CLI parity snapshots as the primary dual-entry regression artifact; treat this matrix as a secondary inventory view.
-8. `codex_desktop_host_adapter` may exist only as a mirror alias and must never receive host-only semantics that bypass `codex_desktop_adapter`.
-9. Do not let `codexcli` become controller truth while shrinking legacy alias or companion surfaces.
+8. Treat `cli_common_adapter` as the canonical CLI-family shared contract; `codex_common_adapter` remains a Codex compatibility naming view only.
+9. `codex_desktop_host_adapter` may exist only as a mirror alias and must never receive host-only semantics that bypass `codex_desktop_adapter`.
+10. Do not let `codexcli` become controller truth while shrinking legacy alias or companion surfaces.
 
 ## Alias Exit Gates
 
@@ -39,20 +45,24 @@ following are true:
 ## Current Status
 
 - `framework_profile` contract: implemented in outer framework.
-- `codex_common_adapter`: shared Codex contract projection is now implemented.
+- `cli_common_adapter`: canonical CLI-family shared contract projection is now implemented.
+- `codex_common_adapter`: Codex compatibility naming view over the shared contract projection is now implemented.
 - `codex_desktop_adapter`: canonical interactive desktop adapter is now implemented.
-- `codex_desktop_host_adapter`: compatibility alias remains available only for explicit continuity / compatibility lanes.
+- `codex_desktop_host_adapter`: compatibility alias remains available only for explicit continuity / compatibility lanes and is not part of the default artifact emission surface.
 - `codex_cli_adapter`: headless Codex entrypoint projection is now implemented.
 - `aionrs_companion_adapter`: outer-framework companion projection is contract-scoped legacy debt.
 - `AionUI host adapter`: outer-framework host projection is contract-scoped legacy debt.
 - legacy Codex Desktop alias surface: contract-scoped compatibility debt only; not a first-class Desktop output target.
 - `build_codex_dual_entry_parity_snapshot(...)`: Desktop / CLI shared-contract parity is emitted as the first-class dual-entry artifact.
-- `codex_desktop_alias_inventory.json`: current repo-side alias references are inventoried so retirement stops depending on ad-hoc grep.
-- `codex_desktop_alias_retirement_status.json`: alias retirement gates are externalized as a contract instead of staying implicit in docs only.
+- `build_cli_family_parity_snapshot(...)`: CLI-family shared-contract parity is emitted as the canonical CLI regression artifact.
+- `codex_desktop_alias_inventory.json`: current repo-side alias references are inventoried only on explicit continuity runs.
+- `codex_desktop_alias_retirement_status.json`: alias retirement gates are externalized as a contract only on the explicit continuity lane.
 - `build_upgrade_compatibility_matrix(...)`: the upgrade lane is anchored in the outer-framework contract, not host internals.
-- `emit_framework_contract_artifacts(...)`: Python can now emit concrete bridge/contract artifacts for profile + adapters + matrix + dual-entry parity snapshot + the first-class control-plane contract artifacts `execution_controller_contract`, `delegation_contract`, and `supervisor_state_contract`.
+- `emit_framework_contract_artifacts(...)`: Python can now emit concrete bridge/contract artifacts for profile + adapters + matrix + dual-entry parity snapshot + the first-class control-plane contract artifacts `execution_controller_contract`, `delegation_contract`, and `supervisor_state_contract`; legacy alias inventory/status are opt-in only.
 - default artifact emission is parity-first: `codex_desktop_host_adapter` is now
-  legacy opt-in output.
+  legacy opt-in output and its inventory/status artifacts stay behind explicit continuity opt-in.
+- default regression authority is parity-first: this matrix stays secondary
+  inventory / smoke evidence and does not replace parity snapshots.
 - default package export is parity-first: `compile_codex_desktop_host_adapter(...)`
   no longer lives on `codex_agno_runtime` root and is only exposed from
   `codex_agno_runtime.compatibility`.

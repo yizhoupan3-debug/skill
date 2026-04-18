@@ -11,7 +11,7 @@ runtime_requirements:
   commands:
     - npx
 short_description: Use a real browser when live evidence or page interaction is required
-trigger_phrases:
+trigger_hints:
   - 浏览器自动化
   - live browser
   - browser-mcp

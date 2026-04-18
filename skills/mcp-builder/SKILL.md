@@ -1,13 +1,9 @@
 ---
 name: mcp-builder
 description: |
-  Design, build, review, and improve MCP (Model Context Protocol) servers and
-  agent-facing tool interfaces. Use when creating an MCP server, wrapping an
-  external API or service as MCP tools, choosing transport, designing tool
-  schemas, naming tools, handling auth, pagination, and errors, or improving
-  discoverability and usability for agents. 适用于“做 MCP server”“把 API 封成
-  MCP 工具”“设计 MCP tool schema”“MCP transport 选型”“MCP 工具命名/分页/
-  鉴权/评测”“MCP 可用性优化”这类请求。
+  Design, build, review, and improve MCP servers and agent-facing tool interfaces.
+  Use for transport choice, tool schema design, auth/errors/pagination,
+  and wrapping external services as MCP tools.
 risk: medium
 source: community-adapted
 routing_layer: L3

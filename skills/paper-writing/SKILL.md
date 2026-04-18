@@ -1,12 +1,9 @@
 ---
 name: paper-writing
 description: |
-  Polish academic paper prose — abstract, introduction, related work, method,
-  captions, rebuttal, and response letters — for clarity, tone, evidence-linked
-  phrasing, and reviewer-facing professionalism. Produces tighter text without
-  altering scientific claims. Use when the user asks to "帮我润色", "文字打磨",
-  "学术写作", "论文改写", "文章精修", "论文精修", "SCI 润色", "abstract 太啰嗦了", "introduction
-  逻辑不通", "写 related work", or wants writing-quality help on paper text.
+  Polish academic paper prose without changing scientific claims.
+  Use for abstracts, introductions, related work, captions, rebuttals,
+  and reviewer-facing writing quality.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none

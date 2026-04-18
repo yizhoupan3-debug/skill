@@ -14,7 +14,13 @@ if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
 from codex_agno_runtime.context import ContextEngineer
-from codex_agno_runtime.memory import MEMORY_PROVENANCE_KIND, MEMORY_STORE_SCHEMA_VERSION, FactMemoryStore
+from codex_agno_runtime.memory import (
+    MEMORY_PROVENANCE_KIND,
+    MEMORY_STORE_SCHEMA_VERSION,
+    DeterministicFactMemoryKernel,
+    FactMemoryStore,
+    USER_FACT_PATTERNS,
+)
 
 
 FIXTURES = json.loads((PROJECT_ROOT / "tests" / "runtime_memory_compression_fixtures.json").read_text(encoding="utf-8"))
@@ -52,6 +58,34 @@ def test_memory_contract_fixture(tmp_path: Path) -> None:
     assert persisted["control_plane"]["delegate_kind"] == "fact-memory-store"
 
 
+def test_memory_kernel_keeps_first_insertion_and_applies_limit_after_ranking(tmp_path: Path) -> None:
+    """Deterministic memory mechanics should stay stable for later Rust replacement."""
+
+    store = FactMemoryStore(tmp_path / "memory")
+    store.save_facts(
+        "kernel-user",
+        [" Alpha ", "beta", "ALPHA", "", "Beta  ", "Gamma", "gamma rays", "GAMMA RAYS"],
+    )
+
+    assert store.load_facts("kernel-user") == ["Alpha", "beta", "Gamma", "gamma rays"]
+
+    retrieval = store.retrieve_facts("kernel-user", limit=3)
+    assert [row["value"] for row in retrieval] == ["Alpha", "beta", "Gamma"]
+    assert [row["rank"] for row in retrieval] == [1, 2, 3]
+
+
+def test_memory_kernel_extracts_with_deterministic_normalization() -> None:
+    """Extraction should normalize whitespace and dedupe repeated matches deterministically."""
+
+    kernel = DeterministicFactMemoryKernel(patterns=tuple(USER_FACT_PATTERNS))
+
+    extracted = kernel.extract_facts(
+        "My name is Ada   Lovelace. I prefer Rust. I prefer rust. I work at OpenAI."
+    )
+
+    assert extracted == ["Ada Lovelace", "OpenAI", "Rust"]
+
+
 def test_compression_contract_fixture() -> None:
     """Context compression should match the frozen deterministic fixture."""
 
@@ -66,3 +100,43 @@ def test_compression_contract_fixture() -> None:
     assert result.artifact_offload_decision is expected["artifact_offload_decision"]
     assert result.output_token_estimate == expected["output_token_estimate"]
     assert result.prompt == expected["prompt"]
+
+
+def test_compression_identity_when_prompt_already_fits() -> None:
+    """Prompts within budget must remain byte-identical."""
+
+    prompt = "Short prompt with enough budget."
+    result = ContextEngineer().compress_contract(prompt, token_limit=128)
+
+    assert result.strategy == "none"
+    assert result.truncated is False
+    assert result.omitted_sections == 0
+    assert result.prompt == prompt
+    assert result.input_token_estimate == result.output_token_estimate
+
+
+def test_compression_zero_budget_returns_deterministic_omission_marker() -> None:
+    """Zero-token budgets should never produce ad-hoc truncation text."""
+
+    result = ContextEngineer().compress_contract("Section 1\n\nSection 2", token_limit=0)
+
+    assert result.truncated is True
+    assert result.prompt == "[Context compression]\nPrompt omitted due to zero token budget."
+    assert result.strategy == "truncate"
+
+
+def test_compression_prefers_head_tail_before_raw_truncation() -> None:
+    """Structured prompts should retain head/tail sections before truncation when possible."""
+
+    prompt = "\n\n".join(f"S{index}" for index in range(1, 31))
+    result = ContextEngineer().compress_contract(prompt, token_limit=26)
+
+    assert result.strategy == "head-tail"
+    assert result.truncated is False
+    assert result.omitted_sections == 25
+    assert "S1" in result.prompt
+    assert "S2" in result.prompt
+    assert "S3" in result.prompt
+    assert "S29" in result.prompt
+    assert "S30" in result.prompt
+    assert "Omitted 25 middle sections" in result.prompt

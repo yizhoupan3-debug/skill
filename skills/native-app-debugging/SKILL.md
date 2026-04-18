@@ -4,7 +4,7 @@ description: |
   调试 Web-Native 边界的桌面 App 问题：Tauri、Electron、WkWebView、Wails、IPC、原生菜单与打包后失效。
   Use when a bug spans the frontend-web layer and the native OS/runtime layer.
 short_description: Debug desktop app issues across the Web-Native boundary
-trigger_phrases:
+trigger_hints:
   - Tauri crash
   - Electron IPC
   - WkWebView

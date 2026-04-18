@@ -1,8 +1,12 @@
 # Codex 双入口总蓝图
 
-> 本文件是当前方案的总蓝图。它覆盖已经落地的战略前提：
-> `Codex Desktop + codexcli` 双入口，framework core 保持单真源；
-> `codex_dual_entry_parity_snapshot` 是主回归基线，desktop host alias 只保留兼容镜像角色。
+> 本文件现在是双入口迁移的 compatibility-view 总蓝图，不再承担 runtime
+> truth 的主叙事。当前主线口径已经统一为
+> `thin projection + Rust contract-first migration`：
+> framework core 保持单真源，Rust-first 默认 runtime / contract / parity lane
+> 继续推进；`codex_dual_entry_parity_snapshot` 只保留为双入口兼容回归视图，
+> `upgrade_compatibility_matrix` 最多只保留 secondary compatibility inventory /
+> smoke 角色。
 
 ## 1. 结论先行
 
@@ -140,6 +144,8 @@
 
 - 不新增投资
 - 不再把它们写成未来主线
+- `upgrade_compatibility_matrix` 只允许停留在 secondary inventory / smoke
+  语义，不能再作为主回归基线
 - 在 Codex-only 主线稳定后再决定收缩或移除
 
 ## 4. 边界清单
@@ -183,9 +189,8 @@
 
 - [ ] `aionrs_companion_adapter` 仍在当前代码面存在
 - [ ] `aionui_host_adapter` 仍在当前代码面存在
-- [ ] 文档与 artifact 仍残留旧的 `aionrs` 主线叙事
-- [ ] 仍有文档把 `codex_desktop_host_adapter` 写成正式 desktop adapter
-- [ ] 仍有文档把 `upgrade_compatibility_matrix` 写成主回归基线
+- [ ] 仍有部分 artifact / tests / legacy notes 带着旧 `aionrs` 迁移负债
+- [ ] 仍需继续压缩非文档面的 compatibility-first 残留
 
 ## 6. Rust 边界
 

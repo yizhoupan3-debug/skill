@@ -146,8 +146,8 @@ graph TB
 
 | 步骤 | 目标 | 主 skill | 可选辅助 skill | 不该用的 skill |
 |---|---|---|---|---|
-| 1 | 判断这是框架级问题还是单 skill 问题 | `skill-developer-codex` | `plan-writing` | 不要直接上 `skill-writer` |
-| 2 | 写 / 改本轮执行计划、批次计划、总结 | `plan-writing` | `skill-developer-codex` | 不要直接上 `skill-routing-repair-codex` |
+| 1 | 判断这是框架级问题还是单 skill 问题 | `skill-developer-codex` | `idea-to-plan` | 不要直接上 `skill-writer` |
+| 2 | 写 / 改本轮战略计划、批次计划、总结 | `idea-to-plan` | `skill-developer-codex` | 不要直接上 `skill-routing-repair-codex` |
 | 3 | 判断是否需要并行分工 | `subagent-delegation` | 无 | 小任务不要启用 |
 | 4 | 修 Git-first 主流程脚本与维护规范 | `skill-developer-codex` | `documentation-engineering` | 不要先做 token 微调 |
 | 5 | 修某个具体 skill 的触发面 / description /边界文案 | `skill-routing-repair-codex` | `skill-writer` | 不要一上来新建 skill |
@@ -338,7 +338,7 @@ graph TB
 | `scripts/check_skills.py` | `skill-developer-codex` | `systematic-debugging` |
 | `scripts/sync_skills.py` | `skill-developer-codex` | `systematic-debugging` |
 | `skills/SKILL_MAINTENANCE_GUIDE.md` | `documentation-engineering` | `skill-developer-codex` |
-| `implementation_plan.md` | `plan-writing` | `skill-developer-codex` |
+| `implementation_plan.md` | `idea-to-plan` | `skill-developer-codex` |
 
 ## P1 — 自更新落地所需
 
@@ -754,7 +754,7 @@ graph TB
 2. 固化长期维护手册与入口说明 → `documentation-engineering`
 3. 对最终仍臃肿的框架技能做最后收缩 → `skill-writer`
 4. 跑最终回归验证 → `test-engineering`
-5. 生成最终迁移完成声明与长期维护 checklist → `plan-writing` / `documentation-engineering`
+5. 生成最终迁移完成声明与长期维护 checklist → `checklist-writting` / `documentation-engineering`
 
 ### 本批子进化要求
 

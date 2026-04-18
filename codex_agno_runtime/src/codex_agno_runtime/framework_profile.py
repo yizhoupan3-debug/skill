@@ -5,6 +5,36 @@ from typing import Any, Dict, Iterable, Mapping, MutableMapping, Sequence
 
 
 FRAMEWORK_PROFILE_VERSION = "0.1.0"
+FRAMEWORK_SHARED_CONTRACT_SCHEMA_VERSION = "framework-shared-contract-v1"
+FRAMEWORK_SHARED_CONTRACT_FIELDS = (
+    "artifact_contract",
+    "memory_mounts",
+    "mcp_servers",
+    "tool_policy",
+    "approval_policy",
+    "loadout_policy",
+    "workspace_bootstrap",
+    "session_contract",
+)
+HOST_SPECIFIC_METADATA_KEYS = frozenset(
+    {
+        "adapter_id",
+        "automation_bridge_required",
+        "config_root_env_var",
+        "context_files",
+        "controller_is_cli",
+        "entrypoint_kind",
+        "host_cli",
+        "host_id",
+        "settings_paths",
+        "shared_adapter",
+        "supports_batch",
+        "supports_ci",
+        "supports_cron",
+        "thread_binding",
+        "transport",
+    }
+)
 
 CORE_CAPABILITIES = (
     "runtime",
@@ -43,6 +73,83 @@ def _merge_nested_mapping(
     return merged
 
 
+def normalize_framework_memory_mounts(memory_mounts: Sequence[Any]) -> list[Dict[str, Any]]:
+    normalized: list[Dict[str, Any]] = []
+    for mount in memory_mounts:
+        if isinstance(mount, Mapping):
+            payload = dict(_clone_json_like(mount))
+            payload.setdefault("mount_id", payload.get("id", "unnamed-memory-mount"))
+            normalized.append(payload)
+            continue
+        normalized.append(
+            {
+                "mount_id": str(mount),
+                "source": str(mount),
+                "bridge_kind": "framework-memory-mount",
+            }
+        )
+    return normalized
+
+
+def normalize_framework_mcp_servers(mcp_servers: Sequence[Any]) -> list[Dict[str, Any]]:
+    normalized: list[Dict[str, Any]] = []
+    for server in mcp_servers:
+        if isinstance(server, Mapping):
+            payload = dict(_clone_json_like(server))
+            payload.setdefault("server_id", payload.get("id", "unnamed-mcp-server"))
+            normalized.append(payload)
+            continue
+        normalized.append({"server_id": str(server)})
+    return normalized
+
+
+def build_framework_session_contract(session_policy: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = dict(_clone_json_like(session_policy))
+    return {
+        "mode": normalized.get("mode", "default"),
+        "approval_mode": normalized.get("approval_mode", "inherit"),
+        "history_policy": normalized.get("history_policy", "host-managed"),
+        "takeover": bool(normalized.get("takeover", False)),
+        "extras": {
+            key: value
+            for key, value in normalized.items()
+            if key not in {"mode", "approval_mode", "history_policy", "takeover"}
+        },
+    }
+
+
+def build_framework_workspace_bootstrap(
+    workspace_bootstrap: Mapping[str, Any],
+    memory_mounts: Sequence[Any],
+) -> Dict[str, Any]:
+    normalized = dict(_clone_json_like(workspace_bootstrap))
+    bridges = dict(normalized.get("bridges", {}))
+    bridges.setdefault(
+        "skills",
+        normalized.get(
+            "skill_bridge",
+            {
+                "project_dir": ".codex/skills",
+                "user_dir": "~/.codex/skills",
+                "bridge_dir": ".aionrs/skills",
+            },
+        ),
+    )
+    bridges.setdefault(
+        "memory",
+        normalized.get(
+            "memory_bridge",
+            {
+                "bridge_dir": ".aionrs-memory-bridge",
+                "mounts": normalize_framework_memory_mounts(memory_mounts),
+            },
+        ),
+    )
+    compiled = dict(normalized)
+    compiled["bridges"] = bridges
+    return compiled
+
+
 @dataclass(frozen=True)
 class FrameworkProfile:
     """Host-agnostic framework contract.
@@ -73,6 +180,32 @@ class FrameworkProfile:
     workspace_bootstrap: Dict[str, Any] = field(default_factory=dict)
     host_capability_requirements: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def shared_contract_surface(self) -> Dict[str, Any]:
+        return {
+            "artifact_contract": _clone_json_like(self.artifact_contract),
+            "memory_mounts": normalize_framework_memory_mounts(self.memory_mounts),
+            "mcp_servers": normalize_framework_mcp_servers(self.mcp_servers),
+            "tool_policy": _clone_json_like(self.tool_policy),
+            "approval_policy": _clone_json_like(self.approval_policy),
+            "loadout_policy": _clone_json_like(self.loadout_policy),
+            "workspace_bootstrap": build_framework_workspace_bootstrap(
+                self.workspace_bootstrap,
+                self.memory_mounts,
+            ),
+            "session_contract": build_framework_session_contract(self.session_policy),
+        }
+
+    def shared_contract_payload(self) -> Dict[str, Any]:
+        return {
+            "schema_version": FRAMEWORK_SHARED_CONTRACT_SCHEMA_VERSION,
+            "authority": "framework_profile",
+            "framework_truth": "framework_core",
+            "profile_id": self.profile_id,
+            "framework_profile_version": self.framework_profile_version,
+            "shared_contract_fields": list(FRAMEWORK_SHARED_CONTRACT_FIELDS),
+            "shared_contract": self.shared_contract_surface(),
+        }
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -110,6 +243,12 @@ class FrameworkProfile:
             raise ValueError(f"framework profile missing core capabilities: {missing}")
         if self.host_family == "aionrs":
             raise ValueError("framework core must not be pinned directly to aionrs")
+        host_specific_metadata = sorted(set(self.metadata) & HOST_SPECIFIC_METADATA_KEYS)
+        if host_specific_metadata:
+            raise ValueError(
+                "framework profile metadata must stay host-neutral; move host-specific "
+                f"keys into adapter projections: {host_specific_metadata}"
+            )
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "FrameworkProfile":

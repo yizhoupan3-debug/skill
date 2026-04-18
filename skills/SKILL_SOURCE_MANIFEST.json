@@ -1,25 +1,21 @@
 {
-  "version": 1,
-  "resolution": "later-source-wins",
+  "version": 2,
+  "winning_rule": "highest-position-wins",
   "sources": [
     {
       "name": "system",
-      "priority": 100,
       "position": 0
     },
     {
       "name": "vendor",
-      "priority": 80,
       "position": 1
     },
     {
       "name": "user",
-      "priority": 60,
       "position": 2
     },
     {
       "name": "project",
-      "priority": 40,
       "position": 3
     }
   ]

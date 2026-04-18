@@ -14,10 +14,13 @@ class RustRouteAdapter:
     route_decision_schema_version = "router-rs-route-decision-v1"
     route_policy_schema_version = "router-rs-route-policy-v1"
     route_snapshot_schema_version = "router-rs-route-snapshot-v1"
+    route_report_schema_version = "router-rs-route-report-v1"
     runtime_control_plane_schema_version = "router-rs-runtime-control-plane-v1"
+    background_control_schema_version = "router-rs-background-control-v1"
     route_authority = "rust-route-core"
     compile_authority = "rust-route-compiler"
     runtime_control_plane_authority = "rust-runtime-control-plane"
+    background_control_authority = "rust-background-control"
 
     def __init__(self, codex_home: Path, *, timeout_seconds: float = 5.0) -> None:
         self.codex_home = codex_home
@@ -77,7 +80,10 @@ class RustRouteAdapter:
         rust_route_snapshot: dict[str, Any],
         rollback_active: bool,
     ) -> dict[str, Any]:
-        """Build the stable route diff report through the Rust routing core."""
+        """Build the stable route diff report through the Rust routing core.
+
+        The report is for compare-only diagnostic lanes, not live authority rollback.
+        """
 
         args = [
             "--route-report-json",
@@ -91,15 +97,31 @@ class RustRouteAdapter:
         if rollback_active:
             args.append("--rollback-active")
         try:
-            return self._run_json_command(
+            payload = self._run_json_command(
                 [*self._binary_command(), *args],
                 failure_label="route report engine",
             )
         except RuntimeError:
-            return self._run_json_command(
+            payload = self._run_json_command(
                 [*self._cargo_command(), *args],
                 failure_label="route report engine",
             )
+        if payload.get("report_schema_version") != self.route_report_schema_version:
+            payload = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="route report engine",
+            )
+            if payload.get("report_schema_version") != self.route_report_schema_version:
+                raise RuntimeError(
+                    "Rust route report engine returned an unknown schema: "
+                    f"{payload.get('report_schema_version')!r}"
+                )
+        if payload.get("authority") != self.route_authority:
+            raise RuntimeError(
+                "Rust route report engine returned an unexpected authority marker: "
+                f"{payload.get('authority')!r}"
+            )
+        return payload
 
     def route_policy(
         self,
@@ -107,7 +129,10 @@ class RustRouteAdapter:
         mode: str,
         rollback_to_python: bool,
     ) -> dict[str, Any]:
-        """Resolve route-mode policy through the Rust routing core."""
+        """Resolve route-mode policy through the Rust routing core.
+
+        The returned policy keeps Python in explicit legacy or diagnostic lanes only.
+        """
 
         args = [
             "--route-policy-json",
@@ -249,6 +274,41 @@ class RustRouteAdapter:
             )
         return payload
 
+    def background_control(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Resolve background admission/retry policy through the Rust runtime core."""
+
+        args = [
+            "--background-control-json",
+            "--background-control-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        try:
+            resolved = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="background control compiler",
+            )
+        except RuntimeError:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="background control compiler",
+            )
+        if resolved.get("schema_version") != self.background_control_schema_version:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="background control compiler",
+            )
+            if resolved.get("schema_version") != self.background_control_schema_version:
+                raise RuntimeError(
+                    "Rust background control compiler returned an unknown schema: "
+                    f"{resolved.get('schema_version')!r}"
+                )
+        if resolved.get("authority") != self.background_control_authority:
+            raise RuntimeError(
+                "Rust background control compiler returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        return resolved
+
     def health(self) -> dict[str, Any]:
         """Describe Rust route-adapter availability."""
 
@@ -261,10 +321,13 @@ class RustRouteAdapter:
             "route_authority": self.route_authority,
             "compile_authority": self.compile_authority,
             "runtime_control_plane_authority": self.runtime_control_plane_authority,
+            "background_control_authority": self.background_control_authority,
             "route_decision_schema_version": self.route_decision_schema_version,
             "route_policy_schema_version": self.route_policy_schema_version,
             "route_snapshot_schema_version": self.route_snapshot_schema_version,
+            "route_report_schema_version": self.route_report_schema_version,
             "runtime_control_plane_schema_version": self.runtime_control_plane_schema_version,
+            "background_control_schema_version": self.background_control_schema_version,
         }
 
     def _binary_command(self) -> list[str]:

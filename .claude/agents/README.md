@@ -13,7 +13,7 @@ Available agents:
 - `state-artifact-keeper.md`: bounded maintainer for `.supervisor_state.json`
   and the shared task-artifact contract
 - `claude-host-maintainer.md`: bounded maintainer for `.claude/**`,
-  `CLAUDE.md`, and `.mcp.json` without forking shared policy
+  `CLAUDE.md`, and Claude-host compatibility docs without forking shared policy
 
 Design rules for these subagents:
 

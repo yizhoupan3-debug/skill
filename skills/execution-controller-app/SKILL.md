@@ -5,10 +5,21 @@ description: |
   适用于“APP 一键优化 / 全栈重构 / 跨栈逻辑对齐 / 前后端联调优化 / 自动化测试闭环 / SCR 状态持久化”。每轮对话开始 / first-turn / conversation start，凡涉及 APP 全局任务必须优先挂载。
 routing_layer: L0
 routing_owner: "@app-controller"
-routing_gate: APP一键优化, 全栈重构, 跨栈协同, 前后端联调优化, 自动化测试闭环, 性能全链路调优, 全栈安全审计, APP深度体检, 深度核查前端/后端/测试, 系统级 APP 优化
+routing_gate: delegation
 routing_priority: P0
 session_start: required
 short_description: Master orchestrator for production-grade app optimization, refactor, and full-stack verification
+trigger_hints:
+  - APP一键优化
+  - 全栈重构
+  - 跨栈协同
+  - 前后端联调优化
+  - 自动化测试闭环
+  - 性能全链路调优
+  - 全栈安全审计
+  - APP深度体检
+  - 深度核查前端/后端/测试
+  - 系统级 APP 优化
 framework_roles:
   - orchestrator
   - supervisor
@@ -31,7 +42,6 @@ metadata:
     - tdd
 risk: high
 source: local
-source_priority: 40
 allowed_tools:
   - shell
   - git

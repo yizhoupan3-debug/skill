@@ -5,8 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
-import sqlite3
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,20 +14,23 @@ if __package__ in {None, ""}:
 
 from scripts.memory_store import MemoryStore
 from scripts.memory_support import (
-    DEFAULT_MEMORY_ROOT,
+    classify_runtime_continuity,
+    evaluate_memory_freshness,
     get_repo_root,
+    is_generic_query,
+    query_matches_task,
+    read_json_if_exists,
+    read_memory_state,
     read_text_if_exists,
     resolve_effective_memory_dir,
     safe_slug,
-    workspace_dir,
+    tokenize_query,
+    load_runtime_snapshot,
 )
 
 SQLITE_FILENAMES = ("memory.sqlite3", "memory.db", ".memory.sqlite3")
-CURRENT_STATE_CATEGORIES = {"task_state", "blocker", "constraint"}
-
-
-def _tokenizer(topic: str) -> list[str]:
-    return [part.lower() for part in re.split(r"[\s,/|]+", topic) if part.strip()]
+STABLE_MEMORY_FILES = ("MEMORY.md", "preferences.md", "decisions.md", "lessons.md", "runbooks.md")
+VALID_MODES = {"stable", "active", "history", "debug"}
 
 
 def _section_score(text: str, topic_tokens: list[str]) -> int:
@@ -40,11 +41,10 @@ def _section_score(text: str, topic_tokens: list[str]) -> int:
 def _filter_text(text: str, topic: str, max_items: int) -> str:
     if not text.strip():
         return ""
-    topic_tokens = _tokenizer(topic)
+    topic_tokens = tokenize_query(topic)
     if not topic_tokens:
         return text.strip()
     blocks: list[tuple[int, str]] = []
-    current_heading = ""
     current_lines: list[str] = []
     for line in text.splitlines():
         stripped = line.strip()
@@ -52,8 +52,7 @@ def _filter_text(text: str, topic: str, max_items: int) -> str:
             if current_lines:
                 block = "\n".join(current_lines).strip()
                 blocks.append((_section_score(block, topic_tokens), block))
-            current_heading = line
-            current_lines = [current_heading]
+            current_lines = [line]
             continue
         if not current_lines:
             current_lines = [line]
@@ -72,179 +71,128 @@ def _filter_text(text: str, topic: str, max_items: int) -> str:
     return "\n\n".join(deduped).strip()
 
 
-def _workspace_sqlite_candidates(memory_workspace_root: Path) -> list[Path]:
-    """Return likely SQLite database paths for a workspace."""
-
-    return [memory_workspace_root / name for name in SQLITE_FILENAMES]
-
-
 def _workspace_sqlite_path(memory_workspace_root: Path) -> Path | None:
-    """Return the first existing SQLite database path for a workspace."""
-
-    for candidate in _workspace_sqlite_candidates(memory_workspace_root):
+    for candidate in (memory_workspace_root / name for name in SQLITE_FILENAMES):
         if candidate.is_file():
             return candidate
     return None
 
 
-def _textify(value: Any) -> str:
-    """Convert SQLite values to readable text."""
-
-    if isinstance(value, bytes):
-        return value.decode("utf-8", errors="replace")
-    if isinstance(value, (dict, list, tuple)):
-        try:
-            return json.dumps(value, ensure_ascii=False, sort_keys=True)
-        except TypeError:
-            return str(value)
-    return str(value)
-
-
-def _is_workspace_scoped(row: dict[str, Any], workspace: str) -> bool:
-    """Check whether a row is scoped to the current workspace."""
-
-    workspace_slug = safe_slug(workspace)
-    workspace_basename = Path(workspace).name
-    scope_fields = (
-        row.get("workspace"),
-        row.get("namespace"),
-        row.get("project"),
-        row.get("project_name"),
-    )
-    values = {str(value).lower() for value in scope_fields if value}
-    if not values:
-        return True
-    return workspace.lower() in values or workspace_slug.lower() in values or workspace_basename.lower() in values
-
-
-def _sqlite_columns(connection: sqlite3.Connection, table_name: str) -> list[str]:
-    cursor = connection.execute(f'PRAGMA table_info("{table_name}")')
-    return [row[1] for row in cursor.fetchall()]
-
-
-def _sqlite_user_tables(connection: sqlite3.Connection) -> list[str]:
-    rows = connection.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-    ).fetchall()
-    return [row[0] for row in rows]
-
-
-def _sqlite_row_text(row: dict[str, Any]) -> str:
-    preferred = ("title", "summary", "content", "body", "notes", "prompt", "kind", "category", "source", "status")
-    parts = [_textify(row.get(key)) for key in preferred if row.get(key) not in (None, "")]
-    for key, value in row.items():
-        if key not in preferred and value not in (None, ""):
-            parts.append(f"{key}: {_textify(value)}")
-    return "\n".join(parts)
-
-
-def _sqlite_row_title(row: dict[str, Any], fallback_index: int) -> str:
-    for key in ("title", "summary", "kind", "category", "source", "subject"):
-        value = str(row.get(key) or "").strip()
-        if value:
-            return value.splitlines()[0][:120]
-    return f"row-{fallback_index}"
-
-
-def _sqlite_row_score(row: dict[str, Any], topic_tokens: list[str]) -> int:
-    lowered = _sqlite_row_text(row).lower()
-    return sum(token in lowered for token in topic_tokens)
-
-
-def _split_current_state_items(
-    items: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    current_state: list[dict[str, Any]] = []
-    state_history: list[dict[str, Any]] = []
-    general: list[dict[str, Any]] = []
-    for item in items:
-        category = str(item.get("category") or "").strip()
-        source = str(item.get("source") or "").strip()
-        if category in CURRENT_STATE_CATEGORIES:
-            current_state.append(item)
-        elif "current_state_history" in source or "task_state_history" in source:
-            state_history.append(item)
-        else:
-            general.append(item)
-    return current_state, state_history, general
-
-
-def _load_sqlite_sections(
+def _render_sqlite_memory_items(
     workspace: str,
     db_path: Path,
     *,
-    topic: str = "",
-    max_items: int = 8,
-) -> list[dict[str, str]]:
-    """Read structured memory data from the workspace SQLite database."""
-
-    # Retrieval is read-only here; the database already exists if we reached this path.
+    topic: str,
+    max_items: int,
+) -> tuple[str, str] | None:
     store = MemoryStore(db_path, workspace, ensure_schema=False)
-    items = store.search_memory_items(topic, limit=max_items * 4) if topic else store.list_memory_items(limit=max_items * 4)
-    current_state_items, fallback_state_items, general_items = _split_current_state_items(items)
-    remaining_slots = max_items
-    sections: list[dict[str, str]] = []
-    if current_state_items:
-        lines = ["# sqlite:current_state"]
-        for item in current_state_items[:remaining_slots]:
-            lines.extend(
-                [
-                    f"### {_sqlite_row_title(item, 0)}",
-                    f"- category: {item.get('category', '')}",
-                    f"- confidence: {item.get('confidence', '')}",
-                    f"- summary: {item.get('summary', '')}",
-                    f"- notes: {item.get('notes', '')}",
-                    "",
-                ]
-            )
-        sections.append({"path": "sqlite/current_state.md", "content": "\n".join(lines).strip()})
-        remaining_slots = max(0, remaining_slots - len(current_state_items[:remaining_slots]))
-    if remaining_slots > 0 and fallback_state_items:
-        current_state_items.extend(fallback_state_items[:remaining_slots])
-    if general_items:
-        lines = ["# sqlite:memory_items"]
-        topic_tokens = _tokenizer(topic)
-        ranked = sorted(general_items, key=lambda row: _sqlite_row_score(row, topic_tokens), reverse=True)
-        for index, item in enumerate(ranked[:max_items], start=1):
-            lines.extend(
-                [
-                    f"### {_sqlite_row_title(item, index)}",
-                    f"- source: {item.get('source', '')}",
-                    f"- status: {item.get('status', '')}",
-                    f"- summary: {item.get('summary', '')}",
-                    f"- notes: {item.get('notes', '')}",
-                    "",
-                ]
-            )
-        sections.append({"path": "sqlite/memory_items.md", "content": "\n".join(lines).strip()})
-    notes = store.list_recent_session_notes(limit=max_items)
-    if notes:
-        lines = ["# sqlite:session_notes"]
-        for note in notes:
-            lines.extend(
-                [
-                    f"### {note.get('session_key', '')}#{note.get('position', '')}",
-                    f"- note_type: {note.get('note_type', '')}",
-                    f"- updated_at: {note.get('updated_at', '')}",
-                    f"- note: {note.get('note', '')}",
-                    "",
-                ]
-            )
-        sections.append({"path": "sqlite/session_notes.md", "content": "\n".join(lines).strip()})
-    evidence = store.list_evidence(limit=max_items)
-    if evidence:
-        lines = ["# sqlite:evidence_records"]
-        for artifact in evidence:
-            lines.extend(
-                [
-                    f"### {_sqlite_row_title(artifact, 0)}",
-                    f"- kind: {artifact.get('kind', '')}",
-                    f"- path: {artifact.get('path', '')}",
-                    f"- content: {artifact.get('content', '')}",
-                    "",
-                ]
-            )
-        sections.append({"path": "sqlite/evidence_records.md", "content": "\n".join(lines).strip()})
+    items = (
+        store.search_memory_items(topic, limit=max_items)
+        if topic.strip()
+        else store.list_memory_items(limit=max_items)
+    )
+    if not items:
+        return None
+    lines = ["# sqlite:memory_items"]
+    for index, item in enumerate(items, start=1):
+        lines.extend(
+            [
+                f"### {item.get('summary') or f'item-{index}'}",
+                f"- source: {item.get('source', '')}",
+                f"- category: {item.get('category', '')}",
+                f"- status: {item.get('status', '')}",
+                f"- summary: {item.get('summary', '')}",
+                "",
+            ]
+        )
+    return "sqlite/memory_items.md", "\n".join(lines).strip()
+
+
+def _stable_sections(
+    workspace: str,
+    memory_workspace_root: Path,
+    *,
+    topic: str,
+    max_items: int,
+) -> list[tuple[str, str]]:
+    sections: list[tuple[str, str]] = []
+    sqlite_path = _workspace_sqlite_path(memory_workspace_root)
+    if sqlite_path:
+        section = _render_sqlite_memory_items(workspace, sqlite_path, topic=topic, max_items=max_items)
+        if section is not None:
+            sections.append(section)
+    for name in STABLE_MEMORY_FILES:
+        text = read_text_if_exists(memory_workspace_root / name).strip()
+        if not text:
+            continue
+        filtered = _filter_text(text, topic, max_items) if topic.strip() else text
+        if filtered.strip():
+            sections.append((name, filtered))
+    return sections
+
+
+def _active_task_section(
+    snapshot: Any,
+    memory_workspace_root: Path,
+    *,
+    topic: str,
+) -> tuple[tuple[str, str] | None, dict[str, Any]]:
+    continuity = classify_runtime_continuity(snapshot)
+    state = read_memory_state(memory_workspace_root)
+    freshness = evaluate_memory_freshness(snapshot, state)
+    if not continuity.get("current_execution"):
+        return None, freshness
+    if is_generic_query(topic):
+        freshness = dict(freshness)
+        freshness["state"] = "generic-query"
+        freshness["active_task_allowed"] = False
+        freshness["reasons"] = ["query is empty or generic"]
+        return None, freshness
+    task = str(continuity.get("task") or "")
+    if not query_matches_task(topic, task):
+        freshness = dict(freshness)
+        freshness["state"] = "query-mismatch"
+        freshness["active_task_allowed"] = False
+        freshness["reasons"] = ["query does not target the active task"]
+        return None, freshness
+    if not freshness.get("active_task_allowed"):
+        return None, freshness
+    current = continuity["current_execution"]
+    lines = [
+        "# runtime:current_task",
+        f"- task: {current.get('task', '')}",
+        f"- phase: {current.get('phase', '')}",
+        f"- status: {current.get('status', '')}",
+    ]
+    if current.get("route"):
+        lines.append(f"- route: {' / '.join(current['route'])}")
+    if current.get("next_actions"):
+        lines.append(f"- next_actions: {' / '.join(current['next_actions'])}")
+    if current.get("blockers"):
+        lines.append(f"- blockers: {' / '.join(current['blockers'])}")
+    if current.get("scope"):
+        lines.append(f"- scope: {' / '.join(current['scope'])}")
+    return ("runtime/current_task.md", "\n".join(lines)), freshness
+
+
+def _archive_sections(memory_workspace_root: Path, *, topic: str, max_items: int) -> list[tuple[str, str]]:
+    archive_root = memory_workspace_root / "archive"
+    if not archive_root.is_dir():
+        return []
+    sections: list[tuple[str, str]] = []
+    for path in sorted(archive_root.rglob("*")):
+        if not path.is_file():
+            continue
+        rel_path = path.relative_to(memory_workspace_root)
+        if path.suffix == ".json":
+            text = json.dumps(read_json_if_exists(path), ensure_ascii=False, indent=2)
+        else:
+            text = read_text_if_exists(path)
+        filtered = _filter_text(text, topic, max_items) if topic.strip() else text.strip()
+        if filtered.strip():
+            sections.append((str(rel_path), filtered))
+        if len(sections) >= max_items:
+            break
     return sections
 
 
@@ -255,39 +203,58 @@ def render_context(
     max_items: int = 8,
     memory_root: Path | None = None,
     repo_root: Path | None = None,
+    artifact_root: Path | None = None,
+    mode: str = "stable",
 ) -> dict[str, Any]:
     """Render memory context for prompt injection."""
 
-    memory_workspace_root = resolve_effective_memory_dir(workspace=workspace, memory_root=memory_root, repo_root=repo_root)
+    if mode not in VALID_MODES:
+        raise ValueError(f"Unsupported memory recall mode: {mode}")
+    repo_root = repo_root.resolve() if repo_root is not None else None
+    memory_workspace_root = resolve_effective_memory_dir(
+        workspace=workspace,
+        memory_root=memory_root,
+        repo_root=repo_root,
+    )
     memory_workspace_root.mkdir(parents=True, exist_ok=True)
-    sections: list[tuple[str, str]] = []
-    sqlite_path = _workspace_sqlite_path(memory_workspace_root)
-    if sqlite_path:
-        for section in _load_sqlite_sections(workspace, sqlite_path, topic=topic, max_items=max_items):
-            sections.append((section["path"], section["content"]))
-    memory_md = read_text_if_exists(memory_workspace_root / "MEMORY.md")
-    if memory_md:
-        filtered = _filter_text(memory_md, topic, max_items) if topic else memory_md.strip()
-        if filtered:
-            sections.append(("MEMORY.md", filtered))
-    for name in ("preferences.md", "decisions.md", "lessons.md", "runbooks.md"):
-        text = read_text_if_exists(memory_workspace_root / name).strip()
-        if text:
-            sections.append((name, _filter_text(text, topic, max_items) if topic else text))
-    sessions_root = memory_workspace_root / "sessions"
-    latest_path = sorted(sessions_root.glob("*.md"))[-1] if sessions_root.exists() and list(sessions_root.glob("*.md")) else None
-    if latest_path:
-        latest_text = read_text_if_exists(latest_path).strip()
-        if latest_text:
-            sections.append((f"sessions/{latest_path.name}", _filter_text(latest_text, topic, max_items) if topic else latest_text))
+    sections = _stable_sections(
+        workspace,
+        memory_workspace_root,
+        topic=topic,
+        max_items=max_items,
+    )
+    snapshot = load_runtime_snapshot(repo_root or get_repo_root(), artifact_root=artifact_root)
+    active_section = None
+    freshness = {
+        "state": "not-requested",
+        "active_task_allowed": False,
+        "reasons": [],
+    }
+    if mode in {"active", "history", "debug"}:
+        active_section, freshness = _active_task_section(snapshot, memory_workspace_root, topic=topic)
+        if active_section is not None:
+            sections.append(active_section)
+    if mode in {"history", "debug"}:
+        sections.extend(_archive_sections(memory_workspace_root, topic=topic, max_items=max_items))
+    if mode == "debug":
+        state_payload = read_memory_state(memory_workspace_root)
+        if state_payload:
+            sections.append(("state.json", json.dumps(state_payload, ensure_ascii=False, indent=2)))
     blocks = [f"## {path}\n{content.strip()}" for path, content in sections if content.strip()]
+    sqlite_path = _workspace_sqlite_path(memory_workspace_root)
+    continuity = classify_runtime_continuity(snapshot)
     return {
         "workspace": workspace,
         "topic": topic,
+        "mode": mode,
         "memory_root": str(memory_workspace_root),
         "sqlite_path": str(sqlite_path) if sqlite_path else "",
         "items": [{"path": path, "content": content} for path, content in sections],
         "context": "\n\n".join(blocks).strip(),
+        "active_task_included": active_section is not None,
+        "freshness": freshness,
+        "continuity_state": continuity.get("state"),
+        "active_task_id": snapshot.active_task_id,
     }
 
 
@@ -298,9 +265,16 @@ def main() -> int:
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--topic", default="")
     parser.add_argument("--top", type=int, default=8, dest="max_items")
+    parser.add_argument("--mode", choices=sorted(VALID_MODES), default="stable")
     parser.add_argument("--json", action="store_true", dest="json_output")
     args = parser.parse_args()
-    result = render_context(workspace=args.workspace, topic=args.topic, max_items=args.max_items, repo_root=get_repo_root())
+    result = render_context(
+        workspace=args.workspace,
+        topic=args.topic,
+        max_items=args.max_items,
+        repo_root=get_repo_root(),
+        mode=args.mode,
+    )
     if args.json_output:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:

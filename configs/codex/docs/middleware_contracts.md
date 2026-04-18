@@ -10,7 +10,7 @@
 - Output: owner / gate / overlay decision
 
 ### memory-middleware
-- Input: `AGENTS.md`, runtime overlay, stable user/project preferences
+- Input: `AGENTS.md`, task-scoped continuity artifacts, stable user/project preferences
 - Output: normalized memory context
 
 ### compression-middleware

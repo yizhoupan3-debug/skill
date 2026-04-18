@@ -19,6 +19,9 @@ allowed_tools:
   - python
 approval_required_tools:
   - git push
+artifact_outputs:
+  - SESSION_SUMMARY.md
+  - TRACE_METADATA.json
 metadata:
   version: "1.1.0"
   platforms: [codex]

@@ -23,7 +23,15 @@ def test_approval_policy_contains_declarative_fields_for_controller_skill() -> N
     """
 
     policy = build_policy(PROJECT_ROOT / "skills")
+    assert policy["schema_version"] == "skill-approval-policy-v2"
     controller = policy["skills"]["execution-controller-coding"]
     assert "git push" in controller["approval_required_tools"]
     assert "repo" in controller["filesystem_scope"]
     assert "SESSION_SUMMARY.md" in controller["artifact_outputs"]
+
+
+def test_build_policy_normalizes_filesystem_scope_to_list() -> None:
+    policy = build_policy(PROJECT_ROOT / "skills")
+
+    assert isinstance(policy["skills"]["pdf"]["filesystem_scope"], list)
+    assert "artifacts" in policy["skills"]["pdf"]["filesystem_scope"]

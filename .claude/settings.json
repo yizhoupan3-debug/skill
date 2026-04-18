@@ -1,6 +1,33 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "allowedMcpServers": [
+    {
+      "serverName": "browser-mcp"
+    }
+  ],
   "hooks": {
+    "ConfigChange": [
+      {
+        "hooks": [
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/config_change.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "project_settings"
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_compact.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
     "SessionEnd": [
       {
         "hooks": [
@@ -8,8 +35,7 @@
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_end.sh",
             "type": "command"
           }
-        ],
-        "matcher": "*"
+        ]
       }
     ],
     "SessionStart": [
@@ -30,9 +56,49 @@
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stop.sh",
             "type": "command"
           }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stop_failure.sh",
+            "type": "command"
+          }
         ],
-        "matcher": "*"
+        "matcher": "invalid_request|server_error|max_output_tokens|unknown"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/subagent_stop.sh",
+            "type": "command"
+          }
+        ]
       }
     ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(ls)",
+      "Bash(pwd)",
+      "Bash(git status)",
+      "Bash(git diff)",
+      "Bash(python3 scripts/check_skills.py --verify-sync)",
+      "Bash(python3 scripts/claude_memory_bridge.py *)",
+      "Bash(python3 scripts/claude_statusline.py --repo-root *)",
+      "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
+      "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
+      "Bash(bash ./tools/browser-mcp/scripts/start_browser_mcp.sh *)"
+    ]
+  },
+  "statusLine": {
+    "command": "python3 \"$CLAUDE_PROJECT_DIR\"/scripts/claude_statusline.py --repo-root \"$CLAUDE_PROJECT_DIR\"",
+    "padding": 1,
+    "refreshInterval": 30,
+    "type": "command"
   }
 }

@@ -17,9 +17,16 @@ COMMON_STOP_TOKENS = {"一个", "帮我", "帮我看", "我看", "先给", "给�
 # Skills that should only be used as overlays, never as the primary owner.
 # Per AGENTS.md: iterative-optimizer does not count toward the overlay quota.
 OVERLAY_ONLY_SKILLS = {"iterative-optimizer", "execution-audit-codex", "i18n-l10n", "humanizer"}
+OVERLAY_EXPLICIT_HINTS = {
+    "iterative-optimizer": {"iterative-optimizer", "多轮优化", "自迭代", "优化x轮", "review→fix→verify"},
+    "execution-audit-codex": {"execution-audit-codex", "强制验收", "零容忍审计", "sign-off", "高质量闭环"},
+    "i18n-l10n": {"i18n", "l10n", "国际化", "多语言", "localization", "internationalization", "locale", "rtl"},
+    "humanizer": {"humanizer", "humanize", "自然化", "降 ai 味", "去 ai 感", "像人写的"},
+}
 # Static alias hints supplement dynamic tag-based aliases
 SKILL_ALIAS_HINTS = {
-    "plan-writing": {"计划", "拆解", "拆任务", "里程碑", "roadmap", "outline"},
+    "checklist-writting": {"checklist", "execution-ready", "拆解", "拆任务", "执行清单", "里程碑", "roadmap", "并行", "串行", "lane", "agent", "agent 数量", "路线已经定了", "不用再论证", "直接拆成", "review checklist", "复审checklist", "评估checklist", "检查是否结束"},
+    "idea-to-plan": {"方案", "先做方案", "技术方案", "路线比较", "tradeoff", "权衡", "先调研再给计划", "先别写代码", "先探索现状再提方案", "先探索代码库再出方案", "风险评估", "decision log", "open questions", "assumptions", "critical files", "explore-plan", "outline.md", "code_list.md", "收敛"},
     "python-pro": {"python", "脚本", "pytest", "fastapi", "mypy", "pyright"},
     "visual-review": {"截图", "看图", "视觉", "布局", "层级", "render", "渲染", "screenshot", "ui"},
     "plan-to-code": {"实现", "落地", "开发", "按文档", "根据方案", "直接做代码"},
@@ -38,6 +45,14 @@ SKILL_ALIAS_HINTS = {
     "node-backend": {"node", "express", "hono", "elysia", "bun"},
     "tailwind-pro": {"tailwind", "tailwindcss", "tw-"},
     "git-workflow": {"git", "commit", "branch", "merge", "rebase", "pr"},
+    "execution-controller-coding": {"高负载", "跨文件", "长运行", "系统指挥中心", ".supervisor_state.json", "checkpoint", "rollback"},
+    "skill-developer-codex": {"skill框架", "边界重叠", "owner", "gate", "overlay", "framework", "routing", "token"},
+}
+GATE_HINTS = {
+    "source": {"官方", "官方文档", "文档", "docs", "readme", "api", "openai", "github", "look up", "search"},
+    "artifact": {"pdf", "docx", "xlsx", "ppt", "pptx", "word", "excel", "artifact", "文档", "表格", "幻灯片", "文件"},
+    "evidence": {"报错", "失败", "崩", "截图", "渲染", "日志", "traceback", "error", "bug", "why", "为什么"},
+    "delegation": {"sidecar", "subagent", "delegation", "并行", "子代理", "主线程", "local-supervisor", "跨文件", "长运行"},
 }
 
 
@@ -127,7 +142,17 @@ class SkillRouter:
         all_candidates = [candidate for layer_list in by_layer.values() for candidate in layer_list]
         gate_candidates = [c for c in all_candidates if c.skill.routing_owner == "gate" or (c.skill.routing_gate and c.skill.routing_gate != "none")]
         gate_candidates = sorted(gate_candidates, key=lambda c: (-c.score, PRIORITY_ORDER.get(c.skill.routing_priority, 99)))
-        if gate_candidates and gate_candidates[0].score >= 30:
+        owner_candidates = [
+            c
+            for c in all_candidates
+            if c.skill.routing_owner != "gate" and c.skill.routing_gate in {"", "none"}
+        ]
+        owner_candidates = sorted(
+            owner_candidates,
+            key=lambda c: (-c.score, PRIORITY_ORDER.get(c.skill.routing_priority, 99), c.skill.name),
+        )
+        top_owner_score = owner_candidates[0].score if owner_candidates else float("-inf")
+        if gate_candidates and gate_candidates[0].score >= 30 and gate_candidates[0].score >= top_owner_score:
             gate_candidates[0].reasons.append("Prioritized via 6-rule gate checklist (Gate before Owner).")
             return gate_candidates[0]
 
@@ -173,7 +198,8 @@ class SkillRouter:
                 continue
             is_overlay_by_role = "overlay" in [r.lower() for r in skill.framework_roles]
             is_known_overlay = skill.name in {"iterative-optimizer", "execution-audit-codex", "i18n-l10n", "humanizer"}
-            is_explicitly_mentioned = skill.name in task_text or any(t.lower() in task_text for t in skill.trigger_phrases if len(t) > 3)
+            explicit_hints = OVERLAY_EXPLICIT_HINTS.get(skill.name, {skill.name})
+            is_explicitly_mentioned = any(normalize_text(hint) in task_text for hint in explicit_hints)
             if (is_overlay_by_role or is_known_overlay) and is_explicitly_mentioned:
                 explicit_overlay = skill
                 break
@@ -200,6 +226,38 @@ class SkillRouter:
         task_tokens = {token for token in tokenize(task) if token not in COMMON_STOP_TOKENS}
         score = 0.0
 
+        settled_strategy_markers = {
+            normalize_text("路线已经定了"),
+            normalize_text("不用再论证"),
+            normalize_text("执行清单"),
+            normalize_text("execution-ready checklist"),
+        }
+        strategic_planning_markers = {
+            normalize_text("先调研再给计划"),
+            normalize_text("先别写代码"),
+            normalize_text("先探索现状再提方案"),
+            normalize_text("先探索代码库再出方案"),
+            normalize_text("路线比较"),
+            normalize_text("decision log"),
+            normalize_text("open questions"),
+            normalize_text("assumptions"),
+            normalize_text("critical files"),
+            normalize_text("explore-plan"),
+        }
+
+        if skill.name == "idea-to-plan" and any(marker in normalized_task for marker in settled_strategy_markers):
+            return ScoredSkill(
+                skill=skill,
+                score=0.0,
+                reasons=["Suppressed: task says the strategy is already fixed and only needs execution decomposition."],
+            )
+        if skill.name == "checklist-writting" and any(marker in normalized_task for marker in strategic_planning_markers):
+            return ScoredSkill(
+                skill=skill,
+                score=0.0,
+                reasons=["Suppressed: task still needs strategic planning rather than execution checklist writing."],
+            )
+
         if skill.name.startswith("skill-") and not any(hint in normalized_task for hint in ROUTING_META_HINTS):
             return ScoredSkill(skill=skill, score=0.0, reasons=[])
 
@@ -207,8 +265,10 @@ class SkillRouter:
             score += 100
             reasons.append(f"Exact skill name matched: {skill.name}.")
 
-        gate_phrases = [g.strip() for g in skill.routing_gate.split(",") if g.strip() and g.strip().lower() != "none"]
-        matched_gates = [g for g in gate_phrases if normalize_text(g) in normalized_task]
+        gate_phrases = sorted(
+            hint for hint in GATE_HINTS.get(skill.routing_gate, set()) if normalize_text(hint) in normalized_task
+        )
+        matched_gates = gate_phrases
         if matched_gates:
             score += 18 + min(12, (len(matched_gates) - 1) * 6)
             reasons.append(f"Routing gate matched: {', '.join(matched_gates)}.")
@@ -219,13 +279,13 @@ class SkillRouter:
             score += 14 + len(shared_name_tokens) * 4
             reasons.append(f"Name tokens matched: {', '.join(shared_name_tokens)}.")
 
-        for phrase in skill.trigger_phrases:
+        for phrase in skill.trigger_hints:
             normalized_phrase = normalize_text(phrase)
             if len(normalized_phrase) < 2:
                 continue
             if normalized_phrase and normalized_phrase in normalized_task:
                 score += 20
-                reasons.append(f"Trigger phrase matched: {phrase}.")
+                reasons.append(f"Trigger hint matched: {phrase}.")
 
         # Dynamic aliases: merge static hints with skill tags
         dynamic_aliases = set(skill.tags) | SKILL_ALIAS_HINTS.get(skill.name, set())
@@ -250,6 +310,40 @@ class SkillRouter:
 
         if skill.routing_owner == "gate" and score > 0:
             score += 2
+
+        if skill.name == "execution-controller-coding":
+            controller_markers = [
+                token
+                for token in ("高负载", "跨文件", "长运行", ".supervisor_state.json", "主线程", "系统指挥中心")
+                if token in normalized_task
+            ]
+            if controller_markers:
+                score += 24
+                reasons.append(
+                    f"Execution-controller boost applied: {', '.join(controller_markers)}."
+                )
+
+        if skill.name == "subagent-delegation" and score > 0:
+            explicit_delegation = any(
+                token in normalized_task
+                for token in ("sidecar", "subagent", "delegation", "子代理", "并行 sidecar")
+            )
+            controller_markers = any(
+                token in normalized_task
+                for token in ("高负载", "跨文件", "长运行", ".supervisor_state.json", "主线程", "系统指挥中心")
+            )
+            if controller_markers and not explicit_delegation:
+                score *= 0.7
+                reasons.append("Delegation-gate suppression applied: controller-orchestration signals dominate.")
+
+        if skill.name == "skill-writer" and score > 0:
+            framework_policy_markers = any(
+                token in normalized_task
+                for token in ("owner gate overlay", "边界重叠", "routing", "framework", "skill框架", "路由策略")
+            )
+            if framework_policy_markers:
+                score *= 0.5
+                reasons.append("Single-skill-writer suppression applied: framework-policy signals dominate.")
 
         # Overlay-only skills must not become the primary owner
         if skill.name in OVERLAY_ONLY_SKILLS and score > 0:

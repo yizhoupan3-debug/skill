@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,8 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
+from codex_agno_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
+from codex_agno_runtime.config import RuntimeSettings
 from codex_agno_runtime.middleware import (
     MemoryMiddleware,
     Middleware,
@@ -30,6 +33,12 @@ from codex_agno_runtime.schemas import (
     UsageMetrics,
 )
 from codex_agno_runtime.trace import (
+    TRACE_COMPACTION_ARTIFACT_REF_SCHEMA_VERSION,
+    TRACE_COMPACTION_DELTA_SCHEMA_VERSION,
+    TRACE_COMPACTION_MANIFEST_SCHEMA_VERSION,
+    TRACE_COMPACTION_RECOVERY_SCHEMA_VERSION,
+    TRACE_COMPACTION_RESULT_SCHEMA_VERSION,
+    TRACE_COMPACTION_SNAPSHOT_SCHEMA_VERSION,
     TRACE_EVENT_SINK_SCHEMA_VERSION,
     TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
     TRACE_EVENT_HANDOFF_SCHEMA_VERSION,
@@ -42,6 +51,7 @@ from codex_agno_runtime.trace import (
     TRACE_REPLAY_CHUNK_SCHEMA_VERSION,
     TRACE_REPLAY_CURSOR_SCHEMA_VERSION,
 )
+from codex_agno_runtime.services import TraceService
 
 
 class _RecordingMemoryStore:
@@ -85,6 +95,53 @@ class _NoOpMiddleware(Middleware):
         return result
 
 
+@dataclass(frozen=True)
+class _MemoryStorageCapabilities:
+    backend_family: str = "memory"
+    supports_atomic_replace: bool = False
+    supports_compaction: bool = False
+    supports_snapshot_delta: bool = False
+    supports_remote_event_transport: bool = True
+
+
+class _InMemoryStorageBackend:
+    """Backend double that keeps trace artifacts in process memory."""
+
+    def __init__(self) -> None:
+        self._payloads: dict[Path, str] = {}
+
+    def capabilities(self) -> _MemoryStorageCapabilities:
+        return _MemoryStorageCapabilities()
+
+    def exists(self, path: Path) -> bool:
+        return path in self._payloads
+
+    def read_text(self, path: Path) -> str:
+        return self._payloads[path]
+
+    def write_text(self, path: Path, payload: str) -> None:
+        self._payloads[path] = payload
+
+    def delete_text(self, path: Path) -> None:
+        self._payloads.pop(path, None)
+
+
+@dataclass(frozen=True)
+class _CompactionStorageCapabilities:
+    backend_family: str = "memory-compaction"
+    supports_atomic_replace: bool = False
+    supports_compaction: bool = True
+    supports_snapshot_delta: bool = True
+    supports_remote_event_transport: bool = True
+
+
+class _CompactionStorageBackend(_InMemoryStorageBackend):
+    """Backend double that advertises compaction and snapshot-delta support."""
+
+    def capabilities(self) -> _CompactionStorageCapabilities:
+        return _CompactionStorageCapabilities()
+
+
 def _build_routing_result(session_id: str) -> RoutingResult:
     skill = SkillMetadata(
         name="trace-observability",
@@ -98,6 +155,97 @@ def _build_routing_result(session_id: str) -> RoutingResult:
         selected_skill=skill,
         layer=skill.routing_layer,
     )
+
+
+def _build_rust_first_trace_control_plane_descriptor(
+    *,
+    stream_scope_fields: list[str],
+    cleanup_scope_fields: list[str],
+) -> dict[str, object]:
+    return {
+        "schema_version": "router-rs-runtime-control-plane-v1",
+        "authority": "rust-runtime-control-plane",
+        "python_host_role": "thin-projection",
+        "rustification_status": {
+            "hot_path_projection_mode": "descriptor-driven",
+            "python_runtime_role": "compatibility-host",
+            "runtime_primary_owner": "rust-control-plane",
+            "runtime_primary_owner_authority": "rust-runtime-control-plane",
+            "steady_state_python_allowed": False,
+        },
+        "services": {
+            "trace": {
+                "authority": "rust-runtime-control-plane",
+                "role": "trace-and-handoff",
+                "projection": "rust-first-trace-projection",
+                "delegate_kind": "rust-trace-store",
+                "ownership_lane": "rust-contract-lane",
+                "producer_owner": "rust-control-plane",
+                "producer_authority": "rust-runtime-control-plane",
+                "exporter_owner": "rust-control-plane",
+                "exporter_authority": "rust-runtime-control-plane",
+                "resume_mode": "after_event_id",
+                "stream_scope_fields": stream_scope_fields,
+                "cleanup_scope_fields": cleanup_scope_fields,
+            }
+        },
+    }
+
+
+def test_trace_service_health_exposes_background_effect_host_contract(tmp_path: Path) -> None:
+    """Trace health should expose the current rustification owner and residual Python role."""
+
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=False,
+    )
+    checkpointer = FilesystemRuntimeCheckpointer(
+        data_dir=settings.resolved_data_dir,
+        trace_output_path=settings.resolved_trace_output_path,
+    )
+    control_plane_descriptor = _build_rust_first_trace_control_plane_descriptor(
+        stream_scope_fields=["session_id"],
+        cleanup_scope_fields=["session_id"],
+    )
+    trace_service = TraceService(
+        checkpointer,
+        control_plane_descriptor=control_plane_descriptor,
+    )
+
+    trace_service.startup()
+    health = trace_service.health()
+    contract = health["background_effect_host_contract"]
+
+    assert health["control_plane_authority"] == "rust-runtime-control-plane"
+    assert health["control_plane_role"] == "trace-and-handoff"
+    assert contract["service"] == "trace"
+    assert contract["control_plane_authority"] == "rust-runtime-control-plane"
+    assert contract["control_plane_role"] == "trace-and-handoff"
+    assert contract["control_plane_projection"] == "rust-first-trace-projection"
+    assert contract["control_plane_delegate_kind"] == "rust-trace-store"
+    assert contract["runtime_control_plane_authority"] == "rust-runtime-control-plane"
+    assert contract["python_host_role"] == "thin-projection"
+    assert contract["steady_state_owner"] == "rust-control-plane"
+    assert contract["remaining_python_role"] == "compatibility-host"
+    assert contract["progression"]["runtime_primary_owner"] == "rust-control-plane"
+    assert contract["progression"]["runtime_primary_owner_authority"] == "rust-runtime-control-plane"
+    assert contract["progression"]["python_runtime_role"] == "compatibility-host"
+    assert contract["progression"]["steady_state_python_allowed"] is False
+    recorder_contract = health["control_plane_contract"]["recorder"]
+    bridge_contract = health["control_plane_contract"]["bridge"]
+    assert recorder_contract["ownership_lane"] == "rust-contract-lane"
+    assert recorder_contract["producer_owner"] == "rust-control-plane"
+    assert recorder_contract["producer_authority"] == "rust-runtime-control-plane"
+    assert recorder_contract["exporter_owner"] == "rust-control-plane"
+    assert recorder_contract["exporter_authority"] == "rust-runtime-control-plane"
+    assert bridge_contract["ownership_lane"] == "rust-contract-lane"
+    assert bridge_contract["producer_owner"] == "rust-control-plane"
+    assert bridge_contract["exporter_owner"] == "rust-control-plane"
+    assert health["control_plane_contract"]["aligned"] is True
+
+    trace_service.shutdown()
 
 
 def test_trace_recorder_writes_versioned_metadata(tmp_path: Path) -> None:
@@ -162,6 +310,11 @@ def test_trace_recorder_writes_versioned_metadata(tmp_path: Path) -> None:
     assert data["retry_count"] == 1
     assert data["control_plane"]["authority"] == "rust-runtime-control-plane"
     assert data["control_plane"]["projection"] == "python-thin-projection"
+    assert data["control_plane"]["ownership_lane"] == "rust-contract-lane"
+    assert data["control_plane"]["producer_owner"] == "rust-control-plane"
+    assert data["control_plane"]["producer_authority"] == "rust-runtime-control-plane"
+    assert data["control_plane"]["exporter_owner"] == "rust-control-plane"
+    assert data["control_plane"]["exporter_authority"] == "rust-runtime-control-plane"
     assert data["supervisor_projection"] == {
         "supervisor_state_path": "/tmp/.supervisor_state.json",
         "active_phase": "validated",
@@ -183,8 +336,69 @@ def test_trace_recorder_writes_versioned_metadata(tmp_path: Path) -> None:
     assert data["stream"]["replay_supported"] is True
     assert data["stream"]["control_plane_authority"] == "rust-runtime-control-plane"
     assert data["stream"]["control_plane_projection"] == "python-thin-projection"
+    assert data["stream"]["ownership_lane"] == "rust-contract-lane"
+    assert data["stream"]["producer_owner"] == "rust-control-plane"
+    assert data["stream"]["producer_authority"] == "rust-runtime-control-plane"
+    assert data["stream"]["exporter_owner"] == "rust-control-plane"
+    assert data["stream"]["exporter_authority"] == "rust-runtime-control-plane"
     assert data["stream"]["latest_seq"] == 4
     assert data["stream"]["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
+
+
+def test_trace_recorder_uses_storage_backend_for_events_metadata_and_replay(tmp_path: Path) -> None:
+    """Backend-backed trace recording should persist events, metadata, and replay from memory."""
+
+    output = tmp_path / "TRACE_METADATA.json"
+    stream = tmp_path / "TRACE_EVENTS.jsonl"
+    backend = _InMemoryStorageBackend()
+    recorder = RuntimeTraceRecorder(
+        output_path=output,
+        event_stream_path=stream,
+        storage_backend=backend,
+    )
+    recorder.record(
+        session_id="session-backend",
+        job_id="job-backend",
+        kind="route.selected",
+        stage="routing",
+        payload={"skill": "trace-observability"},
+    )
+    recorder.record(
+        session_id="session-backend",
+        job_id="job-backend",
+        kind="run.failed",
+        stage="execution",
+        payload={"error": "backend failure"},
+    )
+    recorder.flush_metadata(
+        task="backend trace observability",
+        matched_skills=["trace-observability"],
+        owner="trace-observability",
+        gate="none",
+        overlay=None,
+        artifact_paths=["artifacts/current/TRACE_METADATA.json"],
+        verification_status="dry_run",
+    )
+
+    assert backend.capabilities().backend_family == "memory"
+    assert not output.exists()
+    assert not stream.exists()
+    assert backend.exists(output)
+    assert backend.exists(stream)
+
+    metadata = json.loads(backend.read_text(output))
+    assert metadata["metadata_schema_version"] == TRACE_METADATA_SCHEMA_VERSION
+    assert metadata["trace_event_sink_schema_version"] == TRACE_EVENT_SINK_SCHEMA_VERSION
+    assert metadata["events"][0]["schema_version"] == TRACE_EVENT_SCHEMA_VERSION
+
+    replayed = RuntimeTraceRecorder(
+        output_path=output,
+        event_stream_path=stream,
+        storage_backend=backend,
+    ).replay(session_id="session-backend", job_id="job-backend")
+    assert [event.kind for event in replayed.events] == ["route.selected", "run.failed"]
+    assert replayed.next_cursor is not None
+    assert replayed.next_cursor.seq == 2
 
 
 def test_middleware_chain_emits_trace_events_and_skips_memory_write_on_dry_run() -> None:
@@ -328,18 +542,205 @@ def test_trace_recorder_supports_resumable_replay_windows(tmp_path: Path) -> Non
     assert second_window.next_cursor.seq == 3
 
 
+def test_trace_compaction_rolls_generation_and_recovers_from_snapshot_plus_deltas(tmp_path: Path) -> None:
+    """Compaction should freeze one stable snapshot and replay later deltas from the next generation."""
+
+    backend = _CompactionStorageBackend()
+    recorder = RuntimeTraceRecorder(
+        output_path=tmp_path / "TRACE_METADATA.json",
+        event_stream_path=tmp_path / "TRACE_EVENTS.jsonl",
+        storage_backend=backend,
+    )
+    recorder.record(
+        session_id="session-compact",
+        job_id="job-compact",
+        kind="job.started",
+        stage="background",
+        payload={"step": 1},
+    )
+    recorder.record(
+        session_id="session-compact",
+        job_id="job-compact",
+        kind="job.progress",
+        stage="background",
+        payload={"step": 2},
+    )
+
+    compaction = recorder.compact(
+        session_id="session-compact",
+        job_id="job-compact",
+        artifact_paths=["/tmp/.supervisor_state.json"],
+    )
+    assert compaction.schema_version == TRACE_COMPACTION_RESULT_SCHEMA_VERSION
+    assert compaction.applied is True
+    assert compaction.status == "compacted"
+    assert compaction.backend_family == "memory-compaction"
+    assert compaction.current_generation == 0
+    assert compaction.next_generation == 1
+    assert compaction.latest_stable_snapshot is not None
+    assert compaction.latest_stable_snapshot.schema_version == TRACE_COMPACTION_SNAPSHOT_SCHEMA_VERSION
+    assert compaction.latest_stable_snapshot.generation == 0
+
+    first_new = recorder.record(
+        session_id="session-compact",
+        job_id="job-compact",
+        kind="job.resumed",
+        stage="background",
+        payload={"step": 3},
+    )
+    second_new = recorder.record(
+        session_id="session-compact",
+        job_id="job-compact",
+        kind="job.completed",
+        stage="background",
+        payload={"step": 4},
+    )
+    assert first_new.generation == 1
+    assert first_new.seq == 1
+    assert second_new.generation == 1
+    assert second_new.seq == 2
+
+    manifest = recorder.load_compaction_manifest(session_id="session-compact", job_id="job-compact")
+    assert manifest is not None
+    assert manifest.schema_version == TRACE_COMPACTION_MANIFEST_SCHEMA_VERSION
+    assert manifest.active_generation == 1
+    assert manifest.compaction_supported is True
+    assert manifest.snapshot_delta_supported is True
+
+    recovery = recorder.recover_compacted_state(session_id="session-compact", job_id="job-compact")
+    assert recovery is not None
+    assert recovery.schema_version == TRACE_COMPACTION_RECOVERY_SCHEMA_VERSION
+    assert recovery.snapshot.generation == 0
+    assert recovery.latest_recoverable_generation == 1
+    assert recovery.latest_cursor is not None
+    assert recovery.latest_cursor.generation == 1
+    assert recovery.latest_cursor.seq == 2
+    assert recovery.state["continuity_artifacts"] == ["/tmp/.supervisor_state.json"]
+    assert len(recovery.deltas) == 2
+    assert all(delta.schema_version == TRACE_COMPACTION_DELTA_SCHEMA_VERSION for delta in recovery.deltas)
+    assert [delta.kind for delta in recovery.deltas] == ["job.resumed", "job.completed"]
+    assert any(ref.kind == "continuity_artifact" for ref in recovery.artifact_index)
+    assert all(ref.schema_version == TRACE_COMPACTION_ARTIFACT_REF_SCHEMA_VERSION for ref in recovery.artifact_index)
+
+    replay = recorder.replay(session_id="session-compact", job_id="job-compact")
+    assert replay.generation == 1
+    assert [event.kind for event in replay.events] == ["job.resumed", "job.completed"]
+    assert replay.next_cursor is not None
+    assert replay.next_cursor.generation == 1
+    assert replay.next_cursor.seq == 2
+    assert recorder.describe_stream()["compaction_manifest_path"].endswith("trace_compaction")
+
+
+def test_trace_compaction_fail_closed_when_referenced_artifact_is_missing(tmp_path: Path) -> None:
+    """Recovery must fail closed when compaction points at a missing required artifact."""
+
+    backend = _CompactionStorageBackend()
+    recorder = RuntimeTraceRecorder(
+        output_path=tmp_path / "TRACE_METADATA.json",
+        event_stream_path=tmp_path / "TRACE_EVENTS.jsonl",
+        storage_backend=backend,
+    )
+    recorder.record(
+        session_id="session-artifact",
+        job_id="job-artifact",
+        kind="job.started",
+        stage="background",
+    )
+    compaction = recorder.compact(session_id="session-artifact", job_id="job-artifact")
+    assert compaction.applied is True
+    assert compaction.latest_stable_snapshot is not None
+
+    backend.delete_text(Path(compaction.latest_stable_snapshot.state_ref.uri))
+    with pytest.raises(RuntimeError, match="failed closed"):
+        recorder.recover_compacted_state(session_id="session-artifact", job_id="job-artifact")
+
+
+def test_trace_compaction_returns_explicit_unsupported_result_when_backend_lacks_capabilities(tmp_path: Path) -> None:
+    """Backends without compaction capability should return an explicit non-applying result."""
+
+    backend = _InMemoryStorageBackend()
+    recorder = RuntimeTraceRecorder(
+        output_path=tmp_path / "TRACE_METADATA.json",
+        event_stream_path=tmp_path / "TRACE_EVENTS.jsonl",
+        storage_backend=backend,
+    )
+    recorder.record(
+        session_id="session-unsupported",
+        job_id="job-unsupported",
+        kind="job.started",
+        stage="background",
+    )
+
+    compaction = recorder.compact(session_id="session-unsupported", job_id="job-unsupported")
+    assert compaction.schema_version == TRACE_COMPACTION_RESULT_SCHEMA_VERSION
+    assert compaction.applied is False
+    assert compaction.status == "unsupported"
+    assert compaction.reason == "storage backend does not advertise compaction + snapshot-delta support"
+    assert recorder.load_compaction_manifest(session_id="session-unsupported", job_id="job-unsupported") is None
+
+
+def test_trace_contract_scoping_uses_rust_first_scope_fields(tmp_path: Path) -> None:
+    """Trace replay and cleanup should follow the Rust-owned scope contract, not hardcoded Python scope."""
+
+    control_plane_descriptor = _build_rust_first_trace_control_plane_descriptor(
+        stream_scope_fields=["session_id"],
+        cleanup_scope_fields=["session_id"],
+    )
+    bridge = InMemoryRuntimeEventBridge(control_plane_descriptor=control_plane_descriptor)
+    recorder = RuntimeTraceRecorder(
+        event_stream_path=tmp_path / "TRACE_EVENTS.jsonl",
+        event_bridge=bridge,
+        control_plane_descriptor=control_plane_descriptor,
+    )
+    recorder.record(
+        session_id="session-contract",
+        job_id="job-a",
+        kind="job.started",
+        stage="background",
+    )
+    recorder.record(
+        session_id="session-contract",
+        job_id="job-b",
+        kind="job.completed",
+        stage="background",
+    )
+
+    replay = recorder.replay(session_id="session-contract", job_id="job-a")
+    assert [event.job_id for event in replay.events] == ["job-a", "job-b"]
+    assert recorder.describe_stream()["stream_scope_fields"] == ["session_id"]
+    assert recorder.describe_stream()["cleanup_scope_fields"] == ["session_id"]
+    assert recorder.describe_stream()["ownership_lane"] == "rust-contract-lane"
+    assert recorder.describe_stream()["producer_owner"] == "rust-control-plane"
+    assert recorder.control_plane_descriptor().stream_scope_fields == ["session_id"]
+    assert recorder.control_plane_descriptor().ownership_lane == "rust-contract-lane"
+
+    window = bridge.subscribe(session_id="session-contract", job_id="job-a")
+    assert [event.job_id for event in window.events] == ["job-a", "job-b"]
+
+    bridge.cleanup(session_id="session-contract", job_id="job-a")
+    cleaned = bridge.subscribe(session_id="session-contract", heartbeat=True)
+    assert cleaned.events == []
+    assert cleaned.heartbeat is not None
+    assert bridge.health()["stream_scope_fields"] == ["session_id"]
+    assert bridge.health()["cleanup_scope_fields"] == ["session_id"]
+    assert bridge.health()["ownership_lane"] == "rust-contract-lane"
+    assert bridge.health()["producer_owner"] == "rust-control-plane"
+
+
 def test_runtime_event_handoff_serializes_transport_and_replay_refs() -> None:
     """Handoff descriptor should carry transport details plus replay anchors."""
 
     transport = RuntimeEventTransport(
         stream_id="stream::session-4",
         session_id="session-4",
+        job_id="job-4",
         binding_backend_family="filesystem",
         binding_artifact_path="/tmp/runtime_event_transports/session-4__session-4.json",
     )
     handoff = RuntimeEventHandoff(
         stream_id=transport.stream_id,
         session_id="session-4",
+        job_id="job-4",
         checkpoint_backend_family="filesystem",
         trace_stream_path="/tmp/TRACE_EVENTS.jsonl",
         resume_manifest_path="/tmp/TRACE_RESUME_MANIFEST.json",
@@ -351,8 +752,30 @@ def test_runtime_event_handoff_serializes_transport_and_replay_refs() -> None:
     assert payload["checkpoint_backend_family"] == "filesystem"
     assert payload["trace_stream_path"].endswith("TRACE_EVENTS.jsonl")
     assert payload["resume_manifest_path"].endswith("TRACE_RESUME_MANIFEST.json")
+    assert payload["remote_attach_strategy"] == "transport_descriptor_then_replay"
+    assert payload["cleanup_preserves_replay"] is True
+    assert payload["attach_target"]["endpoint_kind"] == "runtime_method"
+    assert payload["attach_target"]["subscribe_method"] == "subscribe_runtime_events"
+    assert payload["attach_target"]["session_id"] == "session-4"
+    assert payload["attach_target"]["job_id"] == "job-4"
+    assert payload["replay_anchor"]["anchor_kind"] == "trace_replay_cursor"
+    assert payload["replay_anchor"]["cursor_schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
+    assert payload["replay_anchor"]["resume_mode"] == "after_event_id"
     assert payload["transport"]["handoff_supported"] is True
+    assert payload["transport"]["remote_attach_supported"] is True
+    assert payload["transport"]["ownership_lane"] == "rust-contract-lane"
+    assert payload["transport"]["producer_owner"] == "rust-control-plane"
+    assert payload["transport"]["producer_authority"] == "rust-runtime-control-plane"
+    assert payload["transport"]["exporter_owner"] == "rust-control-plane"
+    assert payload["transport"]["exporter_authority"] == "rust-runtime-control-plane"
+    assert payload["transport"]["attach_target"]["session_id"] == "session-4"
+    assert payload["transport"]["replay_anchor"]["anchor_kind"] == "trace_replay_cursor"
     assert payload["transport"]["binding_artifact_path"].endswith("session-4__session-4.json")
+    assert payload["recovery_artifacts"] == [
+        "/tmp/runtime_event_transports/session-4__session-4.json",
+        "/tmp/TRACE_RESUME_MANIFEST.json",
+        "/tmp/TRACE_EVENTS.jsonl",
+    ]
 
 
 def test_in_memory_event_bridge_supports_last_event_id_heartbeat_and_cleanup() -> None:

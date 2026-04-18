@@ -35,7 +35,6 @@ metadata:
     - context-compression
 risk: medium
 source: local
-source_priority: 40
 allowed_tools:
   - shell
   - git
@@ -62,12 +61,13 @@ bridge_behavior: mobile_complete_once
 
 This skill owns **strict execution auditing** for Codex work: prove that an implementation is not only present, but also fully wired, resilient, measurable, and worthy of final sign-off.
 
-Use it as an **overlay**, not a primary builder. It should sit on top of `plan-to-code`, `checklist-fixer`, domain implementation skills, or [`$execution-controller-coding`](/Users/joe/Documents/skill/skills/execution-controller-coding/SKILL.md) slices.
+Use it as an **overlay**, not a primary builder. It should sit on top of `idea-to-plan`, `plan-to-code`, `checklist-fixer`, domain implementation skills, or [`$execution-controller-coding`](/Users/joe/Documents/skill/skills/execution-controller-coding/SKILL.md) slices.
 
 ## When to use
 
 - “强制高质量执行 / 深度执行审计 / 最终验收 / 帮我做 sign-off”
 - “检查是不是 100% 对齐需求 / 有没有漏接线 / 有没有隐藏风险”
+- “这个计划是不是只是拆任务，还是已经形成高质量方案”
 - The user has **zero tolerance** for placeholders, partial glue code, flaky behavior, or weak runtime evidence
 - The implementation spans multiple surfaces such as **logic + API + storage + UI + tests**
 - The task needs **automated verification**, artifact capture, and a rework queue instead of casual review comments
@@ -126,12 +126,19 @@ This overlay enforces five questions:
 4. **Runtime evidence** — do tests, logs, browser state, and outputs prove correctness?
 5. **Result idealism** — is the result merely functional, or genuinely shippable?
 
+For planning-oriented audits on top of `idea-to-plan`, also enforce:
+
+6. **Strategic clarity** — did the plan separate route selection from execution decomposition?
+7. **Decision traceability** — are assumptions, open questions, and rejected routes explicit?
+8. **Planning acceptance** — does the plan satisfy the [planning rubric](references/planning-rubric.md)?
+
 ## Audit surfaces
 
 1. **Spec Alignment (L1)**
    - Requirement coverage
    - Acceptance criteria mapping
    - Missing glue / unregistered routes / dead branches
+   - For planning slices: verify the plan includes goals, non-goals, compared routes, assumptions, open questions, and handoff boundaries
 2. **Robustness Audit (L2)**
    - Null / empty / invalid input
    - Timeout / retry / cancellation
@@ -145,6 +152,8 @@ This overlay enforces five questions:
    - Regression protection and failure visibility
 5. **Superior Quality Audit (L5)**
    - Final pass against [references/superior-quality-bar.md](references/superior-quality-bar.md)
+6. **Planning Rubric Audit (L5-P)**
+   - When auditing a planning deliverable, run the checklist in [references/planning-rubric.md](references/planning-rubric.md)
 
 ## Runtime-policy adaptation
 

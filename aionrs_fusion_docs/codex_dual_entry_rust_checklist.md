@@ -1,6 +1,9 @@
 # Codex 双入口主清单
 
-> 本文件是当前阶段的 canonical checklist，明确新路线下哪些东西已经落地、哪些还要继续清理、哪些应降级为 legacy debt。
+> 本文件现在是双入口 Rust 迁移的 compatibility-facing checklist，不再承担
+> 仓库顶层执行主清单角色。当前主线执行由仓库根部的 `rust_checklist.md`
+> 驱动；本文只保留双入口兼容视图下的收口状态，并统一服从
+> `thin projection + Rust contract-first migration` 口径。
 
 ## 1. 本阶段目标
 
@@ -66,9 +69,11 @@
 ## 5. 当前还没收口的核心空缺
 
 - [x] alias retirement gate 已定义
-- [ ] 仍有 checklist / outline 叙事滞后于当前文档，未完全反映 `codex_desktop_host_adapter` 已是 compatibility-only
-- [ ] 仍有旧清单把 `upgrade_compatibility_matrix` 写成主回归基线
-- [ ] 还没有完全把旧 `aionrs` 叙事替换为 Codex-only artifact contract
+- [x] checklist / outline 叙事已收口，已明确 `codex_desktop_host_adapter`
+  只是 compatibility-only mirror
+- [x] 旧清单不再把 `upgrade_compatibility_matrix` 写成主回归基线
+- [~] 旧 `aionrs` 叙事在文档面已切到 compatibility / legacy debt 口径
+  artifact / tests / code 侧仍待后续 lane 收口
 
 ## 6. 当前必须推进的五个核心任务
 
@@ -76,7 +81,8 @@
 
 - [x] 明确 framework core 是唯一主控
 - [x] 明确 `codexcli` 是执行入口，不是真源
-- [ ] 把这一结论系统性写入 adapter / artifact / test 叙事
+- [~] 把这一结论系统性写入 adapter / artifact / test 叙事
+  文档 / contract 叙事已完成；adapter / tests 仍待后续 lane 收口
 
 ### Task 2: 建立 `codex_common_adapter`
 
@@ -97,7 +103,8 @@
 - [x] 已用 Desktop / CLI parity snapshot 替换旧 `aionrs` compatibility 主线
 - [x] 已建立 shared artifact layout baseline
 - [x] 已建立双入口回归而不是单宿主回归
-- [ ] 继续推动下游从 `upgrade_compatibility_matrix` 迁到 parity-snapshot-first
+- [~] 继续推动下游从 `upgrade_compatibility_matrix` 迁到 parity-snapshot-first
+  文档口径已完成；artifact / tests / scripts 仍待后续 lane 收口
 
 ### Task 5: 重新定义 Rust 边界
 
@@ -123,7 +130,7 @@
 
 - [x] 已从旧的 companion projection 叙事，改成 Codex shared contract emission
 - [x] 已从旧的 upgrade compatibility 叙事，改成 Desktop / CLI parity snapshot
-- [ ] 仍需清掉残留文档里的 compatibility-first 表述
+- [x] 已清掉残留文档里的 compatibility-first 表述
 
 ### 当前不做
 
@@ -147,8 +154,10 @@
 - [x] Desktop / CLI 共享同一份 artifact / memory / session continuity contract
 - [x] `codex_dual_entry_parity_snapshot` 已是主 regression baseline
 - [x] `codex_desktop_host_adapter` 已只是 compatibility-only mirror alias
-- [ ] 旧 `aionrs` / `AionUI` 路线被明确降级为 legacy debt
-- [ ] Rust lane 的输出对准 Codex-only 双入口方案
+- [~] 旧 `aionrs` / `AionUI` 路线已在文档面明确降级为 legacy debt
+  代码 / tests / artifacts 仍待后续 lane 收口
+- [x] Rust lane 的输出口径已对准 Codex-only 双入口 compatibility view，
+  并受 `thin projection + Rust contract-first migration` 主线约束
 
 ## 9. 明确不做的事
 

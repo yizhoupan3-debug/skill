@@ -27,12 +27,15 @@ const KNOWN_OVERLAY_SKILLS: [&str; 5] = [
 const ROUTE_DECISION_SCHEMA_VERSION: &str = "router-rs-route-decision-v1";
 const ROUTE_POLICY_SCHEMA_VERSION: &str = "router-rs-route-policy-v1";
 const ROUTE_SNAPSHOT_SCHEMA_VERSION: &str = "router-rs-route-snapshot-v1";
+const ROUTE_REPORT_SCHEMA_VERSION: &str = "router-rs-route-report-v1";
 const ROUTE_AUTHORITY: &str = "rust-route-core";
 const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
 const EXECUTION_SCHEMA_VERSION: &str = "router-rs-execute-response-v1";
 const EXECUTION_AUTHORITY: &str = "rust-execution-cli";
 const RUNTIME_CONTROL_PLANE_SCHEMA_VERSION: &str = "router-rs-runtime-control-plane-v1";
 const RUNTIME_CONTROL_PLANE_AUTHORITY: &str = "rust-runtime-control-plane";
+const BACKGROUND_CONTROL_SCHEMA_VERSION: &str = "router-rs-background-control-v1";
+const BACKGROUND_CONTROL_AUTHORITY: &str = "rust-background-control";
 const OVERLAY_ONLY_SKILLS: [&str; 4] = [
     "execution-audit-codex",
     "humanizer",
@@ -67,6 +70,8 @@ struct Cli {
     #[arg(long)]
     runtime_control_plane_json: bool,
     #[arg(long)]
+    background_control_json: bool,
+    #[arg(long)]
     profile_json: bool,
     #[arg(long)]
     profile_artifacts_json: bool,
@@ -86,6 +91,8 @@ struct Cli {
     route_snapshot_input_json: Option<String>,
     #[arg(long)]
     execute_input_json: Option<String>,
+    #[arg(long)]
+    background_control_input_json: Option<String>,
     #[arg(long, default_value = "route-cli")]
     session_id: String,
     #[arg(long, default_value_t = true)]
@@ -106,10 +113,10 @@ struct SkillRecord {
     health: f64,
     slug_lower: String,
     summary_lower: String,
-    triggers_lower: String,
+    trigger_hints_lower: String,
     fuzzy_tokens: Vec<String>,
     gate_phrases: Vec<String>,
-    trigger_phrases: Vec<String>,
+    trigger_hints: Vec<String>,
     name_tokens: HashSet<String>,
     keyword_tokens: HashSet<String>,
 }
@@ -147,6 +154,8 @@ struct RouteDecisionSnapshotPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteDiffReportPayload {
+    report_schema_version: String,
+    authority: String,
     mode: String,
     primary_engine: String,
     shadow_engine: Option<String>,
@@ -184,6 +193,7 @@ struct RouteExecutionPolicyPayload {
     mode: String,
     rollback_active: bool,
     python_route_required: bool,
+    diagnostic_python_lane: bool,
     primary_authority: String,
     route_result_engine: String,
     shadow_engine: Option<String>,
@@ -254,6 +264,75 @@ struct ExecuteResponsePayload {
     metadata: Value,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BackgroundControlRequestPayload {
+    schema_version: String,
+    operation: String,
+    multitask_strategy: Option<String>,
+    current_status: Option<String>,
+    task_active: Option<bool>,
+    task_done: Option<bool>,
+    active_job_count: Option<usize>,
+    capacity_limit: Option<usize>,
+    attempt: Option<usize>,
+    retry_count: Option<usize>,
+    max_attempts: Option<usize>,
+    backoff_base_seconds: Option<f64>,
+    backoff_multiplier: Option<f64>,
+    max_backoff_seconds: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BackgroundControlEffectPlanPayload {
+    next_step: String,
+    terminal_status: Option<String>,
+    resolved_status: Option<String>,
+    finalize_immediately: Option<bool>,
+    cancel_running_task: Option<bool>,
+    next_retry_count: Option<usize>,
+    backoff_seconds: Option<f64>,
+    wait_timeout_seconds: Option<f64>,
+    wait_poll_interval_seconds: Option<f64>,
+    sleep_seconds: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BackgroundControlResponsePayload {
+    schema_version: String,
+    authority: String,
+    operation: String,
+    normalized_multitask_strategy: Option<String>,
+    supported_multitask_strategies: Vec<String>,
+    strategy_supported: bool,
+    accepted: Option<bool>,
+    requires_takeover: Option<bool>,
+    error: Option<String>,
+    should_retry: Option<bool>,
+    next_retry_count: Option<usize>,
+    backoff_seconds: Option<f64>,
+    terminal_status: Option<String>,
+    resolved_status: Option<String>,
+    finalize_immediately: Option<bool>,
+    cancel_running_task: Option<bool>,
+    reason: String,
+    effect_plan: BackgroundControlEffectPlanPayload,
+}
+
+fn background_effect_plan(next_step: &str) -> BackgroundControlEffectPlanPayload {
+    BackgroundControlEffectPlanPayload {
+        next_step: next_step.to_string(),
+        terminal_status: None,
+        resolved_status: None,
+        finalize_immediately: None,
+        cancel_running_task: None,
+        next_retry_count: None,
+        backoff_seconds: None,
+        wait_timeout_seconds: None,
+        wait_poll_interval_seconds: None,
+        sleep_seconds: None,
+    }
+}
+
 impl SkillRecord {
     fn from_raw(raw: RawSkillRecord) -> Self {
         let RawSkillRecord {
@@ -264,27 +343,26 @@ impl SkillRecord {
             priority,
             session_start,
             summary,
-            triggers,
+            trigger_hints,
             health,
         } = raw;
         let slug_lower = normalize_text(&slug);
         let summary_lower = normalize_text(&summary);
-        let triggers_lower = normalize_text(&triggers);
+        let trigger_hints_lower = normalize_text(&trigger_hints.join(" "));
         let mut fuzzy_source = String::with_capacity(
-            slug_lower.len() + summary_lower.len() + triggers_lower.len() + 2,
+            slug_lower.len() + summary_lower.len() + trigger_hints_lower.len() + 2,
         );
         fuzzy_source.push_str(&slug_lower);
         fuzzy_source.push(' ');
-        fuzzy_source.push_str(&triggers_lower);
+        fuzzy_source.push_str(&trigger_hints_lower);
         fuzzy_source.push(' ');
         fuzzy_source.push_str(&summary_lower);
 
-        let gate_phrases = split_phrases(&gate);
-        let trigger_phrases = split_phrases(&triggers);
+        let gate_phrases = gate_hint_phrases(&gate);
         let name_tokens = tokenize_query(&slug.replace('-', " "))
             .into_iter()
             .collect::<HashSet<_>>();
-        let keyword_tokens = tokenize_query(&format!("{summary} {triggers}"))
+        let keyword_tokens = tokenize_query(&format!("{summary} {}", trigger_hints.join(" ")))
             .into_iter()
             .collect::<HashSet<_>>();
 
@@ -299,10 +377,10 @@ impl SkillRecord {
             health,
             slug_lower,
             summary_lower,
-            triggers_lower,
+            trigger_hints_lower,
             fuzzy_tokens: tokenize_query(&fuzzy_source),
             gate_phrases,
-            trigger_phrases,
+            trigger_hints,
             name_tokens,
             keyword_tokens,
         }
@@ -318,7 +396,7 @@ struct RawSkillRecord {
     priority: String,
     session_start: String,
     summary: String,
-    triggers: String,
+    trigger_hints: Vec<String>,
     health: f64,
 }
 
@@ -331,6 +409,7 @@ fn main() -> Result<(), String> {
         args.route_snapshot_json,
         args.execute_json,
         args.runtime_control_plane_json,
+        args.background_control_json,
         args.profile_json,
         args.profile_artifacts_json,
         args.route_report_json,
@@ -341,9 +420,27 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --route-report-json, --profile-json, and --profile-artifacts-json"
+            "choose only one output mode among --json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --background-control-json, --route-report-json, --profile-json, and --profile-artifacts-json"
                 .to_string(),
         );
+    }
+
+    if args.background_control_json {
+        let payload = serde_json::from_str::<BackgroundControlRequestPayload>(
+            args.background_control_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--background-control-input-json is required with --background-control-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse background control input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_background_control_response(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
     }
 
     if args.runtime_control_plane_json {
@@ -635,9 +732,15 @@ fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
         .get("summary")
         .or_else(|| index.get("description"))
         .ok_or_else(|| format!("runtime index missing summary key: {}", path.display()))?;
-    let idx_triggers = *index
-        .get("triggers")
-        .ok_or_else(|| format!("runtime index missing triggers key: {}", path.display()))?;
+    let idx_trigger_hints = *index
+        .get("trigger_hints")
+        .or_else(|| index.get("triggers"))
+        .ok_or_else(|| {
+            format!(
+                "runtime index missing trigger_hints key: {}",
+                path.display()
+            )
+        })?;
     let idx_health = *index
         .get("health")
         .ok_or_else(|| format!("runtime index missing health key: {}", path.display()))?;
@@ -649,7 +752,7 @@ fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
         idx_owner,
         idx_gate,
         idx_summary,
-        idx_triggers,
+        idx_trigger_hints,
         idx_health,
     ]
     .iter()
@@ -674,7 +777,7 @@ fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
                     .map(value_to_string)
                     .unwrap_or_else(|| "n/a".to_string()),
                 summary: value_to_string(&row[idx_summary]),
-                triggers: value_to_string(&row[idx_triggers]),
+                trigger_hints: value_to_string_list(&row[idx_trigger_hints]),
                 health: value_to_f64(&row[idx_health]).unwrap_or(100.0),
             }))
         })
@@ -714,9 +817,10 @@ fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, String> {
         .get("description")
         .or_else(|| key_index.get("summary"))
         .ok_or_else(|| format!("manifest missing description key: {}", path.display()))?;
-    let idx_triggers = *key_index
-        .get("triggers")
-        .ok_or_else(|| format!("manifest missing triggers key: {}", path.display()))?;
+    let idx_trigger_hints = *key_index
+        .get("trigger_hints")
+        .or_else(|| key_index.get("triggers"))
+        .ok_or_else(|| format!("manifest missing trigger_hints key: {}", path.display()))?;
     let idx_health = *key_index
         .get("health")
         .ok_or_else(|| format!("manifest missing health key: {}", path.display()))?;
@@ -728,7 +832,7 @@ fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, String> {
         idx_owner,
         idx_gate,
         idx_desc,
-        idx_triggers,
+        idx_trigger_hints,
         idx_health,
     ]
     .iter()
@@ -753,7 +857,7 @@ fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, String> {
                     .map(value_to_string)
                     .unwrap_or_else(|| "n/a".to_string()),
                 summary: value_to_string(&row[idx_desc]),
-                triggers: value_to_string(&row[idx_triggers]),
+                trigger_hints: value_to_string_list(&row[idx_trigger_hints]),
                 health: value_to_f64(&row[idx_health]).unwrap_or(100.0),
             }))
         })
@@ -773,6 +877,18 @@ fn value_to_string(value: &Value) -> String {
         Value::Bool(raw) => raw.to_string(),
         Value::Null => String::new(),
         other => other.to_string(),
+    }
+}
+
+fn value_to_string_list(value: &Value) -> Vec<String> {
+    match value {
+        Value::Array(items) => items
+            .iter()
+            .map(value_to_string)
+            .filter(|item| !item.trim().is_empty())
+            .collect(),
+        Value::Null => Vec::new(),
+        _ => split_phrases(&value_to_string(value)),
     }
 }
 
@@ -831,6 +947,62 @@ fn split_phrases(text: &str) -> Vec<String> {
     phrases
 }
 
+fn gate_hint_phrases(gate: &str) -> Vec<String> {
+    match gate {
+        "source" => vec![
+            "官方".to_string(),
+            "官方文档".to_string(),
+            "文档".to_string(),
+            "docs".to_string(),
+            "readme".to_string(),
+            "api".to_string(),
+            "openai".to_string(),
+            "github".to_string(),
+            "look up".to_string(),
+            "search".to_string(),
+        ],
+        "artifact" => vec![
+            "pdf".to_string(),
+            "docx".to_string(),
+            "xlsx".to_string(),
+            "ppt".to_string(),
+            "pptx".to_string(),
+            "word".to_string(),
+            "excel".to_string(),
+            "artifact".to_string(),
+            "文档".to_string(),
+            "表格".to_string(),
+            "幻灯片".to_string(),
+            "文件".to_string(),
+        ],
+        "evidence" => vec![
+            "报错".to_string(),
+            "失败".to_string(),
+            "崩".to_string(),
+            "截图".to_string(),
+            "渲染".to_string(),
+            "日志".to_string(),
+            "traceback".to_string(),
+            "error".to_string(),
+            "bug".to_string(),
+            "why".to_string(),
+            "为什么".to_string(),
+        ],
+        "delegation" => vec![
+            "sidecar".to_string(),
+            "subagent".to_string(),
+            "delegation".to_string(),
+            "并行".to_string(),
+            "子代理".to_string(),
+            "主线程".to_string(),
+            "local-supervisor".to_string(),
+            "跨文件".to_string(),
+            "长运行".to_string(),
+        ],
+        _ => Vec::new(),
+    }
+}
+
 fn term_score(term: &str, record: &SkillRecord) -> f64 {
     if term == record.slug_lower {
         return 16.0;
@@ -838,7 +1010,7 @@ fn term_score(term: &str, record: &SkillRecord) -> f64 {
     if record.slug_lower.contains(term) {
         return 12.0;
     }
-    if record.triggers_lower.contains(term) {
+    if record.trigger_hints_lower.contains(term) {
         return 9.0;
     }
     if record.summary_lower.contains(term) {
@@ -1052,13 +1224,15 @@ fn build_route_diff_report(
     }
 
     RouteDiffReportPayload {
+        report_schema_version: ROUTE_REPORT_SCHEMA_VERSION.to_string(),
+        authority: ROUTE_AUTHORITY.to_string(),
         mode: mode.to_string(),
-        primary_engine: if mode == "shadow" || rollback_active {
+        primary_engine: if mode == "python" {
             "python".to_string()
         } else {
             "rust".to_string()
         },
-        shadow_engine: Some(if mode == "shadow" || rollback_active {
+        shadow_engine: Some(if mode == "python" {
             "rust".to_string()
         } else {
             "python".to_string()
@@ -1104,6 +1278,410 @@ fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponsePayl
     ))
 }
 
+fn normalize_multitask_strategy(strategy: Option<&str>) -> String {
+    strategy.unwrap_or("reject").trim().to_lowercase()
+}
+
+fn compute_backoff_seconds(
+    base: f64,
+    multiplier: f64,
+    retry_count: usize,
+    maximum: Option<f64>,
+) -> f64 {
+    if retry_count == 0 || base <= 0.0 {
+        return 0.0;
+    }
+    let normalized_multiplier = if multiplier > 0.0 { multiplier } else { 1.0 };
+    let mut delay = base * normalized_multiplier.powi((retry_count.saturating_sub(1)) as i32);
+    if let Some(maximum) = maximum {
+        delay = delay.min(maximum);
+    }
+    delay
+}
+
+fn build_background_control_response(
+    payload: BackgroundControlRequestPayload,
+) -> Result<BackgroundControlResponsePayload, String> {
+    let supported_multitask_strategies = vec!["interrupt".to_string(), "reject".to_string()];
+    match payload.operation.as_str() {
+        "enqueue" => {
+            let normalized_multitask_strategy =
+                normalize_multitask_strategy(payload.multitask_strategy.as_deref());
+            let strategy_supported = supported_multitask_strategies
+                .iter()
+                .any(|strategy| strategy == &normalized_multitask_strategy);
+            if !strategy_supported {
+                let mut effect_plan = background_effect_plan("reject");
+                effect_plan.terminal_status = Some("failed".to_string());
+                return Ok(BackgroundControlResponsePayload {
+                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                    operation: payload.operation,
+                    normalized_multitask_strategy: Some(normalized_multitask_strategy),
+                    supported_multitask_strategies,
+                    strategy_supported: false,
+                    accepted: Some(false),
+                    requires_takeover: Some(false),
+                    error: Some(format!(
+                        "Unsupported multitask strategy: {}. Supported strategies: interrupt, reject",
+                        payload.multitask_strategy.as_deref().unwrap_or("reject")
+                    )),
+                    should_retry: None,
+                    next_retry_count: None,
+                    backoff_seconds: None,
+                    terminal_status: None,
+                    resolved_status: None,
+                    finalize_immediately: None,
+                    cancel_running_task: None,
+                    reason: "invalid-multitask-strategy".to_string(),
+                    effect_plan,
+                });
+            }
+            let active_job_count = payload.active_job_count.unwrap_or(0);
+            let capacity_limit = payload.capacity_limit.unwrap_or(0);
+            if active_job_count >= capacity_limit {
+                let mut effect_plan = background_effect_plan("reject");
+                effect_plan.terminal_status = Some("failed".to_string());
+                return Ok(BackgroundControlResponsePayload {
+                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                    operation: payload.operation,
+                    normalized_multitask_strategy: Some(normalized_multitask_strategy.clone()),
+                    supported_multitask_strategies,
+                    strategy_supported: true,
+                    accepted: Some(false),
+                    requires_takeover: Some(normalized_multitask_strategy == "interrupt"),
+                    error: Some(format!(
+                        "Too many admitted background jobs ({}/{})",
+                        active_job_count, capacity_limit
+                    )),
+                    should_retry: None,
+                    next_retry_count: None,
+                    backoff_seconds: None,
+                    terminal_status: None,
+                    resolved_status: None,
+                    finalize_immediately: None,
+                    cancel_running_task: None,
+                    reason: "capacity-rejected".to_string(),
+                    effect_plan,
+                });
+            }
+            let effect_plan = background_effect_plan("admit");
+            Ok(BackgroundControlResponsePayload {
+                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                operation: payload.operation,
+                normalized_multitask_strategy: Some(normalized_multitask_strategy.clone()),
+                supported_multitask_strategies,
+                strategy_supported: true,
+                accepted: Some(true),
+                requires_takeover: Some(normalized_multitask_strategy == "interrupt"),
+                error: None,
+                should_retry: None,
+                next_retry_count: None,
+                backoff_seconds: None,
+                terminal_status: None,
+                resolved_status: None,
+                finalize_immediately: None,
+                cancel_running_task: None,
+                reason: "accepted".to_string(),
+                effect_plan,
+            })
+        }
+        "interrupt" => {
+            let current_status = payload
+                .current_status
+                .unwrap_or_else(|| "queued".to_string());
+            let task_active = payload.task_active.unwrap_or(false);
+            let task_done = payload.task_done.unwrap_or(false);
+            let finalize_immediately =
+                matches!(current_status.as_str(), "queued" | "retry_scheduled")
+                    || !task_active
+                    || task_done;
+            let mut effect_plan = if finalize_immediately {
+                background_effect_plan("finalize_interrupted")
+            } else {
+                background_effect_plan("request_interrupt")
+            };
+            effect_plan.finalize_immediately = Some(finalize_immediately);
+            effect_plan.cancel_running_task =
+                Some(!finalize_immediately && task_active && !task_done);
+            effect_plan.resolved_status = Some("interrupt_requested".to_string());
+            effect_plan.terminal_status = Some(if finalize_immediately {
+                "interrupted".to_string()
+            } else {
+                "interrupt_requested".to_string()
+            });
+            Ok(BackgroundControlResponsePayload {
+                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                operation: payload.operation,
+                normalized_multitask_strategy: None,
+                supported_multitask_strategies,
+                strategy_supported: true,
+                accepted: None,
+                requires_takeover: None,
+                error: None,
+                should_retry: None,
+                next_retry_count: None,
+                backoff_seconds: None,
+                terminal_status: Some(if finalize_immediately {
+                    "interrupted".to_string()
+                } else {
+                    "interrupt_requested".to_string()
+                }),
+                resolved_status: Some("interrupt_requested".to_string()),
+                finalize_immediately: Some(finalize_immediately),
+                cancel_running_task: Some(!finalize_immediately && task_active && !task_done),
+                reason: if finalize_immediately {
+                    "interrupt-finalized".to_string()
+                } else {
+                    "interrupt-cancel-running-task".to_string()
+                },
+                effect_plan,
+            })
+        }
+        "complete" => {
+            let mut effect_plan = background_effect_plan("finalize_completed");
+            effect_plan.finalize_immediately = Some(true);
+            effect_plan.terminal_status = Some("completed".to_string());
+            effect_plan.resolved_status = Some("completed".to_string());
+            Ok(BackgroundControlResponsePayload {
+                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                operation: payload.operation,
+                normalized_multitask_strategy: None,
+                supported_multitask_strategies,
+                strategy_supported: true,
+                accepted: None,
+                requires_takeover: None,
+                error: None,
+                should_retry: None,
+                next_retry_count: None,
+                backoff_seconds: None,
+                terminal_status: Some("completed".to_string()),
+                resolved_status: Some("completed".to_string()),
+                finalize_immediately: Some(true),
+                cancel_running_task: Some(false),
+                reason: "complete-finalized".to_string(),
+                effect_plan,
+            })
+        }
+        "completion-race" => {
+            let current_status = payload
+                .current_status
+                .unwrap_or_else(|| "running".to_string());
+            let lost_race = matches!(
+                current_status.as_str(),
+                "interrupt_requested" | "interrupted"
+            );
+            let terminal_status = if lost_race {
+                "interrupted"
+            } else {
+                "completed"
+            };
+            let mut effect_plan = if lost_race {
+                background_effect_plan("finalize_interrupted")
+            } else {
+                background_effect_plan("finalize_completed")
+            };
+            effect_plan.finalize_immediately = Some(true);
+            effect_plan.terminal_status = Some(terminal_status.to_string());
+            effect_plan.resolved_status = Some(terminal_status.to_string());
+            Ok(BackgroundControlResponsePayload {
+                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                operation: payload.operation,
+                normalized_multitask_strategy: None,
+                supported_multitask_strategies,
+                strategy_supported: true,
+                accepted: None,
+                requires_takeover: None,
+                error: None,
+                should_retry: None,
+                next_retry_count: None,
+                backoff_seconds: None,
+                terminal_status: Some(terminal_status.to_string()),
+                resolved_status: Some(terminal_status.to_string()),
+                finalize_immediately: Some(true),
+                cancel_running_task: Some(false),
+                reason: if lost_race {
+                    "completion-race-lost".to_string()
+                } else {
+                    "completion-race-won".to_string()
+                },
+                effect_plan,
+            })
+        }
+        "retry-claim" => {
+            let current_status = payload
+                .current_status
+                .unwrap_or_else(|| "retry_scheduled".to_string());
+            let interrupted = matches!(
+                current_status.as_str(),
+                "interrupt_requested" | "interrupted"
+            );
+            let terminal_status = if interrupted {
+                "interrupted"
+            } else {
+                "retry_claimed"
+            };
+            let mut effect_plan = if interrupted {
+                background_effect_plan("finalize_interrupted")
+            } else {
+                background_effect_plan("claim_retry")
+            };
+            effect_plan.finalize_immediately = Some(interrupted);
+            effect_plan.terminal_status = Some(terminal_status.to_string());
+            effect_plan.resolved_status = Some(terminal_status.to_string());
+            Ok(BackgroundControlResponsePayload {
+                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                operation: payload.operation,
+                normalized_multitask_strategy: None,
+                supported_multitask_strategies,
+                strategy_supported: true,
+                accepted: None,
+                requires_takeover: None,
+                error: None,
+                should_retry: None,
+                next_retry_count: None,
+                backoff_seconds: None,
+                terminal_status: Some(terminal_status.to_string()),
+                resolved_status: Some(terminal_status.to_string()),
+                finalize_immediately: Some(interrupted),
+                cancel_running_task: Some(false),
+                reason: if interrupted {
+                    "retry-claim-interrupted".to_string()
+                } else {
+                    "retry-claim-granted".to_string()
+                },
+                effect_plan,
+            })
+        }
+        "interrupt-finalize" => {
+            let mut effect_plan = background_effect_plan("finalize_interrupted");
+            effect_plan.finalize_immediately = Some(true);
+            effect_plan.terminal_status = Some("interrupted".to_string());
+            effect_plan.resolved_status = Some("interrupted".to_string());
+            Ok(BackgroundControlResponsePayload {
+                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                operation: payload.operation,
+                normalized_multitask_strategy: None,
+                supported_multitask_strategies,
+                strategy_supported: true,
+                accepted: None,
+                requires_takeover: None,
+                error: None,
+                should_retry: None,
+                next_retry_count: None,
+                backoff_seconds: None,
+                terminal_status: Some("interrupted".to_string()),
+                resolved_status: Some("interrupted".to_string()),
+                finalize_immediately: Some(true),
+                cancel_running_task: Some(false),
+                reason: "interrupt-finalized".to_string(),
+                effect_plan,
+            })
+        }
+        "retry" => {
+            let attempt = payload.attempt.unwrap_or(1).max(1);
+            let retry_count = payload.retry_count.unwrap_or(0);
+            let max_attempts = payload.max_attempts.unwrap_or(1).max(1);
+            if attempt >= max_attempts {
+                let mut effect_plan = background_effect_plan("finalize_terminal");
+                effect_plan.terminal_status = Some(if max_attempts > 1 {
+                    "retry_exhausted".to_string()
+                } else {
+                    "failed".to_string()
+                });
+                return Ok(BackgroundControlResponsePayload {
+                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                    operation: payload.operation,
+                    normalized_multitask_strategy: None,
+                    supported_multitask_strategies,
+                    strategy_supported: true,
+                    accepted: None,
+                    requires_takeover: None,
+                    error: None,
+                    should_retry: Some(false),
+                    next_retry_count: Some(retry_count),
+                    backoff_seconds: Some(0.0),
+                    terminal_status: Some(if max_attempts > 1 {
+                        "retry_exhausted".to_string()
+                    } else {
+                        "failed".to_string()
+                    }),
+                    resolved_status: None,
+                    finalize_immediately: None,
+                    cancel_running_task: None,
+                    reason: "attempt-budget-exhausted".to_string(),
+                    effect_plan,
+                });
+            }
+            let next_retry_count = retry_count + 1;
+            let backoff_seconds = compute_backoff_seconds(
+                payload.backoff_base_seconds.unwrap_or(0.0),
+                payload.backoff_multiplier.unwrap_or(2.0),
+                next_retry_count,
+                payload.max_backoff_seconds,
+            );
+            let mut effect_plan = background_effect_plan("schedule_retry");
+            effect_plan.next_retry_count = Some(next_retry_count);
+            effect_plan.backoff_seconds = Some(backoff_seconds);
+            effect_plan.terminal_status = Some("retry_scheduled".to_string());
+            Ok(BackgroundControlResponsePayload {
+                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                operation: payload.operation,
+                normalized_multitask_strategy: None,
+                supported_multitask_strategies,
+                strategy_supported: true,
+                accepted: None,
+                requires_takeover: None,
+                error: None,
+                should_retry: Some(true),
+                next_retry_count: Some(next_retry_count),
+                backoff_seconds: Some(backoff_seconds),
+                terminal_status: Some("retry_scheduled".to_string()),
+                resolved_status: None,
+                finalize_immediately: None,
+                cancel_running_task: None,
+                reason: "retry-scheduled".to_string(),
+                effect_plan,
+            })
+        }
+        "session-release" => {
+            let mut effect_plan = background_effect_plan("wait_for_release");
+            effect_plan.wait_timeout_seconds = Some(5.0);
+            effect_plan.wait_poll_interval_seconds = Some(0.01);
+            Ok(BackgroundControlResponsePayload {
+                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                operation: payload.operation,
+                normalized_multitask_strategy: None,
+                supported_multitask_strategies,
+                strategy_supported: true,
+                accepted: None,
+                requires_takeover: None,
+                error: None,
+                should_retry: None,
+                next_retry_count: None,
+                backoff_seconds: None,
+                terminal_status: None,
+                resolved_status: None,
+                finalize_immediately: None,
+                cancel_running_task: None,
+                reason: "session-release-wait".to_string(),
+                effect_plan,
+            })
+        }
+        other => Err(format!("unsupported background control operation: {other}")),
+    }
+}
+
 fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     let mut lines = vec![
         "You are the Codex runtime executing through the Rust kernel slice.".to_string(),
@@ -1135,6 +1713,10 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
                 lines.push(format!("- {reason}"));
             }
         }
+    }
+    if payload.selected_skill == "idea-to-plan" {
+        lines.push("Repo-local planning delta: converge the strategy into outline.md, decision_log.md, assumptions.md, open_questions.md, plan_rubric.md, and code_list.md.".to_string());
+        lines.push("Use checklist-writting instead when the route is already fixed and only execution decomposition remains.".to_string());
     }
     lines.push(
         "Respond as the selected skill and keep the execution aligned with the routed contract."
@@ -1392,15 +1974,15 @@ fn build_runtime_control_plane_payload() -> Value {
             },
             "agent_factory": {
                 "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "role": "compatibility-fallback-factory",
-                "projection": "python-compatibility-only",
-                "delegate_kind": "python-agno-fallback",
+                "role": "retired-compatibility-agent-contract-handle",
+                "projection": "python-retired-request-surface",
+                "delegate_kind": "execution-kernel-compatibility-agent-v1",
             },
             "background": {
                 "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
                 "role": "background-orchestration",
                 "projection": "python-thin-projection",
-                "delegate_kind": "asyncio-background-supervisor",
+                "delegate_kind": "rust-background-control-policy",
             },
         },
     })
@@ -1482,6 +2064,7 @@ fn build_route_policy(
         mode: normalized_mode.clone(),
         rollback_active,
         python_route_required: false,
+        diagnostic_python_lane: false,
         primary_authority: "rust".to_string(),
         route_result_engine: "rust".to_string(),
         shadow_engine: None,
@@ -1496,25 +2079,21 @@ fn build_route_policy(
             ..base
         }),
         "shadow" => Ok(RouteExecutionPolicyPayload {
-            python_route_required: true,
-            primary_authority: "python".to_string(),
-            route_result_engine: "python".to_string(),
-            shadow_engine: Some("rust".to_string()),
+            diagnostic_python_lane: true,
+            shadow_engine: Some("python".to_string()),
             diff_report_required: true,
             ..base
         }),
         "verify" => Ok(RouteExecutionPolicyPayload {
-            python_route_required: true,
+            diagnostic_python_lane: true,
             shadow_engine: Some("python".to_string()),
             diff_report_required: true,
             verify_parity_required: true,
             ..base
         }),
         "rust" if rollback_active => Ok(RouteExecutionPolicyPayload {
-            python_route_required: true,
-            primary_authority: "python".to_string(),
-            route_result_engine: "python".to_string(),
-            shadow_engine: Some("rust".to_string()),
+            diagnostic_python_lane: true,
+            shadow_engine: Some("python".to_string()),
             diff_report_required: true,
             ..base
         }),
@@ -1568,17 +2147,17 @@ fn score_route_candidate(
         ));
     }
 
-    let matched_trigger_phrases = record
-        .trigger_phrases
+    let matched_trigger_hints = record
+        .trigger_hints
         .iter()
         .filter(|phrase| phrase.chars().count() >= 2 && query_text.contains(phrase.as_str()))
         .cloned()
         .collect::<Vec<_>>();
-    if !matched_trigger_phrases.is_empty() {
-        score += (matched_trigger_phrases.len() as f64) * 20.0;
+    if !matched_trigger_hints.is_empty() {
+        score += (matched_trigger_hints.len() as f64) * 20.0;
         reasons.push(format!(
-            "Trigger phrase matched: {}.",
-            matched_trigger_phrases.join(", ")
+            "Trigger hint matched: {}.",
+            matched_trigger_hints.join(", ")
         ));
     }
 
@@ -1654,8 +2233,21 @@ fn pick_owner(mut candidates: Vec<RouteCandidate>) -> RouteCandidate {
         .cloned()
         .collect::<Vec<_>>();
     gate_candidates.sort_by(route_candidate_cmp);
+    let mut owner_candidates = candidates
+        .iter()
+        .filter(|candidate| {
+            normalize_text(&candidate.record.owner) != "gate"
+                && normalize_text(&candidate.record.gate) == "none"
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    owner_candidates.sort_by(route_candidate_cmp);
+    let top_owner_score = owner_candidates
+        .first()
+        .map(|candidate| candidate.score)
+        .unwrap_or(f64::NEG_INFINITY);
     if let Some(top_gate) = gate_candidates.first().cloned() {
-        if top_gate.score >= 30.0 {
+        if top_gate.score >= 30.0 && top_gate.score >= top_owner_score {
             let mut selected = top_gate;
             selected
                 .reasons
@@ -1741,7 +2333,7 @@ fn pick_overlay(
         }
         let explicit_name_match = query_text.contains(&record.slug_lower);
         let explicit_trigger_match = record
-            .trigger_phrases
+            .trigger_hints
             .iter()
             .any(|phrase| phrase.chars().count() > 3 && query_text.contains(phrase.as_str()));
         if explicit_name_match || explicit_trigger_match {
@@ -1932,9 +2524,11 @@ mod tests {
 
         let report = build_route_diff_report("shadow", python_snapshot, rust_snapshot, false);
 
+        assert_eq!(report.report_schema_version, ROUTE_REPORT_SCHEMA_VERSION);
+        assert_eq!(report.authority, ROUTE_AUTHORITY);
         assert_eq!(report.mode, "shadow");
-        assert_eq!(report.primary_engine, "python");
-        assert_eq!(report.shadow_engine.as_deref(), Some("rust"));
+        assert_eq!(report.primary_engine, "rust");
+        assert_eq!(report.shadow_engine.as_deref(), Some("python"));
         assert!(report.selected_skill_match);
         assert!(report.overlay_skill_match);
         assert!(report.layer_match);
@@ -1948,6 +2542,7 @@ mod tests {
     fn route_policy_matches_mode_matrix() {
         let python = build_route_policy("python", false).expect("python policy");
         assert!(python.python_route_required);
+        assert!(!python.diagnostic_python_lane);
         assert_eq!(python.primary_authority, "python");
         assert_eq!(python.route_result_engine, "python");
         assert!(python.shadow_engine.is_none());
@@ -1955,15 +2550,17 @@ mod tests {
         assert!(!python.verify_parity_required);
 
         let shadow = build_route_policy("shadow", false).expect("shadow policy");
-        assert!(shadow.python_route_required);
-        assert_eq!(shadow.primary_authority, "python");
-        assert_eq!(shadow.route_result_engine, "python");
-        assert_eq!(shadow.shadow_engine.as_deref(), Some("rust"));
+        assert!(!shadow.python_route_required);
+        assert!(shadow.diagnostic_python_lane);
+        assert_eq!(shadow.primary_authority, "rust");
+        assert_eq!(shadow.route_result_engine, "rust");
+        assert_eq!(shadow.shadow_engine.as_deref(), Some("python"));
         assert!(shadow.diff_report_required);
         assert!(!shadow.verify_parity_required);
 
         let verify = build_route_policy("verify", false).expect("verify policy");
-        assert!(verify.python_route_required);
+        assert!(!verify.python_route_required);
+        assert!(verify.diagnostic_python_lane);
         assert_eq!(verify.primary_authority, "rust");
         assert_eq!(verify.route_result_engine, "rust");
         assert_eq!(verify.shadow_engine.as_deref(), Some("python"));
@@ -1972,6 +2569,7 @@ mod tests {
 
         let rust = build_route_policy("rust", false).expect("rust policy");
         assert!(!rust.python_route_required);
+        assert!(!rust.diagnostic_python_lane);
         assert_eq!(rust.primary_authority, "rust");
         assert_eq!(rust.route_result_engine, "rust");
         assert!(rust.shadow_engine.is_none());
@@ -1979,10 +2577,11 @@ mod tests {
         assert!(!rust.rollback_active);
 
         let rollback = build_route_policy("rust", true).expect("rollback policy");
-        assert!(rollback.python_route_required);
-        assert_eq!(rollback.primary_authority, "python");
-        assert_eq!(rollback.route_result_engine, "python");
-        assert_eq!(rollback.shadow_engine.as_deref(), Some("rust"));
+        assert!(!rollback.python_route_required);
+        assert!(rollback.diagnostic_python_lane);
+        assert_eq!(rollback.primary_authority, "rust");
+        assert_eq!(rollback.route_result_engine, "rust");
+        assert_eq!(rollback.shadow_engine.as_deref(), Some("python"));
         assert!(rollback.diff_report_required);
         assert!(rollback.rollback_active);
         assert!(!rollback.verify_parity_required);
@@ -2000,8 +2599,14 @@ mod tests {
             payload["authority"],
             Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
         );
-        assert_eq!(payload["default_route_mode"], Value::String("rust".to_string()));
-        assert_eq!(payload["default_route_authority"], Value::String(ROUTE_AUTHORITY.to_string()));
+        assert_eq!(
+            payload["default_route_mode"],
+            Value::String("rust".to_string())
+        );
+        assert_eq!(
+            payload["default_route_authority"],
+            Value::String(ROUTE_AUTHORITY.to_string())
+        );
         assert_eq!(payload["python_authority_default"], Value::Bool(false));
         assert_eq!(
             payload["rustification_status"]["runtime_primary_owner"],
@@ -2023,6 +2628,323 @@ mod tests {
             payload["services"]["background"]["authority"],
             Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
         );
+        assert_eq!(
+            payload["services"]["background"]["delegate_kind"],
+            Value::String("rust-background-control-policy".to_string())
+        );
+    }
+
+    #[test]
+    fn background_control_enqueue_rejects_invalid_strategy_and_capacity() {
+        let invalid = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "enqueue".to_string(),
+            multitask_strategy: Some("pause".to_string()),
+            current_status: None,
+            task_active: None,
+            task_done: None,
+            active_job_count: Some(0),
+            capacity_limit: Some(4),
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+        })
+        .expect("invalid strategy response");
+        assert_eq!(invalid.authority, BACKGROUND_CONTROL_AUTHORITY);
+        assert!(!invalid.strategy_supported);
+        assert_eq!(invalid.accepted, Some(false));
+
+        let capacity = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "enqueue".to_string(),
+            multitask_strategy: Some("interrupt".to_string()),
+            current_status: None,
+            task_active: None,
+            task_done: None,
+            active_job_count: Some(2),
+            capacity_limit: Some(2),
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+        })
+        .expect("capacity response");
+        assert!(capacity.strategy_supported);
+        assert_eq!(capacity.accepted, Some(false));
+        assert_eq!(capacity.requires_takeover, Some(true));
+        assert_eq!(capacity.reason, "capacity-rejected");
+    }
+
+    #[test]
+    fn background_control_retry_computes_backoff_and_terminal_status() {
+        let retry = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "retry".to_string(),
+            multitask_strategy: None,
+            current_status: None,
+            task_active: None,
+            task_done: None,
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: Some(1),
+            retry_count: Some(0),
+            max_attempts: Some(2),
+            backoff_base_seconds: Some(0.5),
+            backoff_multiplier: Some(2.0),
+            max_backoff_seconds: Some(1.0),
+        })
+        .expect("retry response");
+        assert_eq!(retry.should_retry, Some(true));
+        assert_eq!(retry.next_retry_count, Some(1));
+        assert_eq!(retry.backoff_seconds, Some(0.5));
+        assert_eq!(retry.terminal_status.as_deref(), Some("retry_scheduled"));
+        assert_eq!(retry.effect_plan.next_step, "schedule_retry");
+        assert_eq!(retry.effect_plan.next_retry_count, Some(1));
+        assert_eq!(retry.effect_plan.backoff_seconds, Some(0.5));
+
+        let exhausted = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "retry".to_string(),
+            multitask_strategy: None,
+            current_status: None,
+            task_active: None,
+            task_done: None,
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: Some(2),
+            retry_count: Some(1),
+            max_attempts: Some(2),
+            backoff_base_seconds: Some(0.5),
+            backoff_multiplier: Some(2.0),
+            max_backoff_seconds: Some(1.0),
+        })
+        .expect("retry exhausted response");
+        assert_eq!(exhausted.should_retry, Some(false));
+        assert_eq!(
+            exhausted.terminal_status.as_deref(),
+            Some("retry_exhausted")
+        );
+        assert_eq!(exhausted.effect_plan.next_step, "finalize_terminal");
+    }
+
+    #[test]
+    fn background_control_interrupt_resolves_finalize_and_cancel_paths() {
+        let queued = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "interrupt".to_string(),
+            multitask_strategy: None,
+            current_status: Some("queued".to_string()),
+            task_active: Some(false),
+            task_done: Some(false),
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+        })
+        .expect("queued interrupt response");
+        assert_eq!(
+            queued.resolved_status.as_deref(),
+            Some("interrupt_requested")
+        );
+        assert_eq!(queued.finalize_immediately, Some(true));
+        assert_eq!(queued.cancel_running_task, Some(false));
+        assert_eq!(queued.terminal_status.as_deref(), Some("interrupted"));
+        assert_eq!(queued.effect_plan.next_step, "finalize_interrupted");
+
+        let running = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "interrupt".to_string(),
+            multitask_strategy: None,
+            current_status: Some("running".to_string()),
+            task_active: Some(true),
+            task_done: Some(false),
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+        })
+        .expect("running interrupt response");
+        assert_eq!(running.finalize_immediately, Some(false));
+        assert_eq!(running.cancel_running_task, Some(true));
+        assert_eq!(
+            running.terminal_status.as_deref(),
+            Some("interrupt_requested")
+        );
+        assert_eq!(running.effect_plan.next_step, "request_interrupt");
+    }
+
+    #[test]
+    fn background_control_complete_and_completion_race_resolve_terminal_status() {
+        let complete = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "complete".to_string(),
+            multitask_strategy: None,
+            current_status: Some("running".to_string()),
+            task_active: Some(false),
+            task_done: Some(true),
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+        })
+        .expect("complete response");
+        assert_eq!(complete.terminal_status.as_deref(), Some("completed"));
+        assert_eq!(complete.resolved_status.as_deref(), Some("completed"));
+        assert_eq!(complete.effect_plan.next_step, "finalize_completed");
+
+        let race_won = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "completion-race".to_string(),
+            multitask_strategy: None,
+            current_status: Some("running".to_string()),
+            task_active: Some(false),
+            task_done: Some(true),
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+        })
+        .expect("completion race won response");
+        assert_eq!(race_won.terminal_status.as_deref(), Some("completed"));
+        assert_eq!(race_won.reason, "completion-race-won");
+        assert_eq!(race_won.effect_plan.next_step, "finalize_completed");
+
+        let race_lost = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "completion-race".to_string(),
+            multitask_strategy: None,
+            current_status: Some("interrupt_requested".to_string()),
+            task_active: Some(false),
+            task_done: Some(true),
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+        })
+        .expect("completion race lost response");
+        assert_eq!(race_lost.terminal_status.as_deref(), Some("interrupted"));
+        assert_eq!(race_lost.resolved_status.as_deref(), Some("interrupted"));
+        assert_eq!(race_lost.reason, "completion-race-lost");
+        assert_eq!(race_lost.effect_plan.next_step, "finalize_interrupted");
+    }
+
+    #[test]
+    fn background_control_retry_claim_and_interrupt_finalize_cover_retry_lifecycle() {
+        let claimed = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "retry-claim".to_string(),
+            multitask_strategy: None,
+            current_status: Some("retry_scheduled".to_string()),
+            task_active: Some(false),
+            task_done: Some(false),
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+        })
+        .expect("retry claim response");
+        assert_eq!(claimed.terminal_status.as_deref(), Some("retry_claimed"));
+        assert_eq!(claimed.resolved_status.as_deref(), Some("retry_claimed"));
+        assert_eq!(claimed.finalize_immediately, Some(false));
+        assert_eq!(claimed.effect_plan.next_step, "claim_retry");
+
+        let interrupted = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "retry-claim".to_string(),
+            multitask_strategy: None,
+            current_status: Some("interrupt_requested".to_string()),
+            task_active: Some(false),
+            task_done: Some(false),
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+        })
+        .expect("retry claim interrupted response");
+        assert_eq!(interrupted.terminal_status.as_deref(), Some("interrupted"));
+        assert_eq!(interrupted.resolved_status.as_deref(), Some("interrupted"));
+        assert_eq!(interrupted.reason, "retry-claim-interrupted");
+        assert_eq!(interrupted.effect_plan.next_step, "finalize_interrupted");
+
+        let finalize = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "interrupt-finalize".to_string(),
+            multitask_strategy: None,
+            current_status: Some("interrupt_requested".to_string()),
+            task_active: Some(false),
+            task_done: Some(true),
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+        })
+        .expect("interrupt finalize response");
+        assert_eq!(finalize.terminal_status.as_deref(), Some("interrupted"));
+        assert_eq!(finalize.resolved_status.as_deref(), Some("interrupted"));
+        assert_eq!(finalize.reason, "interrupt-finalized");
+        assert_eq!(finalize.effect_plan.next_step, "finalize_interrupted");
+    }
+
+    #[test]
+    fn background_control_session_release_exposes_wait_plan() {
+        let release = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "session-release".to_string(),
+            multitask_strategy: None,
+            current_status: None,
+            task_active: None,
+            task_done: None,
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+        })
+        .expect("session release response");
+        assert_eq!(release.reason, "session-release-wait");
+        assert_eq!(release.effect_plan.next_step, "wait_for_release");
+        assert_eq!(release.effect_plan.wait_timeout_seconds, Some(5.0));
+        assert_eq!(release.effect_plan.wait_poll_interval_seconds, Some(0.01));
     }
 
     #[test]
@@ -2097,6 +3019,27 @@ mod tests {
     }
 
     #[test]
+    fn live_execute_prompt_builder_adds_idea_to_plan_contract() {
+        let mut payload = sample_execute_request();
+        payload.dry_run = false;
+        payload.prompt_preview = None;
+        payload.selected_skill = "idea-to-plan".to_string();
+        payload.overlay_skill = Some("anti-laziness".to_string());
+        payload.layer = "L-1".to_string();
+        payload.reasons = vec!["Trigger hint matched: 先探索现状再提方案.".to_string()];
+
+        let prompt = build_live_execute_prompt(&payload);
+
+        assert!(prompt.contains("Repo-local planning delta"));
+        assert!(prompt.contains("outline.md"));
+        assert!(prompt.contains("decision_log.md"));
+        assert!(prompt.contains("code_list.md"));
+        assert!(prompt.contains("checklist-writting"));
+        assert!(!prompt.contains("READ-ONLY planning route"));
+        assert!(!prompt.contains("<proposed_plan>"));
+    }
+
+    #[test]
     fn live_execute_ignores_caller_supplied_prompt_preview() {
         let mut payload = sample_execute_request();
         payload.dry_run = false;
@@ -2131,8 +3074,14 @@ mod tests {
             response.metadata["execution_kernel_delegate_family"],
             "rust-cli"
         );
-        assert_eq!(response.metadata["execution_kernel_delegate_impl"], "router-rs");
-        assert_eq!(response.metadata["execution_kernel_live_primary"], "router-rs");
+        assert_eq!(
+            response.metadata["execution_kernel_delegate_impl"],
+            "router-rs"
+        );
+        assert_eq!(
+            response.metadata["execution_kernel_live_primary"],
+            "router-rs"
+        );
         assert_eq!(
             response.metadata["execution_kernel_live_primary_authority"],
             EXECUTION_AUTHORITY

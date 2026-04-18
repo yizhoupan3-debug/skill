@@ -17,6 +17,10 @@ It is the runtime-specific contract source of truth for:
 
 It must stay compatible with existing project artifacts and must not fork the
 meaning of existing routing and runtime files.
+The `aionrs_fusion_docs/*` references above are compatibility-facing narrative
+artifacts only; they may explain migration state, but they must not redefine
+runtime truth or re-promote `aionrs` / `AionUI` / `upgrade_compatibility_matrix`
+as steady-state authority.
 
 ## Current Codex Dual-Entry Boundary
 
@@ -46,8 +50,8 @@ mirrors the first-class Codex artifact set directly, so downstream consumers no
 longer need to unpack the bundle just to read parity or alias-retirement
 contracts. `prepare_session(...)` and dry-run preview already route through
 `router-rs`, and normal live execution now stays Rust-only by default. The
-compatibility fallback remains disabled unless a caller explicitly enables the
-compatibility escape hatch.
+former compatibility fallback is now retired; explicit fallback requests are
+rejected instead of reopening the Python live path.
 
 That first-class set now also includes
 `cli_family_capability_discovery` plus
@@ -90,6 +94,10 @@ Rust must therefore follow these dual-entry invariants:
 - explicit `--profile-artifacts-json --include-legacy-alias-artifact` output is
   allowed only as a continuity transport exception; it does not re-promote the
   alias into the canonical Rust peer set.
+- `upgrade_compatibility_matrix` may survive only as a secondary compatibility
+  inventory / smoke artifact; it must not replace
+  `codex_dual_entry_parity_snapshot` or any first-class Rust parity contract as
+  the primary regression baseline.
 - `aionrs` / `AionUI` compatibility stays in upstream-safe legacy lanes, not in
   the forward Rust runtime center.
 - `codexcli` remains a headless execution entrypoint, never framework truth.
@@ -120,14 +128,16 @@ The benchmark implication for this repo is:
 - avoid a big-bang rewrite; move one kernel slice at a time under frozen
   contracts
 
-## Current Implementation Wave
+## Current Status Ledger
+
+### 已实现
 
 The active runtime wave is now Rust-authoritative across the default runtime:
 
 - `route_engine_mode` defaults to `rust`, so routing authority is Rust unless a
   caller explicitly chooses `python` / `shadow` / `verify` or requests rollback
-- live execution and dry-run preview stay Rust-only by default, with
-  compatibility behavior available only through an explicit escape hatch
+- live execution and dry-run preview stay Rust-only by default, and
+  compatibility live fallback is retired with explicit requests rejected
 - the runtime control plane now publishes a Rust-owned authority descriptor for
   `router` / `state` / `trace` / `memory` / `background`, while the in-process
   Python layer remains a thin projection over the frozen contracts and storage
@@ -161,9 +171,10 @@ The implemented runtime control-plane surface in this wave is:
 - runtime now exposes a filesystem `RuntimeCheckpointer` seam so
   `TRACE_RESUME_MANIFEST.json`, trace paths, and background-state path
   discovery converge on one runtime-owned backend interface
-- the checkpointer and durable background state now already share the same
-  backend-family abstraction, even though the only concrete implementation is
-  still filesystem-backed and compaction/snapshot-delta are not live yet
+- the checkpointer and durable background state now share the same
+  backend-family abstraction; filesystem remains the default concrete backend,
+  while compaction is a gated minimal lane on supported backends and unsupported
+  backends fail closed
 - runtime execution now enters through a single `ExecutionKernel` seam owned
   by `ExecutionEnvironmentService`, rather than keeping dry/live branching and
   run-output normalization inline in `runtime.py`
@@ -173,25 +184,25 @@ The implemented runtime control-plane surface in this wave is:
 - `prepare_session(...)` and dry-run preview already route through
   `router-rs`, so Python no longer owns the default preview path
 - the execution-kernel contract now treats normal live operation as
-  Rust-only by default, with compatibility behavior available only through an
-  explicit escape hatch
+  Rust-only steady state; explicit compatibility fallback requests are rejected
+  instead of reopening the Python live path
 - the next safe slice is now also externalized as
   `execution_kernel_live_response_serialization_contract`, which freezes the
   current `RunTaskResponse` shape plus the response metadata invariants for
-  live primary, compatibility fallback, and deterministic dry-run paths
+  live primary, deterministic dry-run, and the retired
+  compatibility-fallback metadata lane
 - `execution_kernel_delegate_family` and
   `execution_kernel_delegate_impl` are now also part of the stable
   execution-kernel contract descriptor, so callers can read delegate
-  family/impl directly from the shared contract lane even when live fallback is
-  disabled
+  family/impl directly from the shared contract lane without reopening a live
+  Python fallback branch
 - the contract no longer carries a blocker list; compatibility-only metadata
-  is isolated to the escape hatch and does not drive runtime branching
-- compatibility fallback semantics are now reported separately through
-  `execution_kernel_live_fallback_enabled` and
-  `execution_kernel_live_fallback_mode=compatibility|disabled`, instead of
-  encoding fallback state inside the primary live contract mode string
-- when compatibility fallback is disabled, normal live execution stays
-  Rust-only and `execution_kernel_live_fallback*` metadata may be `null`
+  is isolated to retirement descriptors and does not drive runtime branching
+- compatibility fallback now survives only as a retired contract surface:
+  explicit `rust_execute_fallback_to_python` requests are rejected, and normal
+  live/dry-run execution no longer re-enter the Python kernel path
+- compatibility-fallback metadata is tracked only as retired legacy fields, not
+  as a runnable steady-state capability on the live kernel
 - interrupt-style background replacements now use a reserved session takeover
   handoff before the new job queues, reducing the old release-then-requeue race
 - pending takeover reservations are now persisted as part of the durable
@@ -219,17 +230,21 @@ One additional Rust-authority slice is now implemented in this wave:
   `shadow` / `verify` / rollback semantics, so Python no longer computes the
   Rust-side mismatch vocabulary locally
 
-The boundary is still explicit:
+### 已退休
 
-- Rust remains the live execution owner through the router-rs boundary rather
-  than an in-process Python-owned kernel
-- `RouterService` only hydrates the Python runtime router when the explicit
-  compatibility lane or rollback path requests it
-- the compatibility lane stays intentionally narrow: it is present for legacy
-  continuity only, not as the default runtime mode
-- the next runtime target is to strengthen backend/transport implementations,
-  not to restore Python as the default authority for routing or control-plane
-  ownership
+- the compatibility live fallback runtime path is retired; explicit requests
+  are rejected instead of reopening the Python live path
+- the old blocker-list narration is retired from the live kernel contract and
+  survives only in retirement descriptors
+- `codex_desktop_host_adapter` remains compatibility-only mirror surface and is
+  no longer treated as a default or canonical peer
+
+### 下一 safe slice
+
+- strengthen backend and transport implementations without widening the live
+  Python authority surface
+- keep pushing non-filesystem concrete backend coverage and transport clarity
+  while preserving the frozen contracts
 
 ## Contract 0: Desktop Alias Retirement Path
 
@@ -572,6 +587,8 @@ Invariants:
 Status:
 
 - frozen for the current lightweight filesystem-backed implementation
+- deterministic kernel is explicitly scoped so Rust can replace mechanics
+  without taking over Python policy
 
 Compatibility targets:
 
@@ -606,6 +623,20 @@ Required provenance semantics:
   - `kind = filesystem.user-facts.v1`
   - `storage_path = absolute path to the user fact file`
 
+Rust-ready deterministic kernel:
+
+- compile the contract-provided regex patterns
+- normalize extracted fact values with stable whitespace collapse
+- dedupe facts case-insensitively while preserving first surviving insertion
+- build retrieval rows with stable `rank` and provenance
+- apply `limit` only after the ranked row set exists
+
+Python-owned policy boundary:
+
+- which extraction patterns should be active for a given host/runtime contract
+- whether an LLM-derived extraction policy should augment regex extraction later
+- any future prompt wording or summarization policy layered above fact storage
+
 Rule:
 
 - model-based memory extraction policy stays Python-owned
@@ -628,6 +659,12 @@ Deterministic mechanics suitable for Rust later:
 - section ranking
 - truncation
 - artifact offload decision
+
+Current Rust-ready kernel line:
+
+- deterministic compression mechanics live in `ContextEngineer.compress_contract(...)`
+- Rust may replace those mechanics only if it preserves the same byte-level
+  contract for retained sections, omission markers, and truncation markers
 
 Required compression metadata:
 
@@ -652,12 +689,15 @@ Policy that stays Python-owned for now:
 - summarization prompt design
 - section wording
 - human-readable compression guidance
+- any future model-assisted rewrite that changes semantic content instead of
+  deterministic pruning only
 
 ## Contract 8: Sandbox Boundary
 
 Status:
 
-- frozen as a contract and regression skeleton; implementation remains pending
+- frozen as a contract with a contract-backed minimal implementation already
+  live in the host runtime
 
 Source of truth:
 
@@ -680,8 +720,8 @@ Rule:
 
 Status:
 
-- frozen as a design contract and regression skeleton; implementation remains
-  pending
+- frozen as a contract-backed minimal implementation that is already live on
+  supported backends
 
 Source of truth:
 

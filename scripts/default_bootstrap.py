@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Materialize the default Hermes bootstrap bundle for shared CLI hosts."""
+"""Materialize the default framework bootstrap bundle for shared CLI hosts."""
 
 from __future__ import annotations
 
@@ -12,8 +12,33 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.hermes_bridge import build_evolution_proposals, build_memory_bootstrap, export_skills_for_hermes
-from scripts.memory_support import get_repo_root, workspace_name_from_root, write_json_if_changed
+from scripts.framework_bridge import (
+    build_evolution_proposals,
+    build_framework_memory_bootstrap,
+    export_framework_skills,
+)
+from scripts.memory_support import (
+    bootstrap_artifact_root,
+    build_task_id,
+    current_local_timestamp,
+    get_repo_root,
+    workspace_name_from_root,
+    write_json_if_changed,
+)
+
+BOOTSTRAP_FILENAME = "framework_default_bootstrap.json"
+
+
+def resolve_bootstrap_path(output_dir: Path) -> Path:
+    """Return the canonical bootstrap payload path."""
+
+    return output_dir / BOOTSTRAP_FILENAME
+
+
+def resolve_task_bootstrap_path(output_dir: Path, task_id: str) -> Path:
+    """Return the task-scoped bootstrap payload path."""
+
+    return output_dir / task_id / BOOTSTRAP_FILENAME
 
 
 def run_default_bootstrap(
@@ -26,22 +51,31 @@ def run_default_bootstrap(
     workspace: str | None = None,
     top: int = 8,
 ) -> dict[str, Any]:
-    """Build and write the Hermes default bootstrap bundle."""
+    """Build and write the default framework bootstrap bundle."""
 
     repo_root = (repo_root or get_repo_root()).resolve()
     workspace = workspace or workspace_name_from_root(repo_root)
-    output_dir = (output_dir or repo_root / "artifacts" / "current").resolve()
+    output_dir = (output_dir or bootstrap_artifact_root(repo_root)).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    runtime = export_skills_for_hermes()
-    memory = build_memory_bootstrap(
+    runtime = export_framework_skills()
+    memory = build_framework_memory_bootstrap(
         workspace=workspace,
         query=query,
         source_root=repo_root,
         memory_root=memory_root,
         artifact_source_dir=artifact_source_dir,
         top=top,
+        mode="active",
     )
     proposals = build_evolution_proposals()
+    created_at = current_local_timestamp()
+    continuity_decision = memory.get("continuity_decision", {})
+    task_id = str(
+        continuity_decision.get("task_id")
+        or build_task_id(query or workspace, created_at=created_at)
+    )
+    primary_bootstrap_path = resolve_task_bootstrap_path(output_dir, task_id)
+    mirror_bootstrap_path = resolve_bootstrap_path(output_dir)
     payload = {
         "skills-export": runtime,
         "memory-bootstrap": memory,
@@ -50,16 +84,27 @@ def run_default_bootstrap(
             "query": query,
             "workspace": workspace,
             "repo_root": str(repo_root),
+            "task_id": task_id,
+            "created_at": created_at,
+            "source_task": continuity_decision.get("source_task"),
+            "query_matches_active_task": bool(
+                continuity_decision.get("query_matches_active_task", False)
+            ),
+            "ignored_root_continuity": bool(
+                continuity_decision.get("ignored_root_continuity", False)
+            ),
         },
     }
-    bootstrap_path = output_dir / "hermes_default_bootstrap.json"
-    write_json_if_changed(bootstrap_path, payload)
+    write_json_if_changed(primary_bootstrap_path, payload)
+    write_json_if_changed(mirror_bootstrap_path, payload)
     return {
-        "bootstrap_path": str(bootstrap_path),
+        "bootstrap_path": str(primary_bootstrap_path),
         "paths": {
             "output_dir": str(output_dir),
+            "task_output_dir": str(primary_bootstrap_path.parent),
             "repo_root": str(repo_root),
             "memory_root": memory["memory_root"],
+            "mirror_bootstrap_path": str(mirror_bootstrap_path),
         },
         "memory_items": len(memory["retrieval"].get("items", [])),
         "proposal_count": proposals.get("proposal_count", 0),
@@ -68,7 +113,7 @@ def run_default_bootstrap(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build the default Hermes bootstrap bundle.")
+    parser = argparse.ArgumentParser(description="Build the default framework bootstrap bundle.")
     parser.add_argument("--query", default="")
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument("--memory-root", type=Path, default=None)

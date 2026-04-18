@@ -42,7 +42,7 @@
 L0  execution-controller-coding, skill-writer, skill-developer-codex, skill-routing-repair-codex, writing-skills,
     gh-address-comments, gh-fix-ci, sentry, subagent-delegation,
     systematic-debugging, iterative-optimizer
-L1  plan-writing, tdd-workflow, test-engineering, refactoring,
+L1  checklist-writting, tdd-workflow, test-engineering, refactoring,
     documentation-engineering, error-handling-patterns, frontend-debugging,
     backend-runtime-debugging,
     citation-management, coding-standards, prompt-engineer,
@@ -50,7 +50,7 @@ L1  plan-writing, tdd-workflow, test-engineering, refactoring,
 L2  build-tooling, plan-to-code, api-integration-debugging,
     datastore-cache-queue, observability, web-platform-basics, git-workflow,
     css-pro, shell-cli, data-wrangling, dependency-migration,
-    checklist-fixer, env-config-management, code-review,
+    checklist-normalizer, checklist-fixer, env-config-management, code-review,
     architect-review, sustech-mailer, github-investigator
 L3  academic-search, accessibility-auditor, api-design, api-load-tester,
     brainstorm-research, cloudflare-deploy, doc, docker,
@@ -103,6 +103,9 @@ Overlays  coding-standards, tdd-workflow, error-handling-patterns, code-review,
 - `information-retrieval` vs `skill-scout` → 通用调研 vs skill 生态专项对标
 - `information-retrieval` vs `github-investigator` → 通用多源调研 vs repo / issue / PR / timeline 深挖
 - `github-investigator` vs `skill-scout` → 仓库拆解复盘 vs 为本地 skill 库做吸收式对标
+- `checklist-writting` vs `checklist-normalizer` → 从目标直接生 execution-ready checklist vs 整理已有 checklist / phase plan
+- `checklist-normalizer` vs `checklist-fixer` → 重写 checklist 结构 vs 按 checklist 执行
+- `plan-to-code` vs `checklist-normalizer` → spec/plan 直接落代码 vs 先把 checklist shape 稳定下来
 
 ## 重路由信号
 

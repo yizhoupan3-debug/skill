@@ -253,13 +253,16 @@ fn audit_journal(path: PathBuf, days: i64, json: bool, manifest_path: Option<Pat
                     if let Some(skills) = manifest["skills"].as_array() {
                         let keys = manifest["keys"].as_array().unwrap();
                         let idx_slug = keys.iter().position(|k| k == "slug").unwrap();
-                        let idx_triggers = keys.iter().position(|k| k == "triggers").unwrap();
+                        let idx_trigger_hints = keys
+                            .iter()
+                            .position(|k| k == "trigger_hints" || k == "triggers")
+                            .unwrap();
 
                         let active_skills: HashSet<_> = filtered.iter().map(|e| e.final_skill.as_str()).collect();
 
                         for s in skills {
                             let name = s[idx_slug].as_str().unwrap();
-                            let triggers = s[idx_triggers].as_str().unwrap();
+                            let triggers = row_text(&s[idx_trigger_hints]);
 
                             // R33: Pruning Suggestion (Zero usage)
                             if !active_skills.contains(name) && total > 5 {
@@ -452,14 +455,17 @@ fn detect_boundary_collisions(manifest_path: Option<PathBuf>) -> anyhow::Result<
         if let Some(skills) = manifest["skills"].as_array() {
             let keys = manifest["keys"].as_array().ok_or_else(|| anyhow::anyhow!("Invalid manifest"))?;
             let idx_slug = keys.iter().position(|k| k == "slug").unwrap_or(0);
-            let idx_triggers = keys.iter().position(|k| k == "triggers").unwrap_or(7);
+            let idx_trigger_hints = keys
+                .iter()
+                .position(|k| k == "trigger_hints" || k == "triggers")
+                .unwrap_or(7);
 
             for i in 0..skills.len() {
                 for j in i+1..skills.len() {
                     let s1 = &skills[i];
                     let s2 = &skills[j];
-                    let t1: HashSet<_> = s1[idx_triggers].as_str().unwrap_or("").split_whitespace().collect();
-                    let t2: HashSet<_> = s2[idx_triggers].as_str().unwrap_or("").split_whitespace().collect();
+                    let t1: HashSet<_> = row_terms(&s1[idx_trigger_hints]);
+                    let t2: HashSet<_> = row_terms(&s2[idx_trigger_hints]);
                     let intersection: HashSet<_> = t1.intersection(&t2).cloned().collect();
                     if intersection.len() > 3 {
                         collisions.push(format!("`{}` & `{}` overlap: {:?}", s1[idx_slug], s2[idx_slug], intersection));
@@ -515,6 +521,26 @@ fn calculate_jaccard(s1: &str, s2: &str) -> f32 {
     let intersection = t1.iter().filter(|&&w| t2.contains(w)).count() as f32;
     let union = (t1.len() + t2.len()) as f32 - intersection;
     intersection / union
+}
+
+fn row_text(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Array(items) => items
+            .iter()
+            .filter_map(|item| item.as_str())
+            .collect::<Vec<_>>()
+            .join(" "),
+        serde_json::Value::String(text) => text.clone(),
+        _ => String::new(),
+    }
+}
+
+fn row_terms<'a>(value: &'a serde_json::Value) -> HashSet<&'a str> {
+    match value {
+        serde_json::Value::Array(items) => items.iter().filter_map(|item| item.as_str()).collect(),
+        serde_json::Value::String(text) => text.split_whitespace().collect(),
+        _ => HashSet::new(),
+    }
 }
 
 fn main() -> anyhow::Result<()> {

@@ -1,0 +1,86 @@
+{
+  "schema_version": "routing-eval-cases-v1",
+  "cases": [
+    {
+      "id": "execution-controller-coding-should-trigger",
+      "category": "should-trigger",
+      "task": "这是一个高负载跨文件长运行的治理任务，主线程保持极简并维护 .supervisor_state.json。",
+      "focus_skill": "execution-controller-coding",
+      "expected_owner": "execution-controller-coding",
+      "expected_overlay": "anti-laziness",
+      "first_turn": true
+    },
+    {
+      "id": "idea-to-plan-should-trigger",
+      "category": "should-trigger",
+      "task": "把这个模糊研究想法收敛成 outline.md 和 code_list.md，再决定后续怎么做。",
+      "focus_skill": "idea-to-plan",
+      "expected_owner": "idea-to-plan",
+      "expected_overlay": "anti-laziness",
+      "first_turn": true
+    },
+    {
+      "id": "idea-to-plan-strategic-plan-case",
+      "category": "should-trigger",
+      "task": "先别写代码，先调研现状，比较两条技术路线，写 assumptions、open questions 和 decision log，再给我方案。",
+      "focus_skill": "idea-to-plan",
+      "expected_owner": "idea-to-plan",
+      "expected_overlay": "anti-laziness",
+      "first_turn": true
+    },
+    {
+      "id": "idea-to-plan-explore-plan-case",
+      "category": "should-trigger",
+      "task": "先探索代码库现状，列出 critical files，再比较实现路线并给我方案。",
+      "focus_skill": "idea-to-plan",
+      "expected_owner": "idea-to-plan",
+      "expected_overlay": "anti-laziness",
+      "first_turn": true
+    },
+    {
+      "id": "systematic-debugging-gate-conflict",
+      "category": "gate-vs-owner-conflict",
+      "task": "这个复杂多文件任务现在报错了，先查日志和根因，不要直接编排执行。",
+      "focus_skill": "systematic-debugging",
+      "expected_owner": "systematic-debugging",
+      "expected_overlay": "anti-laziness",
+      "forbidden_owners": ["execution-controller-coding"],
+      "first_turn": true
+    },
+    {
+      "id": "skill-developer-codex-near-miss",
+      "category": "wrong-owner-near-miss",
+      "task": "这个 skill 框架 owner gate overlay 边界重叠了，顺手把路由策略修一下并减少 token 消耗。",
+      "focus_skill": "skill-developer-codex",
+      "expected_owner": "skill-developer-codex",
+      "expected_overlay": "anti-laziness",
+      "forbidden_owners": ["idea-to-plan"],
+      "first_turn": true
+    },
+    {
+      "id": "idea-to-plan-should-not-trigger",
+      "category": "should-not-trigger",
+      "task": "根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。",
+      "focus_skill": "idea-to-plan",
+      "forbidden_owners": ["idea-to-plan"],
+      "first_turn": true
+    },
+    {
+      "id": "checklist-writting-post-strategy-case",
+      "category": "should-trigger",
+      "task": "路线已经定了，不用再论证，直接写 execution-ready checklist，拆成里程碑和串行步骤。",
+      "focus_skill": "checklist-writting",
+      "expected_owner": "checklist-writting",
+      "expected_overlay": "anti-laziness",
+      "first_turn": true
+    },
+    {
+      "id": "execution-controller-coding-should-not-overtrigger",
+      "category": "should-not-trigger",
+      "task": "只改一个单文件 shell 脚本，别上复杂编排。",
+      "focus_skill": "execution-controller-coding",
+      "forbidden_owners": ["execution-controller-coding"],
+      "first_turn": true
+    }
+  ]
+}

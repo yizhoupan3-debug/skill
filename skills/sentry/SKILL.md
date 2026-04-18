@@ -24,7 +24,16 @@ allowed_tools:
   - shell
   - python
   - web
-approval_required_tools: []
+approval_required_tools:
+  - authenticated web access
+filesystem_scope:
+  - repo
+  - artifacts
+network_access: required
+artifact_outputs:
+  - sentry_triage.md
+  - EVIDENCE_INDEX.json
+  - TRACE_METADATA.json
 ---
 
 # sentry

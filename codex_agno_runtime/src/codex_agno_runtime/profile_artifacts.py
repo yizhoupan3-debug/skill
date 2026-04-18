@@ -6,7 +6,10 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
-from codex_agno_runtime.framework_profile import FrameworkProfile
+from codex_agno_runtime.framework_profile import (
+    FRAMEWORK_SHARED_CONTRACT_FIELDS,
+    FrameworkProfile,
+)
 from codex_agno_runtime.host_adapters import (
     DELEGATION_CONTRACT_ARTIFACT_ID,
     EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID,
@@ -31,6 +34,11 @@ from codex_agno_runtime.host_adapters import (
     should_emit_codex_desktop_alias_artifact,
 )
 from codex_agno_runtime.rust_router import RustRouteAdapter
+from codex_agno_runtime.schemas import (
+    FrameworkSharedContract,
+    FrameworkSharedContractProjectionReport,
+    FrameworkSharedContractSurface,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 LEGACY_DESKTOP_ALIAS_ID = "codex_desktop_host_adapter"
@@ -261,6 +269,122 @@ def build_codex_desktop_alias_inventory(repo_root: Path | None = None) -> dict[s
     }
 
 
+def _extract_shared_contract_surface(
+    payload: Mapping[str, Any],
+    field_name: str,
+) -> dict[str, Any]:
+    source = payload[field_name]
+    return {
+        field: _clone_payload(source[field])
+        for field in FRAMEWORK_SHARED_CONTRACT_FIELDS
+    }
+
+
+def build_framework_shared_contract_projection_report(
+    profile: FrameworkProfile,
+    *,
+    host_overrides: Mapping[str, Any] | None = None,
+    adapter_payloads: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    canonical_payload = FrameworkSharedContract.model_validate(
+        profile.shared_contract_payload()
+    ).model_dump(mode="python")
+    canonical_surface = canonical_payload["shared_contract"]
+
+    compiled_payloads = (
+        dict(adapter_payloads)
+        if adapter_payloads is not None
+        else {
+            "cli_common_adapter": compile_cli_common_adapter(
+                profile,
+                host_overrides=host_overrides,
+            ).host_payload,
+            "codex_common_adapter": compile_codex_common_adapter(
+                profile,
+                host_overrides=host_overrides,
+            ).host_payload,
+            "codex_desktop_adapter": compile_codex_desktop_adapter(
+                profile,
+                host_overrides=host_overrides,
+            ).host_payload,
+            "codex_cli_adapter": compile_codex_cli_adapter(
+                profile,
+                host_overrides=host_overrides,
+            ).host_payload,
+            "claude_code_adapter": compile_claude_code_adapter(
+                profile,
+                host_overrides=host_overrides,
+            ).host_payload,
+            "gemini_cli_adapter": compile_gemini_cli_adapter(
+                profile,
+                host_overrides=host_overrides,
+            ).host_payload,
+        }
+    )
+
+    adapter_projection_map = (
+        ("cli_common_adapter", "shared_contract", None),
+        ("codex_common_adapter", "shared_contract", None),
+        ("codex_desktop_adapter", "common_contract", "runtime_surface"),
+        ("codex_cli_adapter", "common_contract", "runtime_surface"),
+        ("claude_code_adapter", "common_contract", "runtime_surface"),
+        ("gemini_cli_adapter", "common_contract", "runtime_surface"),
+    )
+    projections: list[dict[str, Any]] = []
+    all_match = True
+
+    for adapter_id, projection_field, runtime_surface_field in adapter_projection_map:
+        payload = compiled_payloads[adapter_id]
+        projected_contract = _extract_shared_contract_surface(payload, projection_field)
+        shared_mismatch_fields = _collect_diff_paths(canonical_surface, projected_contract)
+        shared_match = not shared_mismatch_fields
+        runtime_surface = None
+        runtime_surface_mismatch_fields: list[str] = []
+        runtime_surface_match: bool | None = None
+        if runtime_surface_field:
+            runtime_surface = _extract_shared_contract_surface(payload, runtime_surface_field)
+            runtime_surface_mismatch_fields = _collect_diff_paths(canonical_surface, runtime_surface)
+            runtime_surface_match = not runtime_surface_mismatch_fields
+        all_match = all_match and shared_match and (
+            runtime_surface_match if runtime_surface_match is not None else True
+        )
+        projections.append(
+            {
+                "adapter_id": adapter_id,
+                "projection_field": projection_field,
+                "shared_contract_match": shared_match,
+                "shared_contract_mismatch_fields": shared_mismatch_fields,
+                "projected_contract": FrameworkSharedContractSurface.model_validate(
+                    projected_contract
+                ).model_dump(mode="python"),
+                "runtime_surface_match": runtime_surface_match,
+                "runtime_surface_mismatch_fields": runtime_surface_mismatch_fields,
+                "runtime_surface": (
+                    FrameworkSharedContractSurface.model_validate(runtime_surface).model_dump(
+                        mode="python"
+                    )
+                    if runtime_surface is not None
+                    else None
+                ),
+            }
+        )
+
+    report = FrameworkSharedContractProjectionReport.model_validate(
+        {
+            "schema_version": "framework-shared-contract-projection-report-v1",
+            "authority": "framework-profile-artifacts",
+            "profile_id": profile.profile_id,
+            "framework_profile_version": profile.framework_profile_version,
+            "shared_contract_schema_version": canonical_payload["schema_version"],
+            "projection_fields": list(FRAMEWORK_SHARED_CONTRACT_FIELDS),
+            "canonical_shared_contract": canonical_surface,
+            "adapter_projections": projections,
+            "all_shared_contract_projections_match": all_match,
+        }
+    )
+    return report.model_dump(mode="python")
+
+
 def emit_framework_contract_artifacts(
     output_dir: Path,
     *,
@@ -335,6 +459,16 @@ def emit_framework_contract_artifacts(
         ),
     }
     python_artifacts.update(build_control_plane_contract_descriptors())
+    shared_contract_report = build_framework_shared_contract_projection_report(
+        profile,
+        host_overrides=host_overrides,
+        adapter_payloads=python_artifacts,
+    )
+    if not shared_contract_report["all_shared_contract_projections_match"]:
+        raise ValueError(
+            "framework shared-contract projection drift detected: "
+            f"{shared_contract_report['adapter_projections']}"
+        )
     paths = {
         "framework_profile": _write_json(profile_path, python_artifacts["framework_profile"]),
         "cli_common_adapter": _write_json(output_dir / "cli_common_adapter.json", python_artifacts["cli_common_adapter"]),
@@ -383,14 +517,6 @@ def emit_framework_contract_artifacts(
             output_dir / "codex_dual_entry_parity_snapshot.json",
             python_artifacts["codex_dual_entry_parity_snapshot"],
         ),
-        "codex_desktop_alias_inventory": _write_json(
-            output_dir / "codex_desktop_alias_inventory.json",
-            python_artifacts["codex_desktop_alias_inventory"],
-        ),
-        "codex_desktop_alias_retirement_status": _write_json(
-            output_dir / "codex_desktop_alias_retirement_status.json",
-            python_artifacts["codex_desktop_alias_retirement_status"],
-        ),
         "execution_controller_contract": _write_json(
             output_dir / f"{EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID}.json",
             python_artifacts["execution_controller_contract"],
@@ -416,6 +542,14 @@ def emit_framework_contract_artifacts(
         paths["codex_desktop_host_adapter"] = _write_json(
             output_dir / "codex_desktop_host_adapter.json",
             compile_codex_desktop_host_adapter(profile, host_overrides=host_overrides).host_payload,
+        )
+        paths["codex_desktop_alias_inventory"] = _write_json(
+            output_dir / "codex_desktop_alias_inventory.json",
+            python_artifacts["codex_desktop_alias_inventory"],
+        )
+        paths["codex_desktop_alias_retirement_status"] = _write_json(
+            output_dir / "codex_desktop_alias_retirement_status.json",
+            python_artifacts["codex_desktop_alias_retirement_status"],
         )
 
     if rust_adapter is not None:

@@ -97,8 +97,8 @@ If the task shifts to adjacent skill territory, route to:
 With `$subagent-delegation`, this skill improves the **prompt quality** while
 delegation still owns **whether / what / when** to delegate.
 
-With `$plan-writing`, this skill can strengthen prompt specs inside a plan
-without owning the plan structure itself.
+With `$checklist-writting`, this skill can strengthen prompt specs inside a checklist
+without owning the checklist structure itself.
 
 ## Required workflow
 

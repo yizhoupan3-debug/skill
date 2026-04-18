@@ -2,18 +2,18 @@
 
 _Generated from shared runtime artifacts and `./.codex/memory/`. Do not edit manually._
 
-- generated_at: 2026-04-17T00:27:53+08:00
+- generated_at: 2026-04-18T22:10:36+08:00
 - repo_root: `/Users/joe/Documents/skill`
 
-## Current Execution State
+## Recent Completed Task
 
-- task: Validate real Claude CLI host integration and audit shared Codex CLI/Desktop entrypoints
-- phase: validated
+- task: checklist-series final closeout
+- phase: finalized
 - status: completed
-- route: execution-controller-coding, skill-developer-codex
-- next_actions: Fix Claude project subagent registration so .claude/agents becomes live instead of decorative. / Optionally run one interactive Codex Desktop GUI smoke test if you want host-level sign-off beyond repo-local entrypoint audit. / Keep Claude hooks, memory bridge, and MCP config under the shared generator and sync lane.
-- scope: .supervisor_state.json / SESSION_SUMMARY.md / NEXT_ACTIONS.json / EVIDENCE_INDEX.json / TRACE_METADATA.json / codex_agno_runtime/src/codex_agno_runtime/checkpoint_store.py / tests/test_codex_agno_runtime_services.py / tests/test_codex_agno_runtime_runtime.py
-- acceptance: Runtime recovery artifact enumeration includes .supervisor_state.json when the file exists at repo root. / Targeted runtime/checkpointer tests prove TRACE_RESUME_MANIFEST artifact_paths carry the supervisor-state path. / Continuity artifacts point to the same validated task, owner/gate story, and scope guardrails. / The slice remains explicitly inside thin projection + Rust contract-first migration and does not introduce runtime rewrite semantics.
+- route: execution-controller-coding / execution-audit-codex / checklist-fixer
+- terminal_reasons: summary phase is terminal: finalized / summary status is terminal: completed / supervisor phase is terminal: finalized / verification status is terminal: completed
+- follow_up_notes: No active checklist execution remains in the checklist_v1.md through checklist_v4.md chain. / If host or integration owners later provide no-probe evidence, open a new standalone removal task for rust_execute_fallback_to_python under the retained checklist_v2 policy contract. / Treat any future continuity or TRACE_METADATA divergence as a new regression rather than a continuation of the checklist_v1.md through checklist_v4.md chain.
+- current_execution_injection: blocked
 
 ## Stable Project Patterns
 
@@ -28,7 +28,7 @@ _Generated from shared runtime artifacts and `./.codex/memory/`. Do not edit man
 - 项目长期记忆固定落在 `<workspace>/.codex/memory/`
 - `./.codex/` 是共享框架内存根，不代表仅限 Codex 宿主
 - 身份记忆固定落在 `~/.codex/identity/`
-- Hermes 只读取共享闭环产物，不再依赖旧宿主目录或注入链路
+- framework bootstrap 只读取共享闭环产物，不再依赖旧宿主目录或注入链路
 - 当前任务真实状态始终以 task artifacts 与 `.supervisor_state.json` 为准
 - 复杂任务默认先走 `execution-controller-coding`
 
@@ -40,9 +40,12 @@ _Generated from shared runtime artifacts and `./.codex/memory/`. Do not edit man
 
 ## Artifact Anchors
 
+- root continuity anchor: `/Users/joe/Documents/skill/.supervisor_state.json`
+- current session mirror: `artifacts/current/SESSION_SUMMARY.md`
 - `artifacts/current/SESSION_SUMMARY.md`
 - `artifacts/current/NEXT_ACTIONS.json`
 - `artifacts/current/EVIDENCE_INDEX.json`
 - `artifacts/current/TRACE_METADATA.json`
-- `.supervisor_state.json`
 - `./.codex/memory/`
+- logical->physical memory mapping: `./.codex/memory/` -> `memory`
+- sync rule: Supervisor writes the root continuity artifacts and keeps artifacts/current mirrored for bridge and aggregation consumers.

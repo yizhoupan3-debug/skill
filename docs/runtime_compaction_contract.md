@@ -212,3 +212,22 @@ Required invariants:
 - rollover preserves the minimum state needed to continue execution.
 - large payloads are moved to artifact refs instead of duplicated in history.
 - compacted recovery can be validated without a full historical JSONL scan.
+
+## Current Minimal Implementation Status
+
+- the runtime trace recorder now exposes an explicit compaction lane instead of
+  a design-only placeholder.
+- compaction is only allowed when the active backend advertises both
+  `supports_compaction` and `supports_snapshot_delta`.
+- on a supported backend, compaction must:
+  - write one stable snapshot for the old generation
+  - write explicit artifact refs for state and continuity artifacts
+  - roll the active stream to exactly one successor generation
+  - append active-generation deltas that replay on top of the latest stable
+    snapshot
+- recovery must use the latest stable snapshot plus generation-local deltas and
+  must not require scanning the full historical stream.
+- if a required artifact ref is missing or unreadable, recovery must fail
+  closed.
+- if the backend does not support compaction, the result must be an explicit
+  fail-closed / no-op contract outcome, not implicit partial support.

@@ -27,6 +27,18 @@ framework_contracts:
   emits_execution_items: false
   consumes_execution_items: false
   emits_verification_results: false
+allowed_tools:
+  - shell
+  - browser
+approval_required_tools:
+  - gui automation
+filesystem_scope:
+  - repo
+  - artifacts
+network_access: conditional
+artifact_outputs:
+  - visual_review.md
+  - EVIDENCE_INDEX.json
 ---
 
 # Visual Review
