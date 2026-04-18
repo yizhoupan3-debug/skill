@@ -134,7 +134,25 @@ def load_compiled_skill_artifacts() -> dict[str, Any] | None:
         return None
 
     required = {"registry", "index", "manifest", "runtime_index", "shadow_map", "approval_policy"}
-    return payload if isinstance(payload, dict) and required.issubset(payload) else None
+    if not isinstance(payload, dict) or not required.issubset(payload):
+        return None
+
+    manifest = payload.get("manifest")
+    runtime_index = payload.get("runtime_index")
+    shadow_map = payload.get("shadow_map")
+    manifest_keys = manifest.get("keys") if isinstance(manifest, dict) else None
+    runtime_keys = runtime_index.get("keys") if isinstance(runtime_index, dict) else None
+    winning_rule = shadow_map.get("winning_rule") if isinstance(shadow_map, dict) else None
+    if (
+        not isinstance(manifest_keys, list)
+        or "trigger_hints" not in manifest_keys
+        or "source_position" not in manifest_keys
+        or not isinstance(runtime_keys, list)
+        or "trigger_hints" not in runtime_keys
+        or winning_rule != "highest-position-wins"
+    ):
+        return None
+    return payload
 
 
 def load_health_payload() -> dict[str, Any]:
@@ -174,7 +192,7 @@ def load_health_data(raw: dict[str, Any] | None = None) -> dict[str, Any]:
     return {}
 
 
-def extract_trigger_phrases(
+def extract_trigger_hints(
     frontmatter: dict[str, Any],
     description: str,
     body: str,
@@ -199,11 +217,8 @@ def extract_trigger_phrases(
         "request", "using", "used", "best", "good", "real", "will",
     }
     samples: list[str] = [description]
-    trigger_phrases = frontmatter.get("trigger_phrases", [])
-    if isinstance(trigger_phrases, str):
-        samples.append(trigger_phrases)
-    elif isinstance(trigger_phrases, list):
-        samples.extend(str(item) for item in trigger_phrases if str(item).strip())
+    trigger_hints = check_skills.collect_trigger_hints(frontmatter)
+    samples.extend(trigger_hints)
     samples.extend(body.splitlines()[:20])
     source = "\n".join(samples)
 
@@ -220,11 +235,8 @@ def extract_trigger_phrases(
         seen.add(key)
         phrases.append(cleaned)
 
-    if isinstance(trigger_phrases, str):
-        push(trigger_phrases)
-    elif isinstance(trigger_phrases, list):
-        for item in trigger_phrases:
-            push(str(item))
+    for item in trigger_hints:
+        push(str(item))
 
     for match in re.findall(r'[\"“](.+?)[\"”]', source):
         push(match)
@@ -248,8 +260,8 @@ def extract_trigger_phrases(
     return phrases[:limit]
 
 
-def extract_triggers(frontmatter: dict[str, Any], description: str, body: str) -> str:
-    """Extract a compact trigger string for manifest lookup.
+def join_trigger_hints(frontmatter: dict[str, Any], description: str, body: str) -> str:
+    """Render trigger hints for human-readable registry output.
 
     Parameters:
         frontmatter: Parsed skill frontmatter.
@@ -257,10 +269,10 @@ def extract_triggers(frontmatter: dict[str, Any], description: str, body: str) -
         body: Skill body markdown.
 
     Returns:
-        str: Space-delimited trigger phrase string.
+        str: Slash-delimited trigger hint string.
     """
 
-    return " ".join(extract_trigger_phrases(frontmatter, description, body))
+    return " / ".join(extract_trigger_hints(frontmatter, description, body))
 
 
 def normalize_health_manifest(
@@ -334,6 +346,32 @@ def pick_runtime_summary(frontmatter: dict[str, Any], limit: int = 80) -> str:
     return summarize_text(str(frontmatter.get("description", "")), limit=limit)
 
 
+def select_manifest_skill_documents(
+    skill_documents: list[check_skills.SkillDocument],
+    skill_entries: list[dict[str, Any]],
+) -> list[check_skills.SkillDocument]:
+    """Keep only the highest-precedence document for each slug in MANIFEST/REGISTRY."""
+
+    winner_paths: dict[str, str] = {}
+    for entry in sorted(
+        skill_entries,
+        key=lambda item: (item.get("source_position", -1), str(item.get("path", ""))),
+    ):
+        winner_paths[str(entry["slug"])] = str(entry["path"])
+
+    selected: list[check_skills.SkillDocument] = []
+    seen: set[str] = set()
+    for document in skill_documents:
+        slug = document.slug
+        if slug in seen:
+            continue
+        if winner_paths.get(slug) != repo_relative(document.skill_dir):
+            continue
+        selected.append(document)
+        seen.add(slug)
+    return selected
+
+
 def build_registry_and_manifest(
     skill_documents: list[check_skills.SkillDocument] | None = None,
     skill_entries: list[dict[str, Any]] | None = None,
@@ -349,16 +387,13 @@ def build_registry_and_manifest(
     skill_documents = skill_documents or check_skills.load_skill_documents(SKILLS_ROOT, include_system=True)
     if skill_entries is None:
         source_manifest = load_source_manifest(SOURCE_MANIFEST_PATH)
-        source_entries = {
-            entry["slug"]: entry
-            for entry in collect_skill_entries(
-                SKILLS_ROOT,
-                source_manifest=source_manifest,
-                skill_documents=skill_documents,
-            )
-        }
-    else:
-        source_entries = {entry["slug"]: entry for entry in skill_entries}
+        skill_entries = collect_skill_entries(
+            SKILLS_ROOT,
+            source_manifest=source_manifest,
+            skill_documents=skill_documents,
+        )
+    source_entries = {entry["slug"]: entry for entry in skill_entries}
+    selected_documents = select_manifest_skill_documents(skill_documents, skill_entries)
     keys = [
         "slug",
         "layer",
@@ -367,13 +402,13 @@ def build_registry_and_manifest(
         "priority",
         "description",
         "session_start",
-        "triggers",
+        "trigger_hints",
         "health",
         "source",
-        "source_priority",
+        "source_position",
     ]
 
-    for document in skill_documents:
+    for document in selected_documents:
         slug = document.slug
         skill_dir = document.skill_dir
         skill_file = document.skill_file
@@ -392,12 +427,12 @@ def build_registry_and_manifest(
         gate = str(fm["routing_gate"]).strip()
         session_start = str(fm["session_start"]).strip()
         description = str(fm.get("description", "")).strip()
-        trigger_str = extract_triggers(fm, description, body)
+        trigger_hints = extract_trigger_hints(fm, description, body)
         summary = pick_runtime_summary(fm)
         long_summary = pick_runtime_summary(fm, limit=200)
         source_entry = source_entries.get(slug, {})
         source = str(source_entry.get("source", "project"))
-        source_priority = source_entry.get("source_priority")
+        source_position = source_entry.get("source_position")
 
         health_info = health_data.get(slug, {}) if isinstance(health_data, dict) else {}
         try:
@@ -417,10 +452,10 @@ def build_registry_and_manifest(
             priority,
             long_summary,
             session_start,
-            trigger_str,
+            trigger_hints,
             round(health_score, 1),
             source,
-            source_priority,
+            source_position,
         ])
 
     registry = (
@@ -443,8 +478,8 @@ def build_index(manifest: dict[str, Any]) -> str:
         "> Entry point for rapid lookup.",
         "> Prefer `skills/SKILL_ROUTING_RUNTIME.json` for the lean machine-readable route map.",
         "> Prefer `skills/SKILL_MANIFEST.json` for the full manifest (includes owner, priority, source, etc.).",
-        "> RUNTIME (v2) is a compact 8-key subset: slug, layer, owner, gate, session_start, summary, triggers, health.",
-        "> MANIFEST is the full 11-key record: slug, layer, owner, gate, priority, description, session_start, triggers, health, source, source_priority.",
+        "> RUNTIME (v2) is a compact 8-key subset: slug, layer, owner, gate, session_start, summary, trigger_hints, health.",
+        "> MANIFEST is the full 11-key record: slug, layer, owner, gate, priority, description, session_start, trigger_hints, health, source, source_position.",
         "",
         "## 6-rule gate checklist",
     ]
@@ -507,7 +542,7 @@ def build_runtime_index(manifest: dict[str, Any]) -> dict[str, Any]:
     return {
         "version": 2,
         "checklist": INDEX_CHECKLIST,
-        "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "triggers", "health"],
+        "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "health"],
         "skills": [
             [skill[0], skill[1], skill[2], skill[3], skill[6], summarize_text(str(skill[5]), limit=96), skill[7], skill[8]]
             for skill in selected
@@ -563,11 +598,17 @@ def write_generated_files(
             skill_entries=skill_entries,
         )
         approval_policy = build_policy(SKILLS_ROOT, skill_documents=skill_documents)
-    validate_loadouts(DEFAULT_LOADOUTS, manifest)
     health_manifest = normalize_health_manifest(
         manifest,
         raw_health_payload=raw_health_payload,
         health_data=health_data,
+    )
+    validate_loadouts(
+        DEFAULT_LOADOUTS,
+        manifest,
+        shadow_map=shadow_map,
+        approval_policy=approval_policy,
+        health_manifest=health_manifest,
     )
     targets = {
         REGISTRY_PATH: registry,

@@ -40,7 +40,7 @@ This skill is a valid **opening-turn owner** for early-stage research ideation.
 - The user already has a focused topic and wants a deep novelty check or systematic literature review → use `$literature-synthesis`
 - The user has existing papers and wants to find research gaps from that literature → use `$literature-synthesis` Mode E (Research-Gap Memo)
 - Mature corpus → use `$literature-synthesis`
-- Execution plan → use `$plan-writing`
+- Execution plan or execution-ready checklist → use `$checklist-writting`
 - Implementation from spec → use `$plan-to-code`
 - Reviewer-style critique → use `$paper-reviewer` or `$paper-logic`
 - The user wants autonomous multi-hypothesis experiment orchestration → use `$autoresearch`

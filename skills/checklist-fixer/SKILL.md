@@ -71,7 +71,7 @@ Before this skill takes ownership, respect earlier gates:
 2. Problem list comes from PR review comments → `$gh-address-comments`
 3. Problem list comes from CI failures → `$gh-fix-ci`
 4. Task is structural refactoring without a fix list → `$refactoring`
-5. User wants a plan only, not execution → `$plan-writing`
+5. User wants a plan only, not execution → `$checklist-writting`
 6. Task is complex enough for delegation → coordinate with `$subagent-delegation`
 
 ## When to use
@@ -91,7 +91,7 @@ Before this skill takes ownership, respect earlier gates:
 - List comes from GitHub PR comments → `$gh-address-comments`
 - List comes from failing CI checks → `$gh-fix-ci`
 - Purely structural refactoring without a fix list → `$refactoring`
-- User only wants a plan/assessment, not execution → `$plan-writing` or `$architect-review`
+- User only wants a plan/assessment, not execution → `$checklist-writting` or `$architect-review`
 
 ## Primary operating principle
 
@@ -100,8 +100,9 @@ This owner should behave like a **queue executor inside the master-control chain
 1. execute one bounded checklist item at a time
 2. keep per-item evidence and verification outside the main thread when possible
 3. prefer bounded sidecars for non-blocking subwork when runtime policy permits
-4. if runtime policy blocks spawning, preserve the same checklist split in local-supervisor mode
-5. report progress as queue state, not as sprawling process narration
+4. keep shared continuity artifacts supervisor-only even when checklist items run in parallel
+5. if runtime policy blocks spawning, preserve the same checklist split in local-supervisor mode
+6. report progress as queue state, not as sprawling process narration
 
 ## Main-thread compression contract
 
@@ -118,12 +119,14 @@ The main thread should contain only:
 If runtime policy permits delegation:
 
 - route bounded research, verification, or isolated implementation slices through [`$subagent-delegation`](/Users/joe/Documents/skill/skills/subagent-delegation/SKILL.md)
+- require lane-local outputs or delta artifacts; do not let delegated items co-edit global continuity files
 
 If runtime policy does **not** permit spawning:
 
 - keep the same checklist split in local-supervisor mode
 - execute items or side-slices sequentially
 - keep raw per-item detail in artifacts, notes, or state instead of the main thread
+- flush `SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`, and `.supervisor_state.json` only from the integrating controller step
 
 ## Task ownership and boundaries
 
@@ -142,6 +145,7 @@ This skill does not own:
 - root-cause investigation for unclear bugs
 - feature implementation from specs
 - CI/PR-specific feedback workflows
+- restructuring a messy checklist before execution when serial/parallel boundaries, goals, constraints, or acceptance are still unclear → `$checklist-normalizer`
 
 ## Finding-driven framework role
 
@@ -217,6 +221,7 @@ See `references/verification-protocol.md` for the full protocol. Core rules:
 - Do not batch unrelated fixes into one commit or one "done" claim
 - Do not continue past a P0 failure without explicit user approval
 - Do not modify files outside the scope of the current fix item
+- Do not let parallel checklist items directly co-edit shared continuity artifacts
 - Update the checklist source file with progress marks if it exists
 - Always report what was fixed, what failed, and what remains
 - When user selects items by number, execute ONLY those items

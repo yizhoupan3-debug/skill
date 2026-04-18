@@ -1,12 +1,9 @@
 ---
 name: i18n-l10n
 description: |
-  Internationalization and localization overlay for web/mobile projects. Covers hardcoded
-  string detection, translation key design, locale files, date/number/currency formatting,
-  RTL support, pluralization rules, and i18n library integration (react-intl, next-intl,
-  i18next, vue-i18n). Use when the user wants multi-language support, hardcoded string
-  checks, i18n review, or l10n best practices. 适用于 '国际化' '多语言' 'i18n' 'l10n' '翻译'
-  '硬编码文本检查' 'locale'.
+  Internationalization and localization overlay for web/mobile projects.
+  Use for multi-language support, hardcoded string audits, locale formatting,
+  RTL/pluralization, and i18n library integration.
 metadata:
   version: "1.0.0"
   platforms: [codex]

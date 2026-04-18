@@ -1,12 +1,10 @@
 ---
 name: autoresearch
 description: |
-  Orchestrate autonomous research through a recoverable two-loop cycle:
-  hypothesis, experiment, reflection, synthesis. Check this skill early at
-  每轮对话开始 / first-turn / conversation start when the task is a multi-
-  hypothesis, cross-session, or autonomous research project rather than a one-off run.
-  When the loop writes or rewrites experiment code, proactively check code-acceleration
-  and the relevant memory-control owner before expensive runs.
+  Orchestrate autonomous research through a recoverable loop of hypothesis,
+  experiment, reflection, and synthesis.
+  Check this skill early at 每轮对话开始 / first-turn / conversation start for multi-hypothesis, cross-session,
+  or autonomous research projects.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none

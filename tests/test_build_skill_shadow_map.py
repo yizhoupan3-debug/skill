@@ -70,6 +70,7 @@ def test_shadow_map_prefers_later_source_by_precedence(tmp_path: Path) -> None:
     shadow_map = build_shadow_map(skills_root=skills_root)
     duplicate = shadow_map["skills"]["duplicate-skill"]
 
+    assert shadow_map["winning_rule"] == "highest-position-wins"
     assert duplicate["has_shadow"] is True
     assert duplicate["winner"]["source"] == "project"
     assert duplicate["shadowed"][0]["source"] == "system"
@@ -109,3 +110,36 @@ def test_shadow_map_discovers_nested_skill_dirs_without_container_entries(tmp_pa
         shadow_map["skills"]["spreadsheets"]["winner"]["path"]
         == str((skills_root / "codex-primary-runtime" / "spreadsheets"))
     )
+
+
+def test_shadow_map_uses_source_position_not_priority_for_winner_order(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    _write_skill(skills_root / ".system" / "sample-skill", name="sample-skill", source="system")
+    _write_skill(skills_root / "user" / "sample-skill", name="sample-skill", source="user")
+
+    shadow_map = build_shadow_map(
+        skills_root=skills_root,
+        source_manifest={
+            "version": 2,
+            "winning_rule": "highest-position-wins",
+            "sources": [
+                {"name": "system", "position": 0},
+                {"name": "user", "position": 9},
+            ],
+        },
+    )
+
+    assert shadow_map["skills"]["sample-skill"]["winner"]["source"] == "user"
+    assert shadow_map["skills"]["sample-skill"]["winner"]["source_position"] == 9
+
+
+def test_shadow_map_tie_breaks_stably_for_same_source_position(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    _write_skill(skills_root / "alpha" / "same-skill", name="same-skill", source="project")
+    _write_skill(skills_root / "beta" / "same-skill", name="same-skill", source="project")
+
+    shadow_map = build_shadow_map(skills_root=skills_root)
+    same_skill = shadow_map["skills"]["same-skill"]
+
+    assert same_skill["winner"]["path"].endswith("beta/same-skill")
+    assert same_skill["shadowed"][0]["path"].endswith("alpha/same-skill")

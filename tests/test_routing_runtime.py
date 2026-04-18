@@ -13,19 +13,19 @@ if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
 from scripts.route import search_skills
-from scripts.sync_skills import extract_trigger_phrases, normalize_health_manifest
+from scripts.sync_skills import extract_trigger_hints, normalize_health_manifest
 
 
-def test_extract_trigger_phrases_preserves_multilingual_terms() -> None:
-    """Verify trigger extraction keeps Chinese and English routing phrases.
+def test_extract_trigger_hints_preserves_multilingual_terms() -> None:
+    """Verify trigger extraction keeps Chinese and English routing hints.
 
     Returns:
         None.
     """
 
-    phrases = extract_trigger_phrases(
+    phrases = extract_trigger_hints(
         {
-            "trigger_phrases": ["github深度调研", "issue PR 时间线"],
+            "trigger_hints": ["github深度调研", "issue PR 时间线"],
         },
         'Use for "github深度调研 / repo对标 / issue-PR演化分析" and code history.',
         "## When to use\n- 看这个开源项目怎么做的\n- issue PR 时间线\n",
@@ -46,8 +46,8 @@ def test_normalize_health_manifest_backfills_missing_skill_rows() -> None:
 
     manifest = {
         "skills": [
-            ["alpha-skill", "L2", "owner", "none", "P2", "Alpha", "n/a", "alpha", 95.0, "project", 40],
-            ["beta-skill", "L2", "owner", "none", "P2", "Beta", "n/a", "beta", 95.0, "project", 40],
+            ["alpha-skill", "L2", "owner", "none", "P2", "Alpha", "n/a", ["alpha"], 95.0, "project", 3],
+            ["beta-skill", "L2", "owner", "none", "P2", "Beta", "n/a", ["beta"], 95.0, "project", 3],
         ]
     }
 

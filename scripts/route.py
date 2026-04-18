@@ -48,7 +48,7 @@ class SkillRecord:
     gate: str
     owner: str
     summary: str
-    triggers: str
+    trigger_hints: list[str]
     health: float
     priority: str = "P2"
     session_start: str = "n/a"
@@ -103,7 +103,8 @@ def _load_records_from_index(index_path: Path, summary_key: str) -> list[SkillRe
         raise ValueError(f"{index_path} is missing keyed routing rows")
 
     index = {str(key): idx for idx, key in enumerate(keys)}
-    required = ("slug", "layer", "owner", "gate", summary_key, "triggers", "health")
+    trigger_key = "trigger_hints" if "trigger_hints" in index else "triggers"
+    required = ("slug", "layer", "owner", "gate", summary_key, trigger_key, "health")
     missing = [key for key in required if key not in index]
     if missing:
         missing_str = ", ".join(missing)
@@ -114,7 +115,7 @@ def _load_records_from_index(index_path: Path, summary_key: str) -> list[SkillRe
     idx_owner = index["owner"]
     idx_gate = index["gate"]
     idx_summary = index[summary_key]
-    idx_triggers = index["triggers"]
+    idx_trigger_hints = index[trigger_key]
     idx_health = index["health"]
     idx_priority = index.get("priority")
     idx_session_start = index.get("session_start")
@@ -124,7 +125,7 @@ def _load_records_from_index(index_path: Path, summary_key: str) -> list[SkillRe
         idx_owner,
         idx_gate,
         idx_summary,
-        idx_triggers,
+        idx_trigger_hints,
         idx_health,
         idx_priority if idx_priority is not None else 0,
         idx_session_start if idx_session_start is not None else 0,
@@ -145,13 +146,26 @@ def _load_records_from_index(index_path: Path, summary_key: str) -> list[SkillRe
                 gate=str(row[idx_gate]),
                 owner=str(row[idx_owner]),
                 summary=str(row[idx_summary]),
-                triggers=str(row[idx_triggers]),
+                trigger_hints=_normalize_trigger_hints(row[idx_trigger_hints]),
                 health=float(row[idx_health]),
                 priority=priority or "P2",
                 session_start=session_start or "n/a",
             )
         )
     return records
+
+
+def _normalize_trigger_hints(value: object) -> list[str]:
+    """Normalize trigger hints loaded from compiled routing artifacts."""
+
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    raw = str(value).strip()
+    if not raw:
+        return []
+    if "/" in raw:
+        return [part.strip() for part in raw.split("/") if part.strip()]
+    return [raw]
 
 
 def load_records(

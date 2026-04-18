@@ -2,7 +2,7 @@
 name: sustech-mailer
 description: |
   Send emails from the SUSTech student mailbox via SMTP with auto-generated content.
-  Use when the user asks to send, draft, or compose an email from 12312411@mail.sustech.edu.cn, or when another skill delegates delivery. Supports subject/body generation, confirmation preview, browser compose, and homework-submission emails in Chinese. Best for outbound mail via the student enterprise mailbox.
+  Use when the user asks to send, draft, or compose an email from 12312411@mail.sustech.edu.cn, or when another skill delegates delivery. Supports subject/body generation, optional preview, browser compose, and homework-submission emails in Chinese. Best for outbound mail via the student enterprise mailbox.
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
@@ -19,7 +19,7 @@ runtime_requirements:
     - /Users/joe/Documents/套磁/CV_Yizhou_Pan.pdf
     - /Users/joe/Documents/套磁/Academic transcript.pdf
 metadata:
-  version: 2.1.0
+  version: 2.2.0
   platforms:
   - codex
   tags:
@@ -34,8 +34,8 @@ metadata:
 
 Send emails from `12312411@mail.sustech.edu.cn` via SMTP over the Tencent
 Enterprise Mail relay (`smtp.exmail.qq.com:465` SSL). This skill handles
-credential management, content generation, confirmation preview, browser
-compose page, and delivery.
+credential management, content generation, optional preview, browser compose
+page, and delivery.
 
 ## Prerequisites
 
@@ -136,12 +136,18 @@ When called without explicit subject/body, generate them from context:
 
 **Mode auto-inference**: if the user mentions "交作业", "提交作业", "作业", "proj", homework file paths, or a TA/course email, automatically select homework mode. Otherwise default to professional English mode.
 
-### 3. Show confirmation preview
+### 3. Optional preview
 
-**Always** show a preview before sending. When SMTP credentials are configured and the path is SMTP send, use `--dry-run` to capture the final execution parameters (including default attachments). When credentials are missing and the user is using browser compose, preview by echoing the exact `open_compose.py` parameters instead of attempting SMTP auth.
+Show a preview only when one of these is true:
+
+- the user explicitly asks to preview, review, inspect, or confirm before sending
+- the chosen path is browser compose rather than direct SMTP send
+- the calling skill asks for a dry-run style preview
+
+For direct SMTP send requests, do **not** force an extra preview/approval turn.
 
 **Preview Protocol:**
-1.  If SMTP credentials are available, run `send_email.py --dry-run` with all planned parameters.
+1.  If SMTP credentials are available and a preview is requested, run `send_email.py --dry-run` with all planned parameters.
 2.  If SMTP credentials are unavailable and the path is browser compose, format the preview directly from the resolved `to` / `subject` / `body` / attachment plan, then open `open_compose.py`.
 3.  Format the output into a clean preview block:
 
@@ -157,14 +163,13 @@ Attach:  <file list with ✓/✗ status from dry-run output>
 <body text from dry-run output>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Type "send" to confirm, or describe changes.
+Describe changes, or ask to send directly.
 ```
 
 - **Recipients, Subject, Body, and Attachments MUST match the dry-run output exactly when SMTP dry-run is used.**
 - In browser-compose fallback, the preview must match the exact values passed to `open_compose.py`.
-- If the user says "send", "发", "确认", or similar → proceed to step 4.
+- If the user says "send", "发", "确认", or similar after a preview → proceed to step 4.
 - If the user requests changes → revise and show preview again.
-- **Never skip the preview step.**
 
 ### 4. Send or open browser compose page
 
@@ -212,6 +217,11 @@ Use browser compose when:
 - SMTP credentials are not configured
 - The user wants to review visually before sending
 
+Direct-send rule:
+
+- If the user explicitly asks to send now, or an upstream skill delegates a send-now action with resolved `to` / `subject` / `body`, send immediately through SMTP when credentials are available.
+- Do not require a second manual approval round once the send intent is already explicit.
+
 ### 5. Report result
 
 After sending:
@@ -241,7 +251,8 @@ Legacy path `~/.tao-ci-smtp.env` is also checked as fallback.
 
 ## Guardrails
 
-- **Never send without showing the confirmation preview first.**
+- Never send unless recipient, subject, and body are fully resolved.
+- Never invent send intent: direct send requires either the user's explicit send request in the current turn or an upstream delegated send-now action.
 - Never hardcode passwords in scripts or skill files.
 - If credentials are missing, print a clear setup guide and exit — do not prompt for password inline.
 - If SMTP connection fails, suggest checking network, authorization code validity, or whether SMTP service is enabled.

@@ -4,7 +4,7 @@ description: |
   GitHub 仓库深度调研：仓库拆解、repo对标、issue/PR 时间线、code history 与可复用模式分析。
   Use when the answer depends on repository structure, discussions, commits, releases, or architecture evolution.
 short_description: Deep GitHub repo research with issue/PR timeline and code-history evidence
-trigger_phrases:
+trigger_hints:
   - github深度调研
   - repo对标
   - 仓库拆解

@@ -3,8 +3,8 @@
 > Entry point for rapid lookup.
 > Prefer `skills/SKILL_ROUTING_RUNTIME.json` for the lean machine-readable route map.
 > Prefer `skills/SKILL_MANIFEST.json` for the full manifest (includes owner, priority, source, etc.).
-> RUNTIME (v2) is a compact 8-key subset: slug, layer, owner, gate, session_start, summary, triggers, health.
-> MANIFEST is the full 11-key record: slug, layer, owner, gate, priority, description, session_start, triggers, health, source, source_priority.
+> RUNTIME (v2) is a compact 8-key subset: slug, layer, owner, gate, session_start, summary, trigger_hints, health.
+> MANIFEST is the full 11-key record: slug, layer, owner, gate, priority, description, session_start, trigger_hints, health, source, source_position.
 
 ## 6-rule gate checklist
 1. Extract object / action / constraints / deliverable first.
@@ -17,8 +17,8 @@
 ## Gates & Meta
 | Name | Layer | Owner | Gate | Description |
 |---|---|---|---|---|
-| `execution-controller-app` | L0 | @app-controller | APP一键优化, 全栈重构, 跨栈协同, 前后端联调优化, 自动化测试闭环, 性能全链路调优, 全栈安全审计, APP深度体检, 深度核查前端/后端/测试, 系统级 APP 优化 | Master orchestrator for production-grade app optimization, refactor, and full-st |
-| `execution-controller-coding` | L0 | @kernel-controller | 高负载, 跨文件, 长运行周期, 系统指挥中心, SCR架构, 协同式确定性治理, 内核级控制器, 状态持久化, 纳米级心跳 | Orchestrate complex execution with aggressive routing, state, delegation, and co |
+| `execution-controller-app` | L0 | @app-controller | delegation | Master orchestrator for production-grade app optimization, refactor, and full-st |
+| `execution-controller-coding` | L0 | @kernel-controller | delegation | Orchestrate complex execution with aggressive routing, state, delegation, and co |
 | `gh-address-comments` | L0 | gate | source | Triage and address GitHub PR review comments and review threads for the current  |
 | `gh-fix-ci` | L0 | gate | source | Triage failing GitHub Actions PR checks with `gh` and `scripts/inspect_pr_checks |
 | `sentry` | L0 | gate | source | Inspect Sentry issues, events, releases, environments, and recent production exc |
@@ -31,20 +31,21 @@
 | `spreadsheets` | L3 | gate | artifact | Create, edit, analyze, and review workbook-native spreadsheet artifacts. Use thi |
 | `visual-review` | L3 | gate | evidence | Review screenshots, rendered pages, charts, and UI artifacts with image-grounded |
 | `xlsx` | L3 | gate | artifact | Read, create, edit, repair, and review Excel `.xlsx` workbooks when spreadsheet- |
-| `idea-to-plan` | L-1 | @strategic-orchestrator | idea-to-plan, 战略编排, 意图到计划, 科研自动化, 试点验证, Pilot, Duo-Doc, outline.md, code_list.md, 蓝图设计 | Turn ambiguous ideas into evidence-backed plans with branch routing and compress |
+| `idea-to-plan` | L-1 | @strategic-orchestrator | delegation | Turn ambiguous ideas into evidence-backed plans with branch routing and compress |
 | `skill-developer-codex` | L0 | owner | none | Design and tune Codex skill routing/framework behavior |
 | `skill-writer` | L0 | owner | none | Shape one skill's wording, boundary, and token budget |
 | `anti-laziness` | L1 | overlay | none | Fused overlay to detect/counter cognitive laziness and force empirical evidence. |
 | `citation-management` | L1 | owner | none | Verify, normalize, de-duplicate, complete, and format academic citations and ref |
 | `plan-to-code` | L2 | owner | none | Implement a concrete plan or spec into integrated code |
 | `brainstorm-research` | L3 | owner | none | Expand early research ideas into multiple comparable directions and preserve the |
-| `autoresearch` | L4 | owner | none | Orchestrate autonomous research through a recoverable two-loop cycle: hypothesis |
+| `autoresearch` | L4 | owner | none | Orchestrate autonomous research through a recoverable loop of hypothesis, experi |
 | `latex-compile-acceleration` | L4 | owner | none | Speed up LaTeX compile and preview workflows |
 | `iterative-optimizer` | L0 | overlay | none | N-round optimization loops with built-in laziness immunity |
 | `skill-routing-repair-codex` | L0 | overlay | none | Patch routing misses with the smallest safe skill fix |
 | `writing-skills` | L0 | overlay | none | Standardize and strengthen multiple `SKILL.md` files and shared skill-writing do |
 | `api-integration-debugging` | L1 | owner | none | Diagnose and fix API integration failures at service boundaries. Produces reprod |
 | `backend-runtime-debugging` | L1 | owner | none | Diagnose backend runtime failures: crashes, tracebacks, OOM, deadlocks, hanging  |
+| `checklist-writting` | L1 | owner | none | Write a versioned execution-ready checklist once the strategy is fixed. |
 | `coding-standards` | L1 | overlay | none | Enforce cross-stack coding standards: naming, readability, error handling, immut |
 | `documentation-engineering` | L1 | owner | none | Write, review, and maintain project documentation such as README, API docs, ADRs |
 | `error-handling-patterns` | L1 | overlay | none | Design cross-language error-handling architectures such as custom errors, retry/ |
@@ -52,7 +53,6 @@
 | `frontend-debugging` | L1 | owner | none | Diagnose frontend runtime bugs with a five-layer model (component → state → rend |
 | `information-retrieval` | L1 | owner | none | Run multi-round research before acting or recommending |
 | `openai-docs` | L1 | owner | none | Use OpenAI docs MCP tools for current OpenAI API, model, Apps SDK, Codex, and do |
-| `plan-writing` | L1 | owner | none | Write an execution-ready plan before implementation |
 | `plugin-creator` | L1 | owner | none | Create a local Codex plugin scaffold with `.codex-plugin/plugin.json` and option |
 | `prompt-engineer` | L1 | owner | none | Transform vague instructions into structured prompts with explicit role, constra |
 | `refactoring` | L1 | owner | none | Plan and execute systematic code refactoring without changing behavior. Use when |
@@ -65,10 +65,11 @@
 | `architect-review` | L2 | owner | none | Review software architecture, system design, and major structural code changes w |
 | `build-tooling` | L2 | owner | none | Debug and design JS/TS/Python build tooling across package managers, lockfiles,  |
 | `checklist-fixer` | L2 | owner | none | Execute fix lists and implementation plans with mandatory per-item verification  |
+| `checklist-normalizer` | L2 | owner | none | Rewrite a messy checklist into an execution-ready form with explicit serial/para |
 | `code-review` | L2 | overlay | none | Review code with structured findings and optional quality scoring. Use when the  |
 | `css-pro` | L2 | owner | none | Architect maintainable CSS layout, responsive, animation, and vibrant design-tok |
 | `data-wrangling` | L2 | owner | none | Clean, transform, validate, and pipeline structured or semi-structured data acro |
-| `datastore-cache-queue` | L2 | owner | none | Diagnose and fix data-runtime correctness problems across stores, caches, queues |
+| `datastore-cache-queue` | L2 | owner | none | Diagnose and fix correctness issues across stores, caches, queues, and ORM-backe |
 | `dependency-migration` | L2 | owner | none | Manage, audit, upgrade, and migrate project dependencies across npm, pip, Cargo, |
 | `env-config-management` | L2 | owner | none | Design, audit, debug, and implement app configuration across env vars, `.env`, s |
 | `gh-pr-triage` | L2 | owner | none | Triage GitHub pull requests by collecting PR metadata, comments, review state, c |
@@ -91,19 +92,19 @@
 | `frontend-design` | L3 | owner | none | Guide distinctive, high-end UI design: aesthetic direction, typography, color, m |
 | `github-actions-authoring` | L3 | owner | none | Produce GitHub Actions workflow YAML with minimal permissions, stable cache keys |
 | `graphviz-expert` | L3 | owner | none | Create Graphviz/DOT diagrams for precise, orthogonal, publication-quality flowch |
-| `i18n-l10n` | L3 | overlay | none | Internationalization and localization overlay for web/mobile projects. Covers ha |
+| `i18n-l10n` | L3 | overlay | none | Internationalization and localization overlay for web/mobile projects. Use for m |
 | `imagegen` | L3 | owner | none | Use when the user asks to generate or edit images via the OpenAI Image API, incl |
 | `infographic` | L3 | owner | none | Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge car |
 | `jupyter-notebook` | L3 | owner | none | Create, scaffold, refactor, and normalize Jupyter notebooks (`.ipynb`) for exper |
 | `linux-server-ops` | L3 | owner | none | Get services running and staying healthy on a Linux host — systemd units, revers |
-| `mcp-builder` | L3 | owner | none | Design, build, review, and improve MCP (Model Context Protocol) servers and agen |
+| `mcp-builder` | L3 | owner | none | Design, build, review, and improve MCP servers and agent-facing tool interfaces. |
 | `mermaid-expert` | L3 | owner | none | Create Mermaid diagrams for flowcharts, process diagrams, sequence diagrams, ERD |
 | `monorepo-tooling` | L3 | owner | none | Design clean package boundaries and task orchestration for multi-package reposit |
 | `motion-design` | L3 | owner | none | Design and implement high-end web animations, micro-interactions, and staggered  |
 | `native-app-debugging` | L3 | owner | none | Debug desktop app issues across the Web-Native boundary |
 | `npm-package-authoring` | L3 | owner | none | Build, refactor, and publish npm packages and JavaScript/TypeScript libraries in |
 | `performance-expert` | L3 | owner | none | Audit and improve web performance with emphasis on Core Web Vitals, asset weight |
-| `release-engineering` | L3 | owner | none | Build end-to-end release pipelines from commit to published artifact. Produces v |
+| `release-engineering` | L3 | owner | none | Build release pipelines from commit to published artifact. Use for versioning st |
 | `screenshot` | L3 | owner | none | Capture desktop or system screenshots including full screen, a specific app wind |
 | `security-threat-model` | L3 | owner | none | Repository-grounded threat modeling for applications, services, MCP servers, API |
 | `skill-developer` | L3 | owner | none | Create, improve, debug, and audit Antigravity skills and `SKILL.md` files. Use w |
@@ -113,7 +114,7 @@
 | `agent-swarm-orchestration` | L4 | owner | none | Design and debug multi-agent systems with planners, routers, workers, reviewers, |
 | `ai-research` | L4 | owner | none | AI/ML research engineering for model training, experiment pipelines, evaluation, |
 | `algo-trading` | L4 | owner | none | Design, analyze, and implement algorithmic trading strategies, backtests, execut |
-| `assignment-compliance` | L4 | owner | none | Check whether a homework or course-project submission satisfies every requiremen |
+| `assignment-compliance` | L4 | owner | none | Check whether a homework or course-project submission satisfies the stated requi |
 | `auth-implementation` | L4 | owner | none | Produce server-enforced auth flows with clean separation between authentication, |
 | `chatgpt-apps` | L4 | owner | none | Build, scaffold, refactor, and troubleshoot ChatGPT Apps SDK applications that c |
 | `chrome-extension-dev` | L4 | owner | none | Produce Chrome extensions for Manifest V3: Service Workers, minimal permissions, |
@@ -126,15 +127,15 @@
 | `literature-synthesis` | L4 | owner | none | Systematically screen, cluster, compare, and synthesize academic literature into |
 | `mac-memory-management` | L4 | owner | none | Optimize Apple Silicon ML runtimes for memory pressure, throughput, and MPS stab |
 | `math-derivation` | L4 | owner | none | Execute rigorous mathematical derivations and proofs |
-| `nextjs` | L4 | owner | none | Deliver Next.js 14/15 applications with correct Server Component boundaries, opt |
+| `nextjs` | L4 | owner | none | Deliver Next.js 14/15 applications with correct App Router, Server Component, an |
 | `node-backend` | L4 | owner | none | Produce well-layered Node.js backend services with thin handlers, boundary valid |
 | `paper-length-tuner` | L4 | owner | none | Diagnose paper length vs target page/word budget and produce a section-level exp |
 | `paper-logic` | L4 | owner | none | Audit a paper's scientific defensibility under peer review: claims-vs- evidence  |
 | `paper-notation-audit` | L4 | owner | none | Audit and enforce notation consistency across an academic paper: abbreviations,  |
 | `paper-reviewer` | L4 | owner | none | Review a paper or manuscript at whole-paper level and return prioritized finding |
 | `paper-reviser` | L4 | owner | none | Revise an academic paper or manuscript from reviewer comments, issue lists, rebu |
-| `paper-visuals` | L4 | owner | none | Audit and improve academic paper figures, tables, captions, legends, axes, notes |
-| `paper-writing` | L4 | owner | none | Polish academic paper prose — abstract, introduction, related work, method, capt |
+| `paper-visuals` | L4 | owner | none | Audit and improve paper figures, tables, captions, legends, axes, notes, and res |
+| `paper-writing` | L4 | owner | none | Polish academic paper prose without changing scientific claims. Use for abstract |
 | `ppt-beamer` | L4 | owner | none | Create, revise, and compile presentation decks with LaTeX Beamer when you want e |
 | `ppt-html-export` | L4 | owner | none | Use when the user wants to create, revise, or export a slide deck / PPT / presen |
 | `ppt-markdown` | L4 | owner | none | Build slide decks from Markdown using Slidev or Marp. Use when the user wants fa |

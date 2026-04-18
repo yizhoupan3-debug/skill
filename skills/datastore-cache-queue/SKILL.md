@@ -1,8 +1,9 @@
 ---
 name: datastore-cache-queue
 description: |
-  Diagnose and fix data-runtime correctness problems across stores, caches, queues, and ORM-backed workers.
-  Focus on source-of-truth, cache invalidation, retry safety, idempotency, and failure paths across SQL/NoSQL, Redis, queues, workers, ORM, migrations, and connection pools. Use when the user asks to 设计数据层、排查 Redis/缓存、queue/worker、migration/transaction/连接池、debug ORM, or investigate duplicate consumption, stale cache, or consistency bugs.
+  Diagnose and fix correctness issues across stores, caches, queues, and ORM-backed workers.
+  Use for source-of-truth bugs, cache invalidation, idempotency, retries,
+  migrations, and worker consistency failures.
 metadata:
   version: "1.0.1"
   platforms: [codex]

@@ -32,9 +32,9 @@ struct SkillDoc {
 #[derive(Debug, Clone)]
 struct SkillEntry {
     slug: String,
+    skill_dir: PathBuf,
     path: String,
     source: String,
-    source_priority: Option<i64>,
     source_position: i64,
     routing_layer: String,
     routing_owner: String,
@@ -241,13 +241,13 @@ fn parse_frontmatter(
 fn load_source_manifest(path: &Path) -> Result<Value, String> {
     if !path.exists() {
         return Ok(json!({
-            "version": 1,
-            "resolution": "later-source-wins",
+            "version": 2,
+            "winning_rule": "highest-position-wins",
             "sources": [
-                {"name": "system", "priority": 100, "position": 0},
-                {"name": "vendor", "priority": 80, "position": 1},
-                {"name": "user", "priority": 60, "position": 2},
-                {"name": "project", "priority": 40, "position": 3},
+                {"name": "system", "position": 0},
+                {"name": "vendor", "position": 1},
+                {"name": "user", "position": 2},
+                {"name": "project", "position": 3},
             ],
         }));
     }
@@ -294,13 +294,15 @@ fn collect_skill_entries(
     let mut entries = Vec::new();
     for doc in docs {
         let source = infer_skill_source(skills_root, doc, &precedence)?;
-        let source_info = precedence.get(&source).cloned().unwrap_or((None, -1));
+        let source_position = precedence.get(&source).copied().ok_or_else(|| {
+            format!("source manifest missing precedence position for source `{source}`")
+        })?;
         entries.push(SkillEntry {
             slug: doc.slug.clone(),
+            skill_dir: doc.skill_dir.clone(),
             path: repo_relative(skills_root, &doc.skill_dir),
             source,
-            source_priority: source_info.0,
-            source_position: source_info.1,
+            source_position,
             routing_layer: string_field(&doc.metadata, "routing_layer"),
             routing_owner: string_field(&doc.metadata, "routing_owner"),
             routing_gate: string_field(&doc.metadata, "routing_gate"),
@@ -310,7 +312,7 @@ fn collect_skill_entries(
     Ok(entries)
 }
 
-fn build_precedence_map(source_manifest: &Value) -> HashMap<String, (Option<i64>, i64)> {
+fn build_precedence_map(source_manifest: &Value) -> HashMap<String, i64> {
     let mut result = HashMap::new();
     if let Some(sources) = source_manifest.get("sources").and_then(Value::as_array) {
         for (position, entry) in sources.iter().enumerate() {
@@ -320,12 +322,11 @@ fn build_precedence_map(source_manifest: &Value) -> HashMap<String, (Option<i64>
                     .and_then(Value::as_str)
                     .unwrap_or("project"),
             );
-            let priority = entry.get("priority").and_then(Value::as_i64);
             let source_position = entry
                 .get("position")
                 .and_then(Value::as_i64)
                 .unwrap_or(position as i64);
-            result.insert(name, (priority, source_position));
+            result.insert(name, source_position);
         }
     }
     result
@@ -342,7 +343,7 @@ fn normalize_source_name(raw: &str) -> String {
 fn infer_skill_source(
     skills_root: &Path,
     doc: &SkillDoc,
-    precedence: &HashMap<String, (Option<i64>, i64)>,
+    precedence: &HashMap<String, i64>,
 ) -> Result<String, String> {
     let declared = normalize_source_name(
         doc.metadata
@@ -382,6 +383,7 @@ fn build_registry_and_manifest(
     skill_entries: &[SkillEntry],
     health_data: &HashMap<String, Value>,
 ) -> Result<(String, Value), String> {
+    let selected_docs = select_manifest_docs(docs, skill_entries);
     let source_entries = skill_entries
         .iter()
         .map(|entry| (entry.slug.clone(), entry))
@@ -394,15 +396,15 @@ fn build_registry_and_manifest(
         "priority",
         "description",
         "session_start",
-        "triggers",
+        "trigger_hints",
         "health",
         "source",
-        "source_priority"
+        "source_position"
     ]);
     let mut rows = Vec::new();
     let mut skills = Vec::new();
 
-    for doc in docs {
+    for doc in selected_docs {
         for field in [
             "routing_layer",
             "routing_owner",
@@ -432,7 +434,7 @@ fn build_registry_and_manifest(
         let gate = string_field(&doc.metadata, "routing_gate");
         let session_start = string_field(&doc.metadata, "session_start");
         let description = optional_string_field(&doc.metadata, "description").unwrap_or_default();
-        let trigger_str = extract_triggers(&doc.metadata, &description, &doc.body);
+        let trigger_hints = extract_trigger_hints(&doc.metadata, &description, &doc.body);
         let summary = pick_runtime_summary(&doc.metadata, 80);
         let long_summary = pick_runtime_summary(&doc.metadata, 200);
         let health_info = health_data.get(&slug);
@@ -469,10 +471,10 @@ fn build_registry_and_manifest(
             priority,
             long_summary,
             session_start,
-            trigger_str,
+            trigger_hints,
             round_one_decimal(health_score),
             source_entry.source,
-            source_entry.source_priority,
+            source_entry.source_position,
         ]));
     }
 
@@ -483,6 +485,37 @@ fn build_registry_and_manifest(
     Ok((registry, json!({"keys": keys, "skills": skills})))
 }
 
+fn select_manifest_docs<'a>(docs: &'a [SkillDoc], skill_entries: &[SkillEntry]) -> Vec<&'a SkillDoc> {
+    let mut ordered_entries = skill_entries.iter().collect::<Vec<_>>();
+    ordered_entries.sort_by(|left, right| {
+        left.source_position
+            .cmp(&right.source_position)
+            .then_with(|| left.path.cmp(&right.path))
+    });
+
+    let mut winner_paths = HashMap::new();
+    for entry in ordered_entries {
+        winner_paths.insert(entry.slug.as_str(), &entry.skill_dir);
+    }
+
+    let mut selected = Vec::new();
+    let mut seen = HashSet::new();
+    for doc in docs {
+        if seen.contains(doc.slug.as_str()) {
+            continue;
+        }
+        let Some(winner_path) = winner_paths.get(doc.slug.as_str()) else {
+            continue;
+        };
+        if *winner_path != &doc.skill_dir {
+            continue;
+        }
+        seen.insert(doc.slug.as_str());
+        selected.push(doc);
+    }
+    selected
+}
+
 fn build_index(manifest: &Value) -> String {
     let selected = select_runtime_skills(manifest);
     let mut lines = vec![
@@ -491,8 +524,8 @@ fn build_index(manifest: &Value) -> String {
         "> Entry point for rapid lookup.".to_string(),
         "> Prefer `skills/SKILL_ROUTING_RUNTIME.json` for the lean machine-readable route map.".to_string(),
         "> Prefer `skills/SKILL_MANIFEST.json` for the full manifest (includes owner, priority, source, etc.).".to_string(),
-        "> RUNTIME (v2) is a compact 8-key subset: slug, layer, owner, gate, session_start, summary, triggers, health.".to_string(),
-        "> MANIFEST is the full 11-key record: slug, layer, owner, gate, priority, description, session_start, triggers, health, source, source_priority.".to_string(),
+        "> RUNTIME (v2) is a compact 8-key subset: slug, layer, owner, gate, session_start, summary, trigger_hints, health.".to_string(),
+        "> MANIFEST is the full 11-key record: slug, layer, owner, gate, priority, description, session_start, trigger_hints, health, source, source_position.".to_string(),
         "".to_string(),
         "## 6-rule gate checklist".to_string(),
     ];
@@ -544,7 +577,7 @@ fn build_runtime_index(manifest: &Value) -> Value {
     json!({
         "version": 2,
         "checklist": index_checklist(),
-        "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "triggers", "health"],
+        "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "health"],
         "skills": skills,
     })
 }
@@ -585,7 +618,7 @@ fn build_shadow_map(skill_entries: &[SkillEntry], source_manifest: &Value) -> Va
 
     json!({
         "version": 1,
-        "resolution": source_manifest.get("resolution").cloned().unwrap_or_else(|| Value::String("later-source-wins".to_string())),
+        "winning_rule": source_manifest.get("winning_rule").cloned().unwrap_or_else(|| Value::String("highest-position-wins".to_string())),
         "sources": source_manifest.get("sources").cloned().unwrap_or_else(|| Value::Array(Vec::new())),
         "skills": Value::Object(skills),
     })
@@ -624,7 +657,6 @@ fn skill_entry_to_value(entry: &SkillEntry) -> Value {
         "slug": entry.slug,
         "path": entry.path,
         "source": entry.source,
-        "source_priority": entry.source_priority,
         "source_position": entry.source_position,
         "routing_layer": entry.routing_layer,
         "routing_owner": entry.routing_owner,
@@ -677,11 +709,7 @@ fn runtime_rank(skill: &[Value]) -> (i32, i32, i32) {
     (session_rank, gate_rank, layer_rank)
 }
 
-fn extract_triggers(metadata: &HashMap<String, Value>, description: &str, body: &str) -> String {
-    extract_trigger_phrases(metadata, description, body).join(" ")
-}
-
-fn extract_trigger_phrases(
+fn extract_trigger_hints(
     metadata: &HashMap<String, Value>,
     description: &str,
     body: &str,
@@ -695,8 +723,11 @@ fn extract_trigger_phrases(
     .collect::<HashSet<_>>();
 
     let mut samples = vec![description.to_string()];
-    if let Some(trigger_phrases) = metadata.get("trigger_phrases") {
-        match trigger_phrases {
+    if let Some(trigger_hints) = metadata
+        .get("trigger_hints")
+        .or_else(|| metadata.get("trigger_phrases"))
+    {
+        match trigger_hints {
             Value::String(text) => samples.push(text.clone()),
             Value::Array(items) => {
                 for item in items {
@@ -750,8 +781,11 @@ fn extract_trigger_phrases(
         }
     };
 
-    if let Some(trigger_phrases) = metadata.get("trigger_phrases") {
-        match trigger_phrases {
+    if let Some(trigger_hints) = metadata
+        .get("trigger_hints")
+        .or_else(|| metadata.get("trigger_phrases"))
+    {
+        match trigger_hints {
             Value::String(text) => push(text.clone()),
             Value::Array(items) => {
                 for item in items {
@@ -1000,5 +1034,75 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(discovered_paths, vec![".system/openai-docs".to_string()]);
+    }
+
+    #[test]
+    fn compiler_outputs_new_schema_keys() {
+        let skills_root = temp_skills_root("schema-keys");
+        fs::create_dir_all(skills_root.join("sample-skill")).expect("create sample skill dir");
+        fs::write(
+            skills_root.join("sample-skill").join("SKILL.md"),
+            "---\nname: sample-skill\ndescription: test\nrouting_layer: L1\nrouting_owner: owner\nrouting_gate: none\nsession_start: n/a\ntrigger_hints:\n  - sample trigger\n---\n## When to use\n- test\n",
+        )
+        .expect("write skill");
+
+        let docs = load_skill_documents(&skills_root).expect("load skill docs");
+        let source_manifest = json!({
+            "version": 2,
+            "winning_rule": "highest-position-wins",
+            "sources": [{"name": "project", "position": 3}],
+        });
+        let entries =
+            collect_skill_entries(&skills_root, &docs, &source_manifest).expect("collect entries");
+        let (_, manifest) =
+            build_registry_and_manifest(&docs, &entries, &HashMap::new()).expect("manifest");
+        let runtime = build_runtime_index(&manifest);
+        let shadow_map = build_shadow_map(&entries, &source_manifest);
+
+        assert_eq!(
+            manifest["keys"],
+            json!([
+                "slug",
+                "layer",
+                "owner",
+                "gate",
+                "priority",
+                "description",
+                "session_start",
+                "trigger_hints",
+                "health",
+                "source",
+                "source_position"
+            ])
+        );
+        assert_eq!(runtime["keys"][6], json!("trigger_hints"));
+        assert_eq!(shadow_map["winning_rule"], json!("highest-position-wins"));
+        assert!(manifest["skills"][0][7].is_array());
+    }
+
+    #[test]
+    fn compiler_manifest_keeps_only_highest_precedence_duplicate_slug() {
+        let skills_root = temp_skills_root("duplicate-slug");
+        write_skill(&skills_root.join(".system").join("imagegen"), "imagegen");
+        write_skill(&skills_root.join("imagegen"), "imagegen");
+
+        let docs = load_skill_documents(&skills_root).expect("load skill docs");
+        let source_manifest = json!({
+            "version": 2,
+            "winning_rule": "highest-position-wins",
+            "sources": [
+                {"name": "system", "position": 0},
+                {"name": "project", "position": 3},
+            ],
+        });
+        let entries =
+            collect_skill_entries(&skills_root, &docs, &source_manifest).expect("collect entries");
+        let (_, manifest) =
+            build_registry_and_manifest(&docs, &entries, &HashMap::new()).expect("manifest");
+
+        assert_eq!(manifest["skills"].as_array().map(Vec::len), Some(1));
+        assert_eq!(manifest["skills"][0][0], json!("imagegen"));
+        assert_eq!(manifest["skills"][0][9], json!("project"));
+        assert_eq!(manifest["skills"][0][10], json!(3));
     }
 }

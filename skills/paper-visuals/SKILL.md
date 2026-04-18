@@ -1,12 +1,10 @@
 ---
 name: paper-visuals
 description: |
-  Audit and improve academic paper figures, tables, captions, legends, axes, notes, and
-  result presentation for publication-grade polish, self-containment, information density,
-  English-first defaults, and no visual overlap. Use when the user asks to 审图、修图、审表、修表、看
-  caption / legend / axis、投稿级视觉优化、图表美化、图表规范, or wants figure/table review without
-  splitting into separate skills. Pair with `visual-review` and
-  `scientific-figure-plotting` as needed.
+  Audit and improve paper figures, tables, captions, legends, axes, notes,
+  and result presentation.
+  Use for submission-grade figure/table review, self-containment,
+  information density, and visual polish.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none

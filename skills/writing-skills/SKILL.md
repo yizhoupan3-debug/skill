@@ -25,6 +25,9 @@ allowed_tools:
   - python
 approval_required_tools:
   - git push
+artifact_outputs:
+  - SESSION_SUMMARY.md
+  - TRACE_METADATA.json
 ---
 - **Dual-Dimension Audit (Pre: Batch-Logic/Template, Post: Consistency/Sync Results)** → `$execution-audit-codex` [Overlay]
 

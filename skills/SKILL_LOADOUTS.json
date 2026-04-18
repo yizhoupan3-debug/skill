@@ -21,10 +21,10 @@
         "plan-to-code",
         "typescript-pro",
         "python-pro",
-        "react"
+        "react",
+        "test-engineering"
       ],
       "overlays": [
-        "test-engineering",
         "frontend-code-quality"
       ],
       "exclude": [
@@ -33,12 +33,11 @@
       "purpose": "Concrete implementation and refactor execution with test support."
     },
     "audit_loadout": {
-      "owners": [
+      "owners": [],
+      "overlays": [
         "execution-audit-codex",
         "code-review",
-        "security-audit"
-      ],
-      "overlays": [
+        "security-audit",
         "anti-laziness"
       ],
       "exclude": [
@@ -50,7 +49,8 @@
       "owners": [
         "skill-developer-codex",
         "execution-controller-coding",
-        "idea-to-plan"
+        "idea-to-plan",
+        "checklist-normalizer"
       ],
       "overlays": [
         "execution-audit-codex"
@@ -58,7 +58,7 @@
       "exclude": [
         "seo-web"
       ],
-      "purpose": "Framework design, routing policy, and orchestrator evolution work."
+      "purpose": "Framework design, routing policy, orchestrator evolution, and execution-shape normalization work."
     },
     "ops_loadout": {
       "owners": [

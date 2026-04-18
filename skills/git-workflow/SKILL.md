@@ -26,7 +26,7 @@ routing_gate: none
 routing_priority: P1
 session_start: n/a
 short_description: Safely execute Git operations and remote sync
-trigger_phrases:
+trigger_hints:
   - 整理提交推送
   - 分支为什么推不上去
   - git push 失败

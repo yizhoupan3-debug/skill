@@ -72,7 +72,7 @@ jobs:
       - name: Check generated artifact drift
         run: |
           python3 scripts/sync_skills.py --apply
-          if ! git diff --quiet -- skills/SKILL_ROUTING_REGISTRY.md skills/SKILL_MANIFEST.json skills/SKILL_ROUTING_INDEX.md skills/SKILL_ROUTING_RUNTIME.json AGENT.md AGENTS.md CLAUDE.md GEMINI.md .mcp.json .claude/CLAUDE.md .claude/settings.json .claude/agents/README.md .claude/hooks/README.md .gemini/settings.json configs/claude/CLAUDE.md configs/codex/AGENTS.md configs/gemini/GEMINI.md; then
+          if ! git diff --quiet -- skills/SKILL_ROUTING_REGISTRY.md skills/SKILL_MANIFEST.json skills/SKILL_ROUTING_INDEX.md skills/SKILL_ROUTING_RUNTIME.json skills/SKILL_SOURCE_MANIFEST.json skills/SKILL_SHADOW_MAP.json skills/SKILL_LOADOUTS.json skills/SKILL_APPROVAL_POLICY.json skills/SKILL_HEALTH_MANIFEST.json AGENT.md AGENTS.md CLAUDE.md GEMINI.md .mcp.json .claude/CLAUDE.md .claude/settings.json .claude/agents/README.md .claude/hooks/README.md .gemini/settings.json configs/claude/CLAUDE.md configs/codex/AGENTS.md configs/gemini/GEMINI.md; then
             echo "::error::Generated skill artifacts or shared CLI entrypoints are out of date — run sync_skills.py --apply locally"
             exit 1
           fi

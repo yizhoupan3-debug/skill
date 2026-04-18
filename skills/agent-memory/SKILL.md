@@ -4,7 +4,7 @@ description: |
   Agent 长期记忆 / 跨会话记忆设计：MEMORY.md、偏好记忆、决策档案、语义召回与 context injection。
   Use when the user wants an agent to remember project context across sessions instead of relying on chat history.
 short_description: Design persistent agent memory across sessions
-trigger_phrases:
+trigger_hints:
   - 长期记忆
   - 跨会话记忆
   - MEMORY.md

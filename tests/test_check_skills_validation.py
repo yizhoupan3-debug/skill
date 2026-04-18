@@ -189,3 +189,57 @@ def test_system_skill_override_is_not_treated_as_duplicate(tmp_path: Path) -> No
     ]
 
     assert _is_allowed_system_override(skills_root, paths) is True
+
+
+def test_validate_skill_document_rejects_invalid_routing_gate_value(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "bad-gate"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: bad-gate
+description: Bad gate
+routing_layer: L1
+routing_owner: owner
+routing_gate: fuzzy, freeform
+session_start: n/a
+---
+## When to use
+- test
+""",
+        encoding="utf-8",
+    )
+
+    document, error_report = _read_skill_document("bad-gate", skill_dir)
+    assert document is not None
+    assert error_report is None
+
+    report = validate_skill_document(document)
+
+    assert any("routing_gate must be one of" in error for error in report.errors)
+
+
+def test_validate_skill_document_rejects_invalid_session_start_value(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "bad-session"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: bad-session
+description: Bad session
+routing_layer: L1
+routing_owner: owner
+routing_gate: none
+session_start: always
+---
+## When to use
+- test
+""",
+        encoding="utf-8",
+    )
+
+    document, error_report = _read_skill_document("bad-session", skill_dir)
+    assert document is not None
+    assert error_report is None
+
+    report = validate_skill_document(document)
+
+    assert any("session_start must be one of" in error for error in report.errors)

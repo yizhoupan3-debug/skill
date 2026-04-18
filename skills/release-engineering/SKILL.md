@@ -1,13 +1,8 @@
 ---
 name: release-engineering
 description: |
-  Build end-to-end release pipelines from commit to published artifact.
-  Produces version strategy, changelog automation, and tag→build→publish
-  orchestration across semantic-release, release-please, changesets, and
-  manual flows — for npm, PyPI, crates.io, Docker, and GitHub Releases.
-  Use when the user asks to set up automated releases, design versioning, generate
-  changelogs, or phrases like "搭自动发布流程", "设计版本号策略", "配
-  semantic-release", "生成 changelog".
+  Build release pipelines from commit to published artifact.
+  Use for versioning strategy, changelog automation, and automated tag→build→publish flows.
 metadata:
   version: "1.0.0"
   platforms: [codex]

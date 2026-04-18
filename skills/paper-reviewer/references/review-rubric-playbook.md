@@ -56,6 +56,28 @@ When running adversarial review, explicitly probe:
 - COPE emphasizes objectivity, confidentiality, expertise, timeliness, and reporting ethics concerns to the editor instead of investigating privately.
 - NIH criteria emphasize importance, rigor and feasibility, and expertise/resources evaluated in context.
 
+## Reflective challenge dimensions
+
+Use these dimensions to prevent multi-round review fatigue and false convergence:
+
+- `core-claim-support / soundness`
+- `novelty / contribution detectability`
+- `baseline / fairness / comparator adequacy`
+- `experimental rigor / statistical sufficiency`
+- `robustness / boundary conditions / failure cases`
+- `manuscript self-sufficiency / evidence traceability`
+- `venue-bar fit / significance threshold`
+- `writing clarity / visuals / reviewer legibility`
+
+Adjacent rounds should rotate away from the previous dimension whenever possible. Near-neighbor dimensions do not count as orthogonal for convergence. If all major dimensions have been covered, revisit the weakest-covered dimension or the dimension with the fewest findings for a deeper pass.
+
+## Convergence reminder for adversarial review
+
+- One null pass is not stability.
+- Stable convergence requires **Two Consecutive Null Deltas** across orthogonal review dimensions.
+- Run a false-convergence challenge before declaring the review stable.
+- If the strongest reject paragraph sharpens, or a new decision-relevant issue appears late, refresh the ledger instead of treating the review as complete.
+
 ## Review output shape
 
 - Start with a one-paragraph summary of what the paper claims to do.
@@ -66,3 +88,50 @@ When running adversarial review, explicitly probe:
 - If a recommendation depends on missing evidence, say exactly what evidence would change it.
 - Number findings and cite manuscript locations whenever possible.
 - Keep critique focused on the paper, not the authors, and keep any ethics concerns confidential to the editor if the target venue supports that channel.
+
+## Output contract
+
+Use `论文问题总表` and keep this fixed section order:
+1. `审稿对象摘要`
+2. `总体结论`
+3. `Grounded Strengths / Accept Path`
+4. `Reject Case`
+5. `P0: 一票否决 — 不修则拒`
+6. `A: 核心硬伤`
+7. `B: 需补充数据/实验`
+8. `C: 文本打磨`
+9. `Reflection Summary`
+10. `Top 3 Revision Priorities`
+
+Within every severity section, keep `Non-visual` before `Visual` and write `- None.` when empty.
+
+### Required finding fields
+
+Each material finding must include:
+- `finding_id`
+- `severity` + `severity_native`
+- `evidence`
+- `impact`
+- `adversarial_attack`
+- `fixability`
+- `repair path`
+- `repair leverage`
+- `recommended owner`
+- `recommended executor`
+- `verification`
+- `status`
+
+### Required reflection fields
+
+Report:
+- mode used
+- rounds completed
+- dimensions covered
+- issues added per round
+- null-delta rounds and why they count as orthogonal
+- false-convergence challenge status
+- confidence shifts
+- adversarial reviewer's top concern
+- smallest credible accept-path
+- accept-path shift across rounds
+

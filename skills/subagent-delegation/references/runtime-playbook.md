@@ -45,6 +45,7 @@ Good sidecars usually have:
 - one role
 - one clear output contract
 - no hidden write overlap
+- no direct writes to shared global continuity artifacts
 
 ### 3. Record the delegation plan
 
@@ -52,6 +53,8 @@ Before any runtime branch, persist at least:
 
 - `delegation_plan_created`
 - candidate sidecars and output contracts
+- forbidden scope for each non-integrator lane
+- lane-local artifact or delta paths for each lane
 - what stays local
 
 ### 4. Check runtime policy
@@ -100,6 +103,7 @@ When sidecars return, or when queued local slices finish:
 
 - check whether the assigned task was answered
 - check for boundary violations
+- reject any sidecar that directly mutated shared continuity artifacts outside its allowed scope
 - integrate only the result summary and proof
 - keep raw detail outside the main thread
 
@@ -116,6 +120,7 @@ When sidecars return, or when queued local slices finish:
 1. Task: ...
    - Role: ...
    - Scope: ...
+   - Forbidden scope: ...
    - Output: ...
 
 ## Kept Local
@@ -140,5 +145,6 @@ When sidecars return, or when queued local slices finish:
 1. Task: ...
    - Role: ...
    - Why: ...
+   - Forbidden scope: ...
    - Output contract: ...
 ````

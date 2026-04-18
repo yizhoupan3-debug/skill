@@ -32,6 +32,14 @@ allowed_tools:
   - python
 approval_required_tools:
   - git push
+filesystem_scope:
+  - repo
+  - artifacts
+network_access: conditional
+artifact_outputs:
+  - ci_failure_digest.md
+  - EVIDENCE_INDEX.json
+  - TRACE_METADATA.json
 ---
 # gh-fix-ci
 

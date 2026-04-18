@@ -13,7 +13,7 @@ routing_owner: owner
 routing_gate: none
 session_start: n/a
 metadata:
-  version: "2.1.0"
+  version: "2.1.1"
   platforms: [codex]
   tags: [paper, logic, novelty, experiments, reviewer, evidence, statistics, symbols]
 framework_roles:
@@ -41,9 +41,10 @@ Logic findings produced here should be mappable to the shared
 finding-driven framework without flattening paper-native semantics.
 
 Minimum compatibility expectations:
-- preserve a stable `finding_id` when the same logic issue persists
+- preserve a stable `finding_id` when the same logic issue persists, including upstream dimension-coded IDs such as `NOV-01`, `THY-02`, `EXP-03`, `RES-04`, `WRT-05`, `REF-06`, and `VIS-07` when they already point to a logic-surface problem
 - keep `severity_native` in paper terms (`P0 / A / B / C`)
 - include `evidence`, `fixability`, and `recommended_owner_skill`
+- preserve richer upstream planning hints such as shortest repair path, `repair_leverage`, and whether the strongest next move is to reorganize underexploited evidence already present
 - when the result is a repair task, consume findings from `$paper-reviewer`
   or reviewer comments already normalized into findings
 
@@ -81,6 +82,7 @@ Rule of thumb: if the question is **about a paper's defensibility under peer rev
    - claimed novelty and its level (methodological innovation vs engineering improvement)
    - evidence supporting each claim
    - manuscript stage and target venue
+   - whether incoming findings already specify shortest repair path, `repair_leverage`, or an underexploited-evidence route that should be honored during logic repair
 
 2. **Audit scientific logic** (Tier-1 checks):
 
@@ -96,9 +98,12 @@ Rule of thumb: if the question is **about a paper's defensibility under peer rev
    - Is balance between physics and data-driven terms justified (error bounds, convergence proof, Pareto argument)?
    - Are applicability boundaries of theoretical assumptions discussed?
    - Is there "theory washing" (physics component contributes negligibly but is sold as the main novelty)?
+   - Run an explicit theory-breakpoint scan: declaration-vs-derivation gaps, local approximation or closure assumptions, unexplained surrogate substitutions, and claims that survive only if the reviewer grants unstated author intuition
 
    ### Method Rigor & Mathematical Self-Consistency
    - Is derivation from definitions to final algorithm step-by-step complete?
+   - For every approximation jump, is the admissible regime or validity window stated?
+   - If a closure, proxy relation, or first-order expansion is introduced, does the paper explain where it comes from and what error it may induce?
    - Do pseudocode variables match the math exactly?
    - Are all hyperparameters (schedule, weights, search range, final values) disclosed?
    - Are custom operators explicitly defined at first use?
@@ -145,6 +150,8 @@ Rule of thumb: if the question is **about a paper's defensibility under peer rev
    - For each claimed novelty: name the closest existing work and explain why the novelty claim still holds despite it
    - For any severity rating below A: justify why it is not more severe
    - If more than 3 checks passed without any reservation, flag this as a review-depth warning and re-examine
+   - If a finding is fixable without new experiments, state the shortest credible repair path; if not, say exactly what new evidence would be needed
+   - When underexploited evidence already exists in the manuscript, appendix, figures, tables, or notes, prefer reorganizing that evidence before escalating to a `needs new experiment` conclusion
 
    This step prevents **false security** from systematic checklists that can mask lenient judgment.
 
@@ -152,16 +159,21 @@ Rule of thumb: if the question is **about a paper's defensibility under peer rev
    - If the user wants critique only: output `逻辑问题单`
    - If the user wants fixes: rewrite claims/framing honestly without inventing evidence
    - Flag blocked issues that require new experiments rather than text edits
+   - Preserve `repair_leverage` when incoming findings provide it; otherwise assign `high / medium / low` to help downstream revision planning
 
 ## Output defaults
 
 Use `逻辑问题单` or `逻辑修订记录`:
+- finding_id
 - claim
 - weakness
 - evidence (present or missing)
 - fix (text edit or new experiment needed)
+- shortest credible repair path
+- repair_leverage: high / medium / low
 - severity: P0 (reject-level) / A (core flaw) / B (needs data) / C (text polish)
 - whether new evidence is required
+- whether the preferred path is `existing evidence reorganized` or `new evidence created`
 
 > Severity definitions follow the shared paper-skill severity spec. See [`$paper-reviewer` references/severity-spec.md](../paper-reviewer/references/severity-spec.md).
 

@@ -9,7 +9,7 @@ routing_gate: none
 routing_priority: P1
 session_start: preferred
 short_description: Design and tune Codex skill routing/framework behavior
-trigger_phrases:
+trigger_hints:
   - skill框架
   - 边界重叠
   - 减少 token 消耗
@@ -50,6 +50,7 @@ network_access: conditional
 artifact_outputs:
   - SESSION_SUMMARY.md
   - TRACE_METADATA.json
+  - EVIDENCE_INDEX.json
 bridge_behavior: mobile_complete_once
 ---
 - **Dual-Dimension Audit (Pre: Framework-Policy/Logic, Post: Sync-Health/Registry Results)** → `$execution-audit-codex` [Overlay]

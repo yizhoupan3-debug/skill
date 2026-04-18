@@ -144,10 +144,6 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
                         "execution_kernel_delegate_impl": "router-rs",
                         "execution_kernel_live_primary": "router-rs",
                         "execution_kernel_live_primary_authority": "rust-execution-cli",
-                        "execution_kernel_live_fallback": "python-agno",
-                        "execution_kernel_live_fallback_authority": "python-agno-kernel-adapter",
-                        "execution_kernel_live_fallback_enabled": True,
-                        "execution_kernel_live_fallback_mode": "compatibility",
                         "status": "completed",
                     },
                 }
@@ -167,14 +163,16 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
     assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
     assert response.metadata["execution_kernel_live_primary"] == "router-rs"
     assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-    assert response.metadata["execution_kernel_live_fallback"] == "python-agno"
-    assert response.metadata["execution_kernel_live_fallback_authority"] == "python-agno-kernel-adapter"
-    assert response.metadata["execution_kernel_live_fallback_enabled"] is True
-    assert response.metadata["execution_kernel_live_fallback_mode"] == "compatibility"
+    assert "execution_kernel_live_fallback" not in response.metadata
+    assert "execution_kernel_live_fallback_authority" not in response.metadata
+    assert "execution_kernel_live_fallback_enabled" not in response.metadata
+    assert "execution_kernel_live_fallback_mode" not in response.metadata
     assert response.usage.total_tokens == 34
 
 
-def test_python_kernel_falls_back_only_when_router_rs_infrastructure_fails(monkeypatch) -> None:
+def test_python_kernel_rejects_explicit_live_fallback_requests_after_retirement(
+    monkeypatch,
+) -> None:
     settings = SimpleNamespace(
         codex_home=PROJECT_ROOT,
         rust_router_timeout_seconds=5.0,
@@ -194,35 +192,10 @@ def test_python_kernel_falls_back_only_when_router_rs_infrastructure_fails(monke
 
     monkeypatch.setattr("codex_agno_runtime.execution_kernel.subprocess.run", failing_run)
 
-    response = asyncio.run(kernel.execute(_request()))
+    with pytest.raises(RuntimeError, match="requested Python compatibility fallback is rejected"):
+        asyncio.run(kernel.execute(_request()))
 
-    assert response.live_run is True
-    assert response.content == "python fallback content"
-    assert response.metadata["execution_kernel"] == "python-agno"
-    assert response.metadata["execution_kernel_authority"] == "python-agno-kernel-adapter"
-    assert response.metadata["run_id"] == "py-fallback-run"
-    assert response.metadata["status"] == "completed"
-    assert response.metadata["trace_event_count"] == 9
-    assert response.metadata["trace_output_path"] == "/tmp/TRACE_METADATA.json"
-    assert response.metadata[EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY] == (
-        EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE
-    )
-    assert response.metadata[EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY] == (
-        EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
-    )
-    assert response.metadata["execution_kernel_primary"] == "router-rs"
-    assert response.metadata["execution_kernel_primary_authority"] == "rust-execution-cli"
-    assert response.metadata[EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY] == (
-        EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION
-    )
-    assert response.metadata[EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY] == "python-agno"
-    assert response.metadata[EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY] == (
-        "python-agno-kernel-adapter"
-    )
-    assert "router-rs execute could not be launched" in response.metadata[
-        EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY
-    ]
-    assert fallback_agent.instructions == ["Prompt for plan-to-code"]
+    assert fallback_agent.instructions == []
 
 
 def test_execution_kernel_contract_helpers_define_compatibility_fallback_metadata() -> None:
@@ -277,7 +250,14 @@ def test_execution_kernel_contract_helpers_define_compatibility_fallback_metadat
 
     contract_core = build_execution_kernel_live_response_serialization_contract_core()
     assert contract_core["current_contract_truth"]["public_response_model"] == "RunTaskResponse"
-    assert contract_core["runtime_response_metadata_fields"]["compatibility_fallback"] == [
+    assert contract_core["current_contract_truth"]["steady_state_response_shapes"] == [
+        "live_primary",
+        "dry_run",
+    ]
+    assert contract_core["current_contract_truth"]["compatibility_fallback_runtime_path"] == (
+        "retired"
+    )
+    assert contract_core["runtime_response_metadata_fields"]["retired_compatibility_fallback"] == [
         "run_id",
         "status",
         EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
@@ -289,8 +269,11 @@ def test_execution_kernel_contract_helpers_define_compatibility_fallback_metadat
         EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
         EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
     ]
-    assert contract_core["current_response_shape_truth"]["compatibility_fallback"][
-        "required_metadata_fields"
+    assert contract_core["current_response_shape_truth"]["retired_compatibility_fallback"][
+        "runtime_path_available"
+    ] is False
+    assert contract_core["current_response_shape_truth"]["retired_compatibility_fallback"][
+        "legacy_required_metadata_fields"
     ] == [
         "run_id",
         "status",
@@ -457,10 +440,11 @@ def test_python_kernel_health_defaults_to_explicitly_disabled_fallback() -> None
     health = kernel.health()
 
     assert health["kernel_live_fallback_enabled"] is False
-    assert health["kernel_live_fallback_mode"] == "disabled"
+    assert health["kernel_live_fallback_mode"] == "retired"
+    assert health["kernel_live_fallback_request_status"] == "not-supported"
 
 
-def test_python_kernel_health_uses_explicit_compatibility_mode_when_enabled() -> None:
+def test_python_kernel_health_marks_explicit_compatibility_requests_as_rejected() -> None:
     settings = SimpleNamespace(
         codex_home=PROJECT_ROOT,
         rust_router_timeout_seconds=5.0,
@@ -476,8 +460,9 @@ def test_python_kernel_health_uses_explicit_compatibility_mode_when_enabled() ->
 
     health = kernel.health()
 
-    assert health["kernel_live_fallback_enabled"] is True
-    assert health["kernel_live_fallback_mode"] == "compatibility-only-explicit"
+    assert health["kernel_live_fallback_enabled"] is False
+    assert health["kernel_live_fallback_mode"] == "retired"
+    assert health["kernel_live_fallback_request_status"] == "explicit-request-rejected"
 
 
 def test_python_kernel_omits_python_prompt_preview_on_rust_live_path(monkeypatch) -> None:
@@ -525,10 +510,6 @@ def test_python_kernel_omits_python_prompt_preview_on_rust_live_path(monkeypatch
                         "execution_kernel_delegate_impl": "router-rs",
                         "execution_kernel_live_primary": "router-rs",
                         "execution_kernel_live_primary_authority": "rust-execution-cli",
-                        "execution_kernel_live_fallback": "python-agno",
-                        "execution_kernel_live_fallback_authority": "python-agno-kernel-adapter",
-                        "execution_kernel_live_fallback_enabled": True,
-                        "execution_kernel_live_fallback_mode": "compatibility",
                     },
                 }
             ),
@@ -545,10 +526,10 @@ def test_python_kernel_omits_python_prompt_preview_on_rust_live_path(monkeypatch
     assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
     assert response.metadata["execution_kernel_live_primary"] == "router-rs"
     assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-    assert response.metadata["execution_kernel_live_fallback"] == "python-agno"
-    assert response.metadata["execution_kernel_live_fallback_authority"] == "python-agno-kernel-adapter"
-    assert response.metadata["execution_kernel_live_fallback_enabled"] is True
-    assert response.metadata["execution_kernel_live_fallback_mode"] == "compatibility"
+    assert "execution_kernel_live_fallback" not in response.metadata
+    assert "execution_kernel_live_fallback_authority" not in response.metadata
+    assert "execution_kernel_live_fallback_enabled" not in response.metadata
+    assert "execution_kernel_live_fallback_mode" not in response.metadata
 
 
 def test_python_kernel_raises_when_router_rs_infrastructure_fails_and_live_fallback_is_disabled(
@@ -580,7 +561,7 @@ def test_python_kernel_raises_when_router_rs_infrastructure_fails_and_live_fallb
 
     monkeypatch.setattr("codex_agno_runtime.execution_kernel.subprocess.run", failing_run)
 
-    with pytest.raises(RuntimeError, match="infrastructure failed while Python live fallback is disabled"):
+    with pytest.raises(RuntimeError, match="compatibility fallback retirement"):
         asyncio.run(kernel.execute(_request()))
 
     assert fallback_calls == 0
@@ -613,7 +594,7 @@ def test_python_kernel_does_not_fallback_for_router_rs_live_execute_errors(monke
 
     monkeypatch.setattr("codex_agno_runtime.execution_kernel.subprocess.run", failing_run)
 
-    with pytest.raises(RuntimeError, match="without entering the Python compatibility fallback"):
+    with pytest.raises(RuntimeError, match="compatibility fallback is rejected after retirement"):
         asyncio.run(kernel.execute(_request()))
 
     assert fallback_calls == 0

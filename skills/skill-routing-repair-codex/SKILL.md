@@ -11,13 +11,25 @@ routing_gate: none
 routing_priority: P1
 session_start: n/a
 short_description: Patch routing misses with the smallest safe skill fix
-trigger_phrases: 路由修复, 触发修复, 自提升, 顺手更新 skill, 这次为什么没触发, 以后别再选错, 做完后更新 skill, 复盘这次 miss, gate 应该先触发
+trigger_hints:
+  - 路由修复
+  - 触发修复
+  - 自提升
+  - 顺手更新 skill
+  - 这次为什么没触发
+  - 以后别再选错
+  - 做完后更新 skill
+  - 复盘这次 miss
+  - gate 应该先触发
 allowed_tools:
   - shell
   - git
   - python
 approval_required_tools:
   - git push
+artifact_outputs:
+  - SESSION_SUMMARY.md
+  - TRACE_METADATA.json
 metadata:
   version: "1.2.0"
   platforms: [codex]

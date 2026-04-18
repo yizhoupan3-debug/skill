@@ -2,12 +2,9 @@
 name: build-tooling
 description: |
   Debug and design JS/TS/Python build tooling across package managers,
-  lockfiles, bundlers, compilers, module resolution, and local/CI pipelines.
-  Use when the user asks to 修构建, 排查依赖安装失败, 解决 bundler/module 报错,
-  fix lockfile or toolchain drift, handle ESM/CJS or alias/path issues, or
-  explain why dev/build/test scripts fail before application logic runs.
-  For LaTeX-specific compile/watch/externalization optimization, use
-  `$latex-compile-acceleration`.
+  lockfiles, bundlers, compilers, and CI pipelines.
+  Use for install/build failures, module-resolution drift, ESM/CJS issues,
+  and toolchain mismatches before app logic runs.
 metadata:
   version: "1.0.1"
   platforms: [codex]

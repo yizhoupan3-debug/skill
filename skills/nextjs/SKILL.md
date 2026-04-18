@@ -1,12 +1,9 @@
 ---
 name: nextjs
 description: |
-  Deliver Next.js 14/15 applications with correct Server Component boundaries,
-  optimal caching/revalidation strategies, and zero client-side data waterfalls.
-  Produces App Router code that defaults to Server Components, uses streaming
-  with Suspense, and enforces Zod-validated Server Actions. Use when the user
-  asks for Next.js development, SSR/SSG strategy, App Router architecture, or
-  phrases like "Next 项目", "SSR", "Server Actions", "App Router 怎么用".
+  Deliver Next.js 14/15 applications with correct App Router, Server Component,
+  and caching boundaries.
+  Use for Next.js development, SSR/SSG strategy, streaming, and Server Actions.
 metadata:
   version: "2.0.0"
   platforms: [codex, antigravity, claude-code]

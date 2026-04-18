@@ -1,18 +1,11 @@
 {
   "ts": "2026-04-15T10:46:46.102903+00:00",
   "summary": {
-    "total_skills": 139,
+    "total_skills": 140,
     "critical_skills": 0,
     "avg_health": 96.3
   },
   "skills": {
-    "imagegen": {
-      "dynamic_score": 98.7,
-      "static_score": 96.8,
-      "usage_30d": 0,
-      "reroutes_30d": 0,
-      "health_status": "Healthy"
-    },
     "openai-docs": {
       "dynamic_score": 100.0,
       "static_score": 100.0,
@@ -170,6 +163,20 @@
     "checklist-fixer": {
       "dynamic_score": 96.5,
       "static_score": 91.2,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "checklist-normalizer": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "checklist-writting": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
       "usage_30d": 0,
       "reroutes_30d": 0,
       "health_status": "Healthy"
@@ -440,6 +447,13 @@
       "reroutes_30d": 0,
       "health_status": "Healthy"
     },
+    "imagegen": {
+      "dynamic_score": 98.7,
+      "static_score": 96.8,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
     "infographic": {
       "dynamic_score": 95.1,
       "static_score": 87.8,
@@ -640,13 +654,6 @@
       "dynamic_score": 95.8,
       "static_score": 89.6,
       "usage_30d": 0,
-      "reroutes_30d": 0,
-      "health_status": "Healthy"
-    },
-    "plan-writing": {
-      "dynamic_score": 93.0,
-      "static_score": 82.5,
-      "usage_30d": 4,
       "reroutes_30d": 0,
       "health_status": "Healthy"
     },

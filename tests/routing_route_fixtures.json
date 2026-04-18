@@ -7,7 +7,7 @@
     "priority",
     "description",
     "session_start",
-    "triggers",
+    "trigger_hints",
     "health"
   ],
   "skills": [
@@ -19,7 +19,12 @@
       "P0",
       "Kernel orchestrator for high-load, cross-file execution.",
       "required",
-      "高负载,跨文件,sidecar,delegation",
+      [
+        "高负载",
+        "跨文件",
+        "sidecar",
+        "delegation"
+      ],
       100.0
     ],
     [
@@ -30,7 +35,11 @@
       "P1",
       "Split complex tasks into bounded sidecars.",
       "required",
-      "delegation,sidecar,并行",
+      [
+        "delegation",
+        "sidecar",
+        "并行"
+      ],
       94.5
     ],
     [
@@ -41,7 +50,11 @@
       "P1",
       "Implement a concrete plan directly into code.",
       "n/a",
-      "按方案实现,直接做代码,实现",
+      [
+        "按方案实现",
+        "直接做代码",
+        "实现"
+      ],
       96.0
     ],
     [
@@ -52,7 +65,11 @@
       "P2",
       "Deliver production-grade Python code with tests.",
       "n/a",
-      "python 脚本,pytest,fastapi",
+      [
+        "python 脚本",
+        "pytest",
+        "fastapi"
+      ],
       98.0
     ],
     [
@@ -63,8 +80,26 @@
       "P1",
       "Overlay to enforce evidence and prevent lazy execution.",
       "preferred",
-      "别偷懒,严格落实",
+      [
+        "别偷懒",
+        "严格落实"
+      ],
       95.0
+    ],
+    [
+      "checklist-writting",
+      "L1",
+      "owner",
+      "none",
+      "P1",
+      "Write execution-ready checklists before implementation or review.",
+      "n/a",
+      [
+        "checklist",
+        "计划",
+        "review checklist"
+      ],
+      95.5
     ],
     [
       "iterative-optimizer",
@@ -74,7 +109,11 @@
       "P2",
       "N-round iterative optimizer overlay.",
       "n/a",
-      "自迭代,10轮,优化",
+      [
+        "自迭代",
+        "10轮",
+        "优化"
+      ],
       96.4
     ],
     [
@@ -85,7 +124,10 @@
       "P2",
       "Shared tie-break candidate.",
       "n/a",
-      "并发构建,toolchain",
+      [
+        "并发构建",
+        "toolchain"
+      ],
       90.0
     ],
     [
@@ -96,7 +138,10 @@
       "P1",
       "Shared tie-break candidate.",
       "n/a",
-      "并发构建,toolchain",
+      [
+        "并发构建",
+        "toolchain"
+      ],
       90.0
     ]
   ],
@@ -114,7 +159,7 @@
       "name": "gate-precedence",
       "query": "这是高负载跨文件任务，需要 sidecar delegation 并行处理",
       "expected": {
-        "selected_skill": "execution-controller-coding",
+        "selected_skill": "subagent-delegation",
         "overlay_skill": "anti-laziness",
         "layer": "L0"
       }
@@ -126,6 +171,15 @@
         "selected_skill": "plan-to-code",
         "overlay_skill": "iterative-optimizer",
         "layer": "L2"
+      }
+    },
+    {
+      "name": "review-checklist-routing",
+      "query": "review checklist 看这轮是否结束",
+      "expected": {
+        "selected_skill": "checklist-writting",
+        "overlay_skill": "anti-laziness",
+        "layer": "L1"
       }
     },
     {

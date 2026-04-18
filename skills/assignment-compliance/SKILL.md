@@ -1,13 +1,9 @@
 ---
 name: assignment-compliance
 description: |
-  Check whether a homework or course-project submission satisfies every
-  requirement in the problem statement or rubric.
-  Use when the user wants line-by-line requirement extraction from PDFs, screenshots, rubrics,
-  or mixed sources, then map them to the student work and produce a compliance
-  checklist, gap analysis, score estimate, and fix plan. Trigger phrases
-  include “检查作业要求”, “对照 rubric”, “check assignment requirements”,
-  “能拿满分吗”, and “还差什么”.
+  Check whether a homework or course-project submission satisfies the stated requirements or rubric.
+  Use for requirement extraction, compliance mapping, gap analysis,
+  score estimation, and fix planning.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none

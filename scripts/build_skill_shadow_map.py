@@ -19,13 +19,13 @@ SOURCE_MANIFEST_PATH = SKILLS_ROOT / "SKILL_SOURCE_MANIFEST.json"
 SHADOW_MAP_PATH = SKILLS_ROOT / "SKILL_SHADOW_MAP.json"
 
 DEFAULT_SOURCE_MANIFEST = {
-    "version": 1,
-    "resolution": "later-source-wins",
+    "version": 2,
+    "winning_rule": "highest-position-wins",
     "sources": [
-        {"name": "system", "priority": 100, "position": 0},
-        {"name": "vendor", "priority": 80, "position": 1},
-        {"name": "user", "priority": 60, "position": 2},
-        {"name": "project", "priority": 40, "position": 3},
+        {"name": "system", "position": 0},
+        {"name": "vendor", "position": 1},
+        {"name": "user", "position": 2},
+        {"name": "project", "position": 3},
     ],
 }
 
@@ -126,7 +126,6 @@ def build_precedence_map(source_manifest: dict[str, Any]) -> dict[str, dict[str,
         name = normalize_source_name(entry.get("name"))
         precedence[name] = {
             "name": name,
-            "priority": entry.get("priority"),
             "position": entry.get("position", position),
         }
     return precedence
@@ -157,14 +156,16 @@ def collect_skill_entries(
         metadata = document.metadata
 
         source_name = infer_skill_source(skill_dir, metadata, skills_root=skills_root)
-        source_info = precedence.get(source_name, {"priority": None, "position": -1})
+        if source_name not in precedence:
+            available = ", ".join(sorted(precedence))
+            raise ValueError(f"unknown skill source '{source_name}' (expected one of {available})")
+        source_info = precedence[source_name]
 
         entries.append(
             {
                 "slug": slug,
                 "path": repo_relative(skill_dir),
                 "source": source_name,
-                "source_priority": source_info.get("priority"),
                 "source_position": source_info.get("position", -1),
                 "routing_layer": str(metadata.get("routing_layer", "")).strip(),
                 "routing_owner": str(metadata.get("routing_owner", "")).strip(),
@@ -202,6 +203,7 @@ def build_shadow_map(
         grouped.setdefault(entry["slug"], []).append(entry)
 
     skills_payload: dict[str, Any] = {}
+    winning_rule = str(manifest.get("winning_rule", "highest-position-wins"))
     for slug, group in sorted(grouped.items()):
         ordered = sorted(
             group,
@@ -210,6 +212,7 @@ def build_shadow_map(
         winner = ordered[-1]
         shadowed = [item for item in ordered[:-1]]
         skills_payload[slug] = {
+            "winning_rule": winning_rule,
             "winner": winner,
             "shadowed": shadowed,
             "shadowed_by": [] if not shadowed else [winner["path"]],
@@ -217,8 +220,8 @@ def build_shadow_map(
         }
 
     return {
-        "version": 1,
-        "resolution": manifest.get("resolution", "later-source-wins"),
+        "version": 2,
+        "winning_rule": winning_rule,
         "sources": manifest.get("sources", []),
         "skills": skills_payload,
     }
