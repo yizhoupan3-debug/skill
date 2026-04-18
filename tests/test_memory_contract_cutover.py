@@ -8,9 +8,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.consolidate_memory import archive_legacy_memory_bundle, persist_memory_bundle
+from scripts.default_bootstrap import run_default_bootstrap
+from scripts.memory_store import MemoryItem, MemoryStore
 from scripts.framework_bridge import build_framework_memory_bootstrap
 from scripts.memory_support import build_memory_state, load_runtime_snapshot
-from scripts.run_memory_automation import migrate_current_artifact_clutter, migrate_legacy_artifact_roots
+from scripts.run_memory_automation import (
+    migrate_current_artifact_clutter,
+    migrate_legacy_artifact_roots,
+    run_pipeline,
+)
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -145,3 +152,95 @@ def test_migrate_legacy_artifact_roots_moves_old_memory_automation_and_tmp_dirs(
         tmp_path / "artifacts" / "scratch" / "tmp-demo" / "runtime_background_jobs.json"
     ).is_file()
     assert not (tmp_path / "artifacts" / "memory_automation").exists()
+
+
+def test_run_pipeline_defaults_to_planning_migrations_without_mutating_live_artifacts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _seed_runtime(
+        tmp_path,
+        tmp_path / "artifacts",
+        task_id="keep-task-20260418220000",
+        task="keep task",
+    )
+    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
+    stray_dir = tmp_path / "artifacts" / "current" / "older-task"
+    stray_dir.mkdir(parents=True)
+    _write_text(stray_dir / "SESSION_SUMMARY.md", "- task: older\n")
+    monkeypatch.setattr(
+        "scripts.run_memory_automation.collect_storage_report",
+        lambda *_args, **_kwargs: {"root": str(tmp_path / ".codex"), "total_mib": 1.0, "top_entries": []},
+    )
+
+    result = run_pipeline(workspace=tmp_path.name, source_root=tmp_path)
+
+    assert result["apply_artifact_migrations"] is False
+    assert result["planned_current_artifact_migrations"]
+    assert result["moved_current_artifacts"] == []
+    assert stray_dir.is_dir()
+
+
+def test_archive_legacy_memory_bundle_exports_and_clears_non_authoritative_memory_rows(
+    tmp_path: Path,
+) -> None:
+    memory_root = tmp_path / ".codex" / "memory"
+    memory_root.mkdir(parents=True, exist_ok=True)
+    _write_text(memory_root / "MEMORY.md", "# 项目长期记忆\n\n- stable row\n")
+    store = MemoryStore.for_workspace(tmp_path.name, resolved_dir=memory_root)
+    store.upsert_memory_item(
+        MemoryItem(
+            item_id=f"{tmp_path.name}:task_state:1",
+            category="task_state",
+            source="current_state_extractor",
+            summary="stale task state",
+        )
+    )
+
+    result = archive_legacy_memory_bundle(tmp_path.name, memory_root)
+
+    assert result["legacy_memory_item_count"] == 1
+    dump = json.loads((Path(result["archive_root"]) / "sqlite_legacy_dump.json").read_text(encoding="utf-8"))
+    assert dump["memory_items"][0]["source"] == "current_state_extractor"
+    remaining_sources = {
+        row["source"] for row in store.list_memory_items(limit=100, active=False)
+    }
+    assert "current_state_extractor" not in remaining_sources
+
+
+def test_persist_memory_bundle_prunes_non_authoritative_memory_sources(tmp_path: Path) -> None:
+    memory_root = tmp_path / ".codex" / "memory"
+    memory_root.mkdir(parents=True, exist_ok=True)
+    store = MemoryStore.for_workspace(tmp_path.name, resolved_dir=memory_root)
+    store.upsert_memory_item(
+        MemoryItem(
+            item_id=f"{tmp_path.name}:task_state:1",
+            category="task_state",
+            source="current_state_extractor",
+            summary="stale task state",
+        )
+    )
+
+    persist_memory_bundle(
+        tmp_path.name,
+        {"MEMORY.md": "# 项目长期记忆\n\n- stable row\n"},
+        resolved_dir=memory_root,
+    )
+
+    rows = store.list_memory_items(limit=100, active=False)
+    assert {row["source"] for row in rows} == {"MEMORY.md"}
+
+
+def test_default_bootstrap_compacts_evolution_payload(tmp_path: Path) -> None:
+    _seed_runtime(
+        tmp_path,
+        tmp_path / "artifacts",
+        task_id="bootstrap-task-20260418220000",
+        task="bootstrap task",
+    )
+    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
+
+    result = run_default_bootstrap(repo_root=tmp_path, output_dir=tmp_path / "out", workspace=tmp_path.name)
+
+    payload = result["payload"]["evolution-proposals"]
+    assert set(payload) == {"proposal_count", "proposals"}

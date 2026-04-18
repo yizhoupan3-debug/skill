@@ -37,6 +37,24 @@ def test_extract_trigger_hints_preserves_multilingual_terms() -> None:
     assert "history" in " ".join(phrases).lower()
 
 
+def test_extract_trigger_hints_skips_generic_single_english_tokens() -> None:
+    """Verify generic single-word English tokens do not leak into routing hints.
+
+    Returns:
+        None.
+    """
+
+    phrases = extract_trigger_hints(
+        {},
+        "Review screenshots and rendered pages for image-grounded findings.",
+        "Internationalization and localization overlay for web/mobile projects.\n",
+    )
+
+    lowered = {phrase.lower() for phrase in phrases}
+    assert "review" not in lowered
+    assert "overlay" not in lowered
+
+
 def test_normalize_health_manifest_backfills_missing_skill_rows() -> None:
     """Verify health manifest normalization covers every manifest skill.
 

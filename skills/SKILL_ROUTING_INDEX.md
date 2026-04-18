@@ -24,6 +24,7 @@
 | `sentry` | L0 | gate | source | Inspect Sentry issues, events, releases, environments, and recent production exc |
 | `subagent-delegation` | L0 | gate | delegation | Decide whether to split a complex task across sidecars or preserve the same stru |
 | `systematic-debugging` | L0 | gate | evidence | Investigate unknown failures before fixing |
+| `openai-docs` | L1 | gate | source | Use OpenAI docs MCP tools for current OpenAI API, model, Apps SDK, Codex, and do |
 | `doc` | L3 | gate | artifact | Read, create, edit, repair, and review `.docx` Word documents when layout and Wo |
 | `pdf` | L3 | gate | artifact | Read, create, edit, repair, and review PDFs when rendering and page layout matte |
 | `playwright` | L3 | gate | evidence | Use a real browser when live evidence or page interaction is required |
@@ -53,7 +54,6 @@
 | `frontend-debugging` | L1 | owner | none | Diagnose frontend runtime bugs with a five-layer model (component → state → rend |
 | `imagegen` | L1 | owner | none | Use the built-in image tool for raster image generation or edits. |
 | `information-retrieval` | L1 | owner | none | Run multi-round research before acting or recommending |
-| `openai-docs` | L1 | owner | none | Use OpenAI docs MCP tools for current OpenAI API, model, Apps SDK, Codex, and do |
 | `plugin-creator` | L1 | owner | none | Create a local Codex plugin scaffold with `.codex-plugin/plugin.json` and option |
 | `prompt-engineer` | L1 | owner | none | Transform vague instructions into structured prompts with explicit role, constra |
 | `refactoring` | L1 | owner | none | Plan and execute systematic code refactoring without changing behavior. Use when |
@@ -109,6 +109,7 @@
 | `security-threat-model` | L3 | owner | none | Repository-grounded threat modeling for applications, services, MCP servers, API |
 | `skill-developer` | L3 | owner | none | Create, improve, debug, and audit Antigravity skills and `SKILL.md` files. Use w |
 | `skill-installer-antigravity` | L3 | owner | none | Install Antigravity skills into the shared workspace skill library from local fo |
+| `tao-ci` | L3 | owner | none | Draft professor-specific summer research outreach emails from workbook data |
 | `agent-memory` | L4 | owner | none | Design persistent agent memory across sessions |
 | `agent-swarm-orchestration` | L4 | owner | none | Design and debug multi-agent systems with planners, routers, workers, reviewers, |
 | `ai-research` | L4 | owner | none | AI/ML research engineering for model training, experiment pipelines, evaluation, |

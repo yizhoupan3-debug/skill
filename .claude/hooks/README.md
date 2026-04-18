@@ -53,7 +53,9 @@ Validation commands:
 - `printf '{"hook_event_name":"StopFailure","failure_type":"server_error"}
 ' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/stop_failure.sh`
   Expected: host-private failure classification hint on stderr; exit 0.
-- `python3 scripts/claude_memory_bridge.py session-start --repo-root "$PWD" --json`
+- `python3 scripts/session_lifecycle_hook.py session-start --repo-root "$PWD" --json`
   Expected: JSON result with `canonical_command`, `contract`, and `projection`.
+- `python3 scripts/session_lifecycle_hook.py end-session --repo-root "$PWD" --json`
+  Expected: compatibility alias for `session-end`; same consolidation and projection contract.
 
 Shared routing policy still comes from `../../AGENT.md`.

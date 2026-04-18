@@ -112,6 +112,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         "Bash(git status)",
         "Bash(git diff)",
         "Bash(python3 scripts/check_skills.py --verify-sync)",
+        "Bash(python3 scripts/session_lifecycle_hook.py *)",
         "Bash(python3 scripts/claude_memory_bridge.py *)",
         "Bash(python3 scripts/claude_statusline.py --repo-root *)",
         "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",

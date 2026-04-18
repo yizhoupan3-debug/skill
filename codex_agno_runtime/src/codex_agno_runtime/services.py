@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 import resource
+import sys
 from typing import Any, Mapping
 from uuid import uuid4
 
@@ -138,6 +139,14 @@ def _now_iso() -> str:
     """Return a canonical UTC timestamp."""
 
     return datetime.now(UTC).isoformat()
+
+
+def _normalize_rusage_maxrss(raw_value: float) -> float:
+    """Normalize ``ru_maxrss`` to bytes across supported host platforms."""
+
+    if sys.platform == "darwin":
+        return float(raw_value)
+    return float(raw_value) * 1024.0
 
 
 _SANDBOX_LIFECYCLE_STATES = (
@@ -370,8 +379,8 @@ class SandboxLifecycleService:
         return {
             "self_cpu": float(self_usage.ru_utime + self_usage.ru_stime),
             "child_cpu": float(child_usage.ru_utime + child_usage.ru_stime),
-            "self_memory": float(self_usage.ru_maxrss),
-            "child_memory": float(child_usage.ru_maxrss),
+            "self_memory": _normalize_rusage_maxrss(self_usage.ru_maxrss),
+            "child_memory": _normalize_rusage_maxrss(child_usage.ru_maxrss),
         }
 
     def _acquire_record(self, request: ExecutionKernelRequest) -> _SandboxRecord:

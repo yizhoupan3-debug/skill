@@ -320,6 +320,20 @@ class MemoryStore:
                 [self.workspace, *cleaned],
             )
 
+    def delete_memory_items_not_in_sources(self, allowed_sources: list[str]) -> None:
+        """Delete workspace memory items whose sources are no longer authoritative."""
+
+        cleaned = [str(source).strip() for source in allowed_sources if str(source).strip()]
+        with self.connect() as conn:
+            if not cleaned:
+                conn.execute("DELETE FROM memory_items WHERE workspace = ?", (self.workspace,))
+                return
+            placeholders = ", ".join("?" for _ in cleaned)
+            conn.execute(
+                f"DELETE FROM memory_items WHERE workspace = ? AND source NOT IN ({placeholders})",
+                [self.workspace, *cleaned],
+            )
+
     def sync_session_notes(self, session_key: str, notes: list[str]) -> None:
         """Replace one session note stream."""
 
@@ -433,6 +447,32 @@ class MemoryStore:
             "session_notes": [dict(row) for row in session_rows],
             "evidence_records": [dict(row) for row in evidence_rows],
         }
+
+    def export_memory_items_excluding_sources(self, allowed_sources: list[str]) -> list[dict[str, Any]]:
+        """Export non-authoritative memory items before pruning them."""
+
+        cleaned = [str(source).strip() for source in allowed_sources if str(source).strip()]
+        with self.connect() as conn:
+            if not cleaned:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM memory_items
+                    WHERE workspace = ?
+                    ORDER BY updated_at DESC
+                    """,
+                    (self.workspace,),
+                ).fetchall()
+            else:
+                placeholders = ", ".join("?" for _ in cleaned)
+                rows = conn.execute(
+                    f"""
+                    SELECT * FROM memory_items
+                    WHERE workspace = ? AND source NOT IN ({placeholders})
+                    ORDER BY updated_at DESC
+                    """,
+                    [self.workspace, *cleaned],
+                ).fetchall()
+        return [dict(row) for row in rows]
 
     def clear_legacy_rows(self) -> None:
         """Clear the legacy non-authoritative tables after archival."""

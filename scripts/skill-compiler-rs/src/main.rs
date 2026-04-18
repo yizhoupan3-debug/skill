@@ -817,14 +817,31 @@ fn extract_trigger_hints(
                 push(found.as_str().to_string());
             }
         }
-    }
-
-    let lowered = source.to_lowercase();
-    for found in english_token_regex().find_iter(&lowered) {
-        let token = found.as_str();
-        if !noise.contains(token) {
-            push(token.to_string());
+        let english_tokens = english_token_regex()
+            .find_iter(chunk)
+            .map(|found| found.as_str().to_lowercase())
+            .collect::<Vec<_>>();
+        let meaningful_tokens = english_tokens
+            .into_iter()
+            .filter(|token| !noise.contains(token.as_str()))
+            .collect::<Vec<_>>();
+        if meaningful_tokens.is_empty() {
+            continue;
         }
+        if meaningful_tokens.len() == 1 {
+            let token = &meaningful_tokens[0];
+            if token.chars().any(|ch| ch.is_ascii_digit())
+                || token.contains('.')
+                || token.contains('+')
+                || token.contains('#')
+                || token.contains('/')
+                || token.contains('-')
+            {
+                push(token.clone());
+            }
+            continue;
+        }
+        push(meaningful_tokens.into_iter().take(6).collect::<Vec<_>>().join(" "));
     }
 
     phrases.truncate(16);

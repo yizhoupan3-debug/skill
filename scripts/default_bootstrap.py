@@ -41,6 +41,15 @@ def resolve_task_bootstrap_path(output_dir: Path, task_id: str) -> Path:
     return output_dir / task_id / BOOTSTRAP_FILENAME
 
 
+def _compact_evolution_proposals(payload: dict[str, Any]) -> dict[str, Any]:
+    """Keep the bootstrap-facing proposal payload compact and prompt-safe."""
+
+    return {
+        "proposal_count": payload.get("proposal_count", 0),
+        "proposals": payload.get("proposals", []),
+    }
+
+
 def run_default_bootstrap(
     *,
     query: str = "",
@@ -79,7 +88,7 @@ def run_default_bootstrap(
     payload = {
         "skills-export": runtime,
         "memory-bootstrap": memory,
-        "evolution-proposals": proposals,
+        "evolution-proposals": _compact_evolution_proposals(proposals),
         "bootstrap": {
             "query": query,
             "workspace": workspace,
