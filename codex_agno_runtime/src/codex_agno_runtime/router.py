@@ -255,7 +255,6 @@ class SkillRouter:
     def _pick_overlay(self, task: str, allow_overlay: bool, selected_skill: SkillMetadata) -> SkillMetadata | None:
         if not allow_overlay:
             return None
-        task_text = normalize_text(task)
         task_tokens = tokenize(task)
 
         # Rule: L0/L1 tasks auto-attach anti-laziness overlay unless user already
@@ -281,6 +280,16 @@ class SkillRouter:
 
         if explicit_overlay is not None:
             return explicit_overlay
+        if (
+            selected_skill.name == "skill-developer-codex"
+            and any(
+                _contains_phrase(task_tokens, marker)
+                for marker in ("review", "framework-review", "routing-review", "审查", "审核")
+            )
+        ):
+            for skill in self.skills:
+                if skill.name == "code-review":
+                    return skill
         if auto_anti_laziness and anti_laziness_skill is not None:
             return anti_laziness_skill
         return None

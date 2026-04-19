@@ -2485,6 +2485,16 @@ fn pick_overlay(
         }
     }
 
+    if selected_skill.slug == "skill-developer-codex"
+        && ["review", "framework-review", "routing-review", "审查", "审核"]
+            .iter()
+            .any(|marker| text_matches_phrase(query_tokens, marker))
+    {
+        if let Some(skill) = records.iter().find(|record| record.slug == "code-review") {
+            return Some(skill.slug.clone());
+        }
+    }
+
     if auto_anti_laziness {
         if let Some(skill) = anti_laziness {
             if skill.slug != selected_skill.slug {

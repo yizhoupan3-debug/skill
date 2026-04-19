@@ -73,7 +73,7 @@
 | `datastore-cache-queue` | L2 | owner | none | Diagnose and fix correctness issues across stores, caches, queues, and ORM-backe |
 | `dependency-migration` | L2 | owner | none | Manage, audit, upgrade, and migrate project dependencies across npm, pip, Cargo, |
 | `env-config-management` | L2 | owner | none | Design, audit, debug, and implement app configuration across env vars, `.env`, s |
-| `gh-pr-triage` | L2 | owner | none | Triage GitHub pull requests by collecting PR metadata, comments, review state, c |
+| `gh-pr-triage` | L2 | owner | none | Triage GitHub pull requests by collecting PR metadata, comments, reviewer state, |
 | `git-workflow` | L2 | owner | none | Safely execute Git operations and remote sync |
 | `github-investigator` | L2 | owner | none | Deep GitHub repo research with issue/PR timeline and code-history evidence |
 | `observability` | L2 | owner | none | Make production systems observable through logs, metrics, traces, dashboards, an |
@@ -132,10 +132,10 @@
 | `paper-length-tuner` | L4 | owner | none | Diagnose paper length vs target page/word budget and produce a section-level exp |
 | `paper-logic` | L4 | owner | none | Audit a paper's scientific defensibility under peer review: claims-vs- evidence  |
 | `paper-notation-audit` | L4 | owner | none | Audit and enforce notation consistency across an academic paper: abbreviations,  |
-| `paper-reviewer` | L4 | owner | none | Review a paper or manuscript at whole-paper level and return prioritized finding |
-| `paper-reviser` | L4 | owner | none | Revise an academic paper or manuscript from reviewer comments, issue lists, rebu |
+| `paper-reviewer` | L4 | owner | none | Review a paper by abstract dimensions, not by sections. Default to the full `G0- |
+| `paper-reviser` | L4 | owner | none | Execute the paper gate ledger one gate at a time. Default to sequential revision |
 | `paper-visuals` | L4 | owner | none | Audit and improve paper figures, tables, captions, legends, axes, notes, and res |
-| `paper-writing` | L4 | owner | none | Polish academic paper prose without changing scientific claims. Use for abstract |
+| `paper-writing` | L4 | owner | none | Polish already-decided academic paper prose without changing evidence or claim b |
 | `ppt-beamer` | L4 | owner | none | Create, revise, and compile presentation decks with LaTeX Beamer when you want e |
 | `ppt-html-export` | L4 | owner | none | Use when the user wants to create, revise, or export a slide deck / PPT / presen |
 | `ppt-markdown` | L4 | owner | none | Build slide decks from Markdown using Slidev or Marp. Use when the user wants fa |

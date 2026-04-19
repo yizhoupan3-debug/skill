@@ -337,8 +337,22 @@ export class BrowserRuntime {
     const include = input.include ?? ['summary', 'interactive_elements', 'diff'];
     const baseSnapshot =
       input.sinceRevision !== undefined
-        ? (tab.snapshotHistory.find((s) => s.revision === input.sinceRevision) ?? previousSnapshot)
+        ? tab.snapshotHistory.find((s) => s.revision === input.sinceRevision)
         : previousSnapshot;
+
+    if (input.sinceRevision !== undefined && !baseSnapshot) {
+      const oldestRetainedRevision = tab.snapshotHistory[0]?.revision ?? snapshot.revision;
+      throw new BrowserToolError(
+        'STALE_STATE_REVISION',
+        `Requested sinceRevision ${input.sinceRevision} is no longer retained (oldest retained is ${oldestRetainedRevision}, current is ${snapshot.revision}).`,
+        true,
+        [
+          'call browser_get_state without sinceRevision',
+          'request a fresher revision before diffing',
+        ],
+      );
+    }
+
     const limitedElements = snapshot.interactiveElements.slice(
       0,
       input.maxElements ?? DEFAULT_MAX_ELEMENTS,
@@ -730,7 +744,7 @@ export class BrowserRuntime {
       lastSnapshot: null,
       snapshotHistory: [],
       networkEvents: [],
-      requestStartTimes: new Map<string, number>(),
+      requestStartTimes: new Map<Request, number>(),
       disposeNetworkObserver: undefined,
     };
     tab.disposeNetworkObserver = this.attachNetworkObserver(tab);
@@ -758,11 +772,12 @@ export class BrowserRuntime {
 
   private attachNetworkObserver(tab: TabRecord): () => void {
     const captureBody = this.options.captureBody;
+    const requestStartTimes = tab.requestStartTimes;
 
     // Track request start times and optionally capture POST body
     const requestListener = (request: Request): void => {
       const id = `req_${++this.requestCounter}`;
-      tab.requestStartTimes.set(request.url(), Date.now());
+      requestStartTimes.set(request, Date.now());
 
       if (captureBody) {
         const postData = request.postData();
@@ -791,9 +806,9 @@ export class BrowserRuntime {
 
     const requestFailedListener = (request: Request): void => {
       const failure = request.failure();
-      const startTs = tab.requestStartTimes.get(request.url());
+      const startTs = requestStartTimes.get(request);
       const durationMs = startTs != null ? Date.now() - startTs : null;
-      tab.requestStartTimes.delete(request.url());
+      requestStartTimes.delete(request);
 
       const event: NetworkEvent = {
         id: `req_${++this.requestCounter}`,
@@ -829,9 +844,10 @@ export class BrowserRuntime {
   ): Promise<void> {
     const request = response.request();
     const headers = await response.allHeaders().catch(() => ({} as Record<string, string>));
-    const startTs = tab.requestStartTimes.get(request.url());
+    const requestStartTimes = tab.requestStartTimes;
+    const startTs = requestStartTimes.get(request);
     const durationMs = startTs != null ? Date.now() - startTs : null;
-    tab.requestStartTimes.delete(request.url());
+    requestStartTimes.delete(request);
 
     const contentType = headers['content-type'] ?? null;
 

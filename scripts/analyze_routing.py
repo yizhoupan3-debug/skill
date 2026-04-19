@@ -130,17 +130,17 @@ def analyze_misses(entries: list[dict]) -> dict:
 
 
 def load_trigger_index_skills() -> set[str]:
-    """Load skill names from the routing quickref.
+    """Load skill names from the live routing index.
 
     Returns:
-        Set of skill names found in the routing quickref.
+        Set of skill names found in the routing index.
     """
-    trigger_file = ROOT / "skills" / "SKILL_TRIGGER_QUICKREF.md"
-    if not trigger_file.is_file():
+    index_file = ROOT / "skills" / "SKILL_ROUTING_INDEX.md"
+    if not index_file.is_file():
         return set()
 
     skills = set()
-    text = trigger_file.read_text(encoding="utf-8")
+    text = index_file.read_text(encoding="utf-8")
     # Match backtick-quoted slugs in any format (table rows, list items, inline)
     for match in re.finditer(r"`([a-z][a-z0-9]*(?:-[a-z0-9]+)*)`", text):
         skills.add(match.group(1))

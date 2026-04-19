@@ -127,6 +127,28 @@ def resolve_effective_memory_dir(
     return root
 
 
+def format_repo_relative_path(path: Path, repo_root: Path) -> str:
+    """Return a repo-relative display path, falling back safely when needed."""
+
+    target = path.expanduser()
+    resolved_target = target.resolve()
+    base = repo_root.expanduser()
+    candidate_bases = [base]
+    resolved_base = base.resolve()
+    if resolved_base != base:
+        candidate_bases.append(resolved_base)
+    candidate_targets = [target]
+    if resolved_target != target:
+        candidate_targets.append(resolved_target)
+    for candidate_base in candidate_bases:
+        for candidate_target in candidate_targets:
+            try:
+                return str(candidate_target.relative_to(candidate_base))
+            except ValueError:
+                continue
+    return str(target)
+
+
 def describe_project_local_memory_layout(repo_root: Path) -> dict[str, Any]:
     """Describe the logical and physical project-local memory roots."""
 
@@ -842,7 +864,12 @@ def resolve_active_task_id(
     return safe_slug(_text(pointer.get("task_id")))
 
 
-def load_runtime_snapshot(source_root: Path, artifact_root: Path | None = None) -> RuntimeSnapshot:
+def load_runtime_snapshot(
+    source_root: Path,
+    artifact_root: Path | None = None,
+    *,
+    repair: bool = True,
+) -> RuntimeSnapshot:
     """Load the standard runtime artifacts used for consolidation.
 
     The bridge-facing read path comes from `artifacts/current/*`, while
@@ -856,19 +883,20 @@ def load_runtime_snapshot(source_root: Path, artifact_root: Path | None = None) 
     supervisor_state = normalize_supervisor_state(
         read_json_if_exists(source_root / ARTIFACT_NAMES["supervisor_state"])
     )
-    repair_result = repair_runtime_continuity_artifacts(
-        source_root,
-        artifact_root,
-        supervisor_state=supervisor_state,
-    )
-    supervisor_state = normalize_supervisor_state(
-        (
-            repair_result.get("supervisor_state")
-            if isinstance(repair_result, dict)
-            else None
+    if repair:
+        repair_result = repair_runtime_continuity_artifacts(
+            source_root,
+            artifact_root,
+            supervisor_state=supervisor_state,
         )
-        or read_json_if_exists(source_root / ARTIFACT_NAMES["supervisor_state"])
-    )
+        supervisor_state = normalize_supervisor_state(
+            (
+                repair_result.get("supervisor_state")
+                if isinstance(repair_result, dict)
+                else None
+            )
+            or read_json_if_exists(source_root / ARTIFACT_NAMES["supervisor_state"])
+        )
     active_task_id = resolve_active_task_id(
         source_root,
         artifact_root,

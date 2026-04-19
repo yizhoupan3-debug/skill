@@ -56,7 +56,7 @@
 | `frontend-design` | Active | P2 | L3 | owner | none | project | ✓ 95.2 | Guide distinctive, high-end UI design: aesthetic direction, typography, color, m |
 | `gh-address-comments` | Active | P2 | L0 | gate | source | project | ✓ 94.0 | Triage and address GitHub PR review comments and review threads for the current  |
 | `gh-fix-ci` | Active | P2 | L0 | gate | source | project | ✓ 93.5 | Triage failing GitHub Actions PR checks with `gh` and `scripts/inspect_pr_checks |
-| `gh-pr-triage` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Triage GitHub pull requests by collecting PR metadata, comments, review state, c |
+| `gh-pr-triage` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Triage GitHub pull requests by collecting PR metadata, comments, reviewer state, |
 | `git-workflow` | Active | P1 | L2 | owner | none | project | ✓ 100.0 | Safely execute Git operations and remote sync |
 | `github-actions-authoring` | Active | P2 | L3 | owner | none | project | ✓ 97.7 | Produce GitHub Actions workflow YAML with minimal permissions, stable cache keys |
 | `github-investigator` | Active | P2 | L2 | owner | none | project | ⚠ 64.0 | Deep GitHub repo research with issue/PR timeline and code-history evidence |
@@ -88,10 +88,10 @@
 | `paper-length-tuner` | Active | P2 | L4 | owner | none | project | ✓ 97.8 | Diagnose paper length vs target page/word budget and produce a section-level exp |
 | `paper-logic` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Audit a paper's scientific defensibility under peer review: claims-vs- evidence  |
 | `paper-notation-audit` | Active | P2 | L4 | owner | none | project | ✓ 97.1 | Audit and enforce notation consistency across an academic paper: abbreviations,  |
-| `paper-reviewer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Review a paper or manuscript at whole-paper level and return prioritized finding |
-| `paper-reviser` | Active | P2 | L4 | owner | none | project | ✓ 97.3 | Revise an academic paper or manuscript from reviewer comments, issue lists, rebu |
+| `paper-reviewer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Review a paper by abstract dimensions, not by sections. Default to the full `G0- |
+| `paper-reviser` | Active | P2 | L4 | owner | none | project | ✓ 97.3 | Execute the paper gate ledger one gate at a time. Default to sequential revision |
 | `paper-visuals` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Audit and improve paper figures, tables, captions, legends, axes, notes, and res |
-| `paper-writing` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Polish academic paper prose without changing scientific claims. Use for abstract |
+| `paper-writing` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Polish already-decided academic paper prose without changing evidence or claim b |
 | `pdf` | Active | P1 | L3 | gate | artifact | project | ✓ 94.8 | Read, create, edit, repair, and review PDFs when rendering and page layout matte |
 | `performance-expert` | Active | P2 | L3 | owner | none | project | ✓ 94.2 | Audit and improve web performance with emphasis on Core Web Vitals, asset weight |
 | `plan-to-code` | Active | P1 | L2 | owner | none | project | ✓ 95.8 | Implement a concrete plan or spec into integrated code |

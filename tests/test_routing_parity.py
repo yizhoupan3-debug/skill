@@ -124,6 +124,11 @@ def test_real_task_replay_queries_match_shadow_diff_fields(query: str) -> None:
             "code-review",
         ),
         (
+            "framework-review",
+            "skill-developer-codex",
+            "code-review",
+        ),
+        (
             "帮我看 OpenAI Responses API 最新官方文档并说明怎么用。",
             "openai-docs",
             "anti-laziness",

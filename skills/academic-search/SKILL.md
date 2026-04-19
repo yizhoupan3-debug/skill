@@ -22,7 +22,7 @@ trigger_hints:
   - related work drafting
   - semantic scholar
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   platforms: [codex]
   tags:
     - academic-search
@@ -60,6 +60,7 @@ This skill owns **structured academic literature search and retrieval**.
 
 - `$literature-synthesis` Phase 2 (Systematic Search) can optionally delegate to this skill for structured multi-source retrieval
 - `$brainstorm-research` novelty gate can invoke this skill for quick search passes
+- `$paper-reviewer` uses this skill in `G0 Target Contract + Ref Bootstrap` to build the reusable benchmark pool under `paper_ref/`
 
 ## Search Source Priority
 
@@ -129,6 +130,43 @@ Normalize all results into a standard inventory:
 - Flag: preprints, workshop papers, non-peer-reviewed sources
 - Note: papers with <5 citations from current year are OK (too new)
 
+## Paper-review benchmark pool bootstrap
+
+When invoked by `$paper-reviewer` for `G0`, this skill must create or refresh a
+local benchmark pool in the manuscript workspace root:
+
+- `paper_ref/TARGET_CONTRACT.md`
+- `paper_ref/ref_pool_manifest_v<N>.md`
+- `paper_ref/pdfs/001_<slug>.pdf` through `020_<slug>.pdf`
+
+Rules:
+
+1. Search the target venue first, normally within the most recent 3 years.
+2. Prioritize papers that are close in topic, claim type, and article form.
+3. If the target venue alone cannot supply 20 good local PDFs, backfill from adjacent top venues.
+4. Keep only candidates whose PDFs can actually be downloaded locally.
+5. If the target contract is unchanged, reuse the existing pool and do not re-download old files.
+6. If the target contract changes materially, create the next manifest version and only add missing PDFs.
+
+`TARGET_CONTRACT.md` should at least lock:
+
+- target venue
+- article type
+- audience
+- topic / task keywords
+- comparator venues
+- page or word contract
+- any required disclosure or format constraints relevant to the review
+
+`ref_pool_manifest_v<N>.md` should record:
+
+- search date
+- queries used
+- source venues searched
+- retained local PDFs
+- skipped candidates and why they were skipped
+- any remaining coverage gap
+
 ## Semantic Scholar API Quick Reference
 
 ```bash
@@ -170,6 +208,19 @@ Time window: YYYY-YYYY
 Date of search: YYYY-MM-DD
 ```
 
+### Benchmark Pool Metadata
+
+When running the paper-review bootstrap, also report:
+
+```
+Target contract: ...
+Pool path: paper_ref/
+Manifest version: vN
+Local PDFs retained: 20 or fewer with explicit gap note
+Target-venue hits: N
+Adjacent-venue backfills: M
+```
+
 ## Hard Constraints
 
 - Do not fabricate paper titles, authors, or venues
@@ -178,6 +229,7 @@ Date of search: YYYY-MM-DD
 - Always record the search date (results change over time)
 - Distinguish peer-reviewed papers from preprints
 - Do not assume a paper exists just because the topic makes sense
+- In benchmark-pool mode, do not count a paper as retained unless the PDF is stored locally
 - When API access is unavailable, use web search and note the limitation
 - **Superior Quality Audit**: For systematic literature reviews, trigger `$execution-audit-codex` to verify search breadth against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
 

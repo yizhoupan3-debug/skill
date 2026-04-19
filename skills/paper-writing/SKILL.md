@@ -1,20 +1,31 @@
 ---
 name: paper-writing
 description: |
-  Polish academic paper prose without changing scientific claims.
-  Use for abstracts, introductions, related work, captions, rebuttals,
-  and reviewer-facing writing quality.
+  Polish already-decided academic paper prose without changing evidence or
+  claim boundaries. Use for section- or paragraph-level rewriting of
+  abstracts, introductions, related work, captions, conclusions, and rebuttal
+  wording after the review or gate decision is already known.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
 trigger_hints:
-  - paper
-  - writing
-  - rewrite
-  - rebuttal
-  - abstract
-  - prose
+  - 润色摘要
+  - 改摘要表达
+  - 改引言表达
+  - 精修 introduction
+  - 改 conclusion 表述
+  - 改相关工作文字
+  - 改 caption
+  - caption polish
+  - rebuttal wording
+  - 回复信润色
+  - 文字精修
+  - prose polish
+  - rewrite abstract
+  - rewrite introduction
+  - polish conclusion
+  - rewrite captions
 metadata:
   version: "2.1.0"
   platforms: [codex]
@@ -37,7 +48,7 @@ source: local
 
 # Paper Writing
 
-This skill owns **paper prose review and revision**.
+This skill owns **local paper prose revision after scope is already fixed**.
 
 ## Finding-driven framework compatibility
 
@@ -52,19 +63,41 @@ Minimum compatibility expectations:
 - emit verification status for the revised prose instead of re-litigating the
   original issue list
 
+When this skill is invoked from the paper gate chain, also treat the markdown
+packet as the source of truth:
+
+- read the active gate file first
+- respect `Frozen Inputs`
+- do not rely on remembered chat prose when the gate markdown already defines the live claim surface
+
 ## When to use
 
-- The user wants wording review or rewriting
-- The target is abstract, intro, captions, related work, rebuttal, or response text
-- The user wants stronger academic tone, cleaner flow, or more specific reviewer-facing phrasing
+- The user wants wording review or rewriting after the scientific scope is already decided
+- The target is abstract, intro, captions, related work, conclusion, rebuttal, or response text
+- The user wants stronger academic tone, cleaner flow, more natural phrasing, or more specific reviewer-facing language
+- The user is editing a local text block rather than running a full paper gate flow
 
 ## Do not use
 
 - The main question is whether the science stands up → use `$paper-logic`
-- The task is whole-paper triage → use `$paper-reviewer`
+- The task is whole-paper triage, submission-readiness review, or dimension review → use `$paper-reviewer`
+- The task is manuscript execution from reviewer comments, gate files, or strategic `delete / narrow / move_to_appendix / de_emphasize` decisions → use `$paper-reviser`
 - The task is mainly figure/table presentation → use `$paper-visuals`
 - The task is primarily generic prose naturalization outside manuscript context → use `$humanizer`
 - The task is rebuttal/response-letter **orchestration** (coordinating manuscript edits + writing the letter) → use `$paper-reviser`
+
+## Routing defaults
+
+Choose this skill only when the paper-facing task is mainly local text work:
+
+- rewrite or polish a named text block
+- improve tone, flow, wording, or naturalness
+- keep the current claim and evidence boundaries fixed
+
+Do not choose this skill when the user is really asking:
+
+- "能不能投" or "帮我审一下" -> `$paper-reviewer`
+- "根据 reviewer comments 修改" or "该删就删 / 藏到附录" -> `$paper-reviser`
 
 ## Handoff to humanizer
 
@@ -96,6 +129,9 @@ When handing off:
    - terminology consistency
    - reviewer-facing professionalism
 5. If captions are involved, keep them consistent with `$paper-visuals`.
+6. In gate-chain mode, consume only the markdown packet plus manuscript text
+   needed for the current gate instead of carrying forward loose prior-thread
+   narration.
 
 ## Output defaults
 

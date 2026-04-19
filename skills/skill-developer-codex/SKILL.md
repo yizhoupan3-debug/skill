@@ -2,7 +2,8 @@
 name: skill-developer-codex
 description: |
   Codex skill 框架治理：路由、边界、owner/gate/overlay、维护规范与减少 token 消耗。
-  Use when the request is about framework policy, overlap repair strategy, or skill-library self-optimization.
+  Use when the request is about framework policy, routing-system review, skill-boundary audit,
+  overlap repair strategy, or skill-library self-optimization.
 routing_layer: L0
 routing_owner: owner
 routing_gate: none
@@ -11,6 +12,12 @@ session_start: preferred
 short_description: Design and tune Codex skill routing/framework behavior
 trigger_hints:
   - skill框架
+  - 路由系统
+  - skill 边界
+  - framework review
+  - framework-review
+  - 路由 review
+  - routing framework
   - 边界重叠
   - 减少 token 消耗
   - framework 自优化

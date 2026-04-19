@@ -113,6 +113,19 @@ def _seed_shared_memory(repo_root: Path) -> None:
     )
 
 
+def _read_continuity_artifacts(repo_root: Path) -> dict[str, str]:
+    tracked = [
+        repo_root / ".supervisor_state.json",
+        repo_root / "artifacts" / "current" / "SESSION_SUMMARY.md",
+        repo_root / "artifacts" / "current" / "NEXT_ACTIONS.json",
+        repo_root / "artifacts" / "current" / "EVIDENCE_INDEX.json",
+        repo_root / "artifacts" / "current" / "TRACE_METADATA.json",
+        repo_root / "artifacts" / "current" / "active_task.json",
+        repo_root / ".codex" / "memory" / "state.json",
+    ]
+    return {str(path): path.read_text(encoding="utf-8") for path in tracked if path.exists()}
+
+
 def test_sync_claude_memory_projection_renders_shared_runtime_state(tmp_path: Path) -> None:
     _seed_runtime_artifacts(tmp_path)
     _seed_shared_memory(tmp_path)
@@ -133,15 +146,27 @@ def test_sync_claude_memory_projection_renders_shared_runtime_state(tmp_path: Pa
 def test_run_bridge_session_end_consolidates_then_refreshes_projection(tmp_path: Path) -> None:
     _seed_runtime_artifacts(tmp_path, mode="completed")
     _seed_shared_memory(tmp_path)
+    _write_json(
+        tmp_path / ".supervisor_state.json",
+        {
+            "task_summary": "checklist-series final closeout",
+            "active_phase": "finalized",
+            "verification": {"verification_status": "completed"},
+            "continuity": {"story_state": "completed", "resume_allowed": True},
+        },
+    )
 
     result = run_bridge("session-end", tmp_path)
 
     assert result["canonical_command"] == "session-end"
     assert result["contract"]["consolidates_shared_memory"] is True
     assert "consolidation" in result
+    assert result["consolidation"]["memory_root"].endswith("/.codex/memory")
     assert (tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md").is_file()
     assert (tmp_path / ".codex" / "memory" / "state.json").is_file()
     assert not (tmp_path / ".codex" / "memory" / "MEMORY_AUTO.md").exists()
+    repaired_state = json.loads((tmp_path / ".supervisor_state.json").read_text(encoding="utf-8"))
+    assert repaired_state["continuity"]["resume_allowed"] is False
     projection = (tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md").read_text(encoding="utf-8")
     assert "## Recent Completed Task" in projection
     assert "Current Execution State" not in projection
@@ -157,17 +182,48 @@ def test_run_bridge_projection_only_commands_refresh_without_consolidation(tmp_p
         "subagent-stop",
     ):
         case_root = tmp_path / command
-        _seed_runtime_artifacts(case_root)
+        _seed_runtime_artifacts(case_root, mode="completed")
         _seed_shared_memory(case_root)
+        state_path = case_root / ".codex" / "memory" / "state.json"
+        state_path.unlink(missing_ok=True)
+        _write_json(
+            case_root / ".supervisor_state.json",
+            {
+                "task_summary": "checklist-series final closeout",
+                "active_phase": "finalized",
+                "verification": {"verification_status": "completed"},
+                "continuity": {"story_state": "completed", "resume_allowed": True},
+            },
+        )
+        before = _read_continuity_artifacts(case_root)
 
         result = run_bridge(command, case_root)
+        after = _read_continuity_artifacts(case_root)
 
         expected_canonical = "refresh-projection" if command in {"sync", "refresh-projection"} else command
         assert result["canonical_command"] == expected_canonical
         assert result["contract"]["consolidates_shared_memory"] is False
         assert "consolidation" not in result
         assert (case_root / ".codex" / "memory" / "CLAUDE_MEMORY.md").is_file()
+        assert not state_path.exists()
         assert not (case_root / ".codex" / "memory" / "MEMORY_AUTO.md").exists()
+        assert before == after
+
+
+def test_sync_claude_memory_projection_handles_repo_alias_root(tmp_path: Path) -> None:
+    real_root = tmp_path / "real-repo"
+    real_root.mkdir()
+    alias_root = tmp_path / "alias-repo"
+    alias_root.symlink_to(real_root, target_is_directory=True)
+    _seed_runtime_artifacts(real_root)
+    _seed_shared_memory(real_root)
+
+    result = sync_claude_memory_projection(alias_root)
+
+    content = (alias_root / ".codex" / "memory" / "CLAUDE_MEMORY.md").read_text(encoding="utf-8")
+    assert result["changed"] is True
+    assert "logical->physical memory mapping" in content
+    assert "`.codex/memory`" in content
 
 
 def test_session_lifecycle_hook_supports_end_session_compatibility_alias(tmp_path: Path) -> None:
