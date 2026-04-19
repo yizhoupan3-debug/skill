@@ -25,13 +25,13 @@ from scripts.memory_support import (
     current_local_timestamp,
     describe_continuity_layout,
     describe_project_local_memory_layout,
+    format_repo_relative_path,
     get_repo_root,
     load_runtime_snapshot,
     normalize_next_actions,
     normalize_trace_skills,
     parse_session_summary,
     read_text_if_exists,
-    refresh_memory_state_if_needed,
     resolve_effective_memory_dir,
     stable_line_items,
     supervisor_contract,
@@ -124,8 +124,7 @@ def _join_lines(values: list[str]) -> str:
     return " / ".join(str(item) for item in values if str(item).strip())
 
 
-def _current_state_section(repo_root: Path) -> tuple[str, list[str]]:
-    snapshot = load_runtime_snapshot(repo_root)
+def _current_state_section(snapshot: Any) -> tuple[str, list[str]]:
     continuity = classify_runtime_continuity(snapshot)
     if continuity["state"] == "active" and continuity.get("current_execution"):
         current = continuity["current_execution"]
@@ -195,9 +194,11 @@ def build_claude_memory_projection(
     repo_root: Path,
     *,
     max_lines: int = DEFAULT_MAX_LINES,
+    snapshot: Any | None = None,
 ) -> str:
     """Render a concise Claude-friendly projection from shared memory and artifacts."""
 
+    snapshot = snapshot or load_runtime_snapshot(repo_root, repair=False)
     memory_dir = resolve_effective_memory_dir(repo_root=repo_root)
     memory_md = read_text_if_exists(memory_dir / "MEMORY.md")
     stable_patterns = _extract_bullets(
@@ -230,7 +231,7 @@ def build_claude_memory_projection(
         "`./.codex/memory/`",
         (
             f"logical->physical memory mapping: `./.codex/memory/` -> "
-            f"`{Path(memory_layout['physical_root']).relative_to(repo_root)}`"
+            f"`{format_repo_relative_path(Path(memory_layout['physical_root']), repo_root)}`"
         ),
         f"sync rule: {continuity['sync_responsibility']}",
     ]
@@ -242,7 +243,7 @@ def build_claude_memory_projection(
         f"- generated_at: {current_local_timestamp()}",
         f"- repo_root: `{repo_root}`",
         "",
-        _markdown_block(*_current_state_section(repo_root)).rstrip(),
+        _markdown_block(*_current_state_section(snapshot)).rstrip(),
         "",
         _markdown_block("Stable Project Patterns", stable_patterns).rstrip(),
         "",
@@ -262,10 +263,9 @@ def sync_claude_memory_projection(
 ) -> dict[str, Any]:
     """Write the Claude memory projection into the shared project memory directory."""
 
-    memory_dir = resolve_effective_memory_dir(repo_root=repo_root)
-    refresh_memory_state_if_needed(load_runtime_snapshot(repo_root), memory_dir)
+    snapshot = load_runtime_snapshot(repo_root, repair=False)
     target = repo_root / CLAUDE_MEMORY_PATH
-    content = build_claude_memory_projection(repo_root, max_lines=max_lines)
+    content = build_claude_memory_projection(repo_root, max_lines=max_lines, snapshot=snapshot)
     changed = write_text_if_changed(target, content)
     return {
         "status": "updated" if changed else "unchanged",

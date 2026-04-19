@@ -1,8 +1,8 @@
 # Paper Reviewer Playbook
 
-This is the source-backed operating rubric for `paper-reviewer`.
+This is the operating rubric for the gate-chain version of `paper-reviewer`.
 
-## Source Index
+## Source index
 
 - NeurIPS reviewer guidelines: [https://neurips.cc/Conferences/2023/ReviewerGuidelines](https://neurips.cc/Conferences/2023/ReviewerGuidelines)
 - ICML reviewer instructions: [https://icml.cc/Conferences/2025/ReviewerInstructions](https://icml.cc/Conferences/2025/ReviewerInstructions)
@@ -12,126 +12,318 @@ This is the source-backed operating rubric for `paper-reviewer`.
 - NIH reviewer guidance: [https://grants.nih.gov/policy-and-compliance/policy-topics/peer-review/simplifying-review/reviewer-guidance](https://grants.nih.gov/policy-and-compliance/policy-topics/peer-review/simplifying-review/reviewer-guidance)
 - NIH review criteria: [https://www.niaid.nih.gov/research/review-criteria](https://www.niaid.nih.gov/research/review-criteria)
 
-## Primary review order
+## Core stance
 
-1. Ethics, integrity, and scope fit
-2. Core claim support and soundness
-3. Significance and originality
-4. Completeness, reproducibility, and experimental adequacy
-5. Clarity, presentation, and paper mechanics
+- Review by abstract dimension, not by manuscript section.
+- Lock the target contract before any scientific judgment.
+- Use the strictest honest standard at every gate.
+- Freeze earlier gate conclusions once they pass.
+- Later gates improve quality but do not silently renegotiate evidence, claims,
+  or routing decisions made upstream.
 
-## What to look for
+## Shared persistence contract
 
-- A reviewer report should state what the paper contributes, whether the contribution is worth publishing at the stated venue, and what technical failures block acceptance.
-- A good review is specific, evidence-linked, and constructive. It should name the problem, show where the problem appears, and explain why it matters for the decision.
-- Treat novelty as a contribution question, not a binary "new method" question. Incremental work can still be significant if the increment is detectable and well supported.
-- Do not treat polished prose as evidence that the scientific claim is sound.
+Use the runtime artifact protocol in [`../../PAPER_GATE_PROTOCOL.md`](../../PAPER_GATE_PROTOCOL.md).
 
-## Adversarial top-journal mode
+Key persistence rules:
 
-Use this stance when the user asks for 顶刊 / SCI / hostile / most adversarial review, or when the venue bar is explicitly elite journal level.
+- `paper_ref/` is created once and reused unless the target contract changes materially.
+- `paper_review_v<N>/` is the overall review-round directory.
+- Every turn creates one new gate checklist file.
+- Old gate files are never overwritten.
 
-- Start from the strongest plausible **reject case**, not from “how can this be fixed nicely?”
-- Judge the manuscript **as written**. If a claim needs author clarification outside the text, treat the paper as currently unsupported.
-- Assume a skeptical specialist with limited patience: missing strongest baselines, fairness controls, robustness checks, or boundary conditions count against acceptance.
-- Every major claim should be attacked with the question: “what exact evidence here would convince a hostile reviewer this is not oversold?”
-- Prefer decision-relevant weaknesses before polish suggestions.
+## Scope modes
 
-## Hostile reviewer attack surface
+- `full_chain` is the default when the user does not name a specific gate or dimension.
+- `single_gate` is valid only when the user explicitly names one gate or dimension.
 
-When running adversarial review, explicitly probe:
+In `single_gate`:
 
-- contribution detectability against the strongest nearby baseline, not only author-selected baselines
-- fairness of comparison: compute budget, tuning budget, pretrained assets, data access, metric definitions
-- benchmark hygiene: split leakage, cherry-picked datasets, omitted negative results, fragile cherry-picked seeds
-- robustness width: cross-domain, noise, prompt, hyperparameter, and seed sensitivity where relevant
-- overclaim risk: causal, theoretical, deployment, generalization, or mechanism claims stronger than the evidence shown
-- venue-fit insufficiency: why this may still be below the bar for the target journal even if technically competent
-- manuscript self-sufficiency: whether a reviewer can verify the claim chain without private author explanation
+- review only that gate
+- do not silently backfill other gates
+- record upstream assumptions as `assumed_frozen_inputs` when needed
+- still create exactly one new non-overwriting gate file
 
-## Source-grounded reminders
+Quick routing map:
 
-- NeurIPS and ICML review forms emphasize soundness, significance, originality, clarity/presentation, and completeness.
-- Nature referee guidance emphasizes technical failings and whether the manuscript serves the audience it targets.
-- COPE emphasizes objectivity, confidentiality, expertise, timeliness, and reporting ethics concerns to the editor instead of investigating privately.
-- NIH criteria emphasize importance, rigor and feasibility, and expertise/resources evaluated in context.
+- vague review asks such as "帮我审这篇 paper", "能不能投", or "投稿前把关" -> `full_chain`
+- explicit dimension asks such as claim, math, citations, appendix routing, front-door text, notation, figures, tables, language, or layout -> `single_gate`
+- hostile wording such as "最狠审稿人", "reject reviewer", or "对抗性找茬" -> same scope selection as above, plus `Hostile`
 
-## Reflective challenge dimensions
+## Review-strength preservation
 
-Use these dimensions to prevent multi-round review fatigue and false convergence:
+To prevent repeated review passes from becoming softer over time:
 
-- `core-claim-support / soundness`
-- `novelty / contribution detectability`
-- `baseline / fairness / comparator adequacy`
-- `experimental rigor / statistical sufficiency`
-- `robustness / boundary conditions / failure cases`
-- `manuscript self-sufficiency / evidence traceability`
-- `venue-bar fit / significance threshold`
-- `writing clarity / visuals / reviewer legibility`
+- use a fresh isolated reviewer worker for each gate pass
+- pass state only through the markdown packet
+- do not rely on accumulated chat memory as the review source of truth
 
-Adjacent rounds should rotate away from the previous dimension whenever possible. Near-neighbor dimensions do not count as orthogonal for convergence. If all major dimensions have been covered, revisit the weakest-covered dimension or the dimension with the fewest findings for a deeper pass.
+In practice, the markdown packet should contain:
 
-## Convergence reminder for adversarial review
+- `paper_ref/TARGET_CONTRACT.md`
+- latest ref-pool manifest
+- the active gate file
+- the upstream gate files named in `Frozen Inputs`
 
-- One null pass is not stability.
-- Stable convergence requires **Two Consecutive Null Deltas** across orthogonal review dimensions.
-- Run a false-convergence challenge before declaring the review stable.
-- If the strongest reject paragraph sharpens, or a new decision-relevant issue appears late, refresh the ledger instead of treating the review as complete.
+If subagent spawning is unavailable, simulate the same isolation by re-reading
+only those markdown files and ignoring prior narrative state.
 
-## Review output shape
+## Heartbeat wrapper
 
-- Start with a one-paragraph summary of what the paper claims to do.
-- Then give positives briefly.
-- In adversarial top-journal mode, state the one-paragraph **Reject Case** before the detailed ledger.
-- Then list findings in severity order with evidence and impact.
-- End with an explicit recommendation: ready, conditional, or not ready.
-- If a recommendation depends on missing evidence, say exactly what evidence would change it.
-- Number findings and cite manuscript locations whenever possible.
-- Keep critique focused on the paper, not the authors, and keep any ethics concerns confidential to the editor if the target venue supports that channel.
+For autonomous full-chain review mode, the wrapper contract is:
 
-## Output contract
+- 5-minute heartbeat cadence
+- one gate-round advancement per tick
+- fresh isolated reviewer worker each tick
+- markdown-only state transfer across ticks
 
-Use `论文问题总表` and keep this fixed section order:
-1. `审稿对象摘要`
-2. `总体结论`
-3. `Grounded Strengths / Accept Path`
-4. `Reject Case`
-5. `P0: 一票否决 — 不修则拒`
-6. `A: 核心硬伤`
-7. `B: 需补充数据/实验`
-8. `C: 文本打磨`
-9. `Reflection Summary`
-10. `Top 3 Revision Priorities`
+## Gate order and what each gate must prove
 
-Within every severity section, keep `Non-visual` before `Visual` and write `- None.` when empty.
+### G0 Target Contract + Ref Bootstrap
 
-### Required finding fields
+What must be true:
 
-Each material finding must include:
-- `finding_id`
-- `severity` + `severity_native`
-- `evidence`
-- `impact`
-- `adversarial_attack`
-- `fixability`
-- `repair path`
-- `repair leverage`
-- `recommended owner`
-- `recommended executor`
-- `verification`
-- `status`
+- target venue, article type, audience, and page/disclosure contract are explicit
+- the review is anchored to that contract, not to a generic venue fantasy
+- `paper_ref/` exists or is refreshed with target-journal-first local PDFs
 
-### Required reflection fields
+Failure signals:
 
-Report:
-- mode used
-- rounds completed
-- dimensions covered
-- issues added per round
-- null-delta rounds and why they count as orthogonal
-- false-convergence challenge status
-- confidence shifts
-- adversarial reviewer's top concern
-- smallest credible accept-path
-- accept-path shift across rounds
+- no target venue or article type
+- benchmark pool built from arbitrary topic papers rather than target-venue-near papers
+- candidate papers listed but not locally downloadable as PDFs
 
+### G1 Fatal Eligibility
+
+What must be true:
+
+- no integrity, scope, provenance, or required-disclosure fatal
+- no result provenance gap that would make the paper unreviewable on arrival
+
+Failure signals:
+
+- hidden provenance or unverifiable results
+- missing mandatory disclosure or ethics statement
+- article type / venue mismatch that cannot be repaired by prose polish
+
+### G2 Core Evidence Freeze
+
+What must be true:
+
+- main tables, figures, key numbers, and decisive ablations are the strongest
+  honest evidentiary backbone available
+- comparisons are fair
+- the statistical story is self-consistent
+
+Failure signals:
+
+- strongest baseline omitted
+- fairness mismatch in compute, tuning, data, or metric definitions
+- key ablation or robustness control missing for the central claim
+- headline number survives only because the main table is weakly designed
+
+### G3 Claim Ceiling & Article Fit
+
+What must be true:
+
+- `claim_floor`, `claim_ceiling`, and `selected_claim_level` are explicit
+- the chosen claim is the highest honest claim that can still support the
+  intended article type
+
+Failure signals:
+
+- claim overshoots evidence
+- claim is needlessly crushed below what the evidence can honestly support
+- contribution bullets are misaligned with the journal or article contract
+
+### G4 Formal / Math Closure without Overmath
+
+What must be true:
+
+- every proof-dependent claim is formally closed when the surviving claim needs it
+- unnecessary math has been removed or downgraded
+
+Failure signals:
+
+- theorem or derivation has a logical hole
+- mechanism claim depends on math that is only suggestive
+- draft carries decorative math that does not strengthen a surviving claim
+
+### G5 Reference Support & Venue Calibration
+
+What must be true:
+
+- citations are real, precise, and venue-calibrated
+- citation clusters do not run longer than 3 consecutive references
+- the reference mix is recent by default and close to the target venue
+
+Failure signals:
+
+- fake or unverifiable references
+- citation dumping instead of claim-level support
+- reference portfolio talks to the wrong venue conversation
+
+### G6 Main Text vs Appendix Routing
+
+What must be true:
+
+- main text contains only the material required to support the surviving claim
+- extra experiments, extended proofs, and secondary visuals have a deliberate
+  appendix or deletion decision
+
+Failure signals:
+
+- main text is burdened by low-leverage side material
+- key support is buried in appendix
+- appendix is being used to evade an honest claim downgrade
+
+### G7 Narrative Spine & Main-text Flow
+
+What must be true:
+
+- the main text reads as one clean narrative spine
+- ordering and length serve the surviving claim
+
+Failure signals:
+
+- technically correct but unreadable flow
+- redundant detours that belong in appendix
+- pacing that blocks reviewer comprehension
+
+### G8 Front-door Text Gate
+
+What must be true:
+
+- title, abstract, introduction, and conclusion are the tightest surfaces in the paper
+- all four reflect the selected claim ceiling exactly
+
+Failure signals:
+
+- abstract stronger than the evidence
+- conclusion revives a dropped claim
+- intro framing drifts from the target contract
+
+### G9 Mirror & Text Consistency
+
+What must be true:
+
+- all mirrored claim surfaces say the same surviving thing
+- captions and rebuttal text agree with the manuscript's current truth
+
+Failure signals:
+
+- one section still advertises a deleted or narrowed claim
+- figure or table callouts no longer match what survives
+
+### G10 Terminology / Notation / Symbol Consistency
+
+What must be true:
+
+- terminology and symbol usage are globally consistent
+- units, equation references, and abbreviations are clean
+
+Failure signals:
+
+- same object named differently across sections
+- symbol collision or undefined notation
+- table / figure units disagree with body text
+
+### G11 Figure Gate at Final Scale
+
+What must be true:
+
+- every surviving figure is judged at real rendered scale
+- single- vs double-column choice is explicit
+- single column wins when it remains clear and more compact
+
+Failure signals:
+
+- only the source image looks good; the rendered scale fails
+- labels or titles are illegible
+- layout feels cramped, obstructed, or visually cheap
+
+### G12 Table Gate at Final Scale
+
+What must be true:
+
+- every surviving table is judged at real rendered scale
+- statistical framing and title language are explicit
+- wrapping, alignment, and compactness work in the final layout
+
+Failure signals:
+
+- header or cell wrapping destroys readability
+- statistic definition is unclear
+- the table is visually bloated or badly aligned
+
+### G13 Language Naturalness & Defense Posture
+
+What must be true:
+
+- prose is natural, smooth, and restrained
+- tone is not defensive and not promotional
+
+Failure signals:
+
+- AI-sounding transition clusters
+- rebuttal-style defensiveness inside the paper
+- stiff or over-signposted sentence rhythm
+
+### G14 Rendered Layout & Page Economy
+
+What must be true:
+
+- the final PDF render has no cuts, crowding, hollows, or broken float flow
+- page economy and readability are jointly optimized
+
+Failure signals:
+
+- figures/tables fit poorly in the actual PDF
+- empty whitespace or clogged pages
+- single/double-column decisions work against narrative flow
+
+## Hostile overlay
+
+Use hostile mode only when explicitly requested.
+
+Hostile mode adds:
+
+- a compact `Reject Case`
+- sharper counterfactual attacks on the current gate
+- stronger pressure on fairness, venue bar, and self-sufficiency
+
+Hostile mode does not:
+
+- change gate order
+- skip G0
+- authorize fake certainty
+- erase the honest accept path
+
+Hostile can apply on top of either `full_chain` or `single_gate`, but it still
+does not authorize cross-gate drift.
+
+## Gate file quality bar
+
+Every generated `gate_r<M>.md` must:
+
+- be executable as a checklist
+- name frozen upstream inputs explicitly
+- identify stable `unit_type:unit_id` review objects
+- state the hard bar in reviewer language
+- constrain the legal decision output to the gate kind
+- predeclare the next file for pass and fail paths
+
+## Output shape
+
+Primary response shape:
+
+1. review scope
+2. current review round folder
+3. target-contract status
+4. benchmark-pool status
+5. current gate judgment
+6. freeze/backjump state
+7. next gate file created
+8. hostile `Reject Case` only when requested
+
+Do not default back to the old severity-bucket report.

@@ -1,4 +1,4 @@
-import type { BrowserContext, BrowserType, Page } from 'playwright';
+import type { BrowserContext, BrowserType, Page, Request } from 'playwright';
 
 /** Describes the supported browser engines. */
 export type BrowserEngine = 'chromium' | 'firefox' | 'webkit';
@@ -122,7 +122,7 @@ export interface TabRecord {
   snapshotHistory: PageSnapshot[];
   networkEvents: NetworkEvent[];
   /** Timestamp (ms) of last request start — used for duration calc. */
-  requestStartTimes: Map<string, number>;
+  requestStartTimes: Map<Request, number>;
   disposeNetworkObserver?: () => void;
 }
 

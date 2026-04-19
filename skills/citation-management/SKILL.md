@@ -22,7 +22,7 @@ trigger_hints:
   - IEEE
   - ACM
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
   platforms: [codex]
   tags:
     - citation
@@ -49,16 +49,36 @@ metadata:
 
 ## Cross-references
 
-- `$paper-reviewer` Tier-3 routes citation and reference management issues to this skill
+- `$paper-reviewer` uses this skill as the primary owner for `G5 Reference Support & Venue Calibration`
+- `$paper-reviser` uses this skill when a gate decision changes citation support, appendix routing, or venue-facing reference calibration
 - `$paper-writing` may co-invoke for results sections that need claim-to-citation precision
 - `$literature-synthesis` handles literature review and synthesis; this skill handles citation formatting and verification
 
 ## Core operating promises
 1. **Truth over completeness.** Never invent authors, titles, venues, years, pages, DOIs, PMIDs, URLs, or indexing status.
 2. **Authority over convenience.** Prefer publisher pages, DOI registries, PubMed, Crossref, official journal pages, and other primary metadata sources before secondary summaries.
-3. **Journal-first by default.** When recommending or selecting references, prefer recent, authoritative journal papers and SCI/SCIE-indexed literature where feasible. Do not use preprints unless necessary, clearly labeled, and justified.
+3. **Venue-aware source choice.** Prefer the strongest authoritative source for verification, but allow the newest citable public version when the active task is frontier positioning or target-venue calibration.
 4. **Exact support over citation dumping.** Citations should support the precise clause, result, method, or claim they are attached to.
 5. **Fail closed.** If a reference cannot be verified, flag it as unresolved instead of guessing.
+
+## Paper gate override: G5 Reference Support & Venue Calibration
+
+When this skill is invoked by `$paper-reviewer` or `$paper-reviser` for the
+paper gate chain, use these stricter defaults:
+
+- `cluster_limit = 3`
+- `recency_window = 3 years` by default; keep older references only when they are canonical and explicitly justified
+- `target_venue_proximity = required`
+- `citation_precision = claim_or_clause_level`
+- `truthfulness = fail_closed`
+- `prefer_preprint = true` unless the target venue or field norm clearly prefers the final peer-reviewed version
+
+In this override mode:
+
+- do not allow more than 3 consecutive references in one citation cluster
+- verify that each citation cluster supports one narrow claim, not a vague field summary
+- calibrate the reference mix to the target venue's recent conversation, not just to the broad topic
+- if a claim is narrowed, hidden, moved to appendix, or abandoned in another gate, remove or reroute any citation support that no longer belongs to the surviving main-text claim
 
 ## Source priority for verification
 Use the strongest available source in this order:
@@ -69,7 +89,12 @@ Use the strongest available source in this order:
 5. Author institutional page or accepted-manuscript page
 6. arXiv / bioRxiv / SSRN only when no peer-reviewed version is available or the user explicitly wants preprints
 
-When a preprint and journal version both exist, prefer the peer-reviewed version and update the citation accordingly.
+When a preprint and journal version both exist, choose according to the active
+mode:
+
+- general verification mode → prefer the peer-reviewed version
+- `G5` gate-calibration mode → prefer the newest legitimate citable version that
+  matches the target venue norm, often a preprint for fast-moving fields
 
 For style-specific field order and normalization checks, read [references/style-policy.md](references/style-policy.md) when needed.
 
@@ -154,7 +179,7 @@ For each reference:
 - confirm the paper is real
 - confirm the canonical title, author order, venue, year, and persistent identifier
 - check whether a later journal version supersedes a preprint or workshop version
-- prefer the authoritative final version
+- prefer the authoritative final version unless the `G5` gate-calibration override is active
 - mark unverifiable entries explicitly
 
 Never silently keep suspicious entries.
@@ -207,6 +232,15 @@ Prefer these patterns:
 - avoid using a citation cluster to hide uncertainty or lack of reading
 
 When revising prose, map citations at the **claim / clause** level, not just the sentence level.
+
+### 6A. Gate-chain calibration checks
+
+When operating in the paper gate chain:
+
+- flag any citation cluster longer than 3 as a gate failure unless a very rare venue-specific convention justifies it
+- prefer references from the last 3 years for frontier positioning and claim support
+- check whether the selected references are actually close to the target venue's standards, topics, and comparator set
+- treat fake, unverifiable, or clause-misaligned citations as decision-level failures, not polish
 
 ### 7. Convert to target style
 Supported default styles:

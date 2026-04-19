@@ -54,13 +54,108 @@ function createLoginPageHtml(): string {
 }
 
 /**
+ * Creates a simple page whose contents are unique per label.
+ * @param label Human-readable revision label.
+ * @returns HTML payload.
+ */
+function createVariantPageHtml(label: string): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>${label}</title>
+  </head>
+  <body>
+    <main>
+      <h1>${label}</h1>
+      <p>${label} body</p>
+    </main>
+  </body>
+</html>`;
+}
+
+/**
+ * Creates a page that fires two same-URL fetches with different delays.
+ * @returns HTML payload.
+ */
+function createDuplicateTimingPageHtml(): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Duplicate timing</title>
+  </head>
+  <body>
+    <main>
+      <h1>Duplicate timing</h1>
+      <button data-testid="fire-dupe-btn" type="button">Fire duplicate requests</button>
+    </main>
+    <script>
+      const fireDuplicateRequests = () => {
+        void (async () => {
+          const first = fetch('/api/duplicate-timing', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ slot: 1 }),
+          });
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          const second = fetch('/api/duplicate-timing', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ slot: 2 }),
+          });
+          await Promise.all([first, second]);
+        })();
+      };
+      document.querySelector('[data-testid="fire-dupe-btn"]')?.addEventListener('click', fireDuplicateRequests);
+      fireDuplicateRequests();
+    </script>
+  </body>
+</html>`;
+}
+
+/**
+ * Creates a page that continuously mutates its title and visible text.
+ * @returns HTML payload.
+ */
+function createChurnPageHtml(): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Churn 0</title>
+  </head>
+  <body>
+    <main>
+      <h1>Churn 0</h1>
+      <p>Step 0</p>
+    </main>
+    <script>
+      let step = 0;
+      const render = () => {
+        document.title = 'Churn ' + step;
+        document.querySelector('main').innerHTML = '<h1>Churn ' + step + '</h1><p>Step ' + step + '</p>';
+      };
+      render();
+      setInterval(() => {
+        step += 1;
+        render();
+      }, 40);
+    </script>
+  </body>
+</html>`;
+}
+
+/**
  * Starts the local HTTP server used by browser tests.
  * @returns Promise that resolves once the server listens.
  */
 function startHttpServer(): Promise<void> {
   return new Promise((resolve) => {
     server = createServer(async (req, res) => {
-      if (req.url === '/api/login' && req.method === 'POST') {
+      const requestUrl = new URL(req.url ?? '/', 'http://127.0.0.1');
+
+      if (requestUrl.pathname === '/api/login' && req.method === 'POST') {
         const chunks: Buffer[] = [];
         for await (const chunk of req) {
           chunks.push(Buffer.from(chunk));
@@ -68,6 +163,38 @@ function startHttpServer(): Promise<void> {
         const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { email: string };
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ ok: true, email: body.email }));
+        return;
+      }
+
+      if (requestUrl.pathname === '/api/duplicate-timing' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.from(chunk));
+        }
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { slot?: number };
+        const delayMs = body.slot === 1 ? 300 : 50;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, slot: body.slot ?? null }));
+        return;
+      }
+
+      if (requestUrl.pathname === '/duplicate-fetch') {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(createDuplicateTimingPageHtml());
+        return;
+      }
+
+      if (requestUrl.pathname === '/churn') {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(createChurnPageHtml());
+        return;
+      }
+
+      if (requestUrl.pathname.startsWith('/variant/')) {
+        const label = requestUrl.pathname.slice('/variant/'.length) || 'variant';
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(createVariantPageHtml(label));
         return;
       }
 
@@ -212,5 +339,34 @@ describe('BrowserRuntime', () => {
     expect(diff.fromRevision).toBe(initialRevision);
     expect(diff.toRevision).toBeGreaterThan(initialRevision);
     expect(diff.newText.some((line) => line.includes('Recent activity'))).toBe(true);
+  });
+
+  it('records distinct timing for concurrent same-url requests', async () => {
+    await runtime.open({ url: `${baseUrl}/duplicate-fetch`, newTab: false });
+
+    const network = await runtime.getNetwork({ limit: 10, sinceSeconds: 60 });
+    const duplicateRequests = network.requests.filter((request) =>
+      request.url.endsWith('/api/duplicate-timing'),
+    );
+    const durations = duplicateRequests.map((request) => request.durationMs ?? 0);
+
+    expect(duplicateRequests).toHaveLength(2);
+    expect(Math.max(...durations)).toBeGreaterThan(250);
+    expect(Math.min(...durations)).toBeLessThan(150);
+  });
+
+  it('fails closed when sinceRevision has been evicted from snapshot history', async () => {
+    await runtime.open({ url: `${baseUrl}/churn`, newTab: false });
+    const initial = await runtime.getState({ include: ['summary'] });
+    const initialRevision = (initial.tab as { pageRevision: number }).pageRevision;
+
+    for (let index = 0; index < 11; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      await runtime.getState({ include: ['summary'] });
+    }
+
+    await expect(runtime.getState({ include: ['diff'], sinceRevision: initialRevision })).rejects.toMatchObject({
+      code: 'STALE_STATE_REVISION',
+    });
   });
 });

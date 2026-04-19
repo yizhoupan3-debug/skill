@@ -1,29 +1,45 @@
 ---
 name: paper-reviser
 description: |
-  Revise an academic paper or manuscript from reviewer comments, issue lists, rebuttal
-  goals, or submission-readiness gaps across logic, writing, visuals, and layout. Sole
-  owner of rebuttal / response-letter orchestration. Use when the user asks '按这些意见帮我改',
-  '修到能投', '根据 reviewer comments 修改', '写 rebuttal', or wants coordinated revision.
+  Execute the paper gate ledger one gate at a time. Default to sequential
+  revision for requests like "根据 reviewer comments 修改", "按 review 改", or
+  "修到能投"; if the user explicitly names one dimension or gate, revise only
+  that gate. Choose an honest disposition before editing, such as repair,
+  narrow, delete, move_to_appendix, or de_emphasize. Owns rebuttal and
+  response-letter orchestration.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
 trigger_hints:
+  - 根据审稿意见修改
   - 按这些意见帮我改
+  - 按 review 改
+  - 按审核单改
+  - 按 gate 改
+  - 按这个维度改
   - 修到能投
+  - 根据 review 修改论文
   - 根据 reviewer comments 修改
+  - reviewer comments revise
+  - 该删就删
+  - 藏到附录
+  - 缩口径
+  - 降 claim
+  - 降级这个 claim
+  - 别强调这个点
+  - 只改 G8
+  - 只改摘要标题引言结论
+  - 只改图表维度
+  - 只改文献维度
   - 写 rebuttal
-  - coordinated revision
-  - paper
-  - manuscript
-  - revise
-  - fix
+  - paper revise
+  - gate ledger
   - reviewer comments
 metadata:
-  version: "2.1.1"
+  version: "3.0.0"
   platforms: [codex]
-  tags: [paper, manuscript, revise, fix, reviewer-comments, submission, rebuttal, response-letter]
+  tags: [paper, manuscript, revise, gate-executor, rebuttal, response-letter, appendix-routing]
 framework_roles:
   - planner
   - executor
@@ -41,128 +57,214 @@ source: local
 
 # Paper Reviser
 
-This skill owns **whole-paper revision orchestration** and **reviewer response management**.
+This skill owns gate-execution revision for academic papers. It does not
+freestyle across the whole draft. It consumes the active paper gate ledger,
+executes one gate at a time, and advances the review filesystem by creating the
+next actionable gate round file.
+
+It also respects the review automation contract:
+
+- the gate ledger is the markdown source of truth
+- any verification re-review should use the same fresh-isolated reviewer policy
+- cross-turn state should travel through markdown docs rather than loose chat memory
 
 ## When to use
 
-- The user wants manuscript changes, not just review comments
-- The user provides reviewer comments or a problem list
-- The task spans multiple paper surfaces such as logic + writing + visuals
-- The user wants coordinated revisions toward a submission bar
-- The user wants to write a rebuttal or response letter
+- The user wants the manuscript changed, not just reviewed
+- The user says "根据 reviewer comments 修改", "按 review 改", "修到能投", or "按 gate 改"
+- The user provides reviewer comments, a gate ledger, or a `paper_review_v<N>/` folder
+- The revision spans logic, writing, figures, tables, notation, and layout under one active gate
+- The user wants strategic narrowing such as "删 / 缩 / 藏附录 / 降口径 / 不主动强调"
+- The user wants rebuttal / response-letter orchestration tied to actual edits
 
 ## Do not use
 
-- The user only wants a reviewer-style assessment → use `$paper-reviewer`
-- The task is only logic revision → use `$paper-logic`
-- The task is only prose revision → use `$paper-writing`
-- The task is only figure/table presentation revision → use `$paper-visuals`
+- The user wants the initial review gate chain built or only wants to know "能不能投" → use `$paper-reviewer`
+- The user wants only one review dimension judged, without manuscript edits → use `$paper-reviewer`
+- The task is only pure logic critique → use `$paper-logic`
+- The task is only prose polish for already-fixed claims and evidence → use `$paper-writing`
+- The task is only figure/table polish → use `$paper-visuals`
 
-## Task ownership and boundaries
+## Shared protocol
 
-This skill owns:
-- issue-list driven paper revision
-- sequencing fixes across subdomains
-- recheck planning after edits
-- deciding when to call specialized paper skills
-- **rebuttal / response letter drafting when it involves coordinating actual manuscript edits**
-- revision diff tracking
+Use the shared contract in [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md).
 
-This skill does not own:
-- rebuttal or response letter that is **purely about writing quality** without manuscript edits → `$paper-writing`
+The active state is defined by:
 
-> **Rebuttal routing rule**: "帮我写 rebuttal" / "写 response letter" → always start with `paper-reviser`. If the user truly only wants prose polish on an already-drafted response letter, `paper-reviser` delegates to `paper-writing`.
+- current `paper_review_v<N>/`
+- active gate file
+- frozen upstream gates
+- current `target_contract`
+- current `object_map`
+- the current gate's `selected_decision` options
 
-## Finding-driven framework role
+Respect `review_scope`:
 
-This skill is a **Phase-1 planner / executor / verifier anchor** in the shared finding-driven framework. It consumes structured findings from upstream paper review skills or reviewer comments normalized into the shared schema in [`../SKILL_FRAMEWORK_PROTOCOLS.md`](../SKILL_FRAMEWORK_PROTOCOLS.md).
+- `full_chain` → execute the current active gate in sequence
+- `single_gate` → execute only the explicitly requested gate
 
-Before editing, normalize raw reviewer comments into finding entries whenever possible. Preserve richer upstream fields instead of flattening them away. For each execution batch, materialize queue items with:
-- `execution_item_id`
-- `source_findings`
-- `owner_skill`
-- `executor_skill`
-- `change_scope`
-- `verification_strategy`
-- `recheck_scope`
-- `status`
+Respect transport and verification:
 
-After edits, update finding status to `resolved`, `partial`, or `blocked`, and record residual risk explicitly. When incoming findings include `repair_leverage`, preserve it through execution planning and final reporting rather than collapsing it into severity.
+- `transport_contract = md_only`
+- gate state comes from the markdown packet, not from remembered thread prose
+- when a revision needs re-review, use a fresh isolated reviewer worker if available
+
+## Routing defaults
+
+Choose scope in this order:
+
+1. If the user explicitly names one gate or one dimension to revise, use `single_gate`.
+2. If the user asks to revise the paper generally, or says "根据 reviewer comments 修改" without naming one dimension, continue the sequential active gate in `full_chain`.
+3. Do not expand an explicit one-gate edit request into multi-gate execution.
+
+Typical wording that should still route here:
+
+- "根据 reviewer comments 修改"
+- "按这个 checklist 改"
+- "这个弱 claim 该删就删"
+- "把这部分藏到附录"
+- "这个口径降下来"
+- "别再硬修了，直接收口"
+
+## Strategic narrowing boundary
+
+This skill may strategically narrow the manuscript when that is the strongest
+honest path to a better submission outcome.
+
+Allowed by default:
+
+- delete a non-core, low-leverage, weak claim when the surviving contribution does not depend on it
+- narrow a claim to the highest honest supportable level
+- move secondary negative detail, extra comparison, or boundary-case material into appendix or limitation framing
+- de-emphasize material that drags the narrative while not being required for the surviving claim
+
+Never allowed:
+
+- hide evidence that directly conflicts with a claim the manuscript still keeps
+- delete or move information required to understand the main method, main result, or main conclusion
+- use appendix routing as a substitute for an honest claim downgrade
+- let a surviving core claim remain unsupported after a `hide` move; if that happens, mark the gate blocked or downgrade it explicitly
+
+## Gate-decision semantics
+
+Gate-level decisions are coarse:
+
+- `ideal`
+- `hide`
+- `abandon`
+- `ideal_only`
+
+Within a decision gate, this skill maps that gate-level decision to concrete
+unit-level `Disposition` values:
+
+- `repair`
+- `narrow`
+- `delete`
+- `move_to_appendix`
+- `de_emphasize`
+- `disclose_as_limitation`
+- `block`
+
+Default autonomy:
+
+- if the best honest path is `delete`, `narrow`, `move_to_appendix`, or
+  `de_emphasize`, execute it directly unless the user explicitly restricted that
+  authority
 
 ## Required workflow
 
-### Phase 1: Issue Intake
+### Phase 0: Gate intake
 
-> This skill is typically driven by output from `$paper-reviewer` (issue list) or external reviewer comments. When no structured issue list exists, derive one first with `$paper-reviewer`.
+1. Resolve the manuscript workspace root and the active `paper_review_v<N>/`.
+2. Load the active gate file. If no gate ledger exists yet, derive it first with `$paper-reviewer`.
+3. Read the current gate's:
+   - `Goal`
+   - `Frozen Inputs`
+   - `Review Objects`
+   - `Hard Bar`
+   - `Decision Slot`
+   - `Backjump Rule`
+   - `Pass Line`
+4. Do not advance to the next gate until the current gate passes, unless the user explicitly requested a one-gate revision slice.
 
-1. Start from reviewer comments or derive an issue list with `$paper-reviewer`.
-2. Preserve incoming `finding_id` values when present, including dimension-coded IDs such as `NOV-01`, `THY-02`, `EXP-03`, `RES-04`, `WRT-05`, `REF-06`, and `VIS-07`; normalize only missing fields into finding entries with `severity`, `fixability`, recommended owner/executor skill, and `verification_method`.
-3. Preserve and consume upstream planning hints when present, especially `repair_leverage`, shortest repair path, and any note that the best next step is to reorganize underexploited evidence already present instead of generating entirely new content.
-4. Group issues by owner:
-   - logic → `$paper-logic`
-   - writing → `$paper-writing`
-   - visuals → `$paper-visuals`
+### Phase 1: Current-gate execution
+
+5. Determine the gate kind:
+   - `G0` setup → satisfy or fail the target contract bootstrap
+   - `G1-G6` decision → choose `ideal`, `hide`, or `abandon`
+   - `G7-G14` quality → only `ideal_only`
+6. For decision gates, assign a per-unit `Disposition` before editing:
+   - `repair`
+   - `narrow`
+   - `delete`
+   - `move_to_appendix`
+   - `de_emphasize`
+   - `disclose_as_limitation`
+   - `block`
+7. Use the current gate's primary owner routing:
+   - evidence / claims → `$paper-logic`
+   - formal closure → `$math-derivation`
+   - citations → `$citation-management`
+   - prose / flow → `$paper-writing`
+   - notation → `$paper-notation-audit`
+   - figures / tables → `$paper-visuals`
    - rendered layout → `$pdf`
-5. Build an execution queue. For each batch, record: `execution_item_id`, `source_findings`, executor, change scope, verification strategy, and recheck scope.
+8. Execute only the active gate's scope plus required mirror cleanup.
+9. If the current gate requires re-review after edits, pass only the markdown
+   packet back to a fresh isolated reviewer worker; do not rely on the prior
+   reviser chat state to judge closure.
 
-### Phase 2: Surgical Execution
+### Phase 2: Mirror propagation and integrity
 
-6. Fix highest-risk issues first (P0 → A → B → C), using `repair_leverage` to break ties inside the same severity bucket so high-yield / low-cost revisions land first.
-7. If the shortest credible repair path says the issue can be solved by reorganizing underexploited evidence already present in the manuscript, appendix, figures, tables, or analysis drafts, prefer that path before requesting genuinely new experiments or assets.
-8. **Execution discipline**: only modify regions directly related to the fix. All other text, structure, and punctuation remain frozen.
-9. Severity markers determine depth:
-   - Single marker (✅) = standard fix
-   - Multiple markers (✅✅✅) = deep rewrite and thorough rework of that point
-10. After every 3 fixes, pause and verify:
-   - Was the fix actually applied correctly?
-   - Did the fix introduce any side effects?
-   - **Context Integrity**: Did the surgical edit leave orphaned text or create a duplicate heading (e.g., `\paragraph`)?
-   - If not applied correctly, redo before continuing.
+10. If a claim is deleted, narrowed, moved to appendix, or de-emphasized, update
+   every mirrored mention in:
+   - abstract
+   - introduction framing
+   - method framing
+   - experiment claim sentences
+   - conclusion
+   - captions
+   - rebuttal / response text
+11. After every meaningful edit batch, verify:
+   - the edit actually applied
+   - no orphaned text or duplicate section headers were introduced
+   - no dangling claim or callout survived the chosen `Disposition`
+   - main-text support still matches the surviving claim
 
-### Phase 3: Reflective Recheck
+### Phase 3: Pass, fail, or backjump
 
-9. After all fixes are applied, **re-run the review** on the edited artifact:
-   - Do not check from memory; re-read the actual edited text
-   - Use the same Tier-1/2/3 checklist from `$paper-reviewer`
-   - **Structural Scan**: Run a global search for duplicate headers (Sections, Subsections, Paragraphs). Use `grep` or similar tools to ensure each `\paragraph{Name}` is unique.
-   - Focus especially on whether fixes introduced new inconsistencies
+12. Check the current gate against its `Pass Line`.
+13. If the gate passes:
+   - freeze it
+   - create the next gate's `r1` checklist file
+14. If the gate does not pass:
+   - create the same gate's next round file
+15. If a quality gate discovers an upstream contradiction:
+   - set `backjump_gate_on_regression`
+   - do not invent a new `hide` or `abandon`
+   - create the earlier gate's next round file
 
-10. **Cross-fix interference check**:
-   - Did fix A contradict or weaken fix B?
-   - Did any fix change a claim without updating the corresponding evidence?
-   - Did any fix break symbol consistency, figure numbering, or cross-references?
+### Phase 4: Rebuttal / response letter
 
-11. If the recheck surfaces new issues:
-    - Classify them as `fix-induced` (caused by the revision) vs `pre-existing` (missed earlier)
-    - Fix `fix-induced` issues immediately
-    - Report `pre-existing` issues in the output as newly discovered
-
-12. For each resolved or unresolved item, record `status`, `verification_method`, and `remaining_risk`.
-13. Report remaining blockers honestly. Include a **confidence statement**:
-    - "All P0 and A issues resolved with high confidence"
-    - "N issues remain at medium confidence — recommend human verification of [specific point]"
-
-### Phase 4: Rebuttal / Response Letter (when applicable)
-
-14. Structure response by reviewer:
-    - Quote each reviewer comment
-    - State the action taken (with page/line references)
-    - Highlight the key evidence or change
-    - If declining a suggestion, give clear technical rationale
-15. Response letter tone: respectful, specific, evidence-linked, non-defensive.
-16. Use diff-style formatting or color markup to show changes in the manuscript.
+16. When reviewer-response prose is needed, structure it by reviewer comment but
+   keep it downstream of the gate decisions.
+17. Response tone must stay respectful, specific, evidence-linked, and
+   non-defensive.
+18. If a suggestion is declined, explain it by gate logic and manuscript change,
+   not by vague preference.
 
 ## Output defaults
 
-### For revisions: `论文修订记录`
+### Gate execution record
 
-| Finding ID | Exec ID | Severity | Repair Leverage | Action Taken | Owner Skill | Verification | Remaining Risk | Status |
-|---|---|---|---|---|---|---|---|---|
-| NOV-01 | EXEC-01 | P0/A/B/C | high/medium/low | ... | ... | ... | ... | 已解决/部分解决/受阻 |
+| Gate | Unit | Exec ID | Gate Decision | Disposition | Action Taken | Owner Skill | Verification | Remaining Risk | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| G3 | claim:C2 | EXEC-01 | ideal/hide/abandon/ideal_only | repair/narrow/delete/move_to_appendix/de_emphasize/disclose_as_limitation/block | ... | ... | ... | ... | resolved/partial/blocked |
 
-When useful, add one short line under an entry noting whether the fix used `existing evidence reorganized` or `new evidence created`.
+When useful, add one short note under an entry stating whether the fix used
+`existing evidence reorganized` or `new evidence created`.
 
-### For rebuttal: `审稿意见回复`
+### Rebuttal / response letter
 
 ```markdown
 ## Reviewer #N
@@ -170,15 +272,21 @@ When useful, add one short line under an entry noting whether the fix used `exis
 > [Reviewer comment quoted]
 
 **Response**: [Action taken and rationale]
+- Gate: [which gate decision drove this response]
 - Changed: [specific location and edit summary]
 - Evidence: [what supports this change]
 ```
 
 ## Hard constraints
 
-- Do not fabricate experiments, numbers, or evidence.
-- Do not treat cosmetic edits as resolution of scientific issues.
-- When layout or visual quality matters, verify rendered artifacts.
-- Do not modify text outside the targeted fix region without explicit authorization.
-- **No Structural Duplication**: Proactively ensure that no `\section`, `\subsection`, or `\paragraph` name is duplicated in the document.
-- After completing all revisions, clean up all working notes and produce only the final clean output.
+- Do not edit a later gate while the current gate is still failing.
+- Do not silently expand an explicit one-gate revision request into multi-gate execution.
+- Do not pass revision state through free-form chat when the markdown packet can carry it.
+- Do not let re-review reuse a stale long-lived reviewer context when a fresh isolated worker is possible.
+- Quality gates may not invent a new `hide` or `abandon`; they must backjump.
+- Do not fabricate experiments, numbers, citations, or proofs.
+- Do not treat cosmetic edits as closure of scientific issues.
+- Do not hide evidence that still matters to a surviving core claim.
+- When the chosen disposition changes a claim surface, update every mirrored mention rather than leaving a hanging claim elsewhere.
+- Verify rendered artifacts when layout or visual quality is part of the gate.
+- **No Structural Duplication**: Ensure that no `\section`, `\subsection`, or `\paragraph` name is duplicated by the revision.

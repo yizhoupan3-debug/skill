@@ -11,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from scripts.memory_support import (
     RuntimeSnapshot,
     classify_runtime_continuity,
+    format_repo_relative_path,
     describe_continuity_layout,
     describe_project_local_memory_layout,
     load_runtime_snapshot,
@@ -116,6 +117,42 @@ def test_memory_and_continuity_layout_descriptors_are_explicit(tmp_path: Path) -
     )
     assert continuity["task_scoped_current"]["template"].endswith("/artifacts/current/<task_id>")
     assert "task-scoped continuity" in continuity["sync_responsibility"]
+
+
+def test_format_repo_relative_path_handles_alias_roots_and_fallback(tmp_path: Path) -> None:
+    real_root = tmp_path / "repo"
+    real_root.mkdir()
+    alias_root = tmp_path / "repo-alias"
+    alias_root.symlink_to(real_root, target_is_directory=True)
+    target = real_root / "memory" / "anchor.txt"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("anchor", encoding="utf-8")
+
+    assert format_repo_relative_path(target, alias_root) == "memory/anchor.txt"
+
+    unrelated_root = tmp_path / "unrelated"
+    unrelated_root.mkdir()
+    assert format_repo_relative_path(target, unrelated_root) == str(target)
+
+
+def test_load_runtime_snapshot_without_repair_preserves_raw_supervisor_state(tmp_path: Path) -> None:
+    supervisor_state_path = tmp_path / ".supervisor_state.json"
+    supervisor_state_path.write_text(
+        (
+            '{"task_id":"demo-task-20260418220000","task_summary":"demo task",'
+            '"active_phase":"completed","verification":{"verification_status":"completed"},'
+            '"continuity":{"story_state":"completed","resume_allowed":true}}\n'
+        ),
+        encoding="utf-8",
+    )
+    before = supervisor_state_path.read_text(encoding="utf-8")
+
+    snapshot = load_runtime_snapshot(tmp_path, repair=False)
+
+    after = supervisor_state_path.read_text(encoding="utf-8")
+
+    assert before == after
+    assert snapshot.supervisor_state["continuity"]["resume_allowed"] is True
 
 
 def test_classify_runtime_continuity_active_snapshot_stays_resumable(tmp_path: Path) -> None:
