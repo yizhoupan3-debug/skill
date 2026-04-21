@@ -224,8 +224,8 @@ class SQLiteRuntimeStorageBackend:
         return RuntimeStoreCapabilities(
             backend_family="sqlite",
             supports_atomic_replace=True,
-            supports_compaction=False,
-            supports_snapshot_delta=False,
+            supports_compaction=True,
+            supports_snapshot_delta=True,
             supports_remote_event_transport=True,
         )
 
