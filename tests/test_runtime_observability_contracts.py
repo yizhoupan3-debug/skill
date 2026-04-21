@@ -4,9 +4,28 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
+from unittest.mock import patch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
+RUST_ADAPTER_TIMEOUT_SECONDS = 120.0
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+if str(RUNTIME_SRC) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_SRC))
+
+from codex_agno_runtime.observability import (
+    RUNTIME_OBSERVABILITY_DASHBOARD_DIMENSIONS,
+    RUNTIME_OBSERVABILITY_METRIC_SPECS,
+    build_runtime_metric_record,
+    build_runtime_observability_exporter_descriptor,
+    runtime_observability_dashboard_schema,
+)
+from codex_agno_runtime.paths import default_codex_home
+from codex_agno_runtime.rust_router import RustRouteAdapter
+
 CONTRACT_PATH = PROJECT_ROOT / "docs" / "runtime_observability_contract.md"
 CONTRACT_TEXT = CONTRACT_PATH.read_text(encoding="utf-8")
 
@@ -137,8 +156,8 @@ def test_contract_records_rust_owned_producer_exporter_lane() -> None:
     ownership_section = _section("Producer / Exporter Ownership")
 
     assert "rust-contract-lane" in ownership_section
-    assert "producer_owner = \"rust-control-plane\"" in CONTRACT_TEXT
-    assert "exporter_owner = \"rust-control-plane\"" in CONTRACT_TEXT
+    assert 'producer_owner = "rust-control-plane"' in CONTRACT_TEXT
+    assert 'exporter_owner = "rust-control-plane"' in CONTRACT_TEXT
     assert "producer_authority" in CONTRACT_TEXT
     assert "exporter_authority" in CONTRACT_TEXT
     assert "JSONL vocabulary" in ownership_section
@@ -211,3 +230,233 @@ def test_metrics_catalog_and_dashboard_schema_are_stable() -> None:
         "runtime.lease_takeover_latency_ms",
         "runtime.sandbox_timeout_total",
     }
+
+
+def test_concrete_observability_helpers_match_the_contract() -> None:
+    adapter = RustRouteAdapter(default_codex_home(), timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS)
+    with patch("codex_agno_runtime.observability._observability_rust_adapter", return_value=adapter):
+        exporter = build_runtime_observability_exporter_descriptor()
+        assert exporter["ownership_lane"] == "rust-contract-lane"
+        assert exporter["producer_owner"] == "rust-control-plane"
+        assert exporter["exporter_owner"] == "rust-control-plane"
+        assert exporter["export_path"] == "jsonl-plus-otel"
+
+        schema = runtime_observability_dashboard_schema()
+        assert schema["schema_version"] == "runtime-observability-dashboard-v1"
+        assert tuple(schema["resource_dimensions"]) == RUNTIME_OBSERVABILITY_DASHBOARD_DIMENSIONS
+        assert {panel["metric"] for panel in schema["panels"]} == {
+            spec.metric_name for spec in RUNTIME_OBSERVABILITY_METRIC_SPECS
+        }
+
+        record = build_runtime_metric_record(
+            "runtime.route_mismatch_total",
+            value=3,
+            service_name="codex-runtime",
+            service_version="v1",
+            runtime_instance_id="runtime-123",
+            route_engine_mode="rust",
+            job_id="job-1",
+            session_id="session-1",
+            attempt=2,
+            worker_id="worker-7",
+            generation="gen-a",
+        )
+        assert record["metric_name"] == "runtime.route_mismatch_total"
+        assert record["metric_type"] == "counter"
+        assert record["unit"] == "1"
+        assert record["resource_attributes"]["service.name"] == "codex-runtime"
+        assert record["dimensions"] == {
+            "runtime.job_id": "job-1",
+            "runtime.session_id": "session-1",
+            "runtime.attempt": 2,
+            "runtime.worker_id": "worker-7",
+            "runtime.generation": "gen-a",
+            "runtime.stage": "runtime.metric",
+            "runtime.status": "ok",
+        }
+        assert record["ownership"]["exporter_authority"] == "rust-runtime-control-plane"
+        assert "build_runtime_metric_record()" in CONTRACT_TEXT
+
+
+def test_observability_helpers_delegate_to_rust_contract_lane() -> None:
+    adapter = RustRouteAdapter(default_codex_home(), timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS)
+    with patch("codex_agno_runtime.observability._observability_rust_adapter", return_value=adapter):
+        exporter = build_runtime_observability_exporter_descriptor()
+        assert exporter == adapter.runtime_observability_exporter_descriptor()
+
+        dashboard = runtime_observability_dashboard_schema()
+        assert dashboard == adapter.runtime_observability_dashboard_schema()
+
+        request = {
+            "metric_name": "runtime.route_mismatch_total",
+            "value": 3,
+            "service_name": "codex-runtime",
+            "service_version": "v1",
+            "runtime_instance_id": "runtime-123",
+            "route_engine_mode": "rust",
+            "job_id": "job-1",
+            "session_id": "session-1",
+            "attempt": 2,
+            "worker_id": "worker-7",
+            "generation": "gen-a",
+        }
+        record = build_runtime_metric_record(
+            "runtime.route_mismatch_total",
+            value=3,
+            service_name="codex-runtime",
+            service_version="v1",
+            runtime_instance_id="runtime-123",
+            route_engine_mode="rust",
+            job_id="job-1",
+            session_id="session-1",
+            attempt=2,
+            worker_id="worker-7",
+            generation="gen-a",
+        )
+        assert record == adapter.runtime_metric_record(request)
+
+
+def test_observability_helpers_fallback_to_python_when_rust_lane_is_unavailable() -> None:
+    class _BrokenRustObservabilityAdapter:
+        def runtime_observability_exporter_descriptor(self) -> dict[str, object]:
+            raise RuntimeError("rust observability lane unavailable")
+
+        def runtime_observability_dashboard_schema(self) -> dict[str, object]:
+            raise RuntimeError("rust observability lane unavailable")
+
+        def runtime_metric_record(self, payload: dict[str, object]) -> dict[str, object]:
+            raise RuntimeError("rust observability lane unavailable")
+
+    with patch(
+        "codex_agno_runtime.observability._observability_rust_adapter",
+        return_value=_BrokenRustObservabilityAdapter(),
+    ):
+        exporter = build_runtime_observability_exporter_descriptor()
+        assert exporter["ownership_lane"] == "rust-contract-lane"
+        assert exporter["producer_owner"] == "rust-control-plane"
+        assert exporter["exporter_owner"] == "rust-control-plane"
+        assert exporter["export_path"] == "jsonl-plus-otel"
+
+        schema = runtime_observability_dashboard_schema()
+        assert schema["schema_version"] == "runtime-observability-dashboard-v1"
+        assert tuple(schema["resource_dimensions"]) == RUNTIME_OBSERVABILITY_DASHBOARD_DIMENSIONS
+
+        record = build_runtime_metric_record(
+            "runtime.route_mismatch_total",
+            value=3,
+            service_name="codex-runtime",
+            service_version="v1",
+            runtime_instance_id="runtime-123",
+            route_engine_mode="rust",
+            job_id="job-1",
+            session_id="session-1",
+            attempt=2,
+            worker_id="worker-7",
+            generation="gen-a",
+        )
+        assert record["dimensions"] == {
+            "runtime.job_id": "job-1",
+            "runtime.session_id": "session-1",
+            "runtime.attempt": 2,
+            "runtime.worker_id": "worker-7",
+            "runtime.generation": "gen-a",
+            "runtime.stage": "runtime.metric",
+            "runtime.status": "ok",
+        }
+
+
+def test_observability_helpers_fail_closed_for_unknown_metrics_and_empty_dimensions() -> None:
+    try:
+        build_runtime_metric_record(
+            "runtime.unknown_total",
+            value=1,
+            service_name="codex-runtime",
+            service_version="v1",
+            runtime_instance_id="runtime-123",
+            route_engine_mode="rust",
+            job_id="job-1",
+            session_id="session-1",
+            attempt=1,
+            worker_id="worker-7",
+            generation="gen-a",
+        )
+    except ValueError as exc:
+        assert str(exc) == "unsupported runtime metric: runtime.unknown_total"
+    else:
+        raise AssertionError("unknown metrics should fail closed")
+
+    try:
+        build_runtime_metric_record(
+            "runtime.route_mismatch_total",
+            value=1,
+            service_name=" ",
+            service_version="v1",
+            runtime_instance_id="runtime-123",
+            route_engine_mode="rust",
+            job_id="job-1",
+            session_id="session-1",
+            attempt=1,
+            worker_id="worker-7",
+            generation="gen-a",
+        )
+    except ValueError as exc:
+        assert str(exc) == "service_name must be a non-empty string"
+    else:
+        raise AssertionError("empty resource dimensions should fail closed")
+
+    try:
+        build_runtime_metric_record(
+            "runtime.route_mismatch_total",
+            value=float("nan"),
+            service_name="codex-runtime",
+            service_version="v1",
+            runtime_instance_id="runtime-123",
+            route_engine_mode="rust",
+            job_id="job-1",
+            session_id="session-1",
+            attempt=1,
+            worker_id="worker-7",
+            generation="gen-a",
+        )
+    except ValueError as exc:
+        assert str(exc) == "metric value must be finite"
+    else:
+        raise AssertionError("non-finite metric values should fail closed")
+
+    try:
+        build_runtime_metric_record(
+            "runtime.route_mismatch_total",
+            value=True,
+            service_name="codex-runtime",
+            service_version="v1",
+            runtime_instance_id="runtime-123",
+            route_engine_mode="rust",
+            job_id="job-1",
+            session_id="session-1",
+            attempt=1,
+            worker_id="worker-7",
+            generation="gen-a",
+        )
+    except ValueError as exc:
+        assert str(exc) == "runtime metric record requires a numeric value"
+    else:
+        raise AssertionError("boolean metric values should fail closed")
+
+    try:
+        build_runtime_metric_record(
+            "runtime.route_mismatch_total",
+            value=1,
+            service_name="codex-runtime",
+            service_version="v1",
+            runtime_instance_id="runtime-123",
+            route_engine_mode="rust",
+            job_id="job-1",
+            session_id="session-1",
+            attempt=-1,
+            worker_id="worker-7",
+            generation="gen-a",
+        )
+    except ValueError as exc:
+        assert str(exc) == "runtime metric record requires non-negative integer field attempt"
+    else:
+        raise AssertionError("negative attempts should fail closed")
