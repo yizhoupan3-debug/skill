@@ -430,6 +430,9 @@ class RuntimeEventTransport(BaseModel):
     exporter_authority: str = _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR["exporter_authority"]
     remote_capable: bool = True
     remote_attach_supported: bool = True
+    attach_mode: str = "process_external_artifact_replay"
+    binding_artifact_role: str = "primary_attach_descriptor"
+    recommended_remote_attach_method: str = "describe_runtime_event_handoff"
     handoff_supported: bool = True
     handoff_method: str | None = "describe_runtime_event_handoff"
     subscribe_method: str = "subscribe_runtime_events"
@@ -488,6 +491,8 @@ class RuntimeEventHandoff(BaseModel):
     checkpoint_backend_family: str
     trace_stream_path: str | None = None
     resume_manifest_path: str | None = None
+    attach_mode: str = "process_external_artifact_replay"
+    resume_manifest_role: str = "checkpoint_recovery_anchor"
     remote_attach_strategy: str = "transport_descriptor_then_replay"
     cleanup_preserves_replay: bool = True
     attach_target: RuntimeEventAttachTarget | None = None

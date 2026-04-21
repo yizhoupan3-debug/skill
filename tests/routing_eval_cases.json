@@ -11,6 +11,15 @@
       "first_turn": true
     },
     {
+      "id": "execution-controller-coding-gsd-should-trigger",
+      "category": "should-trigger",
+      "task": "这个仓库的修复你直接 gsd，推进到底，别停，主线程保持简短并给我验证证据。",
+      "focus_skill": "execution-controller-coding",
+      "expected_owner": "execution-controller-coding",
+      "expected_overlay": "anti-laziness",
+      "first_turn": true
+    },
+    {
       "id": "idea-to-plan-should-trigger",
       "category": "should-trigger",
       "task": "把这个模糊研究想法收敛成 outline.md 和 code_list.md，再决定后续怎么做。",
@@ -138,6 +147,66 @@
       "task": "只改一个单文件 shell 脚本，别上复杂编排。",
       "focus_skill": "execution-controller-coding",
       "forbidden_owners": ["execution-controller-coding"],
+      "first_turn": true
+    },
+    {
+      "id": "frontend-design-visual-redesign-case",
+      "category": "should-trigger",
+      "task": "不要给方案，也不要探索代码；直接做 UI 改版，把这个 SaaS dashboard 页面焕新，提升品牌感、视觉层级和整体高级感。",
+      "focus_skill": "frontend-design",
+      "expected_owner": "frontend-design",
+      "expected_overlay": null,
+      "forbidden_owners": ["idea-to-plan", "css-pro", "motion-design", "visual-review"],
+      "first_turn": true
+    },
+    {
+      "id": "design-agent-brand-routing-case",
+      "category": "should-trigger",
+      "task": "先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。",
+      "focus_skill": "design-agent",
+      "expected_owner": "design-agent",
+      "expected_overlay": null,
+      "forbidden_owners": ["frontend-design", "motion-design", "visual-review"],
+      "first_turn": true
+    },
+    {
+      "id": "design-agent-mixed-source-case",
+      "category": "wrong-owner-near-miss",
+      "task": "我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。",
+      "focus_skill": "design-agent",
+      "expected_owner": "design-agent",
+      "expected_overlay": null,
+      "forbidden_owners": ["frontend-design", "motion-design", "css-pro"],
+      "first_turn": true
+    },
+    {
+      "id": "frontend-design-screenshot-review-reroute-case",
+      "category": "gate-vs-owner-conflict",
+      "task": "基于这组 screenshot 做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。",
+      "focus_skill": "visual-review",
+      "expected_owner": "visual-review",
+      "expected_overlay": null,
+      "forbidden_owners": ["frontend-design"],
+      "first_turn": true
+    },
+    {
+      "id": "frontend-design-motion-boundary-case",
+      "category": "wrong-owner-near-miss",
+      "task": "用 Framer Motion 给这个界面做磁性按钮、page transition 和微交互，重点是动效质感。",
+      "focus_skill": "motion-design",
+      "expected_owner": "motion-design",
+      "expected_overlay": null,
+      "forbidden_owners": ["frontend-design", "css-pro"],
+      "first_turn": true
+    },
+    {
+      "id": "frontend-design-css-boundary-case",
+      "category": "wrong-owner-near-miss",
+      "task": "给这个 Bento 风页面设计 Grid、container queries 和响应式布局方案，顺便落一套 CSS tokens。",
+      "focus_skill": "css-pro",
+      "expected_owner": "css-pro",
+      "expected_overlay": null,
+      "forbidden_owners": ["frontend-design"],
       "first_turn": true
     }
   ]

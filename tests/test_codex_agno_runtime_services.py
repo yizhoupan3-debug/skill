@@ -1355,15 +1355,9 @@ def test_execution_environment_service_exposes_control_plane_contract_descriptor
     assert descriptors["runtime_control_plane"]["authority"] == "rust-runtime-control-plane"
 
 
-    """Verify mode should compare Python and Rust route decisions at runtime."""
+def test_router_service_verify_mode_keeps_rust_primary_and_emits_diagnostic_evidence() -> None:
+    """Verify mode should keep Rust as the live route while emitting diagnostic parity evidence."""
 
-    python_service = RouterService(
-        RuntimeSettings(
-            codex_home=PROJECT_ROOT,
-            live_model_override=False,
-            route_engine_mode="python",
-        )
-    )
     verify_service = RouterService(
         RuntimeSettings(
             codex_home=PROJECT_ROOT,
@@ -1372,12 +1366,6 @@ def test_execution_environment_service_exposes_control_plane_contract_descriptor
         )
     )
 
-    python_result = python_service.route(
-        task="帮我写一个 Rust CLI 工具",
-        session_id="verify-route-session",
-        allow_overlay=True,
-        first_turn=True,
-    )
     verify_result = verify_service.route(
         task="帮我写一个 Rust CLI 工具",
         session_id="verify-route-session",
@@ -1385,24 +1373,27 @@ def test_execution_environment_service_exposes_control_plane_contract_descriptor
         first_turn=True,
     )
 
-    assert verify_result.selected_skill.name == python_result.selected_skill.name
-    assert (
-        verify_result.overlay_skill.name if verify_result.overlay_skill else None
-    ) == (python_result.overlay_skill.name if python_result.overlay_skill else None)
-    assert verify_result.layer == python_result.layer
-    assert python_result.route_snapshot is not None
-    assert python_result.route_snapshot.engine == "python"
     assert verify_result.route_engine == "rust"
+    assert verify_result.rollback_to_python is False
     assert verify_result.shadow_route_report is not None
     assert verify_result.shadow_route_report.report_schema_version == "router-rs-route-report-v1"
     assert verify_result.shadow_route_report.authority == "rust-route-core"
+    assert verify_result.shadow_route_report.mode == "verify"
+    assert verify_result.shadow_route_report.primary_engine == verify_result.route_engine
+    assert verify_result.shadow_route_report.shadow_engine == "python"
     assert verify_result.shadow_route_report.selected_skill_match is True
     assert verify_result.shadow_route_report.overlay_skill_match is True
     assert verify_result.shadow_route_report.layer_match is True
+    assert verify_result.shadow_route_report.python.engine == "python"
+    assert verify_result.shadow_route_report.rust.selected_skill == verify_result.selected_skill.name
+    assert verify_service.health()["primary_authority"] == "rust"
+    assert verify_service.health()["route_result_engine"] == "rust"
+    assert verify_service.health()["shadow_engine"] == "python"
+    assert verify_service.health()["python_router_required"] is False
 
 
 def test_router_service_shadow_mode_keeps_rust_primary_and_records_diff() -> None:
-    """Shadow mode should keep Rust as the executed route and capture a stable diff payload."""
+    """Shadow mode should keep Rust as the live route and capture diagnostic evidence."""
 
     shadow_service = RouterService(
         RuntimeSettings(
@@ -1425,16 +1416,17 @@ def test_router_service_shadow_mode_keeps_rust_primary_and_records_diff() -> Non
     assert result.shadow_route_report.report_schema_version == "router-rs-route-report-v1"
     assert result.shadow_route_report.authority == "rust-route-core"
     assert result.shadow_route_report.mode == "shadow"
-    assert result.shadow_route_report.primary_engine == "rust"
+    assert result.shadow_route_report.primary_engine == result.route_engine
     assert result.shadow_route_report.shadow_engine == "python"
     assert result.shadow_route_report.selected_skill_match is True
     assert result.shadow_route_report.overlay_skill_match is True
     assert result.shadow_route_report.layer_match is True
-    assert result.shadow_route_report.python.selected_skill == result.selected_skill.name
+    assert result.shadow_route_report.python.engine == "python"
+    assert result.shadow_route_report.rust.selected_skill == result.selected_skill.name
 
 
 def test_router_service_rust_mode_keeps_rollback_as_diagnostic_lane() -> None:
-    """Rust mode should keep rollback as a diagnostic lane without changing the live route engine."""
+    """Rust mode should keep rollback as diagnostic evidence without changing the live route engine."""
 
     rollback_service = RouterService(
         RuntimeSettings(
@@ -1458,12 +1450,14 @@ def test_router_service_rust_mode_keeps_rollback_as_diagnostic_lane() -> None:
     assert result.shadow_route_report.report_schema_version == "router-rs-route-report-v1"
     assert result.shadow_route_report.authority == "rust-route-core"
     assert result.shadow_route_report.rollback_active is True
-    assert result.shadow_route_report.primary_engine == "rust"
+    assert result.shadow_route_report.primary_engine == result.route_engine
     assert result.shadow_route_report.shadow_engine == "python"
+    assert result.shadow_route_report.python.engine == "python"
     assert rollback_service.health()["primary_authority"] == "rust"
     assert rollback_service.health()["route_result_engine"] == "rust"
     assert rollback_service.health()["shadow_engine"] == "python"
     assert rollback_service.health()["rollback_to_python"] is False
+    assert rollback_service.health()["python_router_required"] is False
     assert rollback_service.health()["python_router_required"] is False
 
 
@@ -1607,6 +1601,9 @@ def test_trace_service_describes_host_facing_transport(tmp_path: Path) -> None:
     assert transport.endpoint_kind == "runtime_method"
     assert transport.remote_capable is True
     assert transport.remote_attach_supported is True
+    assert transport.attach_mode == "process_external_artifact_replay"
+    assert transport.binding_artifact_role == "primary_attach_descriptor"
+    assert transport.recommended_remote_attach_method == "describe_runtime_event_handoff"
     assert transport.handoff_supported is True
     assert transport.handoff_method == "describe_runtime_event_handoff"
     assert transport.handoff_kind == "artifact_handoff"
@@ -1641,6 +1638,8 @@ def test_trace_service_describes_host_facing_transport(tmp_path: Path) -> None:
     handoff = trace_service.describe_handoff(session_id="transport-session", job_id="job-transport")
     assert handoff.stream_id == transport.stream_id
     assert handoff.checkpoint_backend_family == "filesystem"
+    assert handoff.attach_mode == "process_external_artifact_replay"
+    assert handoff.resume_manifest_role == "checkpoint_recovery_anchor"
     assert handoff.trace_stream_path is not None
     assert handoff.resume_manifest_path is not None
     assert handoff.remote_attach_strategy == "transport_descriptor_then_replay"

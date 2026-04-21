@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from scripts.claude_hook_audit import run_config_change, run_stop_failure
 from scripts.claude_statusline import render_statusline
 from scripts.materialize_cli_host_entrypoints import (
+    CLAUDE_REFRESH_COMMAND,
     materialize_repo_host_entrypoints,
     sync_repo_host_entrypoints,
 )
@@ -78,6 +79,15 @@ def _seed_shared_memory(repo_root: Path) -> None:
     )
 
 
+def _init_git_repo(repo_root: Path) -> None:
+    subprocess.run(["git", "init"], cwd=repo_root, check=True)
+    subprocess.run(["git", "config", "user.name", "Codex Test"], cwd=repo_root, check=True)
+    subprocess.run(["git", "config", "user.email", "codex@example.com"], cwd=repo_root, check=True)
+    (repo_root / "README.md").write_text("seed\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=repo_root, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=repo_root, check=True)
+
+
 def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxies(
     tmp_path: Path,
 ) -> None:
@@ -91,8 +101,13 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert ".gemini/settings.json" in result["written"]
 
     assert (tmp_path / "AGENT.md").is_file()
-    assert "Shared Agent Policy" in (tmp_path / "AGENT.md").read_text(encoding="utf-8")
-    assert "RTK.md" in (tmp_path / "AGENT.md").read_text(encoding="utf-8")
+    agent_policy = (tmp_path / "AGENT.md").read_text(encoding="utf-8")
+    assert "Shared Agent Policy" in agent_policy
+    assert "RTK.md" in agent_policy
+    assert "## Task Closeout" in agent_policy
+    assert "changed-file inventories" in agent_policy
+    assert "what now works or what" in agent_policy
+    assert "effect was achieved" in agent_policy
     assert "AGENT.md" in (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     assert not (tmp_path / ".codex" / "model_instructions.md").exists()
     assert not (tmp_path / ".mcp.json").exists()
@@ -139,6 +154,16 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     }
     assert json.loads((tmp_path / ".gemini" / "settings.json").read_text(encoding="utf-8")) == {}
     assert (tmp_path / ".claude" / "agents" / "README.md").is_file()
+    assert (tmp_path / ".claude" / "commands" / "refresh.md").is_file()
+    refresh_command = (tmp_path / ".claude" / "commands" / "refresh.md").read_text(encoding="utf-8")
+    assert refresh_command == CLAUDE_REFRESH_COMMAND
+    assert "claude_memory_bridge.py refresh-workflow --json" in refresh_command
+    assert "one fixed sentence" in refresh_command
+    assert "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。" in refresh_command
+    assert "summary" not in refresh_command.lower()
+    assert "clear" not in refresh_command.lower()
+    assert "CLAUDE_PROJECT_DIR" not in refresh_command
+    assert "allowed-tools: Bash(python3 scripts/claude_memory_bridge.py *)" in refresh_command
     assert (tmp_path / ".claude" / "hooks" / "README.md").is_file()
     hooks_readme = (tmp_path / ".claude" / "hooks" / "README.md").read_text(encoding="utf-8")
     assert "Generated-first maintenance" in hooks_readme
@@ -184,6 +209,21 @@ def test_sync_repo_host_entrypoints_reports_drift_without_writing(tmp_path: Path
     assert not (tmp_path / "AGENT.md").exists()
 
 
+def test_materialize_repo_host_entrypoints_syncs_matching_worktrees(tmp_path: Path) -> None:
+    _init_git_repo(tmp_path)
+    peer_worktree = tmp_path / ".claude" / "worktrees" / "agent-peer"
+    peer_worktree.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "worktree", "add", str(peer_worktree), "--detach"], cwd=tmp_path, check=True)
+
+    result = materialize_repo_host_entrypoints(tmp_path)
+
+    assert str(peer_worktree.resolve()) in result["synced_worktrees"]
+    assert (peer_worktree / ".claude" / "commands" / "refresh.md").is_file()
+    assert (
+        peer_worktree / ".claude" / "commands" / "refresh.md"
+    ).read_text(encoding="utf-8") == CLAUDE_REFRESH_COMMAND
+
+
 def test_write_generated_files_includes_shared_cli_entrypoints_when_repo_is_dirty(tmp_path: Path) -> None:
     root = PROJECT_ROOT
     managed_paths = [
@@ -194,6 +234,7 @@ def test_write_generated_files_includes_shared_cli_entrypoints_when_repo_is_dirt
         root / ".claude" / "CLAUDE.md",
         root / ".claude" / "settings.json",
         root / ".claude" / "agents" / "README.md",
+        root / ".claude" / "commands" / "refresh.md",
         root / ".claude" / "hooks" / "README.md",
         root / ".claude" / "hooks" / "session_start.sh",
         root / ".claude" / "hooks" / "stop.sh",

@@ -5,13 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 import sqlite3
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Protocol
+from typing import Any, Callable, Iterable, Mapping, Protocol
 
 from pydantic import BaseModel
 
+from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.trace import (
     JsonlTraceEventSink,
     RuntimeEventBridge,
+    RuntimeEventHandoff,
     RuntimeEventTransport,
     RuntimeTraceRecorder,
     TraceReplayCursor,
@@ -211,8 +213,11 @@ class SQLiteRuntimeStorageBackend:
 
     _TABLE_NAME = "runtime_storage_payloads"
 
-    def __init__(self, *, db_path: Path) -> None:
+    def __init__(self, *, db_path: Path, storage_root: Path | None = None) -> None:
         self._db_path = db_path.expanduser().resolve()
+        self._storage_root = (
+            storage_root.expanduser().resolve() if storage_root is not None else self._db_path.parent
+        )
         self._ensure_schema()
 
     def capabilities(self) -> RuntimeStoreCapabilities:
@@ -225,22 +230,28 @@ class SQLiteRuntimeStorageBackend:
         )
 
     def exists(self, path: Path) -> bool:
+        keys = self._lookup_keys(path)
         with self._connect() as conn:
-            row = conn.execute(
-                f"SELECT 1 FROM {self._TABLE_NAME} WHERE payload_key = ? LIMIT 1",
-                (self._key(path),),
-            ).fetchone()
-        return row is not None
+            for key in keys:
+                row = conn.execute(
+                    f"SELECT 1 FROM {self._TABLE_NAME} WHERE payload_key = ? LIMIT 1",
+                    (key,),
+                ).fetchone()
+                if row is not None:
+                    return True
+        return False
 
     def read_text(self, path: Path) -> str:
+        keys = self._lookup_keys(path)
         with self._connect() as conn:
-            row = conn.execute(
-                f"SELECT payload_text FROM {self._TABLE_NAME} WHERE payload_key = ?",
-                (self._key(path),),
-            ).fetchone()
-        if row is None:
-            raise KeyError(f"No payload stored for path {path!s}")
-        return row[0]
+            for key in keys:
+                row = conn.execute(
+                    f"SELECT payload_text FROM {self._TABLE_NAME} WHERE payload_key = ?",
+                    (key,),
+                ).fetchone()
+                if row is not None:
+                    return row[0]
+        raise KeyError(f"No payload stored for path {path!s}")
 
     def write_text(self, path: Path, payload: str) -> None:
         with self._connect() as conn:
@@ -250,7 +261,7 @@ class SQLiteRuntimeStorageBackend:
                 VALUES (?, ?)
                 ON CONFLICT(payload_key) DO UPDATE SET payload_text = excluded.payload_text
                 """,
-                (self._key(path), payload),
+                (self._stable_key(path), payload),
             )
             conn.commit()
 
@@ -283,8 +294,21 @@ class SQLiteRuntimeStorageBackend:
             if owns_connection:
                 connection.close()
 
+    def _lookup_keys(self, path: Path) -> tuple[str, str]:
+        return (self._stable_key(path), self._legacy_key(path))
+
+    def _stable_key(self, path: Path) -> str:
+        resolved = path.expanduser().resolve()
+        try:
+            relative_path = resolved.relative_to(self._storage_root)
+        except ValueError as exc:
+            raise ValueError(
+                f"SQLite runtime storage path {resolved!s} must stay under storage root {self._storage_root!s}"
+            ) from exc
+        return relative_path.as_posix()
+
     @staticmethod
-    def _key(path: Path) -> str:
+    def _legacy_key(path: Path) -> str:
         return str(path.expanduser().resolve())
 
 
@@ -326,7 +350,7 @@ def select_runtime_storage_backend(
                 sqlite_db_path = (storage_root / db_file).resolve()
             else:
                 sqlite_db_path = settings.resolved_checkpoint_storage_db_file
-        return SQLiteRuntimeStorageBackend(db_path=sqlite_db_path)
+        return SQLiteRuntimeStorageBackend(db_path=sqlite_db_path, storage_root=storage_root)
     raise ValueError(f"Unsupported runtime storage backend family: {resolved_family!r}")
 
 
@@ -338,6 +362,38 @@ class RuntimeCheckpointer(Protocol):
 
     def storage_capabilities(self) -> RuntimeStoreCapabilities:
         """Return the active backend-family capability descriptor."""
+
+    def resolve_transport_manifest(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None,
+        latest_cursor: TraceReplayCursor | None,
+    ) -> RuntimeEventTransport:
+        """Resolve the host-facing transport manifest for one stream."""
+
+    def resolve_handoff_manifest(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None,
+        transport: RuntimeEventTransport,
+    ) -> RuntimeEventHandoff:
+        """Resolve the durable handoff manifest for one stream."""
+
+    def resolve_resume_manifest(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None,
+        status: str,
+        generation: int,
+        latest_cursor: TraceReplayCursor | None,
+        event_transport_path: str | None,
+        artifact_paths: list[str],
+        supervisor_projection: dict[str, Any] | None = None,
+    ) -> TraceResumeManifest:
+        """Resolve the runtime resume manifest before backend persistence."""
 
     def checkpoint(
         self,
@@ -391,6 +447,7 @@ class FilesystemRuntimeCheckpointer:
             paths=self._paths,
             capabilities=self.storage_backend.capabilities(),
         )
+        self._rust_adapter = RustRouteAdapter(_runtime_settings().codex_home)
 
     def describe_paths(self) -> RuntimeCheckpointPaths:
         """Return the shared path descriptor."""
@@ -423,6 +480,104 @@ class FilesystemRuntimeCheckpointer:
             control_plane_descriptor=self._control_plane.trace_service,
         )
 
+    def resolve_transport_manifest(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None,
+        latest_cursor: TraceReplayCursor | None,
+    ) -> RuntimeEventTransport:
+        return self._resolve_rust_manifest_payload(
+            resolver=self._rust_adapter.describe_transport,
+            payload={
+                "session_id": session_id,
+                "job_id": job_id,
+                "latest_cursor": latest_cursor.model_dump(mode="json") if latest_cursor is not None else None,
+                "binding_backend_family": self.storage_capabilities().backend_family,
+                "binding_artifact_path": (
+                    str(path)
+                    if (path := self.transport_binding_path(session_id=session_id, job_id=job_id)) is not None
+                    else None
+                ),
+                "control_plane": self._control_plane.model_dump(mode="json"),
+            },
+            model_factory=RuntimeEventTransport.model_validate,
+            fallback=lambda: self._fallback_transport_manifest(
+                session_id=session_id,
+                job_id=job_id,
+                latest_cursor=latest_cursor,
+            ),
+        )
+
+    def resolve_handoff_manifest(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None,
+        transport: RuntimeEventTransport,
+    ) -> RuntimeEventHandoff:
+        paths = self.describe_paths()
+        return self._resolve_rust_manifest_payload(
+            resolver=self._rust_adapter.describe_handoff,
+            payload={
+                "session_id": session_id,
+                "job_id": job_id,
+                "transport": transport.model_dump(mode="json"),
+                "checkpoint_backend_family": self.storage_capabilities().backend_family,
+                "trace_stream_path": str(paths.event_stream_path) if paths.event_stream_path is not None else None,
+                "resume_manifest_path": str(paths.resume_manifest_path) if paths.resume_manifest_path is not None else None,
+                "control_plane": self._control_plane.model_dump(mode="json"),
+            },
+            model_factory=RuntimeEventHandoff.model_validate,
+            fallback=lambda: self._fallback_handoff_manifest(
+                session_id=session_id,
+                job_id=job_id,
+                transport=transport,
+            ),
+        )
+
+    def resolve_resume_manifest(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None,
+        status: str,
+        generation: int,
+        latest_cursor: TraceReplayCursor | None,
+        event_transport_path: str | None,
+        artifact_paths: list[str],
+        supervisor_projection: dict[str, Any] | None = None,
+    ) -> TraceResumeManifest:
+        paths = self.describe_paths()
+        return self._resolve_rust_manifest_payload(
+            resolver=self._rust_adapter.checkpoint_resume_manifest,
+            payload={
+                "session_id": session_id,
+                "job_id": job_id,
+                "status": status,
+                "generation": generation,
+                "trace_output_path": str(paths.trace_output_path) if paths.trace_output_path is not None else None,
+                "trace_stream_path": str(paths.event_stream_path) if paths.event_stream_path is not None else None,
+                "event_transport_path": event_transport_path,
+                "background_state_path": str(paths.background_state_path),
+                "latest_cursor": latest_cursor.model_dump(mode="json") if latest_cursor is not None else None,
+                "artifact_paths": artifact_paths,
+                "supervisor_projection": supervisor_projection,
+                "control_plane": self._control_plane.model_dump(mode="json"),
+            },
+            model_factory=TraceResumeManifest.model_validate,
+            fallback=lambda: self._fallback_resume_manifest(
+                session_id=session_id,
+                job_id=job_id,
+                status=status,
+                generation=generation,
+                latest_cursor=latest_cursor,
+                event_transport_path=event_transport_path,
+                artifact_paths=artifact_paths,
+                supervisor_projection=supervisor_projection,
+            ),
+        )
+
     def checkpoint(
         self,
         *,
@@ -440,20 +595,18 @@ class FilesystemRuntimeCheckpointer:
         paths = self.describe_paths()
         if paths.resume_manifest_path is None:
             return None
-        manifest = TraceResumeManifest(
+        manifest = self.resolve_resume_manifest(
             session_id=session_id,
             job_id=job_id,
             status=status,
             generation=generation,
-            trace_output_path=str(paths.trace_output_path) if paths.trace_output_path is not None else None,
-            trace_stream_path=str(paths.event_stream_path) if paths.event_stream_path is not None else None,
-            event_transport_path=event_transport_path,
-            background_state_path=str(paths.background_state_path),
             latest_cursor=latest_cursor,
+            event_transport_path=event_transport_path,
             artifact_paths=artifact_paths,
             supervisor_projection=supervisor_projection,
-            control_plane=self._control_plane.model_dump(mode="json"),
         )
+        if self._write_resume_manifest_via_rust(paths.resume_manifest_path, manifest):
+            return manifest
         self.storage_backend.write_text(
             paths.resume_manifest_path,
             manifest.model_dump_json(indent=2) + "\n",
@@ -487,6 +640,7 @@ class FilesystemRuntimeCheckpointer:
         projected = transport.model_copy(
             update={
                 "binding_artifact_path": str(path),
+                "binding_backend_family": transport.binding_backend_family or self._control_plane.backend_family,
                 "control_plane_authority": self._control_plane.trace_service.get("authority"),
                 "control_plane_role": self._control_plane.trace_service.get("role"),
                 "control_plane_projection": self._control_plane.trace_service.get("projection"),
@@ -500,9 +654,152 @@ class FilesystemRuntimeCheckpointer:
                 },
             }
         )
+        if self._write_transport_binding_via_rust(path, projected):
+            return path
         payload = projected.model_dump_json(indent=2) + "\n"
         self.storage_backend.write_text(path, payload)
         return path
+
+    def _transport_health_payload(self) -> dict[str, Any]:
+        return {
+            "backend_family": self._control_plane.backend_family,
+            "supports_atomic_replace": self._control_plane.supports_atomic_replace,
+            "supports_compaction": self._control_plane.supports_compaction,
+            "supports_snapshot_delta": self._control_plane.supports_snapshot_delta,
+            "supports_remote_event_transport": self._control_plane.supports_remote_event_transport,
+        }
+
+    def _is_filesystem_storage_backend(self) -> bool:
+        return isinstance(self.storage_backend, FilesystemRuntimeStorageBackend)
+
+    def _build_transport_binding_write_payload(
+        self,
+        *,
+        path: Path,
+        transport: RuntimeEventTransport,
+    ) -> dict[str, Any]:
+        payload = transport.model_dump(mode="json")
+        payload["path"] = str(path)
+        return payload
+
+    def _build_resume_manifest_write_payload(
+        self,
+        *,
+        path: Path,
+        manifest: TraceResumeManifest,
+    ) -> dict[str, Any]:
+        payload = manifest.model_dump(mode="json")
+        payload["path"] = str(path)
+        return payload
+
+    def _write_transport_binding_via_rust(self, path: Path, transport: RuntimeEventTransport) -> bool:
+        if not self._is_filesystem_storage_backend():
+            return False
+        try:
+            resolved = self._rust_adapter.write_transport_binding(
+                self._build_transport_binding_write_payload(path=path, transport=transport)
+            )
+        except RuntimeError:
+            return False
+        return resolved.get("path") == str(path)
+
+    def _write_resume_manifest_via_rust(self, path: Path, manifest: TraceResumeManifest) -> bool:
+        if not self._is_filesystem_storage_backend():
+            return False
+        try:
+            resolved = self._rust_adapter.write_checkpoint_resume_manifest(
+                self._build_resume_manifest_write_payload(path=path, manifest=manifest)
+            )
+        except RuntimeError:
+            return False
+        return resolved.get("path") == str(path)
+
+    def _fallback_transport_manifest(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None,
+        latest_cursor: TraceReplayCursor | None,
+    ) -> RuntimeEventTransport:
+        stream_key = job_id or session_id
+        return RuntimeEventTransport(
+            stream_id=f"stream::{stream_key}",
+            session_id=session_id,
+            job_id=job_id,
+            binding_backend_family=self.storage_capabilities().backend_family,
+            binding_artifact_path=(
+                str(path)
+                if (path := self.transport_binding_path(session_id=session_id, job_id=job_id)) is not None
+                else None
+            ),
+            latest_cursor=latest_cursor,
+            control_plane_authority=self._control_plane.trace_service.get("authority"),
+            control_plane_role=self._control_plane.trace_service.get("role"),
+            control_plane_projection=self._control_plane.trace_service.get("projection"),
+            control_plane_delegate_kind=self._control_plane.trace_service.get("delegate_kind"),
+            transport_health=self._transport_health_payload(),
+        )
+
+    def _fallback_handoff_manifest(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None,
+        transport: RuntimeEventTransport,
+    ) -> RuntimeEventHandoff:
+        paths = self.describe_paths()
+        return RuntimeEventHandoff(
+            stream_id=transport.stream_id,
+            session_id=session_id,
+            job_id=job_id,
+            checkpoint_backend_family=self.storage_capabilities().backend_family,
+            trace_stream_path=str(paths.event_stream_path) if paths.event_stream_path is not None else None,
+            resume_manifest_path=str(paths.resume_manifest_path) if paths.resume_manifest_path is not None else None,
+            control_plane=self._control_plane.model_dump(mode="json"),
+            transport=transport,
+        )
+
+    def _fallback_resume_manifest(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None,
+        status: str,
+        generation: int,
+        latest_cursor: TraceReplayCursor | None,
+        event_transport_path: str | None,
+        artifact_paths: list[str],
+        supervisor_projection: dict[str, Any] | None = None,
+    ) -> TraceResumeManifest:
+        paths = self.describe_paths()
+        return TraceResumeManifest(
+            session_id=session_id,
+            job_id=job_id,
+            status=status,
+            generation=generation,
+            trace_output_path=str(paths.trace_output_path) if paths.trace_output_path is not None else None,
+            trace_stream_path=str(paths.event_stream_path) if paths.event_stream_path is not None else None,
+            event_transport_path=event_transport_path,
+            background_state_path=str(paths.background_state_path),
+            latest_cursor=latest_cursor,
+            artifact_paths=list(artifact_paths),
+            supervisor_projection=supervisor_projection,
+            control_plane=self._control_plane.model_dump(mode="json"),
+        )
+
+    def _resolve_rust_manifest_payload(
+        self,
+        *,
+        resolver: Callable[[dict[str, Any]], dict[str, Any]],
+        payload: dict[str, Any],
+        model_factory: Callable[[Any], Any],
+        fallback: Callable[[], Any],
+    ) -> Any:
+        try:
+            resolved_payload = resolver(payload)
+            return model_factory(resolved_payload)
+        except (RuntimeError, ValueError):
+            return fallback()
 
     def control_plane_descriptor(self) -> RuntimeCheckpointControlPlaneDescriptor:
         """Return the shared control-plane descriptor for checkpoint-backed artifacts."""

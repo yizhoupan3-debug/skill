@@ -91,6 +91,7 @@ This gate should behave like a **delegation controller**, not a yes/no spawn swi
 4. compress the main thread into decision summaries rather than process narration
 5. if runtime policy forbids subagent spawning, preserve the same sidecar structure in local-supervisor mode
 6. treat “cannot spawn now” as a runtime constraint, not as proof that delegation thinking was wrong
+7. under a `gsd` posture, keep immediate blocker work local and delegate only true sidecars
 
 ## Main-thread compression contract
 

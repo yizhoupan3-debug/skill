@@ -131,7 +131,14 @@ def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> 
             assert response.metadata["trace_event_transport_endpoint_kind"] == "runtime_method"
             assert response.metadata["trace_event_transport_remote_capable"] is True
             assert response.metadata["trace_event_transport_handoff_supported"] is True
+            assert response.metadata["trace_event_transport_attach_mode"] == "process_external_artifact_replay"
+            assert response.metadata["trace_event_transport_binding_role"] == "primary_attach_descriptor"
+            assert response.metadata["trace_event_transport_recommended_method"] == "describe_runtime_event_handoff"
+            assert response.metadata["trace_resume_manifest_role"] == "checkpoint_recovery_anchor"
             assert response.metadata["trace_event_handoff_schema_version"] == "runtime-event-handoff-v1"
+            assert response.metadata["trace_resume_manifest_binding_path"].endswith(
+                f"runtime_event_transports/{response.session_id}__{response.session_id}.json"
+            )
             assert response.metadata["trace_replay_anchor_kind"] == "trace_replay_cursor"
             assert response.metadata["trace_replay_resume_mode"] == "after_event_id"
             assert response.metadata["execution_kernel"] == "rust-execution-kernel-slice"
@@ -492,6 +499,68 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             assert len(first_window["events"]) == 2
             assert first_window["has_more"] is True
 
+            attached_runtime = CodexAgnoRuntime(
+                RuntimeSettings(
+                    codex_home=PROJECT_ROOT,
+                    data_dir=tmp_path / "attached-runtime-data",
+                    trace_output_path=tmp_path / "ATTACHED_TRACE_METADATA.json",
+                    live_model_override=False,
+                )
+            )
+            transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
+            attached = attached_runtime.attach_runtime_event_transport(
+                binding_artifact_path=transport["binding_artifact_path"]
+            )
+            assert attached["attach_mode"] == "process_external_artifact_replay"
+            assert attached["transport"]["stream_id"] == transport["stream_id"]
+            assert attached["binding_artifact_path"] == transport["binding_artifact_path"]
+            assert attached["trace_stream_path"].endswith("TRACE_EVENTS.jsonl")
+            assert attached["cleanup_semantics"] == "no_persisted_state"
+            assert attached["cleanup_preserves_replay"] is True
+            resumed_via_binding = attached_runtime.subscribe_attached_runtime_events(
+                binding_artifact_path=transport["binding_artifact_path"],
+                after_event_id=first_window["events"][-1]["event_id"],
+                limit=20,
+            )
+            assert resumed_via_binding["events"]
+            assert resumed_via_binding["after_event_id"] == first_window["events"][-1]["event_id"]
+
+            handoff = runtime.describe_runtime_event_handoff(session_id=response.session_id)
+            attached_via_manifest = attached_runtime.attach_runtime_event_transport(
+                resume_manifest_path=handoff["resume_manifest_path"]
+            )
+            assert attached_via_manifest["handoff"] is None
+            assert attached_via_manifest["resume_manifest"]["session_id"] == response.session_id
+            assert attached_via_manifest["binding_artifact_path"] == transport["binding_artifact_path"]
+            resumed_via_manifest = attached_runtime.subscribe_attached_runtime_events(
+                resume_manifest_path=handoff["resume_manifest_path"],
+                after_event_id=first_window["events"][-1]["event_id"],
+                limit=20,
+            )
+            assert resumed_via_manifest["events"]
+            assert resumed_via_manifest["after_event_id"] == first_window["events"][-1]["event_id"]
+            manifest_cleanup = attached_runtime.cleanup_attached_runtime_event_transport(
+                resume_manifest_path=handoff["resume_manifest_path"]
+            )
+            assert manifest_cleanup["cleanup_semantics"] == "no_persisted_state"
+            assert manifest_cleanup["cleanup_preserves_replay"] is True
+
+            handoff_path = Path(transport["binding_artifact_path"]).with_name("ATTACHED_RUNTIME_EVENT_HANDOFF.json")
+            handoff_path.write_text(json.dumps(handoff, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            attached_via_handoff = attached_runtime.attach_runtime_event_transport(handoff_path=str(handoff_path))
+            assert attached_via_handoff["handoff"]["stream_id"] == handoff["stream_id"]
+            assert attached_via_handoff["resume_manifest"]["session_id"] == response.session_id
+            idle_via_handoff = attached_runtime.subscribe_attached_runtime_events(
+                handoff_path=str(handoff_path),
+                after_event_id=transport["latest_cursor"]["event_id"],
+                heartbeat=True,
+            )
+            assert idle_via_handoff["events"] == []
+            assert idle_via_handoff["heartbeat"]["status"] == "idle"
+            attached_cleanup = attached_runtime.cleanup_attached_runtime_event_transport(handoff_path=str(handoff_path))
+            assert attached_cleanup["cleanup_semantics"] == "no_persisted_state"
+            assert attached_cleanup["cleanup_preserves_replay"] is True
+
             transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
             assert transport["schema_version"] == TRACE_EVENT_TRANSPORT_SCHEMA_VERSION
             assert transport["session_id"] == response.session_id
@@ -500,6 +569,10 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             assert transport["endpoint_kind"] == "runtime_method"
             assert transport["remote_capable"] is True
             assert transport["remote_attach_supported"] is True
+            assert response.metadata["trace_event_transport_attach_mode"] == "process_external_artifact_replay"
+            assert transport["attach_mode"] == "process_external_artifact_replay"
+            assert transport["binding_artifact_role"] == "primary_attach_descriptor"
+            assert transport["recommended_remote_attach_method"] == "describe_runtime_event_handoff"
             assert transport["handoff_supported"] is True
             assert transport["handoff_method"] == "describe_runtime_event_handoff"
             assert transport["handoff_kind"] == "artifact_handoff"
@@ -509,6 +582,8 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             assert transport["binding_artifact_path"].endswith(
                 f"runtime_event_transports/{response.session_id}__{response.session_id}.json"
             )
+            assert response.metadata["trace_resume_manifest_binding_path"] == transport["binding_artifact_path"]
+            assert response.metadata["trace_event_transport_path"] == transport["binding_artifact_path"]
             assert transport["describe_method"] == "describe_runtime_event_transport"
             assert transport["subscribe_method"] == "subscribe_runtime_events"
             assert transport["cleanup_method"] == "cleanup_runtime_events"
@@ -530,6 +605,8 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             assert handoff["schema_version"] == "runtime-event-handoff-v1"
             assert handoff["stream_id"] == transport["stream_id"]
             assert handoff["checkpoint_backend_family"] == "filesystem"
+            assert handoff["attach_mode"] == "process_external_artifact_replay"
+            assert handoff["resume_manifest_role"] == "checkpoint_recovery_anchor"
             assert handoff["trace_stream_path"].endswith("TRACE_EVENTS.jsonl")
             assert handoff["resume_manifest_path"].endswith("TRACE_RESUME_MANIFEST.json")
             assert handoff["remote_attach_strategy"] == "transport_descriptor_then_replay"
@@ -590,6 +667,74 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             assert resume_manifest["supervisor_projection"]["delegation"]["sidecar_count"] == len(
                 supervisor_state["delegation"]["delegated_sidecars"]
             )
+
+        asyncio.run(_run())
+
+
+def test_runtime_event_attach_replays_from_sqlite_backend(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """External attach should replay through the SQLite backend when artifacts are not materialized as files."""
+
+    monkeypatch.setenv("CODEX_AGNO_CHECKPOINT_STORAGE_BACKEND_FAMILY", "sqlite")
+    monkeypatch.setenv("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE", "runtime_checkpoint_store.sqlite3")
+
+    with _project_supervisor_state():
+        data_dir = tmp_path / "runtime-data"
+        trace_path = data_dir / "TRACE_METADATA.json"
+        settings = RuntimeSettings(
+            codex_home=PROJECT_ROOT,
+            data_dir=data_dir,
+            trace_output_path=trace_path,
+            live_model_override=False,
+        )
+        runtime = CodexAgnoRuntime(settings)
+
+        async def _run() -> None:
+            response = await runtime.run_task(
+                RunTaskRequest(
+                    task="帮我写一个 Rust CLI 工具",
+                    user_id="tester",
+                    dry_run=True,
+                )
+            )
+
+            transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
+            handoff = runtime.describe_runtime_event_handoff(session_id=response.session_id)
+            sqlite_db_path = settings.resolved_data_dir / "runtime_checkpoint_store.sqlite3"
+
+            assert transport["binding_backend_family"] == "sqlite"
+            assert handoff["checkpoint_backend_family"] == "sqlite"
+            assert sqlite_db_path.exists()
+            assert not Path(transport["binding_artifact_path"]).exists()
+            assert not Path(handoff["resume_manifest_path"]).exists()
+            assert not Path(handoff["trace_stream_path"]).exists()
+
+            attached_runtime = CodexAgnoRuntime(
+                RuntimeSettings(
+                    codex_home=PROJECT_ROOT,
+                    data_dir=tmp_path / "attached-runtime-data",
+                    trace_output_path=tmp_path / "attached-runtime-data" / "ATTACHED_TRACE_METADATA.json",
+                    live_model_override=False,
+                )
+            )
+            attached = attached_runtime.attach_runtime_event_transport(
+                binding_artifact_path=transport["binding_artifact_path"]
+            )
+            assert attached["artifact_backend_family"] == "sqlite"
+            assert attached["transport"]["binding_backend_family"] == "sqlite"
+            assert attached["resume_manifest"]["session_id"] == response.session_id
+
+            replay = attached_runtime.subscribe_attached_runtime_events(
+                binding_artifact_path=transport["binding_artifact_path"],
+                limit=20,
+            )
+            assert replay["events"]
+            assert replay["events"][0]["session_id"] == response.session_id
+
+            attached_via_manifest = attached_runtime.attach_runtime_event_transport(
+                resume_manifest_path=handoff["resume_manifest_path"]
+            )
+            assert attached_via_manifest["artifact_backend_family"] == "sqlite"
+            assert attached_via_manifest["binding_artifact_path"] == transport["binding_artifact_path"]
 
         asyncio.run(_run())
 

@@ -10,6 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts import claude_memory_bridge as bridge_module
 from scripts.claude_memory_bridge import run_bridge, sync_claude_memory_projection
 from scripts.session_lifecycle_hook import run_lifecycle_hook
 
@@ -210,6 +211,48 @@ def test_run_bridge_projection_only_commands_refresh_without_consolidation(tmp_p
         assert before == after
 
 
+def test_run_bridge_refresh_workflow_builds_next_turn_prompt_and_skips_auto_clear(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _seed_runtime_artifacts(tmp_path)
+    _seed_shared_memory(tmp_path)
+
+    copied: dict[str, str] = {}
+
+    def fake_copy(prompt: str) -> dict[str, object]:
+        copied["prompt"] = prompt
+        return {"attempted": True, "status": "copied", "message": "ok"}
+
+    monkeypatch.setattr(bridge_module, "_copy_to_clipboard", fake_copy)
+
+    result = run_bridge("refresh-workflow", tmp_path, auto_clear_ui=True)
+
+    assert result["canonical_command"] == "refresh-workflow"
+    assert "projection" not in result
+    assert result["clipboard"]["status"] == "copied"
+    assert result["auto_clear"]["status"] == "skipped"
+    assert copied["prompt"] == result["workflow_prompt"]
+    assert "继续当前仓库的工作。先阅读并使用这些恢复锚点：" in result["workflow_prompt"]
+    assert "TRACE_METADATA:" in result["workflow_prompt"]
+    assert "当前上下文：" in result["workflow_prompt"]
+    assert "待完成事项：" in result["workflow_prompt"]
+    assert "必须先做的下一步：" in result["workflow_prompt"]
+    assert "- 先核对恢复锚点与当前代码状态" in result["workflow_prompt"]
+    assert "执行要求：参考prompt设置的串并行分工，直接开始执行！" in result["workflow_prompt"]
+    assert "Validate Claude bridge" in result["workflow_prompt"]
+    assert "Wire hooks" in result["workflow_prompt"]
+
+
+def test_sync_claude_memory_projection_is_stable_without_semantic_changes(tmp_path: Path) -> None:
+    _seed_runtime_artifacts(tmp_path)
+    _seed_shared_memory(tmp_path)
+
+    first = sync_claude_memory_projection(tmp_path)
+    second = sync_claude_memory_projection(tmp_path)
+
+    assert first["changed"] is True
+    assert second["changed"] is False
+
+
+
 def test_sync_claude_memory_projection_handles_repo_alias_root(tmp_path: Path) -> None:
     real_root = tmp_path / "real-repo"
     real_root.mkdir()
@@ -226,16 +269,46 @@ def test_sync_claude_memory_projection_handles_repo_alias_root(tmp_path: Path) -
     assert "`.codex/memory`" in content
 
 
-def test_session_lifecycle_hook_supports_end_session_compatibility_alias(tmp_path: Path) -> None:
-    _seed_runtime_artifacts(tmp_path, mode="completed")
+
+def test_run_bridge_refresh_workflow_ignores_env_auto_clear_toggle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _seed_runtime_artifacts(tmp_path)
     _seed_shared_memory(tmp_path)
 
-    result = run_lifecycle_hook("end-session", tmp_path)
+    monkeypatch.setenv("CLAUDE_REFRESH_AUTO_CLEAR_UI", "1")
+    monkeypatch.setattr(
+        bridge_module,
+        "_copy_to_clipboard",
+        lambda prompt: {"attempted": True, "status": "copied", "message": prompt[:8]},
+    )
 
-    assert result["wrapper_command"] == "end-session"
-    assert result["canonical_command"] == "session-end"
-    assert (tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md").is_file()
-    assert (tmp_path / ".codex" / "memory" / "state.json").is_file()
+    result = run_bridge("refresh-workflow", tmp_path)
+
+    assert result["auto_clear"]["status"] == "skipped"
+    assert result["clipboard"]["status"] == "copied"
+
+
+
+def test_run_bridge_refresh_workflow_does_not_write_projection_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _seed_runtime_artifacts(tmp_path)
+    _seed_shared_memory(tmp_path)
+    projection_path = tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md"
+    projection_path.parent.mkdir(parents=True, exist_ok=True)
+    projection_path.write_text("original projection\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        bridge_module,
+        "_copy_to_clipboard",
+        lambda prompt: {"attempted": True, "status": "copied", "message": prompt[:8]},
+    )
+
+    before = projection_path.read_text(encoding="utf-8")
+    result = run_bridge("refresh-workflow", tmp_path)
+    after = projection_path.read_text(encoding="utf-8")
+
+    assert "projection" not in result
+    assert "consolidation" not in result
+    assert before == after
+
 
 
 def test_sync_claude_memory_projection_marks_completed_tasks_as_recent_completed(tmp_path: Path) -> None:
@@ -261,6 +334,18 @@ def test_sync_claude_memory_projection_blocks_stale_continuity(tmp_path: Path) -
     assert "## Stale Continuity Warning" in content
     assert "current_execution_injection: blocked" in content
     assert "stale bridge lane" in content
+
+
+def test_session_lifecycle_hook_supports_end_session_compatibility_alias(tmp_path: Path) -> None:
+    _seed_runtime_artifacts(tmp_path, mode="completed")
+    _seed_shared_memory(tmp_path)
+
+    result = run_lifecycle_hook("end-session", tmp_path)
+
+    assert result["wrapper_command"] == "end-session"
+    assert result["canonical_command"] == "session-end"
+    assert (tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md").is_file()
+    assert (tmp_path / ".codex" / "memory" / "state.json").is_file()
 
 
 @pytest.mark.parametrize(

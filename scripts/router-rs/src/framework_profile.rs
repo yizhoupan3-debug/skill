@@ -2341,8 +2341,6 @@ fn build_codex_desktop_alias_retirement_status() -> Map<String, Value> {
     } else {
         Value::Null
     };
-    let default_emits_alias_artifact = should_emit_codex_desktop_alias_artifact(&inventory_summary);
-
     let mut retirement_gates = Map::new();
     retirement_gates.insert(
         "canonical_desktop_identity_locked".to_string(),
@@ -2374,11 +2372,11 @@ fn build_codex_desktop_alias_retirement_status() -> Map<String, Value> {
     let mut emitter_contract = Map::new();
     emitter_contract.insert(
         "python_emits_alias_artifact".to_string(),
-        Value::Bool(default_emits_alias_artifact),
+        Value::Bool(false),
     );
     emitter_contract.insert(
         "rust_emits_alias_artifact".to_string(),
-        Value::Bool(default_emits_alias_artifact),
+        Value::Bool(false),
     );
     emitter_contract.insert(
         "drop_requires_joint_emitter_flip".to_string(),
@@ -2459,6 +2457,32 @@ fn build_execution_controller_contract() -> Map<String, Value> {
         "state_artifact".to_string(),
         Value::String(".supervisor_state.json".to_string()),
     );
+    controller.insert(
+        "user_facing_aliases".to_string(),
+        json!(["gsd", "get shit done"]),
+    );
+
+    let mut gsd_execution_posture = Map::new();
+    gsd_execution_posture.insert(
+        "label".to_string(),
+        Value::String("get-shit-done".to_string()),
+    );
+    gsd_execution_posture.insert(
+        "auto_continue_safe_local_work".to_string(),
+        Value::Bool(true),
+    );
+    gsd_execution_posture.insert(
+        "main_thread_stays_decision_heavy".to_string(),
+        Value::Bool(true),
+    );
+    gsd_execution_posture.insert(
+        "verify_before_done".to_string(),
+        Value::Bool(true),
+    );
+    gsd_execution_posture.insert(
+        "runtime_dependency".to_string(),
+        Value::String("none".to_string()),
+    );
 
     let mut boundaries = Map::new();
     boundaries.insert(
@@ -2513,6 +2537,10 @@ fn build_execution_controller_contract() -> Map<String, Value> {
         Value::String("shared-contract-evidence".to_string()),
     );
     payload.insert("controller".to_string(), Value::Object(controller));
+    payload.insert(
+        "gsd_execution_posture".to_string(),
+        Value::Object(gsd_execution_posture),
+    );
     payload.insert("boundaries".to_string(), Value::Object(boundaries));
     payload.insert(
         "continuity_artifacts".to_string(),
@@ -3616,27 +3644,6 @@ fn classify_alias_reference(path: &Path) -> (&'static str, &'static str) {
 fn increment_counter(counter: &mut Map<String, Value>, key: &str) {
     let next_value = counter.get(key).and_then(Value::as_u64).unwrap_or(0) + 1;
     counter.insert(key.to_string(), Value::from(next_value));
-}
-
-fn should_emit_codex_desktop_alias_artifact(alias_inventory_summary: &Map<String, Value>) -> bool {
-    if !alias_inventory_summary
-        .get("inventory_complete")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-    {
-        return true;
-    }
-    if alias_inventory_summary
-        .get("primary_identity_risk_occurrences")
-        .and_then(Value::as_u64)
-        != Some(0)
-    {
-        return true;
-    }
-    alias_inventory_summary
-        .get("translation_shim_required")
-        .and_then(Value::as_bool)
-        != Some(false)
 }
 
 fn value_to_string(value: &Value) -> String {

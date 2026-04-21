@@ -917,6 +917,10 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert execution["status_contract"] == "execution_controller_contract_v1"
     assert execution["controller"]["primary_owner"] == "execution-controller-coding"
     assert execution["controller"]["state_artifact"] == ".supervisor_state.json"
+    assert execution["controller"]["user_facing_aliases"] == ["gsd", "get shit done"]
+    assert execution["gsd_execution_posture"]["label"] == "get-shit-done"
+    assert execution["gsd_execution_posture"]["verify_before_done"] is True
+    assert execution["gsd_execution_posture"]["runtime_dependency"] == "none"
     assert execution["boundaries"]["runtime_branching_changes_required"] is False
     assert execution["required_execution_contract_fields"] == [
         "goal",

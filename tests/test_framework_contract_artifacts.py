@@ -3,14 +3,17 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
+RUST_ADAPTER_TIMEOUT_SECONDS = 120.0
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
+import codex_agno_runtime.profile_artifacts as profile_artifacts_module
 from codex_agno_runtime.framework_profile import build_framework_profile
 from codex_agno_runtime.profile_artifacts import (
     build_framework_shared_contract_projection_report,
@@ -37,7 +40,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     paths = emit_framework_contract_artifacts(
         tmp_path,
         profile=profile,
-        rust_adapter=RustRouteAdapter(PROJECT_ROOT),
+        rust_adapter=RustRouteAdapter(PROJECT_ROOT, timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS),
     )
 
     expected_keys = {
@@ -254,6 +257,9 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     )
     assert execution_controller["status_contract"] == "execution_controller_contract_v1"
     assert execution_controller["controller"]["primary_owner"] == "execution-controller-coding"
+    assert execution_controller["controller"]["user_facing_aliases"] == ["gsd", "get shit done"]
+    assert execution_controller["gsd_execution_posture"]["auto_continue_safe_local_work"] is True
+    assert execution_controller["gsd_execution_posture"]["runtime_dependency"] == "none"
     assert execution_controller["boundaries"]["runtime_branching_changes_required"] is False
 
     delegation = json.loads(Path(paths["delegation_contract"]).read_text(encoding="utf-8"))
@@ -619,6 +625,40 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert rust_parity_report["artifacts"]["codex_desktop_alias_retirement_status"]["raw_match"] is True
 
 
+def test_emit_framework_contract_artifacts_requires_explicit_opt_in_for_continuity_outputs(
+    tmp_path: Path,
+) -> None:
+    profile = build_framework_profile(
+        profile_id="artifact-profile-no-auto-alias",
+        display_name="Artifact Profile No Auto Alias",
+        rules_bundle={"rules": [{"id": "outer-owned"}]},
+        skill_bundle={"skills": ["router"]},
+        session_policy={"mode": "bounded"},
+    )
+    risky_inventory = {
+        "canonical_adapter_id": "codex_desktop_adapter",
+        "legacy_alias_id": "codex_desktop_host_adapter",
+        "scan_root": str(PROJECT_ROOT),
+        "summary": {
+            "inventory_complete": False,
+            "primary_identity_risk_occurrences": 3,
+            "translation_shim_required": True,
+        },
+        "references": [],
+    }
+
+    with patch.object(
+        profile_artifacts_module,
+        "build_codex_desktop_alias_inventory",
+        return_value=risky_inventory,
+    ):
+        paths = emit_framework_contract_artifacts(tmp_path, profile=profile)
+
+    assert "codex_desktop_host_adapter" not in paths
+    assert "codex_desktop_alias_inventory" not in paths
+    assert "codex_desktop_alias_retirement_status" not in paths
+
+
 def test_framework_shared_contract_projection_report_keeps_hosts_on_one_outer_truth() -> None:
     profile = build_framework_profile(
         profile_id="shared-contract-report",
@@ -680,7 +720,7 @@ def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
     paths = emit_framework_contract_artifacts(
         tmp_path,
         profile=profile,
-        rust_adapter=RustRouteAdapter(PROJECT_ROOT),
+        rust_adapter=RustRouteAdapter(PROJECT_ROOT, timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS),
         include_legacy_alias_artifact=True,
     )
 
@@ -736,7 +776,10 @@ def test_rust_route_adapter_can_compile_profile_bundle(tmp_path: Path) -> None:
     profile_path = tmp_path / "framework_profile.json"
     profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False), encoding="utf-8")
 
-    payload = RustRouteAdapter(PROJECT_ROOT).compile_profile_bundle(profile_path)
+    payload = RustRouteAdapter(
+        PROJECT_ROOT,
+        timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS,
+    ).compile_profile_bundle(profile_path)
 
     assert payload["profile_id"] == "rust-compile-profile"
     assert payload["companion_projection"]["presetRules"][0]["id"] == "outer-owned"
@@ -757,7 +800,10 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
     profile_path = tmp_path / "framework_profile.json"
     profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False), encoding="utf-8")
 
-    payload = RustRouteAdapter(PROJECT_ROOT).compile_codex_profile_artifacts(profile_path)
+    payload = RustRouteAdapter(
+        PROJECT_ROOT,
+        timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS,
+    ).compile_codex_profile_artifacts(profile_path)
 
     assert set(payload) == {
         "cli_common_adapter",
@@ -852,7 +898,10 @@ def test_rust_route_adapter_can_opt_in_continuity_alias_artifact(tmp_path: Path)
     profile_path = tmp_path / "framework_profile.json"
     profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False), encoding="utf-8")
 
-    payload = RustRouteAdapter(PROJECT_ROOT).compile_codex_profile_artifacts(
+    payload = RustRouteAdapter(
+        PROJECT_ROOT,
+        timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS,
+    ).compile_codex_profile_artifacts(
         profile_path,
         include_legacy_alias_artifact=True,
     )

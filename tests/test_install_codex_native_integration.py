@@ -11,9 +11,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.install_codex_native_integration import (
+    DEFAULT_TUI_STATUS_ITEMS,
     build_personal_marketplace_payload,
     build_framework_server_block,
     ensure_config_file,
+    ensure_tui_status_line,
     install_native_integration,
     sync_directory,
 )
@@ -33,6 +35,48 @@ def test_ensure_config_file_bootstraps_schema_header(tmp_path: Path) -> None:
     changed = ensure_config_file(config_path)
     assert changed is True
     assert config_path.read_text(encoding="utf-8").startswith("#:schema https://developers.openai.com/codex/config-schema.json")
+
+
+def test_ensure_tui_status_line_bootstraps_table_when_missing(tmp_path: Path) -> None:
+    config_path = tmp_path / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text("#:schema https://developers.openai.com/codex/config-schema.json\n", encoding="utf-8")
+
+    changed = ensure_tui_status_line(config_path)
+
+    content = config_path.read_text(encoding="utf-8")
+    assert changed is True
+    assert "[tui]" in content
+    for item in DEFAULT_TUI_STATUS_ITEMS:
+        assert f'"{item}"' in content
+
+
+def test_ensure_tui_status_line_preserves_existing_tui_keys(tmp_path: Path) -> None:
+    config_path = tmp_path / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "\n".join(
+            [
+                "#:schema https://developers.openai.com/codex/config-schema.json",
+                "",
+                "[tui]",
+                'theme = "monokai-extended-bright"',
+                "",
+                "[mcp_servers.example]",
+                'command = "python3"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    changed = ensure_tui_status_line(config_path)
+
+    content = config_path.read_text(encoding="utf-8")
+    assert changed is True
+    assert 'theme = "monokai-extended-bright"' in content
+    assert content.count("[tui]") == 1
+    assert "status_line = [" in content
 
 
 def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
@@ -73,11 +117,15 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert second["success"] is True
     assert content.count("[mcp_servers.browser-mcp]") == 1
     assert content.count("[mcp_servers.framework-mcp]") == 1
+    assert content.count("[tui]") == 1
+    assert content.count("status_line = [") == 1
     assert (home_plugin_root / ".codex-plugin" / "plugin.json").is_file()
     assert [plugin["name"] for plugin in marketplace["plugins"]].count("skill-framework-native") == 1
     assert instructions == ""
     assert first["framework_overlay_retirement"]["status"] in {"retired-file", "retired-managed-block"}
     assert second["framework_overlay_retirement"]["status"] == "already-retired"
+    assert first["tui_status_line_changed"] is True
+    assert second["tui_status_line_changed"] is False
 
 
 def test_sync_directory_removes_stale_files_and_copies_updates(tmp_path: Path) -> None:

@@ -125,9 +125,11 @@ def test_tools_and_resources_list_expose_framework_surface(tmp_path: Path) -> No
         "framework_skill_search",
         "framework_runtime_snapshot",
         "framework_contract_summary",
+        "framework_recap_refresh",
     }.issubset(tool_names)
     assert {
         "framework://memory/project",
+        "framework://memory/claude-recap",
         "framework://routing/runtime",
         "framework://bootstrap/default",
         "framework://supervisor/state",
@@ -286,6 +288,35 @@ def test_contract_summary_and_artifact_index_are_compact_and_actionable(tmp_path
     assert contract["recent_completed_execution"]["task"] == "checklist-series final closeout"
     assert payload["workspace"] == tmp_path.name
     assert isinstance(payload["next_actions"], list)
+
+
+def test_recap_tool_and_resource_expose_claude_style_resume_context(tmp_path: Path) -> None:
+    _seed_runtime_artifacts(tmp_path, terminal=False)
+    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n\n## Active Patterns\n\n- AP-1: Externalize task state\n")
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
+
+    recap = _tool_call(
+        server=server,
+        request_id=61,
+        name="framework_recap_refresh",
+        arguments={"max_lines": 4},
+    )
+    resource = _call(
+        server=server,
+        request_id=62,
+        method="resources/read",
+        params={"uri": "framework://memory/claude-recap"},
+    )
+
+    assert recap["ok"] is True
+    assert recap["continuity_state"] == "active"
+    assert recap["task"] == "active bootstrap repair"
+    assert "## Current Execution State" in recap["projection"]
+    assert "active bootstrap repair" in recap["projection"]
+    assert "继续当前仓库的工作。先阅读并使用这些恢复锚点：" in recap["workflow_prompt"]
+    assert "必须先做的下一步：" in recap["workflow_prompt"]
+    assert "active bootstrap repair" in resource["result"]["contents"][0]["text"]
+    assert "## Current Execution State" in resource["result"]["contents"][0]["text"]
 
 
 def test_runtime_snapshot_falls_back_to_trace_skill_for_primary_owner(tmp_path: Path) -> None:

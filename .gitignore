@@ -13,9 +13,10 @@ TRACE_METADATA.json
 configs/codex/sub_accounts.state.json
 .pytest_cache/
 .codebuddy/
-.codex/
+.claude/worktrees/
 .opencode/
 .rtk/
+.omc/
 tmp/
 output/
 .aionrs/sessions/
@@ -49,3 +50,4 @@ product-name-*.js
 tmp_index-*.js
 my_ccs.css
 opencode.jsonc
+.codex/*

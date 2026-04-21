@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -24,6 +25,13 @@ PROJECT_INSTRUCTIONS_PATH = Path(".codex") / "model_instructions.md"
 REPO_MARKETPLACE_PATH = Path(".agents") / "plugins" / "marketplace.json"
 PLUGIN_NAME = "skill-framework-native"
 CONFIG_SCHEMA_HEADER = "#:schema https://developers.openai.com/codex/config-schema.json\n"
+DEFAULT_TUI_STATUS_ITEMS = (
+    "model-with-reasoning",
+    "git-branch",
+    "context-used",
+    "context-remaining",
+    "used-tokens",
+)
 
 
 def ensure_config_file(config_path: Path) -> bool:
@@ -56,6 +64,46 @@ def install_framework_server(config_path: Path, repo_root: Path) -> bool:
     if "[mcp_servers.framework-mcp]" in content:
         return False
     updated = content.rstrip() + ("\n\n" if content.strip() else "") + build_framework_server_block(repo_root) + "\n"
+    return write_text_if_changed(config_path, updated)
+
+
+def _format_status_line(items: tuple[str, ...] = DEFAULT_TUI_STATUS_ITEMS) -> str:
+    return "status_line = [" + ", ".join(f'"{item}"' for item in items) + "]"
+
+
+def ensure_tui_status_line(
+    config_path: Path,
+    *,
+    status_items: tuple[str, ...] = DEFAULT_TUI_STATUS_ITEMS,
+) -> bool:
+    """Ensure Codex config has a stable TUI status line without clobbering other [tui] keys."""
+
+    content = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+    status_line = _format_status_line(status_items)
+    tui_pattern = re.compile(r"(?ms)^\[tui\]\n.*?(?=^\[|\Z)")
+    match = tui_pattern.search(content)
+    if not match:
+        updated = content.rstrip()
+        if updated:
+            updated += "\n\n"
+        updated += "[tui]\n" + status_line + "\n"
+        return write_text_if_changed(config_path, updated)
+
+    block = match.group(0).rstrip("\n")
+    lines = block.splitlines()
+    replaced = False
+    updated_lines: list[str] = []
+    for line in lines:
+        if re.match(r"^\s*status_line\s*=", line):
+            updated_lines.append(status_line)
+            replaced = True
+            continue
+        updated_lines.append(line)
+    if not replaced:
+        updated_lines.append(status_line)
+
+    new_block = "\n".join(updated_lines) + "\n"
+    updated = content[: match.start()] + new_block + content[match.end() :]
     return write_text_if_changed(config_path, updated)
 
 
@@ -194,6 +242,7 @@ def install_native_integration(
         browser_changed = install_browser_server(config_path=home_config_path, repo_root=resolved_repo_root)
     if install_framework_mcp:
         framework_changed = install_framework_server(config_path=home_config_path, repo_root=resolved_repo_root)
+    tui_changed = ensure_tui_status_line(home_config_path)
     if install_personal_plugin:
         personal_plugin_changed = sync_personal_plugin_bundle(resolved_repo_root, plugin_root=home_plugin_root)
     if install_personal_marketplace_entry:
@@ -215,6 +264,7 @@ def install_native_integration(
         "created_config": created_config,
         "browser_mcp_changed": browser_changed,
         "framework_mcp_changed": framework_changed,
+        "tui_status_line_changed": tui_changed,
         "personal_plugin_changed": personal_plugin_changed,
         "personal_marketplace_changed": personal_marketplace_changed,
         "framework_overlay_retirement": framework_overlay_result,

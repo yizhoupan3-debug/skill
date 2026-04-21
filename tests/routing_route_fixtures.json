@@ -250,6 +250,84 @@
       96.0
     ],
     [
+      "design-agent",
+      "L3",
+      "gate",
+      "none",
+      "P2",
+      "Route named-product design references and brand-plus-motion source grounding.",
+      "n/a",
+      [
+        "像 Linear 一样",
+        "参考源",
+        "verified tokens",
+        "品牌 token",
+        "liquid glass motion"
+      ],
+      95.5
+    ],
+    [
+      "frontend-design",
+      "L3",
+      "owner",
+      "none",
+      "P2",
+      "Own UI redesign and visual direction for premium-feeling interfaces.",
+      "n/a",
+      [
+        "改UI",
+        "品牌感",
+        "视觉层级",
+        "Bento UI"
+      ],
+      95.2
+    ],
+    [
+      "motion-design",
+      "L3",
+      "owner",
+      "none",
+      "P2",
+      "Own motion-first UI work such as Framer Motion, transitions, and micro-interactions.",
+      "n/a",
+      [
+        "Framer Motion",
+        "micro-interactions",
+        "smooth transitions"
+      ],
+      95.0
+    ],
+    [
+      "css-pro",
+      "L2",
+      "owner",
+      "none",
+      "P2",
+      "Own CSS engineering, responsive layout mechanics, and token systems.",
+      "n/a",
+      [
+        "Grid",
+        "responsive",
+        "CSS tokens"
+      ],
+      97.0
+    ],
+    [
+      "visual-review",
+      "L3",
+      "gate",
+      "evidence",
+      "P1",
+      "Own screenshot-grounded visual review and visible-defect audits.",
+      "required",
+      [
+        "screenshot",
+        "visual review",
+        "UI audit"
+      ],
+      95.0
+    ],
+    [
       "tie-skill-a",
       "L2",
       "owner",
@@ -293,6 +371,15 @@
       "query": "这是高负载跨文件任务，需要 sidecar delegation 并行处理",
       "expected": {
         "selected_skill": "subagent-delegation",
+        "overlay_skill": "anti-laziness",
+        "layer": "L0"
+      }
+    },
+    {
+      "name": "gsd-controller-routing",
+      "query": "这个仓库的修复你直接 gsd，推进到底，别停，主线程保持简短并给我验证证据",
+      "expected": {
+        "selected_skill": "execution-controller-coding",
         "overlay_skill": "anti-laziness",
         "layer": "L0"
       }
@@ -394,6 +481,51 @@
         "selected_skill": "doc",
         "overlay_skill": null,
         "layer": "L3"
+      }
+    },
+    {
+      "name": "design-agent-brand-reference-routing",
+      "query": "先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和组件气质",
+      "expected": {
+        "selected_skill": "design-agent",
+        "overlay_skill": null,
+        "layer": "L3"
+      }
+    },
+    {
+      "name": "frontend-design-visual-redesign",
+      "query": "把这个 SaaS dashboard 做得更有品牌感和高级感，重新梳理视觉层级、配色和设计语言",
+      "expected": {
+        "selected_skill": "frontend-design",
+        "overlay_skill": null,
+        "layer": "L3"
+      }
+    },
+    {
+      "name": "frontend-design-screenshot-review-reroute",
+      "query": "基于这组 screenshot 做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题",
+      "expected": {
+        "selected_skill": "visual-review",
+        "overlay_skill": null,
+        "layer": "L3"
+      }
+    },
+    {
+      "name": "frontend-design-motion-boundary",
+      "query": "用 Framer Motion 给这个界面做磁性按钮、page transition 和微交互，重点是动效质感",
+      "expected": {
+        "selected_skill": "motion-design",
+        "overlay_skill": null,
+        "layer": "L3"
+      }
+    },
+    {
+      "name": "frontend-design-css-boundary",
+      "query": "给这个 Bento 风页面设计 Grid、container queries 和响应式布局方案，顺便落一套 CSS tokens",
+      "expected": {
+        "selected_skill": "css-pro",
+        "overlay_skill": null,
+        "layer": "L2"
       }
     }
   ]

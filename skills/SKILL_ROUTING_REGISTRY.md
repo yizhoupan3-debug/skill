@@ -40,6 +40,7 @@
 | `data-wrangling` | Active | P2 | L2 | owner | none | project | ✓ 96.2 | Clean, transform, validate, and pipeline structured or semi-structured data acro |
 | `datastore-cache-queue` | Active | P2 | L2 | owner | none | project | ✓ 97.3 | Diagnose and fix correctness issues across stores, caches, queues, and ORM-backe |
 | `dependency-migration` | Active | P2 | L2 | owner | none | project | ✓ 97.2 | Manage, audit, upgrade, and migrate project dependencies across npm, pip, Cargo, |
+| `design-agent` | Active | P2 | L3 | gate | none | project | ✓ 100.0 | Route named-product design references and brand-plus-motion source grounding bef |
 | `doc` | Active | P1 | L3 | gate | artifact | project | ✓ 94.3 | Read, create, edit, repair, and review `.docx` Word documents when layout and Wo |
 | `docker` | Active | P2 | L3 | owner | none | project | ✓ 90.9 | Produce minimal, secure Docker images with correct layer caching, multi-stage bu |
 | `documentation-engineering` | Active | P2 | L1 | owner | none | project | ✓ 97.2 | Write, review, and maintain project documentation such as README, API docs, ADRs |
@@ -129,7 +130,6 @@
 | `svelte` | Active | P2 | L4 | owner | none | project | ✓ 97.7 | Deliver Svelte 5 applications using runes-based reactivity ($state, $derived, $e |
 | `systematic-debugging` | Active | P1 | L0 | gate | evidence | project | ✓ 97.0 | Investigate unknown failures before fixing |
 | `tailwind-pro` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Produce Tailwind CSS configurations with design tokens, plugin hooks, and framew |
-| `tao-ci` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Draft professor-specific summer research outreach emails from workbook data |
 | `tdd-workflow` | Active | P2 | L1 | overlay | none | project | ✓ 92.8 | Run a Test-Driven Development workflow centered on the RED-GREEN-REFACTOR loop w |
 | `test-engineering` | Active | P2 | L1 | owner | none | project | ✓ 97.3 | Choose the right test layer, write maintainable tests, and stabilize flaky behav |
 | `typescript-pro` | Active | P1 | L4 | owner | none | project | ✓ 96.3 | Deliver type-safe TypeScript 5.x+ code. Enforces strict mode, encodes domain con |

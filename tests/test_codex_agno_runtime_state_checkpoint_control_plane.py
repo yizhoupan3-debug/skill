@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from pathlib import Path
+
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
@@ -17,6 +20,7 @@ from codex_agno_runtime.checkpoint_store import (
     FilesystemRuntimeCheckpointer,
     InMemoryRuntimeStorageBackend,
     SQLiteRuntimeStorageBackend,
+    select_runtime_storage_backend,
 )
 from codex_agno_runtime.state import BackgroundJobStore
 from codex_agno_runtime.trace import RuntimeEventTransport
@@ -122,6 +126,70 @@ def test_checkpointer_embeds_control_plane_into_manifest_and_transport(tmp_path:
     assert persisted_manifest["control_plane"]["supports_snapshot_delta"] is False
 
 
+def test_checkpointer_uses_rust_writers_only_for_filesystem_backend(monkeypatch, tmp_path: Path) -> None:
+    """Filesystem persistence should prefer Rust writers and keep the same artifact paths."""
+
+    checkpointer = FilesystemRuntimeCheckpointer(
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "runtime-data" / "TRACE_METADATA.json",
+        control_plane_descriptor=CONTROL_PLANE_DESCRIPTOR,
+    )
+    calls: list[tuple[str, str]] = []
+
+    def fake_write_transport_binding(payload: dict[str, object]) -> dict[str, object]:
+        path = Path(str(payload["path"]))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"path": str(path), "via": "rust"}) + "\n", encoding="utf-8")
+        calls.append(("transport", str(path)))
+        return {
+            "schema_version": checkpointer._rust_adapter.transport_binding_write_schema_version,
+            "authority": checkpointer._rust_adapter.transport_binding_write_authority,
+            "path": str(path),
+            "bytes_written": path.stat().st_size,
+        }
+
+    def fake_write_resume_manifest(payload: dict[str, object]) -> dict[str, object]:
+        path = Path(str(payload["path"]))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"path": str(path), "via": "rust"}) + "\n", encoding="utf-8")
+        calls.append(("manifest", str(path)))
+        return {
+            "schema_version": checkpointer._rust_adapter.checkpoint_manifest_write_schema_version,
+            "authority": checkpointer._rust_adapter.checkpoint_manifest_write_authority,
+            "path": str(path),
+            "bytes_written": path.stat().st_size,
+        }
+
+    monkeypatch.setattr(checkpointer._rust_adapter, "write_transport_binding", fake_write_transport_binding)
+    monkeypatch.setattr(checkpointer._rust_adapter, "write_checkpoint_resume_manifest", fake_write_resume_manifest)
+
+    transport = RuntimeEventTransport(
+        stream_id="stream::session-1",
+        session_id="session-1",
+        job_id="job-1",
+        binding_backend_family="filesystem",
+    )
+    binding_path = checkpointer.write_transport_binding(transport)
+    manifest = checkpointer.checkpoint(
+        session_id="session-1",
+        job_id="job-1",
+        status="completed",
+        generation=1,
+        latest_cursor=None,
+        event_transport_path=str(binding_path) if binding_path is not None else None,
+        artifact_paths=[str(binding_path)] if binding_path is not None else [],
+    )
+
+    assert binding_path is not None
+    assert manifest is not None
+    assert calls == [
+        ("transport", str(binding_path)),
+        ("manifest", str(checkpointer.describe_paths().resume_manifest_path)),
+    ]
+    assert json.loads(binding_path.read_text(encoding="utf-8"))["via"] == "rust"
+    assert json.loads(checkpointer.describe_paths().resume_manifest_path.read_text(encoding="utf-8"))["via"] == "rust"
+
+
 def test_background_state_uses_non_filesystem_backend_family(tmp_path: Path) -> None:
     """Background state should persist through the backend seam without filesystem writes."""
 
@@ -212,6 +280,49 @@ def test_checkpointer_uses_non_filesystem_backend_family(tmp_path: Path) -> None
     assert checkpointer.health()["supports_remote_event_transport"] is True
 
 
+def test_non_filesystem_backend_skips_rust_writers(monkeypatch, tmp_path: Path) -> None:
+    """Memory-backed checkpoints should stay on the backend seam and never invoke Rust file writers."""
+
+    backend = InMemoryRuntimeStorageBackend()
+    checkpointer = FilesystemRuntimeCheckpointer(
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "runtime-data" / "TRACE_METADATA.json",
+        storage_backend=backend,
+        control_plane_descriptor=CONTROL_PLANE_DESCRIPTOR,
+    )
+
+    def fail_write_transport_binding(payload: dict[str, object]) -> dict[str, object]:
+        raise AssertionError(f"unexpected rust transport write: {payload}")
+
+    def fail_write_resume_manifest(payload: dict[str, object]) -> dict[str, object]:
+        raise AssertionError(f"unexpected rust manifest write: {payload}")
+
+    monkeypatch.setattr(checkpointer._rust_adapter, "write_transport_binding", fail_write_transport_binding)
+    monkeypatch.setattr(checkpointer._rust_adapter, "write_checkpoint_resume_manifest", fail_write_resume_manifest)
+
+    transport = RuntimeEventTransport(
+        stream_id="stream::session-1",
+        session_id="session-1",
+        job_id="job-1",
+        binding_backend_family="memory",
+    )
+    binding_path = checkpointer.write_transport_binding(transport)
+    manifest = checkpointer.checkpoint(
+        session_id="session-1",
+        job_id="job-1",
+        status="completed",
+        generation=1,
+        latest_cursor=None,
+        event_transport_path=str(binding_path) if binding_path is not None else None,
+        artifact_paths=["/tmp/example.json"],
+    )
+
+    assert binding_path is not None
+    assert manifest is not None
+    assert backend.exists(binding_path)
+    assert backend.exists(checkpointer.describe_paths().resume_manifest_path)
+
+
 def test_sqlite_backend_family_can_be_selected_and_round_tripped_via_config(
     monkeypatch,
     tmp_path: Path,
@@ -262,10 +373,17 @@ def test_sqlite_backend_family_can_be_selected_and_round_tripped_via_config(
         state_path=state_path,
         control_plane_descriptor=CONTROL_PLANE_DESCRIPTOR,
     )
+    reopened = FilesystemRuntimeCheckpointer(
+        data_dir=data_dir,
+        trace_output_path=data_dir / "TRACE_METADATA.json",
+        control_plane_descriptor=CONTROL_PLANE_DESCRIPTOR,
+    )
+    reopened_loaded = reopened.load_checkpoint()
 
     assert binding_path is not None
     assert manifest is not None
     assert loaded is not None
+    assert reopened_loaded is not None
     assert recovered.get("job-1") is not None
     assert recovered.get("job-1").status == "queued"
     assert recovered.health()["backend_family"] == "sqlite"
@@ -293,3 +411,40 @@ def test_sqlite_backend_family_can_be_selected_and_round_tripped_via_config(
     assert loaded.control_plane["supports_remote_event_transport"] is True
     assert manifest.control_plane is not None
     assert manifest.control_plane["backend_family"] == "sqlite"
+    assert reopened_loaded.session_id == "session-1"
+    assert reopened_loaded.job_id == "job-1"
+
+
+def test_sqlite_backend_reads_legacy_absolute_path_keys(tmp_path: Path) -> None:
+    """SQLite backend should keep reading legacy absolute-path payload keys."""
+
+    data_dir = tmp_path / "runtime-data"
+    db_path = data_dir / "runtime_checkpoint_store.sqlite3"
+    state_path = data_dir / "runtime_background_jobs.json"
+    backend = SQLiteRuntimeStorageBackend(db_path=db_path, storage_root=data_dir)
+    legacy_key = str(state_path.expanduser().resolve())
+    payload = '{"schema_version":"runtime-background-state-v4","version":2,"control_plane":null,"jobs":[],"active_sessions":[],"pending_session_takeovers":[]}\n'
+
+    with sqlite3.connect(db_path, timeout=30.0) as conn:
+        conn.execute(
+            "INSERT INTO runtime_storage_payloads (payload_key, payload_text) VALUES (?, ?)",
+            (legacy_key, payload),
+        )
+        conn.commit()
+
+    assert backend.exists(state_path) is True
+    assert backend.read_text(state_path) == payload
+
+
+
+def test_sqlite_backend_rejects_paths_outside_storage_root(tmp_path: Path) -> None:
+    """SQLite backend should fail closed for paths outside the configured storage root."""
+
+    data_dir = tmp_path / "runtime-data"
+    backend = SQLiteRuntimeStorageBackend(
+        db_path=data_dir / "runtime_checkpoint_store.sqlite3",
+        storage_root=data_dir,
+    )
+
+    with pytest.raises(ValueError, match="must stay under storage root"):
+        backend.write_text(tmp_path / "outside.json", "{}")

@@ -90,6 +90,8 @@ class RouteExecutionPolicy(BaseModel):
 
     `python_route_required` only covers the explicit legacy primary-authority lane.
     `diagnostic_python_lane` marks compare-only shadow/verify/rollback lanes.
+    `rollback_active` records a compatibility/diagnostic marker and never changes
+    the live route-result authority on its own.
     """
 
     policy_schema_version: str
@@ -106,7 +108,7 @@ class RouteExecutionPolicy(BaseModel):
 
 
 class RouteDiffReport(BaseModel):
-    """Stable parity and soak payload shared by shadow/verify/rust modes."""
+    """Stable diagnostic evidence payload shared by shadow/verify/rust lanes."""
 
     report_schema_version: str
     authority: str
