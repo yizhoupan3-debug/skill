@@ -42,11 +42,26 @@
 
 ## Git hooks
 
-已配置 `.githooks/`（`pre-commit` 自动校验 + 评分，`post-commit` 自动 push）。首次安装：
+已提供 `.githooks/`（`pre-commit` 自动校验 + 评分，`post-commit` 仅在显式 opt-in 时自动 push）。首次安装：
 
 ```bash
 python3 scripts/sync_skills.py --install-hooks
 ```
+
+默认不会在 commit 后自动 push。只有显式设置 `SKILL_SYNC_AUTO_PUSH=1` 时，`post-commit` 才会触发自动 push。
+
+## Git 安全基线
+
+这个仓库高频变更且可能同时存在多个 worktree。做清理、切分提交、rebase、stash 前，先运行：
+
+```bash
+python3 scripts/git_safety.py status
+python3 scripts/git_safety.py checkpoint --label before-cleanup
+python3 scripts/git_safety.py start-topic topic/<task-name>
+```
+
+checkpoint 会把 tracked patch、staged patch、untracked 备份和 reflog 锚点写到 `artifacts/ops/git_safety/`，不改写当前工作区。
+如果当前脏改还堆在 `main` 上，优先用 `start-topic`，它会先打 checkpoint，再把当前工作区原样切到新分支。
 
 ## 技能演化与凝结 (Evolution & Condensation)
 
