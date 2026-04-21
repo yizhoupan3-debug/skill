@@ -36,6 +36,7 @@ codex_agno_runtime/tmp-data-test/
 memory/*.db
 memory/*.sqlite3
 memory/.*.sqlite3
+memory/CLAUDE_MEMORY.md
 memory/archive/
 memory/state.json
 skills/.evolution_journal.jsonl
