@@ -1230,7 +1230,6 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
         "cli_family_capability_discovery",
         "cli_family_parity_snapshot",
         "codex_dual_entry_parity_snapshot",
-        "codex_desktop_alias_retirement_status",
         "execution_controller_contract",
         "delegation_contract",
         "supervisor_state_contract",
@@ -1261,15 +1260,6 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     ] == "headless-exec"
     assert payload["cli_family_parity_snapshot"]["all_shared_contract_checks_pass"] is True
     assert payload["codex_dual_entry_parity_snapshot"]["all_shared_contract_checks_pass"] is True
-    assert payload["codex_desktop_alias_retirement_status"]["alias_lifecycle"] == "compatibility-only"
-    assert payload["codex_desktop_alias_retirement_status"]["emitter_contract"]["rust_emits_alias_artifact"] is False
-    assert payload["codex_desktop_alias_retirement_status"]["inventory_summary"]["inventory_complete"] is True
-    assert (
-        payload["codex_desktop_alias_retirement_status"]["inventory_summary"][
-            "primary_identity_risk_occurrences"
-        ]
-        == 0
-    )
     assert payload["execution_kernel_live_fallback_retirement_status"]["live_primary"][
         "contract_mode"
     ] == "rust-live-primary"
@@ -1371,6 +1361,8 @@ def test_router_rs_profile_artifacts_json_can_opt_in_continuity_alias_artifact()
         "stream-json",
     ]
     assert payload["codex_desktop_host_adapter"]["metadata"]["adapter_alias_of"] == "codex_desktop_adapter"
+    assert payload["codex_desktop_alias_retirement_status"]["alias_lifecycle"] == "compatibility-only"
+    assert payload["codex_desktop_alias_retirement_status"]["emitter_contract"]["rust_emits_alias_artifact"] is False
 
 
 def test_ensure_capabilities_rejects_missing_capability() -> None:

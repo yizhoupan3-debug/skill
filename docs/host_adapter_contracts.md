@@ -27,9 +27,10 @@ compatibility inventory / smoke 角色，不能替代 `cli_family_parity_snapsho
 或 `codex_dual_entry_parity_snapshot` 成为主回归基线。
 默认 Python artifact emission 不再携带
 `codex_desktop_alias_inventory.json` 或
-`codex_desktop_alias_retirement_status.json`；这些仍然只在显式 continuity
-lane 里保留。Rust `--profile-artifacts-json` 的默认 continuity evidence
-本轮不改，仍由 Rust lane 单独维护。
+`codex_desktop_alias_retirement_status.json`；默认 Rust
+`--profile-artifacts-json` 也不再把 `codex_desktop_alias_retirement_status`
+当作 first-class 输出。这些 alias continuity 证据只在显式 continuity
+lane 里保留。
 
 ## Adapter Set
 

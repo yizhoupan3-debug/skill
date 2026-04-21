@@ -58,7 +58,6 @@ DEFAULT_RUST_CODEX_ARTIFACT_FILENAMES = {
     "cli_family_capability_discovery": "router_rs_cli_family_capability_discovery.json",
     "cli_family_parity_snapshot": "router_rs_cli_family_parity_snapshot.json",
     "codex_dual_entry_parity_snapshot": "router_rs_codex_dual_entry_parity_snapshot.json",
-    "codex_desktop_alias_retirement_status": "router_rs_codex_desktop_alias_retirement_status.json",
     "execution_controller_contract": "router_rs_execution_controller_contract.json",
     "delegation_contract": "router_rs_delegation_contract.json",
     "supervisor_state_contract": "router_rs_supervisor_state_contract.json",
@@ -84,7 +83,6 @@ RUST_PYTHON_PARITY_FIELDS = {
     "cli_family_capability_discovery": "rust_cli_family_capability_discovery",
     "cli_family_parity_snapshot": "rust_cli_family_parity_snapshot",
     "codex_dual_entry_parity_snapshot": "rust_codex_dual_entry_parity_snapshot",
-    "codex_desktop_alias_retirement_status": "rust_codex_desktop_alias_retirement_status",
     "execution_controller_contract": "rust_execution_controller_contract",
     "delegation_contract": "rust_delegation_contract",
     "supervisor_state_contract": "rust_supervisor_state_contract",
@@ -569,6 +567,11 @@ def emit_framework_contract_artifacts(
             paths[f"rust_{legacy_artifact_key}"] = _write_json(
                 output_dir / legacy_filename,
                 rust_codex_artifacts[legacy_artifact_key],
+            )
+        if emit_legacy_alias_artifact and "codex_desktop_alias_retirement_status" in rust_codex_artifacts:
+            paths["rust_codex_desktop_alias_retirement_status"] = _write_json(
+                output_dir / "router_rs_codex_desktop_alias_retirement_status.json",
+                rust_codex_artifacts["codex_desktop_alias_retirement_status"],
             )
         rust_parity_report = build_rust_python_artifact_parity_report(
             python_artifacts=python_artifacts,
