@@ -347,8 +347,8 @@ def test_sqlite_backend_family_can_be_selected_and_round_tripped_via_config(
     assert isinstance(checkpointer.storage_backend, SQLiteRuntimeStorageBackend)
     assert checkpointer.health()["backend_family"] == "sqlite"
     assert checkpointer.health()["supports_atomic_replace"] is True
-    assert checkpointer.health()["supports_compaction"] is False
-    assert checkpointer.health()["supports_snapshot_delta"] is False
+    assert checkpointer.health()["supports_compaction"] is True
+    assert checkpointer.health()["supports_snapshot_delta"] is True
     assert checkpointer.health()["supports_remote_event_transport"] is True
 
     store.set_status("job-1", status="queued", session_id="session-1", timeout_seconds=30)
@@ -387,6 +387,10 @@ def test_sqlite_backend_family_can_be_selected_and_round_tripped_via_config(
     assert recovered.get("job-1") is not None
     assert recovered.get("job-1").status == "queued"
     assert recovered.health()["backend_family"] == "sqlite"
+    assert recovered.health()["supports_atomic_replace"] is True
+    assert recovered.health()["supports_compaction"] is True
+    assert recovered.health()["supports_snapshot_delta"] is True
+    assert recovered.health()["supports_remote_event_transport"] is True
     assert state_path.exists() is False
     assert checkpointer.describe_paths().resume_manifest_path is not None
     assert checkpointer.describe_paths().resume_manifest_path.exists() is False
@@ -400,19 +404,86 @@ def test_sqlite_backend_family_can_be_selected_and_round_tripped_via_config(
     binding_payload = json.loads(checkpointer.storage_backend.read_text(binding_path))
     assert binding_payload["transport_health"]["backend_family"] == "sqlite"
     assert binding_payload["transport_health"]["supports_atomic_replace"] is True
-    assert binding_payload["transport_health"]["supports_compaction"] is False
-    assert binding_payload["transport_health"]["supports_snapshot_delta"] is False
+    assert binding_payload["transport_health"]["supports_compaction"] is True
+    assert binding_payload["transport_health"]["supports_snapshot_delta"] is True
     assert binding_payload["transport_health"]["supports_remote_event_transport"] is True
     assert loaded.control_plane is not None
     assert loaded.control_plane["backend_family"] == "sqlite"
     assert loaded.control_plane["supports_atomic_replace"] is True
-    assert loaded.control_plane["supports_compaction"] is False
-    assert loaded.control_plane["supports_snapshot_delta"] is False
+    assert loaded.control_plane["supports_compaction"] is True
+    assert loaded.control_plane["supports_snapshot_delta"] is True
     assert loaded.control_plane["supports_remote_event_transport"] is True
     assert manifest.control_plane is not None
     assert manifest.control_plane["backend_family"] == "sqlite"
+    assert manifest.control_plane["supports_compaction"] is True
+    assert manifest.control_plane["supports_snapshot_delta"] is True
     assert reopened_loaded.session_id == "session-1"
     assert reopened_loaded.job_id == "job-1"
+
+
+def test_sqlite_backend_supports_trace_compaction_snapshot_delta(tmp_path: Path) -> None:
+    """SQLite-backed trace artifacts should support compaction and snapshot-delta recovery."""
+
+    data_dir = tmp_path / "runtime-data"
+    backend = SQLiteRuntimeStorageBackend(
+        db_path=data_dir / "runtime_checkpoint_store.sqlite3",
+        storage_root=data_dir,
+    )
+    checkpointer = FilesystemRuntimeCheckpointer(
+        data_dir=data_dir,
+        trace_output_path=data_dir / "TRACE_METADATA.json",
+        storage_backend=backend,
+        control_plane_descriptor=CONTROL_PLANE_DESCRIPTOR,
+    )
+    recorder = checkpointer.build_trace_recorder()
+
+    recorder.record(
+        session_id="session-compact",
+        job_id="job-compact",
+        kind="job.started",
+        stage="background",
+        payload={"step": 1},
+    )
+    recorder.record(
+        session_id="session-compact",
+        job_id="job-compact",
+        kind="job.progress",
+        stage="background",
+        payload={"step": 2},
+    )
+
+    compaction = recorder.compact(
+        session_id="session-compact",
+        job_id="job-compact",
+        artifact_paths=[str(checkpointer.describe_paths().background_state_path)],
+    )
+    assert compaction.applied is True
+    assert compaction.status == "compacted"
+    assert compaction.backend_family == "sqlite"
+
+    manifest = recorder.load_compaction_manifest(session_id="session-compact", job_id="job-compact")
+    assert manifest is not None
+    assert manifest.compaction_supported is True
+    assert manifest.snapshot_delta_supported is True
+
+    next_event = recorder.record(
+        session_id="session-compact",
+        job_id="job-compact",
+        kind="job.completed",
+        stage="background",
+        payload={"step": 3},
+    )
+    assert next_event.generation == 1
+    assert next_event.seq == 1
+
+    recovery = recorder.recover_compacted_state(session_id="session-compact", job_id="job-compact")
+    assert recovery is not None
+    assert recovery.snapshot.generation == 0
+    assert recovery.latest_recoverable_generation == 1
+    assert recovery.latest_cursor is not None
+    assert recovery.latest_cursor.generation == 1
+    assert recovery.latest_cursor.seq == 1
+    assert [delta.kind for delta in recovery.deltas] == ["job.completed"]
 
 
 def test_sqlite_backend_reads_legacy_absolute_path_keys(tmp_path: Path) -> None:
