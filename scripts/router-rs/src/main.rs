@@ -1,7 +1,7 @@
 use clap::Parser;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -37,6 +37,12 @@ const TRANSPORT_BINDING_WRITE_SCHEMA_VERSION: &str = "router-rs-transport-bindin
 const TRANSPORT_BINDING_WRITE_AUTHORITY: &str = "rust-runtime-transport-binding-writer";
 const CHECKPOINT_MANIFEST_WRITE_SCHEMA_VERSION: &str = "router-rs-checkpoint-manifest-write-v1";
 const CHECKPOINT_MANIFEST_WRITE_AUTHORITY: &str = "rust-runtime-checkpoint-manifest-writer";
+const RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION: &str = "runtime-observability-exporter-v1";
+const RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION: &str =
+    "runtime-observability-metric-record-v1";
+const RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION: &str = "runtime-observability-metrics-v1";
+const RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION: &str = "runtime-observability-dashboard-v1";
+const RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY: &str = "shared-runtime-v1";
 const OVERLAY_ONLY_SKILLS: [&str; 4] = [
     "execution-audit-codex",
     "humanizer",
@@ -97,6 +103,12 @@ struct Cli {
     #[arg(long)]
     write_checkpoint_resume_manifest_json: bool,
     #[arg(long)]
+    runtime_observability_exporter_json: bool,
+    #[arg(long)]
+    runtime_observability_dashboard_json: bool,
+    #[arg(long)]
+    runtime_metric_record_json: bool,
+    #[arg(long)]
     profile_json: bool,
     #[arg(long)]
     profile_artifacts_json: bool,
@@ -128,6 +140,8 @@ struct Cli {
     write_transport_binding_input_json: Option<String>,
     #[arg(long)]
     write_checkpoint_resume_manifest_input_json: Option<String>,
+    #[arg(long)]
+    runtime_metric_record_input_json: Option<String>,
     #[arg(long, default_value = "route-cli")]
     session_id: String,
     #[arg(long, default_value_t = true)]
@@ -263,7 +277,8 @@ struct ExecuteRequestPayload {
     overlay_skill: Option<String>,
     layer: String,
     route_engine: Option<String>,
-    rollback_to_python: Option<bool>,
+    #[serde(alias = "rollback_to_python")]
+    diagnostic_python_lane_active: Option<bool>,
     reasons: Vec<String>,
     prompt_preview: Option<String>,
     dry_run: bool,
@@ -450,6 +465,9 @@ fn main() -> Result<(), String> {
         args.checkpoint_resume_manifest_json,
         args.write_transport_binding_json,
         args.write_checkpoint_resume_manifest_json,
+        args.runtime_observability_exporter_json,
+        args.runtime_observability_dashboard_json,
+        args.runtime_metric_record_json,
         args.profile_json,
         args.profile_artifacts_json,
         args.route_report_json,
@@ -460,7 +478,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --background-control-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --route-report-json, --profile-json, and --profile-artifacts-json"
+            "choose only one output mode among --json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --background-control-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --runtime-observability-exporter-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --route-report-json, --profile-json, and --profile-artifacts-json"
                 .to_string(),
         );
     }
@@ -577,6 +595,42 @@ fn main() -> Result<(), String> {
         println!(
             "{}",
             serde_json::to_string(&build_runtime_control_plane_payload())
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.runtime_observability_exporter_json {
+        println!(
+            "{}",
+            serde_json::to_string(&build_runtime_observability_exporter_descriptor())
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.runtime_observability_dashboard_json {
+        println!(
+            "{}",
+            serde_json::to_string(&runtime_observability_dashboard_schema())
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.runtime_metric_record_json {
+        let payload = serde_json::from_str::<Value>(
+            args.runtime_metric_record_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--runtime-metric-record-input-json is required with --runtime-metric-record-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse runtime metric record input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_runtime_metric_record(payload)?)
                 .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());
@@ -1916,8 +1970,10 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     {
         lines.push(format!("Route engine: {route_engine}"));
     }
-    if let Some(rollback_to_python) = payload.rollback_to_python {
-        lines.push(format!("Rollback to python: {rollback_to_python}"));
+    if let Some(diagnostic_python_lane_active) = payload.diagnostic_python_lane_active {
+        lines.push(format!(
+            "Diagnostic python lane active: {diagnostic_python_lane_active}"
+        ));
     }
     if !payload.reasons.is_empty() {
         lines.push("Routing reasons:".to_string());
@@ -1975,7 +2031,7 @@ fn build_dry_run_execute_response(
             "execution_kernel_authority": EXECUTION_AUTHORITY,
             "execution_mode": "dry_run",
             "route_engine": payload.route_engine,
-            "rollback_to_python": payload.rollback_to_python,
+            "diagnostic_python_lane_active": payload.diagnostic_python_lane_active,
         }),
     }
 }
@@ -2111,7 +2167,7 @@ fn build_live_execute_response(
             "execution_kernel_live_fallback_mode": "disabled",
             "execution_mode": "live",
             "route_engine": payload.route_engine,
-            "rollback_to_python": payload.rollback_to_python,
+            "diagnostic_python_lane_active": payload.diagnostic_python_lane_active,
         }),
     }
 }
@@ -2538,6 +2594,228 @@ fn build_runtime_control_plane_payload() -> Value {
             },
         },
     })
+}
+
+fn runtime_observability_resource_dimensions() -> Vec<&'static str> {
+    vec![
+        "service.name",
+        "service.version",
+        "runtime.instance.id",
+        "route_engine_mode",
+    ]
+}
+
+fn runtime_observability_base_dimensions() -> Vec<&'static str> {
+    vec![
+        "runtime.job_id",
+        "runtime.session_id",
+        "runtime.attempt",
+        "runtime.worker_id",
+        "runtime.generation",
+    ]
+}
+
+fn runtime_observability_dashboard_dimensions() -> Vec<String> {
+    runtime_observability_resource_dimensions()
+        .into_iter()
+        .chain(runtime_observability_base_dimensions())
+        .map(|value| value.to_string())
+        .collect()
+}
+
+fn runtime_observability_metric_catalog() -> Vec<Value> {
+    let base_dimensions = runtime_observability_dashboard_dimensions();
+    vec![
+        json!({
+            "intent": "route mismatch rate",
+            "metric_name": "runtime.route_mismatch_total",
+            "metric_type": "counter",
+            "unit": "1",
+            "base_dimensions": base_dimensions.clone(),
+            "dashboard_derivation": "rate(route_mismatch_total) / rate(route_evaluation_total)",
+        }),
+        json!({
+            "intent": "replay resume success rate",
+            "metric_name": "runtime.replay_resume_success_total",
+            "metric_type": "counter",
+            "unit": "1",
+            "base_dimensions": base_dimensions.clone(),
+            "dashboard_derivation": "rate(replay_resume_success_total) / rate(replay_resume_attempt_total)",
+        }),
+        json!({
+            "intent": "lease takeover latency",
+            "metric_name": "runtime.lease_takeover_latency_ms",
+            "metric_type": "histogram",
+            "unit": "ms",
+            "base_dimensions": base_dimensions.clone(),
+            "dashboard_derivation": "p50 / p95 / p99",
+        }),
+        json!({
+            "intent": "interrupt completion latency",
+            "metric_name": "runtime.interrupt_completion_latency_ms",
+            "metric_type": "histogram",
+            "unit": "ms",
+            "base_dimensions": base_dimensions.clone(),
+            "dashboard_derivation": "p50 / p95 / p99",
+        }),
+        json!({
+            "intent": "compression offload rate",
+            "metric_name": "runtime.compression_offload_total",
+            "metric_type": "counter",
+            "unit": "1",
+            "base_dimensions": base_dimensions.clone(),
+            "dashboard_derivation": "rate(compression_offload_total) / rate(compression_candidate_total)",
+        }),
+        json!({
+            "intent": "sandbox timeout rate",
+            "metric_name": "runtime.sandbox_timeout_total",
+            "metric_type": "counter",
+            "unit": "1",
+            "base_dimensions": base_dimensions,
+            "dashboard_derivation": "rate(sandbox_timeout_total) / rate(sandbox_execution_total)",
+        }),
+    ]
+}
+
+fn build_runtime_observability_exporter_descriptor() -> Value {
+    json!({
+        "schema_version": RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION,
+        "metric_catalog_version": RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION,
+        "dashboard_schema_version": RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION,
+        "signal_vocabulary": RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY,
+        "export_path": "jsonl-plus-otel",
+        "jsonl_sink_schema_version": "runtime-event-sink-v1",
+        "trace_bridge_schema_version": "runtime-event-bridge-v1",
+        "trace_handoff_schema_version": "runtime-event-handoff-v1",
+        "ownership_lane": "rust-contract-lane",
+        "producer_owner": "rust-control-plane",
+        "producer_authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+        "exporter_owner": "rust-control-plane",
+        "exporter_authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+    })
+}
+
+fn runtime_observability_dashboard_schema() -> Value {
+    json!({
+        "schema_version": RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION,
+        "title": "Runtime Observability",
+        "resource_dimensions": runtime_observability_dashboard_dimensions(),
+        "panels": [
+            {
+                "name": "Route mismatch rate",
+                "metric": "runtime.route_mismatch_total",
+                "visualization": "timeseries",
+                "group_by": ["service.name", "service.version", "route_engine_mode"],
+            },
+            {
+                "name": "Replay resume success rate",
+                "metric": "runtime.replay_resume_success_total",
+                "visualization": "timeseries",
+                "group_by": ["service.name", "service.version", "runtime.session_id"],
+            },
+            {
+                "name": "Lease takeover latency",
+                "metric": "runtime.lease_takeover_latency_ms",
+                "visualization": "histogram",
+                "group_by": ["service.name", "service.version", "runtime.worker_id"],
+            },
+            {
+                "name": "Interrupt completion latency",
+                "metric": "runtime.interrupt_completion_latency_ms",
+                "visualization": "histogram",
+                "group_by": ["service.name", "service.version", "runtime.session_id"],
+            },
+            {
+                "name": "Compression offload rate",
+                "metric": "runtime.compression_offload_total",
+                "visualization": "timeseries",
+                "group_by": ["service.name", "service.version", "runtime.generation"],
+            },
+            {
+                "name": "Sandbox timeout rate",
+                "metric": "runtime.sandbox_timeout_total",
+                "visualization": "timeseries",
+                "group_by": ["service.name", "service.version", "runtime.worker_id"],
+            }
+        ],
+        "alerts": [
+            {
+                "name": "route-mismatch-burst",
+                "metric": "runtime.route_mismatch_total",
+                "severity": "warning",
+            },
+            {
+                "name": "lease-takeover-latency-regression",
+                "metric": "runtime.lease_takeover_latency_ms",
+                "severity": "critical",
+            },
+            {
+                "name": "sandbox-timeout-spike",
+                "metric": "runtime.sandbox_timeout_total",
+                "severity": "warning",
+            }
+        ],
+    })
+}
+
+fn build_runtime_metric_record(payload: Value) -> Result<Value, String> {
+    let metric_name = required_non_empty_string(&payload, "metric_name", "runtime metric record")?;
+    let spec = runtime_observability_metric_catalog()
+        .into_iter()
+        .find(|entry| entry.get("metric_name").and_then(Value::as_str) == Some(metric_name.as_str()))
+        .ok_or_else(|| format!("unsupported runtime metric: {metric_name}"))?;
+
+    let value = payload
+        .get("value")
+        .cloned()
+        .ok_or_else(|| "runtime metric record requires a numeric value".to_string())?;
+    let numeric_value = value
+        .as_f64()
+        .ok_or_else(|| "runtime metric record requires a numeric value".to_string())?;
+    if !numeric_value.is_finite() {
+        return Err("metric value must be finite".to_string());
+    }
+
+    let service_name = required_non_empty_string(&payload, "service_name", "runtime metric record")?;
+    let service_version = required_non_empty_string(&payload, "service_version", "runtime metric record")?;
+    let runtime_instance_id =
+        required_non_empty_string(&payload, "runtime_instance_id", "runtime metric record")?;
+    let route_engine_mode = required_non_empty_string(&payload, "route_engine_mode", "runtime metric record")?;
+    let job_id = required_non_empty_string(&payload, "job_id", "runtime metric record")?;
+    let session_id = required_non_empty_string(&payload, "session_id", "runtime metric record")?;
+    let worker_id = required_non_empty_string(&payload, "worker_id", "runtime metric record")?;
+    let generation = required_non_empty_string(&payload, "generation", "runtime metric record")?;
+    let attempt = payload
+        .get("attempt")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| "runtime metric record requires integer field attempt".to_string())?;
+    if attempt < 0 {
+        return Err("runtime metric record requires non-negative integer field attempt".to_string());
+    }
+
+    Ok(json!({
+        "schema_version": RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION,
+        "metric_name": metric_name,
+        "metric_type": spec.get("metric_type").cloned().unwrap_or(Value::Null),
+        "unit": spec.get("unit").cloned().unwrap_or(Value::Null),
+        "value": value,
+        "resource_attributes": {
+            "service.name": service_name,
+            "service.version": service_version,
+            "runtime.instance.id": runtime_instance_id,
+            "route_engine_mode": route_engine_mode,
+        },
+        "dimensions": {
+            "runtime.job_id": job_id,
+            "runtime.session_id": session_id,
+            "runtime.attempt": attempt,
+            "runtime.worker_id": worker_id,
+            "runtime.generation": generation,
+            "runtime.stage": "runtime.metric",
+            "runtime.status": "ok",
+        },
+        "ownership": build_runtime_observability_exporter_descriptor(),
+    }))
 }
 
 fn normalize_chat_completions_endpoint(base_url: &str) -> String {
@@ -3121,7 +3399,7 @@ mod tests {
             overlay_skill: Some("rust-pro".to_string()),
             layer: "L2".to_string(),
             route_engine: Some("rust".to_string()),
-            rollback_to_python: Some(false),
+            diagnostic_python_lane_active: Some(false),
             reasons: vec!["Trigger phrase matched: 直接做代码.".to_string()],
             prompt_preview: Some("Keep the kernel Rust-first.".to_string()),
             dry_run: true,
@@ -3329,6 +3607,118 @@ mod tests {
         assert_eq!(
             payload["services"]["background"]["delegate_kind"],
             Value::String("rust-background-control-policy".to_string())
+        );
+    }
+
+    #[test]
+    fn runtime_observability_exporter_descriptor_is_rust_owned() {
+        let payload = build_runtime_observability_exporter_descriptor();
+
+        assert_eq!(
+            payload["schema_version"],
+            Value::String(RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            payload["metric_catalog_version"],
+            Value::String(RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION.to_string())
+        );
+        assert_eq!(
+            payload["dashboard_schema_version"],
+            Value::String(RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            payload["producer_authority"],
+            Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
+        );
+        assert_eq!(
+            payload["exporter_authority"],
+            Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
+        );
+        assert_eq!(payload["export_path"], Value::String("jsonl-plus-otel".to_string()));
+    }
+
+    #[test]
+    fn runtime_observability_dashboard_and_metric_record_follow_contract() {
+        let dashboard = runtime_observability_dashboard_schema();
+        let resource_dimensions = dashboard["resource_dimensions"]
+            .as_array()
+            .expect("resource dimensions array");
+        assert_eq!(
+            dashboard["schema_version"],
+            Value::String(RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION.to_string())
+        );
+        assert!(resource_dimensions.iter().any(|value| value == "service.name"));
+        assert!(resource_dimensions.iter().any(|value| value == "runtime.generation"));
+
+        let record = build_runtime_metric_record(json!({
+            "metric_name": "runtime.route_mismatch_total",
+            "value": 3,
+            "service_name": "codex-runtime",
+            "service_version": "v1",
+            "runtime_instance_id": "runtime-123",
+            "route_engine_mode": "rust",
+            "job_id": "job-1",
+            "session_id": "session-1",
+            "attempt": 2,
+            "worker_id": "worker-7",
+            "generation": "gen-a",
+        }))
+        .expect("metric record");
+        assert_eq!(
+            record["schema_version"],
+            Value::String(RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            record["metric_type"],
+            Value::String("counter".to_string())
+        );
+        assert_eq!(record["unit"], Value::String("1".to_string()));
+        assert_eq!(
+            record["dimensions"]["runtime.stage"],
+            Value::String("runtime.metric".to_string())
+        );
+        assert_eq!(
+            record["dimensions"]["runtime.status"],
+            Value::String("ok".to_string())
+        );
+        assert_eq!(
+            record["ownership"]["exporter_authority"],
+            Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
+        );
+
+        let err = build_runtime_metric_record(json!({
+            "metric_name": "runtime.unknown_total",
+            "value": 1,
+            "service_name": "codex-runtime",
+            "service_version": "v1",
+            "runtime_instance_id": "runtime-123",
+            "route_engine_mode": "rust",
+            "job_id": "job-1",
+            "session_id": "session-1",
+            "attempt": 1,
+            "worker_id": "worker-7",
+            "generation": "gen-a",
+        }))
+        .expect_err("unknown metric should fail closed");
+        assert_eq!(err, "unsupported runtime metric: runtime.unknown_total");
+
+        let err = build_runtime_metric_record(json!({
+            "metric_name": "runtime.route_mismatch_total",
+            "value": 1,
+            "service_name": "codex-runtime",
+            "service_version": "v1",
+            "runtime_instance_id": "runtime-123",
+            "route_engine_mode": "rust",
+            "job_id": "job-1",
+            "session_id": "session-1",
+            "attempt": -1,
+            "worker_id": "worker-7",
+            "generation": "gen-a",
+        }))
+        .expect_err("negative attempts should fail closed");
+        assert_eq!(
+            err,
+            "runtime metric record requires non-negative integer field attempt"
         );
     }
 
