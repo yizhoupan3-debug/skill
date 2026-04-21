@@ -73,7 +73,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "rust_cli_family_capability_discovery",
         "rust_cli_family_parity_snapshot",
         "rust_codex_dual_entry_parity_snapshot",
-        "rust_codex_desktop_alias_retirement_status",
         "rust_execution_controller_contract",
         "rust_delegation_contract",
         "rust_supervisor_state_contract",
@@ -509,15 +508,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert rust_parity["desktop"]["legacy_aliases"] == ["codex_desktop_host_adapter"]
     assert rust_parity["all_shared_contract_checks_pass"] is True
 
-    rust_alias_retirement = json.loads(
-        Path(paths["rust_codex_desktop_alias_retirement_status"]).read_text(encoding="utf-8")
-    )
-    assert rust_alias_retirement["canonical_adapter_id"] == "codex_desktop_adapter"
-    assert rust_alias_retirement["retirement_gates"]["runtime_primary_identity_consumers_cleared"] is True
-    assert rust_alias_retirement["inventory_summary"]["inventory_complete"] is True
-    assert rust_alias_retirement["inventory_summary"]["primary_identity_risk_occurrences"] == 0
-    assert rust_alias_retirement["inventory_summary"]["translation_shim_required"] is False
-
     rust_execution_controller = json.loads(
         Path(paths["rust_execution_controller_contract"]).read_text(encoding="utf-8")
     )
@@ -616,13 +606,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert rust_parity_report["artifacts"]["execution_kernel_live_response_serialization_contract"][
         "raw_match"
     ] is True
-    assert (
-        rust_parity_report["artifacts"]["codex_desktop_alias_retirement_status"][
-            "ignored_python_owned_paths"
-        ]
-        == []
-    )
-    assert rust_parity_report["artifacts"]["codex_desktop_alias_retirement_status"]["raw_match"] is True
+    assert "codex_desktop_alias_retirement_status" not in rust_parity_report["artifacts"]
 
 
 def test_emit_framework_contract_artifacts_requires_explicit_opt_in_for_continuity_outputs(
@@ -763,6 +747,12 @@ def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
         Path(paths["rust_codex_desktop_host_adapter"]).read_text(encoding="utf-8")
     )
     assert rust_alias_payload["metadata"]["adapter_alias_of"] == "codex_desktop_adapter"
+    rust_alias_retirement = json.loads(
+        Path(paths["rust_codex_desktop_alias_retirement_status"]).read_text(encoding="utf-8")
+    )
+    assert rust_alias_retirement["canonical_adapter_id"] == "codex_desktop_adapter"
+    assert rust_alias_retirement["retirement_gates"]["runtime_primary_identity_consumers_cleared"] is True
+    assert rust_alias_retirement["emitter_contract"]["legacy_alias_artifact_opt_in"] is True
 
 
 def test_rust_route_adapter_can_compile_profile_bundle(tmp_path: Path) -> None:
@@ -815,7 +805,6 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
         "cli_family_capability_discovery",
         "cli_family_parity_snapshot",
         "codex_dual_entry_parity_snapshot",
-        "codex_desktop_alias_retirement_status",
         "execution_controller_contract",
         "delegation_contract",
         "supervisor_state_contract",
@@ -883,10 +872,6 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
     ] == "headless-exec"
     assert payload["cli_family_parity_snapshot"]["all_shared_contract_checks_pass"] is True
     assert payload["codex_dual_entry_parity_snapshot"]["all_shared_contract_checks_pass"] is True
-    assert payload["codex_desktop_alias_retirement_status"]["alias_mode"] == "mirror-only"
-    assert payload["codex_desktop_alias_retirement_status"]["emitter_contract"]["rust_emits_alias_artifact"] is False
-
-
 def test_rust_route_adapter_can_opt_in_continuity_alias_artifact(tmp_path: Path) -> None:
     profile = build_framework_profile(
         profile_id="rust-artifacts-profile-legacy",

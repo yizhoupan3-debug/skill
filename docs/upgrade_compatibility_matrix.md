@@ -61,7 +61,8 @@ following are true:
 - `emit_framework_contract_artifacts(...)`: Python can now emit concrete bridge/contract artifacts for profile + adapters + matrix + dual-entry parity snapshot + the first-class control-plane contract artifacts `execution_controller_contract`, `delegation_contract`, and `supervisor_state_contract`; legacy alias inventory/status are opt-in only.
 - default Python artifact emission is parity-first: `codex_desktop_host_adapter` is now
   legacy opt-in output and its inventory/status artifacts stay behind explicit continuity opt-in.
-- Rust `--profile-artifacts-json` keeps its current continuity evidence surface in this slice; this document only tightens the Python default file-emission surface.
+- default Rust `--profile-artifacts-json` is now parity-first too: `codex_desktop_alias_retirement_status`
+  stays behind explicit continuity opt-in together with the legacy alias artifact.
 - default regression authority is parity-first: this matrix stays secondary
   inventory / smoke evidence and does not replace parity snapshots.
 - default package export is parity-first: `compile_codex_desktop_host_adapter(...)`

@@ -513,10 +513,12 @@ pub fn build_codex_artifact_bundle(
         "codex_dual_entry_parity_snapshot".to_string(),
         bundle.codex_dual_entry_parity_snapshot,
     );
-    artifacts.insert(
-        "codex_desktop_alias_retirement_status".to_string(),
-        bundle.codex_desktop_alias_retirement_status,
-    );
+    if include_legacy_alias_artifact {
+        artifacts.insert(
+            "codex_desktop_alias_retirement_status".to_string(),
+            bundle.codex_desktop_alias_retirement_status,
+        );
+    }
     artifacts.insert(
         EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID.to_string(),
         bundle.execution_controller_contract,
@@ -4005,7 +4007,7 @@ mod tests {
     fn codex_artifact_bundle_exposes_first_class_outputs() {
         let artifacts =
             build_codex_artifact_bundle(&sample_profile(), false).expect("artifacts should build");
-        assert_eq!(artifacts.len(), 15);
+        assert_eq!(artifacts.len(), 14);
         assert_eq!(
             artifacts["cli_common_adapter"]["controller_boundary"]["shared_adapter"],
             Value::String("cli_common_adapter".to_string())
@@ -4067,10 +4069,6 @@ mod tests {
             Value::Bool(true)
         );
         assert_eq!(
-            artifacts["codex_desktop_alias_retirement_status"]["secondary_inventory_artifact"],
-            Value::String("upgrade_compatibility_matrix".to_string())
-        );
-        assert_eq!(
             artifacts["execution_controller_contract"]["controller"]["primary_owner"],
             Value::String("execution-controller-coding".to_string())
         );
@@ -4085,11 +4083,6 @@ mod tests {
         assert_eq!(
             artifacts["supervisor_state_contract"]["schema_expectations"]["verification_fields"],
             json!(["verification_status", "last_verification_summary"])
-        );
-        assert_eq!(
-            artifacts["codex_desktop_alias_retirement_status"]["emitter_contract"]
-                ["rust_emits_alias_artifact"],
-            Value::Bool(false)
         );
         assert_eq!(
             artifacts["execution_kernel_live_fallback_retirement_status"]["live_primary"]
@@ -4148,6 +4141,7 @@ mod tests {
     fn codex_artifact_bundle_can_opt_in_continuity_alias_artifact() {
         let artifacts =
             build_codex_artifact_bundle(&sample_profile(), true).expect("artifacts should build");
+        assert!(artifacts.contains_key("codex_desktop_alias_retirement_status"));
         assert_eq!(
             artifacts["cli_common_adapter"]["controller_boundary"]["cli_family_entrypoints"],
             json!([
