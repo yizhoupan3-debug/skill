@@ -249,6 +249,18 @@ def test_classify_runtime_continuity_detects_inconsistent_task_identity(tmp_path
     assert any("disagrees with trace task" in reason for reason in continuity["inconsistency_reasons"])
 
 
+def test_load_runtime_snapshot_can_skip_contract_snapshot_scan(tmp_path: Path) -> None:
+    contracts_root = tmp_path / "artifacts" / "contracts"
+    contracts_root.mkdir(parents=True, exist_ok=True)
+    (contracts_root / "one.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / ".supervisor_state.json").write_text("{}\n", encoding="utf-8")
+
+    snapshot = load_runtime_snapshot(tmp_path, include_contract_snapshots=False)
+
+    assert snapshot.snapshots == []
+
+
+
 def test_load_runtime_snapshot_prefers_task_scoped_current_root(tmp_path: Path) -> None:
     task_id = "codex-first-convergence-20260418210000"
     task_root = tmp_path / "artifacts" / "current" / task_id
@@ -272,6 +284,7 @@ def test_load_runtime_snapshot_prefers_task_scoped_current_root(tmp_path: Path) 
     assert snapshot.session_summary_text == "- task: task scoped\n"
 
 
+
 def test_load_runtime_snapshot_uses_repaired_supervisor_state_after_continuity_fix(
     tmp_path: Path,
 ) -> None:
@@ -290,6 +303,7 @@ def test_load_runtime_snapshot_uses_repaired_supervisor_state_after_continuity_f
     assert snapshot.supervisor_state["continuity"]["resume_allowed"] is False
     assert continuity["state"] == "completed"
     assert continuity["inconsistency_reasons"] == []
+
 
 
 def test_load_runtime_snapshot_repairs_mixed_supervisor_and_mirror_truth(tmp_path: Path) -> None:
@@ -330,6 +344,7 @@ def test_load_runtime_snapshot_repairs_mixed_supervisor_and_mirror_truth(tmp_pat
     ).read_text(encoding="utf-8").find("new-task-20260418220000") != -1
     assert "new task" in (tmp_path / "SESSION_SUMMARY.md").read_text(encoding="utf-8")
     assert "new task" in (tmp_path / "TRACE_METADATA.json").read_text(encoding="utf-8")
+
 
 
 def test_repair_runtime_continuity_artifacts_uses_current_routing_runtime_version(

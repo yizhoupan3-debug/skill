@@ -480,6 +480,21 @@
         "source_position": 3
       }
     },
+    "design-agent": {
+      "has_shadow": false,
+      "shadowed": [],
+      "shadowed_by": [],
+      "winner": {
+        "path": "skills/design-agent",
+        "routing_gate": "none",
+        "routing_layer": "L3",
+        "routing_owner": "gate",
+        "session_start": "n/a",
+        "slug": "design-agent",
+        "source": "project",
+        "source_position": 3
+      }
+    },
     "doc": {
       "has_shadow": false,
       "shadowed": [],
@@ -1914,21 +1929,6 @@
         "routing_owner": "owner",
         "session_start": "n/a",
         "slug": "tailwind-pro",
-        "source": "project",
-        "source_position": 3
-      }
-    },
-    "tao-ci": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
-      "winner": {
-        "path": "skills/tao-ci",
-        "routing_gate": "none",
-        "routing_layer": "L3",
-        "routing_owner": "owner",
-        "session_start": "n/a",
-        "slug": "tao-ci",
         "source": "project",
         "source_position": 3
       }

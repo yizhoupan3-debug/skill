@@ -22,6 +22,7 @@ ROUTE_FIXTURE_PATH = PROJECT_ROOT / "tests" / "routing_route_fixtures.json"
 MISSING_RUNTIME_PATH = PROJECT_ROOT / "tests" / "_routing_missing_runtime.json"
 ROUTE_FIXTURES = json.loads(ROUTE_FIXTURE_PATH.read_text(encoding="utf-8"))
 REGRESSION_CASE_NAMES = {
+    "design-agent-brand-reference-routing",
     "overlay-code-review-does-not-own",
     "overlay-tdd-does-not-own",
     "wording-cleanup-does-not-hit-doc-gate",

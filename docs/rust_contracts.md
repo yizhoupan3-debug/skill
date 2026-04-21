@@ -161,6 +161,14 @@ The implemented runtime control-plane surface in this wave is:
 - runtime now also exposes `describe_runtime_event_handoff(...)`, which joins
   that transport descriptor with replay/checkpoint anchors for cross-process
   or remote attach without pretending SSE/network delivery already exists
+- `trace_resume_manifest_path` now remains only as checkpoint/recovery metadata;
+  attach consumers should treat the binding artifact as the primary attach
+  descriptor and `describe_runtime_event_handoff(...)` as the recommended
+  remote attach seam
+- process-external attach now also works when the active checkpoint backend is
+  SQLite: if the binding/resume/trace paths are logical storage paths instead
+  of materialized JSON files, the attach bridge resolves them through the
+  runtime SQLite backing store instead of silently degrading to filesystem-only
 - that transport seam is now explicitly host-facing and remote-capable in
   contract shape, while still honestly implemented as a local poll bridge:
   `transport_family=host-facing-bridge`, `endpoint_kind=runtime_method`, and

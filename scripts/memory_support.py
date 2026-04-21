@@ -869,6 +869,7 @@ def load_runtime_snapshot(
     artifact_root: Path | None = None,
     *,
     repair: bool = True,
+    include_contract_snapshots: bool = True,
 ) -> RuntimeSnapshot:
     """Load the standard runtime artifacts used for consolidation.
 
@@ -879,7 +880,11 @@ def load_runtime_snapshot(
 
     artifact_base = (artifact_root or source_root / "artifacts").resolve()
     mirror_root = artifact_base / CURRENT_ARTIFACT_DIR
-    snapshots = sorted((artifact_base / "contracts").glob("*")) if (artifact_base / "contracts").exists() else []
+    snapshots = (
+        sorted((artifact_base / "contracts").glob("*"))
+        if include_contract_snapshots and (artifact_base / "contracts").exists()
+        else []
+    )
     supervisor_state = normalize_supervisor_state(
         read_json_if_exists(source_root / ARTIFACT_NAMES["supervisor_state"])
     )

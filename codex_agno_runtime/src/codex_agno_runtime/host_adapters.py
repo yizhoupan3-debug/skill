@@ -1460,10 +1460,6 @@ def build_codex_desktop_alias_retirement_status(
         primary_identity_risk_occurrences == 0 if inventory_complete else None
     )
 
-    default_emits_alias_artifact = should_emit_codex_desktop_alias_artifact(
-        inventory_summary if inventory_complete else None
-    )
-
     return {
         "canonical_adapter_id": CODEX_DESKTOP_ADAPTER_ID,
         "legacy_alias_id": LEGACY_CODEX_DESKTOP_ADAPTER_ID,
@@ -1474,8 +1470,8 @@ def build_codex_desktop_alias_retirement_status(
         "codex_dual_entry_compatibility_artifact": "codex_dual_entry_parity_snapshot",
         "secondary_inventory_artifact": COMPATIBILITY_INVENTORY_ARTIFACT_ID,
         "emitter_contract": {
-            "python_emits_alias_artifact": default_emits_alias_artifact,
-            "rust_emits_alias_artifact": default_emits_alias_artifact,
+            "python_emits_alias_artifact": False,
+            "rust_emits_alias_artifact": False,
             "drop_requires_joint_emitter_flip": True,
             "legacy_alias_artifact_opt_in": True,
             "alias_may_not_gain_new_host_semantics": True,
@@ -1503,6 +1499,14 @@ def build_execution_controller_contract() -> Dict[str, Any]:
             "role": "kernel-level-execution-controller",
             "framework_phase": "runtime-orchestration",
             "state_artifact": ".supervisor_state.json",
+            "user_facing_aliases": ["gsd", "get shit done"],
+        },
+        "gsd_execution_posture": {
+            "label": "get-shit-done",
+            "auto_continue_safe_local_work": True,
+            "main_thread_stays_decision_heavy": True,
+            "verify_before_done": True,
+            "runtime_dependency": "none",
         },
         "boundaries": {
             "host_adapters_remain_thin_projections": True,

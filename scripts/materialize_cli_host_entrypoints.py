@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,8 @@ framework policy instead of forking per-host routing or memory rules.
 - Reply in Chinese unless the user asks for another language.
 - Keep answers direct and concise.
 - Execute safe read/search/test/build commands directly when the runtime allows.
+- Default to a get-shit-done posture for clear local tasks: auto-continue safe,
+  reversible work, keep ownership local, and verify before handoff.
 - Ask before destructive actions, external publishing, or account-impacting work.
 
 ## Output Compaction
@@ -27,6 +30,20 @@ framework policy instead of forking per-host routing or memory rules.
   `RTK.md` and prefer the corresponding `rtk ...` wrapper.
 - Treat `RTK.md` as repo-local operator guidance only; shared routing and
   policy truth still lives in this file plus the generated routing artifacts.
+
+## Task Closeout
+
+- Keep end-of-task user-facing closeouts in plain Chinese by default.
+- Default the closeout to one short paragraph that says what now works or what
+  effect was achieved, and what still needs to happen next.
+- If no further work is needed, say that directly instead of inventing follow-up
+  tasks.
+- Do not default to changed-file inventories, changelog-style recaps, or
+  step-by-step implementation retellings in the final user-facing closeout.
+- Machine continuity artifacts such as `NEXT_ACTIONS.json`,
+  `.supervisor_state.json`, and verification or blocker fields remain the
+  recovery truth; do not mirror them verbatim into the user-facing closeout
+  unless they materially affect the user's next decision.
 
 ## Turn-Start Routing
 
@@ -41,6 +58,9 @@ framework policy instead of forking per-host routing or memory rules.
    `execution-controller-coding` and maintain `.supervisor_state.json`.
 8. For complex tasks, check `subagent-delegation` before deciding whether to
    split bounded sidecars.
+9. Treat explicit `gsd` / `get shit done` / “推进到底” requests as a posture
+   boost for `execution-controller-coding` plus `anti-laziness`, not as an
+   external runtime workflow.
 
 ## Shared Runtime Contract
 
@@ -140,6 +160,7 @@ Use this directory only for Claude host-private files such as:
 
 - `.claude/settings.json`
 - `.claude/agents/`
+- `.claude/commands/`
 - `.claude/hooks/`
 - `../.codex/memory/CLAUDE_MEMORY.md`
 
@@ -149,7 +170,8 @@ fork the shared framework policy or memory ownership.
 Generated-first maintenance rule:
 
 - Edit `scripts/materialize_cli_host_entrypoints.py` first for
-  `.claude/settings.json`, `.claude/hooks/README.md`, and `.claude/hooks/*.sh`.
+  `.claude/settings.json`, `.claude/commands/*.md`, `.claude/hooks/README.md`,
+  and `.claude/hooks/*.sh`.
 - Treat those files as materialized outputs, not hand-authored truth.
 - `.claude/agents/*.md` stays manually maintained unless a file says otherwise.
 - Event-level lifecycle decisions live in `.claude/hooks/README.md`.
@@ -195,6 +217,23 @@ This file is a thin proxy only.
 
 Do not duplicate or diverge from the shared policy here.
 """
+
+CLAUDE_REFRESH_COMMAND = """---
+description: Build the next-turn execution prompt, copy it to the clipboard, and reply with one fixed sentence.
+allowed-tools: Bash(python3 scripts/claude_memory_bridge.py *)
+---
+
+If `scripts/claude_memory_bridge.py` exists in the current repository, run:
+
+`python3 scripts/claude_memory_bridge.py refresh-workflow --json`
+
+If the bridge copied the prompt successfully, reply with exactly:
+`下一轮执行 prompt 已准备好，并且已经复制到剪贴板。`
+
+If the bridge did not copy it successfully, copy `workflow_prompt` to the macOS clipboard yourself, then reply with exactly:
+`下一轮执行 prompt 已准备好，并且已经复制到剪贴板。`
+"""
+
 
 CLAUDE_AGENTS_README = """# Claude Agents Directory
 
@@ -368,7 +407,7 @@ CLAUDE_PROJECT_SETTINGS = {
     "allowedMcpServers": [{"serverName": "browser-mcp"}],
     "statusLine": {
         "type": "command",
-        "command": "python3 \"$CLAUDE_PROJECT_DIR\"/scripts/claude_statusline.py --repo-root \"$CLAUDE_PROJECT_DIR\"",
+        "command": 'python3 "$CLAUDE_PROJECT_DIR"/scripts/claude_statusline.py --repo-root "$CLAUDE_PROJECT_DIR"',
         "padding": 1,
         "refreshInterval": 30,
     },
@@ -465,6 +504,170 @@ def _write_json(path: Path, payload: dict[str, Any]) -> bool:
     return _write_text(path, content)
 
 
+def _read_git_stdout(root: Path, *args: str) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+    return completed.stdout
+
+
+def _discover_matching_worktrees(root: Path) -> tuple[list[Path], list[str]]:
+    root_head = _read_git_stdout(root, "rev-parse", "HEAD")
+    worktree_listing = _read_git_stdout(root, "worktree", "list", "--porcelain")
+    if root_head is None or worktree_listing is None:
+        return [], []
+
+    current: dict[str, str] = {}
+    worktrees: list[dict[str, str]] = []
+    for raw_line in worktree_listing.splitlines():
+        line = raw_line.strip()
+        if not line:
+            if current:
+                worktrees.append(current)
+                current = {}
+            continue
+        key, _, value = line.partition(" ")
+        current[key] = value
+    if current:
+        worktrees.append(current)
+
+    matches: list[Path] = []
+    skipped: list[str] = []
+    normalized_root_head = root_head.strip()
+    for entry in worktrees:
+        worktree_path = entry.get("worktree")
+        if not worktree_path:
+            continue
+        candidate = Path(worktree_path).resolve()
+        if candidate == root:
+            continue
+        if not candidate.exists():
+            skipped.append(f"{candidate} (missing)")
+            continue
+        if entry.get("HEAD", "").strip() != normalized_root_head:
+            skipped.append(f"{candidate} (head mismatch)")
+            continue
+        matches.append(candidate)
+    return matches, skipped
+
+
+def _describe_path(base_root: Path, target_root: Path, path: Path) -> str:
+    try:
+        return str(path.relative_to(base_root))
+    except ValueError:
+        return f"{target_root}::{path.relative_to(target_root)}"
+
+
+def _sync_single_root(
+    target_root: Path,
+    *,
+    report_root: Path,
+    apply: bool,
+    full_sync: bool,
+) -> dict[str, list[str]]:
+    written: list[str] = []
+    unchanged: list[str] = []
+    created_dirs: list[str] = []
+
+    text_files: dict[Path, str]
+    json_files: dict[Path, dict[str, Any]]
+    retired_paths: list[Path]
+    managed_directories: tuple[Path, ...]
+
+    if full_sync:
+        text_files = {
+            target_root / "AGENT.md": SHARED_AGENT_POLICY,
+            target_root / "AGENTS.md": ROOT_AGENTS_PROXY,
+            target_root / "CLAUDE.md": ROOT_CLAUDE_PROXY,
+            target_root / "GEMINI.md": ROOT_GEMINI_PROXY,
+            target_root / ".claude" / "CLAUDE.md": CLAUDE_LOCAL_PROXY,
+            target_root / ".claude" / "agents" / "README.md": CLAUDE_AGENTS_README,
+            target_root / ".claude" / "commands" / "refresh.md": CLAUDE_REFRESH_COMMAND,
+            target_root / ".claude" / "hooks" / "README.md": CLAUDE_HOOKS_README,
+            target_root / ".claude" / "hooks" / "session_start.sh": CLAUDE_SESSION_START_HOOK,
+            target_root / ".claude" / "hooks" / "stop.sh": CLAUDE_STOP_HOOK,
+            target_root / ".claude" / "hooks" / "pre_compact.sh": CLAUDE_PRE_COMPACT_HOOK,
+            target_root / ".claude" / "hooks" / "subagent_stop.sh": CLAUDE_SUBAGENT_STOP_HOOK,
+            target_root / ".claude" / "hooks" / "session_end.sh": CLAUDE_SESSION_END_HOOK,
+            target_root / ".claude" / "hooks" / "config_change.sh": CLAUDE_CONFIG_CHANGE_HOOK,
+            target_root / ".claude" / "hooks" / "stop_failure.sh": CLAUDE_STOP_FAILURE_HOOK,
+            target_root / "configs" / "codex" / "AGENTS.md": CONFIG_CODEX_PROXY,
+            target_root / "configs" / "claude" / "CLAUDE.md": CONFIG_CLAUDE_PROXY,
+            target_root / "configs" / "gemini" / "GEMINI.md": CONFIG_GEMINI_PROXY,
+        }
+        json_files = {
+            target_root / ".claude" / "settings.json": CLAUDE_PROJECT_SETTINGS,
+            target_root / ".gemini" / "settings.json": {},
+        }
+        retired_paths = [
+            target_root / ".codex" / "model_instructions.md",
+            target_root / ".mcp.json",
+        ]
+        managed_directories = (
+            target_root / ".claude",
+            target_root / ".claude" / "agents",
+            target_root / ".claude" / "commands",
+            target_root / ".claude" / "hooks",
+            target_root / ".gemini",
+            target_root / "configs" / "claude",
+            target_root / "configs" / "gemini",
+            target_root / "configs" / "codex",
+            target_root / ".codex",
+        )
+    else:
+        text_files = {
+            target_root / ".claude" / "commands" / "refresh.md": CLAUDE_REFRESH_COMMAND,
+        }
+        json_files = {}
+        retired_paths = []
+        managed_directories = (
+            target_root / ".claude",
+            target_root / ".claude" / "commands",
+        )
+
+    for directory in managed_directories:
+        if not directory.exists():
+            if apply:
+                directory.mkdir(parents=True, exist_ok=True)
+            created_dirs.append(_describe_path(report_root, target_root, directory))
+
+    for path, content in text_files.items():
+        relative = _describe_path(report_root, target_root, path)
+        existing = path.read_text(encoding="utf-8") if path.is_file() else None
+        is_changed = existing != content
+        if is_changed and apply:
+            _write_text(path, content)
+        (written if is_changed else unchanged).append(relative)
+
+    for path, payload in json_files.items():
+        relative = _describe_path(report_root, target_root, path)
+        content = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        existing = path.read_text(encoding="utf-8") if path.is_file() else None
+        is_changed = existing != content
+        if is_changed and apply:
+            _write_json(path, payload)
+        (written if is_changed else unchanged).append(relative)
+
+    for path in retired_paths:
+        relative = _describe_path(report_root, target_root, path)
+        exists = path.exists()
+        if exists and apply:
+            path.unlink()
+        (written if exists else unchanged).append(relative)
+
+    return {
+        "written": written,
+        "unchanged": unchanged,
+        "created_dirs": created_dirs,
+    }
+
+
 def sync_repo_host_entrypoints(
     repo_root: Path | None = None,
     *,
@@ -476,77 +679,29 @@ def sync_repo_host_entrypoints(
     written: list[str] = []
     unchanged: list[str] = []
     created_dirs: list[str] = []
+    synced_worktrees: list[str] = []
+    skipped_worktrees: list[str] = []
+    matched_worktrees, skipped_worktrees = _discover_matching_worktrees(root)
 
-    text_files: dict[Path, str] = {
-        root / "AGENT.md": SHARED_AGENT_POLICY,
-        root / "AGENTS.md": ROOT_AGENTS_PROXY,
-        root / "CLAUDE.md": ROOT_CLAUDE_PROXY,
-        root / "GEMINI.md": ROOT_GEMINI_PROXY,
-        root / ".claude" / "CLAUDE.md": CLAUDE_LOCAL_PROXY,
-        root / ".claude" / "agents" / "README.md": CLAUDE_AGENTS_README,
-        root / ".claude" / "hooks" / "README.md": CLAUDE_HOOKS_README,
-        root / ".claude" / "hooks" / "session_start.sh": CLAUDE_SESSION_START_HOOK,
-        root / ".claude" / "hooks" / "stop.sh": CLAUDE_STOP_HOOK,
-        root / ".claude" / "hooks" / "pre_compact.sh": CLAUDE_PRE_COMPACT_HOOK,
-        root / ".claude" / "hooks" / "subagent_stop.sh": CLAUDE_SUBAGENT_STOP_HOOK,
-        root / ".claude" / "hooks" / "session_end.sh": CLAUDE_SESSION_END_HOOK,
-        root / ".claude" / "hooks" / "config_change.sh": CLAUDE_CONFIG_CHANGE_HOOK,
-        root / ".claude" / "hooks" / "stop_failure.sh": CLAUDE_STOP_FAILURE_HOOK,
-        root / "configs" / "codex" / "AGENTS.md": CONFIG_CODEX_PROXY,
-        root / "configs" / "claude" / "CLAUDE.md": CONFIG_CLAUDE_PROXY,
-        root / "configs" / "gemini" / "GEMINI.md": CONFIG_GEMINI_PROXY,
-    }
-    json_files: dict[Path, dict[str, Any]] = {
-        root / ".claude" / "settings.json": CLAUDE_PROJECT_SETTINGS,
-        root / ".gemini" / "settings.json": {},
-    }
-    retired_paths = [
-        root / ".codex" / "model_instructions.md",
-        root / ".mcp.json",
-    ]
-
-    for directory in (
-        root / ".claude",
-        root / ".claude" / "agents",
-        root / ".claude" / "hooks",
-        root / ".gemini",
-        root / "configs" / "claude",
-        root / "configs" / "gemini",
-        root / "configs" / "codex",
-        root / ".codex",
-    ):
-        if not directory.exists():
-            directory.mkdir(parents=True, exist_ok=True)
-            created_dirs.append(str(directory.relative_to(root)))
-
-    for path, content in text_files.items():
-        relative = str(path.relative_to(root))
-        existing = path.read_text(encoding="utf-8") if path.is_file() else None
-        is_changed = existing != content
-        if is_changed and apply:
-            _write_text(path, content)
-        (written if is_changed else unchanged).append(relative)
-
-    for path, payload in json_files.items():
-        relative = str(path.relative_to(root))
-        content = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-        existing = path.read_text(encoding="utf-8") if path.is_file() else None
-        is_changed = existing != content
-        if is_changed and apply:
-            _write_json(path, payload)
-        (written if is_changed else unchanged).append(relative)
-
-    for path in retired_paths:
-        relative = str(path.relative_to(root))
-        exists = path.exists()
-        if exists and apply:
-            path.unlink()
-        (written if exists else unchanged).append(relative)
+    for target_root in [root, *matched_worktrees]:
+        single_result = _sync_single_root(
+            target_root,
+            report_root=root,
+            apply=apply,
+            full_sync=target_root == root,
+        )
+        written.extend(single_result["written"])
+        unchanged.extend(single_result["unchanged"])
+        created_dirs.extend(single_result["created_dirs"])
+        if target_root != root:
+            synced_worktrees.append(str(target_root))
 
     return {
         "written": sorted(written),
         "unchanged": sorted(unchanged),
         "created_dirs": sorted(created_dirs),
+        "synced_worktrees": sorted(synced_worktrees),
+        "skipped_worktrees": sorted(skipped_worktrees),
     }
 
 

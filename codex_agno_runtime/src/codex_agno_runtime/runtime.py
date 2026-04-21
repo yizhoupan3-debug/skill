@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from codex_agno_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
+from codex_agno_runtime.event_transport import ExternalRuntimeEventTransportBridge
 from codex_agno_runtime.trace import (
     TRACE_EVENT_HANDOFF_SCHEMA_VERSION,
     TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
@@ -240,6 +241,58 @@ class CodexAgnoRuntime:
         """Expose the host/remote handoff descriptor for one runtime stream."""
 
         return self.trace_service.describe_handoff(session_id=session_id, job_id=job_id).model_dump(mode="json")
+
+    def attach_runtime_event_transport(
+        self,
+        *,
+        binding_artifact_path: str | None = None,
+        handoff_path: str | None = None,
+        resume_manifest_path: str | None = None,
+    ) -> dict[str, Any]:
+        """Resolve a process-external attach bridge from persisted runtime artifacts."""
+
+        return ExternalRuntimeEventTransportBridge.attach(
+            binding_artifact_path=binding_artifact_path,
+            handoff_path=handoff_path,
+            resume_manifest_path=resume_manifest_path,
+        ).describe()
+
+    def subscribe_attached_runtime_events(
+        self,
+        *,
+        binding_artifact_path: str | None = None,
+        handoff_path: str | None = None,
+        resume_manifest_path: str | None = None,
+        after_event_id: str | None = None,
+        limit: int | None = 100,
+        heartbeat: bool = False,
+    ) -> dict[str, Any]:
+        """Replay runtime events through the process-external attach bridge."""
+
+        return ExternalRuntimeEventTransportBridge.attach(
+            binding_artifact_path=binding_artifact_path,
+            handoff_path=handoff_path,
+            resume_manifest_path=resume_manifest_path,
+        ).subscribe(
+            after_event_id=after_event_id,
+            limit=limit,
+            heartbeat=heartbeat,
+        ).model_dump(mode="json")
+
+    def cleanup_attached_runtime_event_transport(
+        self,
+        *,
+        binding_artifact_path: str | None = None,
+        handoff_path: str | None = None,
+        resume_manifest_path: str | None = None,
+    ) -> dict[str, Any]:
+        """Describe cleanup semantics for the process-external attach bridge."""
+
+        return ExternalRuntimeEventTransportBridge.attach(
+            binding_artifact_path=binding_artifact_path,
+            handoff_path=handoff_path,
+            resume_manifest_path=resume_manifest_path,
+        ).cleanup()
 
     def _build_middleware_chain(self) -> MiddlewareChain:
         """Build the ordered middleware pipeline."""
@@ -761,6 +814,8 @@ class CodexAgnoRuntime:
         retry_count = self._trace.count_retries(response.session_id)
         latest_cursor = self._trace.latest_cursor(session_id=response.session_id)
         stream_state = self._trace.describe_stream()
+        transport = self.trace_service.describe_transport(session_id=response.session_id)
+        handoff = self.trace_service.describe_handoff(session_id=response.session_id)
         response.metadata.update(
             {
                 **self.execution_service.kernel_payload(
@@ -772,13 +827,20 @@ class CodexAgnoRuntime:
                 "trace_stream_path": (
                     str(self.trace_service.event_stream_path) if self.trace_service.event_stream_path else None
                 ),
+                "trace_resume_manifest_path": handoff.resume_manifest_path,
+                "trace_resume_manifest_role": handoff.resume_manifest_role,
+                "trace_resume_manifest_binding_path": transport.binding_artifact_path,
+                "trace_event_transport_path": transport.binding_artifact_path,
                 "trace_event_bridge_supported": True,
                 "trace_event_bridge_schema_version": self.trace_service.event_bridge.schema_version,
                 "trace_event_transport_schema_version": TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
-                "trace_event_transport_family": "host-facing-bridge",
-                "trace_event_transport_endpoint_kind": "runtime_method",
-                "trace_event_transport_remote_capable": True,
-                "trace_event_transport_handoff_supported": True,
+                "trace_event_transport_family": transport.transport_family,
+                "trace_event_transport_endpoint_kind": transport.endpoint_kind,
+                "trace_event_transport_remote_capable": transport.remote_capable,
+                "trace_event_transport_handoff_supported": transport.handoff_supported,
+                "trace_event_transport_attach_mode": transport.attach_mode,
+                "trace_event_transport_binding_role": transport.binding_artifact_role,
+                "trace_event_transport_recommended_method": transport.recommended_remote_attach_method,
                 "trace_event_handoff_schema_version": TRACE_EVENT_HANDOFF_SCHEMA_VERSION,
                 "trace_event_schema_version": self._trace.event_schema_version,
                 "trace_metadata_schema_version": self._trace.metadata_schema_version,

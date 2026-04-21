@@ -9,6 +9,8 @@ framework policy instead of forking per-host routing or memory rules.
 - Reply in Chinese unless the user asks for another language.
 - Keep answers direct and concise.
 - Execute safe read/search/test/build commands directly when the runtime allows.
+- Default to a get-shit-done posture for clear local tasks: auto-continue safe,
+  reversible work, keep ownership local, and verify before handoff.
 - Ask before destructive actions, external publishing, or account-impacting work.
 
 ## Output Compaction
@@ -17,6 +19,20 @@ framework policy instead of forking per-host routing or memory rules.
   `RTK.md` and prefer the corresponding `rtk ...` wrapper.
 - Treat `RTK.md` as repo-local operator guidance only; shared routing and
   policy truth still lives in this file plus the generated routing artifacts.
+
+## Task Closeout
+
+- Keep end-of-task user-facing closeouts in plain Chinese by default.
+- Default the closeout to one short paragraph that says what now works or what
+  effect was achieved, and what still needs to happen next.
+- If no further work is needed, say that directly instead of inventing follow-up
+  tasks.
+- Do not default to changed-file inventories, changelog-style recaps, or
+  step-by-step implementation retellings in the final user-facing closeout.
+- Machine continuity artifacts such as `NEXT_ACTIONS.json`,
+  `.supervisor_state.json`, and verification or blocker fields remain the
+  recovery truth; do not mirror them verbatim into the user-facing closeout
+  unless they materially affect the user's next decision.
 
 ## Turn-Start Routing
 
@@ -31,6 +47,9 @@ framework policy instead of forking per-host routing or memory rules.
    `execution-controller-coding` and maintain `.supervisor_state.json`.
 8. For complex tasks, check `subagent-delegation` before deciding whether to
    split bounded sidecars.
+9. Treat explicit `gsd` / `get shit done` / “推进到底” requests as a posture
+   boost for `execution-controller-coding` plus `anti-laziness`, not as an
+   external runtime workflow.
 
 ## Shared Runtime Contract
 

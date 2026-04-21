@@ -31,7 +31,6 @@ from codex_agno_runtime.host_adapters import (
     compile_codex_desktop_host_adapter,
     compile_cli_common_adapter,
     compile_gemini_cli_adapter,
-    should_emit_codex_desktop_alias_artifact,
 )
 from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import (
@@ -397,11 +396,7 @@ def emit_framework_contract_artifacts(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     alias_inventory = build_codex_desktop_alias_inventory()
-    emit_legacy_alias_artifact = (
-        include_legacy_alias_artifact
-        if include_legacy_alias_artifact is not None
-        else should_emit_codex_desktop_alias_artifact(alias_inventory["summary"])
-    )
+    emit_legacy_alias_artifact = include_legacy_alias_artifact is True
 
     profile_path = output_dir / "framework_profile.json"
     python_artifacts = {

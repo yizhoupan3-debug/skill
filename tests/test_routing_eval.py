@@ -33,6 +33,18 @@ def test_routing_eval_baseline_is_actionable() -> None:
     assert results_by_id["idea-to-plan-strategic-plan-case"]["selected_owner"] == "idea-to-plan"
     assert results_by_id["idea-to-plan-explore-plan-case"]["selected_owner"] == "idea-to-plan"
     assert results_by_id["checklist-writting-post-strategy-case"]["selected_owner"] == "checklist-writting"
+    assert results_by_id["frontend-design-visual-redesign-case"]["selected_owner"] == "frontend-design"
+    assert results_by_id["frontend-design-visual-redesign-case"]["selected_overlay"] is None
+    assert results_by_id["design-agent-brand-routing-case"]["selected_owner"] == "design-agent"
+    assert results_by_id["design-agent-brand-routing-case"]["selected_overlay"] is None
+    assert results_by_id["design-agent-mixed-source-case"]["selected_owner"] == "design-agent"
+    assert results_by_id["design-agent-mixed-source-case"]["selected_overlay"] is None
+    assert results_by_id["frontend-design-screenshot-review-reroute-case"]["selected_owner"] == "visual-review"
+    assert results_by_id["frontend-design-screenshot-review-reroute-case"]["selected_overlay"] is None
+    assert results_by_id["frontend-design-motion-boundary-case"]["selected_owner"] == "motion-design"
+    assert results_by_id["frontend-design-motion-boundary-case"]["selected_overlay"] is None
+    assert results_by_id["frontend-design-css-boundary-case"]["selected_owner"] == "css-pro"
+    assert results_by_id["frontend-design-css-boundary-case"]["selected_overlay"] is None
 
 
 def test_routing_eval_case_file_is_valid_json() -> None:

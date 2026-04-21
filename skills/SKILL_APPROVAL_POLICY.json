@@ -334,6 +334,25 @@
       "filesystem_scope": [],
       "network_access": "unspecified"
     },
+    "design-agent": {
+      "allowed_tools": [
+        "shell",
+        "browser"
+      ],
+      "approval_required_tools": [
+        "browser"
+      ],
+      "artifact_outputs": [
+        "design_reference_map.md"
+      ],
+      "bridge_behavior": "default",
+      "destructive_risk": "unspecified",
+      "filesystem_scope": [
+        "repo",
+        "artifacts"
+      ],
+      "network_access": "conditional"
+    },
     "doc": {
       "allowed_tools": [
         "shell",
@@ -1497,15 +1516,6 @@
       "network_access": "conditional"
     },
     "tailwind-pro": {
-      "allowed_tools": [],
-      "approval_required_tools": [],
-      "artifact_outputs": [],
-      "bridge_behavior": "default",
-      "destructive_risk": "unspecified",
-      "filesystem_scope": [],
-      "network_access": "unspecified"
-    },
-    "tao-ci": {
       "allowed_tools": [],
       "approval_required_tools": [],
       "artifact_outputs": [],

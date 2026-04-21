@@ -769,30 +769,15 @@ class RouterService:
             allow_overlay=allow_overlay,
             first_turn=first_turn,
         )
-        python_result: RoutingResult | None = None
-        # Diagnostic lanes may still snapshot Python for comparison, but Rust owns the route result.
-        if policy.diagnostic_python_lane or policy.diff_report_required or policy.verify_parity_required:
-            python_result = self._route_python(
-                task=task,
-                session_id=session_id,
-                allow_overlay=allow_overlay,
-                first_turn=first_turn,
-            )
-        report = (
-            self._build_route_diff_report(
-                mode=policy.mode,
-                python_result=python_result,
-                rust_result=rust_result,
-                rollback_active=policy.rollback_active,
-            )
-            if policy.diff_report_required
-            else None
+        report = self._collect_diagnostic_route_report(
+            policy=policy,
+            task=task,
+            session_id=session_id,
+            allow_overlay=allow_overlay,
+            first_turn=first_turn,
+            rust_result=rust_result,
         )
         self._last_route_report = report
-        if policy.verify_parity_required:
-            if report is None:
-                raise RuntimeError("Rust route policy requires a parity report.")
-            self._assert_parity(report)
         return self._decorate_route_result(
             rust_result,
             route_engine="rust",
@@ -903,18 +888,70 @@ class RouterService:
             }
         )
 
+    def _collect_diagnostic_route_report(
+        self,
+        *,
+        policy: RouteExecutionPolicy,
+        task: str,
+        session_id: str,
+        allow_overlay: bool,
+        first_turn: bool,
+        rust_result: RoutingResult,
+    ) -> RouteDiffReport | None:
+        if policy.diff_report_required or policy.verify_parity_required:
+            if not policy.diagnostic_python_lane:
+                raise RuntimeError(
+                    "Rust route policy declared diff/verify requirements outside the diagnostic lane."
+                )
+        if not policy.diagnostic_python_lane:
+            return None
+        python_snapshot = self._route_python_snapshot(
+            task=task,
+            session_id=session_id,
+            allow_overlay=allow_overlay,
+            first_turn=first_turn,
+        )
+        rust_snapshot = self._build_route_snapshot("rust", rust_result)
+        report = (
+            self._build_route_diff_report(
+                mode=policy.mode,
+                python_snapshot=python_snapshot,
+                rust_snapshot=rust_snapshot,
+                rollback_active=policy.rollback_active,
+            )
+            if policy.diff_report_required
+            else None
+        )
+        if policy.verify_parity_required:
+            if report is None:
+                raise RuntimeError("Rust route policy requires a parity report.")
+            self._assert_parity(report)
+        return report
+
+    def _route_python_snapshot(
+        self,
+        *,
+        task: str,
+        session_id: str,
+        allow_overlay: bool,
+        first_turn: bool,
+    ) -> RouteDecisionSnapshot:
+        python_result = self._route_python(
+            task=task,
+            session_id=session_id,
+            allow_overlay=allow_overlay,
+            first_turn=first_turn,
+        )
+        return self._build_route_snapshot("python", python_result)
+
     def _build_route_diff_report(
         self,
         *,
         mode: str,
-        python_result: RoutingResult | None,
-        rust_result: RoutingResult,
+        python_snapshot: RouteDecisionSnapshot,
+        rust_snapshot: RouteDecisionSnapshot,
         rollback_active: bool,
     ) -> RouteDiffReport:
-        if python_result is None:
-            raise RuntimeError("Python route result is required for diff reporting.")
-        python_snapshot = self._build_route_snapshot("python", python_result)
-        rust_snapshot = self._build_route_snapshot("rust", rust_result)
         payload = self._rust_adapter.route_report(
             mode=mode,
             python_route_snapshot=python_snapshot.model_dump(mode="json"),
@@ -1153,19 +1190,10 @@ class TraceService:
     def describe_transport(self, *, session_id: str, job_id: str | None = None) -> RuntimeEventTransport:
         """Describe the host-facing transport binding for one runtime stream."""
 
-        latest_cursor = self.recorder.latest_cursor(session_id=session_id, job_id=job_id)
-        stream_key = job_id or session_id
-        transport = RuntimeEventTransport(
-            stream_id=f"stream::{stream_key}",
+        transport = self.checkpointer.resolve_transport_manifest(
             session_id=session_id,
             job_id=job_id,
-            binding_backend_family=self.checkpointer.storage_capabilities().backend_family,
-            binding_artifact_path=(
-                str(path)
-                if (path := self.checkpointer.transport_binding_path(session_id=session_id, job_id=job_id)) is not None
-                else None
-            ),
-            latest_cursor=latest_cursor,
+            latest_cursor=self.recorder.latest_cursor(session_id=session_id, job_id=job_id),
         )
         self.checkpointer.write_transport_binding(transport)
         return transport
@@ -1173,15 +1201,10 @@ class TraceService:
     def describe_handoff(self, *, session_id: str, job_id: str | None = None) -> RuntimeEventHandoff:
         """Describe the durable handoff surface for one runtime event stream."""
 
-        paths = self.checkpointer.describe_paths()
         transport = self.describe_transport(session_id=session_id, job_id=job_id)
-        return RuntimeEventHandoff(
-            stream_id=transport.stream_id,
+        return self.checkpointer.resolve_handoff_manifest(
             session_id=session_id,
             job_id=job_id,
-            checkpoint_backend_family=self.checkpointer.storage_capabilities().backend_family,
-            trace_stream_path=str(paths.event_stream_path) if paths.event_stream_path is not None else None,
-            resume_manifest_path=str(paths.resume_manifest_path) if paths.resume_manifest_path is not None else None,
             transport=transport,
         )
 

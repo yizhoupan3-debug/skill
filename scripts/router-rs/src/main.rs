@@ -29,6 +29,14 @@ const RUNTIME_CONTROL_PLANE_SCHEMA_VERSION: &str = "router-rs-runtime-control-pl
 const RUNTIME_CONTROL_PLANE_AUTHORITY: &str = "rust-runtime-control-plane";
 const BACKGROUND_CONTROL_SCHEMA_VERSION: &str = "router-rs-background-control-v1";
 const BACKGROUND_CONTROL_AUTHORITY: &str = "rust-background-control";
+const TRACE_DESCRIPTOR_SCHEMA_VERSION: &str = "router-rs-trace-descriptor-v1";
+const TRACE_DESCRIPTOR_AUTHORITY: &str = "rust-runtime-trace-descriptor";
+const CHECKPOINT_RESUME_MANIFEST_SCHEMA_VERSION: &str = "router-rs-checkpoint-resume-manifest-v1";
+const CHECKPOINT_RESUME_MANIFEST_AUTHORITY: &str = "rust-runtime-checkpoint-manifest";
+const TRANSPORT_BINDING_WRITE_SCHEMA_VERSION: &str = "router-rs-transport-binding-write-v1";
+const TRANSPORT_BINDING_WRITE_AUTHORITY: &str = "rust-runtime-transport-binding-writer";
+const CHECKPOINT_MANIFEST_WRITE_SCHEMA_VERSION: &str = "router-rs-checkpoint-manifest-write-v1";
+const CHECKPOINT_MANIFEST_WRITE_AUTHORITY: &str = "rust-runtime-checkpoint-manifest-writer";
 const OVERLAY_ONLY_SKILLS: [&str; 4] = [
     "execution-audit-codex",
     "humanizer",
@@ -79,6 +87,16 @@ struct Cli {
     #[arg(long)]
     background_control_json: bool,
     #[arg(long)]
+    describe_transport_json: bool,
+    #[arg(long)]
+    describe_handoff_json: bool,
+    #[arg(long)]
+    checkpoint_resume_manifest_json: bool,
+    #[arg(long)]
+    write_transport_binding_json: bool,
+    #[arg(long)]
+    write_checkpoint_resume_manifest_json: bool,
+    #[arg(long)]
     profile_json: bool,
     #[arg(long)]
     profile_artifacts_json: bool,
@@ -100,6 +118,16 @@ struct Cli {
     execute_input_json: Option<String>,
     #[arg(long)]
     background_control_input_json: Option<String>,
+    #[arg(long)]
+    describe_transport_input_json: Option<String>,
+    #[arg(long)]
+    describe_handoff_input_json: Option<String>,
+    #[arg(long)]
+    checkpoint_resume_manifest_input_json: Option<String>,
+    #[arg(long)]
+    write_transport_binding_input_json: Option<String>,
+    #[arg(long)]
+    write_checkpoint_resume_manifest_input_json: Option<String>,
     #[arg(long, default_value = "route-cli")]
     session_id: String,
     #[arg(long, default_value_t = true)]
@@ -417,6 +445,11 @@ fn main() -> Result<(), String> {
         args.execute_json,
         args.runtime_control_plane_json,
         args.background_control_json,
+        args.describe_transport_json,
+        args.describe_handoff_json,
+        args.checkpoint_resume_manifest_json,
+        args.write_transport_binding_json,
+        args.write_checkpoint_resume_manifest_json,
         args.profile_json,
         args.profile_artifacts_json,
         args.route_report_json,
@@ -427,7 +460,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --background-control-json, --route-report-json, --profile-json, and --profile-artifacts-json"
+            "choose only one output mode among --json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --background-control-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --route-report-json, --profile-json, and --profile-artifacts-json"
                 .to_string(),
         );
     }
@@ -445,6 +478,96 @@ fn main() -> Result<(), String> {
         println!(
             "{}",
             serde_json::to_string(&build_background_control_response(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.describe_transport_json {
+        let payload = serde_json::from_str::<Value>(
+            args.describe_transport_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--describe-transport-input-json is required with --describe-transport-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse describe transport input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_trace_transport_descriptor(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.describe_handoff_json {
+        let payload = serde_json::from_str::<Value>(
+            args.describe_handoff_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--describe-handoff-input-json is required with --describe-handoff-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse describe handoff input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_trace_handoff_descriptor(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.checkpoint_resume_manifest_json {
+        let payload = serde_json::from_str::<Value>(
+            args.checkpoint_resume_manifest_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--checkpoint-resume-manifest-input-json is required with --checkpoint-resume-manifest-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse checkpoint resume manifest input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_checkpoint_resume_manifest(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.write_transport_binding_json {
+        let payload = serde_json::from_str::<Value>(
+            args.write_transport_binding_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--write-transport-binding-input-json is required with --write-transport-binding-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse write transport binding input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&write_transport_binding_payload(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.write_checkpoint_resume_manifest_json {
+        let payload = serde_json::from_str::<Value>(
+            args.write_checkpoint_resume_manifest_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--write-checkpoint-resume-manifest-input-json is required with --write-checkpoint-resume-manifest-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse write checkpoint resume manifest input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&write_checkpoint_resume_manifest_payload(payload)?)
                 .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());
@@ -1993,6 +2116,344 @@ fn build_live_execute_response(
     }
 }
 
+fn required_non_empty_string(payload: &Value, key: &str, context: &str) -> Result<String, String> {
+    payload
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+        .ok_or_else(|| format!("{context} requires non-empty {key}"))
+}
+
+fn optional_non_empty_string(payload: &Value, key: &str) -> Option<String> {
+    payload
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+}
+
+fn optional_bool(payload: &Value, key: &str) -> Option<bool> {
+    payload.get(key).and_then(Value::as_bool)
+}
+
+fn nested_value<'a>(payload: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    let mut current = payload;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    Some(current)
+}
+
+fn nested_non_empty_string(payload: &Value, path: &[&str]) -> Option<String> {
+    nested_value(payload, path)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+}
+
+fn nested_bool(payload: &Value, path: &[&str]) -> Option<bool> {
+    nested_value(payload, path).and_then(Value::as_bool)
+}
+
+fn build_attach_target_payload(
+    session_id: &str,
+    job_id: Option<&str>,
+    endpoint_kind: &str,
+    subscribe_method: &str,
+    describe_method: &str,
+    cleanup_method: &str,
+    handoff_method: &str,
+) -> Value {
+    serde_json::json!({
+        "endpoint_kind": endpoint_kind,
+        "subscribe_method": subscribe_method,
+        "describe_method": describe_method,
+        "cleanup_method": cleanup_method,
+        "handoff_method": handoff_method,
+        "session_id": session_id,
+        "job_id": job_id,
+    })
+}
+
+fn build_replay_anchor_payload(latest_cursor: Value, resume_mode: &str, replay_supported: bool) -> Value {
+    serde_json::json!({
+        "anchor_kind": "trace_replay_cursor",
+        "cursor_schema_version": "runtime-trace-cursor-v1",
+        "resume_mode": resume_mode,
+        "latest_cursor": latest_cursor,
+        "replay_supported": replay_supported,
+    })
+}
+
+fn build_transport_health_payload(payload: &Value) -> Value {
+    if payload.get("transport_health").is_some() {
+        return payload.get("transport_health").cloned().unwrap_or(Value::Null);
+    }
+    if payload.get("control_plane").is_none() {
+        return Value::Null;
+    }
+    serde_json::json!({
+        "backend_family": nested_non_empty_string(payload, &["control_plane", "backend_family"]),
+        "supports_atomic_replace": nested_bool(payload, &["control_plane", "supports_atomic_replace"]),
+        "supports_compaction": nested_bool(payload, &["control_plane", "supports_compaction"]),
+        "supports_snapshot_delta": nested_bool(payload, &["control_plane", "supports_snapshot_delta"]),
+        "supports_remote_event_transport": nested_bool(payload, &["control_plane", "supports_remote_event_transport"]),
+    })
+}
+
+fn build_trace_transport_payload(
+    payload: &Value,
+    session_id: String,
+    job_id: Option<String>,
+) -> Value {
+    let stream_key = job_id.as_deref().unwrap_or(session_id.as_str());
+    let endpoint_kind = optional_non_empty_string(payload, "endpoint_kind")
+        .unwrap_or_else(|| "runtime_method".to_string());
+    let subscribe_method = optional_non_empty_string(payload, "subscribe_method")
+        .unwrap_or_else(|| "subscribe_runtime_events".to_string());
+    let describe_method = optional_non_empty_string(payload, "describe_method")
+        .unwrap_or_else(|| "describe_runtime_event_transport".to_string());
+    let cleanup_method = optional_non_empty_string(payload, "cleanup_method")
+        .unwrap_or_else(|| "cleanup_runtime_events".to_string());
+    let handoff_method = optional_non_empty_string(payload, "handoff_method")
+        .unwrap_or_else(|| "describe_runtime_event_handoff".to_string());
+    let resume_mode = optional_non_empty_string(payload, "resume_mode")
+        .unwrap_or_else(|| "after_event_id".to_string());
+    let replay_supported = optional_bool(payload, "replay_supported").unwrap_or(true);
+    let latest_cursor = payload.get("latest_cursor").cloned().unwrap_or(Value::Null);
+    let binding_backend_family = optional_non_empty_string(payload, "binding_backend_family")
+        .or_else(|| nested_non_empty_string(payload, &["control_plane", "backend_family"]));
+    let control_plane_authority = optional_non_empty_string(payload, "control_plane_authority")
+        .or_else(|| nested_non_empty_string(payload, &["control_plane", "trace_service", "authority"]));
+    let control_plane_role = optional_non_empty_string(payload, "control_plane_role")
+        .or_else(|| nested_non_empty_string(payload, &["control_plane", "trace_service", "role"]));
+    let control_plane_projection = optional_non_empty_string(payload, "control_plane_projection")
+        .or_else(|| nested_non_empty_string(payload, &["control_plane", "trace_service", "projection"]));
+    let control_plane_delegate_kind = optional_non_empty_string(payload, "control_plane_delegate_kind")
+        .or_else(|| nested_non_empty_string(payload, &["control_plane", "trace_service", "delegate_kind"]));
+    let attach_target = build_attach_target_payload(
+        &session_id,
+        job_id.as_deref(),
+        &endpoint_kind,
+        &subscribe_method,
+        &describe_method,
+        &cleanup_method,
+        &handoff_method,
+    );
+    let replay_anchor = build_replay_anchor_payload(latest_cursor.clone(), &resume_mode, replay_supported);
+
+    serde_json::json!({
+        "schema_version": "runtime-event-transport-v1",
+        "stream_id": format!("stream::{stream_key}"),
+        "session_id": session_id,
+        "job_id": job_id,
+        "bridge_kind": optional_non_empty_string(payload, "bridge_kind").unwrap_or_else(|| "runtime_event_bridge".to_string()),
+        "transport_family": optional_non_empty_string(payload, "transport_family").unwrap_or_else(|| "host-facing-bridge".to_string()),
+        "transport_kind": optional_non_empty_string(payload, "transport_kind").unwrap_or_else(|| "poll".to_string()),
+        "endpoint_kind": endpoint_kind,
+        "ownership_lane": optional_non_empty_string(payload, "ownership_lane").unwrap_or_else(|| "rust-contract-lane".to_string()),
+        "producer_owner": optional_non_empty_string(payload, "producer_owner").unwrap_or_else(|| "rust-control-plane".to_string()),
+        "producer_authority": optional_non_empty_string(payload, "producer_authority").unwrap_or_else(|| RUNTIME_CONTROL_PLANE_AUTHORITY.to_string()),
+        "exporter_owner": optional_non_empty_string(payload, "exporter_owner").unwrap_or_else(|| "rust-control-plane".to_string()),
+        "exporter_authority": optional_non_empty_string(payload, "exporter_authority").unwrap_or_else(|| RUNTIME_CONTROL_PLANE_AUTHORITY.to_string()),
+        "remote_capable": optional_bool(payload, "remote_capable")
+            .or_else(|| nested_bool(payload, &["control_plane", "supports_remote_event_transport"]))
+            .unwrap_or(true),
+        "remote_attach_supported": optional_bool(payload, "remote_attach_supported")
+            .or_else(|| nested_bool(payload, &["control_plane", "supports_remote_event_transport"]))
+            .unwrap_or(true),
+        "handoff_supported": optional_bool(payload, "handoff_supported").unwrap_or(true),
+        "handoff_method": handoff_method,
+        "subscribe_method": subscribe_method,
+        "cleanup_method": cleanup_method,
+        "describe_method": describe_method,
+        "handoff_kind": optional_non_empty_string(payload, "handoff_kind").unwrap_or_else(|| "artifact_handoff".to_string()),
+        "binding_refresh_mode": optional_non_empty_string(payload, "binding_refresh_mode").unwrap_or_else(|| "describe_or_checkpoint".to_string()),
+        "binding_artifact_format": optional_non_empty_string(payload, "binding_artifact_format").unwrap_or_else(|| "json".to_string()),
+        "binding_backend_family": binding_backend_family,
+        "binding_artifact_path": optional_non_empty_string(payload, "binding_artifact_path"),
+        "resume_mode": resume_mode,
+        "heartbeat_supported": optional_bool(payload, "heartbeat_supported").unwrap_or(true),
+        "cleanup_semantics": optional_non_empty_string(payload, "cleanup_semantics").unwrap_or_else(|| "bridge_cache_only".to_string()),
+        "cleanup_preserves_replay": optional_bool(payload, "cleanup_preserves_replay").unwrap_or(true),
+        "replay_reseed_supported": optional_bool(payload, "replay_reseed_supported").unwrap_or(true),
+        "chunk_schema_version": optional_non_empty_string(payload, "chunk_schema_version").unwrap_or_else(|| "runtime-event-bridge-v1".to_string()),
+        "cursor_schema_version": optional_non_empty_string(payload, "cursor_schema_version").unwrap_or_else(|| "runtime-trace-cursor-v1".to_string()),
+        "latest_cursor": latest_cursor,
+        "replay_supported": replay_supported,
+        "attach_target": payload.get("attach_target").cloned().unwrap_or(attach_target),
+        "replay_anchor": payload.get("replay_anchor").cloned().unwrap_or(replay_anchor),
+        "control_plane_authority": control_plane_authority,
+        "control_plane_role": control_plane_role,
+        "control_plane_projection": control_plane_projection,
+        "control_plane_delegate_kind": control_plane_delegate_kind,
+        "transport_health": build_transport_health_payload(payload),
+    })
+}
+
+fn build_trace_transport_descriptor(payload: Value) -> Result<Value, String> {
+    let session_id = required_non_empty_string(&payload, "session_id", "describe transport")?;
+    let job_id = optional_non_empty_string(&payload, "job_id");
+    Ok(serde_json::json!({
+        "schema_version": TRACE_DESCRIPTOR_SCHEMA_VERSION,
+        "authority": TRACE_DESCRIPTOR_AUTHORITY,
+        "transport": build_trace_transport_payload(&payload, session_id, job_id),
+    }))
+}
+
+fn build_trace_handoff_descriptor(payload: Value) -> Result<Value, String> {
+    let session_id = required_non_empty_string(&payload, "session_id", "describe handoff")?;
+    let job_id = optional_non_empty_string(&payload, "job_id");
+    let transport_source = payload.get("transport").cloned().unwrap_or(Value::Null);
+    let transport_session_id = optional_non_empty_string(&transport_source, "session_id")
+        .unwrap_or_else(|| session_id.clone());
+    let transport_job_id = optional_non_empty_string(&transport_source, "job_id")
+        .or_else(|| job_id.clone());
+    let transport = if transport_source.is_object() {
+        build_trace_transport_payload(&transport_source, transport_session_id.clone(), transport_job_id.clone())
+    } else {
+        build_trace_transport_payload(&payload, session_id.clone(), job_id.clone())
+    };
+    let checkpoint_backend_family = optional_non_empty_string(&payload, "checkpoint_backend_family")
+        .or_else(|| optional_non_empty_string(&transport, "binding_backend_family"))
+        .or_else(|| nested_non_empty_string(&payload, &["control_plane", "backend_family"]))
+        .unwrap_or_else(|| "filesystem".to_string());
+    let trace_stream_path = optional_non_empty_string(&payload, "trace_stream_path");
+    let resume_manifest_path = optional_non_empty_string(&payload, "resume_manifest_path");
+    let recovery_artifacts = payload
+        .get("recovery_artifacts")
+        .cloned()
+        .filter(Value::is_array)
+        .unwrap_or_else(|| {
+            let mut ordered: Vec<String> = Vec::new();
+            if let Some(path) = optional_non_empty_string(&transport, "binding_artifact_path") {
+                ordered.push(path);
+            }
+            if let Some(path) = resume_manifest_path.clone() {
+                ordered.push(path);
+            }
+            if let Some(path) = trace_stream_path.clone() {
+                ordered.push(path);
+            }
+            serde_json::json!(ordered)
+        });
+
+    Ok(serde_json::json!({
+        "schema_version": TRACE_DESCRIPTOR_SCHEMA_VERSION,
+        "authority": TRACE_DESCRIPTOR_AUTHORITY,
+        "handoff": {
+            "schema_version": "runtime-event-handoff-v1",
+            "stream_id": transport.get("stream_id").cloned().unwrap_or_else(|| Value::String(format!("stream::{}", transport_job_id.as_deref().unwrap_or(transport_session_id.as_str())))),
+            "session_id": session_id,
+            "job_id": job_id,
+            "checkpoint_backend_family": checkpoint_backend_family,
+            "trace_stream_path": trace_stream_path,
+            "resume_manifest_path": resume_manifest_path,
+            "remote_attach_strategy": optional_non_empty_string(&payload, "remote_attach_strategy").unwrap_or_else(|| "transport_descriptor_then_replay".to_string()),
+            "cleanup_preserves_replay": transport.get("cleanup_preserves_replay").and_then(Value::as_bool).unwrap_or(true),
+            "attach_target": transport.get("attach_target").cloned().unwrap_or(Value::Null),
+            "replay_anchor": transport.get("replay_anchor").cloned().unwrap_or(Value::Null),
+            "recovery_artifacts": recovery_artifacts,
+            "control_plane": payload.get("control_plane").cloned().unwrap_or(Value::Null),
+            "transport": transport,
+        },
+    }))
+}
+
+fn build_checkpoint_resume_manifest(payload: Value) -> Result<Value, String> {
+    let session_id = required_non_empty_string(&payload, "session_id", "checkpoint resume manifest")?;
+    let job_id = optional_non_empty_string(&payload, "job_id");
+    let status = optional_non_empty_string(&payload, "status").unwrap_or_else(|| "running".to_string());
+    let generation = payload
+        .get("generation")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let mut resume_manifest = serde_json::json!({
+        "schema_version": "runtime-resume-manifest-v1",
+        "session_id": session_id,
+        "job_id": job_id,
+        "status": status,
+        "generation": generation,
+        "trace_output_path": optional_non_empty_string(&payload, "trace_output_path"),
+        "trace_stream_path": optional_non_empty_string(&payload, "trace_stream_path"),
+        "event_transport_path": optional_non_empty_string(&payload, "event_transport_path"),
+        "background_state_path": optional_non_empty_string(&payload, "background_state_path"),
+        "latest_cursor": payload.get("latest_cursor").cloned().unwrap_or(Value::Null),
+        "artifact_paths": payload
+            .get("artifact_paths")
+            .cloned()
+            .filter(Value::is_array)
+            .unwrap_or_else(|| serde_json::json!([])),
+        "supervisor_projection": payload.get("supervisor_projection").cloned().unwrap_or(Value::Null),
+        "control_plane": payload.get("control_plane").cloned().unwrap_or(Value::Null),
+    });
+    if let Some(updated_at) = optional_non_empty_string(&payload, "updated_at") {
+        if let Some(map) = resume_manifest.as_object_mut() {
+            map.insert("updated_at".to_string(), Value::String(updated_at));
+        }
+    }
+    Ok(serde_json::json!({
+        "schema_version": CHECKPOINT_RESUME_MANIFEST_SCHEMA_VERSION,
+        "authority": CHECKPOINT_RESUME_MANIFEST_AUTHORITY,
+        "resume_manifest": resume_manifest,
+    }))
+}
+
+fn write_json_payload(path: &Path, payload: &Value) -> Result<usize, String> {
+    let serialized = format!(
+        "{}\n",
+        serde_json::to_string_pretty(payload)
+            .map_err(|err| format!("serialize persisted payload failed: {err}"))?
+    );
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create parent directory for {} failed: {err}", path.display()))?;
+    }
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| format!("persist path {} has no file name", path.display()))?;
+    let tmp_path = path.with_file_name(format!("{file_name}.tmp"));
+    fs::write(&tmp_path, serialized.as_bytes())
+        .map_err(|err| format!("write temp payload {} failed: {err}", tmp_path.display()))?;
+    fs::rename(&tmp_path, path)
+        .map_err(|err| format!("replace payload {} failed: {err}", path.display()))?;
+    Ok(serialized.as_bytes().len())
+}
+
+fn write_transport_binding_payload(payload: Value) -> Result<Value, String> {
+    let path = required_non_empty_string(&payload, "path", "write transport binding")?;
+    let session_id = required_non_empty_string(&payload, "session_id", "write transport binding")?;
+    let job_id = optional_non_empty_string(&payload, "job_id");
+    let transport = build_trace_transport_payload(&payload, session_id, job_id);
+    let bytes_written = write_json_payload(Path::new(&path), &transport)?;
+    Ok(serde_json::json!({
+        "schema_version": TRANSPORT_BINDING_WRITE_SCHEMA_VERSION,
+        "authority": TRANSPORT_BINDING_WRITE_AUTHORITY,
+        "path": path,
+        "bytes_written": bytes_written,
+    }))
+}
+
+fn write_checkpoint_resume_manifest_payload(payload: Value) -> Result<Value, String> {
+    let path = required_non_empty_string(&payload, "path", "write checkpoint resume manifest")?;
+    let manifest = build_checkpoint_resume_manifest(payload)?
+        .get("resume_manifest")
+        .cloned()
+        .ok_or_else(|| "checkpoint resume manifest payload missing resume_manifest".to_string())?;
+    let bytes_written = write_json_payload(Path::new(&path), &manifest)?;
+    Ok(serde_json::json!({
+        "schema_version": CHECKPOINT_MANIFEST_WRITE_SCHEMA_VERSION,
+        "authority": CHECKPOINT_MANIFEST_WRITE_AUTHORITY,
+        "path": path,
+        "bytes_written": bytes_written,
+    }))
+}
+
 fn build_runtime_control_plane_payload() -> Value {
     serde_json::json!({
         "schema_version": RUNTIME_CONTROL_PLANE_SCHEMA_VERSION,
@@ -2143,6 +2604,10 @@ fn estimate_tokens(text: &str) -> usize {
     trimmed.chars().count().div_ceil(4)
 }
 
+fn gsd_execution_markers() -> [&'static str; 6] {
+    ["gsd", "get shit done", "推进到底", "别停", "直接干完", "一路做完"]
+}
+
 fn build_route_policy(
     mode: &str,
     rollback_requested: bool,
@@ -2162,37 +2627,48 @@ fn build_route_policy(
         diff_report_required: false,
         verify_parity_required: false,
     };
-    match normalized_mode.as_str() {
-        "python" => Ok(RouteExecutionPolicyPayload {
+    let policy = match normalized_mode.as_str() {
+        "python" => RouteExecutionPolicyPayload {
             python_route_required: true,
             primary_authority: "python".to_string(),
             route_result_engine: "python".to_string(),
             ..base
-        }),
-        "shadow" => Ok(RouteExecutionPolicyPayload {
+        },
+        "shadow" => RouteExecutionPolicyPayload {
             diagnostic_python_lane: true,
             shadow_engine: Some("python".to_string()),
             diff_report_required: true,
             ..base
-        }),
-        "verify" => Ok(RouteExecutionPolicyPayload {
+        },
+        "verify" => RouteExecutionPolicyPayload {
             diagnostic_python_lane: true,
             shadow_engine: Some("python".to_string()),
             diff_report_required: true,
             verify_parity_required: true,
             ..base
-        }),
-        "rust" if rollback_active => Ok(RouteExecutionPolicyPayload {
+        },
+        "rust" if rollback_active => RouteExecutionPolicyPayload {
             diagnostic_python_lane: true,
             shadow_engine: Some("python".to_string()),
             diff_report_required: true,
             ..base
-        }),
-        "rust" => Ok(base),
-        _ => Err(format!(
-            "unsupported route mode for --route-policy-json: {mode}"
-        )),
+        },
+        "rust" => base,
+        _ => {
+            return Err(format!(
+                "unsupported route mode for --route-policy-json: {mode}"
+            ))
+        }
+    };
+    if (policy.diff_report_required || policy.verify_parity_required) && !policy.diagnostic_python_lane {
+        return Err(
+            "route policy declared diff/verify requirements outside the diagnostic lane".to_string(),
+        );
     }
+    if policy.verify_parity_required && !policy.diff_report_required {
+        return Err("route policy declared verify requirements without diff reporting".to_string());
+    }
+    Ok(policy)
 }
 
 fn score_route_candidate(
@@ -2301,6 +2777,74 @@ fn score_route_candidate(
 
     if normalize_text(&record.owner) == "gate" && score > 0.0 {
         score += 2.0;
+    }
+
+    if record.slug == "execution-controller-coding" {
+        let controller_markers = [
+            "高负载",
+            "跨文件",
+            "长运行",
+            ".supervisor_state.json",
+            "主线程",
+            "系统指挥中心",
+        ]
+        .iter()
+        .filter(|marker| query_text.contains(*marker))
+        .cloned()
+        .collect::<Vec<_>>();
+        if !controller_markers.is_empty() {
+            score += 24.0;
+            reasons.push(format!(
+                "Execution-controller boost applied: {}.",
+                controller_markers.join(", ")
+            ));
+        }
+
+        let gsd_markers = gsd_execution_markers()
+            .iter()
+            .filter(|marker| query_text.contains(*marker))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !gsd_markers.is_empty() {
+            score += 26.0;
+            reasons.push(format!(
+                "GSD execution boost applied: {}.",
+                gsd_markers.join(", ")
+            ));
+        }
+    }
+
+    if record.slug == "subagent-delegation" && score > 0.0 {
+        let explicit_delegation = ["sidecar", "subagent", "delegation", "子代理", "并行 sidecar"]
+            .iter()
+            .any(|marker| query_text.contains(*marker));
+        let controller_markers = [
+            "高负载",
+            "跨文件",
+            "长运行",
+            ".supervisor_state.json",
+            "主线程",
+            "系统指挥中心",
+        ]
+        .iter()
+        .any(|marker| query_text.contains(*marker));
+        let gsd_posture = gsd_execution_markers()
+            .iter()
+            .any(|marker| query_text.contains(*marker));
+        if controller_markers && !explicit_delegation {
+            score *= 0.7;
+            reasons.push(
+                "Delegation-gate suppression applied: controller-orchestration signals dominate."
+                    .to_string(),
+            );
+        }
+        if gsd_posture && !explicit_delegation {
+            score *= 0.45;
+            reasons.push(
+                "Delegation-gate suppression applied: gsd posture keeps the immediate blocker local."
+                    .to_string(),
+            );
+        }
     }
 
     if record.slug == "visual-review" && score > 0.0 {

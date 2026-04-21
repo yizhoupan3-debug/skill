@@ -10,16 +10,16 @@ routing_owner: owner
 routing_gate: none
 session_start: n/a
 trigger_hints:
+  - 改UI
+  - UI 改版
+  - 品牌感
+  - 视觉层级
+  - 高级感
+  - Bento UI
+  - dashboard
   - Premium UI
-  - Stunning
-  - WOW
   - Glassmorphism
   - Mesh Gradients
-  - Premium
-  - a page
-  - interface to look "Premium
-  - sophisticated micro-interactions
-  - ui design
 metadata:
   version: "1.1.0"
   platforms: [codex, antigravity, claude-code]
@@ -46,9 +46,11 @@ look and feel like, not the low-level CSS or framework mechanics.
 - The user asks for aesthetic direction, Bento UI, Glassmorphism, or Mesh Gradient patterns
 - The task is landing-page, dashboard, portfolio, or product-UI visual quality with a "WOW" factor
 - The deliverable is a clearer design direction or a polished visual system for a modern web app
+- The user already knows they want implementation-facing redesign rather than a reference-mapping pass
 
 ## Do not use
 
+- Named-product reference grounding, `参考源`, `verified tokens`, or brand-plus-motion decomposition before implementation -> use `$design-agent`
 - CSS engineering or layout mechanics → use `$css-pro`
 - Tailwind theming/config → use `$tailwind-pro`
 - Accessibility review → use `$accessibility-auditor`
@@ -58,11 +60,12 @@ look and feel like, not the low-level CSS or framework mechanics.
 
 ## Core workflow
 
-1. Identify the interface goal, audience, and brand tone (e.g., Luxury, Professional, Playful).
-2. Choose one clear premium aesthetic direction (Bento, Glass, Minimal, etc.).
-3. Define typography, oklch-based color, and motion (Framer Motion) system.
-4. Ensure key interactive states and micro-animations (staggered reveals) are covered.
-5. Deliver a concise design rationale plus production-ready guidance or code.
+1. If the user starts from a named product/style reference and wants source grounding first, route to `$design-agent` before redesign.
+2. Identify the interface goal, audience, and brand tone (e.g., Luxury, Professional, Playful).
+3. Choose one clear premium aesthetic direction (Bento, Glass, Minimal, etc.).
+4. Define typography, oklch-based color, and motion (Framer Motion) system.
+5. Ensure key interactive states and micro-animations (staggered reveals) are covered.
+6. Deliver a concise design rationale plus production-ready guidance or code.
 
 ## Design rules
 
@@ -76,6 +79,10 @@ look and feel like, not the low-level CSS or framework mechanics.
 
 - [references/design-catalog.md](references/design-catalog.md)
 - [references/delivery-checklist.md](references/delivery-checklist.md)
+
+## Routing note
+
+- Use `$design-agent` first when the request is "make it feel like X product" and the user wants reference sources, verified tokens, or borrow/adapt decisions before any UI rewrite starts.
 
 ## Trigger examples
 - "这个设计规范里的配色和阴影怎么在 CSS 里精确还原？"

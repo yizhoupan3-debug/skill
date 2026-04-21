@@ -272,6 +272,13 @@
       "reroutes_30d": 0,
       "health_status": "Healthy"
     },
+    "design-agent": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
     "doc": {
       "dynamic_score": 94.3,
       "static_score": 85.8,
@@ -891,13 +898,6 @@
     "tailwind-pro": {
       "dynamic_score": 94.8,
       "static_score": 87.1,
-      "usage_30d": 0,
-      "reroutes_30d": 0,
-      "health_status": "Healthy"
-    },
-    "tao-ci": {
-      "dynamic_score": 100.0,
-      "static_score": 100.0,
       "usage_30d": 0,
       "reroutes_30d": 0,
       "health_status": "Healthy"

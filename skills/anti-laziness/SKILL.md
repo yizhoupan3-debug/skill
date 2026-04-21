@@ -2,7 +2,8 @@
 name: anti-laziness
 description: |
   Use proactively to detect and counter AI laziness patterns (spinning wheels, manual work offload, idling, truncation).
-  Triggers on failures, excuses, or passive declarations. Forces empirical execution and evidence-based verification.
+  Triggers on failures, excuses, passive declarations, and explicit gsd / get shit done posture requests.
+  Forces empirical execution and evidence-based verification.
   At 每轮对话开始 / first-turn / conversation start, check whether there is any laziness signal before proceeding.
 routing_layer: L1
 routing_owner: overlay
@@ -21,6 +22,10 @@ trigger_hints:
   - quality enforcement
   - mental rigor
   - token optimized
+  - gsd
+  - get shit done
+  - 推进到底
+  - 别停
 allowed_tools:
   - shell
   - python
@@ -35,14 +40,14 @@ framework_contracts:
   emits_verification_results: true
   cognitive_escalation: true
 metadata:
-  version: "2.2.0"
+  version: "2.3.0"
   platforms: [codex, antigravity]
-  tags: [pua, anti-laziness, quality-enforcement, mental-rigor, token-optimized]
+  tags: [pua, anti-laziness, quality-enforcement, mental-rigor, token-optimized, gsd, get-shit-done]
 ---
 
 # anti-laziness
 
-Cross-domain enforcement overlay. Activates when dodging work, repeating failures, or claiming unverified success. Never replaces the domain owner.
+Cross-domain enforcement overlay. Activates when dodging work, repeating failures, claiming unverified success, or the user explicitly asks for a get-shit-done execution posture. Never replaces the domain owner.
 
 ## When to use (PUA Triggers)
 
@@ -54,6 +59,7 @@ Cross-domain enforcement overlay. Activates when dodging work, repeating failure
 - **Code Truncation**: Using `...`, `// remains unchanged`, or partial snippets.
 - **Doc Avoidance**: Guessing API usage instead of using `context7`.
 - **User Complaints**: "别糊弄", "别装死", "防偷懒", "严格落实", "不许偷工减料".
+- **GSD Requests**: "gsd", "get shit done", "推进到底", "别停", "直接干完".
 
 ## Do not use
 
@@ -63,6 +69,13 @@ Cross-domain enforcement overlay. Activates when dodging work, repeating failure
 - First-turn execution where no previous context exists and no laziness signal is present.
 - Strategic planning or brainstorming sessions before any execution attempt has been made.
 - Requests for pure creative writing or philosophical discussion where empirical evidence doesn't apply.
+
+## GSD posture
+
+- Treat explicit `gsd` / `get shit done` wording as a demand for stronger execution ownership, not as permission to skip verification.
+- Keep pushing through safe local steps without handing routine work back to the user.
+- Convert "done" claims into evidence: command output, test result, or artifact path.
+- If a lane blocks, pivot the approach before narrating defeat.
 
 ## PUA Protocol: Thorough & Token-Efficient
 

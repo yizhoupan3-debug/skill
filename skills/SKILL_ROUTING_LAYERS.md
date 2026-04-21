@@ -31,6 +31,7 @@
 | `subagent-delegation` | 复杂任务 + 可并行 sidecar + 仓库授权 | 运行时派单决策 |
 | `systematic-debugging` | bug / 异常 / 失败 + 根因未知 | 先复现定位，再交回 owner |
 | `openai-docs` | OpenAI API / 模型 / 产品 + 需官方当前文档 | source-of-truth gate |
+| `design-agent` | 用户先要命名产品参考、品牌 token、参考源、风格映射，而不是直接改页面 | design source-grounding gate |
 | `visual-review` | 已有截图 / 渲染图 / 可见证据 | evidence-first visual read |
 | `pdf` / `doc` / `xlsx` | 主对象是 artifact 文件 | artifact-native workflow |
 | `sentry` / `gh-address-comments` / `gh-fix-ci` | 任务由外部证据源触发 | source evidence gate |
@@ -54,7 +55,7 @@ L2  build-tooling, plan-to-code, api-integration-debugging,
     architect-review, sustech-mailer, github-investigator
 L3  academic-search, accessibility-auditor, api-design, api-load-tester,
     brainstorm-research, cloudflare-deploy, doc, docker,
-    experiment-reproducibility, frontend-code-quality, frontend-design,
+    design-agent, experiment-reproducibility, frontend-code-quality, frontend-design,
     github-actions-authoring, graphviz-expert, i18n-l10n, imagegen,
     infographic, jupyter-notebook, linux-server-ops, mcp-builder,
     mermaid-expert, monorepo-tooling, native-app-debugging, npm-package-authoring, pdf,
@@ -97,6 +98,8 @@ Overlays  coding-standards, tdd-workflow, error-handling-patterns, code-review,
 - `skill-writer` vs `skill-creator` → 写法指导 vs 实际改 skill 包
 - `skill-creator` vs `skill-installer` → 本地 authoring vs 新 skill intake / relink
 - `systematic-debugging` vs 领域 owner → 根因未知 vs 根因已知
+- `design-agent` vs `frontend-design` → 先定参考源 / verified tokens / borrow-adapt map vs 直接做视觉改版
+- `design-agent` vs `motion-design` → 先拆品牌与动效来源 vs 直接做动效实现
 - `visual-review` vs `pdf` / `doc` / `xlsx` → 看证据 vs 改 artifact
 - `build-tooling` vs `typescript-pro` / `python-pro` / `javascript-pro` → 构建链 vs 语言语义
 - `latex-compile-acceleration` vs `ppt-beamer` → 编译优化 vs Beamer 内容/版式

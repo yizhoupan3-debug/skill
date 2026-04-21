@@ -17,6 +17,7 @@
     ],
     "defaultPrompt": [
       "Use the local framework plugin to inspect memory and routing state.",
+      "Read framework://memory/claude-recap or call framework_recap_refresh when you need a Claude-style handoff recap in Codex.",
       "Refresh the workspace bootstrap bundle before planning framework work.",
       "Search the local skill graph instead of grepping the repo first."
     ],

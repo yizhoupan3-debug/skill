@@ -17,12 +17,20 @@ class RustRouteAdapter:
     route_report_schema_version = "router-rs-route-report-v1"
     runtime_control_plane_schema_version = "router-rs-runtime-control-plane-v1"
     background_control_schema_version = "router-rs-background-control-v1"
+    trace_descriptor_schema_version = "router-rs-trace-descriptor-v1"
+    checkpoint_resume_manifest_schema_version = "router-rs-checkpoint-resume-manifest-v1"
+    transport_binding_write_schema_version = "router-rs-transport-binding-write-v1"
+    checkpoint_manifest_write_schema_version = "router-rs-checkpoint-manifest-write-v1"
     route_authority = "rust-route-core"
     compile_authority = "rust-route-compiler"
     runtime_control_plane_authority = "rust-runtime-control-plane"
     background_control_authority = "rust-background-control"
+    trace_descriptor_authority = "rust-runtime-trace-descriptor"
+    checkpoint_resume_manifest_authority = "rust-runtime-checkpoint-manifest"
+    transport_binding_write_authority = "rust-runtime-transport-binding-writer"
+    checkpoint_manifest_write_authority = "rust-runtime-checkpoint-manifest-writer"
 
-    def __init__(self, codex_home: Path, *, timeout_seconds: float = 10.0) -> None:
+    def __init__(self, codex_home: Path, *, timeout_seconds: float = 30.0) -> None:
         self.codex_home = codex_home
         self.timeout_seconds = timeout_seconds
         self.runtime_path = codex_home / "skills" / "SKILL_ROUTING_RUNTIME.json"
@@ -131,7 +139,8 @@ class RustRouteAdapter:
     ) -> dict[str, Any]:
         """Resolve route-mode policy through the Rust routing core.
 
-        The returned policy keeps Python in explicit legacy or diagnostic lanes only.
+        The returned policy keeps Python in the explicit legacy lane or compare-only
+        diagnostic lanes; it does not change live Rust authority for shadow/verify/rollback.
         """
 
         args = [
@@ -309,6 +318,194 @@ class RustRouteAdapter:
             )
         return resolved
 
+    def describe_transport(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--describe-transport-json",
+            "--describe-transport-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        try:
+            resolved = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="trace transport descriptor compiler",
+            )
+        except RuntimeError:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="trace transport descriptor compiler",
+            )
+        if resolved.get("schema_version") != self.trace_descriptor_schema_version:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="trace transport descriptor compiler",
+            )
+            if resolved.get("schema_version") != self.trace_descriptor_schema_version:
+                raise RuntimeError(
+                    "Rust trace transport descriptor compiler returned an unknown schema: "
+                    f"{resolved.get('schema_version')!r}"
+                )
+        if resolved.get("authority") != self.trace_descriptor_authority:
+            raise RuntimeError(
+                "Rust trace transport descriptor compiler returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        transport = resolved.get("transport")
+        if not isinstance(transport, dict):
+            raise RuntimeError("Rust trace transport descriptor compiler returned a missing transport payload.")
+        return transport
+
+    def describe_handoff(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--describe-handoff-json",
+            "--describe-handoff-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        try:
+            resolved = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="trace handoff descriptor compiler",
+            )
+        except RuntimeError:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="trace handoff descriptor compiler",
+            )
+        if resolved.get("schema_version") != self.trace_descriptor_schema_version:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="trace handoff descriptor compiler",
+            )
+            if resolved.get("schema_version") != self.trace_descriptor_schema_version:
+                raise RuntimeError(
+                    "Rust trace handoff descriptor compiler returned an unknown schema: "
+                    f"{resolved.get('schema_version')!r}"
+                )
+        if resolved.get("authority") != self.trace_descriptor_authority:
+            raise RuntimeError(
+                "Rust trace handoff descriptor compiler returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        handoff = resolved.get("handoff")
+        if not isinstance(handoff, dict):
+            raise RuntimeError("Rust trace handoff descriptor compiler returned a missing handoff payload.")
+        return handoff
+
+    def checkpoint_resume_manifest(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--checkpoint-resume-manifest-json",
+            "--checkpoint-resume-manifest-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        try:
+            resolved = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="checkpoint resume manifest compiler",
+            )
+        except RuntimeError:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="checkpoint resume manifest compiler",
+            )
+        if resolved.get("schema_version") != self.checkpoint_resume_manifest_schema_version:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="checkpoint resume manifest compiler",
+            )
+            if resolved.get("schema_version") != self.checkpoint_resume_manifest_schema_version:
+                raise RuntimeError(
+                    "Rust checkpoint resume manifest compiler returned an unknown schema: "
+                    f"{resolved.get('schema_version')!r}"
+                )
+        if resolved.get("authority") != self.checkpoint_resume_manifest_authority:
+            raise RuntimeError(
+                "Rust checkpoint resume manifest compiler returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        manifest = resolved.get("resume_manifest")
+        if not isinstance(manifest, dict):
+            raise RuntimeError(
+                "Rust checkpoint resume manifest compiler returned a missing resume_manifest payload."
+            )
+        return manifest
+
+    def write_transport_binding(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--write-transport-binding-json",
+            "--write-transport-binding-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        try:
+            resolved = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="transport binding writer",
+            )
+        except RuntimeError:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="transport binding writer",
+            )
+        if resolved.get("schema_version") != self.transport_binding_write_schema_version:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="transport binding writer",
+            )
+            if resolved.get("schema_version") != self.transport_binding_write_schema_version:
+                raise RuntimeError(
+                    "Rust transport binding writer returned an unknown schema: "
+                    f"{resolved.get('schema_version')!r}"
+                )
+        if resolved.get("authority") != self.transport_binding_write_authority:
+            raise RuntimeError(
+                "Rust transport binding writer returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        path = resolved.get("path")
+        bytes_written = resolved.get("bytes_written")
+        if not isinstance(path, str) or not path:
+            raise RuntimeError("Rust transport binding writer returned a missing path.")
+        if not isinstance(bytes_written, int) or bytes_written < 0:
+            raise RuntimeError("Rust transport binding writer returned invalid bytes_written.")
+        return resolved
+
+    def write_checkpoint_resume_manifest(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--write-checkpoint-resume-manifest-json",
+            "--write-checkpoint-resume-manifest-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        try:
+            resolved = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="checkpoint resume manifest writer",
+            )
+        except RuntimeError:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="checkpoint resume manifest writer",
+            )
+        if resolved.get("schema_version") != self.checkpoint_manifest_write_schema_version:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="checkpoint resume manifest writer",
+            )
+            if resolved.get("schema_version") != self.checkpoint_manifest_write_schema_version:
+                raise RuntimeError(
+                    "Rust checkpoint resume manifest writer returned an unknown schema: "
+                    f"{resolved.get('schema_version')!r}"
+                )
+        if resolved.get("authority") != self.checkpoint_manifest_write_authority:
+            raise RuntimeError(
+                "Rust checkpoint resume manifest writer returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        path = resolved.get("path")
+        bytes_written = resolved.get("bytes_written")
+        if not isinstance(path, str) or not path:
+            raise RuntimeError("Rust checkpoint resume manifest writer returned a missing path.")
+        if not isinstance(bytes_written, int) or bytes_written < 0:
+            raise RuntimeError("Rust checkpoint resume manifest writer returned invalid bytes_written.")
+        return resolved
+
     def health(self) -> dict[str, Any]:
         """Describe Rust route-adapter availability."""
 
@@ -328,6 +525,14 @@ class RustRouteAdapter:
             "route_report_schema_version": self.route_report_schema_version,
             "runtime_control_plane_schema_version": self.runtime_control_plane_schema_version,
             "background_control_schema_version": self.background_control_schema_version,
+            "trace_descriptor_schema_version": self.trace_descriptor_schema_version,
+            "checkpoint_resume_manifest_schema_version": self.checkpoint_resume_manifest_schema_version,
+            "transport_binding_write_schema_version": self.transport_binding_write_schema_version,
+            "checkpoint_manifest_write_schema_version": self.checkpoint_manifest_write_schema_version,
+            "trace_descriptor_authority": self.trace_descriptor_authority,
+            "checkpoint_resume_manifest_authority": self.checkpoint_resume_manifest_authority,
+            "transport_binding_write_authority": self.transport_binding_write_authority,
+            "checkpoint_manifest_write_authority": self.checkpoint_manifest_write_authority,
         }
 
     def _binary_command(self) -> list[str]:

@@ -7,6 +7,10 @@ import sys
 from pathlib import Path
 from typing import Any, TextIO
 
+from scripts.claude_memory_bridge import (
+    build_claude_memory_projection,
+    build_refresh_workflow_prompt,
+)
 from scripts.default_bootstrap import resolve_bootstrap_path, run_default_bootstrap
 from scripts.framework_bridge import build_framework_memory_bootstrap, export_framework_skills
 from scripts.memory_support import (
@@ -207,6 +211,10 @@ class FrameworkMcpServer:
             return self._runtime_snapshot()
         if tool_name == "framework_contract_summary":
             return self._contract_summary()
+        if tool_name == "framework_recap_refresh":
+            return self._recap_refresh(
+                max_lines=self._optional_int(arguments=arguments, key="max_lines", default=6, minimum=1),
+            )
         raise FrameworkServerError(
             code="UNSUPPORTED_OPERATION",
             message=f"Tool is registered but not implemented: {tool_name}",
@@ -349,6 +357,40 @@ class FrameworkMcpServer:
             "recovery_hints": continuity.get("recovery_hints", []),
         }
 
+    def _recap_refresh(self, *, max_lines: int) -> JSONDict:
+        snapshot = load_runtime_snapshot(
+            self._repo_root,
+            repair=False,
+            include_contract_snapshots=False,
+        )
+        continuity = classify_runtime_continuity(snapshot)
+        projection = build_claude_memory_projection(
+            self._repo_root,
+            max_lines=max_lines,
+            snapshot=snapshot,
+            continuity=continuity,
+        )
+        workflow_prompt = build_refresh_workflow_prompt(
+            self._repo_root,
+            max_lines=max_lines,
+            snapshot=snapshot,
+            continuity=continuity,
+        )
+        return {
+            "ok": True,
+            "workspace": self._workspace,
+            "continuity_state": continuity.get("state"),
+            "task": continuity.get("task"),
+            "phase": continuity.get("phase"),
+            "status": continuity.get("status"),
+            "max_lines": max_lines,
+            "projection": projection,
+            "workflow_prompt": workflow_prompt,
+            "projection_path": str(
+                resolve_effective_memory_dir(repo_root=self._repo_root) / "CLAUDE_MEMORY.md"
+            ),
+        }
+
     def _build_tool_definitions(self) -> dict[str, dict[str, Any]]:
         return {
             "framework_bootstrap_refresh": {
@@ -403,6 +445,23 @@ class FrameworkMcpServer:
                 "description": "Summarize the current execution contract, blockers, evidence, and next actions.",
                 "inputSchema": {"type": "object", "properties": {}},
             },
+            "framework_recap_refresh": {
+                "name": "framework_recap_refresh",
+                "description": (
+                    "Build the Claude-style recap surfaces for this workspace, including a concise "
+                    "memory projection and a next-turn workflow prompt that Codex can reuse."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "max_lines": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Maximum lines to keep per recap section. Defaults to 6.",
+                        }
+                    },
+                },
+            },
         }
 
     def _build_resource_definitions(self) -> dict[str, dict[str, Any]]:
@@ -411,6 +470,12 @@ class FrameworkMcpServer:
                 "uri": "framework://memory/project",
                 "name": "Project Memory",
                 "description": "Checked-in long-term framework memory for this repository.",
+                "mimeType": "text/markdown",
+            },
+            "framework://memory/claude-recap": {
+                "uri": "framework://memory/claude-recap",
+                "name": "Claude Recap",
+                "description": "Claude-style recap projection rendered from shared runtime artifacts and project memory.",
                 "mimeType": "text/markdown",
             },
             "framework://routing/runtime": {
@@ -443,6 +508,15 @@ class FrameworkMcpServer:
         if uri == "framework://memory/project":
             path = resolve_effective_memory_dir(repo_root=self._repo_root) / "MEMORY.md"
             text = self._read_text_file(path=path, missing_message="Project memory file not found.")
+            return {"uri": uri, "mimeType": "text/markdown", "text": text}
+        if uri == "framework://memory/claude-recap":
+            snapshot = load_runtime_snapshot(self._repo_root, repair=False, include_contract_snapshots=False)
+            continuity = classify_runtime_continuity(snapshot)
+            text = build_claude_memory_projection(
+                self._repo_root,
+                snapshot=snapshot,
+                continuity=continuity,
+            )
             return {"uri": uri, "mimeType": "text/markdown", "text": text}
         if uri == "framework://routing/runtime":
             path = self._repo_root / "skills" / "SKILL_ROUTING_RUNTIME.json"
