@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 from codex_agno_runtime.config import RuntimeSettings
@@ -165,30 +164,6 @@ class RouterRsExecutionKernel(ExecutionKernel):
             timeout_seconds=self.settings.rust_router_timeout_seconds,
         )
 
-    @property
-    def router_dir(self) -> Path:
-        return self._rust_adapter.router_dir
-
-    @router_dir.setter
-    def router_dir(self, value: Path) -> None:
-        self._rust_adapter.router_dir = value
-
-    @property
-    def release_bin(self) -> Path:
-        return self._rust_adapter.release_bin
-
-    @release_bin.setter
-    def release_bin(self, value: Path) -> None:
-        self._rust_adapter.release_bin = value
-
-    @property
-    def debug_bin(self) -> Path:
-        return self._rust_adapter.debug_bin
-
-    @debug_bin.setter
-    def debug_bin(self, value: Path) -> None:
-        self._rust_adapter.debug_bin = value
-
     async def execute(self, request: ExecutionKernelRequest) -> RunTaskResponse:
         payload = self._build_payload(request)
         response_payload = await asyncio.to_thread(self._run_execute_command, payload)
@@ -217,12 +192,6 @@ class RouterRsExecutionKernel(ExecutionKernel):
             }
         )
         return payload
-
-    def _resolved_binary(self) -> Path | None:
-        return self._rust_adapter._resolved_binary()
-
-    def _binary_command(self) -> list[str]:
-        return self._rust_adapter._binary_command()
 
     def _build_payload(self, request: ExecutionKernelRequest) -> dict[str, Any]:
         routing_result = request.routing_result

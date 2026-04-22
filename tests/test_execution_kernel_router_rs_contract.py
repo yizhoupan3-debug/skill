@@ -117,11 +117,11 @@ def test_router_rs_execution_kernel_prefers_release_binary() -> None:
 
         kernel = RouterRsExecutionKernel(_settings())  # type: ignore[arg-type]
         kernel.settings.codex_home = codex_home
-        kernel.router_dir = router_dir
-        kernel.release_bin = release_bin
-        kernel.debug_bin = debug_bin
+        kernel._rust_adapter.router_dir = router_dir
+        kernel._rust_adapter.release_bin = release_bin
+        kernel._rust_adapter.debug_bin = debug_bin
 
-        assert kernel._binary_command() == [str(release_bin)]
+        assert kernel._rust_adapter._binary_command() == [str(release_bin)]
 
 
 def test_router_rs_execution_kernel_requires_prebuilt_binary_when_missing() -> None:
@@ -133,12 +133,12 @@ def test_router_rs_execution_kernel_requires_prebuilt_binary_when_missing() -> N
 
         kernel = RouterRsExecutionKernel(_settings())  # type: ignore[arg-type]
         kernel.settings.codex_home = codex_home
-        kernel.router_dir = router_dir
-        kernel.release_bin = router_dir / "target" / "release" / "router-rs"
-        kernel.debug_bin = router_dir / "target" / "debug" / "router-rs"
+        kernel._rust_adapter.router_dir = router_dir
+        kernel._rust_adapter.release_bin = router_dir / "target" / "release" / "router-rs"
+        kernel._rust_adapter.debug_bin = router_dir / "target" / "debug" / "router-rs"
 
         with pytest.raises(RuntimeError, match="requires a prebuilt binary"):
-            kernel._binary_command()
+            kernel._rust_adapter._binary_command()
 
 
 def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:

@@ -1372,20 +1372,7 @@ class RustRouteAdapter:
         return args
 
     def _resolved_binary(self) -> Path | None:
-        latest_source_mtime = self._latest_source_mtime()
-        fresh_release = (
-            self.release_bin
-            if self.release_bin.is_file() and self.release_bin.stat().st_mtime >= latest_source_mtime
-            else None
-        )
-        fresh_debug = (
-            self.debug_bin
-            if self.debug_bin.is_file() and self.debug_bin.stat().st_mtime >= latest_source_mtime
-            else None
-        )
-        return resolve_router_binary_candidate(
-            *(candidate for candidate in (fresh_release, fresh_debug) if candidate is not None)
-        )
+        return resolve_router_binary_candidate(self.release_bin, self.debug_bin)
 
     def _cached_resolved_binary(self) -> Path | None:
         cached = self._cached_runtime_binary

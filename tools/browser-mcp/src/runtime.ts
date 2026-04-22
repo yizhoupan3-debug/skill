@@ -72,8 +72,6 @@ const ROUTER_RS_TRACE_STREAM_REPLAY_SCHEMA_VERSION = 'router-rs-trace-stream-rep
 const ROUTER_RS_TRACE_STREAM_INSPECT_SCHEMA_VERSION = 'router-rs-trace-stream-inspect-v1';
 const ROUTER_RS_TRACE_IO_AUTHORITY = 'rust-runtime-trace-io';
 const ROUTER_RS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'scripts', 'router-rs');
-const ROUTER_RS_MANIFEST_PATH = path.join(ROUTER_RS_DIR, 'Cargo.toml');
-const ROUTER_RS_SOURCE_DIR = path.join(ROUTER_RS_DIR, 'src');
 const ROUTER_RS_RELEASE_BIN = path.join(ROUTER_RS_DIR, 'target', 'release', 'router-rs');
 const ROUTER_RS_DEBUG_BIN = path.join(ROUTER_RS_DIR, 'target', 'debug', 'router-rs');
 const execFile = promisify(execFileCallback);
@@ -147,61 +145,26 @@ function truncateText(text: string, maxChars: number): string {
   return text.length <= maxChars ? text : `${text.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
-async function newestRouterRsSourceMtimeMs(target: string): Promise<number> {
-  let newest = 0;
-  let entries;
-  try {
-    entries = await readdir(target, { withFileTypes: true });
-  } catch {
-    return newest;
-  }
-  for (const entry of entries) {
-    const entryPath = path.join(target, entry.name);
-    if (entry.isDirectory()) {
-      newest = Math.max(newest, await newestRouterRsSourceMtimeMs(entryPath));
-      continue;
-    }
-    if (entry.isFile() && entry.name.endsWith('.rs')) {
-      try {
-        newest = Math.max(newest, (await stat(entryPath)).mtimeMs);
-      } catch {
-        // Ignore racing file-system updates and keep the best-known mtime.
-      }
-    }
-  }
-  return newest;
-}
-
 let resolvedRouterRsCommand: { command: string; args: string[] } | null = null;
 
 async function resolveRouterRsCommand(): Promise<{ command: string; args: string[] }> {
   if (resolvedRouterRsCommand) {
     return resolvedRouterRsCommand;
   }
-  let newestSourceMtime = 0;
-  try {
-    newestSourceMtime = Math.max(
-      (await stat(ROUTER_RS_MANIFEST_PATH)).mtimeMs,
-      await newestRouterRsSourceMtimeMs(ROUTER_RS_SOURCE_DIR),
-    );
-  } catch {
-    newestSourceMtime = 0;
-  }
-
   for (const candidatePath of [ROUTER_RS_RELEASE_BIN, ROUTER_RS_DEBUG_BIN]) {
     try {
       const candidateStat = await stat(candidatePath);
-      if (candidateStat.isFile() && candidateStat.mtimeMs >= newestSourceMtime) {
+      if (candidateStat.isFile()) {
         resolvedRouterRsCommand = { command: candidatePath, args: [] };
         return resolvedRouterRsCommand;
       }
     } catch {
-      // Keep searching for a fresh prebuilt binary.
+      // Keep searching for a prebuilt binary.
     }
   }
 
   throw new Error(
-    'browser-mcp requires a fresh prebuilt router-rs binary; build scripts/router-rs before using attached runtime replay.',
+    'browser-mcp requires a prebuilt router-rs binary; build scripts/router-rs before using attached runtime replay.',
   );
 }
 
