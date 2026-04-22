@@ -14,7 +14,7 @@
 
 ### 已推进到的状态
 
-- **Lane 1 / Kernel Contract Canonicalization** 已经前进了一步：
+- **Lane 1 / Kernel Contract Canonicalization** 已完成当前 phase 收口：
   - `RouterService` 默认消费 typed Rust contract，而不是继续手拼原始 route JSON。
   - `RustRouteAdapter` 已暴露 `route_contract / route_policy_contract / route_report_contract / route_snapshot_contract`。
   - fixture/live parity 回归也已经优先走 typed contract；unknown skill 会 fail-closed，而不是让 Python 默默兜底。
@@ -32,9 +32,6 @@
 
 ### 仍未收口的内容
 
-- **Lane 1** 还没彻底结束：
-  - route diagnostic 的 typed contract 已收薄，但 execution kernel 的其余 metadata / naming bridge 还没完全压成 Rust canonical producer。
-  - `scripts/route.py` 这类兼容 shim 还存在，虽然 steady-state runtime 已不靠它，但旁路 helper 仍需继续 typed-first 化。
 - **Lane 2 / Native Install / Bootstrap** 还没有实质推进；默认安装/初始化入口是否天然落在当前 Rust-first contract 上，仍需要专门收口。
 
 ---

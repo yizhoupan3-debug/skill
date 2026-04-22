@@ -28,6 +28,7 @@ from codex_agno_runtime.schemas import (
 from scripts.route import (
     build_rust_router_command,
     route_decision_json,
+    run_rust_route_contract,
     run_rust_route_json,
     run_rust_router_json,
     search_skills_json,
@@ -83,6 +84,22 @@ def test_run_rust_route_json_respects_false_overlay_and_first_turn_flags() -> No
     assert decision["selected_skill"] == "execution-controller-coding"
     assert decision["overlay_skill"] is None
     assert all("Session-start" not in reason for reason in decision["reasons"])
+
+
+def test_run_rust_route_contract_exposes_typed_decision() -> None:
+    decision = run_rust_route_contract(
+        "这个仓库的修复你直接 gsd，推进到底，别停，主线程保持简短并给我验证证据",
+        session_id="route-cli-typed-regression",
+        allow_overlay=False,
+        first_turn=False,
+        runtime_path=PROJECT_ROOT / "tests" / "_routing_missing_runtime.json",
+        manifest_path=PROJECT_ROOT / "tests" / "routing_route_fixtures.json",
+    )
+
+    assert isinstance(decision, RouteDecisionContract)
+    assert decision.selected_skill == "execution-controller-coding"
+    assert decision.overlay_skill is None
+    assert decision.route_snapshot.selected_skill == decision.selected_skill
 
 
 def _seed_framework_runtime_artifacts(repo_root: Path, *, terminal: bool) -> None:

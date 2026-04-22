@@ -4929,8 +4929,20 @@ mod tests {
         assert_eq!(response.model_id, None);
         assert_eq!(response.metadata["execution_kernel"], "router-rs");
         assert_eq!(
+            response.metadata["execution_kernel_metadata_schema_version"],
+            EXECUTION_METADATA_SCHEMA_VERSION
+        );
+        assert_eq!(
             response.metadata["execution_kernel_authority"],
             EXECUTION_AUTHORITY
+        );
+        assert_eq!(
+            response.metadata["execution_kernel_response_shape"],
+            EXECUTION_RESPONSE_SHAPE_DRY_RUN
+        );
+        assert_eq!(
+            response.metadata["execution_kernel_prompt_preview_owner"],
+            EXECUTION_PROMPT_PREVIEW_OWNER
         );
         assert_eq!(
             response.metadata["diagnostic_route_mode"],
@@ -5008,6 +5020,10 @@ mod tests {
             EXECUTION_AUTHORITY
         );
         assert_eq!(
+            response.metadata["execution_kernel_metadata_schema_version"],
+            EXECUTION_METADATA_SCHEMA_VERSION
+        );
+        assert_eq!(
             response.metadata["execution_kernel_delegate_family"],
             "rust-cli"
         );
@@ -5038,6 +5054,18 @@ mod tests {
         assert_eq!(
             response.metadata["execution_kernel_live_fallback_mode"],
             "disabled"
+        );
+        assert_eq!(
+            response.metadata["execution_kernel_response_shape"],
+            EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY
+        );
+        assert_eq!(
+            response.metadata["execution_kernel_prompt_preview_owner"],
+            EXECUTION_PROMPT_PREVIEW_OWNER
+        );
+        assert_eq!(
+            response.metadata["execution_kernel_model_id_source"],
+            EXECUTION_MODEL_ID_SOURCE
         );
     }
 
