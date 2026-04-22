@@ -333,7 +333,6 @@ class PrepareSessionResponse(BaseModel):
     overlay: str | None = None
     layer: str
     reasons: list[str] = Field(default_factory=list)
-    prompt_preview: str | None = None
     loaded_skill_count: int = 0
     route_engine: str = "rust"
     diagnostic_route_mode: Literal["none", "shadow", "verify"] = "none"

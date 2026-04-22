@@ -453,7 +453,6 @@ class CodexAgnoRuntime:
             overlay=routing_result.overlay_skill.name if routing_result.overlay_skill else None,
             layer=routing_result.layer,
             reasons=routing_result.reasons,
-            prompt_preview=routing_result.prompt_preview,
             loaded_skill_count=len(self.skills),
             route_engine=routing_result.route_engine,
             diagnostic_route_mode=routing_result.diagnostic_route_mode,

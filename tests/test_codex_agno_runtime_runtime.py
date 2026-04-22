@@ -1929,7 +1929,6 @@ def test_prepare_session_rust_mode_returns_rust_only_contract(tmp_path: Path) ->
     assert rust_prepared.route_diagnostic_report is None
     assert rust_prepared.skill
     assert rust_prepared.layer
-    assert rust_prepared.prompt_preview is None
 
 
 def test_prepare_session_shadow_mode_returns_soak_report(tmp_path: Path) -> None:
@@ -1964,7 +1963,6 @@ def test_prepare_session_shadow_mode_returns_soak_report(tmp_path: Path) -> None
     assert prepared.route_diagnostic_report.verification_passed is True
     assert prepared.route_diagnostic_report.contract_mismatch_fields == []
     assert prepared.route_diagnostic_report.route_snapshot.selected_skill == prepared.skill
-    assert prepared.prompt_preview is None
 
 
 def test_prepare_session_preview_returns_rust_owned_prompt_text(tmp_path: Path) -> None:
