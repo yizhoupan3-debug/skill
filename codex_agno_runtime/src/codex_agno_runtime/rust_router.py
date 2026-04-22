@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import argparse
 import atexit
 import json
+import os
 import select
 import subprocess
 import threading
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -15,6 +18,8 @@ from codex_agno_runtime.schemas import (
     RouteDecisionSnapshot,
     RouteDiagnosticReport,
     RouteExecutionPolicy,
+    SearchMatchResult,
+    SkillMetadata,
 )
 
 
@@ -28,6 +33,48 @@ def resolve_router_binary_candidate(*candidates: Path) -> Path | None:
         enumerate(existing),
         key=lambda item: (item[1].stat().st_mtime, -item[0]),
     )[1]
+
+
+def discover_codex_home(start_path: Path) -> Path:
+    """Resolve the repository root for route CLI entrypoints."""
+
+    if (start_path / "skills").is_dir():
+        return start_path
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=start_path,
+        )
+        return Path(proc.stdout.strip())
+    except Exception:
+        return start_path
+
+
+def build_route_cli_parser() -> argparse.ArgumentParser:
+    """Build the shared route CLI parser."""
+
+    parser = argparse.ArgumentParser(description="Lookup skills by query.")
+    parser.add_argument("--query", type=str, required=True, help="Natural-language search query.")
+    parser.add_argument("--limit", type=int, default=5, help="Max results to return.")
+    parser.add_argument("--json", action="store_true", help="Output ranked search rows in JSON format.")
+    parser.add_argument("--route-json", action="store_true", help="Output final route decision in JSON format.")
+    parser.add_argument("--session-id", type=str, default="route-cli", help="Session id used in route decision.")
+    parser.add_argument(
+        "--allow-overlay",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Allow selecting one overlay skill in route mode.",
+    )
+    parser.add_argument(
+        "--first-turn",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Whether current task is the first turn for session-start boost.",
+    )
+    return parser
 
 
 class _RouterStdioClient:
@@ -170,6 +217,138 @@ def _close_router_stdio_clients() -> None:
 atexit.register(_close_router_stdio_clients)
 
 
+@lru_cache(maxsize=None)
+def _cached_route_adapter_factory(
+    codex_home: str,
+    runtime_path: str | None,
+    manifest_path: str | None,
+    timeout_seconds: float,
+) -> "RustRouteAdapter":
+    return RustRouteAdapter(
+        Path(codex_home),
+        timeout_seconds=timeout_seconds,
+        runtime_path=Path(runtime_path) if runtime_path is not None else None,
+        manifest_path=Path(manifest_path) if manifest_path is not None else None,
+    )
+
+
+def get_cached_route_adapter(
+    codex_home: Path,
+    *,
+    runtime_path: Path | None = None,
+    manifest_path: Path | None = None,
+    timeout_seconds: float = 30.0,
+) -> "RustRouteAdapter":
+    """Return a cached Rust route adapter for one repo/runtime/manifest tuple."""
+
+    return _cached_route_adapter_factory(
+        str(codex_home.resolve()),
+        str(runtime_path.resolve()) if runtime_path is not None else None,
+        str(manifest_path.resolve()) if manifest_path is not None else None,
+        timeout_seconds,
+    )
+
+
+def route_adapter(
+    *,
+    codex_home: Path,
+    runtime_path: Path | None = None,
+    manifest_path: Path | None = None,
+    timeout_seconds: float = 30.0,
+) -> "RustRouteAdapter":
+    """Return the cached route adapter for one repo and optional routing artifacts."""
+
+    return get_cached_route_adapter(
+        codex_home,
+        runtime_path=runtime_path,
+        manifest_path=manifest_path,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def search_skills(
+    query: str,
+    *,
+    codex_home: Path,
+    limit: int = 5,
+    runtime_path: Path | None = None,
+    manifest_path: Path | None = None,
+    timeout_seconds: float = 30.0,
+) -> list[SearchMatchResult]:
+    """Search skills for one repo through the cached Rust route adapter."""
+
+    return route_adapter(
+        codex_home=codex_home,
+        runtime_path=runtime_path,
+        manifest_path=manifest_path,
+        timeout_seconds=timeout_seconds,
+    ).search_skill_matches(query=query, limit=limit)
+
+
+def route_decision_contract(
+    query: str,
+    *,
+    codex_home: Path,
+    session_id: str = "route-cli",
+    allow_overlay: bool = True,
+    first_turn: bool = True,
+    runtime_path: Path | None = None,
+    manifest_path: Path | None = None,
+    timeout_seconds: float = 30.0,
+) -> RouteDecisionContract:
+    """Return the typed Rust route contract for one repo."""
+
+    return route_adapter(
+        codex_home=codex_home,
+        runtime_path=runtime_path,
+        manifest_path=manifest_path,
+        timeout_seconds=timeout_seconds,
+    ).route_contract(
+        query=query,
+        session_id=session_id,
+        allow_overlay=allow_overlay,
+        first_turn=first_turn,
+    )
+
+
+def run_route_cli(
+    *,
+    codex_home: Path,
+    argv: list[str] | None = None,
+) -> int:
+    """Run the shared route CLI flow for one repo."""
+
+    args = build_route_cli_parser().parse_args(argv)
+    if args.route_json and args.json:
+        print("Error: choose either --json or --route-json.", file=sys.stderr)
+        return 2
+
+    adapter = route_adapter(codex_home=codex_home)
+    if adapter.exec_query_cli(
+        query=args.query,
+        limit=args.limit,
+        json_output=args.json,
+        route_json=args.route_json,
+        session_id=args.session_id,
+        allow_overlay=args.allow_overlay,
+        first_turn=args.first_turn,
+    ):
+        return 0
+
+    print(
+        adapter.query_output_text(
+            query=args.query,
+            limit=args.limit,
+            json_output=args.json,
+            route_json=args.route_json,
+            session_id=args.session_id,
+            allow_overlay=args.allow_overlay,
+            first_turn=args.first_turn,
+        )
+    )
+    return 0
+
+
 class RustRouteAdapter:
     """Call the repository Rust route engine for final route decisions."""
 
@@ -179,6 +358,7 @@ class RustRouteAdapter:
     route_snapshot_schema_version = "router-rs-route-snapshot-v1"
     route_report_schema_version = "router-rs-route-report-v2"
     runtime_control_plane_schema_version = "router-rs-runtime-control-plane-v1"
+    sandbox_control_schema_version = "router-rs-sandbox-control-v1"
     background_control_schema_version = "router-rs-background-control-v1"
     trace_descriptor_schema_version = "router-rs-trace-descriptor-v1"
     checkpoint_resume_manifest_schema_version = "router-rs-checkpoint-resume-manifest-v1"
@@ -198,6 +378,7 @@ class RustRouteAdapter:
     execution_authority = "rust-execution-cli"
     compile_authority = "rust-route-compiler"
     runtime_control_plane_authority = "rust-runtime-control-plane"
+    sandbox_control_authority = "rust-sandbox-control"
     background_control_authority = "rust-background-control"
     trace_descriptor_authority = "rust-runtime-trace-descriptor"
     checkpoint_resume_manifest_authority = "rust-runtime-checkpoint-manifest"
@@ -222,6 +403,7 @@ class RustRouteAdapter:
         self.release_bin = self.router_dir / "target" / "release" / "router-rs"
         self.debug_bin = self.router_dir / "target" / "debug" / "router-rs"
         self._cached_runtime_binary: Path | None | object = _ROUTER_BINARY_CACHE_UNSET
+        self._cached_latest_source_mtime: float | None = None
 
     def execute(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Run one Rust-owned execution request through router-rs."""
@@ -296,6 +478,246 @@ class RustRouteAdapter:
                 f"{payload.get('authority')!r}"
             )
         return RouteDecisionContract.model_validate(payload)
+
+    def search_skill_rows(
+        self,
+        *,
+        query: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Return Rust-backed search rows for local Python hydration."""
+
+        command = self.query_cli_command(query=query, limit=limit, json_output=True)
+        resolved: Any = self._run_hot_json_command(
+            "search_skills",
+            {
+                "query": query,
+                "limit": limit,
+                "runtime_path": str(self.runtime_path),
+                "manifest_path": str(self.manifest_path),
+            },
+            command,
+            failure_label="search engine",
+        )
+        rows = resolved if isinstance(resolved, list) else resolved.get("rows")
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise RuntimeError(f"Rust search engine returned an unexpected rows payload: {rows!r}")
+        return [dict(row) for row in rows]
+
+    def search_skill_matches(
+        self,
+        *,
+        query: str,
+        limit: int,
+    ) -> list[SearchMatchResult]:
+        """Return Rust-backed search rows as shared typed match results."""
+
+        return self.search_skill_matches_from_rows(self.search_skill_rows(query=query, limit=limit))
+
+    def search_skill_matches_from_rows(
+        self,
+        rows: list[dict[str, Any]],
+    ) -> list[SearchMatchResult]:
+        """Project raw Rust search rows into shared typed match results."""
+
+        hydrated: list[SearchMatchResult] = []
+        for row in rows:
+            hydrated.append(
+                SearchMatchResult(
+                    record=SkillMetadata(
+                        name=str(row["slug"]),
+                        description=str(row["description"]),
+                        routing_layer=str(row["layer"]),
+                        routing_gate=str(row["gate"]),
+                        routing_owner=str(row["owner"]),
+                    ),
+                    score=float(row["score"]),
+                    matched_terms=int(row["matched_terms"]),
+                    total_terms=int(row["total_terms"]),
+                )
+            )
+        return hydrated
+
+    def render_search_matches_text(
+        self,
+        *,
+        query: str,
+        matches: list[SearchMatchResult],
+    ) -> str:
+        """Render typed search matches into the plain-text CLI table."""
+
+        lines = [
+            f"Found {len(matches)} matches for '{query}':",
+            "",
+            f"{'Skill':<30} | {'Layer':<5} | {'Gate':<10} | {'Score':<6} | {'Description'}",
+            "-" * 120,
+        ]
+        for match in matches:
+            description = match.record.description
+            if len(description) > 60:
+                description = description[:57] + "..."
+            lines.append(
+                f"{match.record.name:<30} | {match.record.routing_layer:<5} | "
+                f"{match.record.routing_gate:<10} | {match.score:<6} | {description}"
+            )
+        return "\n".join(lines)
+
+    def search_skill_rows_json_text(
+        self,
+        *,
+        query: str,
+        limit: int,
+    ) -> str:
+        """Render raw Rust search rows as formatted JSON text."""
+
+        return json.dumps(self.search_skill_rows(query=query, limit=limit), indent=2, ensure_ascii=False)
+
+    def route_contract_json_text(
+        self,
+        *,
+        query: str,
+        session_id: str,
+        allow_overlay: bool,
+        first_turn: bool,
+    ) -> str:
+        """Render one typed route contract as formatted JSON text."""
+
+        contract = self.route_contract(
+            query=query,
+            session_id=session_id,
+            allow_overlay=allow_overlay,
+            first_turn=first_turn,
+        )
+        return json.dumps(contract.model_dump(mode="json"), indent=2, ensure_ascii=False)
+
+    def search_skill_matches_text(
+        self,
+        *,
+        query: str,
+        limit: int,
+    ) -> str:
+        """Render the default human-readable search output for one query."""
+
+        matches = self.search_skill_matches(query=query, limit=limit)
+        if not matches:
+            return f"No skills found matching: {query}"
+        return self.render_search_matches_text(query=query, matches=matches)
+
+    def query_output_text(
+        self,
+        *,
+        query: str,
+        limit: int,
+        json_output: bool = False,
+        route_json: bool = False,
+        session_id: str = "route-cli",
+        allow_overlay: bool = True,
+        first_turn: bool = True,
+    ) -> str:
+        """Render the requested non-exec CLI output for one query."""
+
+        if route_json and json_output:
+            raise ValueError("choose either json_output or route_json")
+        if route_json:
+            return self.route_contract_json_text(
+                query=query,
+                session_id=session_id,
+                allow_overlay=allow_overlay,
+                first_turn=first_turn,
+            )
+        if json_output:
+            return self.search_skill_rows_json_text(query=query, limit=limit)
+        return self.search_skill_matches_text(query=query, limit=limit)
+
+    def compiled_binary(self) -> Path | None:
+        """Expose the resolved router binary for thin Python CLI shims."""
+
+        return self._cached_resolved_binary()
+
+    def exec_query_cli(
+        self,
+        *,
+        query: str,
+        limit: int,
+        json_output: bool = False,
+        route_json: bool = False,
+        session_id: str = "route-cli",
+        allow_overlay: bool = True,
+        first_turn: bool = True,
+    ) -> bool:
+        """Replace the current process with router-rs when a compiled binary exists."""
+
+        binary = self.compiled_binary()
+        if binary is None:
+            return False
+        command = self.query_cli_command(
+            query=query,
+            limit=limit,
+            json_output=json_output,
+            route_json=route_json,
+            session_id=session_id,
+            allow_overlay=allow_overlay,
+            first_turn=first_turn,
+        )
+        try:
+            os.execv(str(binary), command)
+        except OSError:
+            return False
+        return True
+
+    def query_cli_command(
+        self,
+        *,
+        query: str,
+        limit: int,
+        json_output: bool = False,
+        route_json: bool = False,
+        session_id: str = "route-cli",
+        allow_overlay: bool = True,
+        first_turn: bool = True,
+    ) -> list[str]:
+        """Build one router-rs CLI command for search or route rendering."""
+
+        return [*self._binary_command(), *self.query_cli_args(
+            query=query,
+            limit=limit,
+            json_output=json_output,
+            route_json=route_json,
+            session_id=session_id,
+            allow_overlay=allow_overlay,
+            first_turn=first_turn,
+        )]
+
+    def query_cli_args(
+        self,
+        *,
+        query: str,
+        limit: int,
+        json_output: bool = False,
+        route_json: bool = False,
+        session_id: str = "route-cli",
+        allow_overlay: bool = True,
+        first_turn: bool = True,
+    ) -> list[str]:
+        """Build router-rs CLI args without the binary prefix."""
+
+        command = [
+            "--query",
+            query,
+            "--limit",
+            str(limit),
+            "--runtime",
+            str(self.runtime_path),
+            "--manifest",
+            str(self.manifest_path),
+        ]
+        if json_output:
+            command.append("--json")
+        if route_json:
+            command.extend(["--route-json", "--session-id", session_id])
+            command.append(f"--allow-overlay={'true' if allow_overlay else 'false'}")
+            command.append(f"--first-turn={'true' if first_turn else 'false'}")
+        return command
 
     def compile_profile_bundle(self, profile_path: Path) -> dict[str, Any]:
         """Compile a serialized framework profile into the Rust-side companion bundle."""
@@ -719,6 +1141,32 @@ class RustRouteAdapter:
             )
         return resolved
 
+    def sandbox_control(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Resolve sandbox lifecycle transition policy through the Rust runtime core."""
+
+        args = [
+            "--sandbox-control-json",
+            "--sandbox-control-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        resolved = self._run_hot_json_command(
+            "sandbox_control",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="sandbox control compiler",
+        )
+        if resolved.get("schema_version") != self.sandbox_control_schema_version:
+            raise RuntimeError(
+                "Rust sandbox control compiler returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
+            )
+        if resolved.get("authority") != self.sandbox_control_authority:
+            raise RuntimeError(
+                "Rust sandbox control compiler returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        return resolved
+
     def describe_transport(self, payload: dict[str, Any]) -> dict[str, Any]:
         args = [
             "--describe-transport-json",
@@ -1017,7 +1465,7 @@ class RustRouteAdapter:
         """Describe Rust route-adapter availability."""
 
         resolved_binary = self._resolved_binary()
-        latest_source_mtime = self._latest_source_mtime()
+        latest_source_mtime = self._cached_source_mtime()
         resolved_binary_mtime = resolved_binary.stat().st_mtime if resolved_binary is not None else None
         return {
             "runtime_path": str(self.runtime_path),
@@ -1034,12 +1482,14 @@ class RustRouteAdapter:
             "route_authority": self.route_authority,
             "compile_authority": self.compile_authority,
             "runtime_control_plane_authority": self.runtime_control_plane_authority,
+            "sandbox_control_authority": self.sandbox_control_authority,
             "background_control_authority": self.background_control_authority,
             "route_decision_schema_version": self.route_decision_schema_version,
             "route_policy_schema_version": self.route_policy_schema_version,
             "route_snapshot_schema_version": self.route_snapshot_schema_version,
             "route_report_schema_version": self.route_report_schema_version,
             "runtime_control_plane_schema_version": self.runtime_control_plane_schema_version,
+            "sandbox_control_schema_version": self.sandbox_control_schema_version,
             "background_control_schema_version": self.background_control_schema_version,
             "trace_descriptor_schema_version": self.trace_descriptor_schema_version,
             "checkpoint_resume_manifest_schema_version": self.checkpoint_resume_manifest_schema_version,
@@ -1064,11 +1514,6 @@ class RustRouteAdapter:
 
     def _stdio_command(self) -> list[str]:
         return [*self._compiled_binary_command(), "--stdio-json"]
-
-    def _cargo_command(self) -> list[str]:
-        """Compatibility alias while older fallback call sites are retired."""
-
-        return self._compiled_binary_command()
 
     def _compiled_binary_command(self) -> list[str]:
         resolved_binary = self._cached_resolved_binary()
@@ -1115,6 +1560,17 @@ class RustRouteAdapter:
             candidates.extend(source_dir.rglob("*.rs"))
         return max((path.stat().st_mtime for path in candidates if path.exists()), default=0.0)
 
+    def _cached_source_mtime(self) -> float:
+        cached = self._cached_latest_source_mtime
+        if cached is None:
+            cached = self._latest_source_mtime()
+            self._cached_latest_source_mtime = cached
+        return cached
+
+    def _invalidate_binary_cache(self) -> None:
+        self._cached_runtime_binary = _ROUTER_BINARY_CACHE_UNSET
+        self._cached_latest_source_mtime = None
+
     def _run_json_command(self, command: list[str], *, failure_label: str) -> dict[str, Any]:
         try:
             proc = subprocess.run(
@@ -1144,7 +1600,11 @@ class RustRouteAdapter:
             return self._run_json_command(command, failure_label=failure_label)
         try:
             return self._stdio_client().request(operation, payload)
-        except RuntimeError:
+        except RuntimeError as exc:
+            if "unsupported stdio operation" in str(exc):
+                self._reset_stdio_client()
+                self._invalidate_binary_cache()
+                return self._run_json_command(command, failure_label=failure_label)
             self._reset_stdio_client()
             return self._stdio_client().request(operation, payload)
 

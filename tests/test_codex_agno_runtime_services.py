@@ -10,6 +10,7 @@ import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -138,7 +139,6 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     memory_service = MemoryService(settings, control_plane_descriptor=control_plane_descriptor)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
         control_plane_descriptor=control_plane_descriptor,
@@ -164,6 +164,20 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert router_service.health()["route_policy"]["diagnostic_route_mode"] == "none"
     assert router_service.health()["rust_adapter"]["route_authority"] == "rust-route-core"
     assert router_service.health()["rust_adapter"]["compile_authority"] == "rust-route-compiler"
+    assert (
+        router_service.control_plane_descriptor["services"]["execution"]["kernel_live_backend_impl"]
+        == "router-rs"
+    )
+    assert (
+        router_service.control_plane_descriptor["services"]["execution"]["kernel_live_delegate_authority"]
+        == "rust-execution-cli"
+    )
+    assert (
+        router_service.control_plane_descriptor["services"]["execution"]["kernel_contract"][
+            "execution_kernel_delegate_impl"
+        ]
+        == "router-rs"
+    )
     assert (
         router_service.health()["rust_adapter"]["route_policy_schema_version"]
         == "router-rs-route-policy-v1"
@@ -311,6 +325,208 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
 
     for service in (execution_service, memory_service, trace_service, state_service, router_service):
         service.shutdown()
+
+
+def test_trace_service_health_reuses_existing_rust_adapter_for_observability(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=False,
+    )
+    checkpointer = FilesystemRuntimeCheckpointer(
+        data_dir=settings.resolved_data_dir,
+        trace_output_path=settings.resolved_trace_output_path,
+    )
+    trace_service = TraceService(checkpointer)
+    seen: list[object] = []
+
+    def _fake_health_snapshot(*, rust_adapter=None):
+        seen.append(rust_adapter)
+        return {
+            "ownership_lane": "rust-contract-lane",
+            "metric_catalog_version": "runtime-observability-metrics-v1",
+            "dashboard_schema_version": "runtime-observability-dashboard-v1",
+            "resource_dimensions": [],
+            "metric_catalog_schema_version": "runtime-observability-metric-catalog-v1",
+            "metric_names": [],
+            "dashboard_panel_count": 0,
+            "dashboard_alert_count": 0,
+            "exporter": {"ownership_lane": "rust-contract-lane"},
+        }
+
+    monkeypatch.setattr(runtime_services, "build_runtime_observability_health_snapshot", _fake_health_snapshot)
+
+    first = trace_service.health()
+    second = trace_service.health()
+
+    assert first["observability"]["ownership_lane"] == "rust-contract-lane"
+    assert second["observability"]["ownership_lane"] == "rust-contract-lane"
+    assert seen == [trace_service.recorder._rust_adapter]
+
+
+def test_router_service_health_reuses_cached_rust_adapter_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=False,
+    )
+    router_service = RouterService(settings)
+    count = 0
+    health_payload = router_service._rust_adapter.health()
+
+    def _fake_health() -> dict[str, Any]:
+        nonlocal count
+        count += 1
+        return dict(health_payload)
+
+    monkeypatch.setattr(router_service._rust_adapter, "health", _fake_health)
+
+    first = router_service.health()
+    second = router_service.health()
+
+    assert first["rust_adapter"]["resolved_binary"] == second["rust_adapter"]["resolved_binary"]
+    assert count == 1
+
+
+def test_execution_service_health_reuses_cached_control_plane_contracts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=False,
+    )
+    router_service = RouterService(settings)
+    execution_service = ExecutionEnvironmentService(
+        settings,
+        max_background_jobs=4,
+        background_job_timeout_seconds=30.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
+        rust_adapter=router_service._rust_adapter,
+    )
+    count = 0
+
+    def _fake_descriptors() -> dict[str, Any]:
+        nonlocal count
+        count += 1
+        return {"runtime_control_plane": {"authority": "rust-runtime-control-plane"}}
+
+    monkeypatch.setattr(execution_service, "describe_control_plane_contracts", _fake_descriptors)
+
+    first = execution_service.health()
+    second = execution_service.health()
+
+    assert first["control_plane_contracts"] == second["control_plane_contracts"]
+    assert count == 1
+
+
+def test_execution_service_routes_sandbox_transitions_through_rust_control(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=False,
+    )
+    router_service = RouterService(settings)
+    execution_service = ExecutionEnvironmentService(
+        settings,
+        max_background_jobs=2,
+        background_job_timeout_seconds=15.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
+        rust_adapter=router_service._rust_adapter,
+    )
+    routing_result = router_service.route(
+        task="验证 sandbox 生命周期继续 rust 化",
+        session_id="sandbox-rust-control-session",
+        allow_overlay=True,
+        first_turn=True,
+    )
+    request = ExecutionKernelRequest(
+        task=routing_result.task,
+        session_id=routing_result.session_id,
+        job_id="job-sandbox-rust-control",
+        user_id="tester",
+        routing_result=routing_result,
+        dry_run=True,
+        prompt_preview="sandbox-rust-control",
+    )
+    seen: list[dict[str, Any]] = []
+
+    def _fake_sandbox_control(payload: dict[str, Any]) -> dict[str, Any]:
+        seen.append(dict(payload))
+        resolved_state = payload.get("next_state")
+        if payload["operation"] == "cleanup":
+            resolved_state = "failed" if payload.get("cleanup_failed") else "recycled"
+        return {
+            "schema_version": "router-rs-sandbox-control-v1",
+            "authority": "rust-sandbox-control",
+            "operation": payload["operation"],
+            "current_state": payload.get("current_state"),
+            "next_state": payload.get("next_state"),
+            "allowed": True,
+            "resolved_state": resolved_state,
+            "reason": "transition-accepted",
+            "error": None,
+        }
+
+    monkeypatch.setattr(execution_service._rust_adapter, "sandbox_control", _fake_sandbox_control)
+
+    async def fake_execute(current_request: ExecutionKernelRequest) -> RunTaskResponse:
+        return RunTaskResponse(
+            session_id=current_request.session_id,
+            user_id=current_request.user_id,
+            skill=current_request.routing_result.selected_skill.name,
+            overlay=(
+                current_request.routing_result.overlay_skill.name
+                if current_request.routing_result.overlay_skill
+                else None
+            ),
+            live_run=False,
+            content="ok",
+            prompt_preview=current_request.prompt_preview,
+            usage=UsageMetrics(input_tokens=2, output_tokens=1, total_tokens=3, mode="dry_run"),
+            metadata={
+                "execution_kernel": "rust-execution-kernel-slice",
+                "execution_kernel_authority": "rust-execution-kernel-authority",
+            },
+        )
+
+    async def _run() -> None:
+        response = await execution_service.execute_request(request, executor=fake_execute)
+        await execution_service.await_sandbox_cleanup(response.metadata["sandbox_id"])
+
+    asyncio.run(_run())
+
+    assert [entry["operation"] for entry in seen] == [
+        "transition",
+        "transition",
+        "transition",
+        "cleanup",
+        "transition",
+    ]
+    assert [entry["current_state"] for entry in seen] == [
+        "created",
+        "warm",
+        "busy",
+        "draining",
+        "draining",
+    ]
+    assert [entry.get("next_state") for entry in seen] == [
+        "warm",
+        "busy",
+        "draining",
+        None,
+        "recycled",
+    ]
 
 
 def test_rusage_memory_normalization_matches_host_units(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -524,7 +740,6 @@ def test_execution_environment_service_routes_through_kernel_adapter(tmp_path: P
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
@@ -585,7 +800,6 @@ def test_execution_service_exposes_sandbox_lifecycle_health(tmp_path: Path) -> N
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=2,
         background_job_timeout_seconds=15.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
@@ -610,6 +824,15 @@ def test_execution_service_exposes_sandbox_lifecycle_health(tmp_path: Path) -> N
     ]
     assert health["event_log_path"].endswith("runtime_sandbox_events.jsonl")
     assert health["state_counts"]["created"] == 0
+    assert health["contract"]["authority"] == "rust-runtime-control-plane"
+    assert health["contract"]["cleanup_mode"] == "async-drain-and-recycle"
+    assert health["contract"]["control_operations"] == ["transition", "cleanup"]
+    assert health["contract"]["runtime_probe_dimensions"] == [
+        "cpu",
+        "memory",
+        "wall_clock",
+        "output_size",
+    ]
     assert health["background_effect_host_contract"]["service"] == "execution"
     assert health["background_effect_host_contract"]["steady_state_owner"] == "rust-control-plane"
 
@@ -626,7 +849,6 @@ def test_execution_service_schedules_async_sandbox_cleanup(tmp_path: Path) -> No
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=2,
         background_job_timeout_seconds=15.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
@@ -709,7 +931,6 @@ def test_execution_service_rejects_high_risk_without_dedicated_profile(tmp_path:
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=2,
         background_job_timeout_seconds=15.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
@@ -768,7 +989,6 @@ def test_execution_service_enforces_budget_at_admission_and_runtime(tmp_path: Pa
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=2,
         background_job_timeout_seconds=15.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
@@ -845,7 +1065,6 @@ def test_execution_service_failure_isolation_keeps_other_sandboxes_healthy(tmp_p
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=2,
         background_job_timeout_seconds=15.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
@@ -929,7 +1148,6 @@ def test_execution_environment_service_live_mode_omits_python_prompt_preview(tmp
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
@@ -998,7 +1216,6 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
@@ -1083,7 +1300,6 @@ def test_execution_service_prefers_rust_live_metadata_when_present(tmp_path: Pat
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
@@ -1185,7 +1401,6 @@ def test_execution_service_rejects_legacy_live_metadata_shape(tmp_path: Path) ->
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
@@ -1279,7 +1494,6 @@ def test_execution_service_live_path_uses_router_rs_before_python_fallback(tmp_p
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
@@ -1376,7 +1590,6 @@ def test_execution_service_live_path_propagates_router_rs_infrastructure_errors(
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
@@ -1423,7 +1636,6 @@ def test_execution_service_kernel_payload_prefers_explicit_metadata(tmp_path: Pa
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=4,
         background_job_timeout_seconds=30.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
@@ -1464,7 +1676,6 @@ def test_execution_environment_service_exposes_control_plane_contract_descriptor
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
         settings,
-        router_service.prompt_builder,
         max_background_jobs=2,
         background_job_timeout_seconds=15.0,
         control_plane_descriptor=router_service.control_plane_descriptor,

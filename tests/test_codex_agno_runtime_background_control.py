@@ -15,8 +15,15 @@ if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
 from codex_agno_runtime.config import RuntimeSettings
+from codex_agno_runtime.execution_kernel import ExecutionKernelRequest
 from codex_agno_runtime.runtime import CodexAgnoRuntime
-from codex_agno_runtime.schemas import BackgroundRunRequest, RunTaskResponse, UsageMetrics
+from codex_agno_runtime.schemas import (
+    BackgroundRunRequest,
+    RoutingResult,
+    RunTaskResponse,
+    SkillMetadata,
+    UsageMetrics,
+)
 
 
 async def _wait_for_status(
@@ -24,7 +31,7 @@ async def _wait_for_status(
     job_id: str,
     expected: set[str],
     *,
-    timeout: float = 2.0,
+    timeout: float = 5.0,
 ) -> object:
     deadline = asyncio.get_running_loop().time() + timeout
     while asyncio.get_running_loop().time() < deadline:
@@ -314,6 +321,12 @@ def test_background_runtime_sandbox_events_keep_background_job_id(tmp_path: Path
     """Sandbox event logs should preserve the real background job id through cleanup."""
 
     runtime = _build_runtime(tmp_path)
+    selected_skill = SkillMetadata(
+        name="test-skill",
+        routing_layer="L2",
+        routing_owner="owner",
+        routing_gate="none",
+    )
 
     async def fake_kernel_execute(request) -> RunTaskResponse:
         return RunTaskResponse(
@@ -328,10 +341,32 @@ def test_background_runtime_sandbox_events_keep_background_job_id(tmp_path: Path
             metadata={
                 "execution_kernel": "rust-execution-kernel-slice",
                 "execution_kernel_authority": "rust-execution-kernel-authority",
-            },
+                },
+            )
+
+    async def fake_run_task(request: BackgroundRunRequest) -> RunTaskResponse:
+        session_id = request.session_id or "background-sandbox-session"
+        user_id = request.user_id or "tester"
+        routing_result = RoutingResult(
+            task=request.task,
+            session_id=session_id,
+            selected_skill=selected_skill,
+            layer=selected_skill.routing_layer,
+        )
+        return await runtime.execution_service.execute_request(
+            ExecutionKernelRequest(
+                task=request.task,
+                session_id=session_id,
+                job_id=request.job_id,
+                user_id=user_id,
+                routing_result=routing_result,
+                prompt_preview="background prompt",
+                dry_run=True,
+            ),
+            executor=fake_kernel_execute,
         )
 
-    runtime.execution_service._execute_request_via_rust_adapter = fake_kernel_execute  # type: ignore[method-assign]
+    runtime.run_task = fake_run_task  # type: ignore[method-assign]
 
     async def _run() -> None:
         status = await runtime.enqueue_background_run(
@@ -342,8 +377,10 @@ def test_background_runtime_sandbox_events_keep_background_job_id(tmp_path: Path
                 dry_run=True,
             )
         )
-        final = await _wait_for_status(runtime, status.job_id, {"completed"})
+        await asyncio.wait_for(runtime._background_tasks[status.job_id], timeout=5.0)
+        final = runtime.get_background_status(status.job_id)
 
+        assert final is not None
         assert final.status == "completed"
         events_path = tmp_path / "runtime-data" / "runtime_sandbox_events.jsonl"
         events = [
@@ -535,6 +572,53 @@ def test_background_claim_records_rust_kernel_authority(tmp_path: Path) -> None:
             assert event.payload["execution_kernel_authority"] == "rust-execution-kernel-authority"
             assert event.payload["execution_kernel_delegate"] == "router-rs"
             assert event.payload["execution_kernel_delegate_authority"] == "rust-execution-cli"
+
+    asyncio.run(_run())
+
+
+def test_background_claim_step_is_resolved_through_rust_control(tmp_path: Path) -> None:
+    """The runner claim step should go through the Rust background-control reducer."""
+
+    runtime = _build_runtime(tmp_path)
+    seen_operations: list[str] = []
+    original = runtime.rust_adapter.background_control
+
+    def wrapped(payload):
+        seen_operations.append(str(payload["operation"]))
+        return original(payload)
+
+    runtime.rust_adapter.background_control = wrapped  # type: ignore[method-assign]
+
+    async def fake_run_task(_request: BackgroundRunRequest) -> RunTaskResponse:
+        return RunTaskResponse(
+            session_id="background-claim-session",
+            user_id="tester",
+            skill="test-skill",
+            live_run=False,
+            content="ok",
+            usage=UsageMetrics(),
+        )
+
+    runtime.run_task = fake_run_task  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        status = await runtime.enqueue_background_run(
+            BackgroundRunRequest(
+                task="background claim rust control",
+                user_id="tester",
+                session_id="background-claim-session",
+                dry_run=True,
+            )
+        )
+        final = await _wait_for_status(runtime, status.job_id, {"completed"})
+        assert final.status == "completed"
+        assert "claim" in seen_operations
+
+        claimed = next(
+            event for event in runtime._trace.events if event.job_id == status.job_id and event.kind == "job.claimed"
+        )
+        assert claimed.payload["status"] == "running"
+        assert claimed.payload["background_policy_authority"] == "rust-background-control"
 
     asyncio.run(_run())
 

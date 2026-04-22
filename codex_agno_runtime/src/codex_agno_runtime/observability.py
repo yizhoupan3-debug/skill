@@ -217,6 +217,18 @@ def _with_rust_observability_adapter(fallback_fn: Callable[[RustRouteAdapter], _
         return None
 
 
+def _with_explicit_rust_observability_adapter(
+    rust_adapter: RustRouteAdapter | None,
+    resolver: Callable[[RustRouteAdapter], _R],
+) -> _R | None:
+    if rust_adapter is None:
+        return None
+    try:
+        return resolver(rust_adapter)
+    except Exception:
+        return None
+
+
 def _require_non_empty_string(value: str, *, field_name: str) -> str:
     """Reject empty observability dimensions instead of silently emitting them."""
 
@@ -272,11 +284,17 @@ def build_runtime_observability_resource_attributes(
     }
 
 
-def build_runtime_observability_exporter_descriptor() -> dict[str, Any]:
+def build_runtime_observability_exporter_descriptor(
+    *,
+    rust_adapter: RustRouteAdapter | None = None,
+) -> dict[str, Any]:
     """Describe the concrete exporter lane used by the runtime."""
 
-    adapter = _with_rust_observability_adapter(
-        lambda adapter_obj: adapter_obj.runtime_observability_exporter_descriptor()
+    adapter = _with_explicit_rust_observability_adapter(
+        rust_adapter,
+        lambda adapter_obj: adapter_obj.runtime_observability_exporter_descriptor(),
+    ) or _with_rust_observability_adapter(
+        lambda adapter_obj: adapter_obj.runtime_observability_exporter_descriptor(),
     )
     if adapter is not None:
         return adapter
@@ -293,13 +311,13 @@ def build_runtime_observability_exporter_descriptor() -> dict[str, Any]:
     }
 
 
-@lru_cache(maxsize=1)
-def build_runtime_observability_health_snapshot() -> dict[str, Any]:
-    """Return one cached runtime-health projection of the observability contract."""
-
-    exporter = build_runtime_observability_exporter_descriptor()
-    dashboard = runtime_observability_dashboard_schema()
-    metric_catalog = runtime_observability_metric_catalog()
+def _build_runtime_observability_health_snapshot(
+    *,
+    rust_adapter: RustRouteAdapter | None = None,
+) -> dict[str, Any]:
+    exporter = build_runtime_observability_exporter_descriptor(rust_adapter=rust_adapter)
+    dashboard = runtime_observability_dashboard_schema(rust_adapter=rust_adapter)
+    metric_catalog = runtime_observability_metric_catalog(rust_adapter=rust_adapter)
     return {
         "ownership_lane": exporter["ownership_lane"],
         "metric_catalog_version": exporter["metric_catalog_version"],
@@ -313,11 +331,33 @@ def build_runtime_observability_health_snapshot() -> dict[str, Any]:
     }
 
 
-def runtime_observability_metric_catalog() -> dict[str, Any]:
+@lru_cache(maxsize=1)
+def _cached_runtime_observability_health_snapshot() -> dict[str, Any]:
+    return _build_runtime_observability_health_snapshot()
+
+
+def build_runtime_observability_health_snapshot(
+    *,
+    rust_adapter: RustRouteAdapter | None = None,
+) -> dict[str, Any]:
+    """Return one cached runtime-health projection of the observability contract."""
+
+    if rust_adapter is not None:
+        return _build_runtime_observability_health_snapshot(rust_adapter=rust_adapter)
+    return _cached_runtime_observability_health_snapshot()
+
+
+def runtime_observability_metric_catalog(
+    *,
+    rust_adapter: RustRouteAdapter | None = None,
+) -> dict[str, Any]:
     """Return the machine-readable runtime metric catalog frozen by the contract."""
 
-    catalog = _with_rust_observability_adapter(
-        lambda adapter_obj: adapter_obj.runtime_observability_metric_catalog()
+    catalog = _with_explicit_rust_observability_adapter(
+        rust_adapter,
+        lambda adapter_obj: adapter_obj.runtime_observability_metric_catalog(),
+    ) or _with_rust_observability_adapter(
+        lambda adapter_obj: adapter_obj.runtime_observability_metric_catalog(),
     )
     if catalog is not None:
         return catalog
@@ -340,11 +380,17 @@ def runtime_observability_metric_catalog() -> dict[str, Any]:
     }
 
 
-def runtime_observability_dashboard_schema() -> dict[str, Any]:
+def runtime_observability_dashboard_schema(
+    *,
+    rust_adapter: RustRouteAdapter | None = None,
+) -> dict[str, Any]:
     """Return the canonical dashboard schema backing the contract doc."""
 
-    schema = _with_rust_observability_adapter(
-        lambda adapter_obj: adapter_obj.runtime_observability_dashboard_schema()
+    schema = _with_explicit_rust_observability_adapter(
+        rust_adapter,
+        lambda adapter_obj: adapter_obj.runtime_observability_dashboard_schema(),
+    ) or _with_rust_observability_adapter(
+        lambda adapter_obj: adapter_obj.runtime_observability_dashboard_schema(),
     )
     if schema is not None:
         return schema

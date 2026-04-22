@@ -1,44 +1,20 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 import sys
-import types
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
-PACKAGE_ROOT = RUNTIME_SRC / "codex_agno_runtime"
 
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+if str(RUNTIME_SRC) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_SRC))
 
-def _load_runtime_module(module_name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"failed to load {module_name} from {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-if "codex_agno_runtime" not in sys.modules:
-    package = types.ModuleType("codex_agno_runtime")
-    package.__path__ = [str(PACKAGE_ROOT)]  # type: ignore[attr-defined]
-    sys.modules["codex_agno_runtime"] = package
-
-schemas_module = _load_runtime_module(
-    "codex_agno_runtime.schemas",
-    PACKAGE_ROOT / "schemas.py",
-)
-prompt_builder_module = _load_runtime_module(
-    "codex_agno_runtime.prompt_builder",
-    PACKAGE_ROOT / "prompt_builder.py",
-)
-
-PromptBuilder = prompt_builder_module.PromptBuilder
-RoutingResult = schemas_module.RoutingResult
-SkillMetadata = schemas_module.SkillMetadata
+from codex_agno_runtime.prompt_builder import PromptBuilder
+from codex_agno_runtime.schemas import RoutingResult, SkillMetadata
 
 
 FIXTURE_PATH = PROJECT_ROOT / "tests" / "prompt_style_eval_cases.json"

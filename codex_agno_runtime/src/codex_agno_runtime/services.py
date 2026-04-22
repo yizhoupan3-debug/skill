@@ -33,10 +33,7 @@ from codex_agno_runtime.execution_kernel import (
     SandboxExecutionPolicy,
     SandboxResourceBudget,
     SandboxRuntimeProbe,
-    build_router_rs_execution_kernel_contract_descriptor,
-    build_router_rs_execution_kernel_health,
     execute_router_rs_request,
-    preview_router_rs_request_prompt,
 )
 from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_BRIDGE_AUTHORITY,
@@ -51,10 +48,12 @@ from codex_agno_runtime.observability import build_runtime_observability_health_
 from codex_agno_runtime.prompt_builder import PromptBuilder
 from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import (
+    BackgroundBatchEnqueueResponse,
     BackgroundParallelGroupSummary,
     BackgroundRunRequest,
     BackgroundRunStatus,
     RouteDecisionContract,
+    RouteDecisionSnapshot,
     RouteDiagnosticReport,
     RouteExecutionPolicy,
     RoutingResult,
@@ -65,7 +64,7 @@ from codex_agno_runtime.state import (
     BackgroundJobStatusMutation,
     BackgroundJobStore,
     BackgroundSessionTakeoverArbitration,
-    TERMINAL_JOB_STATUSES,
+    SessionConflictError,
 )
 from codex_agno_runtime.trace import InMemoryRuntimeEventBridge, RuntimeEventHandoff, RuntimeEventStreamChunk
 from codex_agno_runtime.trace import RuntimeEventTransport
@@ -85,6 +84,85 @@ _KERNEL_CONTRACT_FIELDS = (
     "execution_kernel_live_fallback_authority",
     "execution_kernel_live_fallback_enabled",
     "execution_kernel_live_fallback_mode",
+)
+_KERNEL_HEALTH_FIELDS = (
+    "kernel_adapter_kind",
+    "kernel_authority",
+    "kernel_owner_family",
+    "kernel_owner_impl",
+    "kernel_contract_mode",
+    "kernel_replace_ready",
+    "kernel_in_process_replacement_complete",
+    "kernel_live_backend_family",
+    "kernel_live_backend_impl",
+    "kernel_live_delegate_kind",
+    "kernel_live_delegate_authority",
+    "kernel_live_delegate_family",
+    "kernel_live_delegate_impl",
+    "kernel_live_delegate_mode",
+    "kernel_live_fallback_kind",
+    "kernel_live_fallback_authority",
+    "kernel_live_fallback_family",
+    "kernel_live_fallback_impl",
+    "kernel_live_fallback_enabled",
+    "kernel_live_fallback_mode",
+    "kernel_mode_support",
+    "execution_schema_version",
+)
+_DEFAULT_SANDBOX_LIFECYCLE_STATES = (
+    "created",
+    "warm",
+    "busy",
+    "draining",
+    "recycled",
+    "failed",
+)
+_DEFAULT_SANDBOX_ALLOWED_TRANSITIONS = {
+    ("created", "warm"),
+    ("warm", "busy"),
+    ("busy", "draining"),
+    ("draining", "recycled"),
+    ("draining", "failed"),
+    ("warm", "failed"),
+    ("busy", "failed"),
+    ("recycled", "warm"),
+}
+_DEFAULT_BACKGROUND_TERMINAL_STATUSES = (
+    "completed",
+    "failed",
+    "interrupted",
+    "retry_exhausted",
+)
+_DEFAULT_BACKGROUND_ACTIVE_STATUSES = (
+    "queued",
+    "running",
+    "interrupt_requested",
+    "retry_scheduled",
+)
+_DEFAULT_RUNTIME_STARTUP_ORDER = (
+    "router",
+    "state",
+    "trace",
+    "memory",
+    "execution",
+    "background",
+)
+_DEFAULT_RUNTIME_SHUTDOWN_ORDER = (
+    "background",
+    "execution",
+    "memory",
+    "trace",
+    "state",
+    "router",
+)
+_DEFAULT_RUNTIME_HEALTH_SECTIONS = (
+    "router",
+    "state",
+    "trace",
+    "memory",
+    "execution_environment",
+    "background",
+    "checkpoint",
 )
 
 
@@ -112,6 +190,154 @@ def _runtime_control_plane_rustification_status(
     if not isinstance(status, Mapping):
         return {}
     return dict(status)
+
+
+def _runtime_execution_kernel_contract(service_descriptor: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return the Rust-owned execution kernel contract projected by the control plane."""
+
+    if not isinstance(service_descriptor, Mapping):
+        raise RuntimeError("runtime control plane execution descriptor is missing.")
+    contract = service_descriptor.get("kernel_contract")
+    if not isinstance(contract, Mapping):
+        raise RuntimeError("runtime control plane execution descriptor is missing kernel_contract.")
+    payload = dict(contract)
+    missing = [field for field in _KERNEL_CONTRACT_FIELDS if field not in payload]
+    if missing:
+        raise RuntimeError(
+            "runtime control plane execution kernel_contract is missing fields: "
+            + ", ".join(sorted(missing))
+        )
+    return payload
+
+
+def project_execution_kernel_payload(
+    service_descriptor: Mapping[str, Any] | None,
+    *,
+    metadata: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Merge explicit execution metadata onto the Rust-owned kernel contract."""
+
+    payload = dict(_runtime_execution_kernel_contract(service_descriptor))
+    if metadata is not None:
+        for field in _KERNEL_CONTRACT_FIELDS:
+            if field in metadata:
+                payload[field] = metadata[field]
+    return {key: value for key, value in payload.items() if value is not None}
+
+
+def _runtime_execution_kernel_health(
+    service_descriptor: Mapping[str, Any] | None,
+    *,
+    resolved_binary: str | None,
+) -> dict[str, Any]:
+    """Return the Rust-owned execution kernel health projection from the control plane."""
+
+    if not isinstance(service_descriptor, Mapping):
+        raise RuntimeError("runtime control plane execution descriptor is missing.")
+    payload = dict(service_descriptor)
+    missing = [field for field in _KERNEL_HEALTH_FIELDS if field not in payload]
+    if missing:
+        raise RuntimeError(
+            "runtime control plane execution descriptor is missing kernel fields: "
+            + ", ".join(sorted(missing))
+        )
+    payload["resolved_binary"] = resolved_binary
+    return {field: payload[field] for field in (*_KERNEL_HEALTH_FIELDS, "resolved_binary")}
+
+
+def _runtime_sandbox_lifecycle_contract(service_descriptor: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return the Rust-owned sandbox lifecycle contract for the execution service."""
+
+    payload = {
+        "schema_version": "runtime-sandbox-lifecycle-v1",
+        "authority": "rust-runtime-control-plane",
+        "role": "sandbox-lifecycle-control",
+        "projection": "python-thin-projection",
+        "delegate_kind": "rust-runtime-control-plane",
+        "lifecycle_states": list(_DEFAULT_SANDBOX_LIFECYCLE_STATES),
+        "allowed_transitions": [list(edge) for edge in sorted(_DEFAULT_SANDBOX_ALLOWED_TRANSITIONS)],
+        "capability_categories": list(SANDBOX_CAPABILITY_CATEGORIES),
+        "cleanup_mode": "async-drain-and-recycle",
+        "event_log_artifact": "runtime_sandbox_events.jsonl",
+        "control_operations": ["transition", "cleanup"],
+        "runtime_probe_dimensions": [
+            "cpu",
+            "memory",
+            "wall_clock",
+            "output_size",
+        ],
+    }
+    if isinstance(service_descriptor, Mapping):
+        contract = service_descriptor.get("sandbox_lifecycle_contract")
+        if isinstance(contract, Mapping):
+            payload.update(dict(contract))
+    return payload
+
+
+def _runtime_background_orchestration_contract(
+    service_descriptor: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Return the Rust-owned background orchestration contract."""
+
+    payload = {
+        "schema_version": "runtime-background-orchestration-v1",
+        "authority": "rust-runtime-control-plane",
+        "role": "background-orchestration-control",
+        "projection": "python-thin-projection",
+        "delegate_kind": "rust-background-control-policy",
+        "policy_schema_version": "router-rs-background-control-v1",
+        "queue_model": "bounded-async-host",
+        "session_takeover_model": "state-store-lease-arbitration",
+        "state_artifact": "runtime_background_jobs.json",
+        "active_statuses": list(_DEFAULT_BACKGROUND_ACTIVE_STATUSES),
+        "terminal_statuses": list(_DEFAULT_BACKGROUND_TERMINAL_STATUSES),
+        "policy_operations": [
+            "enqueue",
+            "claim",
+            "interrupt",
+            "retry",
+            "completion-race",
+            "session-release",
+        ],
+    }
+    if isinstance(service_descriptor, Mapping):
+        contract = service_descriptor.get("orchestration_contract")
+        if isinstance(contract, Mapping):
+            payload.update(dict(contract))
+    return payload
+
+
+def _runtime_host_contract(control_plane_descriptor: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return the Rust-owned top-level runtime orchestration contract."""
+
+    payload = {
+        "authority": "rust-runtime-control-plane",
+        "role": "runtime-orchestration",
+        "projection": "python-thin-projection",
+        "delegate_kind": "rust-runtime-control-plane",
+        "startup_order": list(_DEFAULT_RUNTIME_STARTUP_ORDER),
+        "shutdown_order": list(_DEFAULT_RUNTIME_SHUTDOWN_ORDER),
+        "health_sections": list(_DEFAULT_RUNTIME_HEALTH_SECTIONS),
+        "rust_owned_service_count": 0,
+    }
+    if not isinstance(control_plane_descriptor, Mapping):
+        return payload
+    payload["authority"] = control_plane_descriptor.get("authority", payload["authority"])
+    runtime_host = control_plane_descriptor.get("runtime_host")
+    if isinstance(runtime_host, Mapping):
+        payload.update(dict(runtime_host))
+    services = control_plane_descriptor.get("services")
+    if isinstance(services, Mapping):
+        payload["rust_owned_service_count"] = len(
+            [
+                name
+                for name, descriptor in services.items()
+                if isinstance(name, str)
+                and isinstance(descriptor, Mapping)
+                and descriptor.get("authority")
+            ]
+        )
+    return payload
 
 
 def _runtime_background_effect_host_contract(
@@ -209,26 +435,6 @@ def _current_rss_bytes() -> float | None:
     return None
 
 
-_SANDBOX_LIFECYCLE_STATES = (
-    "created",
-    "warm",
-    "busy",
-    "draining",
-    "recycled",
-    "failed",
-)
-_SANDBOX_ALLOWED_TRANSITIONS = {
-    ("created", "warm"),
-    ("warm", "busy"),
-    ("busy", "draining"),
-    ("draining", "recycled"),
-    ("draining", "failed"),
-    ("warm", "failed"),
-    ("busy", "failed"),
-    ("recycled", "warm"),
-}
-
-
 class SandboxLifecycleError(RuntimeError):
     """Raised when the sandbox state machine is driven through an invalid edge."""
 
@@ -294,11 +500,30 @@ class SandboxLifecycleService:
         settings: RuntimeSettings,
         *,
         control_plane_descriptor: Mapping[str, Any] | None = None,
+        rust_adapter: RustRouteAdapter | None = None,
     ) -> None:
         self.settings = settings
         self._control_plane_descriptor = dict(control_plane_descriptor or {})
         self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "execution")
+        self._rust_adapter = rust_adapter or RustRouteAdapter(
+            settings.codex_home,
+            timeout_seconds=settings.rust_router_timeout_seconds,
+        )
         self._event_log_path = settings.resolved_data_dir / "runtime_sandbox_events.jsonl"
+        self._contract = _runtime_sandbox_lifecycle_contract(self._service_descriptor)
+        self.schema_version = str(self._contract["schema_version"])
+        self._lifecycle_states = tuple(
+            str(state) for state in self._contract.get("lifecycle_states", _DEFAULT_SANDBOX_LIFECYCLE_STATES)
+        )
+        self._allowed_transitions = {
+            (str(edge[0]), str(edge[1]))
+            for edge in self._contract.get("allowed_transitions", [])
+            if isinstance(edge, (list, tuple)) and len(edge) == 2
+        } or set(_DEFAULT_SANDBOX_ALLOWED_TRANSITIONS)
+        self._capability_categories = tuple(
+            str(category)
+            for category in self._contract.get("capability_categories", SANDBOX_CAPABILITY_CATEGORIES)
+        )
         self._sandboxes: dict[str, _SandboxRecord] = {}
         self._cleanup_tasks: dict[str, asyncio.Task[None]] = {}
         self._next_cleanup_failure_reason: str | None = None
@@ -306,6 +531,20 @@ class SandboxLifecycleService:
     def refresh_control_plane(self, control_plane_descriptor: Mapping[str, Any] | None) -> None:
         self._control_plane_descriptor = dict(control_plane_descriptor or {})
         self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "execution")
+        self._contract = _runtime_sandbox_lifecycle_contract(self._service_descriptor)
+        self.schema_version = str(self._contract["schema_version"])
+        self._lifecycle_states = tuple(
+            str(state) for state in self._contract.get("lifecycle_states", _DEFAULT_SANDBOX_LIFECYCLE_STATES)
+        )
+        self._allowed_transitions = {
+            (str(edge[0]), str(edge[1]))
+            for edge in self._contract.get("allowed_transitions", [])
+            if isinstance(edge, (list, tuple)) and len(edge) == 2
+        } or set(_DEFAULT_SANDBOX_ALLOWED_TRANSITIONS)
+        self._capability_categories = tuple(
+            str(category)
+            for category in self._contract.get("capability_categories", SANDBOX_CAPABILITY_CATEGORIES)
+        )
 
     def startup(self) -> None:
         """Ensure the durable sandbox event log directory exists."""
@@ -407,7 +646,7 @@ class SandboxLifecycleService:
     def health(self) -> dict[str, Any]:
         """Summarize sandbox lifecycle state, durability, and cleanup activity."""
 
-        state_counts = {state: 0 for state in _SANDBOX_LIFECYCLE_STATES}
+        state_counts = {state: 0 for state in self._lifecycle_states}
         for record in self._sandboxes.values():
             state_counts[record.state] += 1
         active_cleanup = [
@@ -417,15 +656,16 @@ class SandboxLifecycleService:
         ]
         return {
             "schema_version": self.schema_version,
-            "lifecycle_states": list(_SANDBOX_LIFECYCLE_STATES),
-            "allowed_transitions": [list(edge) for edge in sorted(_SANDBOX_ALLOWED_TRANSITIONS)],
-            "capability_categories": list(SANDBOX_CAPABILITY_CATEGORIES),
+            "lifecycle_states": list(self._lifecycle_states),
+            "allowed_transitions": [list(edge) for edge in sorted(self._allowed_transitions)],
+            "capability_categories": list(self._capability_categories),
             "event_log_path": str(self._event_log_path),
             "state_counts": state_counts,
             "active_cleanup_tasks": len(active_cleanup),
             "active_cleanup_sandboxes": active_cleanup,
             "sandbox_count": len(self._sandboxes),
             "latest_records": [record.as_payload() for record in list(self._sandboxes.values())[-5:]],
+            "contract": dict(self._contract),
             "background_effect_host_contract": _runtime_background_effect_host_contract(
                 self._control_plane_descriptor,
                 self._service_descriptor,
@@ -509,11 +749,11 @@ class SandboxLifecycleService:
             )
             raise SandboxCapabilityViolation("policy_violation:missing_capability_declaration")
         for category in categories:
-            if category not in SANDBOX_CAPABILITY_CATEGORIES:
+            if category not in self._capability_categories:
                 reason = f"policy_violation:unknown_capability:{category}"
                 self._mark_failed(record, request=request, reason=reason)
                 raise SandboxCapabilityViolation(reason)
-        if request.sandbox_tool_category not in SANDBOX_CAPABILITY_CATEGORIES:
+        if request.sandbox_tool_category not in self._capability_categories:
             reason = f"policy_violation:unknown_tool_category:{request.sandbox_tool_category}"
             self._mark_failed(record, request=request, reason=reason)
             raise SandboxCapabilityViolation(reason)
@@ -640,13 +880,29 @@ class SandboxLifecycleService:
             request=None,
         )
         await asyncio.sleep(0)
+        cleanup_resolution = self._rust_adapter.sandbox_control(
+            {
+                "schema_version": self.schema_version,
+                "operation": "cleanup",
+                "current_state": record.state,
+                "cleanup_failed": failure_reason is not None,
+            }
+        )
+        if not bool(cleanup_resolution.get("allowed")):
+            raise SandboxLifecycleError(
+                str(
+                    cleanup_resolution.get("error")
+                    or f"invalid sandbox cleanup state: {record.state!r}"
+                )
+            )
+        resolved_state = str(cleanup_resolution.get("resolved_state") or ("failed" if failure_reason else "recycled"))
         if failure_reason is not None:
             record.cleanup_pending = False
             record.quarantined = True
             record.last_failure_reason = failure_reason
             self._transition(
                 record,
-                "failed",
+                resolved_state,
                 event_kind="sandbox.cleanup_failed",
                 request=None,
                 detail={"failure_reason": failure_reason},
@@ -655,7 +911,7 @@ class SandboxLifecycleService:
         record.cleanup_pending = False
         self._transition(
             record,
-            "recycled",
+            resolved_state,
             event_kind="sandbox.cleanup_completed",
             request=None,
         )
@@ -671,9 +927,18 @@ class SandboxLifecycleService:
         request: ExecutionKernelRequest | None,
         detail: Mapping[str, Any] | None = None,
     ) -> None:
-        edge = (record.state, next_state)
-        if edge not in _SANDBOX_ALLOWED_TRANSITIONS:
-            raise SandboxLifecycleError(f"invalid sandbox transition: {record.state!r} -> {next_state!r}")
+        decision = self._rust_adapter.sandbox_control(
+            {
+                "schema_version": self.schema_version,
+                "operation": "transition",
+                "current_state": record.state,
+                "next_state": next_state,
+            }
+        )
+        if not bool(decision.get("allowed")):
+            raise SandboxLifecycleError(
+                str(decision.get("error") or f"invalid sandbox transition: {record.state!r} -> {next_state!r}")
+            )
         record.state = next_state
         record.last_event_at = _now_iso()
         self._record_event(record, event_kind=event_kind, request=request, detail=detail)
@@ -724,6 +989,7 @@ class RouterService:
         self.skills = []
         self._last_route_report: RouteDiagnosticReport | None = None
         self._route_policy: RouteExecutionPolicy | None = None
+        self._rust_adapter_health: dict[str, Any] | None = None
         self.reload()
 
     def startup(self) -> None:
@@ -742,6 +1008,7 @@ class RouterService:
             refresh=True,
             load_bodies=not self.settings.progressive_skill_loading,
         )
+        self._rust_adapter_health = None
         self._resolve_route_policy(refresh=True)
 
     def route(self, *, task: str, session_id: str, allow_overlay: bool, first_turn: bool) -> RoutingResult:
@@ -799,7 +1066,7 @@ class RouterService:
             "python_runtime_role": self.control_plane_descriptor.get("python_host_role"),
             "rustification_status": rustification_status,
             "route_policy": policy.model_dump(mode="json"),
-            "rust_adapter": self._rust_adapter.health(),
+            "rust_adapter": self._rust_adapter_health_snapshot(),
             "last_route_report": self._last_route_report.model_dump(mode="json") if self._last_route_report else None,
         }
 
@@ -831,7 +1098,9 @@ class RouterService:
             score=float(decision.score),
             layer=decision.layer,
             reasons=[str(reason) for reason in decision.reasons],
-            route_snapshot=decision.route_snapshot,
+            route_snapshot=RouteDecisionSnapshot.model_validate(
+                decision.route_snapshot.model_dump(mode="json")
+            ),
         )
 
     def _decorate_route_result(
@@ -846,7 +1115,11 @@ class RouterService:
             update={
                 "route_engine": route_engine,
                 "diagnostic_route_mode": diagnostic_route_mode,
-                "route_diagnostic_report": report,
+                "route_diagnostic_report": (
+                    RouteDiagnosticReport.model_validate(report.model_dump(mode="json"))
+                    if report is not None
+                    else None
+                ),
             }
         )
 
@@ -884,6 +1157,13 @@ class RouterService:
                 mode=self.settings.route_engine_mode,
             )
         return self._route_policy
+
+    def _rust_adapter_health_snapshot(self) -> dict[str, Any]:
+        cached = self._rust_adapter_health
+        if cached is None:
+            cached = self._rust_adapter.health()
+            self._rust_adapter_health = cached
+        return dict(cached)
 
     def _resolve_loaded_skill(
         self,
@@ -1035,6 +1315,7 @@ class TraceService:
         self.event_transport_dir = paths.event_transport_dir
         self.event_bridge = InMemoryRuntimeEventBridge(control_plane_descriptor=control_plane_descriptor)
         self.recorder = checkpointer.build_trace_recorder(event_bridge=self.event_bridge)
+        self._observability_health: dict[str, Any] | None = None
         self.event_bridge.seed(self.recorder.stream_events())
 
     def refresh_control_plane(self, control_plane_descriptor: Mapping[str, Any] | None) -> None:
@@ -1158,13 +1439,22 @@ class TraceService:
             "replay_supported": self.recorder.describe_stream()["replay_supported"],
             "event_bridge_supported": True,
             "event_bridge_schema_version": self.event_bridge.schema_version,
-            "observability": build_runtime_observability_health_snapshot(),
+            "observability": self._observability_health_snapshot(),
             "background_effect_host_contract": _runtime_background_effect_host_contract(
                 self._control_plane_descriptor,
                 self._service_descriptor,
                 service_name="trace",
             ),
         }
+
+    def _observability_health_snapshot(self) -> dict[str, Any]:
+        cached = self._observability_health
+        if cached is None:
+            cached = build_runtime_observability_health_snapshot(
+                rust_adapter=self.recorder._rust_adapter,
+            )
+            self._observability_health = cached
+        return dict(cached)
 
 
 class MemoryService:
@@ -1210,7 +1500,6 @@ class ExecutionEnvironmentService:
     def __init__(
         self,
         settings: RuntimeSettings,
-        prompt_builder: PromptBuilder | None = None,
         *,
         max_background_jobs: int,
         background_job_timeout_seconds: float,
@@ -1227,14 +1516,18 @@ class ExecutionEnvironmentService:
         self.sandbox = SandboxLifecycleService(
             settings,
             control_plane_descriptor=control_plane_descriptor,
+            rust_adapter=self._rust_adapter,
         )
         self.max_background_jobs = max_background_jobs
         self.background_job_timeout_seconds = background_job_timeout_seconds
+        self._rust_adapter_health: dict[str, Any] | None = None
+        self._control_plane_contracts: dict[str, Any] | None = None
 
     def refresh_control_plane(self, control_plane_descriptor: Mapping[str, Any] | None) -> None:
         self.control_plane_descriptor = dict(control_plane_descriptor or {})
         self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "execution")
         self.sandbox.refresh_control_plane(control_plane_descriptor)
+        self._control_plane_contracts = None
 
     def startup(self) -> None:
         """Execution-environment startup hook."""
@@ -1304,6 +1597,7 @@ class ExecutionEnvironmentService:
         self.sandbox.fail_next_cleanup(reason)
 
     def health(self) -> dict[str, Any]:
+        adapter_health = self._rust_adapter_health_snapshot()
         payload = {
             "max_background_jobs": self.max_background_jobs,
             "background_job_timeout_seconds": self.background_job_timeout_seconds,
@@ -1316,9 +1610,14 @@ class ExecutionEnvironmentService:
             "control_plane_projection": self._service_descriptor.get("projection"),
             "control_plane_delegate_kind": self._service_descriptor.get("delegate_kind"),
         }
-        payload.update(build_router_rs_execution_kernel_health(self._rust_adapter))
+        payload.update(
+            _runtime_execution_kernel_health(
+                self._service_descriptor,
+                resolved_binary=adapter_health.get("resolved_binary"),
+            )
+        )
         payload["sandbox"] = self.sandbox.health()
-        payload["control_plane_contracts"] = self.describe_control_plane_contracts()
+        payload["control_plane_contracts"] = self._control_plane_contracts_snapshot()
         return payload
 
     def describe_control_plane_contracts(self) -> dict[str, Any]:
@@ -1329,35 +1628,24 @@ class ExecutionEnvironmentService:
             payload["runtime_control_plane"] = self.control_plane_descriptor
         return payload
 
+    def _rust_adapter_health_snapshot(self) -> dict[str, Any]:
+        cached = self._rust_adapter_health
+        if cached is None:
+            cached = self._rust_adapter.health()
+            self._rust_adapter_health = cached
+        return dict(cached)
+
+    def _control_plane_contracts_snapshot(self) -> dict[str, Any]:
+        cached = self._control_plane_contracts
+        if cached is None:
+            cached = self.describe_control_plane_contracts()
+            self._control_plane_contracts = cached
+        return dict(cached)
+
     def describe_kernel_contract(self, *, dry_run: bool = False) -> dict[str, Any]:
         """Return the stable kernel-owner descriptor used by runtime surfaces."""
 
-        return build_router_rs_execution_kernel_contract_descriptor(rust_adapter=self._rust_adapter)
-
-    def preview_prompt(
-        self,
-        *,
-        task: str,
-        session_id: str,
-        user_id: str,
-        routing_result: RoutingResult,
-    ) -> str | None:
-        """Build the dry-run prompt preview through router-rs instead of Python prompt assembly."""
-
-        request = ExecutionKernelRequest(
-            task=task,
-            session_id=session_id,
-            job_id=None,
-            user_id=user_id,
-            routing_result=routing_result,
-            prompt_preview=None,
-            dry_run=True,
-        )
-        return preview_router_rs_request_prompt(
-            request,
-            settings=self.settings,
-            rust_adapter=self._rust_adapter,
-        )
+        return _runtime_execution_kernel_contract(self._service_descriptor)
 
     def kernel_payload(
         self,
@@ -1367,12 +1655,7 @@ class ExecutionEnvironmentService:
     ) -> dict[str, Any]:
         """Merge explicit execution metadata onto the stable kernel contract."""
 
-        payload = dict(self.describe_kernel_contract(dry_run=dry_run))
-        if metadata is not None:
-            for field in _KERNEL_CONTRACT_FIELDS:
-                if field in metadata:
-                    payload[field] = metadata[field]
-        return {key: value for key, value in payload.items() if value is not None}
+        return project_execution_kernel_payload(self._service_descriptor, metadata=metadata)
 
     async def _execute_request_via_rust_adapter(
         self,
@@ -1413,6 +1696,11 @@ class BackgroundRuntimeHost:
         self._supervisor_projection_provider = supervisor_projection_provider
         self._control_plane_descriptor = dict(control_plane_descriptor or {})
         self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "background")
+        self._orchestration_contract = _runtime_background_orchestration_contract(self._service_descriptor)
+        self._terminal_statuses = {
+            str(status)
+            for status in self._orchestration_contract.get("terminal_statuses", _DEFAULT_BACKGROUND_TERMINAL_STATUSES)
+        }
         self._max_background_jobs = max_background_jobs
         self._background_job_timeout_seconds = background_job_timeout_seconds
         self._job_store = self.state_service.store
@@ -1442,6 +1730,11 @@ class BackgroundRuntimeHost:
     def refresh_control_plane(self, control_plane_descriptor: Mapping[str, Any] | None) -> None:
         self._control_plane_descriptor = dict(control_plane_descriptor or {})
         self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "background")
+        self._orchestration_contract = _runtime_background_orchestration_contract(self._service_descriptor)
+        self._terminal_statuses = {
+            str(status)
+            for status in self._orchestration_contract.get("terminal_statuses", _DEFAULT_BACKGROUND_TERMINAL_STATUSES)
+        }
 
     def configure_limits(
         self,
@@ -1498,6 +1791,328 @@ class BackgroundRuntimeHost:
             return status
         return self.background_jobs.get(job_id)
 
+    async def enqueue_job(
+        self,
+        request: BackgroundRunRequest,
+        *,
+        session_id_resolver: Callable[[BackgroundRunRequest], str],
+        run_task: Callable[[BackgroundRunRequest], Awaitable[RunTaskResponse]],
+    ) -> BackgroundRunStatus:
+        """Admit one background job under the Rust-owned orchestration policy."""
+
+        job_id = f"job_{uuid4().hex[:12]}"
+        effective_session_id = session_id_resolver(request)
+        request = request.model_copy(update={"session_id": effective_session_id})
+        enqueue_policy = self._background_enqueue_policy(
+            multitask_strategy=request.multitask_strategy,
+            active_job_count=0,
+        )
+        multitask_strategy = str(enqueue_policy["normalized_multitask_strategy"])
+        requires_takeover = bool(enqueue_policy["requires_takeover"])
+
+        if not bool(enqueue_policy["strategy_supported"]):
+            status = self.apply_mutation(
+                job_id,
+                self.mutation(
+                    status="failed",
+                    session_id=effective_session_id,
+                    parallel_group_id=request.parallel_group_id,
+                    lane_id=request.lane_id,
+                    parent_job_id=request.parent_job_id,
+                    multitask_strategy=multitask_strategy,
+                    error=str(enqueue_policy["error"]),
+                    timeout_seconds=self._background_job_timeout_seconds,
+                    max_attempts=request.max_attempts,
+                    backoff_base_seconds=request.backoff_base_seconds,
+                    backoff_multiplier=request.backoff_multiplier,
+                    max_backoff_seconds=request.max_backoff_seconds,
+                ),
+            )
+            async with self._jobs_lock:
+                self.background_jobs[job_id] = status
+            self._trace.record(
+                session_id=effective_session_id,
+                job_id=job_id,
+                kind="job.failed",
+                stage="background",
+                payload={
+                    "error": status.error,
+                    "multitask_strategy": multitask_strategy,
+                    **self._background_trace_context(status),
+                },
+            )
+            self.flush_background_admission_failure_trace_metadata(
+                request=request,
+                status=status,
+            )
+            return status
+
+        if requires_takeover:
+            try:
+                takeover = await self._arbitrate_multitask_takeover(
+                    session_id=effective_session_id,
+                    incoming_job_id=job_id,
+                    operation="reserve",
+                )
+                active_job_id = takeover.previous_active_job_id
+            except SessionConflictError as error:
+                status = self.apply_mutation(
+                    job_id,
+                    self.mutation(
+                        status="failed",
+                        session_id=effective_session_id,
+                        parallel_group_id=request.parallel_group_id,
+                        lane_id=request.lane_id,
+                        parent_job_id=request.parent_job_id,
+                        multitask_strategy=multitask_strategy,
+                        error=str(error),
+                        timeout_seconds=self._background_job_timeout_seconds,
+                        max_attempts=request.max_attempts,
+                        backoff_base_seconds=request.backoff_base_seconds,
+                        backoff_multiplier=request.backoff_multiplier,
+                        max_backoff_seconds=request.max_backoff_seconds,
+                    ),
+                )
+                async with self._jobs_lock:
+                    self.background_jobs[job_id] = status
+                self._trace.record(
+                    session_id=effective_session_id,
+                    job_id=job_id,
+                    kind="job.failed",
+                    stage="background",
+                    payload={
+                        "error": str(error),
+                        "parallel_group_id": request.parallel_group_id,
+                        "lane_id": request.lane_id,
+                        "parent_job_id": request.parent_job_id,
+                    },
+                )
+                self.flush_background_admission_failure_trace_metadata(
+                    request=request,
+                    status=status,
+                )
+                return status
+            if active_job_id is not None:
+                self._trace.record(
+                    session_id=effective_session_id,
+                    job_id=active_job_id,
+                    kind="job.multitask_preempt_requested",
+                    stage="background",
+                    payload={
+                        "multitask_strategy": multitask_strategy,
+                        "incoming_job_id": job_id,
+                        "parallel_group_id": request.parallel_group_id,
+                        "lane_id": request.lane_id,
+                        "parent_job_id": request.parent_job_id,
+                    },
+                )
+                await self.request_interrupt(active_job_id)
+                try:
+                    await self._wait_for_session_release(effective_session_id)
+                except Exception:
+                    async with self._jobs_lock:
+                        self.state_service.arbitrate_session_takeover(
+                            session_id=effective_session_id,
+                            incoming_job_id=job_id,
+                            operation="release",
+                        )
+                    raise
+                await self._arbitrate_multitask_takeover(
+                    session_id=effective_session_id,
+                    incoming_job_id=job_id,
+                    operation="claim",
+                )
+
+        try:
+            async with self._jobs_lock:
+                admission_policy = self._background_enqueue_policy(
+                    multitask_strategy=multitask_strategy,
+                    active_job_count=self.state_service.active_job_count(),
+                )
+                if not bool(admission_policy["accepted"]):
+                    if requires_takeover:
+                        self.state_service.arbitrate_session_takeover(
+                            session_id=effective_session_id,
+                            incoming_job_id=job_id,
+                            operation="release",
+                        )
+                    status = self.apply_mutation(
+                        job_id,
+                        self.mutation(
+                            status="failed",
+                            session_id=effective_session_id,
+                            parallel_group_id=request.parallel_group_id,
+                            lane_id=request.lane_id,
+                            parent_job_id=request.parent_job_id,
+                            multitask_strategy=multitask_strategy,
+                            error=str(admission_policy["error"]),
+                            timeout_seconds=self._background_job_timeout_seconds,
+                            max_attempts=request.max_attempts,
+                            backoff_base_seconds=request.backoff_base_seconds,
+                            backoff_multiplier=request.backoff_multiplier,
+                            max_backoff_seconds=request.max_backoff_seconds,
+                        ),
+                    )
+                else:
+                    status = self.apply_mutation(
+                        job_id,
+                        self.mutation(
+                            status="queued",
+                            session_id=effective_session_id,
+                            parallel_group_id=request.parallel_group_id,
+                            lane_id=request.lane_id,
+                            parent_job_id=request.parent_job_id,
+                            multitask_strategy=multitask_strategy,
+                            timeout_seconds=self._background_job_timeout_seconds,
+                            max_attempts=request.max_attempts,
+                            backoff_base_seconds=request.backoff_base_seconds,
+                            backoff_multiplier=request.backoff_multiplier,
+                            max_backoff_seconds=request.max_backoff_seconds,
+                        ),
+                    )
+        except SessionConflictError as error:
+            if requires_takeover:
+                async with self._jobs_lock:
+                    self.state_service.arbitrate_session_takeover(
+                        session_id=effective_session_id,
+                        incoming_job_id=job_id,
+                        operation="release",
+                    )
+                    status = self.apply_mutation(
+                        job_id,
+                        self.mutation(
+                            status="failed",
+                            session_id=effective_session_id,
+                            parallel_group_id=request.parallel_group_id,
+                            lane_id=request.lane_id,
+                            parent_job_id=request.parent_job_id,
+                            multitask_strategy=multitask_strategy,
+                            error=str(error),
+                            timeout_seconds=self._background_job_timeout_seconds,
+                            max_attempts=request.max_attempts,
+                            backoff_base_seconds=request.backoff_base_seconds,
+                            backoff_multiplier=request.backoff_multiplier,
+                            max_backoff_seconds=request.max_backoff_seconds,
+                        ),
+                    )
+            else:
+                async with self._jobs_lock:
+                    status = self.apply_mutation(
+                        job_id,
+                        self.mutation(
+                            status="failed",
+                            session_id=effective_session_id,
+                            parallel_group_id=request.parallel_group_id,
+                            lane_id=request.lane_id,
+                            parent_job_id=request.parent_job_id,
+                            multitask_strategy=multitask_strategy,
+                            error=str(error),
+                            timeout_seconds=self._background_job_timeout_seconds,
+                            max_attempts=request.max_attempts,
+                            backoff_base_seconds=request.backoff_base_seconds,
+                            backoff_multiplier=request.backoff_multiplier,
+                            max_backoff_seconds=request.max_backoff_seconds,
+                        ),
+                    )
+        if status.status == "failed":
+            self._trace.record(
+                session_id=effective_session_id,
+                job_id=job_id,
+                kind="job.failed",
+                stage="background",
+                payload={
+                    "error": status.error,
+                    **self._background_trace_context(status),
+                },
+            )
+            self.flush_background_admission_failure_trace_metadata(
+                request=request,
+                status=status,
+            )
+            return status
+
+        async with self._jobs_lock:
+            self.background_jobs[job_id] = status
+        self._trace.record(
+            session_id=effective_session_id,
+            job_id=job_id,
+            kind="job.queued",
+            stage="background",
+            payload={
+                "multitask_strategy": multitask_strategy,
+                "timeout_seconds": self._background_job_timeout_seconds,
+                "capacity_limit": self._max_background_jobs,
+                "max_attempts": request.max_attempts,
+                "backoff_base_seconds": request.backoff_base_seconds,
+                "backoff_multiplier": request.backoff_multiplier,
+                "max_backoff_seconds": request.max_backoff_seconds,
+                "background_policy_authority": self._background_control_authority,
+                **self._background_trace_context(status),
+            },
+        )
+
+        self.configure_limits(
+            max_background_jobs=self._max_background_jobs,
+            job_semaphore=self._job_semaphore,
+        )
+        self.start_job(job_id, request, run_task=run_task)
+        return status
+
+    async def enqueue_batch(
+        self,
+        requests: list[BackgroundRunRequest],
+        *,
+        session_id_resolver: Callable[[BackgroundRunRequest], str],
+        run_task: Callable[[BackgroundRunRequest], Awaitable[RunTaskResponse]],
+        parallel_group_id: str | None = None,
+        lane_id_prefix: str = "lane",
+    ) -> BackgroundBatchEnqueueResponse:
+        """Admit a bounded parallel batch and assign lane ids through the host contract."""
+
+        if not requests:
+            raise ValueError("enqueue_background_batch requires at least one request.")
+        resolved_group_id = parallel_group_id or f"pgroup_{uuid4().hex[:12]}"
+        statuses: list[BackgroundRunStatus] = []
+        for index, request in enumerate(requests, start=1):
+            request_group_id = request.parallel_group_id
+            if request_group_id is not None and request_group_id != resolved_group_id:
+                raise ValueError(
+                    "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
+                )
+            lane_id = request.lane_id or f"{lane_id_prefix}-{index}"
+            status = await self.enqueue_job(
+                request.model_copy(
+                    update={
+                        "parallel_group_id": resolved_group_id,
+                        "lane_id": lane_id,
+                    }
+                ),
+                session_id_resolver=session_id_resolver,
+                run_task=run_task,
+            )
+            statuses.append(status)
+        summary = self.parallel_group_summary(resolved_group_id)
+        if summary is None:
+            raise RuntimeError(f"Background parallel group {resolved_group_id!r} was not persisted.")
+        return BackgroundBatchEnqueueResponse(
+            parallel_group_id=resolved_group_id,
+            statuses=statuses,
+            summary=summary,
+        )
+
+    def parallel_group_summary(
+        self,
+        parallel_group_id: str,
+    ) -> BackgroundParallelGroupSummary | None:
+        """Return one durable parallel-batch summary by group id."""
+
+        return self.state_service.parallel_group_summary(parallel_group_id)
+
+    def parallel_group_summaries(self) -> list[BackgroundParallelGroupSummary]:
+        """Return all durable parallel-batch summaries."""
+
+        return self.state_service.parallel_group_summaries()
+
     def start_job(
         self,
         job_id: str,
@@ -1521,7 +2136,7 @@ class BackgroundRuntimeHost:
             current = self._job_store.get(job_id)
             if current is None:
                 return None
-            if current.status in TERMINAL_JOB_STATUSES:
+            if current.status in self._terminal_statuses:
                 self.background_jobs[job_id] = current
                 return current
 
@@ -1577,6 +2192,7 @@ class BackgroundRuntimeHost:
             "control_plane_projection": self._service_descriptor.get("projection"),
             "control_plane_delegate_kind": self._service_descriptor.get("delegate_kind"),
             "background_policy_authority": self._background_control_authority,
+            "orchestration_contract": dict(self._orchestration_contract),
             "background_effect_host_contract": _runtime_background_effect_host_contract(
                 self._control_plane_descriptor,
                 self._service_descriptor,
@@ -1740,6 +2356,67 @@ class BackgroundRuntimeHost:
             raise RuntimeError("Rust background control response missing effect_plan.")
         return effect_plan
 
+    async def _arbitrate_multitask_takeover(
+        self,
+        *,
+        session_id: str,
+        incoming_job_id: str,
+        operation: str,
+    ) -> BackgroundSessionTakeoverArbitration:
+        """Execute one state-owned takeover reducer step under the jobs lock."""
+
+        async with self._jobs_lock:
+            return self.state_service.arbitrate_session_takeover(
+                session_id=session_id,
+                incoming_job_id=incoming_job_id,
+                operation=operation,
+            )
+
+    async def _wait_for_session_release(self, session_id: str, *, timeout_seconds: float = 5.0) -> None:
+        """Wait until a session is no longer reserved by active background work."""
+
+        release_policy = self._background_session_release_policy(session_id=session_id)
+        effect_plan = self._background_effect_plan(release_policy)
+        timeout_seconds = float(effect_plan.get("wait_timeout_seconds") or timeout_seconds)
+        poll_interval_seconds = float(effect_plan.get("wait_poll_interval_seconds") or 0.01)
+        await self.state_service.wait_for_session_release(
+            session_id=session_id,
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+        )
+
+    def _background_enqueue_policy(
+        self,
+        *,
+        multitask_strategy: str,
+        active_job_count: int,
+    ) -> dict[str, Any]:
+        """Resolve enqueue admission through the Rust background-control seam."""
+
+        return self._background_policy(
+            {
+                "operation": "enqueue",
+                "multitask_strategy": multitask_strategy,
+                "active_job_count": active_job_count,
+                "capacity_limit": self._max_background_jobs,
+            }
+        )
+
+    def _background_session_release_policy(self, *, session_id: str) -> dict[str, Any]:
+        """Resolve background session-release timing through the Rust control seam."""
+
+        return self._background_policy(
+            {
+                "operation": "session-release",
+                "current_status": "release_pending",
+                "task_active": False,
+                "task_done": False,
+                "active_job_count": self.state_service.active_job_count(),
+                "capacity_limit": self._max_background_jobs,
+                "session_id": session_id,
+            }
+        )
+
     async def _run_background_job(
         self,
         job_id: str,
@@ -1766,33 +2443,58 @@ class BackgroundRuntimeHost:
                 async with self._job_semaphore:
                     started_at = _now_iso()
                     async with self._jobs_lock:
-                        running = self.apply_mutation(
-                            job_id,
-                            self.mutation(
-                                status="running",
-                                current=current,
-                                session_id=request.session_id,
-                                error=None,
-                                timeout_seconds=self._background_job_timeout_seconds,
-                                claimed_by=job_id,
-                                claimed_at=started_at,
-                                last_attempt_started_at=started_at,
-                            ),
+                        latest = self._job_store.get(job_id)
+                        if latest is None:
+                            return
+                        claim_policy = self._background_status_transition_policy(
+                            operation="claim",
+                            current_status=latest.status,
+                            task_active=False,
+                            task_done=False,
                         )
+                        claim_effect = self._background_effect_plan(claim_policy)
+                        claim_step = str(claim_effect["next_step"])
+                        if claim_step == "finalize_interrupted":
+                            running = None
+                        elif claim_step == "finalize_terminal":
+                            return
+                        else:
+                            running_status = str(
+                                claim_effect.get("resolved_status") or claim_policy.get("resolved_status") or "running"
+                            )
+                            running = self.apply_mutation(
+                                job_id,
+                                self.mutation(
+                                    status=running_status,
+                                    current=latest,
+                                    session_id=request.session_id,
+                                    error=None,
+                                    timeout_seconds=self._background_job_timeout_seconds,
+                                    claimed_by=job_id,
+                                    claimed_at=started_at,
+                                    last_attempt_started_at=started_at,
+                                ),
+                            )
+                    if claim_step == "finalize_interrupted":
+                        await self._mark_background_interrupted(
+                            job_id,
+                            session_id=(latest.session_id if latest is not None else request.session_id) or job_id,
+                            error="Interrupt requested before execution",
+                        )
+                        return
+                    if running is None:
+                        return
                     self._trace.record(
                         session_id=request.session_id or job_id,
                         job_id=job_id,
                         kind="job.claimed",
                         stage="background",
                         payload={
-                            "status": "running",
+                            "status": running.status,
                             "attempt": running.attempt,
+                            "background_policy_authority": self._background_control_authority,
                             **self._background_trace_context(running),
-                            **self.execution_service.kernel_payload(
-                                dry_run=self.execution_service.resolve_dry_run(
-                                    request_dry_run=request.dry_run
-                                ),
-                            ),
+                            **project_execution_kernel_payload(self.execution_service._service_descriptor),
                         },
                     )
 
@@ -1872,8 +2574,8 @@ class BackgroundRuntimeHost:
                             "status": "completed",
                             "attempt": completed.attempt,
                             **self._background_trace_context(completed),
-                            **self.execution_service.kernel_payload(
-                                dry_run=not result.live_run,
+                            **project_execution_kernel_payload(
+                                self.execution_service._service_descriptor,
                                 metadata=result.metadata,
                             ),
                         },
@@ -1892,7 +2594,7 @@ class BackgroundRuntimeHost:
                     return
         except asyncio.CancelledError:
             current = self._job_store.get(job_id)
-            if current is not None and current.status not in TERMINAL_JOB_STATUSES:
+            if current is not None and current.status not in self._terminal_statuses:
                 await self._mark_background_interrupted(
                     job_id,
                     session_id=current.session_id or job_id,

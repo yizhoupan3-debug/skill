@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -17,6 +16,10 @@ from codex_agno_runtime.trace import (
     TraceSupervisorProjection,
 )
 from codex_agno_runtime.config import RuntimeSettings
+from codex_agno_runtime.execution_kernel import (
+    ExecutionKernelRequest,
+    preview_router_rs_request_prompt,
+)
 from codex_agno_runtime.middleware import (
     ContextCompressionMiddleware,
     MemoryMiddleware,
@@ -44,11 +47,9 @@ from codex_agno_runtime.services import (
     RouterService,
     StateService,
     TraceService,
-)
-from codex_agno_runtime.state import (
-    BackgroundJobStatusMutation,
-    BackgroundSessionTakeoverArbitration,
-    SessionConflictError,
+    project_execution_kernel_payload,
+    _runtime_execution_kernel_contract,
+    _runtime_host_contract,
 )
 from codex_agno_runtime.utils import build_session_id
 
@@ -80,6 +81,7 @@ class CodexAgnoRuntime:
             data_dir=self.settings.resolved_data_dir,
             trace_output_path=self.settings.resolved_trace_output_path,
             control_plane_descriptor=self.control_plane_descriptor,
+            rust_adapter=self.rust_adapter,
         )
         self.state_service = StateService(
             self.checkpointer,
@@ -143,54 +145,30 @@ class CodexAgnoRuntime:
     def startup(self) -> None:
         """Start runtime service boundaries."""
 
-        for service in (
-            self.router_service,
-            self.state_service,
-            self.trace_service,
-            self.memory_service,
-            self.execution_service,
-            self.background_service,
-        ):
-            service.startup()
+        for service_name in self._runtime_service_order("startup_order"):
+            self._runtime_services()[service_name].startup()
         self._refresh_router()
 
     def shutdown(self) -> None:
         """Shutdown runtime service boundaries."""
 
-        for service in (
-            self.background_service,
-            self.execution_service,
-            self.memory_service,
-            self.trace_service,
-            self.state_service,
-            self.router_service,
-        ):
-            service.shutdown()
+        for service_name in self._runtime_service_order("shutdown_order"):
+            self._runtime_services()[service_name].shutdown()
 
     def health(self) -> dict[str, Any]:
         """Return health information for each runtime service seam."""
 
-        services = self.control_plane_descriptor.get("services")
-        rust_owned_services = (
-            len(
-                [
-                    name
-                    for name, descriptor in services.items()
-                    if isinstance(name, str)
-                    and isinstance(descriptor, dict)
-                    and descriptor.get("authority")
-                ]
-            )
-            if isinstance(services, dict)
-            else 0
-        )
-        return {
+        runtime_host = _runtime_host_contract(self.control_plane_descriptor)
+        payload = {
             "control_plane": self.control_plane_descriptor,
+            "runtime_host": runtime_host,
             "rustification": {
                 "python_host_role": self.control_plane_descriptor.get("python_host_role"),
                 "rustification_status": self.control_plane_descriptor.get("rustification_status"),
-                "rust_owned_service_count": rust_owned_services,
+                "rust_owned_service_count": runtime_host.get("rust_owned_service_count", 0),
             },
+        }
+        section_payloads = {
             "router": self.router_service.health(),
             "state": self.state_service.health(),
             "trace": self.trace_service.health(),
@@ -199,6 +177,10 @@ class CodexAgnoRuntime:
             "background": self.background_service.health(),
             "checkpoint": self.checkpointer.health(),
         }
+        for section_name in runtime_host.get("health_sections", []):
+            if isinstance(section_name, str) and section_name in section_payloads:
+                payload[section_name] = section_payloads[section_name]
+        return payload
 
     def subscribe_runtime_events(
         self,
@@ -340,6 +322,33 @@ class CodexAgnoRuntime:
             trace_recorder=self._trace,
         )
 
+    def _runtime_services(self) -> dict[str, Any]:
+        return {
+            "router": self.router_service,
+            "state": self.state_service,
+            "trace": self.trace_service,
+            "memory": self.memory_service,
+            "execution": self.execution_service,
+            "background": self.background_service,
+        }
+
+    def _runtime_service_order(self, field_name: str) -> list[str]:
+        runtime_host = _runtime_host_contract(self.control_plane_descriptor)
+        configured = runtime_host.get(field_name, [])
+        if not isinstance(configured, list):
+            raise RuntimeError(f"runtime host contract field {field_name!r} must be a list.")
+        services = self._runtime_services()
+        resolved: list[str] = []
+        for service_name in configured:
+            if not isinstance(service_name, str):
+                raise RuntimeError(f"runtime host contract field {field_name!r} contains a non-string service name.")
+            if service_name not in services:
+                raise RuntimeError(
+                    f"runtime host contract field {field_name!r} references unknown service {service_name!r}."
+                )
+            resolved.append(service_name)
+        return resolved
+
     def _refresh_router(self) -> None:
         """Reload skill metadata and rebuild router-facing compatibility handles."""
 
@@ -370,11 +379,18 @@ class CodexAgnoRuntime:
         )
         user_id = request.user_id or request.project_id or "codex-user"
         if include_prompt_preview:
-            routing_result.prompt_preview = self.execution_service.preview_prompt(
-                task=request.task,
-                session_id=session_id,
-                user_id=user_id,
-                routing_result=routing_result,
+            routing_result.prompt_preview = preview_router_rs_request_prompt(
+                ExecutionKernelRequest(
+                    task=request.task,
+                    session_id=session_id,
+                    job_id=None,
+                    user_id=user_id,
+                    routing_result=routing_result,
+                    prompt_preview=None,
+                    dry_run=True,
+                ),
+                settings=self.settings,
+                rust_adapter=self.rust_adapter,
             )
         self._trace.record(
             session_id=session_id,
@@ -405,6 +421,8 @@ class CodexAgnoRuntime:
                 "diagnostic_route_mode": routing_result.diagnostic_route_mode,
                 "route_diagnostic_report": (
                     routing_result.route_diagnostic_report.model_dump(mode="json")
+                    if hasattr(routing_result.route_diagnostic_report, "model_dump")
+                    else routing_result.route_diagnostic_report
                     if routing_result.route_diagnostic_report is not None
                     else None
                 ),
@@ -444,7 +462,7 @@ class CodexAgnoRuntime:
             include_prompt_preview=execution_is_dry_run,
         )
         routing_result = self._to_routing_result(request.task, prepared)
-        kernel_contract = self.execution_service.describe_kernel_contract(dry_run=execution_is_dry_run)
+        kernel_contract = _runtime_execution_kernel_contract(self.execution_service._service_descriptor)
         self._trace.record(
             session_id=prepared.session_id,
             job_id=request.job_id,
@@ -453,10 +471,7 @@ class CodexAgnoRuntime:
             payload={
                 "skill": prepared.skill,
                 "live_run": not execution_is_dry_run,
-                **self.execution_service.kernel_payload(
-                    dry_run=execution_is_dry_run,
-                    metadata=kernel_contract,
-                ),
+                **project_execution_kernel_payload(self.execution_service._service_descriptor, metadata=kernel_contract),
             },
         )
 
@@ -505,8 +520,8 @@ class CodexAgnoRuntime:
             payload={
                 "live_run": not execution_is_dry_run,
                 "mode": "dry-run" if execution_is_dry_run else "live",
-                **self.execution_service.kernel_payload(
-                    dry_run=not result.live_run,
+                **project_execution_kernel_payload(
+                    self.execution_service._service_descriptor,
                     metadata=result.metadata,
                 ),
                 **({"model_id": result.model_id} if result.live_run else {}),
@@ -519,268 +534,20 @@ class CodexAgnoRuntime:
     async def enqueue_background_run(self, request: BackgroundRunRequest) -> BackgroundRunStatus:
         """Schedule a background task execution."""
 
-        job_id = f"job_{uuid.uuid4().hex[:12]}"
-        effective_session_id = build_session_id(
-            request.project_id,
-            request.task,
-            self.settings.codex_home,
-            request.session_id,
-        )
-        request = request.model_copy(update={"session_id": effective_session_id})
-        enqueue_policy = self._background_enqueue_policy(
-            multitask_strategy=request.multitask_strategy,
-            active_job_count=0,
-        )
-        multitask_strategy = str(enqueue_policy["normalized_multitask_strategy"])
-        requires_takeover = bool(enqueue_policy["requires_takeover"])
-
-        if not bool(enqueue_policy["strategy_supported"]):
-            status = self._apply_background_mutation(
-                job_id,
-                self._background_mutation(
-                    status="failed",
-                    session_id=effective_session_id,
-                    parallel_group_id=request.parallel_group_id,
-                    lane_id=request.lane_id,
-                    parent_job_id=request.parent_job_id,
-                    multitask_strategy=multitask_strategy,
-                    error=str(enqueue_policy["error"]),
-                    timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                    max_attempts=request.max_attempts,
-                    backoff_base_seconds=request.backoff_base_seconds,
-                    backoff_multiplier=request.backoff_multiplier,
-                    max_backoff_seconds=request.max_backoff_seconds,
-                ),
-            )
-            async with self._jobs_lock:
-                self.background_jobs[job_id] = status
-            self._trace.record(
-                session_id=effective_session_id,
-                job_id=job_id,
-                kind="job.failed",
-                stage="background",
-                payload={
-                    "error": status.error,
-                    "multitask_strategy": multitask_strategy,
-                    **self.background_service._background_trace_context(status),
-                },
-            )
-            self.background_service.flush_background_admission_failure_trace_metadata(
-                request=request,
-                status=status,
-            )
-            return status
-
-        if requires_takeover:
-            try:
-                takeover = await self._arbitrate_background_multitask_takeover(
-                    session_id=effective_session_id,
-                    incoming_job_id=job_id,
-                    operation="reserve",
-                )
-                active_job_id = takeover.previous_active_job_id
-            except SessionConflictError as error:
-                status = self._apply_background_mutation(
-                    job_id,
-                    self._background_mutation(
-                    status="failed",
-                    session_id=effective_session_id,
-                    parallel_group_id=request.parallel_group_id,
-                    lane_id=request.lane_id,
-                    parent_job_id=request.parent_job_id,
-                    multitask_strategy=multitask_strategy,
-                    error=str(error),
-                        timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                        max_attempts=request.max_attempts,
-                        backoff_base_seconds=request.backoff_base_seconds,
-                        backoff_multiplier=request.backoff_multiplier,
-                        max_backoff_seconds=request.max_backoff_seconds,
-                    ),
-                )
-                async with self._jobs_lock:
-                    self.background_jobs[job_id] = status
-                self._trace.record(
-                    session_id=effective_session_id,
-                    job_id=job_id,
-                    kind="job.failed",
-                    stage="background",
-                    payload={
-                        "error": str(error),
-                        "parallel_group_id": request.parallel_group_id,
-                        "lane_id": request.lane_id,
-                        "parent_job_id": request.parent_job_id,
-                    },
-                )
-                self.background_service.flush_background_admission_failure_trace_metadata(
-                    request=request,
-                    status=status,
-                )
-                return status
-            if active_job_id is not None:
-                self._trace.record(
-                    session_id=effective_session_id,
-                    job_id=active_job_id,
-                    kind="job.multitask_preempt_requested",
-                    stage="background",
-                    payload={
-                        "multitask_strategy": multitask_strategy,
-                        "incoming_job_id": job_id,
-                        "parallel_group_id": request.parallel_group_id,
-                        "lane_id": request.lane_id,
-                        "parent_job_id": request.parent_job_id,
-                    },
-                )
-                await self.request_background_interrupt(active_job_id)
-                try:
-                    await self._wait_for_background_session_release(effective_session_id)
-                except Exception:
-                    async with self._jobs_lock:
-                        self.state_service.arbitrate_session_takeover(
-                            session_id=effective_session_id,
-                            incoming_job_id=job_id,
-                            operation="release",
-                        )
-                    raise
-                await self._arbitrate_background_multitask_takeover(
-                    session_id=effective_session_id,
-                    incoming_job_id=job_id,
-                    operation="claim",
-                )
-
-        try:
-            async with self._jobs_lock:
-                admission_policy = self._background_enqueue_policy(
-                    multitask_strategy=multitask_strategy,
-                    active_job_count=self.state_service.active_job_count(),
-                )
-                if not bool(admission_policy["accepted"]):
-                    if requires_takeover:
-                        self.state_service.arbitrate_session_takeover(
-                            session_id=effective_session_id,
-                            incoming_job_id=job_id,
-                            operation="release",
-                        )
-                    status = self._apply_background_mutation(
-                        job_id,
-                        self._background_mutation(
-                            status="failed",
-                            session_id=effective_session_id,
-                            parallel_group_id=request.parallel_group_id,
-                            lane_id=request.lane_id,
-                            parent_job_id=request.parent_job_id,
-                            multitask_strategy=multitask_strategy,
-                            error=str(admission_policy["error"]),
-                            timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                            max_attempts=request.max_attempts,
-                            backoff_base_seconds=request.backoff_base_seconds,
-                            backoff_multiplier=request.backoff_multiplier,
-                            max_backoff_seconds=request.max_backoff_seconds,
-                        ),
-                    )
-                else:
-                    status = self._apply_background_mutation(
-                        job_id,
-                        self._background_mutation(
-                            status="queued",
-                            session_id=effective_session_id,
-                            parallel_group_id=request.parallel_group_id,
-                            lane_id=request.lane_id,
-                            parent_job_id=request.parent_job_id,
-                            multitask_strategy=multitask_strategy,
-                            timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                            max_attempts=request.max_attempts,
-                            backoff_base_seconds=request.backoff_base_seconds,
-                            backoff_multiplier=request.backoff_multiplier,
-                            max_backoff_seconds=request.max_backoff_seconds,
-                        ),
-                    )
-        except SessionConflictError as error:
-            if requires_takeover:
-                async with self._jobs_lock:
-                    self.state_service.arbitrate_session_takeover(
-                        session_id=effective_session_id,
-                        incoming_job_id=job_id,
-                        operation="release",
-                    )
-                    status = self._apply_background_mutation(
-                        job_id,
-                        self._background_mutation(
-                            status="failed",
-                            session_id=effective_session_id,
-                            parallel_group_id=request.parallel_group_id,
-                            lane_id=request.lane_id,
-                            parent_job_id=request.parent_job_id,
-                            multitask_strategy=multitask_strategy,
-                            error=str(error),
-                            timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                            max_attempts=request.max_attempts,
-                            backoff_base_seconds=request.backoff_base_seconds,
-                            backoff_multiplier=request.backoff_multiplier,
-                            max_backoff_seconds=request.max_backoff_seconds,
-                        ),
-                    )
-            else:
-                async with self._jobs_lock:
-                    status = self._apply_background_mutation(
-                        job_id,
-                        self._background_mutation(
-                            status="failed",
-                            session_id=effective_session_id,
-                            parallel_group_id=request.parallel_group_id,
-                            lane_id=request.lane_id,
-                            parent_job_id=request.parent_job_id,
-                            multitask_strategy=multitask_strategy,
-                            error=str(error),
-                            timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
-                            max_attempts=request.max_attempts,
-                            backoff_base_seconds=request.backoff_base_seconds,
-                            backoff_multiplier=request.backoff_multiplier,
-                            max_backoff_seconds=request.max_backoff_seconds,
-                        ),
-                    )
-        if status.status == "failed":
-            self._trace.record(
-                session_id=effective_session_id,
-                job_id=job_id,
-                kind="job.failed",
-                stage="background",
-                payload={
-                    "error": status.error,
-                    **self.background_service._background_trace_context(status),
-                },
-            )
-            self.background_service.flush_background_admission_failure_trace_metadata(
-                request=request,
-                status=status,
-            )
-            return status
-
-        async with self._jobs_lock:
-            self.background_jobs[job_id] = status
-        self._trace.record(
-            session_id=effective_session_id,
-            job_id=job_id,
-            kind="job.queued",
-            stage="background",
-            payload={
-                "multitask_strategy": multitask_strategy,
-                "timeout_seconds": _BACKGROUND_JOB_TIMEOUT,
-                "capacity_limit": self._max_background_jobs,
-                "max_attempts": request.max_attempts,
-                "backoff_base_seconds": request.backoff_base_seconds,
-                "backoff_multiplier": request.backoff_multiplier,
-                "max_backoff_seconds": request.max_backoff_seconds,
-                "background_policy_authority": self.rust_adapter.background_control_authority,
-                **self.background_service._background_trace_context(status),
-            },
-        )
-
         self.background_service.configure_limits(
             max_background_jobs=self._max_background_jobs,
             job_semaphore=self._job_semaphore,
         )
-        self.background_service.start_job(job_id, request, run_task=self.run_task)
-        return status
+        return await self.background_service.enqueue_job(
+            request,
+            session_id_resolver=lambda current_request: build_session_id(
+                current_request.project_id,
+                current_request.task,
+                self.settings.codex_home,
+                current_request.session_id,
+            ),
+            run_task=self.run_task,
+        )
 
     async def enqueue_background_batch(
         self,
@@ -791,33 +558,21 @@ class CodexAgnoRuntime:
     ) -> BackgroundBatchEnqueueResponse:
         """Admit a bounded parallel batch and auto-assign lane ids when needed."""
 
-        if not requests:
-            raise ValueError("enqueue_background_batch requires at least one request.")
-        resolved_group_id = parallel_group_id or f"pgroup_{uuid.uuid4().hex[:12]}"
-        statuses: list[BackgroundRunStatus] = []
-        for index, request in enumerate(requests, start=1):
-            request_group_id = request.parallel_group_id
-            if request_group_id is not None and request_group_id != resolved_group_id:
-                raise ValueError(
-                    "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
-                )
-            lane_id = request.lane_id or f"{lane_id_prefix}-{index}"
-            status = await self.enqueue_background_run(
-                request.model_copy(
-                    update={
-                        "parallel_group_id": resolved_group_id,
-                        "lane_id": lane_id,
-                    }
-                )
-            )
-            statuses.append(status)
-        summary = self.get_background_parallel_group_summary(resolved_group_id)
-        if summary is None:
-            raise RuntimeError(f"Background parallel group {resolved_group_id!r} was not persisted.")
-        return BackgroundBatchEnqueueResponse(
-            parallel_group_id=resolved_group_id,
-            statuses=statuses,
-            summary=summary,
+        self.background_service.configure_limits(
+            max_background_jobs=self._max_background_jobs,
+            job_semaphore=self._job_semaphore,
+        )
+        return await self.background_service.enqueue_batch(
+            requests,
+            session_id_resolver=lambda current_request: build_session_id(
+                current_request.project_id,
+                current_request.task,
+                self.settings.codex_home,
+                current_request.session_id,
+            ),
+            run_task=self.run_task,
+            parallel_group_id=parallel_group_id,
+            lane_id_prefix=lane_id_prefix,
         )
 
     def get_background_parallel_group_summary(
@@ -826,103 +581,12 @@ class CodexAgnoRuntime:
     ) -> BackgroundParallelGroupSummary | None:
         """Return one durable parallel-batch summary by group id."""
 
-        return self.state_service.parallel_group_summary(parallel_group_id)
+        return self.background_service.parallel_group_summary(parallel_group_id)
 
     def list_background_parallel_groups(self) -> list[BackgroundParallelGroupSummary]:
         """Return all durable parallel-batch summaries."""
 
-        return self.state_service.parallel_group_summaries()
-
-    async def _arbitrate_background_multitask_takeover(
-        self,
-        *,
-        session_id: str,
-        incoming_job_id: str,
-        operation: str,
-    ) -> BackgroundSessionTakeoverArbitration:
-        """Execute one state-owned takeover reducer step under the jobs lock."""
-
-        async with self._jobs_lock:
-            return self.state_service.arbitrate_session_takeover(
-                session_id=session_id,
-                incoming_job_id=incoming_job_id,
-                operation=operation,
-            )
-
-    def _background_mutation(
-        self,
-        *,
-        status: str,
-        current: BackgroundRunStatus | None = None,
-        **overrides: Any,
-    ) -> BackgroundJobStatusMutation:
-        """Build one descriptor-driven background mutation from the latest row snapshot."""
-
-        return self.background_service.mutation(status=status, current=current, **overrides)
-
-    def _apply_background_mutation(
-        self,
-        job_id: str,
-        mutation: BackgroundJobStatusMutation,
-    ) -> BackgroundRunStatus:
-        """Apply one durable mutation through the state service host lane."""
-
-        return self.background_service.apply_mutation(job_id, mutation)
-
-    async def _wait_for_background_session_release(self, session_id: str, *, timeout_seconds: float = 5.0) -> None:
-        """Wait until a session is no longer reserved by an active background job."""
-
-        release_policy = self._background_session_release_policy(session_id=session_id)
-        effect_plan = self._background_effect_plan(release_policy)
-        timeout_seconds = float(effect_plan.get("wait_timeout_seconds") or timeout_seconds)
-        poll_interval_seconds = float(effect_plan.get("wait_poll_interval_seconds") or 0.01)
-        await self.state_service.wait_for_session_release(
-            session_id=session_id,
-            timeout_seconds=timeout_seconds,
-            poll_interval_seconds=poll_interval_seconds,
-        )
-
-    def _background_enqueue_policy(
-        self,
-        *,
-        multitask_strategy: str,
-        active_job_count: int,
-    ) -> dict[str, Any]:
-        """Resolve enqueue admission through the Rust background-control seam."""
-
-        return self.rust_adapter.background_control(
-            {
-                "schema_version": self.rust_adapter.background_control_schema_version,
-                "operation": "enqueue",
-                "multitask_strategy": multitask_strategy,
-                "active_job_count": active_job_count,
-                "capacity_limit": self._max_background_jobs,
-            }
-        )
-
-    def _background_effect_plan(self, policy: dict[str, Any]) -> dict[str, Any]:
-        """Extract the Rust-owned background effect plan from a control response."""
-
-        effect_plan = policy.get("effect_plan")
-        if not isinstance(effect_plan, dict):
-            raise RuntimeError("Rust background control response missing effect_plan.")
-        return effect_plan
-
-    def _background_session_release_policy(self, *, session_id: str) -> dict[str, Any]:
-        """Resolve background session-release timing through the Rust control seam."""
-
-        return self.rust_adapter.background_control(
-            {
-                "schema_version": self.rust_adapter.background_control_schema_version,
-                "operation": "session-release",
-                "current_status": "release_pending",
-                "task_active": False,
-                "task_done": False,
-                "active_job_count": self.state_service.active_job_count(),
-                "capacity_limit": self._max_background_jobs,
-                "session_id": session_id,
-            }
-        )
+        return self.background_service.parallel_group_summaries()
 
     async def request_background_interrupt(self, job_id: str) -> BackgroundRunStatus | None:
         """Request interruption of a queued, running, or retry-scheduled job."""

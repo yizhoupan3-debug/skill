@@ -36,6 +36,7 @@ from publication_rcparams import (
 
 
 OUTPUT_DIR = Path("/tmp/cjk_font_test")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def test_font_detection():

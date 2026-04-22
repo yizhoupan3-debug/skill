@@ -2880,8 +2880,8 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
     retirement_exit_observation_sources.insert(
         "local_runtime_health".to_string(),
         Value::Array(vec![
-            Value::String("ExecutionEnvironmentService.describe_kernel_contract()".to_string()),
-            Value::String("RouterRsExecutionKernel.health().kernel_live_backend_impl".to_string()),
+            Value::String("runtime_control_plane.services.execution.kernel_contract".to_string()),
+            Value::String("ExecutionEnvironmentService.health().kernel_live_backend_impl".to_string()),
         ]),
     );
     retirement_exit_observation_sources.insert(

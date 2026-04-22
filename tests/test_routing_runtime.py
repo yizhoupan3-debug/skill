@@ -12,7 +12,7 @@ SCRIPTS_ROOT = PROJECT_ROOT / "scripts"
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
-from scripts.route import search_skills
+from codex_agno_runtime.rust_router import search_skills
 from scripts.sync_skills import extract_trigger_hints, normalize_health_manifest
 
 
@@ -116,7 +116,7 @@ def test_search_skills_matches_multilingual_iterative_query() -> None:
         None.
     """
 
-    results = search_skills("自迭代 10轮 优化 验证", limit=3)
+    results = search_skills("自迭代 10轮 优化 验证", codex_home=PROJECT_ROOT, limit=3)
 
     assert results
     assert results[0].record.name == "iterative-optimizer"
@@ -129,8 +129,8 @@ def test_search_skills_matches_memory_and_native_debug_queries() -> None:
         None.
     """
 
-    memory_results = search_skills("agent 长期记忆 跨会话 memory layer", limit=3)
-    native_results = search_skills("Mac 桌面 app 原生 调试 wkwebview ipc", limit=3)
+    memory_results = search_skills("agent 长期记忆 跨会话 memory layer", codex_home=PROJECT_ROOT, limit=3)
+    native_results = search_skills("Mac 桌面 app 原生 调试 wkwebview ipc", codex_home=PROJECT_ROOT, limit=3)
 
     assert memory_results
     assert memory_results[0].record.name == "agent-memory"

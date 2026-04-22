@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Mapping
 
 from codex_agno_runtime.config import RuntimeSettings
 from codex_agno_runtime.execution_kernel_contracts import (
@@ -26,7 +26,6 @@ SANDBOX_CAPABILITY_CATEGORIES = (
     "networked",
     "high_risk",
 )
-
 
 @dataclass(slots=True, frozen=True)
 class SandboxExecutionPolicy:
@@ -219,58 +218,3 @@ def preview_router_rs_request_prompt(
         return decode_router_rs_execution_payload(response_payload).prompt_preview
     except RuntimeError as exc:
         raise RouterRsInfrastructureError(str(exc)) from exc
-
-
-def build_router_rs_execution_kernel_health(
-    rust_adapter: RustRouteAdapter,
-) -> dict[str, Any]:
-    """Return the shared Rust-owned kernel health descriptor."""
-
-    adapter_health = rust_adapter.health()
-    return {
-        "kernel_adapter_kind": EXECUTION_KERNEL_BRIDGE_KIND,
-        "kernel_authority": EXECUTION_KERNEL_BRIDGE_AUTHORITY,
-        "kernel_owner_family": "rust",
-        "kernel_owner_impl": "execution-kernel-slice",
-        "kernel_contract_mode": "rust-live-primary",
-        "kernel_replace_ready": True,
-        "kernel_in_process_replacement_complete": True,
-        "kernel_live_backend_family": "rust-cli",
-        "kernel_live_backend_impl": "router-rs",
-        "kernel_live_delegate_kind": EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
-        "kernel_live_delegate_authority": EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
-        "kernel_live_delegate_family": EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
-        "kernel_live_delegate_impl": EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
-        "kernel_live_delegate_mode": "rust-primary",
-        "kernel_live_fallback_kind": None,
-        "kernel_live_fallback_authority": None,
-        "kernel_live_fallback_family": None,
-        "kernel_live_fallback_impl": None,
-        "kernel_live_fallback_enabled": False,
-        "kernel_live_fallback_mode": "disabled",
-        "kernel_mode_support": ["dry_run", "live"],
-        "execution_schema_version": RustRouteAdapter.execution_schema_version,
-        "resolved_binary": adapter_health.get("resolved_binary"),
-    }
-
-
-def build_router_rs_execution_kernel_contract_descriptor(*, rust_adapter: RustRouteAdapter) -> dict[str, Any]:
-    """Return the shared execution-kernel contract descriptor for runtime surfaces."""
-
-    health = build_router_rs_execution_kernel_health(rust_adapter)
-    return {
-        "execution_kernel": health["kernel_adapter_kind"],
-        "execution_kernel_authority": health["kernel_authority"],
-        "execution_kernel_contract_mode": health["kernel_contract_mode"],
-        "execution_kernel_in_process_replacement_complete": health["kernel_in_process_replacement_complete"],
-        "execution_kernel_delegate": health["kernel_live_delegate_kind"],
-        "execution_kernel_delegate_authority": health["kernel_live_delegate_authority"],
-        "execution_kernel_delegate_family": health["kernel_live_delegate_family"],
-        "execution_kernel_delegate_impl": health["kernel_live_delegate_impl"],
-        "execution_kernel_live_primary": health["kernel_live_delegate_kind"],
-        "execution_kernel_live_primary_authority": health["kernel_live_delegate_authority"],
-        "execution_kernel_live_fallback": health["kernel_live_fallback_kind"],
-        "execution_kernel_live_fallback_authority": health["kernel_live_fallback_authority"],
-        "execution_kernel_live_fallback_enabled": health["kernel_live_fallback_enabled"],
-        "execution_kernel_live_fallback_mode": health["kernel_live_fallback_mode"],
-    }
