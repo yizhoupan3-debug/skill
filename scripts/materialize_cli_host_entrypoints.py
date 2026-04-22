@@ -74,65 +74,43 @@ framework policy instead of forking per-host routing or memory rules.
 ## Turn-Start Routing
 
 1. Extract `object / action / constraints / deliverable`.
-2. Surface any assumption or ambiguity that would materially change the route,
-   scope, or implementation.
+2. Surface any ambiguity that would materially change the route or result.
 3. Check gates before owners.
-4. Use the narrowest matching skill.
-5. Read the chosen `SKILL.md` before analysis, search, coding, or edits.
-6. For non-trivial execution, state the minimum success criteria and intended
+4. Use the narrowest matching skill and read its `SKILL.md` before acting.
+5. For non-trivial execution, state the minimum success criteria and intended
    verification path before coding.
-7. If no skill matches, consult `skills/SKILL_ROUTING_RUNTIME.json` first, then
-   `skills/SKILL_ROUTING_INDEX.md` for the human quick scan.
-8. Keep exactly one primary owner and at most one overlay.
-9. For high-load, cross-file, or long-running tasks, invoke
-   `execution-controller-coding` and maintain `.supervisor_state.json`.
-10. For complex tasks, check `subagent-delegation` before deciding whether to
-   split bounded sidecars.
-11. Treat explicit `gsd` / `get shit done` / “推进到底” requests as a posture
+6. If no skill matches, consult `skills/SKILL_ROUTING_RUNTIME.json` first, then
+   `skills/SKILL_ROUTING_INDEX.md`.
+7. Keep one primary owner and at most one overlay.
+8. Use `execution-controller-coding` for high-load or long-running work, and
+   check `subagent-delegation` before splitting bounded sidecars.
+9. Treat explicit `gsd` / `get shit done` / “推进到底” requests as a posture
    boost for `execution-controller-coding` plus `anti-laziness`, not as an
-   external runtime workflow.
+   external workflow.
 
 ## Shared Runtime Contract
 
-- The shared runtime truth lives in `skills/`, task artifacts, and
+- Runtime truth lives in `skills/`, task artifacts, and
   `.supervisor_state.json`.
-- Host-specific entry files are thin projections only. They must not fork the
-  routing truth, memory schema, or artifact contract.
-- Complex tasks should externalize state into:
-  `SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`,
-  `TRACE_METADATA.json`, and `.supervisor_state.json`.
-- Task-scoped continuity lives under `artifacts/current/<task_id>/`.
-  Root-level continuity files and `artifacts/current/` are current-task mirrors
-  or pointer surfaces only; they must not act as cross-task global truth.
-  `artifacts/current/` may contain only `active_task.json`, the four mirror
-  files, and task-scoped continuity directories. Bootstrap payloads belong in
-  `artifacts/bootstrap/`, memory-automation diagnostics belong in
-  `artifacts/ops/memory_automation/`, evidence belongs in `artifacts/evidence/`,
-  and scratch or demo outputs belong in `artifacts/scratch/`.
-- Shared continuity artifacts are a **single-writer surface**. Only the active
-  supervisor / integrator may write `SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`,
-  `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`, and `.supervisor_state.json`.
-  Parallel lanes must emit lane-local summaries or delta artifacts and leave
-  global continuity flushes to the integration step.
-- Claude host hooks may refresh imported host projections, and `SessionEnd`
-  may consolidate the project-local memory bundle, but they must not rewrite
-  root continuity artifacts or take over supervisor integration.
+- Host-specific entry files are thin projections only; they must not fork
+  routing, memory schema, or artifact rules.
+- Complex tasks externalize state into `SESSION_SUMMARY.md`,
+  `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`, and
+  `.supervisor_state.json`.
+- `artifacts/current/<task_id>/` is task-local continuity. Keep bootstrap,
+  ops, evidence, and scratch outputs in their own roots.
+- Shared continuity files are a single-writer surface: only the active
+  integrator writes them; parallel lanes emit local deltas.
 
 ## Memory Contract
 
-- Long-term framework memory remains project-local at `./.codex/memory/`
-  unless tooling explicitly switches roots.
-- In this repository, `./.codex/memory/` is the logical framework path and
-  currently resolves via symlink to `./memory/`; treat that as one shared root,
-  not two independent memory trees.
+- Framework memory lives at `./.codex/memory/`; in this repo it resolves to
+  `./memory/`, and both paths are one shared root.
 - Default recall reads only the stable layer: `MEMORY.md`, `preferences.md`,
-  `decisions.md`, `lessons.md`, `runbooks.md`, plus a freshness-gated active
-  task summary only when the query clearly targets the current task.
-- Historical/debug snapshots such as old session notes, legacy SQLite rows, and
-  previous automation snapshots must live under `memory/archive/` or
-  `artifacts/ops/memory_automation/`; they are not part of the normal prompt
-  path.
-- This path is shared framework state, not a Codex-only policy claim.
+  `decisions.md`, `lessons.md`, `runbooks.md`, plus an active task summary only
+  when clearly needed.
+- Historical or debug snapshots belong under `memory/archive/` or
+  `artifacts/ops/memory_automation/`, not the normal prompt path.
 - Host entry files may reference framework memory, but must not redefine its
   schema or ownership.
 
@@ -146,34 +124,20 @@ framework policy instead of forking per-host routing or memory rules.
 
 ## Runtime Sources Of Truth
 
-Primary routing entrypoints:
-
-- `skills/SKILL_ROUTING_RUNTIME.json`: machine-readable routing truth
-- `skills/SKILL_ROUTING_INDEX.md`: human quick reference
-
-Extended generated references, only when needed:
-
-- `skills/SKILL_ROUTING_LAYERS.md`: only for owner/reroute ambiguity
-- `skills/SKILL_SOURCE_MANIFEST.json`: source precedence
-- `skills/SKILL_SHADOW_MAP.json`: shadow audit
-- `skills/SKILL_LOADOUTS.json`: loadout definitions
-- `configs/framework/FRAMEWORK_SURFACE_POLICY.json`: default surface, boundary, and outcome policy
-- `skills/SKILL_APPROVAL_POLICY.json`: approval policy registry
+- Default routing truth:
+  `skills/SKILL_ROUTING_RUNTIME.json` and `skills/SKILL_ROUTING_INDEX.md`.
+- Open the extended generated references only when you need ambiguity or audit
+  detail: `skills/SKILL_ROUTING_LAYERS.md`,
+  `skills/SKILL_SOURCE_MANIFEST.json`, `skills/SKILL_SHADOW_MAP.json`,
+  `skills/SKILL_LOADOUTS.json`,
+  `configs/framework/FRAMEWORK_SURFACE_POLICY.json`, and
+  `skills/SKILL_APPROVAL_POLICY.json`.
 
 ## Host Entry Files
 
-Default host entrypoints:
-
-- Codex: `AGENTS.md`
-- Claude Code: `CLAUDE.md`
-- Gemini CLI: `GEMINI.md`
-
-Host-private local overlays:
-
-- Claude Code: `.claude/settings.json`
-- Gemini CLI: `.gemini/settings.json`
-
-These entry files must stay thin and point back to this shared policy.
+- Default host entrypoints: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`.
+- Host-private overlays: `.claude/settings.json`, `.gemini/settings.json`.
+- These files stay thin and point back to this shared policy.
 """
 
 ROOT_AGENTS_PROXY = """# Codex Entry Proxy

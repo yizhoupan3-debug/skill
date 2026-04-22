@@ -110,12 +110,7 @@ bridge_behavior: mobile_complete_once
 - verification path：用什么测试/命令/证据验收
 - minimum route：先走哪条最小实现路径
 
-连续性写入规则：
-
-- 这些文件是 **supervisor-only** 全局写面
-- sidecar / worker / local-supervisor queue item 不得直接改写这些共享文件
-- 并行 lane 只能写 lane-local artifacts 或 delta payload，等待 integrator 合并
-- 只有集成步骤才能刷新全局 continuity artifacts
+- 这些文件是单写面：并行 lane 只写本地 delta，由集成步骤统一刷新。
 
 主线程只保留：
 
@@ -130,7 +125,7 @@ bridge_behavior: mobile_complete_once
 
 - 未知根因优先：reroute to `$systematic-debugging`
 - 方案仍模糊：reroute to `$idea-to-plan`
-- 已有 checklist / phase queue / execution blueprint，但 serial/parallel 边界、scope、acceptance、或 update contract 仍不稳定：reroute to `$checklist-normalizer`
+- checklist 边界还不稳定：reroute to `$checklist-normalizer`
 - 进入强验收：add `$execution-audit-codex`
 - 能并行且边界清晰：先过 `$subagent-delegation`
 
