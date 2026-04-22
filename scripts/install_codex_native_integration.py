@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,30 @@ DEFAULT_TUI_STATUS_ITEMS = (
     "context-used",
     "fast-mode",
 )
+
+
+def run_host_integration_rs(*args: str) -> dict[str, Any]:
+    repo_root = Path(__file__).resolve().parents[1]
+    manifest_path = repo_root / "scripts" / "host-integration-rs" / "Cargo.toml"
+    crate_root = manifest_path.parent
+    binary_path = crate_root / "target" / "debug" / "host-integration-rs"
+    latest_source_mtime = manifest_path.stat().st_mtime
+    for path in (crate_root / "src").rglob("*.rs"):
+        latest_source_mtime = max(latest_source_mtime, path.stat().st_mtime)
+    if not binary_path.exists() or binary_path.stat().st_mtime < latest_source_mtime:
+        subprocess.run(
+            ["cargo", "build", "--manifest-path", str(manifest_path)],
+            cwd=repo_root,
+            check=True,
+        )
+    completed = subprocess.run(
+        [str(binary_path), *args],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
 
 
 def ensure_config_file(config_path: Path) -> bool:
@@ -324,6 +349,62 @@ def install_native_integration(
         "home_claude_refresh_changed": home_claude_refresh_changed,
         "framework_overlay_retirement": framework_overlay_result,
     }
+
+
+def install_native_integration(
+    *,
+    home_config_path: Path = HOME_CONFIG_PATH,
+    repo_root: Path | None = None,
+    home_plugin_root: Path = HOME_PLUGIN_ROOT,
+    home_marketplace_path: Path = HOME_MARKETPLACE_PATH,
+    home_codex_skills_path: Path = HOME_CODEX_SKILLS_PATH,
+    home_claude_refresh_path: Path = HOME_CLAUDE_REFRESH_PATH,
+    project_instructions_path: Path = PROJECT_INSTRUCTIONS_PATH,
+    install_browser_mcp: bool = True,
+    install_framework_mcp: bool = True,
+    retire_framework_overlay_file: bool = True,
+    install_personal_plugin: bool = True,
+    install_personal_marketplace_entry: bool = True,
+    install_home_codex_skills_link: bool = True,
+    install_home_claude_refresh_command: bool = True,
+) -> dict[str, Any]:
+    """Rust-owned installer wrapper kept behind the legacy Python API."""
+
+    resolved_repo_root = (repo_root or get_repo_root()).resolve()
+    command = [
+        "install-native-integration",
+        "--template-root",
+        str(Path(__file__).resolve().parents[1]),
+        "--repo-root",
+        str(resolved_repo_root),
+        "--home-config-path",
+        str(home_config_path),
+        "--home-plugin-root",
+        str(home_plugin_root),
+        "--home-marketplace-path",
+        str(home_marketplace_path),
+        "--home-codex-skills-path",
+        str(home_codex_skills_path),
+        "--home-claude-refresh-path",
+        str(home_claude_refresh_path),
+        "--project-instructions-path",
+        str(project_instructions_path),
+    ]
+    if not install_browser_mcp:
+        command.append("--skip-browser-mcp")
+    if not install_framework_mcp:
+        command.append("--skip-framework-mcp")
+    if not retire_framework_overlay_file:
+        command.append("--skip-framework-overlay-retirement")
+    if not install_personal_plugin:
+        command.append("--skip-personal-plugin")
+    if not install_personal_marketplace_entry:
+        command.append("--skip-personal-marketplace")
+    if not install_home_codex_skills_link:
+        command.append("--skip-home-codex-skills-link")
+    if not install_home_claude_refresh_command:
+        command.append("--skip-home-claude-refresh")
+    return run_host_integration_rs(*command)
 
 
 def main() -> int:

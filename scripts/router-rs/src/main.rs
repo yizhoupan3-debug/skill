@@ -11,7 +11,12 @@ use std::time::Duration;
 use strsim::jaro_winkler;
 
 mod framework_profile;
+mod framework_runtime;
 
+use framework_runtime::{
+    build_framework_contract_summary_envelope, build_framework_runtime_snapshot_envelope,
+    resolve_repo_root_arg,
+};
 use framework_profile::{
     build_codex_artifact_bundle, build_profile_bundle, build_profile_bundle_with_legacy_alias,
     load_framework_profile,
@@ -73,6 +78,8 @@ const ARTIFACT_GATE_PHRASES: [&str; 12] = [
 #[command(about = "Fast Rust routing core for skill lookup")]
 struct Cli {
     #[arg(long)]
+    repo_root: Option<PathBuf>,
+    #[arg(long)]
     query: Option<String>,
     #[arg(long, default_value_t = 5)]
     limit: usize,
@@ -112,6 +119,10 @@ struct Cli {
     runtime_observability_dashboard_json: bool,
     #[arg(long)]
     runtime_metric_record_json: bool,
+    #[arg(long)]
+    framework_runtime_snapshot_json: bool,
+    #[arg(long)]
+    framework_contract_summary_json: bool,
     #[arg(long)]
     profile_json: bool,
     #[arg(long)]
@@ -472,6 +483,8 @@ fn main() -> Result<(), String> {
         args.runtime_observability_exporter_json,
         args.runtime_observability_dashboard_json,
         args.runtime_metric_record_json,
+        args.framework_runtime_snapshot_json,
+        args.framework_contract_summary_json,
         args.profile_json,
         args.profile_artifacts_json,
         args.route_report_json,
@@ -482,7 +495,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --background-control-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --runtime-observability-exporter-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --route-report-json, --profile-json, and --profile-artifacts-json"
+            "choose only one output mode among --json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --background-control-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --runtime-observability-exporter-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --route-report-json, --profile-json, and --profile-artifacts-json"
                 .to_string(),
         );
     }
@@ -632,6 +645,26 @@ fn main() -> Result<(), String> {
         println!(
             "{}",
             serde_json::to_string(&build_runtime_metric_record(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.framework_runtime_snapshot_json {
+        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_framework_runtime_snapshot_envelope(&repo_root)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.framework_contract_summary_json {
+        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_framework_contract_summary_envelope(&repo_root)?)
                 .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());

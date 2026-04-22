@@ -70,29 +70,42 @@ bridge_behavior: mobile_complete_once
 
 如果当前目录不是 Git 仓库，不要擅自初始化；直接说明不是仓库并停下。
 
+## Execution tiers
+
+- 只诊断：`python3 scripts/git_safety.py doctor`
+- 出收口步骤：`python3 scripts/git_safety.py publish-plan`
+- 自动执行到 merge：`python3 scripts/git_safety.py auto-closeout`
+- 自动执行到 push：`python3 scripts/git_safety.py auto-closeout --push`
+
 ## Required workflow
 
-1. 先检查真实风险面：
+1. 先跑 gitx 诊断，而不是上来就提交：
+   - `python3 scripts/git_safety.py doctor`
+   - `python3 scripts/git_safety.py publish-plan`
+2. 需要看原始面时，再补：
    - `python3 scripts/git_safety.py status`
    - `git status --short --branch`
    - `git worktree list --porcelain`
    - `git stash list`
-2. 若发现脏改动直接堆在 `main`、存在 stash、或 worktree 头部不一致：
+3. 若发现脏改动直接堆在 `main`、存在 stash、或 worktree 头部不一致：
    - 先做 checkpoint，必要时用 `python3 scripts/git_safety.py start-topic <branch>`
    - 不要直接在混乱状态下提交
-3. 对待提交改动做 review：
+4. 对待提交改动做 review：
    - 先找明显 bug、回归、脏文件、生成物噪音、遗漏测试
    - 需要时先修复再继续
-4. 整理提交面：
+5. 低风险场景可以直接走：
+   - `python3 scripts/git_safety.py auto-closeout`
+   - 需要真正一把推上去时再加 `--push`
+6. 整理提交面：
    - 把真正源码改动和缓存/日志/临时文件分开
    - 保留用户无关改动，不要误吞
-5. 验证：
+7. 验证：
    - 运行最小但足够的测试、lint、build 或 smoke
    - 没法验证时要明确说明风险
-6. 提交与分支收口：
+8. 提交与分支收口：
    - 用清晰提交信息提交
-   - 若工作在 topic/worktree 分支上，优先安全合并回目标分支，默认 `--ff-only` 能过就用
-7. 推送：
+   - 若工作在 topic/worktree 分支上，优先按照 `publish-plan` 或 `auto-closeout` 给出的 `--ff-only` 路线收口
+9. 推送：
    - 推送前确认 upstream、ahead/behind、remote 目标
    - 用显式 remote 和 branch；不要盲推
 
@@ -101,7 +114,7 @@ bridge_behavior: mobile_complete_once
 - 不要覆盖或丢弃用户未授权的改动
 - 不要默认使用破坏性 Git 命令
 - 不要把“整理”理解成偷偷删东西
-- 不要跳过 review / verification 直接 commit + push
+- 不要在分叉、冲突、落后上游这些高风险情况下假装可以全自动
 - 如果 worktree / stash / hooksPath 很可疑，先处理这些面，再谈“为什么改动被吞”
 
 ## Usage

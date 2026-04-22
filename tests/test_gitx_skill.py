@@ -8,5 +8,8 @@ def test_gitx_skill_exposes_codex_shortcut_and_closeout_flow() -> None:
     assert "name: gitx" in content
     assert "$gitx" in content
     assert "review、修复、整理、提交、合并 worktree、推送" in content
+    assert "python3 scripts/git_safety.py doctor" in content
+    assert "python3 scripts/git_safety.py publish-plan" in content
+    assert "python3 scripts/git_safety.py auto-closeout" in content
     assert "python3 scripts/git_safety.py status" in content
     assert "git worktree list --porcelain" in content

@@ -27,6 +27,100 @@ from scripts.route import (
 )
 
 
+def _write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _write_json(path: Path, payload: dict[str, object]) -> None:
+    _write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+
+
+def _seed_framework_runtime_artifacts(repo_root: Path, *, terminal: bool) -> None:
+    task_id = (
+        "checklist-series-final-closeout-20260418210000"
+        if terminal
+        else "active-bootstrap-repair-20260418210000"
+    )
+    task_root = repo_root / "artifacts" / "current" / task_id
+    if terminal:
+        summary_lines = [
+            "- task: checklist-series final closeout",
+            "- phase: finalized",
+            "- status: completed",
+        ]
+        supervisor_state = {
+            "task_id": task_id,
+            "task_summary": "checklist-series final closeout",
+            "active_phase": "finalized",
+            "verification": {"verification_status": "completed"},
+            "continuity": {"story_state": "completed", "resume_allowed": False},
+            "execution_contract": {
+                "goal": "Do not treat closeout as active continuity",
+                "scope": ["memory/CLAUDE_MEMORY.md"],
+            },
+        }
+        trace_metadata = {
+            "task": "checklist-series final closeout",
+            "matched_skills": ["checklist-fixer"],
+        }
+        next_actions = {
+            "next_actions": ["Start a new standalone task before continuing related work"],
+        }
+    else:
+        summary_lines = [
+            "- task: active bootstrap repair",
+            "- phase: implementation",
+            "- status: in_progress",
+        ]
+        supervisor_state = {
+            "task_id": task_id,
+            "task_summary": "active bootstrap repair",
+            "active_phase": "implementation",
+            "verification": {"verification_status": "in_progress"},
+            "continuity": {"story_state": "active", "resume_allowed": True},
+            "primary_owner": "skill-developer-codex",
+            "execution_contract": {
+                "goal": "Repair stale bootstrap injection",
+                "scope": ["scripts/memory_support.py"],
+                "acceptance_criteria": [
+                    "completed tasks never appear as current execution"
+                ],
+            },
+            "blockers": {"open_blockers": ["Need regression coverage"]},
+        }
+        trace_metadata = {
+            "task": "active bootstrap repair",
+            "matched_skills": [
+                "execution-controller-coding",
+                "skill-developer-codex",
+            ],
+        }
+        next_actions = {"next_actions": ["Patch classifier", "Run MCP regression tests"]}
+    _write_text(task_root / "SESSION_SUMMARY.md", "\n".join(summary_lines) + "\n")
+    _write_json(task_root / "NEXT_ACTIONS.json", next_actions)
+    _write_json(task_root / "EVIDENCE_INDEX.json", {"artifacts": []})
+    _write_json(task_root / "TRACE_METADATA.json", trace_metadata)
+    _write_text(
+        repo_root / "artifacts" / "current" / "SESSION_SUMMARY.md",
+        "\n".join(summary_lines) + "\n",
+    )
+    _write_json(repo_root / "artifacts" / "current" / "NEXT_ACTIONS.json", next_actions)
+    _write_json(
+        repo_root / "artifacts" / "current" / "EVIDENCE_INDEX.json",
+        {"artifacts": []},
+    )
+    _write_json(
+        repo_root / "artifacts" / "current" / "TRACE_METADATA.json",
+        trace_metadata,
+    )
+    _write_json(
+        repo_root / "artifacts" / "current" / "active_task.json",
+        {"task_id": task_id, "task": supervisor_state["task_summary"]},
+    )
+    _write_json(repo_root / ".supervisor_state.json", supervisor_state)
+
+
 def test_rust_route_adapter_trace_descriptor_methods_validate_schema_and_authority(monkeypatch: pytest.MonkeyPatch) -> None:
     adapter = RustRouteAdapter(PROJECT_ROOT)
     expected = {
@@ -636,3 +730,34 @@ def test_route_report_rollback_lane_keeps_rust_primary_engine() -> None:
     assert report["shadow_engine"] == "python"
     assert report["rollback_active"] is True
     assert report["mismatch"] is False
+
+
+def test_rust_route_adapter_framework_runtime_snapshot_reads_workspace_artifacts(
+    tmp_path: Path,
+) -> None:
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    _seed_framework_runtime_artifacts(tmp_path, terminal=False)
+
+    snapshot = adapter.framework_runtime_snapshot(repo_root=tmp_path)
+
+    assert snapshot["ok"] is True
+    assert snapshot["workspace"] == tmp_path.name
+    assert snapshot["continuity"]["state"] == "active"
+    assert snapshot["continuity"]["current_execution"]["task"] == "active bootstrap repair"
+    assert snapshot["supervisor_state"]["primary_owner"] == "skill-developer-codex"
+    assert snapshot["paths"]["supervisor_state"].endswith(".supervisor_state.json")
+
+
+def test_rust_route_adapter_framework_contract_summary_handles_completed_snapshot(
+    tmp_path: Path,
+) -> None:
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    _seed_framework_runtime_artifacts(tmp_path, terminal=True)
+
+    summary = adapter.framework_contract_summary(repo_root=tmp_path)
+
+    assert summary["ok"] is True
+    assert summary["continuity"]["state"] == "completed"
+    assert summary["goal"] is None
+    assert summary["next_actions"] == []
+    assert summary["recent_completed_execution"]["task"] == "checklist-series final closeout"

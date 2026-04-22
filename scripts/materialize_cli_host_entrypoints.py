@@ -5,8 +5,15 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.host_integration_rs import run_host_integration_rs
 
 
 SHARED_AGENT_POLICY = """# Shared Agent Policy
@@ -490,6 +497,30 @@ CLAUDE_PROJECT_SETTINGS = {
 }
 
 
+def run_host_integration_rs(*args: str) -> dict[str, Any]:
+    repo_root = Path(__file__).resolve().parents[1]
+    manifest_path = repo_root / "scripts" / "host-integration-rs" / "Cargo.toml"
+    crate_root = manifest_path.parent
+    binary_path = crate_root / "target" / "debug" / "host-integration-rs"
+    latest_source_mtime = manifest_path.stat().st_mtime
+    for path in (crate_root / "src").rglob("*.rs"):
+        latest_source_mtime = max(latest_source_mtime, path.stat().st_mtime)
+    if not binary_path.exists() or binary_path.stat().st_mtime < latest_source_mtime:
+        subprocess.run(
+            ["cargo", "build", "--manifest-path", str(manifest_path)],
+            cwd=repo_root,
+            check=True,
+        )
+    completed = subprocess.run(
+        [str(binary_path), *args],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
+
+
 def _write_text(path: Path, content: str) -> bool:
     existing = path.read_text(encoding="utf-8") if path.is_file() else None
     if existing == content:
@@ -676,33 +707,42 @@ def sync_repo_host_entrypoints(
     """Check or write the shared and host-specific entrypoint files for this repository."""
 
     root = (repo_root or Path(__file__).resolve().parents[1]).resolve()
-    written: list[str] = []
-    unchanged: list[str] = []
-    created_dirs: list[str] = []
-    synced_worktrees: list[str] = []
-    skipped_worktrees: list[str] = []
-    matched_worktrees, skipped_worktrees = _discover_matching_worktrees(root)
-
-    for target_root in [root, *matched_worktrees]:
-        single_result = _sync_single_root(
-            target_root,
-            report_root=root,
-            apply=apply,
-            full_sync=target_root == root,
+    with TemporaryDirectory() as temp_dir:
+        template_root = Path(temp_dir)
+        for relative_path, content in {
+            "AGENT.md": SHARED_AGENT_POLICY,
+            "AGENTS.md": ROOT_AGENTS_PROXY,
+            "CLAUDE.md": ROOT_CLAUDE_PROXY,
+            "GEMINI.md": ROOT_GEMINI_PROXY,
+            ".claude/CLAUDE.md": CLAUDE_LOCAL_PROXY,
+            ".claude/agents/README.md": CLAUDE_AGENTS_README,
+            ".claude/commands/refresh.md": CLAUDE_REFRESH_COMMAND,
+            ".claude/hooks/README.md": CLAUDE_HOOKS_README,
+            ".claude/hooks/session_start.sh": CLAUDE_SESSION_START_HOOK,
+            ".claude/hooks/stop.sh": CLAUDE_STOP_HOOK,
+            ".claude/hooks/pre_compact.sh": CLAUDE_PRE_COMPACT_HOOK,
+            ".claude/hooks/subagent_stop.sh": CLAUDE_SUBAGENT_STOP_HOOK,
+            ".claude/hooks/session_end.sh": CLAUDE_SESSION_END_HOOK,
+            ".claude/hooks/config_change.sh": CLAUDE_CONFIG_CHANGE_HOOK,
+            ".claude/hooks/stop_failure.sh": CLAUDE_STOP_FAILURE_HOOK,
+            "configs/codex/AGENTS.md": CONFIG_CODEX_PROXY,
+            "configs/claude/CLAUDE.md": CONFIG_CLAUDE_PROXY,
+            "configs/gemini/GEMINI.md": CONFIG_GEMINI_PROXY,
+        }.items():
+            _write_text(template_root / relative_path, content)
+        for relative_path, payload in {
+            ".claude/settings.json": CLAUDE_PROJECT_SETTINGS,
+            ".gemini/settings.json": {},
+        }.items():
+            _write_json(template_root / relative_path, payload)
+        return run_host_integration_rs(
+            "sync-host-entrypoints",
+            "--template-root",
+            str(template_root),
+            "--repo-root",
+            str(root),
+            "--apply" if apply else "--check",
         )
-        written.extend(single_result["written"])
-        unchanged.extend(single_result["unchanged"])
-        created_dirs.extend(single_result["created_dirs"])
-        if target_root != root:
-            synced_worktrees.append(str(target_root))
-
-    return {
-        "written": sorted(written),
-        "unchanged": sorted(unchanged),
-        "created_dirs": sorted(created_dirs),
-        "synced_worktrees": sorted(synced_worktrees),
-        "skipped_worktrees": sorted(skipped_worktrees),
-    }
 
 
 def materialize_repo_host_entrypoints(repo_root: Path | None = None) -> dict[str, list[str]]:
