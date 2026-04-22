@@ -75,7 +75,6 @@ from codex_agno_runtime.state import (
 from codex_agno_runtime.trace import InMemoryRuntimeEventBridge, RuntimeEventHandoff, RuntimeEventStreamChunk
 from codex_agno_runtime.trace import RuntimeEventTransport
 
-_KERNEL_CONTRACT_FIELDS = EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS
 _KERNEL_HEALTH_FIELDS = (
     "kernel_adapter_kind",
     "kernel_authority",
@@ -211,12 +210,49 @@ def _runtime_execution_kernel_contract(
         contract = service_descriptor.get("kernel_contract")
     if not isinstance(contract, Mapping):
         raise RuntimeError("runtime control plane execution descriptor is missing kernel_contract.")
+    metadata_bridge = _runtime_execution_kernel_metadata_bridge(service_descriptor)
     return validate_execution_kernel_steady_state_metadata(
         metadata=contract,
         execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
         execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
         response_shape=response_shape,
+        metadata_bridge=metadata_bridge,
     )
+
+
+def _runtime_execution_kernel_metadata_bridge(
+    service_descriptor: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Return the Rust-owned execution-kernel naming bridge when available."""
+
+    if not isinstance(service_descriptor, Mapping):
+        return None
+    bridge = service_descriptor.get("kernel_metadata_bridge")
+    if bridge is None:
+        return None
+    if not isinstance(bridge, Mapping):
+        raise RuntimeError(
+            "runtime control plane execution descriptor returned an invalid kernel_metadata_bridge."
+        )
+    return dict(bridge)
+
+
+def _runtime_execution_kernel_contract_fields(
+    service_descriptor: Mapping[str, Any] | None,
+) -> tuple[str, ...]:
+    """Return the Rust-owned steady-state contract fields for Python projection."""
+
+    bridge = _runtime_execution_kernel_metadata_bridge(service_descriptor)
+    if bridge is None:
+        return EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS
+    fields = bridge.get("steady_state_fields")
+    if not isinstance(fields, (list, tuple)) or any(
+        not isinstance(field, str) or not field.strip() for field in fields
+    ):
+        raise RuntimeError(
+            "runtime control plane execution descriptor is missing kernel_metadata_bridge.steady_state_fields."
+        )
+    return tuple(str(field) for field in fields)
 
 
 def project_execution_kernel_payload(
@@ -227,10 +263,12 @@ def project_execution_kernel_payload(
 ) -> dict[str, Any]:
     """Merge explicit execution metadata onto the Rust-owned kernel contract."""
 
+    metadata_bridge = _runtime_execution_kernel_metadata_bridge(service_descriptor)
+    contract_fields = _runtime_execution_kernel_contract_fields(service_descriptor)
     payload = dict(_runtime_execution_kernel_contract(service_descriptor, dry_run=dry_run))
     if metadata is not None:
         projected_metadata = dict(payload)
-        for field in _KERNEL_CONTRACT_FIELDS:
+        for field in contract_fields:
             if field in metadata:
                 projected_metadata[field] = metadata[field]
         metadata_execution_kernel = metadata.get("execution_kernel")
@@ -282,8 +320,9 @@ def project_execution_kernel_payload(
                 )
             ),
             response_shape=str(payload["execution_kernel_response_shape"]),
+            metadata_bridge=metadata_bridge,
         )
-        for field in _KERNEL_CONTRACT_FIELDS:
+        for field in contract_fields:
             payload[field] = validated_metadata[field]
     return {key: value for key, value in payload.items() if value is not None}
 
@@ -1731,10 +1770,13 @@ class ExecutionEnvironmentService:
         self,
         request: ExecutionKernelRequest,
     ) -> RunTaskResponse:
+        kernel_contract = self.describe_kernel_contract(dry_run=request.dry_run)
         return await execute_router_rs_request(
             request,
             settings=self.settings,
             rust_adapter=self._rust_adapter,
+            kernel_contract=kernel_contract,
+            metadata_bridge=_runtime_execution_kernel_metadata_bridge(self._service_descriptor),
         )
 
 

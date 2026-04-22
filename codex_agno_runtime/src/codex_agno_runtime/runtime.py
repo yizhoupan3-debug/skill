@@ -52,6 +52,7 @@ from codex_agno_runtime.services import (
     TraceService,
     project_execution_kernel_payload,
     _runtime_execution_kernel_contract,
+    _runtime_execution_kernel_metadata_bridge,
     _runtime_host_contract,
 )
 from codex_agno_runtime.utils import build_session_id
@@ -365,8 +366,6 @@ class CodexAgnoRuntime:
     def _route_session(
         self,
         request: PrepareSessionRequest,
-        *,
-        include_prompt_preview: bool,
     ) -> tuple[str, str, RoutingResult]:
         """Resolve one routed session without projecting through prepare-session response types."""
 
@@ -383,19 +382,6 @@ class CodexAgnoRuntime:
             first_turn=True,
         )
         user_id = request.user_id or request.project_id or "codex-user"
-        if include_prompt_preview:
-            routing_result.prompt_preview = preview_router_rs_request_prompt(
-                ExecutionKernelRequest(
-                    task=request.task,
-                    session_id=session_id,
-                    job_id=None,
-                    user_id=user_id,
-                    routing_result=routing_result,
-                    dry_run=True,
-                ),
-                settings=self.settings,
-                rust_adapter=self.rust_adapter,
-            )
         self._trace.record(
             session_id=session_id,
             kind="session.prepared",
@@ -434,18 +420,44 @@ class CodexAgnoRuntime:
         )
         return session_id, user_id, routing_result
 
+    def _build_session_prompt_preview(
+        self,
+        *,
+        task: str,
+        session_id: str,
+        user_id: str,
+        routing_result: RoutingResult,
+    ) -> str | None:
+        """Build one explicit Rust-owned dry-run preview without mutating the route result."""
+
+        kernel_contract = _runtime_execution_kernel_contract(
+            self.execution_service._service_descriptor,
+            dry_run=True,
+        )
+        return preview_router_rs_request_prompt(
+            ExecutionKernelRequest(
+                task=task,
+                session_id=session_id,
+                job_id=None,
+                user_id=user_id,
+                routing_result=routing_result,
+                dry_run=True,
+            ),
+            settings=self.settings,
+            rust_adapter=self.rust_adapter,
+            kernel_contract=kernel_contract,
+            metadata_bridge=_runtime_execution_kernel_metadata_bridge(
+                self.execution_service._service_descriptor
+            ),
+        )
+
     def _prepare_session(
         self,
         request: PrepareSessionRequest,
-        *,
-        include_prompt_preview: bool,
     ) -> PrepareSessionResponse:
-        """Route a task and optionally build a session prompt preview."""
+        """Route a task without projecting prompt text onto the route result."""
 
-        session_id, user_id, routing_result = self._route_session(
-            request,
-            include_prompt_preview=include_prompt_preview,
-        )
+        session_id, user_id, routing_result = self._route_session(request)
         return PrepareSessionResponse(
             session_id=session_id,
             user_id=user_id,
@@ -462,13 +474,18 @@ class CodexAgnoRuntime:
     def prepare_session(self, request: PrepareSessionRequest) -> PrepareSessionResponse:
         """Route a task without precomputing a dry-run preview."""
 
-        return self._prepare_session(request, include_prompt_preview=False)
+        return self._prepare_session(request)
 
     def prepare_session_preview(self, request: PrepareSessionRequest) -> str | None:
         """Resolve one explicit Rust-owned dry-run preview for callers that need it."""
 
-        _, _, routing_result = self._route_session(request, include_prompt_preview=True)
-        return routing_result.prompt_preview
+        session_id, user_id, routing_result = self._route_session(request)
+        return self._build_session_prompt_preview(
+            task=request.task,
+            session_id=session_id,
+            user_id=user_id,
+            routing_result=routing_result,
+        )
 
     async def run_task(self, request: RunTaskRequest) -> RunTaskResponse:
         """Run a routed task through the middleware chain."""
@@ -481,8 +498,7 @@ class CodexAgnoRuntime:
                 session_id=request.session_id,
                 user_id=request.user_id,
                 allow_overlay=request.allow_overlay,
-            ),
-            include_prompt_preview=False,
+            )
         )
         kernel_contract = _runtime_execution_kernel_contract(
             self.execution_service._service_descriptor,

@@ -18,7 +18,7 @@ from codex_agno_runtime.schemas import RoutingResult, SkillMetadata
 from codex_agno_runtime.skill_loader import SkillLoader
 
 
-def _routing_result(*, prompt_preview: str | None = None, route_engine: str = "rust") -> RoutingResult:
+def _routing_result(*, route_engine: str = "rust") -> RoutingResult:
     return RoutingResult(
         task="直接做代码",
         session_id="session-1",
@@ -30,7 +30,6 @@ def _routing_result(*, prompt_preview: str | None = None, route_engine: str = "r
         overlay_skill=SkillMetadata(name="rust-pro", description="Rust owner overlay"),
         layer="L2",
         reasons=["Trigger phrase matched: 直接做代码."],
-        prompt_preview=prompt_preview,
         route_engine=route_engine,
     )
 
@@ -102,7 +101,7 @@ Implement the spec directly.
     assert skill.do_not_use == "Do not use for pure planning."
 
 
-def test_prompt_builder_passthroughs_rust_owned_prompt_preview() -> None:
+def test_prompt_builder_passthroughs_explicit_rust_owned_prompt_preview() -> None:
     class _Loader:
         calls = 0
 
@@ -113,7 +112,7 @@ def test_prompt_builder_passthroughs_rust_owned_prompt_preview() -> None:
     loader = _Loader()
     builder = PromptBuilder(loader=loader)
 
-    prompt = builder.build_prompt(_routing_result(prompt_preview="Rust-owned preview"))
+    prompt = builder.build_prompt(_routing_result(), prompt_preview="Rust-owned preview")
 
     assert prompt == "Rust-owned preview"
     assert loader.calls == 0
@@ -203,7 +202,7 @@ def test_skill_injection_middleware_prefers_route_preview() -> None:
         def __init__(self) -> None:
             self.calls = 0
 
-        def build_prompt(self, routing_result: RoutingResult) -> str:
+        def build_prompt(self, routing_result: RoutingResult, *, prompt_preview: str | None = None) -> str:
             self.calls += 1
             return "python-generated prompt"
 
@@ -213,14 +212,15 @@ def test_skill_injection_middleware_prefers_route_preview() -> None:
         task="直接做代码",
         session_id="session-3",
         user_id="user-3",
-        routing_result=_routing_result(prompt_preview="Rust preview"),
+        routing_result=_routing_result(),
     )
     ctx.metadata["dry_run"] = True
+    ctx.metadata["routing_prompt_preview"] = "Rust preview"
 
     updated = asyncio.run(middleware.before_agent(ctx))
 
     assert updated.prompt == "Rust preview"
-    assert updated.metadata["python_prompt_source"] == "routing-result-preview"
+    assert updated.metadata["python_prompt_source"] == "routing-metadata-preview"
     assert prompt_builder.calls == 0
 
 

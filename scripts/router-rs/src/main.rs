@@ -29,6 +29,7 @@ use framework_runtime::{
 };
 
 const ROUTE_DECISION_SCHEMA_VERSION: &str = "router-rs-route-decision-v1";
+const SEARCH_RESULTS_SCHEMA_VERSION: &str = "router-rs-search-results-v1";
 const ROUTE_POLICY_SCHEMA_VERSION: &str = "router-rs-route-policy-v1";
 const ROUTE_SNAPSHOT_SCHEMA_VERSION: &str = "router-rs-route-snapshot-v1";
 const ROUTE_REPORT_SCHEMA_VERSION: &str = "router-rs-route-report-v2";
@@ -36,6 +37,8 @@ const ROUTE_AUTHORITY: &str = "rust-route-core";
 const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
 const EXECUTION_SCHEMA_VERSION: &str = "router-rs-execute-response-v1";
 const EXECUTION_METADATA_SCHEMA_VERSION: &str = "router-rs-execution-kernel-metadata-v1";
+const EXECUTION_METADATA_BRIDGE_SCHEMA_VERSION: &str =
+    "router-rs-execution-kernel-metadata-bridge-v1";
 const EXECUTION_AUTHORITY: &str = "rust-execution-cli";
 const EXECUTION_KERNEL_BRIDGE_KIND: &str = "rust-execution-kernel-slice";
 const EXECUTION_KERNEL_BRIDGE_AUTHORITY: &str = "rust-execution-kernel-authority";
@@ -242,7 +245,7 @@ struct SkillRecord {
     keyword_tokens: HashSet<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct MatchRow {
     slug: String,
     layer: String,
@@ -252,6 +255,14 @@ struct MatchRow {
     score: f64,
     matched_terms: usize,
     total_terms: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SearchResultsPayload {
+    search_schema_version: String,
+    authority: String,
+    query: String,
+    matches: Vec<MatchRow>,
 }
 
 #[derive(Debug, Clone)]
@@ -729,12 +740,9 @@ fn main() -> Result<(), String> {
 
     if args.background_state_json {
         let payload = serde_json::from_str::<Value>(
-            args.background_state_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--background-state-input-json is required with --background-state-json"
-                        .to_string()
-                })?,
+            args.background_state_input_json.as_deref().ok_or_else(|| {
+                "--background-state-input-json is required with --background-state-json".to_string()
+            })?,
         )
         .map_err(|err| format!("parse background state input failed: {err}"))?;
         println!(
@@ -1358,9 +1366,23 @@ fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, String> {
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
     let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
     let records = load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?;
-    Ok(json!({
-        "rows": search_skills(records.as_ref(), &query, limit),
-    }))
+    let matches = search_skills(records.as_ref(), &query, limit);
+    let mut resolved = serde_json::to_value(SearchResultsPayload {
+        search_schema_version: SEARCH_RESULTS_SCHEMA_VERSION.to_string(),
+        authority: ROUTE_AUTHORITY.to_string(),
+        query,
+        matches: matches.clone(),
+    })
+    .map_err(|err| format!("serialize search output failed: {err}"))?;
+    let resolved_object = resolved
+        .as_object_mut()
+        .ok_or_else(|| "search output did not serialize to an object".to_string())?;
+    resolved_object.insert(
+        "rows".to_string(),
+        serde_json::to_value(matches)
+            .map_err(|err| format!("serialize search rows failed: {err}"))?,
+    );
+    Ok(resolved)
 }
 
 fn dispatch_stdio_route_report(payload: Value) -> Result<Value, String> {
@@ -1491,10 +1513,7 @@ fn load_records(
     Err("No routing index found.".to_string())
 }
 
-fn records_cache_key(
-    runtime_path: Option<&Path>,
-    manifest_path: Option<&Path>,
-) -> RecordsCacheKey {
+fn records_cache_key(runtime_path: Option<&Path>, manifest_path: Option<&Path>) -> RecordsCacheKey {
     RecordsCacheKey {
         runtime_path: runtime_path.map(Path::to_path_buf),
         manifest_path: manifest_path.map(Path::to_path_buf),
@@ -3160,6 +3179,75 @@ fn build_steady_state_execution_kernel_metadata(response_shape: &str) -> Map<Str
     metadata
 }
 
+fn build_execution_kernel_metadata_bridge() -> Value {
+    serde_json::json!({
+        "schema_version": EXECUTION_METADATA_BRIDGE_SCHEMA_VERSION,
+        "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+        "projection": "python-thin-projection",
+        "steady_state_fields": [
+            "execution_kernel_metadata_schema_version",
+            "execution_kernel",
+            "execution_kernel_authority",
+            "execution_kernel_contract_mode",
+            "execution_kernel_fallback_policy",
+            "execution_kernel_in_process_replacement_complete",
+            "execution_kernel_delegate",
+            "execution_kernel_delegate_authority",
+            "execution_kernel_delegate_family",
+            "execution_kernel_delegate_impl",
+            "execution_kernel_live_primary",
+            "execution_kernel_live_primary_authority",
+            "execution_kernel_live_fallback",
+            "execution_kernel_live_fallback_authority",
+            "execution_kernel_live_fallback_enabled",
+            "execution_kernel_live_fallback_mode",
+            "execution_kernel_response_shape",
+            "execution_kernel_prompt_preview_owner",
+        ],
+        "runtime_fields": {
+            "shared": [
+                "trace_event_count",
+                "trace_output_path",
+            ],
+            "live_primary_required": [
+                "run_id",
+                "status",
+                "execution_kernel_model_id_source",
+                "trace_event_count",
+                "trace_output_path",
+            ],
+            "dry_run_required": [
+                "reason",
+                "execution_kernel_contract_mode",
+                "execution_kernel_fallback_policy",
+                "trace_event_count",
+                "trace_output_path",
+            ],
+        },
+        "metadata_keys": {
+            "metadata_schema_version": "execution_kernel_metadata_schema_version",
+            "contract_mode": "execution_kernel_contract_mode",
+            "fallback_policy": "execution_kernel_fallback_policy",
+            "response_shape": "execution_kernel_response_shape",
+            "prompt_preview_owner": "execution_kernel_prompt_preview_owner",
+            "model_id_source": "execution_kernel_model_id_source",
+        },
+        "defaults": {
+            "contract_mode": EXECUTION_KERNEL_CONTRACT_MODE,
+            "fallback_policy": EXECUTION_KERNEL_FALLBACK_POLICY,
+            "prompt_preview_owner_by_mode": {
+                EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY: EXECUTION_PROMPT_PREVIEW_OWNER,
+                EXECUTION_RESPONSE_SHAPE_DRY_RUN: EXECUTION_PROMPT_PREVIEW_OWNER,
+            },
+            "live_primary_model_id_source": EXECUTION_MODEL_ID_SOURCE,
+            "supported_response_shapes": [
+                EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
+                EXECUTION_RESPONSE_SHAPE_DRY_RUN,
+            ],
+        },
+    })
+}
+
 fn build_execution_kernel_contracts_by_mode() -> Map<String, Value> {
     let mut contracts = Map::new();
     contracts.insert(
@@ -4689,6 +4777,7 @@ fn build_runtime_control_plane_payload() -> Value {
             "role": "execution-kernel-control",
             "projection": "python-thin-projection",
             "delegate_kind": "rust-execution-kernel-slice",
+            "kernel_metadata_bridge": build_execution_kernel_metadata_bridge(),
             "kernel_contract": Value::Object(build_steady_state_execution_kernel_metadata(
                 EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
             )),
@@ -6606,6 +6695,28 @@ mod tests {
         assert_eq!(
             payload["services"]["execution"]["kernel_contract"]["execution_kernel_fallback_policy"],
             Value::String(EXECUTION_KERNEL_FALLBACK_POLICY.to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_metadata_bridge"]["schema_version"],
+            Value::String(EXECUTION_METADATA_BRIDGE_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_metadata_bridge"]["authority"],
+            Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_metadata_bridge"]["metadata_keys"]
+                ["prompt_preview_owner"],
+            Value::String("execution_kernel_prompt_preview_owner".to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_metadata_bridge"]["defaults"]
+                ["live_primary_model_id_source"],
+            Value::String(EXECUTION_MODEL_ID_SOURCE.to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_metadata_bridge"]["steady_state_fields"][0],
+            Value::String("execution_kernel_metadata_schema_version".to_string())
         );
         assert_eq!(
             payload["services"]["execution"]["kernel_contract"]["execution_kernel_response_shape"],

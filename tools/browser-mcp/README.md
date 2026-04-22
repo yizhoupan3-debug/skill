@@ -107,7 +107,9 @@ also flow through the same canonical attach-artifact flag when recovery is the
 only persisted entrypoint you have. When an explicit attach descriptor already
 contains enough artifact hints, browser-mcp now canonicalizes it through the
 same Rust attach bridge first, so provenance and resolution fields stay aligned
-with the artifact-based entrypoints.
+with the artifact-based entrypoints. Once an entrypoint has been canonicalized
+through that bridge, browser-mcp now also prefers the Rust-resolved replay
+payload directly instead of re-deriving the trace path locally.
 
 Then `browser_diagnostics` includes an `attachedRuntime` block with descriptor
 status, replay readiness, trace path, the concrete input artifact kind

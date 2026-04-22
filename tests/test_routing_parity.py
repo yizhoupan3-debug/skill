@@ -26,6 +26,7 @@ from codex_agno_runtime.schemas import (
     RouteDecisionSnapshot,
     RouteDiagnosticReport,
     RouteExecutionPolicy,
+    SearchMatchesContract,
     SearchMatchResult,
     SkillMetadata,
 )
@@ -154,33 +155,73 @@ def test_search_match_result_round_trips_transport_row() -> None:
     assert match.to_transport_row() == row
 
 
-def test_search_skill_rows_json_text_exports_transport_payload_from_typed_matches(
+def test_search_skill_matches_contract_accepts_legacy_transport_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    typed_matches = [
-        SearchMatchResult(
-            record=SkillMetadata(
-                name="iterative-optimizer",
-                description="Iterative optimization loop",
-                routing_layer="L2",
-                routing_gate="none",
-                routing_owner="codex",
-            ),
-            score=9.5,
-            matched_terms=2,
-            total_terms=2,
-        )
+    transport_rows = [
+        {
+            "slug": "iterative-optimizer",
+            "description": "Iterative optimization loop",
+            "layer": "L2",
+            "gate": "none",
+            "owner": "codex",
+            "score": 9.5,
+            "matched_terms": 2,
+            "total_terms": 2,
+        }
     ]
     adapter = RustRouteAdapter(
         PROJECT_ROOT,
         runtime_path=MISSING_RUNTIME_PATH,
         manifest_path=ROUTE_FIXTURE_PATH,
     )
-    monkeypatch.setattr(adapter, "search_skill_matches", lambda **kwargs: typed_matches)
+    monkeypatch.setattr(
+        adapter,
+        "_run_hot_json_command",
+        lambda *args, **kwargs: transport_rows,
+    )
+
+    contract = adapter.search_skill_matches_contract(query="typed first", limit=1)
+
+    assert isinstance(contract, SearchMatchesContract)
+    assert contract.search_schema_version == adapter.search_schema_version
+    assert contract.authority == adapter.route_authority
+    assert contract.query == "typed first"
+    assert contract.to_transport_rows() == transport_rows
+
+
+def test_search_skill_rows_json_text_exports_transport_payload_from_typed_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = SearchMatchesContract.model_validate(
+        {
+            "search_schema_version": "router-rs-search-results-v1",
+            "authority": "rust-route-core",
+            "query": "typed first",
+            "matches": [
+                {
+                    "slug": "iterative-optimizer",
+                    "description": "Iterative optimization loop",
+                    "layer": "L2",
+                    "gate": "none",
+                    "owner": "codex",
+                    "score": 9.5,
+                    "matched_terms": 2,
+                    "total_terms": 2,
+                }
+            ],
+        }
+    )
+    adapter = RustRouteAdapter(
+        PROJECT_ROOT,
+        runtime_path=MISSING_RUNTIME_PATH,
+        manifest_path=ROUTE_FIXTURE_PATH,
+    )
+    monkeypatch.setattr(adapter, "search_skill_matches_contract", lambda **kwargs: contract)
 
     payload = json.loads(adapter.search_skill_rows_json_text(query="typed first", limit=1))
 
-    assert payload == [typed_matches[0].to_transport_row()]
+    assert payload == contract.to_transport_rows()
 
 
 def test_route_decision_contract_stays_typed_first_transport_payload(
@@ -713,17 +754,20 @@ REAL_TASK_REPLAY_QUERIES = [
         ("github 深度 调研 issue PR 演化分析", 5),
     ],
 )
-def test_rust_router_json_matches_python_search_json(query: str, limit: int) -> None:
-    """Verify the compatibility JSON boundary is derived from the typed Python match contract."""
+def test_rust_search_contract_matches_python_search_results(query: str, limit: int) -> None:
+    """Verify the search consumer path stays typed-first even when the CLI still prints rows."""
 
-    payload = route_adapter(
+    contract = route_adapter(
         codex_home=PROJECT_ROOT,
         runtime_path=None,
         manifest_path=None,
-    ).search_skill_rows(query=query, limit=limit)
+    ).search_skill_matches_contract(query=query, limit=limit)
     hydrated = search_skills(query, codex_home=PROJECT_ROOT, limit=limit)
 
-    assert payload == [match.to_transport_row() for match in hydrated]
+    assert contract.search_schema_version == "router-rs-search-results-v1"
+    assert contract.authority == "rust-route-core"
+    assert contract.query == query
+    assert contract.matches == hydrated
 
 
 @pytest.mark.parametrize(

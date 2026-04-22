@@ -1927,6 +1927,7 @@ def test_prepare_session_rust_mode_returns_rust_only_contract(tmp_path: Path) ->
     assert rust_prepared.route_engine == "rust"
     assert rust_prepared.diagnostic_route_mode == "none"
     assert rust_prepared.route_diagnostic_report is None
+    assert not hasattr(rust_prepared, "prompt_preview")
     assert rust_prepared.skill
     assert rust_prepared.layer
 

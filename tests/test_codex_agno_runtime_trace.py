@@ -82,7 +82,7 @@ class _RecordingPromptBuilder:
     def __init__(self) -> None:
         self.calls = 0
 
-    def build_prompt(self, routing_result: RoutingResult) -> str:
+    def build_prompt(self, routing_result: RoutingResult, *, prompt_preview: str | None = None) -> str:
         self.calls += 1
         return f"prompt for {routing_result.selected_skill.name}"
 

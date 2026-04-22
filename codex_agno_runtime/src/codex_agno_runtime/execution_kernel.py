@@ -166,6 +166,43 @@ def decode_router_rs_execution_payload(payload: dict[str, Any]) -> RunTaskRespon
     )
 
 
+def decode_router_rs_execution_payload_with_contract(
+    payload: Mapping[str, Any],
+    *,
+    kernel_contract: Mapping[str, Any] | None = None,
+    metadata_bridge: Mapping[str, Any] | None = None,
+) -> RunTaskResponse:
+    """Decode one router-rs execution payload using the Rust control-plane contract when present."""
+
+    contract = dict(kernel_contract or {})
+    return decode_router_rs_execution_response(
+        payload,
+        execution_kernel=str(contract.get("execution_kernel", EXECUTION_KERNEL_BRIDGE_KIND)),
+        execution_kernel_authority=str(
+            contract.get("execution_kernel_authority", EXECUTION_KERNEL_BRIDGE_AUTHORITY)
+        ),
+        execution_kernel_delegate=str(
+            contract.get("execution_kernel_delegate", EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL)
+        ),
+        execution_kernel_delegate_authority=str(
+            contract.get(
+                "execution_kernel_delegate_authority",
+                EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
+            )
+        ),
+        execution_kernel_delegate_family=str(
+            contract.get(
+                "execution_kernel_delegate_family",
+                EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
+            )
+        ),
+        execution_kernel_delegate_impl=str(
+            contract.get("execution_kernel_delegate_impl", EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL)
+        ),
+        metadata_bridge=metadata_bridge,
+    )
+
+
 def run_router_rs_execution_payload(
     payload: dict[str, Any],
     *,
@@ -187,6 +224,8 @@ async def execute_router_rs_request(
     *,
     settings: RuntimeSettings,
     rust_adapter: RustRouteAdapter,
+    kernel_contract: Mapping[str, Any] | None = None,
+    metadata_bridge: Mapping[str, Any] | None = None,
 ) -> RunTaskResponse:
     """Execute one normalized request through router-rs and decode the result."""
 
@@ -197,7 +236,11 @@ async def execute_router_rs_request(
         rust_adapter=rust_adapter,
     )
     try:
-        return decode_router_rs_execution_payload(response_payload)
+        return decode_router_rs_execution_payload_with_contract(
+            response_payload,
+            kernel_contract=kernel_contract,
+            metadata_bridge=metadata_bridge,
+        )
     except RuntimeError as exc:
         raise RouterRsInfrastructureError(str(exc)) from exc
 
@@ -207,6 +250,8 @@ def preview_router_rs_request_prompt(
     *,
     settings: RuntimeSettings,
     rust_adapter: RustRouteAdapter,
+    kernel_contract: Mapping[str, Any] | None = None,
+    metadata_bridge: Mapping[str, Any] | None = None,
 ) -> str | None:
     """Synchronously resolve the Rust-owned dry-run prompt preview for one request."""
 
@@ -215,6 +260,10 @@ def preview_router_rs_request_prompt(
     payload = build_router_rs_execution_request_payload(request, settings=settings)
     response_payload = run_router_rs_execution_payload(payload, rust_adapter=rust_adapter)
     try:
-        return decode_router_rs_execution_payload(response_payload).prompt_preview
+        return decode_router_rs_execution_payload_with_contract(
+            response_payload,
+            kernel_contract=kernel_contract,
+            metadata_bridge=metadata_bridge,
+        ).prompt_preview
     except RuntimeError as exc:
         raise RouterRsInfrastructureError(str(exc)) from exc

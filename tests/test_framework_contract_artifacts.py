@@ -627,9 +627,10 @@ def test_emit_framework_contract_artifacts_requires_explicit_opt_in_for_continui
         profile_artifacts_module,
         "build_codex_desktop_alias_inventory",
         return_value=risky_inventory,
-    ):
+    ) as alias_inventory_builder:
         paths = emit_framework_contract_artifacts(tmp_path, profile=profile)
 
+    alias_inventory_builder.assert_not_called()
     assert "codex_desktop_host_adapter" not in paths
     assert "codex_desktop_alias_inventory" not in paths
     assert "codex_desktop_alias_retirement_status" not in paths

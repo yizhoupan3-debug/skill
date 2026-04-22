@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -484,6 +483,59 @@ CLAUDE_PROJECT_SETTINGS = {
     },
 }
 
+HOST_ENTRYPOINT_SYNC_MANIFEST_PATH = ".codex/host_entrypoints_sync_manifest.json"
+
+HOST_ENTRYPOINT_TEXT_FILES = {
+    "AGENT.md": SHARED_AGENT_POLICY,
+    "AGENTS.md": ROOT_AGENTS_PROXY,
+    "CLAUDE.md": ROOT_CLAUDE_PROXY,
+    "GEMINI.md": ROOT_GEMINI_PROXY,
+    ".claude/agents/README.md": CLAUDE_AGENTS_README,
+    ".claude/commands/refresh.md": CLAUDE_REFRESH_COMMAND,
+    ".claude/commands/background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
+    ".claude/hooks/README.md": CLAUDE_HOOKS_README,
+    ".claude/hooks/session_start.sh": CLAUDE_SESSION_START_HOOK,
+    ".claude/hooks/stop.sh": CLAUDE_STOP_HOOK,
+    ".claude/hooks/pre_compact.sh": CLAUDE_PRE_COMPACT_HOOK,
+    ".claude/hooks/subagent_stop.sh": CLAUDE_SUBAGENT_STOP_HOOK,
+    ".claude/hooks/session_end.sh": CLAUDE_SESSION_END_HOOK,
+    ".claude/hooks/config_change.sh": CLAUDE_CONFIG_CHANGE_HOOK,
+    ".claude/hooks/stop_failure.sh": CLAUDE_STOP_FAILURE_HOOK,
+}
+
+HOST_ENTRYPOINT_JSON_FILES = {
+    ".claude/settings.json": CLAUDE_PROJECT_SETTINGS,
+    ".gemini/settings.json": {},
+}
+
+FULL_SYNC_MANAGED_DIRECTORIES = (
+    ".claude",
+    ".claude/agents",
+    ".claude/commands",
+    ".claude/hooks",
+    ".gemini",
+    ".codex",
+)
+
+PARTIAL_SYNC_TEXT_FILES = (
+    ".claude/commands/refresh.md",
+    ".claude/commands/background_batch.md",
+)
+
+PARTIAL_SYNC_MANAGED_DIRECTORIES = (
+    ".claude",
+    ".claude/commands",
+)
+
+RETIRED_HOST_ENTRYPOINT_PATHS = (
+    ".claude/CLAUDE.md",
+    ".codex/model_instructions.md",
+    ".mcp.json",
+    "configs/codex/AGENTS.md",
+    "configs/claude/CLAUDE.md",
+    "configs/gemini/GEMINI.md",
+)
+
 def _write_text(path: Path, content: str) -> bool:
     existing = path.read_text(encoding="utf-8") if path.is_file() else None
     if existing == content:
@@ -498,167 +550,33 @@ def _write_json(path: Path, payload: dict[str, Any]) -> bool:
     return _write_text(path, content)
 
 
-def _read_git_stdout(root: Path, *args: str) -> str | None:
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(root), *args],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return None
-    return completed.stdout
-
-
-def _discover_matching_worktrees(root: Path) -> tuple[list[Path], list[str]]:
-    root_head = _read_git_stdout(root, "rev-parse", "HEAD")
-    worktree_listing = _read_git_stdout(root, "worktree", "list", "--porcelain")
-    if root_head is None or worktree_listing is None:
-        return [], []
-
-    current: dict[str, str] = {}
-    worktrees: list[dict[str, str]] = []
-    for raw_line in worktree_listing.splitlines():
-        line = raw_line.strip()
-        if not line:
-            if current:
-                worktrees.append(current)
-                current = {}
-            continue
-        key, _, value = line.partition(" ")
-        current[key] = value
-    if current:
-        worktrees.append(current)
-
-    matches: list[Path] = []
-    skipped: list[str] = []
-    normalized_root_head = root_head.strip()
-    for entry in worktrees:
-        worktree_path = entry.get("worktree")
-        if not worktree_path:
-            continue
-        candidate = Path(worktree_path).resolve()
-        if candidate == root:
-            continue
-        if not candidate.exists():
-            skipped.append(f"{candidate} (missing)")
-            continue
-        if entry.get("HEAD", "").strip() != normalized_root_head:
-            skipped.append(f"{candidate} (head mismatch)")
-            continue
-        matches.append(candidate)
-    return matches, skipped
-
-
-def _describe_path(base_root: Path, target_root: Path, path: Path) -> str:
-    try:
-        return str(path.relative_to(base_root))
-    except ValueError:
-        return f"{target_root}::{path.relative_to(target_root)}"
-
-
-def _sync_single_root(
-    target_root: Path,
-    *,
-    report_root: Path,
-    apply: bool,
-    full_sync: bool,
-) -> dict[str, list[str]]:
-    written: list[str] = []
-    unchanged: list[str] = []
-    created_dirs: list[str] = []
-
-    text_files: dict[Path, str]
-    json_files: dict[Path, dict[str, Any]]
-    retired_paths: list[Path]
-    managed_directories: tuple[Path, ...]
-
-    if full_sync:
-        text_files = {
-            target_root / "AGENT.md": SHARED_AGENT_POLICY,
-            target_root / "AGENTS.md": ROOT_AGENTS_PROXY,
-            target_root / "CLAUDE.md": ROOT_CLAUDE_PROXY,
-            target_root / "GEMINI.md": ROOT_GEMINI_PROXY,
-            target_root / ".claude" / "agents" / "README.md": CLAUDE_AGENTS_README,
-            target_root / ".claude" / "commands" / "refresh.md": CLAUDE_REFRESH_COMMAND,
-            target_root / ".claude" / "commands" / "background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
-            target_root / ".claude" / "hooks" / "README.md": CLAUDE_HOOKS_README,
-            target_root / ".claude" / "hooks" / "session_start.sh": CLAUDE_SESSION_START_HOOK,
-            target_root / ".claude" / "hooks" / "stop.sh": CLAUDE_STOP_HOOK,
-            target_root / ".claude" / "hooks" / "pre_compact.sh": CLAUDE_PRE_COMPACT_HOOK,
-            target_root / ".claude" / "hooks" / "subagent_stop.sh": CLAUDE_SUBAGENT_STOP_HOOK,
-            target_root / ".claude" / "hooks" / "session_end.sh": CLAUDE_SESSION_END_HOOK,
-            target_root / ".claude" / "hooks" / "config_change.sh": CLAUDE_CONFIG_CHANGE_HOOK,
-            target_root / ".claude" / "hooks" / "stop_failure.sh": CLAUDE_STOP_FAILURE_HOOK,
-        }
-        json_files = {
-            target_root / ".claude" / "settings.json": CLAUDE_PROJECT_SETTINGS,
-            target_root / ".gemini" / "settings.json": {},
-        }
-        retired_paths = [
-            target_root / ".claude" / "CLAUDE.md",
-            target_root / ".codex" / "model_instructions.md",
-            target_root / ".mcp.json",
-            target_root / "configs" / "codex" / "AGENTS.md",
-            target_root / "configs" / "claude" / "CLAUDE.md",
-            target_root / "configs" / "gemini" / "GEMINI.md",
-        ]
-        managed_directories = (
-            target_root / ".claude",
-            target_root / ".claude" / "agents",
-            target_root / ".claude" / "commands",
-            target_root / ".claude" / "hooks",
-            target_root / ".gemini",
-            target_root / ".codex",
-        )
-    else:
-        text_files = {
-            target_root / ".claude" / "commands" / "refresh.md": CLAUDE_REFRESH_COMMAND,
-            target_root / ".claude" / "commands" / "background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
-        }
-        json_files = {}
-        retired_paths = []
-        managed_directories = (
-            target_root / ".claude",
-            target_root / ".claude" / "commands",
-        )
-
-    for directory in managed_directories:
-        if not directory.exists():
-            if apply:
-                directory.mkdir(parents=True, exist_ok=True)
-            created_dirs.append(_describe_path(report_root, target_root, directory))
-
-    for path, content in text_files.items():
-        relative = _describe_path(report_root, target_root, path)
-        existing = path.read_text(encoding="utf-8") if path.is_file() else None
-        is_changed = existing != content
-        if is_changed and apply:
-            _write_text(path, content)
-        (written if is_changed else unchanged).append(relative)
-
-    for path, payload in json_files.items():
-        relative = _describe_path(report_root, target_root, path)
-        content = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-        existing = path.read_text(encoding="utf-8") if path.is_file() else None
-        is_changed = existing != content
-        if is_changed and apply:
-            _write_json(path, payload)
-        (written if is_changed else unchanged).append(relative)
-
-    for path in retired_paths:
-        exists = path.exists()
-        if exists and apply:
-            path.unlink()
-        if exists:
-            written.append(_describe_path(report_root, target_root, path))
-
+def _build_host_entrypoint_sync_manifest() -> dict[str, Any]:
     return {
-        "written": written,
-        "unchanged": unchanged,
-        "created_dirs": created_dirs,
+        "schema_version": "host-entrypoints-sync-manifest-v1",
+        "full_sync": {
+            "text_files": sorted(HOST_ENTRYPOINT_TEXT_FILES),
+            "json_files": sorted(HOST_ENTRYPOINT_JSON_FILES),
+            "managed_directories": list(FULL_SYNC_MANAGED_DIRECTORIES),
+            "retired_paths": list(RETIRED_HOST_ENTRYPOINT_PATHS),
+        },
+        "partial_sync": {
+            "text_files": list(PARTIAL_SYNC_TEXT_FILES),
+            "json_files": [],
+            "managed_directories": list(PARTIAL_SYNC_MANAGED_DIRECTORIES),
+            "retired_paths": [],
+        },
     }
+
+
+def _write_host_entrypoint_template(template_root: Path) -> None:
+    for relative_path, content in HOST_ENTRYPOINT_TEXT_FILES.items():
+        _write_text(template_root / relative_path, content)
+    for relative_path, payload in HOST_ENTRYPOINT_JSON_FILES.items():
+        _write_json(template_root / relative_path, payload)
+    _write_json(
+        template_root / HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
+        _build_host_entrypoint_sync_manifest(),
+    )
 
 
 def sync_repo_host_entrypoints(
@@ -671,29 +589,7 @@ def sync_repo_host_entrypoints(
     root = (repo_root or Path(__file__).resolve().parents[1]).resolve()
     with TemporaryDirectory() as temp_dir:
         template_root = Path(temp_dir)
-        for relative_path, content in {
-            "AGENT.md": SHARED_AGENT_POLICY,
-            "AGENTS.md": ROOT_AGENTS_PROXY,
-            "CLAUDE.md": ROOT_CLAUDE_PROXY,
-            "GEMINI.md": ROOT_GEMINI_PROXY,
-            ".claude/agents/README.md": CLAUDE_AGENTS_README,
-            ".claude/commands/refresh.md": CLAUDE_REFRESH_COMMAND,
-            ".claude/commands/background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
-            ".claude/hooks/README.md": CLAUDE_HOOKS_README,
-            ".claude/hooks/session_start.sh": CLAUDE_SESSION_START_HOOK,
-            ".claude/hooks/stop.sh": CLAUDE_STOP_HOOK,
-            ".claude/hooks/pre_compact.sh": CLAUDE_PRE_COMPACT_HOOK,
-            ".claude/hooks/subagent_stop.sh": CLAUDE_SUBAGENT_STOP_HOOK,
-            ".claude/hooks/session_end.sh": CLAUDE_SESSION_END_HOOK,
-            ".claude/hooks/config_change.sh": CLAUDE_CONFIG_CHANGE_HOOK,
-            ".claude/hooks/stop_failure.sh": CLAUDE_STOP_FAILURE_HOOK,
-        }.items():
-            _write_text(template_root / relative_path, content)
-        for relative_path, payload in {
-            ".claude/settings.json": CLAUDE_PROJECT_SETTINGS,
-            ".gemini/settings.json": {},
-        }.items():
-            _write_json(template_root / relative_path, payload)
+        _write_host_entrypoint_template(template_root)
         return run_host_integration_rs(
             "sync-host-entrypoints",
             "--template-root",
