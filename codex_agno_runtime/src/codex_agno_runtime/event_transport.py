@@ -143,6 +143,7 @@ class ExternalRuntimeEventTransportBridge:
             resume_manifest=resume_manifest,
             binding_artifact_path=transport_path,
             resume_manifest_path=resume_file,
+            storage_backend=storage_backend,
         )
         bridge = cls(
             transport=transport,
@@ -295,6 +296,24 @@ class ExternalRuntimeEventTransportBridge:
                 if self._artifact_exists(resolved, storage_backend=self.storage_backend):
                     return resolved, "binding_artifact_adjacency"
         return None, None
+
+    @staticmethod
+    def _infer_trace_stream_from_binding_artifact(
+        binding_artifact_path: Path | None,
+        *,
+        storage_backend: SQLiteRuntimeStorageBackend | None,
+    ) -> Path | None:
+        if binding_artifact_path is None:
+            return None
+        candidates = [
+            binding_artifact_path.parent.parent / "TRACE_EVENTS.jsonl",
+            binding_artifact_path.parent.parent.parent / "TRACE_EVENTS.jsonl",
+        ]
+        for candidate in candidates:
+            resolved = candidate.resolve()
+            if ExternalRuntimeEventTransportBridge._artifact_exists(resolved, storage_backend=storage_backend):
+                return resolved
+        return None
 
     @classmethod
     def _normalize_attach_request(
@@ -540,6 +559,7 @@ class ExternalRuntimeEventTransportBridge:
         resume_manifest: TraceResumeManifest | None,
         binding_artifact_path: Path | None,
         resume_manifest_path: Path | None,
+        storage_backend: SQLiteRuntimeStorageBackend | None,
     ) -> None:
         if handoff is not None:
             if handoff.stream_id != transport.stream_id:
@@ -581,3 +601,25 @@ class ExternalRuntimeEventTransportBridge:
                 != Path(resume_manifest.trace_stream_path).expanduser().resolve()
             ):
                 raise ValueError("External runtime event attach rejected mismatched handoff/resume trace stream paths.")
+        binding_trace_stream_path = ExternalRuntimeEventTransportBridge._infer_trace_stream_from_binding_artifact(
+            binding_artifact_path,
+            storage_backend=storage_backend,
+        )
+        if (
+            binding_trace_stream_path is not None
+            and handoff is not None
+            and handoff.trace_stream_path is not None
+            and Path(handoff.trace_stream_path).expanduser().resolve() != binding_trace_stream_path
+        ):
+            raise ValueError(
+                "External runtime event attach rejected mismatched binding/handoff trace stream paths."
+            )
+        if (
+            binding_trace_stream_path is not None
+            and resume_manifest is not None
+            and resume_manifest.trace_stream_path is not None
+            and Path(resume_manifest.trace_stream_path).expanduser().resolve() != binding_trace_stream_path
+        ):
+            raise ValueError(
+                "External runtime event attach rejected mismatched binding/resume trace stream paths."
+            )
