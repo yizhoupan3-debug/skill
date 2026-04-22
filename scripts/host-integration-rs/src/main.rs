@@ -100,6 +100,8 @@ enum Commands {
         #[arg(long)]
         project_instructions_path: PathBuf,
         #[arg(long)]
+        bootstrap_output_dir: Option<PathBuf>,
+        #[arg(long)]
         skip_browser_mcp: bool,
         #[arg(long)]
         skip_framework_mcp: bool,
@@ -113,6 +115,8 @@ enum Commands {
         skip_home_codex_skills_link: bool,
         #[arg(long)]
         skip_home_claude_refresh: bool,
+        #[arg(long)]
+        skip_default_bootstrap: bool,
     },
 }
 
@@ -151,6 +155,7 @@ fn main() -> Result<(), String> {
             home_codex_skills_path,
             home_claude_refresh_path,
             project_instructions_path,
+            bootstrap_output_dir,
             skip_browser_mcp,
             skip_framework_mcp,
             skip_framework_overlay_retirement,
@@ -158,6 +163,7 @@ fn main() -> Result<(), String> {
             skip_personal_marketplace,
             skip_home_codex_skills_link,
             skip_home_claude_refresh,
+            skip_default_bootstrap,
         } => install_native_integration(
             &template_root,
             &repo_root,
@@ -167,6 +173,7 @@ fn main() -> Result<(), String> {
             &home_codex_skills_path,
             &home_claude_refresh_path,
             &project_instructions_path,
+            bootstrap_output_dir.as_deref(),
             !skip_browser_mcp,
             !skip_framework_mcp,
             !skip_framework_overlay_retirement,
@@ -174,6 +181,7 @@ fn main() -> Result<(), String> {
             !skip_personal_marketplace,
             !skip_home_codex_skills_link,
             !skip_home_claude_refresh,
+            !skip_default_bootstrap,
         )?,
     };
     let stdout = serde_json::to_string_pretty(&payload).map_err(|err| err.to_string())?;
@@ -409,6 +417,7 @@ fn install_native_integration(
     home_codex_skills_path: &Path,
     home_claude_refresh_path: &Path,
     project_instructions_path: &Path,
+    bootstrap_output_dir: Option<&Path>,
     install_browser_mcp: bool,
     install_framework_mcp: bool,
     retire_framework_overlay_file: bool,
@@ -416,6 +425,7 @@ fn install_native_integration(
     install_personal_marketplace_entry: bool,
     install_home_codex_skills_link: bool,
     install_home_claude_refresh_command: bool,
+    install_default_bootstrap: bool,
 ) -> Result<Value, String> {
     let template_root = normalize_path(template_root)?;
     let repo_root = normalize_path(repo_root)?;
@@ -424,6 +434,9 @@ fn install_native_integration(
     let home_marketplace_path = normalize_path(home_marketplace_path)?;
     let home_codex_skills_path = normalize_path(home_codex_skills_path)?;
     let home_claude_refresh_path = normalize_path(home_claude_refresh_path)?;
+    let bootstrap_output_dir = bootstrap_output_dir
+        .map(normalize_path)
+        .transpose()?;
 
     let created_config = ensure_config_file(&home_config_path)?;
     let browser_changed = if install_browser_mcp {
@@ -476,6 +489,15 @@ fn install_native_integration(
     } else {
         Value::Null
     };
+    let default_bootstrap = if install_default_bootstrap {
+        ensure_default_bootstrap(
+            &template_root,
+            &repo_root,
+            bootstrap_output_dir.as_deref(),
+        )?
+    } else {
+        Value::Null
+    };
 
     Ok(json!({
         "success": true,
@@ -495,6 +517,104 @@ fn install_native_integration(
         "home_codex_skills_link_changed": home_codex_skills_link_changed,
         "home_claude_refresh_changed": home_claude_refresh_changed,
         "framework_overlay_retirement": framework_overlay_result,
+        "default_bootstrap": default_bootstrap,
+    }))
+}
+
+fn default_bootstrap_output_dir(repo_root: &Path) -> PathBuf {
+    repo_root.join("artifacts").join("bootstrap")
+}
+
+fn default_bootstrap_mirror_path(output_dir: &Path) -> PathBuf {
+    output_dir.join("framework_default_bootstrap.json")
+}
+
+fn ensure_default_bootstrap(
+    template_root: &Path,
+    repo_root: &Path,
+    output_dir: Option<&Path>,
+) -> Result<Value, String> {
+    let resolved_output_dir = output_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| default_bootstrap_output_dir(repo_root));
+    fs::create_dir_all(&resolved_output_dir).map_err(|err| err.to_string())?;
+    let mirror_bootstrap_path = default_bootstrap_mirror_path(&resolved_output_dir);
+    if mirror_bootstrap_path.is_file() {
+        return Ok(json!({
+            "success": true,
+            "changed": false,
+            "status": "already-present",
+            "output_dir": resolved_output_dir.to_string_lossy(),
+            "bootstrap_path": mirror_bootstrap_path.to_string_lossy(),
+            "mirror_bootstrap_path": mirror_bootstrap_path.to_string_lossy(),
+        }));
+    }
+
+    let snippet = r#"import json, sys
+from pathlib import Path
+template_root = Path(sys.argv[1]).resolve()
+repo_root = Path(sys.argv[2]).resolve()
+output_dir = Path(sys.argv[3]).resolve()
+sys.path.insert(0, str(template_root))
+from scripts.default_bootstrap import run_default_bootstrap
+result = run_default_bootstrap(repo_root=repo_root, output_dir=output_dir)
+print(json.dumps(result, ensure_ascii=False))
+"#;
+    let completed = Command::new("python3")
+        .arg("-c")
+        .arg(snippet)
+        .arg(template_root)
+        .arg(repo_root)
+        .arg(&resolved_output_dir)
+        .output()
+        .map_err(|err| err.to_string())?;
+    if !completed.status.success() {
+        let stderr = String::from_utf8_lossy(&completed.stderr);
+        return Err(format!(
+            "default bootstrap materialization failed: {}",
+            stderr.trim()
+        ));
+    }
+    let raw_stdout = String::from_utf8(completed.stdout).map_err(|err| err.to_string())?;
+    let parsed: Value = serde_json::from_str(raw_stdout.trim()).map_err(|err| err.to_string())?;
+    let output_dir_value = parsed
+        .get("paths")
+        .and_then(|value| value.get("output_dir"))
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .unwrap_or_else(|| resolved_output_dir.to_string_lossy().into_owned());
+    let mirror_bootstrap_value = parsed
+        .get("paths")
+        .and_then(|value| value.get("mirror_bootstrap_path"))
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .unwrap_or_else(|| mirror_bootstrap_path.to_string_lossy().into_owned());
+    let task_output_dir_value = parsed
+        .get("paths")
+        .and_then(|value| value.get("task_output_dir"))
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let bootstrap_path_value = parsed
+        .get("bootstrap_path")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let task_id_value = parsed
+        .get("payload")
+        .and_then(|value| value.get("bootstrap"))
+        .and_then(|value| value.get("task_id"))
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    Ok(json!({
+        "success": true,
+        "changed": true,
+        "status": "materialized",
+        "output_dir": output_dir_value,
+        "task_output_dir": task_output_dir_value,
+        "bootstrap_path": bootstrap_path_value,
+        "mirror_bootstrap_path": mirror_bootstrap_value,
+        "task_id": task_id_value,
+        "memory_items": parsed.get("memory_items").and_then(Value::as_u64),
+        "proposal_count": parsed.get("proposal_count").and_then(Value::as_u64),
     }))
 }
 

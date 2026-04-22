@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# install_skills.sh — Cross-platform AI tool skill installer via symlinks.
-# Inspired by uaio/open-skills.
+# install_skills.sh — Compatibility installer.
 #
 # Usage:
 #   bash scripts/install_skills.sh init     # First-time setup
@@ -12,7 +11,9 @@
 set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILLS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)/skills"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SKILLS_ROOT="$REPO_ROOT/skills"
+DEFAULT_BOOTSTRAP_PATH="$REPO_ROOT/artifacts/bootstrap/framework_default_bootstrap.json"
 
 # Supported tools and their skill paths
 TOOLS="codex claude agents gemini"
@@ -31,7 +32,7 @@ usage() {
   echo "Usage: $(basename "$0") <command> [tool...]"
   echo ""
   echo "Commands:"
-  echo "  init          First-time setup (create symlinks for all tools)"
+  echo "  init          First-time setup (Codex native integration + other tool skill links)"
   echo "  all           Install to all supported tools"
   echo "  ls            Show installation status"
   echo "  rm <tool>     Remove symlink for a specific tool"
@@ -39,10 +40,60 @@ usage() {
   echo ""
   echo "Supported tools: $TOOLS"
   echo "Skills source: $SKILLS_ROOT"
+  echo "Codex default path: native integration installer + default bootstrap bundle"
+}
+
+run_codex_native_install() {
+  local cmd=(python3 "$SCRIPT_DIR/install_codex_native_integration.py")
+
+  if [ -n "${CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR:-}" ]; then
+    cmd+=(--bootstrap-output-dir "$CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR")
+  fi
+  if [ "${CODEX_NATIVE_SKIP_DEFAULT_BOOTSTRAP:-0}" = "1" ]; then
+    cmd+=(--skip-default-bootstrap)
+  fi
+
+  "${cmd[@]}" >/dev/null
+  echo "  ✓ codex — native integration installed"
+}
+
+show_codex_status() {
+  local config_path="$HOME/.codex/config.toml"
+  local skills_path="$HOME/.codex/skills"
+  local bootstrap_path="${CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR:-$DEFAULT_BOOTSTRAP_PATH}"
+  local config_ok="false"
+  local skills_ok="false"
+  local bootstrap_ok="false"
+
+  if [ -f "$config_path" ] && grep -q '\[mcp_servers.browser-mcp\]' "$config_path" && grep -q '\[mcp_servers.framework-mcp\]' "$config_path"; then
+    config_ok="true"
+  fi
+  if [ -L "$skills_path" ]; then
+    local resolved_target resolved_source
+    resolved_target="$(cd "$(dirname "$skills_path")" && cd "$(dirname "$(readlink "$skills_path")")" && pwd)/$(basename "$(readlink "$skills_path")")"
+    resolved_source="$(cd "$SKILLS_ROOT" && pwd)"
+    if [ "$resolved_target" = "$resolved_source" ]; then
+      skills_ok="true"
+    fi
+  fi
+  if [ -f "$bootstrap_path" ]; then
+    bootstrap_ok="true"
+  fi
+
+  if [ "$config_ok" = "true" ] && [ "$skills_ok" = "true" ] && [ "$bootstrap_ok" = "true" ]; then
+    echo "  ✓ codex → native integration ready"
+  else
+    echo "  ⚠ codex → native integration incomplete (config:$config_ok skills:$skills_ok bootstrap:$bootstrap_ok)"
+  fi
 }
 
 install_tool() {
   local tool="$1"
+  if [ "$tool" = "codex" ]; then
+    run_codex_native_install
+    return 0
+  fi
+
   local target
   target="$(get_tool_path "$tool")"
 
@@ -113,6 +164,10 @@ show_status() {
   echo ""
   echo "Installation status:"
   for tool in $TOOLS; do
+    if [ "$tool" = "codex" ]; then
+      show_codex_status
+      continue
+    fi
     local target
     target="$(get_tool_path "$tool")"
     if [ -L "$target" ]; then
@@ -162,6 +217,9 @@ case "$command" in
       exit 1
     fi
     remove_tool "$1"
+    if [ "$1" = "codex" ]; then
+      echo "  ℹ codex — native config/plugin/bootstrap surfaces are left in place"
+    fi
     ;;
   help|--help|-h)
     usage

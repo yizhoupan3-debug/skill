@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -16,6 +18,7 @@ from scripts.install_codex_native_integration import (
     build_personal_marketplace_payload,
     build_framework_server_block,
     ensure_config_file,
+    ensure_default_bootstrap_bundle,
     ensure_home_claude_refresh_command,
     ensure_home_codex_skills_link,
     ensure_tui_status_line,
@@ -98,6 +101,7 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     home_claude_refresh_path = tmp_path / "home" / ".claude" / "commands" / "refresh.md"
     home_plugin_root = tmp_path / "home" / ".codex" / "plugins" / "skill-framework-native"
     home_marketplace_path = tmp_path / "home" / ".agents" / "plugins" / "marketplace.json"
+    bootstrap_output_dir = tmp_path / "bootstrap"
     project_instructions_path = Path(".codex") / "model_instructions.md"
 
     first = install_native_integration(
@@ -108,6 +112,7 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
         home_plugin_root=home_plugin_root,
         home_marketplace_path=home_marketplace_path,
         project_instructions_path=project_instructions_path,
+        bootstrap_output_dir=bootstrap_output_dir,
     )
     second = install_native_integration(
         home_config_path=home_config_path,
@@ -117,6 +122,7 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
         home_plugin_root=home_plugin_root,
         home_marketplace_path=home_marketplace_path,
         project_instructions_path=project_instructions_path,
+        bootstrap_output_dir=bootstrap_output_dir,
     )
 
     content = home_config_path.read_text(encoding="utf-8")
@@ -137,12 +143,29 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert instructions == ""
     assert first["framework_overlay_retirement"]["status"] in {"retired-file", "retired-managed-block"}
     assert second["framework_overlay_retirement"]["status"] == "already-retired"
+    assert first["default_bootstrap"]["status"] == "materialized"
+    assert second["default_bootstrap"]["status"] == "already-present"
+    assert Path(first["default_bootstrap"]["mirror_bootstrap_path"]).is_file()
     assert first["tui_status_line_changed"] is True
     assert second["tui_status_line_changed"] is False
     assert first["home_codex_skills_link_changed"] is True
     assert second["home_codex_skills_link_changed"] is False
     assert first["home_claude_refresh_changed"] is True
     assert second["home_claude_refresh_changed"] is False
+
+
+def test_ensure_default_bootstrap_bundle_is_idempotent(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    output_dir = tmp_path / "bootstrap"
+    repo_root.mkdir(parents=True)
+
+    first = ensure_default_bootstrap_bundle(repo_root, output_dir=output_dir)
+    second = ensure_default_bootstrap_bundle(repo_root, output_dir=output_dir)
+
+    assert first["status"] == "materialized"
+    assert second["status"] == "already-present"
+    assert Path(first["mirror_bootstrap_path"]).is_file()
+    assert Path(second["mirror_bootstrap_path"]).is_file()
 
 
 def test_ensure_home_codex_skills_link_repoints_stale_target(tmp_path: Path) -> None:
@@ -209,3 +232,30 @@ def test_build_personal_marketplace_payload_preserves_existing_plugins() -> None
     assert payload["interface"]["displayName"] == "Custom"
     assert "existing-plugin" in names
     assert "skill-framework-native" in names
+
+
+def test_install_skills_codex_command_routes_through_native_installer(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env["HOME"] = str(tmp_path / "home")
+    env["CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR"] = str(tmp_path / "bootstrap")
+    if "RUSTUP_HOME" not in env:
+        env["RUSTUP_HOME"] = str(Path.home() / ".rustup")
+    if "CARGO_HOME" not in env:
+        env["CARGO_HOME"] = str(Path.home() / ".cargo")
+
+    completed = subprocess.run(
+        ["bash", "scripts/install_skills.sh", "codex"],
+        cwd=PROJECT_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    config_path = Path(env["HOME"]) / ".codex" / "config.toml"
+    content = config_path.read_text(encoding="utf-8")
+    assert "native integration installed" in completed.stdout
+    assert "[mcp_servers.browser-mcp]" in content
+    assert "[mcp_servers.framework-mcp]" in content
+    assert (Path(env["HOME"]) / ".codex" / "skills").is_symlink()
+    assert (tmp_path / "bootstrap" / "framework_default_bootstrap.json").is_file()
