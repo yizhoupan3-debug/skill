@@ -53,7 +53,7 @@ This skill owns **experiment reproducibility management** for research.
 ## Do not use
 
 - The task is about training models → use `$ai-research`
-- The task is about CI/CD pipeline → use `$github-actions-authoring` or `$tao-ci`
+- The task is about CI/CD pipeline → use `$github-actions-authoring`
 - The task is about general Docker setup → use `$docker`
 - The task is about paper writing → use `$paper-writing`
 

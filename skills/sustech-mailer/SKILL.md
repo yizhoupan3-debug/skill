@@ -103,7 +103,7 @@ Collect from the calling context or user input:
 
 | Field | Source | Required |
 |-------|--------|----------|
-| **To** | user provides, or passed by calling skill (e.g. tao-ci workbook row) | ✓ |
+| **To** | user provides, or passed by an upstream automation/workbook row | ✓ |
 | **Subject** | auto-generated if not provided (see §2) | ✓ |
 | **Body** | auto-generated if not provided (see §2) | ✓ |
 | **Mode** | `default` or `homework`; auto-inferred from context (see below) | optional |
@@ -255,10 +255,10 @@ See [references/script_examples.md](references/script_examples.md) for full exec
 | `SUSTECH_SMTP_USER` | Sender email (default: `12312411@mail.sustech.edu.cn`) |
 | `SUSTECH_SMTP_PASS` | Authorization code from Tencent Enterprise Mail |
 
-Legacy env vars `TAOXI_SMTP_USER` / `TAOXI_SMTP_PASS` are also supported.
+Legacy env vars `TAOXI_SMTP_USER` / `TAOXI_SMTP_PASS` are also supported for compatibility.
 
 Credentials file: `~/.sustech-mailer-smtp.env` (see `scripts/.env.example`).
-Legacy path `~/.tao-ci-smtp.env` is also checked as fallback.
+Legacy path `~/.tao-ci-smtp.env` is also checked as a compatibility fallback.
 
 ## Guardrails
 
@@ -274,7 +274,7 @@ Legacy path `~/.tao-ci-smtp.env` is also checked as fallback.
 ## When to use
 
 - The user asks to send an email from their SUSTech student mailbox
-- Another skill (e.g. `tao-ci`) delegates the email-sending step
+- Another automation or upstream workflow delegates the email-sending step
 - The user says "发邮件", "send email", "用学生邮箱发", "交作业", "提交作业", or similar
 - The user wants to compose and preview an email before sending
 - The user wants to open the browser compose page for review
