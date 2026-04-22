@@ -820,9 +820,9 @@ describe('BrowserRuntime', () => {
       expect(diagnostics.attachedRuntime.handoffSource).toBe('explicit_request');
 
       const replay = await attachedRuntime.getAttachedRuntimeEvents({ afterEventId: 'evt-1', limit: 5 });
-      expect(replay.replayContext.descriptorSource).toBe('resume_manifest_path');
-      expect(replay.replayContext.inputArtifactKind).toBe('resume_manifest');
-      expect(replay.replayContext.resumeManifestSource).toBe('explicit_request');
+      expect(replay.replayContext.descriptorSource).toBe('handoff_path');
+      expect(replay.replayContext.inputArtifactKind).toBe('handoff');
+      expect(replay.replayContext.handoffSource).toBe('explicit_request');
       expect(replay.events).toHaveLength(1);
       expect(replay.events[0]!.event_id).toBe('evt-2');
     } finally {
@@ -848,6 +848,9 @@ describe('BrowserRuntime', () => {
       expect(diagnostics.attachedRuntime.resumeManifestSource).toBe('explicit_request');
 
       const replay = await attachedRuntime.getAttachedRuntimeEvents({ afterEventId: 'evt-1', limit: 5 });
+      expect(replay.replayContext.descriptorSource).toBe('resume_manifest_path');
+      expect(replay.replayContext.inputArtifactKind).toBe('resume_manifest');
+      expect(replay.replayContext.resumeManifestSource).toBe('explicit_request');
       expect(replay.events).toHaveLength(1);
       expect(replay.events[0]!.event_id).toBe('evt-2');
     } finally {
@@ -894,8 +897,10 @@ describe('BrowserRuntime', () => {
       expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
 
       const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
-      expect(replay.replayContext.descriptorSource).toBe('attach_artifact_path');
-      expect(replay.replayContext.inputArtifactKind).toBe('resume_manifest');
+      expect(replay.replayContext.descriptorSource).toBe('handoff_path');
+      expect(replay.replayContext.inputArtifactKind).toBe('handoff');
+      expect(replay.replayContext.resumeManifestSource).toBe('handoff_manifest');
+      expect(replay.replayContext.traceStreamSource).toBe('resume_manifest');
       expect(replay.events).toHaveLength(2);
       expect(replay.events[1]!.event_id).toBe('evt-2');
     } finally {
@@ -1070,8 +1075,8 @@ describe('BrowserRuntime', () => {
       expect(diagnostics.attachedRuntime.latestEventId).toBe('evt-sqlite-2');
 
       const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
-      expect(replay.replayContext.descriptorSource).toBe('attach_artifact_path');
-      expect(replay.replayContext.inputArtifactKind).toBe('resume_manifest');
+      expect(replay.replayContext.descriptorSource).toBe('descriptor_path');
+      expect(replay.replayContext.inputArtifactKind).toBe('attach_descriptor');
       expect(replay.replayContext.artifactBackendFamily).toBe('sqlite');
       expect(replay.events).toHaveLength(2);
       expect(replay.events[0]!.event_id).toBe('evt-sqlite-1');
@@ -1177,6 +1182,9 @@ describe('BrowserRuntime', () => {
       expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
 
       const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
+      expect(replay.replayContext.descriptorSource).toBe('attach_artifact_path');
+      expect(replay.replayContext.inputArtifactKind).toBe('resume_manifest');
+      expect(replay.replayContext.artifactBackendFamily).toBe('sqlite');
       expect(replay.events).toHaveLength(2);
       expect(replay.events[0]!.event_id).toBe('evt-sqlite-1');
       expect(replay.events[1]!.event_id).toBe('evt-sqlite-2');
