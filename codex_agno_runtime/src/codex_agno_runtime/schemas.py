@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, model_validator
 
 
 def _now_iso() -> str:
@@ -73,7 +73,24 @@ class RoutingResult(BaseModel):
         validation_alias=AliasChoices("diagnostic_python_lane_active", "rollback_to_python"),
         serialization_alias="diagnostic_python_lane_active",
     )
+    python_lane_kind: Literal["none", "legacy-primary", "diagnostic-compare-only"] = "none"
     shadow_route_report: "RouteDiffReport | None" = None
+
+    @model_validator(mode="after")
+    def _validate_python_lane_contract(self) -> "RoutingResult":
+        if self.python_lane_kind == "diagnostic-compare-only":
+            if not self.diagnostic_python_lane_active:
+                raise ValueError(
+                    "diagnostic-compare-only routing results must keep diagnostic_python_lane_active enabled"
+                )
+            if self.shadow_route_report is None:
+                raise ValueError("diagnostic-compare-only routing results must carry shadow_route_report evidence")
+            return self
+        if self.diagnostic_python_lane_active:
+            raise ValueError("non-diagnostic routing results must keep diagnostic_python_lane_active disabled")
+        if self.shadow_route_report is not None:
+            raise ValueError("non-diagnostic routing results must not expose shadow_route_report")
+        return self
 
     @property
     def rollback_to_python(self) -> bool:
@@ -116,6 +133,48 @@ class RouteExecutionPolicy(BaseModel):
     shadow_engine: str | None = None
     diff_report_required: bool = False
     verify_parity_required: bool = False
+
+    @property
+    def legacy_primary_python_lane_active(self) -> bool:
+        """Return whether Python is the explicit primary route lane."""
+
+        return self.python_lane_kind == "legacy-primary"
+
+    @property
+    def diagnostic_compare_only_python_lane_active(self) -> bool:
+        """Return whether Python is only participating as compare-only evidence."""
+
+        return self.python_lane_kind == "diagnostic-compare-only"
+
+    @model_validator(mode="after")
+    def _validate_python_lane_contract(self) -> "RouteExecutionPolicy":
+        if self.verify_parity_required and not self.diff_report_required:
+            raise ValueError("verify_parity_required requires diff_report_required")
+        if self.python_lane_kind == "legacy-primary":
+            if not self.python_route_required or self.diagnostic_python_lane:
+                raise ValueError(
+                    "legacy-primary route policy must enable python_route_required and disable diagnostic_python_lane"
+                )
+            if self.primary_authority != "python" or self.route_result_engine != "python":
+                raise ValueError("legacy-primary route policy must keep Python as the route-result authority")
+            if self.shadow_engine is not None:
+                raise ValueError("legacy-primary route policy must not expose shadow_engine")
+            return self
+        if self.python_lane_kind == "diagnostic-compare-only":
+            if self.python_route_required or not self.diagnostic_python_lane:
+                raise ValueError(
+                    "diagnostic-compare-only route policy must disable python_route_required and enable diagnostic_python_lane"
+                )
+            if self.primary_authority != "rust" or self.route_result_engine != "rust":
+                raise ValueError("diagnostic-compare-only route policy must keep Rust as the route-result authority")
+            if self.shadow_engine != "python":
+                raise ValueError("diagnostic-compare-only route policy must keep shadow_engine set to python")
+            return self
+        if self.python_route_required or self.diagnostic_python_lane:
+            raise ValueError("python_lane_kind=none must disable all Python route lanes")
+        if self.shadow_engine is not None:
+            raise ValueError("python_lane_kind=none must not expose shadow_engine")
+        return self
 
 
 class RouteDiffReport(BaseModel):
@@ -233,7 +292,24 @@ class PrepareSessionResponse(BaseModel):
         validation_alias=AliasChoices("diagnostic_python_lane_active", "rollback_to_python"),
         serialization_alias="diagnostic_python_lane_active",
     )
+    python_lane_kind: Literal["none", "legacy-primary", "diagnostic-compare-only"] = "none"
     shadow_route_report: RouteDiffReport | None = None
+
+    @model_validator(mode="after")
+    def _validate_python_lane_contract(self) -> "PrepareSessionResponse":
+        if self.python_lane_kind == "diagnostic-compare-only":
+            if not self.diagnostic_python_lane_active:
+                raise ValueError(
+                    "diagnostic-compare-only prepared sessions must keep diagnostic_python_lane_active enabled"
+                )
+            if self.shadow_route_report is None:
+                raise ValueError("diagnostic-compare-only prepared sessions must carry shadow_route_report")
+            return self
+        if self.diagnostic_python_lane_active:
+            raise ValueError("non-diagnostic prepared sessions must keep diagnostic_python_lane_active disabled")
+        if self.shadow_route_report is not None:
+            raise ValueError("non-diagnostic prepared sessions must not expose shadow_route_report")
+        return self
 
     @property
     def rollback_to_python(self) -> bool:
@@ -281,6 +357,9 @@ class RunTaskResponse(BaseModel):
 class BackgroundRunRequest(RunTaskRequest):
     """Background task execution request."""
 
+    parallel_group_id: str | None = None
+    lane_id: str | None = None
+    parent_job_id: str | None = None
     multitask_strategy: str = "reject"
     max_attempts: int = 1
     backoff_base_seconds: float = 0.0
@@ -294,6 +373,9 @@ class BackgroundRunStatus(BaseModel):
     job_id: str
     session_id: str | None = None
     status: str
+    parallel_group_id: str | None = None
+    lane_id: str | None = None
+    parent_job_id: str | None = None
     multitask_strategy: str = "reject"
     result: RunTaskResponse | None = None
     error: str | None = None
@@ -329,3 +411,26 @@ class BackgroundRunStatus(BaseModel):
         """
 
         return self.model_copy(update={**updates, "updated_at": _now_iso()})
+
+
+class BackgroundParallelGroupSummary(BaseModel):
+    """Aggregate one durable parallel background batch."""
+
+    parallel_group_id: str
+    job_ids: list[str] = Field(default_factory=list)
+    session_ids: list[str] = Field(default_factory=list)
+    lane_ids: list[str] = Field(default_factory=list)
+    parent_job_ids: list[str] = Field(default_factory=list)
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    active_job_count: int = 0
+    terminal_job_count: int = 0
+    total_job_count: int = 0
+    latest_updated_at: str | None = None
+
+
+class BackgroundBatchEnqueueResponse(BaseModel):
+    """Result of admitting one bounded parallel batch."""
+
+    parallel_group_id: str
+    statuses: list[BackgroundRunStatus] = Field(default_factory=list)
+    summary: BackgroundParallelGroupSummary

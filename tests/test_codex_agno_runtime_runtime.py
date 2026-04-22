@@ -1137,6 +1137,64 @@ def test_background_job_store_persists_pending_takeovers(tmp_path: Path) -> None
     assert recovered.pending_session_takeovers() == 1
 
 
+def test_background_job_store_aggregates_parallel_group_summaries() -> None:
+    """Parallel background batches should expose one durable aggregate summary."""
+
+    store = BackgroundJobStore()
+    store.set_status(
+        "job-1",
+        status="queued",
+        session_id="session-1",
+        parallel_group_id="pgroup-1",
+        lane_id="lane-1",
+        parent_job_id="parent-job",
+        timeout_seconds=30,
+    )
+    store.set_status(
+        "job-2",
+        status="queued",
+        session_id="session-2",
+        parallel_group_id="pgroup-1",
+        lane_id="lane-2",
+        parent_job_id="parent-job",
+        timeout_seconds=30,
+    )
+    store.set_status(
+        "job-2",
+        status="running",
+        session_id="session-2",
+        parallel_group_id="pgroup-1",
+        lane_id="lane-2",
+        parent_job_id="parent-job",
+        timeout_seconds=30,
+        claimed_by="job-2",
+    )
+    store.set_status(
+        "job-2",
+        status="completed",
+        session_id="session-2",
+        parallel_group_id="pgroup-1",
+        lane_id="lane-2",
+        parent_job_id="parent-job",
+        timeout_seconds=30,
+    )
+
+    summary = store.parallel_group_summary("pgroup-1")
+
+    assert summary is not None
+    assert summary.parallel_group_id == "pgroup-1"
+    assert summary.job_ids == ["job-1", "job-2"]
+    assert summary.session_ids == ["session-1", "session-2"]
+    assert summary.lane_ids == ["lane-1", "lane-2"]
+    assert summary.parent_job_ids == ["parent-job"]
+    assert summary.status_counts == {"completed": 1, "queued": 1}
+    assert summary.active_job_count == 1
+    assert summary.terminal_job_count == 1
+    assert summary.total_job_count == 2
+    assert store.parallel_group_summary("missing-group") is None
+    assert store.health()["parallel_group_count"] == 1
+
+
 def test_background_job_status_mutation_contract_defaults_and_merges() -> None:
     """The state reducer should own creation defaults and update preservation."""
 
@@ -1294,6 +1352,103 @@ def test_runtime_background_queue_can_interrupt_duplicate_session_ids(tmp_path: 
     asyncio.run(_run())
 
 
+def test_runtime_background_batch_persists_parallel_group_summary(tmp_path: Path) -> None:
+    """Batch enqueue should assign one durable group id plus lane ids."""
+
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        live_model_override=False,
+    )
+    runtime = CodexAgnoRuntime(settings)
+
+    async def fake_run_task(request: BackgroundRunRequest) -> RunTaskResponse:
+        await asyncio.sleep(0.01)
+        return RunTaskResponse(
+            session_id=request.session_id or "batch-session",
+            user_id=request.user_id or "tester",
+            skill="test-skill",
+            live_run=False,
+            content=request.task,
+            usage=UsageMetrics(),
+        )
+
+    runtime.run_task = fake_run_task  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        batch = await runtime.enqueue_background_batch(
+            [
+                BackgroundRunRequest(task="lane-a", user_id="tester", session_id="batch-a", dry_run=True),
+                BackgroundRunRequest(task="lane-b", user_id="tester", session_id="batch-b", dry_run=True),
+            ]
+        )
+
+        assert batch.parallel_group_id.startswith("pgroup_")
+        assert [status.parallel_group_id for status in batch.statuses] == [
+            batch.parallel_group_id,
+            batch.parallel_group_id,
+        ]
+        assert [status.lane_id for status in batch.statuses] == ["lane-1", "lane-2"]
+        assert batch.summary.parallel_group_id == batch.parallel_group_id
+        assert batch.summary.total_job_count == 2
+        assert batch.summary.active_job_count == 2
+        assert sorted(batch.summary.session_ids) == ["batch-a", "batch-b"]
+
+        for _ in range(40):
+            await asyncio.sleep(0.02)
+            summary = runtime.get_background_parallel_group_summary(batch.parallel_group_id)
+            if summary is not None and summary.terminal_job_count == 2:
+                break
+
+        summary = runtime.get_background_parallel_group_summary(batch.parallel_group_id)
+        assert summary is not None
+        assert summary.total_job_count == 2
+        assert summary.terminal_job_count == 2
+        assert summary.status_counts["completed"] == 2
+        assert summary.active_job_count == 0
+        assert summary.lane_ids == ["lane-1", "lane-2"]
+        assert summary.job_ids == sorted(status.job_id for status in batch.statuses)
+        listed = runtime.list_background_parallel_groups()
+        assert len(listed) == 1
+        assert listed[0].parallel_group_id == batch.parallel_group_id
+
+    asyncio.run(_run())
+
+
+def test_runtime_background_batch_rejects_misaligned_parallel_group_ids(tmp_path: Path) -> None:
+    """One batch should not fan out across multiple durable group ids."""
+
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        live_model_override=False,
+    )
+    runtime = CodexAgnoRuntime(settings)
+
+    async def _run() -> None:
+        with pytest.raises(ValueError, match="parallel_group_id"):
+            await runtime.enqueue_background_batch(
+                [
+                    BackgroundRunRequest(
+                        task="lane-a",
+                        user_id="tester",
+                        session_id="batch-a",
+                        parallel_group_id="pgroup-a",
+                        dry_run=True,
+                    ),
+                    BackgroundRunRequest(
+                        task="lane-b",
+                        user_id="tester",
+                        session_id="batch-b",
+                        parallel_group_id="pgroup-b",
+                        dry_run=True,
+                    ),
+                ]
+            )
+
+    asyncio.run(_run())
+
+
 def test_runtime_background_queue_rejects_unsupported_multitask_strategy(tmp_path: Path) -> None:
     """Unsupported multitask strategies should fail deterministically."""
 
@@ -1318,6 +1473,98 @@ def test_runtime_background_queue_rejects_unsupported_multitask_strategy(tmp_pat
         assert status.status == "failed"
         assert status.multitask_strategy == "rollback"
         assert "Unsupported multitask strategy" in (status.error or "")
+
+    asyncio.run(_run())
+
+
+def test_runtime_background_batch_persists_parallel_group_resume_summary(tmp_path: Path) -> None:
+    """Parallel batch admission should persist one grouped resume/health summary."""
+
+    trace_path = tmp_path / "TRACE_METADATA.json"
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=trace_path,
+        live_model_override=False,
+    )
+    runtime = CodexAgnoRuntime(settings)
+
+    async def _wait_for_completion(job_ids: list[str]) -> None:
+        deadline = asyncio.get_running_loop().time() + 2.0
+        while asyncio.get_running_loop().time() < deadline:
+            statuses = [runtime.get_background_status(job_id) for job_id in job_ids]
+            if all(status is not None and status.status == "completed" for status in statuses):
+                return
+            await asyncio.sleep(0.02)
+        raise AssertionError(f"Timed out waiting for batch completion: {job_ids}")
+
+    async def _run() -> None:
+        batch = await runtime.enqueue_background_batch(
+            [
+                BackgroundRunRequest(
+                    task="并行 lane 1",
+                    user_id="tester",
+                    session_id="parallel-session-1",
+                    parent_job_id="parent-job",
+                    dry_run=True,
+                ),
+                BackgroundRunRequest(
+                    task="并行 lane 2",
+                    user_id="tester",
+                    session_id="parallel-session-2",
+                    parent_job_id="parent-job",
+                    dry_run=True,
+                ),
+            ],
+            parallel_group_id="pgroup-contract",
+        )
+
+        assert batch.parallel_group_id == "pgroup-contract"
+        assert [status.parallel_group_id for status in batch.statuses] == [
+            "pgroup-contract",
+            "pgroup-contract",
+        ]
+        assert [status.lane_id for status in batch.statuses] == ["lane-1", "lane-2"]
+        assert [status.parent_job_id for status in batch.statuses] == ["parent-job", "parent-job"]
+        assert batch.summary.parallel_group_id == "pgroup-contract"
+        assert batch.summary.total_job_count == 2
+        assert batch.summary.parent_job_ids == ["parent-job"]
+        assert batch.summary.lane_ids == ["lane-1", "lane-2"]
+        assert batch.summary.active_job_count >= 1
+
+        await _wait_for_completion([status.job_id for status in batch.statuses])
+
+        summary = runtime.get_background_parallel_group_summary("pgroup-contract")
+        assert summary is not None
+        assert summary.parallel_group_id == "pgroup-contract"
+        assert summary.total_job_count == 2
+        assert summary.terminal_job_count == 2
+        assert summary.active_job_count == 0
+        assert summary.parent_job_ids == ["parent-job"]
+        assert summary.lane_ids == ["lane-1", "lane-2"]
+
+        listed = runtime.list_background_parallel_groups()
+        assert len(listed) == 1
+        assert listed[0].parallel_group_id == "pgroup-contract"
+
+        health = runtime.background_service.health()
+        assert health["parallel_group_count"] == 1
+        assert health["active_parallel_group_count"] == 0
+
+        resume_manifest = json.loads(trace_path.with_name("TRACE_RESUME_MANIFEST.json").read_text(encoding="utf-8"))
+        assert resume_manifest["parallel_group"]["parallel_group_id"] == "pgroup-contract"
+        assert resume_manifest["parallel_group"]["total_job_count"] == 2
+        assert resume_manifest["parallel_group"]["terminal_job_count"] == 2
+        assert resume_manifest["parallel_group"]["active_job_count"] == 0
+        assert resume_manifest["parallel_group"]["parent_job_ids"] == ["parent-job"]
+        assert resume_manifest["parallel_group"]["lane_ids"] == ["lane-1", "lane-2"]
+        assert sorted(resume_manifest["parallel_group"]["session_ids"]) == [
+            "parallel-session-1",
+            "parallel-session-2",
+        ]
+        assert sorted(resume_manifest["parallel_group"]["job_ids"]) == sorted(
+            status.job_id for status in batch.statuses
+        )
 
     asyncio.run(_run())
 
@@ -1350,10 +1597,14 @@ def test_prepare_session_rust_route_mode_matches_python_mode(tmp_path: Path) -> 
     python_prepared = python_runtime.prepare_session(request=request)
     rust_prepared = rust_runtime.prepare_session(request=request)
 
+    assert python_prepared.route_engine == "python"
+    assert python_prepared.python_lane_kind == "legacy-primary"
+    assert python_prepared.diagnostic_python_lane_active is False
     assert rust_prepared.skill == python_prepared.skill
     assert rust_prepared.overlay == python_prepared.overlay
     assert rust_prepared.layer == python_prepared.layer
     assert rust_prepared.route_engine == "rust"
+    assert rust_prepared.python_lane_kind == "none"
 
 
 def test_prepare_session_shadow_mode_returns_soak_report(tmp_path: Path) -> None:

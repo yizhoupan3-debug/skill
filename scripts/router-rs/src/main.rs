@@ -2584,6 +2584,7 @@ fn build_checkpoint_resume_manifest(payload: Value) -> Result<Value, String> {
             .cloned()
             .filter(Value::is_array)
             .unwrap_or_else(|| serde_json::json!([])),
+        "parallel_group": payload.get("parallel_group").cloned().unwrap_or(Value::Null),
         "supervisor_projection": payload.get("supervisor_projection").cloned().unwrap_or(Value::Null),
         "control_plane": payload.get("control_plane").cloned().unwrap_or(Value::Null),
     });

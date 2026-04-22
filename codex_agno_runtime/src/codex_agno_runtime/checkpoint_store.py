@@ -426,6 +426,7 @@ class RuntimeCheckpointer(Protocol):
         latest_cursor: TraceReplayCursor | None,
         event_transport_path: str | None,
         artifact_paths: list[str],
+        parallel_group: dict[str, Any] | None = None,
         supervisor_projection: dict[str, Any] | None = None,
     ) -> TraceResumeManifest:
         """Resolve the runtime resume manifest before backend persistence."""
@@ -440,6 +441,7 @@ class RuntimeCheckpointer(Protocol):
         latest_cursor: TraceReplayCursor | None,
         event_transport_path: str | None,
         artifact_paths: list[str],
+        parallel_group: dict[str, Any] | None = None,
         supervisor_projection: dict[str, Any] | None = None,
     ) -> TraceResumeManifest | None:
         """Write the current runtime checkpoint when enabled."""
@@ -581,6 +583,7 @@ class FilesystemRuntimeCheckpointer:
         latest_cursor: TraceReplayCursor | None,
         event_transport_path: str | None,
         artifact_paths: list[str],
+        parallel_group: dict[str, Any] | None = None,
         supervisor_projection: dict[str, Any] | None = None,
     ) -> TraceResumeManifest:
         paths = self.describe_paths()
@@ -597,6 +600,7 @@ class FilesystemRuntimeCheckpointer:
                 "background_state_path": str(paths.background_state_path),
                 "latest_cursor": latest_cursor.model_dump(mode="json") if latest_cursor is not None else None,
                 "artifact_paths": artifact_paths,
+                "parallel_group": parallel_group,
                 "supervisor_projection": supervisor_projection,
                 "control_plane": self._control_plane.model_dump(mode="json"),
             },
@@ -609,6 +613,7 @@ class FilesystemRuntimeCheckpointer:
                 latest_cursor=latest_cursor,
                 event_transport_path=event_transport_path,
                 artifact_paths=artifact_paths,
+                parallel_group=parallel_group,
                 supervisor_projection=supervisor_projection,
             ),
         )
@@ -623,6 +628,7 @@ class FilesystemRuntimeCheckpointer:
         latest_cursor: TraceReplayCursor | None,
         event_transport_path: str | None,
         artifact_paths: list[str],
+        parallel_group: dict[str, Any] | None = None,
         supervisor_projection: dict[str, Any] | None = None,
     ) -> TraceResumeManifest | None:
         """Persist the current runtime resume manifest when enabled."""
@@ -638,6 +644,7 @@ class FilesystemRuntimeCheckpointer:
             latest_cursor=latest_cursor,
             event_transport_path=event_transport_path,
             artifact_paths=artifact_paths,
+            parallel_group=parallel_group,
             supervisor_projection=supervisor_projection,
         )
         if self._write_resume_manifest_via_rust(paths.resume_manifest_path, manifest):
@@ -804,6 +811,7 @@ class FilesystemRuntimeCheckpointer:
         latest_cursor: TraceReplayCursor | None,
         event_transport_path: str | None,
         artifact_paths: list[str],
+        parallel_group: dict[str, Any] | None = None,
         supervisor_projection: dict[str, Any] | None = None,
     ) -> TraceResumeManifest:
         paths = self.describe_paths()
@@ -818,6 +826,7 @@ class FilesystemRuntimeCheckpointer:
             background_state_path=str(paths.background_state_path),
             latest_cursor=latest_cursor,
             artifact_paths=list(artifact_paths),
+            parallel_group=parallel_group,
             supervisor_projection=supervisor_projection,
             control_plane=self._control_plane.model_dump(mode="json"),
         )
