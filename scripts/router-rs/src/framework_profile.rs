@@ -4179,7 +4179,8 @@ mod tests {
                 "status",
                 "execution_mode",
                 "route_engine",
-                "diagnostic_route_mode"
+                "diagnostic_route_mode",
+                "execution_kernel_model_id_source"
             ])
         );
         assert_eq!(

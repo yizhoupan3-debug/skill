@@ -11,6 +11,15 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_SRC = ROOT / "codex_agno_runtime" / "src"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(RUNTIME_SRC) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_SRC))
+
+from codex_agno_runtime.schemas import RouteDecisionContract
+
 
 def get_git_root() -> Path:
     """Return the repository root when available."""
@@ -29,7 +38,6 @@ def get_git_root() -> Path:
         return Path(proc.stdout.strip())
     except Exception:
         return local_root
-
 
 ROOT = get_git_root()
 RUNTIME_PATH = ROOT / "skills" / "SKILL_ROUTING_RUNTIME.json"
@@ -347,6 +355,31 @@ def run_rust_route_json(
     return dict(payload)
 
 
+def run_rust_route_contract(
+    query: str,
+    *,
+    session_id: str = "route-cli",
+    allow_overlay: bool = True,
+    first_turn: bool = True,
+    limit: int = 5,
+    runtime_path: Path | None = RUNTIME_PATH,
+    manifest_path: Path | None = MANIFEST_PATH,
+) -> RouteDecisionContract:
+    """Return the Rust route decision as a typed contract."""
+
+    return RouteDecisionContract.model_validate(
+        run_rust_route_json(
+            query,
+            session_id=session_id,
+            allow_overlay=allow_overlay,
+            first_turn=first_turn,
+            limit=limit,
+            runtime_path=runtime_path,
+            manifest_path=manifest_path,
+        )
+    )
+
+
 def search_skills(
     query: str,
     limit: int = 5,
@@ -398,6 +431,27 @@ def route_decision_json(
     """Return the Rust route decision in transport-shim form."""
 
     return run_rust_route_json(
+        query,
+        session_id=session_id,
+        allow_overlay=allow_overlay,
+        first_turn=first_turn,
+        runtime_path=runtime_path if runtime_path is not None else RUNTIME_PATH,
+        manifest_path=manifest_path if manifest_path is not None else MANIFEST_PATH,
+    )
+
+
+def route_decision_contract(
+    query: str,
+    *,
+    session_id: str = "route-cli",
+    allow_overlay: bool = True,
+    first_turn: bool = True,
+    runtime_path: Path | None = None,
+    manifest_path: Path | None = None,
+) -> RouteDecisionContract:
+    """Return the Rust route decision in typed shim form."""
+
+    return run_rust_route_contract(
         query,
         session_id=session_id,
         allow_overlay=allow_overlay,
