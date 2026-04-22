@@ -97,6 +97,34 @@ class RouteDecisionSnapshot(BaseModel):
     reasons_class: str = "none"
 
 
+class RouteDecisionContract(BaseModel):
+    """Stable Rust-owned route decision envelope consumed by the Python host."""
+
+    decision_schema_version: str
+    authority: str
+    compile_authority: str
+    task: str
+    session_id: str
+    selected_skill: str
+    overlay_skill: str | None = None
+    layer: str
+    score: float = 0.0
+    reasons: list[str] = Field(default_factory=list)
+    route_snapshot: RouteDecisionSnapshot
+
+    @model_validator(mode="after")
+    def _validate_rust_route_decision_contract(self) -> "RouteDecisionContract":
+        if self.route_snapshot.engine != "rust":
+            raise ValueError("route decision contract must keep route_snapshot.engine=rust")
+        if self.route_snapshot.selected_skill != self.selected_skill:
+            raise ValueError("route decision contract selected_skill must match route_snapshot")
+        if self.route_snapshot.overlay_skill != self.overlay_skill:
+            raise ValueError("route decision contract overlay_skill must match route_snapshot")
+        if self.route_snapshot.layer != self.layer:
+            raise ValueError("route decision contract layer must match route_snapshot")
+        return self
+
+
 class RouteExecutionPolicy(BaseModel):
     """Stable Rust-owned route-mode policy."""
 

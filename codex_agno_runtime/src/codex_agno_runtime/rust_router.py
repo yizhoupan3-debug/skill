@@ -7,6 +7,13 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from codex_agno_runtime.schemas import (
+    RouteDecisionContract,
+    RouteDecisionSnapshot,
+    RouteDiagnosticReport,
+    RouteExecutionPolicy,
+)
+
 
 class RustRouteAdapter:
     """Call the repository Rust route engine for final route decisions."""
@@ -59,6 +66,23 @@ class RustRouteAdapter:
     ) -> dict[str, Any]:
         """Return one Rust-backed route decision JSON payload."""
 
+        return self.route_contract(
+            query=query,
+            session_id=session_id,
+            allow_overlay=allow_overlay,
+            first_turn=first_turn,
+        ).model_dump(mode="json")
+
+    def route_contract(
+        self,
+        *,
+        query: str,
+        session_id: str,
+        allow_overlay: bool,
+        first_turn: bool,
+    ) -> RouteDecisionContract:
+        """Return one typed Rust-backed route decision contract."""
+
         args = self._route_args(query, session_id, allow_overlay, first_turn)
         command = [*self._binary_command(), *args]
         payload = self._run_json_command(command, failure_label="route engine")
@@ -77,7 +101,7 @@ class RustRouteAdapter:
                 "Rust route engine returned an unexpected authority marker: "
                 f"{payload.get('authority')!r}"
             )
-        return payload
+        return RouteDecisionContract.model_validate(payload)
 
     def compile_profile_bundle(self, profile_path: Path) -> dict[str, Any]:
         """Compile a serialized framework profile into the Rust-side companion bundle."""
@@ -98,12 +122,30 @@ class RustRouteAdapter:
     ) -> dict[str, Any]:
         """Build the stable Rust-owned route diagnostic report."""
 
+        return self.route_report_contract(
+            mode=mode,
+            rust_route_snapshot=rust_route_snapshot,
+        ).model_dump(mode="json")
+
+    def route_report_contract(
+        self,
+        *,
+        mode: str,
+        rust_route_snapshot: dict[str, Any] | RouteDecisionSnapshot,
+    ) -> RouteDiagnosticReport:
+        """Build one typed Rust-owned route diagnostic report."""
+
         args = [
             "--route-report-json",
             "--route-mode",
             mode,
             "--rust-route-snapshot-json",
-            json.dumps(rust_route_snapshot, ensure_ascii=False),
+            json.dumps(
+                rust_route_snapshot.model_dump(mode="json")
+                if isinstance(rust_route_snapshot, RouteDecisionSnapshot)
+                else rust_route_snapshot,
+                ensure_ascii=False,
+            ),
         ]
         try:
             payload = self._run_json_command(
@@ -130,7 +172,7 @@ class RustRouteAdapter:
                 "Rust route report engine returned an unexpected authority marker: "
                 f"{payload.get('authority')!r}"
             )
-        return payload
+        return RouteDiagnosticReport.model_validate(payload)
 
     def route_policy(
         self,
@@ -138,6 +180,15 @@ class RustRouteAdapter:
         mode: str,
     ) -> dict[str, Any]:
         """Resolve Rust-only route-mode policy through the Rust routing core."""
+
+        return self.route_policy_contract(mode=mode).model_dump(mode="json")
+
+    def route_policy_contract(
+        self,
+        *,
+        mode: str,
+    ) -> RouteExecutionPolicy:
+        """Resolve one typed Rust-owned route-mode policy."""
 
         args = [
             "--route-policy-json",
@@ -169,7 +220,7 @@ class RustRouteAdapter:
                 "Rust route policy engine returned an unexpected authority marker: "
                 f"{payload.get('authority')!r}"
             )
-        return payload
+        return RouteExecutionPolicy.model_validate(payload)
 
     def route_snapshot(
         self,
@@ -182,6 +233,27 @@ class RustRouteAdapter:
         reasons: list[str],
     ) -> dict[str, Any]:
         """Build a canonical route snapshot through the Rust routing core."""
+
+        return self.route_snapshot_contract(
+            engine=engine,
+            selected_skill=selected_skill,
+            overlay_skill=overlay_skill,
+            layer=layer,
+            score=score,
+            reasons=reasons,
+        ).model_dump(mode="json")
+
+    def route_snapshot_contract(
+        self,
+        *,
+        engine: str,
+        selected_skill: str,
+        overlay_skill: str | None,
+        layer: str,
+        score: float,
+        reasons: list[str],
+    ) -> RouteDecisionSnapshot:
+        """Build one typed canonical route snapshot through the Rust routing core."""
 
         args = [
             "--route-snapshot-json",
@@ -226,7 +298,7 @@ class RustRouteAdapter:
         route_snapshot = payload.get("route_snapshot")
         if not isinstance(route_snapshot, dict):
             raise RuntimeError("Rust route snapshot engine returned a missing route_snapshot payload.")
-        return route_snapshot
+        return RouteDecisionSnapshot.model_validate(route_snapshot)
 
     def compile_codex_profile_artifacts(
         self,
