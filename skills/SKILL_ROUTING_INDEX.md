@@ -14,7 +14,7 @@
 ## Gate shortcuts
 | If the task starts with... | Route first | Why |
 |---|---|---|
-| OpenAI API / 模型 / 官方当前文档 | `openai-docs` | Use OpenAI docs MCP tools for current OpenAI API, model, |
+| OpenAI API / 模型 / 官方当前文档 | `openai-docs` | Use official OpenAI docs first for current OpenAI guidan |
 | PR 评论 / review comment | `gh-address-comments` | Triage and address GitHub PR review comments and review  |
 | CI 失败 / GitHub Actions 报红 | `gh-fix-ci` | Triage failing GitHub Actions PR checks with `gh` and `s |
 | Sentry 告警 / 线上异常 | `sentry` | Inspect Sentry issues, events, releases, environments, a |

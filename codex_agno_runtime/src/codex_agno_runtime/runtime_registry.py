@@ -18,6 +18,7 @@ _FALLBACK_DEFAULT_HOST_PEER_SET = (
 _FALLBACK_SHARED_PROJECT_MCP_SERVERS = (
     "browser-mcp",
     "framework-mcp",
+    "openaiDeveloperDocs",
 )
 _FALLBACK_PLUGIN_RECORD = {
     "plugin_name": "skill-framework-native",
@@ -42,6 +43,38 @@ _FALLBACK_FRAMEWORK_NATIVE_ALIASES = {
         "canonical_owner": "execution-controller-coding",
         "reroute_when_ambiguous": "idea-to-plan",
         "reroute_when_root_cause_unknown": "systematic-debugging",
+        "upstream_source": {
+            "repo": "https://github.com/Yeachan-Heo/oh-my-claudecode",
+            "tag": "v4.13.2",
+            "commit": "0ac52cdaa093d6c41763e47055e995adaa4f8987",
+            "official_skill_path": "skills/autopilot/SKILL.md",
+        },
+        "omc_lineage": {
+            "source": "oh-my-claudecode",
+            "inherits_core_capabilities": True,
+            "implementation_mode": "match-and-exceed",
+        },
+        "official_workflow": {
+            "phases": [
+                "expansion",
+                "planning",
+                "execution",
+                "qa",
+                "validation",
+                "cleanup",
+            ]
+        },
+        "implementation_bar": [
+            "root-cause-first-when-unknown",
+            "verification-evidence-required",
+            "resume-and-recovery-required",
+            "converge-until-bounded-scope-clean",
+        ],
+        "local_adaptations": [
+            "replace .omc state files with rust-session-supervisor plus continuity artifacts",
+            "replace .omc specs and plans with artifacts/current task-local bootstrap outputs",
+            "keep deepinterview handoff as the first-class clarification gate for vague requests",
+        ],
         "execution_owners": [
             "plan-to-code",
             "subagent-delegation",
@@ -50,15 +83,45 @@ _FALLBACK_FRAMEWORK_NATIVE_ALIASES = {
         "host_entrypoints": {"codex-cli": "$autopilot", "claude-code": "/autopilot"},
         "omc_dependency": False,
     },
-    "deepreview": {
+    "deepinterview": {
         "canonical_owner": "code-review",
+        "upstream_source": {
+            "repo": "https://github.com/Yeachan-Heo/oh-my-claudecode",
+            "tag": "v4.13.2",
+            "commit": "0ac52cdaa093d6c41763e47055e995adaa4f8987",
+            "official_skill_path": "skills/deep-interview/SKILL.md",
+        },
+        "omc_lineage": {
+            "source": "oh-my-claudecode",
+            "inherits_core_capabilities": True,
+            "implementation_mode": "match-and-exceed",
+        },
+        "official_workflow": {
+            "loop_rules": [
+                "one-question-at-a-time",
+                "target-weakest-clarity-dimension",
+                "score-ambiguity-after-each-answer",
+                "handoff-to-execution-only-below-threshold",
+            ]
+        },
+        "implementation_bar": [
+            "root-cause-first-when-unknown",
+            "findings-first-with-severity-order",
+            "verification-evidence-required",
+            "fix-verify-loop-until-bounded-scope-clean",
+        ],
+        "local_adaptations": [
+            "reuse official deep-interview questioning model but store progress in continuity artifacts instead of .omc state",
+            "use live repo evidence first for brownfield clarification before asking the user",
+            "handoff into local autopilot and rust-session-supervisor instead of OMC slash pipeline",
+        ],
         "review_lanes": [
             "architect-review",
             "security-audit",
             "test-engineering",
             "execution-audit-codex",
         ],
-        "host_entrypoints": {"codex-cli": "$deepreview", "claude-code": "/deepreview"},
+        "host_entrypoints": {"codex-cli": "$deepinterview", "claude-code": "/deepinterview"},
         "omc_dependency": False,
     },
 }
@@ -72,6 +135,26 @@ _FALLBACK_OMC_RETIREMENT_CONTRACT = {
         "host_resume_entrypoint",
         "host_tmux_worker_management",
     ],
+    "framework_native_alias_guarantees": {
+        "autopilot": {
+            "inherits_omc_core_capabilities": True,
+            "implementation_bar": [
+                "root-cause-first-when-unknown",
+                "verification-evidence-required",
+                "resume-and-recovery-required",
+                "converge-until-bounded-scope-clean",
+            ],
+        },
+        "deepinterview": {
+            "inherits_omc_core_capabilities": True,
+            "implementation_bar": [
+                "root-cause-first-when-unknown",
+                "findings-first-with-severity-order",
+                "verification-evidence-required",
+                "fix-verify-loop-until-bounded-scope-clean",
+            ],
+        },
+    },
     "omc_is_runtime_dependency": False,
 }
 _FALLBACK_HOST_ADAPTER_ORDER = (

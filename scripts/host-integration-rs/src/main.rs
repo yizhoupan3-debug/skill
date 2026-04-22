@@ -22,7 +22,9 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "context-used",
     "fast-mode",
 ];
-const DEFAULT_SHARED_PROJECT_MCP_SERVERS: [&str; 2] = ["browser-mcp", "framework-mcp"];
+const DEFAULT_SHARED_PROJECT_MCP_SERVERS: [&str; 3] =
+    ["browser-mcp", "framework-mcp", "openaiDeveloperDocs"];
+const OPENAI_DEVELOPER_DOCS_MCP_URL: &str = "https://developers.openai.com/mcp";
 
 #[derive(Deserialize)]
 struct SyncSectionManifest {
@@ -105,6 +107,8 @@ enum Commands {
         #[arg(long)]
         home_codex_skills_path: PathBuf,
         #[arg(long)]
+        home_claude_skills_path: PathBuf,
+        #[arg(long)]
         home_claude_refresh_path: PathBuf,
         #[arg(long)]
         home_claude_mcp_config_path: PathBuf,
@@ -117,13 +121,21 @@ enum Commands {
         #[arg(long)]
         skip_framework_mcp: bool,
         #[arg(long)]
+        skip_openai_developer_docs_mcp: bool,
+        #[arg(long)]
         skip_framework_overlay_retirement: bool,
         #[arg(long)]
         skip_personal_plugin: bool,
         #[arg(long)]
         skip_personal_marketplace: bool,
         #[arg(long)]
+        install_home_codex_skills_link: bool,
+        #[arg(long)]
+        install_home_claude_skills_link: bool,
+        #[arg(long)]
         skip_home_codex_skills_link: bool,
+        #[arg(long)]
+        skip_home_claude_skills_link: bool,
         #[arg(long)]
         skip_home_claude_refresh: bool,
         #[arg(long)]
@@ -166,16 +178,21 @@ fn main() -> Result<(), String> {
             home_plugin_root,
             home_marketplace_path,
             home_codex_skills_path,
+            home_claude_skills_path,
             home_claude_refresh_path,
             home_claude_mcp_config_path,
             project_instructions_path,
             bootstrap_output_dir,
             skip_browser_mcp,
             skip_framework_mcp,
+            skip_openai_developer_docs_mcp,
             skip_framework_overlay_retirement,
             skip_personal_plugin,
             skip_personal_marketplace,
+            install_home_codex_skills_link,
+            install_home_claude_skills_link,
             skip_home_codex_skills_link,
+            skip_home_claude_skills_link,
             skip_home_claude_refresh,
             skip_home_claude_mcp_sync,
             skip_default_bootstrap,
@@ -186,16 +203,19 @@ fn main() -> Result<(), String> {
             &home_plugin_root,
             &home_marketplace_path,
             &home_codex_skills_path,
+            &home_claude_skills_path,
             &home_claude_refresh_path,
             &home_claude_mcp_config_path,
             &project_instructions_path,
             bootstrap_output_dir.as_deref(),
             !skip_browser_mcp,
             !skip_framework_mcp,
+            !skip_openai_developer_docs_mcp,
             !skip_framework_overlay_retirement,
             !skip_personal_plugin,
             !skip_personal_marketplace,
-            !skip_home_codex_skills_link,
+            install_home_codex_skills_link && !skip_home_codex_skills_link,
+            install_home_claude_skills_link && !skip_home_claude_skills_link,
             !skip_home_claude_refresh,
             !skip_home_claude_mcp_sync,
             !skip_default_bootstrap,
@@ -428,8 +448,7 @@ fn runtime_registry_path(repo_root: &Path) -> PathBuf {
     if repo_candidate.is_file() {
         return repo_candidate;
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../configs/framework/RUNTIME_REGISTRY.json")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../configs/framework/RUNTIME_REGISTRY.json")
 }
 
 fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, String> {
@@ -497,16 +516,19 @@ fn install_native_integration(
     home_plugin_root: &Path,
     home_marketplace_path: &Path,
     home_codex_skills_path: &Path,
+    home_claude_skills_path: &Path,
     home_claude_refresh_path: &Path,
     home_claude_mcp_config_path: &Path,
     project_instructions_path: &Path,
     bootstrap_output_dir: Option<&Path>,
     install_browser_mcp: bool,
     install_framework_mcp: bool,
+    install_openai_developer_docs_mcp: bool,
     retire_framework_overlay_file: bool,
     install_personal_plugin: bool,
     install_personal_marketplace_entry: bool,
     install_home_codex_skills_link: bool,
+    install_home_claude_skills_link: bool,
     install_home_claude_refresh_command: bool,
     install_home_claude_mcp_sync: bool,
     install_default_bootstrap: bool,
@@ -526,11 +548,10 @@ fn install_native_integration(
     let home_plugin_root = normalize_path(home_plugin_root)?;
     let home_marketplace_path = normalize_path(home_marketplace_path)?;
     let home_codex_skills_path = normalize_path(home_codex_skills_path)?;
+    let home_claude_skills_path = normalize_path(home_claude_skills_path)?;
     let home_claude_refresh_path = normalize_path(home_claude_refresh_path)?;
     let home_claude_mcp_config_path = normalize_path(home_claude_mcp_config_path)?;
-    let bootstrap_output_dir = bootstrap_output_dir
-        .map(normalize_path)
-        .transpose()?;
+    let bootstrap_output_dir = bootstrap_output_dir.map(normalize_path).transpose()?;
 
     let created_config = ensure_config_file(&home_config_path)?;
     let browser_changed = if install_browser_mcp {
@@ -551,9 +572,21 @@ fn install_native_integration(
     } else {
         false
     };
+    let openai_developer_docs_changed = if install_openai_developer_docs_mcp {
+        install_mcp_block(
+            &home_config_path,
+            "[mcp_servers.openaiDeveloperDocs]",
+            &build_openai_developer_docs_server_block(),
+        )?
+    } else {
+        false
+    };
     let tui_changed = ensure_tui_status_line(&home_config_path)?;
     let personal_plugin_changed = if install_personal_plugin {
-        sync_directory(&repo_root.join(&plugin_registration.source_rel), &home_plugin_root)?
+        sync_directory(
+            &repo_root.join(&plugin_registration.source_rel),
+            &home_plugin_root,
+        )?
     } else {
         false
     };
@@ -568,7 +601,12 @@ fn install_native_integration(
         false
     };
     let home_codex_skills_link_changed = if install_home_codex_skills_link {
-        ensure_home_codex_skills_link(&repo_root, &home_codex_skills_path)?
+        ensure_home_skills_link(&repo_root, &home_codex_skills_path)?
+    } else {
+        false
+    };
+    let home_claude_skills_link_changed = if install_home_claude_skills_link {
+        ensure_home_skills_link(&repo_root, &home_claude_skills_path)?
     } else {
         false
     };
@@ -591,11 +629,7 @@ fn install_native_integration(
         Value::Null
     };
     let default_bootstrap = if install_default_bootstrap {
-        ensure_default_bootstrap(
-            &template_root,
-            &repo_root,
-            bootstrap_output_dir.as_deref(),
-        )?
+        ensure_default_bootstrap(&template_root, &repo_root, bootstrap_output_dir.as_deref())?
     } else {
         Value::Null
     };
@@ -607,16 +641,19 @@ fn install_native_integration(
         "home_plugin_root": home_plugin_root.to_string_lossy(),
         "home_marketplace_path": home_marketplace_path.to_string_lossy(),
         "home_codex_skills_path": home_codex_skills_path.to_string_lossy(),
+        "home_claude_skills_path": home_claude_skills_path.to_string_lossy(),
         "home_claude_refresh_path": home_claude_refresh_path.to_string_lossy(),
         "home_claude_mcp_config_path": home_claude_mcp_config_path.to_string_lossy(),
         "repo_marketplace_path": repo_root.join(".agents/plugins/marketplace.json").to_string_lossy(),
         "created_config": created_config,
         "browser_mcp_changed": browser_changed,
         "framework_mcp_changed": framework_changed,
+        "openai_developer_docs_mcp_changed": openai_developer_docs_changed,
         "tui_status_line_changed": tui_changed,
         "personal_plugin_changed": personal_plugin_changed,
         "personal_marketplace_changed": personal_marketplace_changed,
         "home_codex_skills_link_changed": home_codex_skills_link_changed,
+        "home_claude_skills_link_changed": home_claude_skills_link_changed,
         "home_claude_refresh_changed": home_claude_refresh_changed,
         "home_claude_mcp_config_changed": home_claude_mcp_config_changed,
         "framework_overlay_retirement": framework_overlay_result,
@@ -638,7 +675,11 @@ fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> bool
         .and_then(Value::as_object)
         .zip(payload.get("memory-bootstrap").and_then(Value::as_object))
         .zip(payload.get("skills-export").and_then(Value::as_object))
-        .zip(payload.get("evolution-proposals").and_then(Value::as_object))
+        .zip(
+            payload
+                .get("evolution-proposals")
+                .and_then(Value::as_object),
+        )
         .map(|(((bootstrap, _memory), skills), _proposals)| {
             bootstrap
                 .get("repo_root")
@@ -771,6 +812,13 @@ fn build_framework_server_block(repo_root: &Path) -> String {
     format!(
         "[mcp_servers.framework-mcp]\ncommand = \"python3\"\nargs = [\"-m\", \"scripts.framework_mcp\"]\ncwd = \"{}\"",
         repo_root.to_string_lossy()
+    )
+}
+
+fn build_openai_developer_docs_server_block() -> String {
+    format!(
+        "[mcp_servers.openaiDeveloperDocs]\nurl = \"{}\"",
+        OPENAI_DEVELOPER_DOCS_MCP_URL
     )
 }
 
@@ -932,7 +980,7 @@ fn read_dir_map(root: &Path) -> Result<BTreeMap<String, PathBuf>, String> {
     Ok(entries)
 }
 
-fn ensure_home_codex_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool, String> {
+fn ensure_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool, String> {
     let source = repo_root.join(skill_bridge_source_rel(repo_root)?);
     if let Some(parent) = target_path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
@@ -1026,6 +1074,10 @@ fn managed_home_claude_mcp_server(repo_root: &Path, server_name: &str) -> Result
             "env": {
                 "PYTHONPATH": repo_root_value,
             },
+        })),
+        "openaiDeveloperDocs" => Ok(json!({
+            "type": "http",
+            "url": OPENAI_DEVELOPER_DOCS_MCP_URL,
         })),
         other => Err(format!(
             "Unsupported shared project MCP server for Claude global sync: {other}"

@@ -32,15 +32,15 @@
     }
   },
   "summary": {
-    "total_skills": 145,
+    "total_skills": 146,
     "tier_counts": {
-      "core": 19,
+      "core": 20,
       "optional": 124,
       "experimental": 2,
       "deprecated": 0
     },
     "activation_counts": {
-      "default": 25,
+      "default": 26,
       "explicit_opt_in": 120,
       "disabled": 0
     }
@@ -48,6 +48,7 @@
   "tiers": {
     "core": [
       "checklist-normalizer",
+      "claude-api",
       "design-agent",
       "doc",
       "execution-audit-codex",
@@ -99,7 +100,7 @@
       "css-pro",
       "data-wrangling",
       "datastore-cache-queue",
-      "deepreview",
+      "deepinterview",
       "dependency-migration",
       "docker",
       "documentation-engineering",
@@ -922,6 +923,36 @@
         "loadouts": []
       }
     },
+    "claude-api": {
+      "tier": "core",
+      "reasons": [
+        "owner:gate",
+        "gate:source",
+        "session_start:required"
+      ],
+      "surface": {
+        "activation_mode": "default",
+        "default_surface_enabled": true,
+        "default_loadout_memberships": []
+      },
+      "signals": {
+        "layer": "L1",
+        "owner": "gate",
+        "gate": "source",
+        "priority": "P1",
+        "session_start": "required",
+        "source": "project",
+        "source_position": 3,
+        "health": {
+          "dynamic_score": 100.0,
+          "static_score": 100.0,
+          "usage_30d": 0,
+          "reroutes_30d": 0,
+          "health_status": "Healthy"
+        },
+        "loadouts": []
+      }
+    },
     "cloudflare-deploy": {
       "tier": "optional",
       "reasons": [
@@ -1156,7 +1187,7 @@
         "loadouts": []
       }
     },
-    "deepreview": {
+    "deepinterview": {
       "tier": "optional",
       "reasons": [
         "specialist-opt-in"
@@ -2646,8 +2677,8 @@
         "gate": "source",
         "priority": "P1",
         "session_start": "required",
-        "source": "system",
-        "source_position": 0,
+        "source": "project",
+        "source_position": 3,
         "health": {
           "dynamic_score": 100.0,
           "static_score": 100.0,

@@ -1,13 +1,16 @@
 use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
+use rusqlite::{params, Connection};
 use serde_json::{json, Map, Value};
 use std::collections::HashSet;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 pub const FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION: &str =
     "router-rs-framework-runtime-snapshot-v1";
 pub const FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION: &str =
     "router-rs-framework-contract-summary-v1";
+pub const FRAMEWORK_MEMORY_RECALL_SCHEMA_VERSION: &str = "router-rs-framework-memory-recall-v1";
 pub const FRAMEWORK_RECAP_SCHEMA_VERSION: &str = "router-rs-framework-recap-v1";
 pub const FRAMEWORK_RUNTIME_AUTHORITY: &str = "rust-framework-runtime-read-model";
 
@@ -22,6 +25,18 @@ const NEXT_ACTIONS_SCHEMA_VERSION: &str = "next-actions-v2";
 const EVIDENCE_INDEX_SCHEMA_VERSION: &str = "evidence-index-v2";
 const TRACE_METADATA_SCHEMA_VERSION: &str = "trace-metadata-v2";
 const SUPERVISOR_STATE_SCHEMA_VERSION: &str = "supervisor-state-v2";
+const MEMORY_STATE_FILENAME: &str = "state.json";
+const STABLE_MEMORY_FILENAMES: &[&str] = &[
+    "MEMORY.md",
+    "preferences.md",
+    "decisions.md",
+    "lessons.md",
+    "runbooks.md",
+];
+const MEMORY_SQLITE_FILENAMES: &[&str] = &["memory.sqlite3", "memory.db", ".memory.sqlite3"];
+const GENERIC_QUERY_TOKENS: &[&str] = &[
+    "context", "current", "help", "latest", "memory", "project", "repo", "state", "status",
+];
 const TERMINAL_STORY_STATES: &[&str] = &[
     "completed",
     "finalized",
@@ -202,11 +217,127 @@ pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Val
     }))
 }
 
+pub fn build_framework_memory_recall_envelope(
+    repo_root: &Path,
+    query: &str,
+    max_items: usize,
+    mode: &str,
+) -> Result<Value, String> {
+    if !matches!(mode, "stable" | "active" | "history" | "debug") {
+        return Err(format!("Unsupported memory recall mode: {mode}"));
+    }
+    let snapshot = load_framework_runtime_view(repo_root);
+    let continuity = classify_runtime_continuity(&snapshot);
+    let task = value_text(continuity.get("task"));
+    let active_task = json!({
+        "task_id": snapshot.active_task_id.clone(),
+        "task": if task.is_empty() { Value::Null } else { Value::String(task.clone()) },
+        "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
+        "status": continuity.get("status").cloned().unwrap_or(Value::Null),
+    });
+    let query_matches_active_task = continuity.get("state").and_then(Value::as_str)
+        == Some("active")
+        && !task.is_empty()
+        && !is_generic_query(query)
+        && query_matches_task(query, &task);
+    let effective_continuity = if continuity.get("state").and_then(Value::as_str) == Some("active")
+        && !task.is_empty()
+        && !query_matches_active_task
+    {
+        build_query_mismatch_continuity(&continuity, &active_task)
+    } else {
+        continuity.clone()
+    };
+    let retrieval = render_framework_memory_context(repo_root, &snapshot, query, max_items, mode)?;
+    let memory_root = repo_root.join(".codex").join("memory");
+    let sqlite_path = resolve_memory_sqlite_path(&memory_root)
+        .map(|path| path.display().to_string())
+        .unwrap_or_default();
+    let registered_tasks = json!({
+        "tasks": [],
+        "task_count": 0,
+        "truncated": false,
+        "overflow_count": 0,
+    });
+    let workspace_name = workspace_name_from_root(repo_root);
+    let bootstrap_task_id = if query_matches_active_task {
+        snapshot.active_task_id.clone().unwrap_or_default()
+    } else {
+        build_framework_task_id(if query.trim().is_empty() {
+            &workspace_name
+        } else {
+            query
+        })
+    };
+    let prompt_payload = json!({
+        "workspace": workspace_name,
+        "retrieval": compact_memory_retrieval_for_prompt(&retrieval),
+        "continuity": compact_continuity_for_prompt(&effective_continuity),
+        "active_task": active_task.clone(),
+        "registered_tasks": registered_tasks.clone(),
+        "continuity_decision": {
+            "query": query,
+            "query_matches_active_task": query_matches_active_task,
+            "ignored_root_continuity": effective_continuity.get("state").and_then(Value::as_str) == Some("query-mismatch"),
+            "task_id": bootstrap_task_id,
+            "source_task": if query_matches_active_task && !task.is_empty() { Value::String(task) } else { Value::Null },
+            "mode": mode,
+            "focused_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
+        },
+    });
+    Ok(json!({
+        "schema_version": FRAMEWORK_MEMORY_RECALL_SCHEMA_VERSION,
+        "authority": FRAMEWORK_RUNTIME_AUTHORITY,
+        "memory_recall": {
+            "ok": true,
+            "workspace": workspace_name_from_root(repo_root),
+            "using_project_local": true,
+            "memory_root": memory_root.display().to_string(),
+            "memory_layout": describe_project_local_memory_layout(repo_root),
+            "consolidation_note": "",
+            "changed_files": [],
+            "sqlite": {
+                "path": sqlite_path,
+                "has_sqlite": !sqlite_path.is_empty(),
+                "has_memory_md": memory_root.join("MEMORY.md").is_file(),
+            },
+            "retrieval": retrieval,
+            "continuity": effective_continuity,
+            "active_task": active_task.clone(),
+            "focused_task": active_task,
+            "registered_tasks": registered_tasks.clone(),
+            "continuity_decision": {
+                "query": query,
+                "query_matches_active_task": query_matches_active_task,
+                "ignored_root_continuity": effective_continuity.get("state").and_then(Value::as_str) == Some("query-mismatch"),
+                "task_id": bootstrap_task_id,
+                "source_task": if query_matches_active_task && !value_text(continuity.get("task")).is_empty() {
+                    continuity.get("task").cloned().unwrap_or(Value::Null)
+                } else {
+                    Value::Null
+                },
+                "mode": mode,
+                "focused_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
+            },
+            "source_artifacts": describe_continuity_layout(repo_root),
+            "prompt_payload": prompt_payload,
+        }
+    }))
+}
+
 pub fn build_framework_recap_envelope(repo_root: &Path, max_lines: usize) -> Result<Value, String> {
     let snapshot = load_framework_runtime_view(repo_root);
     let continuity = classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
-    let projection = build_framework_recap_projection(repo_root, max_lines)?;
+    let stable_documents = read_stable_memory_documents(repo_root);
+    let projection = render_framework_recap_projection(
+        repo_root,
+        &snapshot,
+        &continuity,
+        &stable_documents,
+        max_lines,
+    );
+    let project_memory_bundle = render_project_memory_bundle(&stable_documents);
     let workflow_prompt =
         render_framework_workflow_prompt(&snapshot, &continuity, &contract, max_lines);
     Ok(json!({
@@ -221,6 +352,7 @@ pub fn build_framework_recap_envelope(repo_root: &Path, max_lines: usize) -> Res
             "status": continuity.get("status").cloned().unwrap_or(Value::Null),
             "max_lines": max_lines,
             "projection": projection,
+            "project_memory_bundle": project_memory_bundle,
             "workflow_prompt": workflow_prompt,
             "projection_path": repo_root
                 .join(".codex")
@@ -233,17 +365,36 @@ pub fn build_framework_recap_envelope(repo_root: &Path, max_lines: usize) -> Res
     }))
 }
 
-pub fn build_framework_recap_projection(repo_root: &Path, max_lines: usize) -> Result<String, String> {
+pub fn build_framework_recap_projection(
+    repo_root: &Path,
+    max_lines: usize,
+) -> Result<String, String> {
     let snapshot = load_framework_runtime_view(repo_root);
     let continuity = classify_runtime_continuity(&snapshot);
-    let memory_md = read_text_if_exists(&repo_root.join(".codex").join("memory").join("MEMORY.md"));
+    let stable_documents = read_stable_memory_documents(repo_root);
     Ok(render_framework_recap_projection(
         repo_root,
         &snapshot,
         &continuity,
-        &memory_md,
+        &stable_documents,
         max_lines,
     ))
+}
+
+pub fn build_framework_refresh_payload(repo_root: &Path, max_lines: usize) -> Result<Value, String> {
+    let snapshot = load_framework_runtime_view(repo_root);
+    let continuity = classify_runtime_continuity(&snapshot);
+    let contract = supervisor_contract(&snapshot.supervisor_state);
+    let prompt = render_framework_refresh_prompt(&continuity, &contract, max_lines);
+    Ok(json!({
+        "ok": true,
+        "workspace": workspace_name_from_root(repo_root),
+        "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
+        "task": continuity.get("task").cloned().unwrap_or(Value::Null),
+        "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
+        "status": continuity.get("status").cloned().unwrap_or(Value::Null),
+        "prompt": prompt,
+    }))
 }
 
 fn load_framework_runtime_view(repo_root: &Path) -> FrameworkRuntimeView {
@@ -330,18 +481,44 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
         value_text(supervisor.get("task_summary")),
         value_text(supervisor.get("task_id")),
     ]);
-    let task = first_nonempty(&[summary_task.clone(), trace_task.clone(), supervisor_task]);
+    let task = first_nonempty(&[
+        summary_task.clone(),
+        trace_task.clone(),
+        supervisor_task.clone(),
+    ]);
     let summary_phase = value_text(summary.get("phase"));
     let supervisor_phase = value_text(supervisor.get("active_phase"));
-    let phase = first_nonempty(&[summary_phase.clone(), supervisor_phase.clone()]);
     let verification_status = value_text(verification.get("verification_status"));
     let summary_status = value_text(summary.get("status"));
     let story_state = value_text(continuity.get("story_state"));
-    let status = first_nonempty(&[
-        summary_status.clone(),
-        verification_status.clone(),
-        story_state.clone(),
-    ]);
+    let summary_terminal = is_terminal(&summary_phase, TERMINAL_PHASES)
+        || is_terminal(&summary_status, TERMINAL_VERIFICATION_STATUSES);
+    let supervisor_terminal = is_terminal(&supervisor_phase, TERMINAL_PHASES)
+        || is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES)
+        || is_terminal(&story_state, TERMINAL_STORY_STATES);
+    let supervisor_terminal_overrides_summary = supervisor_terminal
+        && !summary_terminal
+        && (summary_task.is_empty()
+            || supervisor_task.is_empty()
+            || looks_same_identity(&summary_task, &supervisor_task));
+    let phase = if supervisor_terminal_overrides_summary {
+        first_nonempty(&[supervisor_phase.clone(), summary_phase.clone()])
+    } else {
+        first_nonempty(&[summary_phase.clone(), supervisor_phase.clone()])
+    };
+    let status = if supervisor_terminal_overrides_summary {
+        first_nonempty(&[
+            verification_status.clone(),
+            story_state.clone(),
+            summary_status.clone(),
+        ])
+    } else {
+        first_nonempty(&[
+            summary_status.clone(),
+            verification_status.clone(),
+            story_state.clone(),
+        ])
+    };
     let authoritative_status = if status.is_empty() {
         synthesized_status(supervisor)
     } else {
@@ -373,11 +550,6 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
     let forbidden_scope = value_string_list(contract.get("forbidden_scope"));
     let acceptance_criteria = value_string_list(contract.get("acceptance_criteria"));
     let evidence_required = value_string_list(contract.get("evidence_required"));
-    let summary_terminal = is_terminal(&summary_phase, TERMINAL_PHASES)
-        || is_terminal(&summary_status, TERMINAL_VERIFICATION_STATUSES);
-    let supervisor_terminal = is_terminal(&supervisor_phase, TERMINAL_PHASES)
-        || is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES)
-        || is_terminal(&story_state, TERMINAL_STORY_STATES);
     let terminal_reasons = stable_line_items(vec![
         terminal_reason("summary phase is terminal", &summary_phase, TERMINAL_PHASES),
         terminal_reason(
@@ -424,6 +596,7 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
         if supervisor_terminal
             && !summary_terminal
             && (!summary_phase.is_empty() || !summary_status.is_empty())
+            && !supervisor_terminal_overrides_summary
         {
             "supervisor marks the task terminal while the session summary still looks active"
                 .to_string()
@@ -593,19 +766,47 @@ fn render_framework_recap_projection(
     repo_root: &Path,
     snapshot: &FrameworkRuntimeView,
     continuity: &Value,
-    memory_md: &str,
+    stable_documents: &[(String, String)],
     max_lines: usize,
 ) -> String {
+    let memory_md = stable_document_text(stable_documents, "MEMORY.md");
+    let preferences_md = stable_document_text(stable_documents, "preferences.md");
+    let decisions_md = stable_document_text(stable_documents, "decisions.md");
+    let lessons_md = stable_document_text(stable_documents, "lessons.md");
+    let runbooks_md = stable_document_text(stable_documents, "runbooks.md");
     let stable_patterns = extract_bullets(
-        &extract_markdown_section(memory_md, &["Active Patterns", "项目约定", "稳定事实"]),
+        &extract_markdown_section(&memory_md, &["Active Patterns", "项目约定", "稳定事实"]),
         max_lines,
     );
-    let stable_decisions = extract_bullets(
-        &extract_markdown_section(memory_md, &["稳定决策", "Decisions"]),
-        max_lines,
-    );
-    let lessons = extract_bullets(
-        &extract_markdown_section(memory_md, &["Lessons", "经验教训"]),
+    let preference_lines = {
+        let section = extract_markdown_section(&preferences_md, &["处理偏好", "Preferences"]);
+        let source = if section.is_empty() {
+            preferences_md.as_str()
+        } else {
+            section.as_str()
+        };
+        extract_bullets(source, max_lines)
+    };
+    let fallback_decisions_md = extract_markdown_section(&memory_md, &["稳定决策", "Decisions"]);
+    let decisions_source = if decisions_md.is_empty() {
+        fallback_decisions_md.as_str()
+    } else {
+        decisions_md.as_str()
+    };
+    let stable_decisions = extract_bullets(decisions_source, max_lines);
+    let fallback_lessons_md = extract_markdown_section(&memory_md, &["Lessons", "经验教训"]);
+    let lessons_source = if lessons_md.is_empty() {
+        fallback_lessons_md.as_str()
+    } else {
+        lessons_md.as_str()
+    };
+    let lessons = extract_bullets(lessons_source, max_lines);
+    let runbooks = extract_bullets(
+        if runbooks_md.is_empty() {
+            ""
+        } else {
+            runbooks_md.as_str()
+        },
         max_lines,
     );
     let startup_rules = vec![
@@ -615,15 +816,20 @@ fn render_framework_recap_projection(
         "不要用 Got it / Understood 这种状态汇报式开场；直接给结果或第一步。".to_string(),
         "目标明确时直接执行可验证的小步，不先写长计划，也不要复述将要做什么。".to_string(),
         "不要扩大任务范围，不要把历史记忆当现状。".to_string(),
-        "如果 Claude 当前走的是 OpenAI/GPT 后端，保持直接风格，不模仿 Claude 套话。"
-            .to_string(),
+        "如果 Claude 当前走的是 OpenAI/GPT 后端，保持直接风格，不模仿 Claude 套话。".to_string(),
     ];
     let reminders = stable_line_items(vec![
+        preference_lines.get(0).cloned().unwrap_or_default(),
+        preference_lines.get(1).cloned().unwrap_or_default(),
         stable_patterns.get(0).cloned().unwrap_or_default(),
         stable_patterns.get(1).cloned().unwrap_or_default(),
         stable_decisions.get(0).cloned().unwrap_or_default(),
         lessons.get(0).cloned().unwrap_or_default(),
-    ]);
+        runbooks.get(0).cloned().unwrap_or_default(),
+    ])
+    .into_iter()
+    .take(max_lines)
+    .collect::<Vec<_>>();
     let anchor_lines = vec![
         "primary: `artifacts/current/SESSION_SUMMARY.md` / `artifacts/current/NEXT_ACTIONS.json` / `artifacts/current/TRACE_METADATA.json` / `.supervisor_state.json`".to_string(),
         format!(
@@ -863,6 +1069,218 @@ fn render_framework_workflow_prompt(
     lines.join("\n") + "\n"
 }
 
+fn render_framework_refresh_prompt(
+    continuity: &Value,
+    contract: &Map<String, Value>,
+    max_lines: usize,
+) -> String {
+    let capped_max_lines = max_lines.clamp(2, 4);
+    let state = value_text(continuity.get("state"));
+    let task = value_text(continuity.get("task"));
+    let phase = value_text(continuity.get("phase"));
+    let status = {
+        let raw = value_text(continuity.get("status"));
+        if raw.is_empty() {
+            state.clone()
+        } else {
+            raw
+        }
+    };
+    let route = value_string_list(continuity.get("route"));
+    let paths_map = continuity
+        .get("paths")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let current = continuity
+        .get("current_execution")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let completed = continuity
+        .get("recent_completed_execution")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let recovery_hints = value_string_list(continuity.get("recovery_hints"));
+    let continuity_next_actions = value_string_list(continuity.get("next_actions"));
+    let continuity_blockers = value_string_list(continuity.get("blockers"));
+    let remaining_tasks = if state == "active" && !current.is_empty() {
+        stable_line_items(
+            contract
+                .get("scope")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .chain(
+                    contract
+                        .get("acceptance_criteria")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten(),
+                )
+                .map(|item| value_text(Some(item)))
+                .filter(|item| !item.is_empty())
+                .collect(),
+        )
+    } else if state == "completed" && !completed.is_empty() {
+        value_string_list(completed.get("follow_up_notes"))
+    } else if state == "inconsistent" {
+        value_string_list(continuity.get("inconsistency_reasons"))
+    } else {
+        recovery_hints.clone()
+    };
+    let next_steps = if state == "active" && !current.is_empty() {
+        let mut items = vec!["先核对恢复锚点和当前代码".to_string()];
+        items.extend(continuity_next_actions.clone());
+        stable_line_items(items)
+    } else if state == "completed" && !completed.is_empty() {
+        let mut items = vec!["如需继续，先新开任务".to_string()];
+        items.extend(recovery_hints.clone());
+        stable_line_items(items)
+    } else if state == "stale" {
+        let mut items = vec!["先重读锚点并重建上下文".to_string()];
+        if continuity_next_actions.is_empty() {
+            items.extend(recovery_hints.clone());
+        } else {
+            items.extend(continuity_next_actions.clone());
+        }
+        stable_line_items(items)
+    } else if state == "inconsistent" {
+        let mut items = vec!["先对齐摘要、轨迹和 supervisor".to_string()];
+        items.extend(recovery_hints.clone());
+        stable_line_items(items)
+    } else {
+        let mut items = vec!["先补齐缺失锚点并确认状态".to_string()];
+        if continuity_next_actions.is_empty() {
+            items.extend(recovery_hints.clone());
+        } else {
+            items.extend(continuity_next_actions.clone());
+        }
+        stable_line_items(items)
+    };
+    let blockers = if state == "completed" {
+        Vec::new()
+    } else {
+        continuity_blockers.clone()
+    };
+    let anchors = stable_line_items(vec![
+        value_text(paths_map.get("session_summary"))
+            .chars()
+            .next()
+            .map(|_| {
+                format!(
+                    "SESSION_SUMMARY: {}",
+                    value_text(paths_map.get("session_summary"))
+                )
+            })
+            .unwrap_or_default(),
+        value_text(paths_map.get("next_actions"))
+            .chars()
+            .next()
+            .map(|_| {
+                format!(
+                    "NEXT_ACTIONS: {}",
+                    value_text(paths_map.get("next_actions"))
+                )
+            })
+            .unwrap_or_default(),
+        value_text(paths_map.get("trace_metadata"))
+            .chars()
+            .next()
+            .map(|_| {
+                format!(
+                    "TRACE_METADATA: {}",
+                    value_text(paths_map.get("trace_metadata"))
+                )
+            })
+            .unwrap_or_default(),
+        value_text(paths_map.get("supervisor_state"))
+            .chars()
+            .next()
+            .map(|_| {
+                format!(
+                    "SUPERVISOR_STATE: {}",
+                    value_text(paths_map.get("supervisor_state"))
+                )
+            })
+            .unwrap_or_default(),
+    ]);
+
+    let mut lines = vec!["继续当前仓库，先看这些恢复锚点：".to_string()];
+    lines.extend(
+        anchors
+            .into_iter()
+            .take(capped_max_lines)
+            .map(|anchor| format!("- {anchor}")),
+    );
+    lines.push("".to_string());
+    lines.push(format!(
+        "任务：{}",
+        if task.is_empty() { "未记录" } else { &task }
+    ));
+    lines.push(format!(
+        "状态：{}",
+        join_lines(&stable_line_items(vec![
+            if phase.is_empty() {
+                String::new()
+            } else {
+                phase.clone()
+            },
+            if status.is_empty() {
+                if state.is_empty() {
+                    "missing".to_string()
+                } else {
+                    state.clone()
+                }
+            } else {
+                status.clone()
+            },
+            if state.is_empty() {
+                String::new()
+            } else {
+                state.clone()
+            },
+        ]))
+    ));
+    if !route.is_empty() {
+        lines.push(format!("路由：{}", join_lines(&route)));
+    }
+    if !remaining_tasks.is_empty() {
+        lines.push("".to_string());
+        lines.push("剩余：".to_string());
+        lines.extend(
+            remaining_tasks
+                .into_iter()
+                .take(capped_max_lines)
+                .map(|item| format!("- {item}")),
+        );
+    }
+    if !next_steps.is_empty() {
+        lines.push("".to_string());
+        lines.push("先做：".to_string());
+        lines.extend(
+            next_steps
+                .into_iter()
+                .take(capped_max_lines)
+                .map(|item| format!("- {item}")),
+        );
+    }
+    if !blockers.is_empty() {
+        lines.push("".to_string());
+        lines.push("阻塞：".to_string());
+        lines.extend(
+            blockers
+                .into_iter()
+                .take(capped_max_lines)
+                .map(|item| format!("- {item}")),
+        );
+    }
+    lines.push("".to_string());
+    lines.push("按既定串并行分工直接开始执行。".to_string());
+    lines.join("\n") + "\n"
+}
+
 fn render_current_state_section(continuity: &Value) -> (String, Vec<String>) {
     let state = value_text(continuity.get("state"));
     if state == "active" {
@@ -887,25 +1305,13 @@ fn render_current_state_section(continuity: &Value) -> (String, Vec<String>) {
         }
     }
     if state == "completed" {
-        if let Some(completed) = continuity
-            .get("recent_completed_execution")
-            .and_then(Value::as_object)
-        {
-            return (
-                "Task Snapshot".to_string(),
-                stable_line_items(vec![
-                    format!(
-                        "recent: {} / {} / {}",
-                        nonempty_or(completed.get("task"), "未记录"),
-                        nonempty_or(completed.get("phase"), "未记录"),
-                        nonempty_or(completed.get("status"), "completed")
-                    ),
-                    format_optional_joined("route", completed.get("route")),
-                    "resume: blocked; start a new task before reviving related work".to_string(),
-                    format_optional_joined("follow_up", completed.get("follow_up_notes")),
-                ]),
-            );
-        }
+        return (
+            "Task Snapshot".to_string(),
+            stable_line_items(vec![
+                "no resumable active task".to_string(),
+                "resume: blocked; start a new task before reviving related work".to_string(),
+            ]),
+        );
     }
     let reasons_key = match state.as_str() {
         "stale" => "stale_reasons",
@@ -921,7 +1327,11 @@ fn render_current_state_section(continuity: &Value) -> (String, Vec<String>) {
         stable_line_items(vec![
             format!(
                 "continuity: {}",
-                if state.is_empty() { "missing" } else { state.as_str() }
+                if state.is_empty() {
+                    "missing"
+                } else {
+                    state.as_str()
+                }
             ),
             if continuity.get("task").is_some() || continuity.get("phase").is_some() {
                 format!(
@@ -948,6 +1358,932 @@ fn markdown_block(title: &str, items: &[String]) -> String {
     lines.extend(rendered.into_iter().map(|item| format!("- {item}")));
     lines.push(String::new());
     lines.join("\n")
+}
+
+fn read_stable_memory_documents(repo_root: &Path) -> Vec<(String, String)> {
+    let memory_root = repo_root.join(".codex").join("memory");
+    STABLE_MEMORY_FILENAMES
+        .iter()
+        .filter_map(|file_name| {
+            let text = read_text_if_exists(&memory_root.join(file_name));
+            if text.trim().is_empty() {
+                None
+            } else {
+                Some(((*file_name).to_string(), text))
+            }
+        })
+        .collect()
+}
+
+fn stable_document_text(stable_documents: &[(String, String)], file_name: &str) -> String {
+    stable_documents
+        .iter()
+        .find_map(|(name, text)| (name == file_name).then(|| text.clone()))
+        .unwrap_or_default()
+}
+
+fn render_project_memory_bundle(stable_documents: &[(String, String)]) -> String {
+    if stable_documents.is_empty() {
+        return String::new();
+    }
+    if stable_documents.len() == 1 && stable_documents[0].0 == "MEMORY.md" {
+        return stable_documents[0].1.clone();
+    }
+    let mut lines = vec!["# Project Memory Bundle".to_string(), "".to_string()];
+    for (name, text) in stable_documents {
+        lines.push(format!("## {name}"));
+        lines.push(String::new());
+        lines.push(text.trim().to_string());
+        lines.push(String::new());
+    }
+    lines.join("\n").trim().to_string()
+}
+
+fn render_framework_memory_context(
+    repo_root: &Path,
+    snapshot: &FrameworkRuntimeView,
+    query: &str,
+    max_items: usize,
+    mode: &str,
+) -> Result<Value, String> {
+    let memory_root = repo_root.join(".codex").join("memory");
+    fs::create_dir_all(&memory_root)
+        .map_err(|err| format!("create framework memory root failed: {err}"))?;
+    refresh_memory_state_if_needed(snapshot, &memory_root)?;
+    let stable_documents = read_stable_memory_documents(repo_root);
+    let mut sections = collect_stable_memory_sections(&stable_documents, query, max_items);
+    let mut freshness = json!({
+        "state": "not-requested",
+        "active_task_allowed": false,
+        "reasons": [],
+    });
+    let mut active_task_included = false;
+    if matches!(mode, "active" | "history" | "debug") {
+        let (active_section, active_freshness) =
+            build_active_task_memory_section(snapshot, &memory_root, query);
+        freshness = active_freshness;
+        if let Some(section) = active_section {
+            active_task_included = true;
+            sections.push(section);
+        }
+    }
+    if matches!(mode, "history" | "debug") {
+        sections.extend(collect_archive_sections(&memory_root, query, max_items));
+    }
+    if mode == "debug" {
+        let workspace_name = workspace_name_from_root(repo_root);
+        if let Some(sqlite_path) = resolve_memory_sqlite_path(&memory_root) {
+            sections.extend(collect_sqlite_sections(
+                &workspace_name,
+                &sqlite_path,
+                query,
+                max_items,
+            ));
+        }
+        let state = read_json_if_exists(&memory_root.join(MEMORY_STATE_FILENAME));
+        if !state.is_null() && state != Value::Object(Map::new()) {
+            if let Ok(text) = serde_json::to_string_pretty(&state) {
+                sections.push(("state.json".to_string(), text));
+            }
+        }
+    }
+    let items = sections
+        .iter()
+        .map(|(path, content)| json!({"path": path, "content": content}))
+        .collect::<Vec<_>>();
+    let blocks = sections
+        .iter()
+        .filter_map(|(path, content)| {
+            if content.trim().is_empty() {
+                None
+            } else {
+                Some(format!("## {path}\n{}", content.trim()))
+            }
+        })
+        .collect::<Vec<_>>();
+    Ok(json!({
+        "workspace": workspace_name_from_root(repo_root),
+        "topic": query,
+        "mode": mode,
+        "memory_root": memory_root.display().to_string(),
+        "sqlite_path": resolve_memory_sqlite_path(&memory_root).map(|path| path.display().to_string()).unwrap_or_default(),
+        "items": items,
+        "context": blocks.join("\n\n").trim().to_string(),
+        "active_task_included": active_task_included,
+        "freshness": freshness,
+        "continuity_state": classify_runtime_continuity(snapshot).get("state").cloned().unwrap_or(Value::Null),
+        "active_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
+    }))
+}
+
+fn collect_stable_memory_sections(
+    stable_documents: &[(String, String)],
+    query: &str,
+    max_items: usize,
+) -> Vec<(String, String)> {
+    if query.trim().is_empty() {
+        return stable_documents
+            .iter()
+            .filter_map(|(name, text)| {
+                if text.trim().is_empty() {
+                    None
+                } else {
+                    Some((name.clone(), text.trim().to_string()))
+                }
+            })
+            .collect();
+    }
+    let mut ranked = Vec::new();
+    for (name, text) in stable_documents {
+        for (headings, body) in extract_markdown_segments(text) {
+            let score = memory_segment_score(&headings, &body, query);
+            if score <= 0.0 {
+                continue;
+            }
+            ranked.push((score, name.clone(), render_memory_segment(&headings, &body)));
+        }
+    }
+    ranked.sort_by(|left, right| {
+        right
+            .0
+            .partial_cmp(&left.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| left.1.cmp(&right.1))
+            .then_with(|| left.2.cmp(&right.2))
+    });
+    let mut deduped = Vec::new();
+    let mut seen = HashSet::new();
+    for (_, name, content) in ranked {
+        let key = format!("{name}\n{content}");
+        if !seen.insert(key) {
+            continue;
+        }
+        deduped.push((name, content));
+        if deduped.len() >= max_items {
+            break;
+        }
+    }
+    if !deduped.is_empty() {
+        return deduped;
+    }
+    Vec::new()
+}
+
+fn build_active_task_memory_section(
+    snapshot: &FrameworkRuntimeView,
+    memory_root: &Path,
+    query: &str,
+) -> (Option<(String, String)>, Value) {
+    let continuity = classify_runtime_continuity(snapshot);
+    let state = read_json_if_exists(&memory_root.join(MEMORY_STATE_FILENAME));
+    let mut freshness = evaluate_memory_freshness(snapshot, &state);
+    let current = continuity
+        .get("current_execution")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    if current.is_empty() {
+        return (None, freshness);
+    }
+    if is_generic_query(query) {
+        freshness = json!({
+            "state": "generic-query",
+            "active_task_allowed": false,
+            "reasons": ["query is empty or generic"],
+            "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
+        });
+        return (None, freshness);
+    }
+    let task = value_text(continuity.get("task"));
+    if task.is_empty() || !query_matches_task(query, &task) {
+        freshness = json!({
+            "state": "query-mismatch",
+            "active_task_allowed": false,
+            "reasons": ["query does not target the active task"],
+            "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
+        });
+        return (None, freshness);
+    }
+    if !freshness
+        .get("active_task_allowed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return (None, freshness);
+    }
+    let mut lines = vec![
+        "# runtime:current_task".to_string(),
+        format!("- task: {}", value_text(current.get("task"))),
+        format!("- phase: {}", value_text(current.get("phase"))),
+        format!("- status: {}", value_text(current.get("status"))),
+    ];
+    let route = value_string_list(current.get("route"));
+    if !route.is_empty() {
+        lines.push(format!("- route: {}", join_lines(&route)));
+    }
+    let next_actions = value_string_list(current.get("next_actions"));
+    if !next_actions.is_empty() {
+        lines.push(format!("- next_actions: {}", join_lines(&next_actions)));
+    }
+    let blockers = value_string_list(current.get("blockers"));
+    if !blockers.is_empty() {
+        lines.push(format!("- blockers: {}", join_lines(&blockers)));
+    }
+    let scope = value_string_list(current.get("scope"));
+    if !scope.is_empty() {
+        lines.push(format!("- scope: {}", join_lines(&scope)));
+    }
+    (
+        Some(("runtime/current_task.md".to_string(), lines.join("\n"))),
+        freshness,
+    )
+}
+
+fn collect_archive_sections(
+    memory_root: &Path,
+    query: &str,
+    max_items: usize,
+) -> Vec<(String, String)> {
+    let archive_root = memory_root.join("archive");
+    if !archive_root.is_dir() {
+        return Vec::new();
+    }
+    let mut files = Vec::new();
+    walk_files(&archive_root, &mut files);
+    files.sort();
+    let mut sections = Vec::new();
+    for path in files {
+        let rel_path = path
+            .strip_prefix(memory_root)
+            .map(|value| value.display().to_string())
+            .unwrap_or_else(|_| path.display().to_string());
+        let text = if path.extension().and_then(|value| value.to_str()) == Some("json") {
+            let value = read_json_if_exists(&path);
+            serde_json::to_string_pretty(&value).unwrap_or_default()
+        } else {
+            read_text_if_exists(&path)
+        };
+        let filtered = if query.trim().is_empty() {
+            text.trim().to_string()
+        } else {
+            let mut matches = extract_markdown_segments(&text)
+                .into_iter()
+                .filter_map(|(headings, body)| {
+                    let score = memory_segment_score(&headings, &body, query);
+                    (score > 0.0).then(|| (score, render_memory_segment(&headings, &body)))
+                })
+                .collect::<Vec<_>>();
+            matches.sort_by(|left, right| {
+                right
+                    .0
+                    .partial_cmp(&left.0)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            matches
+                .into_iter()
+                .take(max_items)
+                .map(|(_, content)| content)
+                .collect::<Vec<_>>()
+                .join("\n\n")
+                .trim()
+                .to_string()
+        };
+        if filtered.is_empty() {
+            continue;
+        }
+        sections.push((rel_path, filtered));
+        if sections.len() >= max_items {
+            break;
+        }
+    }
+    sections
+}
+
+fn collect_sqlite_sections(
+    workspace: &str,
+    sqlite_path: &Path,
+    query: &str,
+    max_items: usize,
+) -> Vec<(String, String)> {
+    let Ok(conn) = Connection::open(sqlite_path) else {
+        return Vec::new();
+    };
+    let mut sections = Vec::new();
+    let memory_items = list_sqlite_memory_items(&conn, workspace, query, max_items);
+    if !memory_items.is_empty() {
+        let mut lines = vec!["# sqlite:memory_items".to_string()];
+        for item in memory_items {
+            lines.push(format!(
+                "### {}",
+                item.get("summary")
+                    .cloned()
+                    .unwrap_or_else(|| "item".to_string())
+            ));
+            lines.push(format!(
+                "- source: {}",
+                item.get("source").cloned().unwrap_or_default()
+            ));
+            lines.push(format!(
+                "- category: {}",
+                item.get("category").cloned().unwrap_or_default()
+            ));
+            lines.push(format!(
+                "- status: {}",
+                item.get("status").cloned().unwrap_or_default()
+            ));
+            lines.push(format!(
+                "- summary: {}",
+                item.get("summary").cloned().unwrap_or_default()
+            ));
+            lines.push(format!(
+                "- notes: {}",
+                item.get("notes").cloned().unwrap_or_default()
+            ));
+            lines.push(String::new());
+        }
+        sections.push((
+            "sqlite/memory_items.md".to_string(),
+            lines.join("\n").trim().to_string(),
+        ));
+    }
+    let session_notes = list_sqlite_rows(
+        &conn,
+        "SELECT session_key, position, note_type, updated_at, note FROM session_notes WHERE workspace = ? ORDER BY updated_at DESC, session_key DESC, position ASC LIMIT ?",
+        workspace,
+        max_items,
+    );
+    if !session_notes.is_empty() {
+        let mut lines = vec!["# sqlite:session_notes".to_string()];
+        for note in session_notes {
+            lines.push(format!(
+                "### {}#{}",
+                note.get("session_key").cloned().unwrap_or_default(),
+                note.get("position").cloned().unwrap_or_default()
+            ));
+            lines.push(format!(
+                "- note_type: {}",
+                note.get("note_type").cloned().unwrap_or_default()
+            ));
+            lines.push(format!(
+                "- updated_at: {}",
+                note.get("updated_at").cloned().unwrap_or_default()
+            ));
+            lines.push(format!(
+                "- note: {}",
+                note.get("note").cloned().unwrap_or_default()
+            ));
+            lines.push(String::new());
+        }
+        sections.push((
+            "sqlite/session_notes.md".to_string(),
+            lines.join("\n").trim().to_string(),
+        ));
+    }
+    let evidence_rows = list_sqlite_rows(
+        &conn,
+        "SELECT kind, path, content FROM evidence_records WHERE workspace = ? ORDER BY updated_at DESC LIMIT ?",
+        workspace,
+        max_items,
+    );
+    if !evidence_rows.is_empty() {
+        let mut lines = vec!["# sqlite:evidence_records".to_string()];
+        for row in evidence_rows {
+            lines.push(format!(
+                "### {}",
+                row.get("path")
+                    .cloned()
+                    .filter(|value| !value.is_empty())
+                    .or_else(|| row.get("kind").cloned())
+                    .unwrap_or_else(|| "evidence".to_string())
+            ));
+            lines.push(format!(
+                "- kind: {}",
+                row.get("kind").cloned().unwrap_or_default()
+            ));
+            lines.push(format!(
+                "- path: {}",
+                row.get("path").cloned().unwrap_or_default()
+            ));
+            lines.push(format!(
+                "- content: {}",
+                row.get("content").cloned().unwrap_or_default()
+            ));
+            lines.push(String::new());
+        }
+        sections.push((
+            "sqlite/evidence_records.md".to_string(),
+            lines.join("\n").trim().to_string(),
+        ));
+    }
+    sections
+}
+
+fn list_sqlite_memory_items(
+    conn: &Connection,
+    workspace: &str,
+    query: &str,
+    max_items: usize,
+) -> Vec<std::collections::BTreeMap<String, String>> {
+    let rows = list_sqlite_rows(
+        conn,
+        "SELECT summary, source, category, status, notes, metadata_json FROM memory_items WHERE workspace = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 500",
+        workspace,
+        500,
+    );
+    if query.trim().is_empty() {
+        return rows.into_iter().take(max_items).collect();
+    }
+    let mut ranked = rows
+        .into_iter()
+        .filter_map(|row| {
+            let searchable = format!(
+                "{} {} {} {} {}",
+                row.get("summary").cloned().unwrap_or_default(),
+                row.get("source").cloned().unwrap_or_default(),
+                row.get("category").cloned().unwrap_or_default(),
+                row.get("status").cloned().unwrap_or_default(),
+                row.get("notes").cloned().unwrap_or_default()
+            )
+            .to_lowercase();
+            if !topic_strong_match(query, &searchable) {
+                return None;
+            }
+            let score = query_tokens(query)
+                .into_iter()
+                .filter(|token| searchable.contains(token))
+                .count() as f64;
+            Some((score, row))
+        })
+        .collect::<Vec<_>>();
+    ranked.sort_by(|left, right| {
+        right
+            .0
+            .partial_cmp(&left.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    ranked
+        .into_iter()
+        .take(max_items)
+        .map(|(_, row)| row)
+        .collect()
+}
+
+fn list_sqlite_rows(
+    conn: &Connection,
+    sql: &str,
+    workspace: &str,
+    limit: usize,
+) -> Vec<std::collections::BTreeMap<String, String>> {
+    let Ok(mut stmt) = conn.prepare(sql) else {
+        return Vec::new();
+    };
+    let column_names = stmt
+        .column_names()
+        .into_iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>();
+    let Ok(rows) = stmt.query_map(params![workspace, limit as i64], |row| {
+        let mut payload = std::collections::BTreeMap::new();
+        for (index, column_name) in column_names.iter().enumerate() {
+            let value = match row.get_ref(index) {
+                Ok(rusqlite::types::ValueRef::Null) => String::new(),
+                Ok(rusqlite::types::ValueRef::Integer(value)) => value.to_string(),
+                Ok(rusqlite::types::ValueRef::Real(value)) => value.to_string(),
+                Ok(rusqlite::types::ValueRef::Text(value)) => {
+                    String::from_utf8_lossy(value).to_string()
+                }
+                Ok(rusqlite::types::ValueRef::Blob(_)) => String::new(),
+                Err(_) => String::new(),
+            };
+            payload.insert(column_name.clone(), value);
+        }
+        Ok(payload)
+    }) else {
+        return Vec::new();
+    };
+    rows.filter_map(Result::ok).collect()
+}
+
+fn refresh_memory_state_if_needed(
+    snapshot: &FrameworkRuntimeView,
+    memory_root: &Path,
+) -> Result<Value, String> {
+    let continuity = classify_runtime_continuity(snapshot);
+    let state = read_json_if_exists(&memory_root.join(MEMORY_STATE_FILENAME));
+    let continuity_state = continuity
+        .get("state")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if !matches!(continuity_state, "active" | "completed") {
+        return Ok(state);
+    }
+    let payload = build_memory_state(snapshot);
+    if state != payload {
+        let text = serde_json::to_string_pretty(&payload)
+            .map_err(|err| format!("serialize memory state failed: {err}"))?;
+        write_text_if_changed(&memory_root.join(MEMORY_STATE_FILENAME), &(text + "\n"))?;
+        return Ok(payload);
+    }
+    Ok(state)
+}
+
+fn build_memory_state(snapshot: &FrameworkRuntimeView) -> Value {
+    let continuity = classify_runtime_continuity(snapshot);
+    let source_updated_at = continuity
+        .get("continuity")
+        .and_then(Value::as_object)
+        .and_then(|inner| inner.get("last_updated_at"))
+        .and_then(Value::as_str)
+        .unwrap_or(&snapshot.collected_at)
+        .to_string();
+    json!({
+        "schema_version": "memory-state-v1",
+        "source_task_id": snapshot.active_task_id.clone(),
+        "source_task": continuity.get("task").cloned().unwrap_or(Value::Null),
+        "source_phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
+        "source_status": continuity.get("status").cloned().unwrap_or(Value::Null),
+        "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
+        "artifact_root": snapshot.current_root.display().to_string(),
+        "source_updated_at": source_updated_at,
+        "content_hash": build_memory_source_hash(snapshot),
+        "last_consolidated_at": current_local_timestamp(),
+    })
+}
+
+fn evaluate_memory_freshness(snapshot: &FrameworkRuntimeView, state: &Value) -> Value {
+    let continuity = classify_runtime_continuity(snapshot);
+    let current = continuity
+        .get("current_execution")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    if continuity.get("state").and_then(Value::as_str) != Some("active") || current.is_empty() {
+        return json!({
+            "state": "blocked",
+            "active_task_allowed": false,
+            "reasons": ["current continuity is not active"],
+            "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
+        });
+    }
+    if state.is_null() || state == &Value::Object(Map::new()) {
+        return json!({
+            "state": "missing",
+            "active_task_allowed": false,
+            "reasons": ["memory/state.json is missing"],
+            "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
+        });
+    }
+    let mut reasons = Vec::new();
+    let state_task_id = value_text(state.get("source_task_id"));
+    let snapshot_task_id = snapshot.active_task_id.clone().unwrap_or_default();
+    if safe_slug(&state_task_id) != safe_slug(&snapshot_task_id) {
+        reasons.push("memory/state.json points at a different task id".to_string());
+    }
+    let expected_hash = build_memory_source_hash(snapshot);
+    if value_text(state.get("content_hash")) != expected_hash {
+        reasons.push("runtime source hash is newer than memory/state.json".to_string());
+    }
+    let state_updated_at = parse_iso_timestamp(state.get("source_updated_at"));
+    let continuity_updated_at = continuity
+        .get("continuity")
+        .and_then(Value::as_object)
+        .and_then(|inner| parse_iso_timestamp(inner.get("last_updated_at")));
+    if let Some(continuity_updated_at) = continuity_updated_at {
+        if state_updated_at.is_none() || state_updated_at < Some(continuity_updated_at) {
+            reasons.push("continuity timestamp is newer than memory/state.json".to_string());
+        }
+    }
+    json!({
+        "state": if reasons.is_empty() { "fresh" } else { "stale" },
+        "active_task_allowed": reasons.is_empty(),
+        "reasons": reasons,
+        "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
+        "source_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
+        "state_task_id": state.get("source_task_id").cloned().unwrap_or(Value::Null),
+    })
+}
+
+fn build_memory_source_hash(snapshot: &FrameworkRuntimeView) -> String {
+    let payload = json!({
+        "active_task_id": snapshot.active_task_id.clone(),
+        "session_summary_text": snapshot.session_summary_text,
+        "next_actions": snapshot.next_actions,
+        "evidence_index": snapshot.evidence_index,
+        "trace_metadata": snapshot.trace_metadata,
+        "supervisor_state": snapshot.supervisor_state,
+    });
+    let encoded = serde_json::to_string(&payload).unwrap_or_default();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    encoded.hash(&mut hasher);
+    format!("{:x}", hasher.finish())
+}
+
+fn describe_project_local_memory_layout(repo_root: &Path) -> Value {
+    let logical_root = repo_root.join(".codex").join("memory");
+    let physical_root = logical_root
+        .canonicalize()
+        .unwrap_or_else(|_| logical_root.clone());
+    json!({
+        "logical_root": logical_root.display().to_string(),
+        "physical_root": physical_root.display().to_string(),
+        "is_symlink": logical_root.is_symlink(),
+        "mapping_note": "Treat the logical .codex/memory path and the physical target as one shared framework memory root.",
+    })
+}
+
+fn describe_continuity_layout(repo_root: &Path) -> Value {
+    let current_root = repo_root.join("artifacts").join(CURRENT_ARTIFACT_DIR);
+    json!({
+        "task_scoped_current": {
+            "template": current_root.join("<task_id>").display().to_string(),
+            "active_task_pointer": current_root.join(ACTIVE_TASK_POINTER_NAME).display().to_string(),
+        },
+        "root_task_mirror": {
+            "supervisor_state": repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
+            "session_summary": repo_root.join(SESSION_SUMMARY_FILENAME).display().to_string(),
+            "next_actions": repo_root.join(NEXT_ACTIONS_FILENAME).display().to_string(),
+            "evidence_index": repo_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
+            "trace_metadata": repo_root.join(TRACE_METADATA_FILENAME).display().to_string(),
+        },
+        "bridge_mirror": {
+            "session_summary": current_root.join(SESSION_SUMMARY_FILENAME).display().to_string(),
+            "next_actions": current_root.join(NEXT_ACTIONS_FILENAME).display().to_string(),
+            "evidence_index": current_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
+            "trace_metadata": current_root.join(TRACE_METADATA_FILENAME).display().to_string(),
+        },
+        "artifact_lanes": {
+            "bootstrap": repo_root.join("artifacts").join("bootstrap").join("<task_id>").display().to_string(),
+            "ops_memory_automation": repo_root.join("artifacts").join("ops").join("memory_automation").join("<run_id>").display().to_string(),
+            "evidence": repo_root.join("artifacts").join("evidence").join("<task_id>").display().to_string(),
+            "scratch": repo_root.join("artifacts").join("scratch").join("<run_id>").display().to_string(),
+        },
+        "sync_responsibility": "Supervisor writes task-scoped continuity under artifacts/current/<task_id>/ and keeps root plus artifacts/current compatibility mirrors aligned to the same task. artifacts/current/ should contain only the active-task pointer, four mirror files, and task-scoped continuity directories; bootstrap, ops, evidence, and scratch belong elsewhere.",
+    })
+}
+
+fn build_query_mismatch_continuity(continuity: &Value, active_task: &Value) -> Value {
+    json!({
+        "state": "query-mismatch",
+        "can_resume": false,
+        "task": Value::Null,
+        "phase": Value::Null,
+        "status": "isolated_bootstrap",
+        "route": [],
+        "next_actions": [],
+        "blockers": [],
+        "current_execution": Value::Null,
+        "recent_completed_execution": Value::Null,
+        "stale_reasons": [],
+        "terminal_reasons": [],
+        "inconsistency_reasons": [],
+        "recovery_hints": [
+            "Query does not match the active task; ignore live continuity and start from an isolated task scope."
+        ],
+        "continuity": {
+            "story_state": "query-mismatch",
+            "resume_allowed": false,
+            "last_updated_at": current_local_timestamp(),
+            "active_lease_expires_at": Value::Null,
+            "state_reason": "active task ignored because bootstrap query targets a different task",
+        },
+        "summary_fields": {},
+        "paths": continuity.get("paths").cloned().unwrap_or_else(|| json!({})),
+        "ignored_active_task": active_task,
+    })
+}
+
+fn compact_memory_retrieval_for_prompt(retrieval: &Value) -> Value {
+    json!({
+        "mode": retrieval.get("mode").cloned().unwrap_or(Value::Null),
+        "memory_root": retrieval.get("memory_root").cloned().unwrap_or(Value::Null),
+        "active_task_included": retrieval.get("active_task_included").cloned().unwrap_or(Value::Bool(false)),
+        "items": retrieval
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .take(8)
+            .collect::<Vec<_>>(),
+    })
+}
+
+fn compact_continuity_for_prompt(continuity: &Value) -> Value {
+    json!({
+        "state": continuity.get("state").cloned().unwrap_or(Value::Null),
+        "task": continuity.get("task").cloned().unwrap_or(Value::Null),
+        "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
+        "status": continuity.get("status").cloned().unwrap_or(Value::Null),
+        "route": continuity.get("route").cloned().unwrap_or_else(|| json!([])),
+        "next_actions": continuity.get("next_actions").cloned().unwrap_or_else(|| json!([])),
+        "blockers": continuity.get("blockers").cloned().unwrap_or_else(|| json!([])),
+        "recovery_hints": continuity.get("recovery_hints").cloned().unwrap_or_else(|| json!([])),
+        "current_execution": continuity.get("current_execution").cloned().unwrap_or(Value::Null),
+        "recent_completed_execution": continuity.get("recent_completed_execution").cloned().unwrap_or(Value::Null),
+    })
+}
+
+fn resolve_memory_sqlite_path(memory_root: &Path) -> Option<PathBuf> {
+    MEMORY_SQLITE_FILENAMES
+        .iter()
+        .map(|file_name| memory_root.join(file_name))
+        .find(|path| path.is_file())
+}
+
+fn build_framework_task_id(label: &str) -> String {
+    let stamp = current_local_timestamp()
+        .chars()
+        .filter(|value| value.is_ascii_alphanumeric())
+        .collect::<String>();
+    let slug = safe_slug(label);
+    if stamp.is_empty() {
+        slug
+    } else {
+        let suffix = if stamp.len() > 14 {
+            &stamp[stamp.len() - 14..]
+        } else {
+            &stamp
+        };
+        format!("{slug}-{suffix}")
+    }
+}
+
+fn extract_markdown_segments(text: &str) -> Vec<(Vec<String>, String)> {
+    let mut segments = Vec::new();
+    let mut heading_stack: Vec<String> = Vec::new();
+    let mut paragraph: Vec<String> = Vec::new();
+    let flush_paragraph = |segments: &mut Vec<(Vec<String>, String)>,
+                           heading_stack: &Vec<String>,
+                           paragraph: &mut Vec<String>| {
+        if paragraph.is_empty() {
+            return;
+        }
+        let body = paragraph.join(" ").trim().to_string();
+        paragraph.clear();
+        if body.is_empty() {
+            return;
+        }
+        segments.push((heading_stack.clone(), body));
+    };
+    for raw_line in text.lines() {
+        let stripped = raw_line.trim();
+        if stripped.is_empty() {
+            flush_paragraph(&mut segments, &heading_stack, &mut paragraph);
+            continue;
+        }
+        let heading_level = stripped.chars().take_while(|value| *value == '#').count();
+        if heading_level > 0 && stripped.chars().nth(heading_level) == Some(' ') {
+            flush_paragraph(&mut segments, &heading_stack, &mut paragraph);
+            let title = stripped[heading_level + 1..].trim().to_string();
+            if heading_level == 1 {
+                heading_stack.clear();
+                continue;
+            }
+            let depth = heading_level.saturating_sub(2);
+            heading_stack.truncate(depth);
+            heading_stack.push(title);
+            continue;
+        }
+        if let Some(bullet) = coerce_bullet_line(stripped) {
+            flush_paragraph(&mut segments, &heading_stack, &mut paragraph);
+            segments.push((heading_stack.clone(), bullet));
+            continue;
+        }
+        paragraph.push(stripped.to_string());
+    }
+    flush_paragraph(&mut segments, &heading_stack, &mut paragraph);
+    segments
+}
+
+fn render_memory_segment(headings: &[String], body: &str) -> String {
+    if headings.is_empty() {
+        format!("- {body}")
+    } else {
+        format!("### {}\n- {body}", headings.join(" / "))
+    }
+}
+
+fn memory_segment_score(headings: &[String], body: &str, query: &str) -> f64 {
+    let tokens = query_tokens(query);
+    if tokens.is_empty() {
+        return 1.0;
+    }
+    let searchable = normalize_match_text(
+        &[headings.join(" "), body.to_string()]
+            .into_iter()
+            .filter(|value| !value.is_empty())
+            .collect::<Vec<_>>()
+            .join(" "),
+    );
+    if !topic_strong_match(query, &searchable) {
+        return 0.0;
+    }
+    let token_hits = tokens
+        .iter()
+        .filter(|token| searchable.contains(*token))
+        .count() as f64;
+    let exact_phrase = searchable.contains(&normalize_match_text(query)) as i32 as f64;
+    let heading_blob = normalize_match_text(&headings.join(" "));
+    let heading_hits = tokens
+        .iter()
+        .filter(|token| heading_blob.contains(*token))
+        .count() as f64;
+    (exact_phrase * 100.0)
+        + (token_hits / tokens.len() as f64) * 10.0
+        + heading_hits * 2.0
+        + token_hits
+}
+
+fn query_tokens(query: &str) -> Vec<String> {
+    query
+        .split(|value: char| value.is_whitespace() || matches!(value, ',' | '/' | '|'))
+        .filter_map(|part| {
+            let trimmed = part.trim().to_lowercase();
+            (!trimmed.is_empty()).then_some(trimmed)
+        })
+        .collect()
+}
+
+fn normalize_match_text(text: &str) -> String {
+    text.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+fn topic_strong_match(query: &str, searchable: &str) -> bool {
+    let tokens = query_tokens(query);
+    if tokens.is_empty() {
+        return true;
+    }
+    let token_hits = tokens
+        .iter()
+        .filter(|token| searchable.contains(*token))
+        .count();
+    if token_hits == 0 {
+        return false;
+    }
+    let exact_phrase = searchable.contains(&normalize_match_text(query));
+    let required_hits = if tokens.len() <= 2 { tokens.len() } else { 2 };
+    exact_phrase || token_hits >= required_hits
+}
+
+fn is_generic_query(query: &str) -> bool {
+    let tokens = query_tokens(query);
+    if tokens.len() < 2 {
+        return true;
+    }
+    tokens.iter().all(|token| {
+        GENERIC_QUERY_TOKENS
+            .iter()
+            .any(|candidate| candidate == token)
+    })
+}
+
+fn query_matches_task(query: &str, task: &str) -> bool {
+    let query_tokens = query
+        .split_whitespace()
+        .map(|value| safe_slug(&value.to_lowercase()))
+        .filter(|value| !value.is_empty())
+        .collect::<HashSet<_>>();
+    let task_tokens = task
+        .split_whitespace()
+        .map(|value| safe_slug(&value.to_lowercase()))
+        .filter(|value| !value.is_empty())
+        .collect::<HashSet<_>>();
+    if query_tokens.is_empty() || task_tokens.is_empty() {
+        return false;
+    }
+    query_tokens.is_subset(&task_tokens)
+        || task_tokens.is_subset(&query_tokens)
+        || !query_tokens.is_disjoint(&task_tokens)
+}
+
+fn walk_files(root: &Path, output: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            walk_files(&path, output);
+        } else if path.is_file() {
+            output.push(path);
+        }
+    }
+}
+
+fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
+    let existing = read_text_if_exists(path);
+    if existing == content {
+        return Ok(false);
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create parent directory failed: {err}"))?;
+    }
+    fs::write(path, content).map_err(|err| format!("write text file failed: {err}"))?;
+    Ok(true)
 }
 
 fn extract_markdown_section(text: &str, headings: &[&str]) -> String {

@@ -17,8 +17,6 @@ if __package__ in {None, ""}:
 
 from codex_agno_runtime.runtime_registry import primary_plugin_record, workspace_bootstrap_defaults
 
-from scripts.install_browser_mcp_codex import install_server as install_browser_server
-from scripts.install_codex_framework_default import retire_overlay as retire_framework_overlay
 from scripts.default_bootstrap import resolve_bootstrap_path, run_default_bootstrap
 from scripts.materialize_cli_host_entrypoints import CLAUDE_REFRESH_COMMAND
 from scripts.host_integration_rs import run_host_integration_rs
@@ -34,12 +32,14 @@ HOME_CONFIG_PATH = Path.home() / ".codex" / "config.toml"
 HOME_PLUGIN_ROOT = Path.home() / ".codex" / "plugins" / "skill-framework-native"
 HOME_MARKETPLACE_PATH = Path.home() / ".agents" / "plugins" / "marketplace.json"
 HOME_CODEX_SKILLS_PATH = Path.home() / ".codex" / "skills"
+HOME_CLAUDE_SKILLS_PATH = Path.home() / ".claude" / "skills"
 HOME_CLAUDE_REFRESH_PATH = Path.home() / ".claude" / "commands" / "refresh.md"
 HOME_CLAUDE_MCP_CONFIG_PATH = Path.home() / ".claude.json"
 PROJECT_INSTRUCTIONS_PATH = Path(".codex") / "model_instructions.md"
 REPO_MARKETPLACE_PATH = Path(".agents") / "plugins" / "marketplace.json"
 PLUGIN_NAME = str(primary_plugin_record().get("plugin_name", "skill-framework-native"))
 CONFIG_SCHEMA_HEADER = "#:schema https://developers.openai.com/codex/config-schema.json\n"
+OPENAI_DEVELOPER_DOCS_MCP_URL = "https://developers.openai.com/mcp"
 DEFAULT_TUI_STATUS_ITEMS = (
     "model-with-reasoning",
     "git-branch",
@@ -47,6 +47,7 @@ DEFAULT_TUI_STATUS_ITEMS = (
     "fast-mode",
 )
 FRAMEWORK_SERVER_PATTERN = re.compile(r"(?ms)^\[mcp_servers\.framework-mcp\]\n.*?(?=^\[|\Z)")
+OPENAI_DEVELOPER_DOCS_SERVER_PATTERN = re.compile(r"(?ms)^\[mcp_servers\.openaiDeveloperDocs\]\n.*?(?=^\[|\Z)")
 
 
 def _bootstrap_payload_matches_contract(payload: dict[str, Any], repo_root: Path) -> bool:
@@ -157,6 +158,29 @@ def install_framework_server(config_path: Path, repo_root: Path) -> bool:
     return write_text_if_changed(config_path, updated)
 
 
+def build_openai_developer_docs_server_block() -> str:
+    """Build the OpenAI Developer Docs MCP config block."""
+
+    return "\n".join(
+        [
+            "[mcp_servers.openaiDeveloperDocs]",
+            f'url = "{OPENAI_DEVELOPER_DOCS_MCP_URL}"',
+        ]
+    )
+
+
+def install_openai_developer_docs_server(config_path: Path) -> bool:
+    """Install the OpenAI Developer Docs MCP entry into a Codex config file."""
+
+    content = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+    updated = _upsert_named_toml_block(
+        content,
+        block=build_openai_developer_docs_server_block(),
+        pattern=OPENAI_DEVELOPER_DOCS_SERVER_PATTERN,
+    )
+    return write_text_if_changed(config_path, updated)
+
+
 def _format_status_line(items: tuple[str, ...] = DEFAULT_TUI_STATUS_ITEMS) -> str:
     return "status_line = [" + ", ".join(f'"{item}"' for item in items) + "]"
 
@@ -242,12 +266,12 @@ def sync_personal_plugin_bundle(repo_root: Path, plugin_root: Path = HOME_PLUGIN
     return sync_directory(source, plugin_root)
 
 
-def ensure_home_codex_skills_link(
+def _ensure_home_skills_link(
     repo_root: Path,
     *,
-    target_path: Path = HOME_CODEX_SKILLS_PATH,
+    target_path: Path,
 ) -> bool:
-    """Ensure ~/.codex/skills points at the repository skill library."""
+    """Ensure one host skill directory points at the repository skill library."""
 
     skill_bridge = workspace_bootstrap_defaults(repo_root=repo_root).get("skill_bridge", {})
     source_rel = str(skill_bridge.get("source_rel", "skills"))
@@ -270,6 +294,26 @@ def ensure_home_codex_skills_link(
 
     target_path.symlink_to(source, target_is_directory=True)
     return True
+
+
+def ensure_home_codex_skills_link(
+    repo_root: Path,
+    *,
+    target_path: Path = HOME_CODEX_SKILLS_PATH,
+) -> bool:
+    """Ensure ~/.codex/skills points at the repository skill library."""
+
+    return _ensure_home_skills_link(repo_root, target_path=target_path)
+
+
+def ensure_home_claude_skills_link(
+    repo_root: Path,
+    *,
+    target_path: Path = HOME_CLAUDE_SKILLS_PATH,
+) -> bool:
+    """Ensure ~/.claude/skills points at the repository skill library."""
+
+    return _ensure_home_skills_link(repo_root, target_path=target_path)
 
 
 def ensure_home_claude_refresh_command(
@@ -362,99 +406,18 @@ def install_native_integration(
     home_plugin_root: Path = HOME_PLUGIN_ROOT,
     home_marketplace_path: Path = HOME_MARKETPLACE_PATH,
     home_codex_skills_path: Path = HOME_CODEX_SKILLS_PATH,
+    home_claude_skills_path: Path = HOME_CLAUDE_SKILLS_PATH,
     home_claude_refresh_path: Path = HOME_CLAUDE_REFRESH_PATH,
     home_claude_mcp_config_path: Path = HOME_CLAUDE_MCP_CONFIG_PATH,
     project_instructions_path: Path = PROJECT_INSTRUCTIONS_PATH,
     install_browser_mcp: bool = True,
     install_framework_mcp: bool = True,
+    install_openai_developer_docs_mcp: bool = True,
     retire_framework_overlay_file: bool = True,
     install_personal_plugin: bool = True,
     install_personal_marketplace_entry: bool = True,
-    install_home_codex_skills_link: bool = True,
-    install_home_claude_refresh_command: bool = True,
-    install_home_claude_mcp_sync: bool = True,
-    install_default_bootstrap: bool = True,
-    bootstrap_output_dir: Path | None = None,
-) -> dict[str, Any]:
-    """Install the repo's Codex-native integration surfaces."""
-
-    resolved_repo_root = (repo_root or get_repo_root()).resolve()
-    created_config = ensure_config_file(home_config_path)
-    browser_changed = False
-    framework_changed = False
-    personal_plugin_changed = False
-    personal_marketplace_changed = False
-    home_codex_skills_link_changed = False
-    home_claude_refresh_changed = False
-    framework_overlay_result: dict[str, Any] | None = None
-    default_bootstrap_result: dict[str, Any] | None = None
-    if install_browser_mcp:
-        browser_changed = install_browser_server(config_path=home_config_path, repo_root=resolved_repo_root)
-    if install_framework_mcp:
-        framework_changed = install_framework_server(config_path=home_config_path, repo_root=resolved_repo_root)
-    tui_changed = ensure_tui_status_line(home_config_path)
-    if install_personal_plugin:
-        personal_plugin_changed = sync_personal_plugin_bundle(resolved_repo_root, plugin_root=home_plugin_root)
-    if install_personal_marketplace_entry:
-        personal_marketplace_changed = install_personal_marketplace(
-            marketplace_path=home_marketplace_path,
-            plugin_root=home_plugin_root,
-            repo_root=resolved_repo_root,
-        )
-    if install_home_codex_skills_link:
-        home_codex_skills_link_changed = ensure_home_codex_skills_link(
-            resolved_repo_root,
-            target_path=home_codex_skills_path,
-        )
-    if install_home_claude_refresh_command:
-        home_claude_refresh_changed = ensure_home_claude_refresh_command(home_claude_refresh_path)
-    if retire_framework_overlay_file:
-        framework_overlay_result = retire_framework_overlay(
-            (resolved_repo_root / project_instructions_path).resolve()
-        )
-    if install_default_bootstrap:
-        default_bootstrap_result = ensure_default_bootstrap_bundle(
-            resolved_repo_root,
-            output_dir=bootstrap_output_dir,
-        )
-    return {
-        "success": True,
-        "repo_root": str(resolved_repo_root),
-        "home_config_path": str(home_config_path),
-        "home_plugin_root": str(home_plugin_root),
-        "home_marketplace_path": str(home_marketplace_path),
-        "home_codex_skills_path": str(home_codex_skills_path),
-        "home_claude_refresh_path": str(home_claude_refresh_path),
-        "repo_marketplace_path": str((resolved_repo_root / REPO_MARKETPLACE_PATH).resolve()),
-        "created_config": created_config,
-        "browser_mcp_changed": browser_changed,
-        "framework_mcp_changed": framework_changed,
-        "tui_status_line_changed": tui_changed,
-        "personal_plugin_changed": personal_plugin_changed,
-        "personal_marketplace_changed": personal_marketplace_changed,
-        "home_codex_skills_link_changed": home_codex_skills_link_changed,
-        "home_claude_refresh_changed": home_claude_refresh_changed,
-        "framework_overlay_retirement": framework_overlay_result,
-        "default_bootstrap": default_bootstrap_result,
-    }
-
-
-def install_native_integration(
-    *,
-    home_config_path: Path = HOME_CONFIG_PATH,
-    repo_root: Path | None = None,
-    home_plugin_root: Path = HOME_PLUGIN_ROOT,
-    home_marketplace_path: Path = HOME_MARKETPLACE_PATH,
-    home_codex_skills_path: Path = HOME_CODEX_SKILLS_PATH,
-    home_claude_refresh_path: Path = HOME_CLAUDE_REFRESH_PATH,
-    home_claude_mcp_config_path: Path = HOME_CLAUDE_MCP_CONFIG_PATH,
-    project_instructions_path: Path = PROJECT_INSTRUCTIONS_PATH,
-    install_browser_mcp: bool = True,
-    install_framework_mcp: bool = True,
-    retire_framework_overlay_file: bool = True,
-    install_personal_plugin: bool = True,
-    install_personal_marketplace_entry: bool = True,
-    install_home_codex_skills_link: bool = True,
+    install_home_codex_skills_link: bool = False,
+    install_home_claude_skills_link: bool = False,
     install_home_claude_refresh_command: bool = True,
     install_home_claude_mcp_sync: bool = True,
     install_default_bootstrap: bool = True,
@@ -477,6 +440,8 @@ def install_native_integration(
         str(home_marketplace_path),
         "--home-codex-skills-path",
         str(home_codex_skills_path),
+        "--home-claude-skills-path",
+        str(home_claude_skills_path),
         "--home-claude-refresh-path",
         str(home_claude_refresh_path),
         "--home-claude-mcp-config-path",
@@ -490,14 +455,18 @@ def install_native_integration(
         command.append("--skip-browser-mcp")
     if not install_framework_mcp:
         command.append("--skip-framework-mcp")
+    if not install_openai_developer_docs_mcp:
+        command.append("--skip-openai-developer-docs-mcp")
     if not retire_framework_overlay_file:
         command.append("--skip-framework-overlay-retirement")
     if not install_personal_plugin:
         command.append("--skip-personal-plugin")
     if not install_personal_marketplace_entry:
         command.append("--skip-personal-marketplace")
-    if not install_home_codex_skills_link:
-        command.append("--skip-home-codex-skills-link")
+    if install_home_codex_skills_link:
+        command.append("--install-home-codex-skills-link")
+    if install_home_claude_skills_link:
+        command.append("--install-home-claude-skills-link")
     if not install_home_claude_refresh_command:
         command.append("--skip-home-claude-refresh")
     if not install_home_claude_mcp_sync:
@@ -513,6 +482,7 @@ def main() -> int:
     parser.add_argument("--home-plugin-root", type=Path, default=HOME_PLUGIN_ROOT)
     parser.add_argument("--home-marketplace-path", type=Path, default=HOME_MARKETPLACE_PATH)
     parser.add_argument("--home-codex-skills-path", type=Path, default=HOME_CODEX_SKILLS_PATH)
+    parser.add_argument("--home-claude-skills-path", type=Path, default=HOME_CLAUDE_SKILLS_PATH)
     parser.add_argument("--home-claude-refresh-path", type=Path, default=HOME_CLAUDE_REFRESH_PATH)
     parser.add_argument("--home-claude-mcp-config-path", type=Path, default=HOME_CLAUDE_MCP_CONFIG_PATH)
     parser.add_argument("--project-instructions-path", type=Path, default=PROJECT_INSTRUCTIONS_PATH)
@@ -520,10 +490,14 @@ def main() -> int:
     parser.add_argument("--repo-root", type=Path, default=None)
     parser.add_argument("--skip-browser-mcp", action="store_true")
     parser.add_argument("--skip-framework-mcp", action="store_true")
+    parser.add_argument("--skip-openai-developer-docs-mcp", action="store_true")
     parser.add_argument("--skip-framework-overlay-retirement", action="store_true")
     parser.add_argument("--skip-personal-plugin", action="store_true")
     parser.add_argument("--skip-personal-marketplace", action="store_true")
+    parser.add_argument("--install-home-codex-skills-link", action="store_true")
+    parser.add_argument("--install-home-claude-skills-link", action="store_true")
     parser.add_argument("--skip-home-codex-skills-link", action="store_true")
+    parser.add_argument("--skip-home-claude-skills-link", action="store_true")
     parser.add_argument("--skip-home-claude-refresh", action="store_true")
     parser.add_argument("--skip-home-claude-mcp-sync", action="store_true")
     parser.add_argument("--skip-default-bootstrap", action="store_true")
@@ -534,16 +508,23 @@ def main() -> int:
         home_plugin_root=args.home_plugin_root,
         home_marketplace_path=args.home_marketplace_path,
         home_codex_skills_path=args.home_codex_skills_path,
+        home_claude_skills_path=args.home_claude_skills_path,
         home_claude_refresh_path=args.home_claude_refresh_path,
         home_claude_mcp_config_path=args.home_claude_mcp_config_path,
         repo_root=args.repo_root,
         project_instructions_path=args.project_instructions_path,
         install_browser_mcp=not args.skip_browser_mcp,
         install_framework_mcp=not args.skip_framework_mcp,
+        install_openai_developer_docs_mcp=not args.skip_openai_developer_docs_mcp,
         retire_framework_overlay_file=not args.skip_framework_overlay_retirement,
         install_personal_plugin=not args.skip_personal_plugin,
         install_personal_marketplace_entry=not args.skip_personal_marketplace,
-        install_home_codex_skills_link=not args.skip_home_codex_skills_link,
+        install_home_codex_skills_link=(
+            args.install_home_codex_skills_link and not args.skip_home_codex_skills_link
+        ),
+        install_home_claude_skills_link=(
+            args.install_home_claude_skills_link and not args.skip_home_claude_skills_link
+        ),
         install_home_claude_refresh_command=not args.skip_home_claude_refresh,
         install_home_claude_mcp_sync=not args.skip_home_claude_mcp_sync,
         install_default_bootstrap=not args.skip_default_bootstrap,

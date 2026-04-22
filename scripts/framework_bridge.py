@@ -8,12 +8,14 @@ import os
 import sys
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from codex_agno_runtime.rust_router import RustRouteAdapter
 from scripts.consolidate_memory import (
     archive_legacy_memory_bundle,
     build_memory_documents,
@@ -126,6 +128,13 @@ def _compact_registered_tasks(snapshot: Any, *, limit: int = BOOTSTRAP_REGISTERE
         "truncated": total > len(rows),
         "overflow_count": max(0, total - len(rows)),
     }
+
+
+@lru_cache(maxsize=1)
+def _framework_rust_adapter() -> RustRouteAdapter:
+    """Return the shared Rust adapter used by thin Python bridge paths."""
+
+    return RustRouteAdapter(get_repo_root())
 
 
 def _compact_memory_retrieval_for_prompt(retrieval: dict[str, Any]) -> dict[str, Any]:
@@ -311,7 +320,7 @@ def build_evolution_proposals(
     }
 
 
-def build_framework_memory_bootstrap(
+def _build_framework_memory_bootstrap_python(
     *,
     workspace: str,
     query: str = "",
@@ -460,6 +469,53 @@ def build_framework_memory_bootstrap(
         "continuity_decision": payload["continuity_decision"],
     }
     return payload
+
+
+def build_framework_memory_bootstrap(
+    *,
+    workspace: str,
+    query: str = "",
+    source_root: Path | None = None,
+    memory_root: Path | None = None,
+    artifact_source_dir: Path | None = None,
+    top: int = 8,
+    mode: str = "stable",
+    task_id: str | None = None,
+) -> dict[str, Any]:
+    """Build a memory bootstrap payload for framework consumers."""
+
+    repo_root = (source_root or get_repo_root()).resolve()
+    default_memory_root = resolve_effective_memory_dir(
+        workspace=workspace,
+        memory_root=None,
+        repo_root=repo_root,
+    )
+    can_use_rust_authority = (
+        memory_root is None
+        and artifact_source_dir is None
+        and task_id is None
+        and (default_memory_root / "MEMORY.md").is_file()
+    )
+    if can_use_rust_authority:
+        try:
+            return _framework_rust_adapter().framework_memory_recall(
+                repo_root=repo_root,
+                query=query,
+                top=top,
+                mode=mode,
+            )
+        except Exception:
+            pass
+    return _build_framework_memory_bootstrap_python(
+        workspace=workspace,
+        query=query,
+        source_root=repo_root,
+        memory_root=memory_root,
+        artifact_source_dir=artifact_source_dir,
+        top=top,
+        mode=mode,
+        task_id=task_id,
+    )
 
 
 def export_supporting_files(

@@ -49,8 +49,8 @@ def _normalize_path(value: Any) -> str:
 def _iter_candidate_paths(payload: dict[str, Any]) -> list[str]:
     candidates: list[str] = []
     for key in (
-        "changed_path",
         "file_path",
+        "changed_path",
         "path",
         "config_path",
         "target_path",
@@ -83,7 +83,7 @@ def _payload_mentions_continuity(payload: dict[str, Any]) -> bool:
 
 
 def run_config_change(repo_root: Path, payload: dict[str, Any]) -> int:
-    scope = payload.get("scope") or payload.get("matcher") or "unknown"
+    scope = payload.get("source") or payload.get("scope") or payload.get("matcher") or "unknown"
     rel_paths = {
         _relative_candidate(path, repo_root)
         for path in _iter_candidate_paths(payload)
@@ -112,7 +112,7 @@ def run_config_change(repo_root: Path, payload: dict[str, Any]) -> int:
 
 
 def run_stop_failure(_repo_root: Path, payload: dict[str, Any]) -> int:
-    failure_type = payload.get("failure_type") or payload.get("matcher") or "unknown"
+    failure_type = payload.get("error") or payload.get("failure_type") or payload.get("matcher") or "unknown"
     continuity_note = " Shared continuity remains untouched." if _payload_mentions_continuity(payload) else ""
     print(
         "[claude-stop-failure] Claude stop failure classified as "

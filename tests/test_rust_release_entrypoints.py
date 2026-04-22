@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 import pytest
@@ -57,20 +58,90 @@ def test_host_integration_rs_requires_prebuilt_release_binary_when_missing(
         host_integration_rs._ensure_binary()
 
 
+def test_host_integration_rs_rejects_stale_release_binary(
+    tmp_path: Path, monkeypatch
+) -> None:
+    crate_root = tmp_path / "host-integration-rs"
+    src_dir = crate_root / "src"
+    release_bin = crate_root / "target" / "release" / "host-integration-rs"
+    src_dir.mkdir(parents=True)
+    release_bin.parent.mkdir(parents=True)
+    manifest_path = crate_root / "Cargo.toml"
+    lock_path = crate_root / "Cargo.lock"
+    manifest_path.write_text("[package]\nname='host-integration-rs'\nversion='0.1.0'\n", encoding="utf-8")
+    lock_path.write_text("", encoding="utf-8")
+    (src_dir / "main.rs").write_text("fn main() {}\n", encoding="utf-8")
+    release_bin.write_text("release", encoding="utf-8")
+
+    monkeypatch.setattr(host_integration_rs, "CRATE_ROOT", crate_root)
+    monkeypatch.setattr(host_integration_rs, "MANIFEST_PATH", manifest_path)
+    monkeypatch.setattr(host_integration_rs, "LOCK_PATH", lock_path)
+    monkeypatch.setattr(host_integration_rs, "RELEASE_BINARY_PATH", release_bin)
+
+    release_mtime = 1_700_000_100
+    manifest_mtime = 1_700_000_150
+    src_mtime = 1_700_000_200
+    os.utime(release_bin, (release_mtime, release_mtime))
+    os.utime(manifest_path, (manifest_mtime, manifest_mtime))
+    os.utime(src_dir / "main.rs", (src_mtime, src_mtime))
+
+    with pytest.raises(RuntimeError, match="prebuilt release binary is stale"):
+        host_integration_rs._ensure_binary()
+
+
 def test_sync_skills_ignores_debug_skill_compiler_binary(
     tmp_path: Path, monkeypatch
 ) -> None:
+    crate_root = tmp_path / "skill-compiler-rs"
     release_bin = tmp_path / "target" / "release" / "skill-compiler-rs"
     debug_bin = tmp_path / "target" / "debug" / "skill-compiler-rs"
+    manifest_path = crate_root / "Cargo.toml"
+    src_main = crate_root / "src" / "main.rs"
+    src_main.parent.mkdir(parents=True)
     debug_bin.parent.mkdir(parents=True)
     debug_bin.write_text("debug", encoding="utf-8")
+    manifest_path.write_text("[package]\nname='skill-compiler-rs'\nversion='0.1.0'\n", encoding="utf-8")
+    src_main.write_text("fn main() {}\n", encoding="utf-8")
 
     monkeypatch.setattr(sync_skills, "SKILL_COMPILER_RS_RELEASE_BIN", release_bin)
     monkeypatch.setattr(sync_skills, "SKILL_COMPILER_RS_DEBUG_BIN", debug_bin)
+    monkeypatch.setattr(sync_skills, "SKILL_COMPILER_RS_DIR", crate_root)
 
     assert sync_skills.resolve_skill_compiler_binary() is None
 
     release_bin.parent.mkdir(parents=True, exist_ok=True)
     release_bin.write_text("release", encoding="utf-8")
+    src_mtime = 1_700_000_100
+    release_mtime = 1_700_000_200
+    manifest_mtime = 1_700_000_050
+    os.utime(manifest_path, (manifest_mtime, manifest_mtime))
+    os.utime(src_main, (src_mtime, src_mtime))
+    os.utime(release_bin, (release_mtime, release_mtime))
 
     assert sync_skills.resolve_skill_compiler_binary() == release_bin
+
+
+def test_sync_skills_ignores_stale_release_skill_compiler_binary(
+    tmp_path: Path, monkeypatch
+) -> None:
+    crate_root = tmp_path / "skill-compiler-rs"
+    release_bin = tmp_path / "target" / "release" / "skill-compiler-rs"
+    manifest_path = crate_root / "Cargo.toml"
+    src_main = crate_root / "src" / "main.rs"
+    src_main.parent.mkdir(parents=True)
+    release_bin.parent.mkdir(parents=True)
+    manifest_path.write_text("[package]\nname='skill-compiler-rs'\nversion='0.1.0'\n", encoding="utf-8")
+    src_main.write_text("fn main() {}\n", encoding="utf-8")
+    release_bin.write_text("release", encoding="utf-8")
+
+    monkeypatch.setattr(sync_skills, "SKILL_COMPILER_RS_RELEASE_BIN", release_bin)
+    monkeypatch.setattr(sync_skills, "SKILL_COMPILER_RS_DIR", crate_root)
+
+    release_mtime = 1_700_000_100
+    src_mtime = 1_700_000_200
+    manifest_mtime = 1_700_000_150
+    os.utime(release_bin, (release_mtime, release_mtime))
+    os.utime(manifest_path, (manifest_mtime, manifest_mtime))
+    os.utime(src_main, (src_mtime, src_mtime))
+
+    assert sync_skills.resolve_skill_compiler_binary() is None

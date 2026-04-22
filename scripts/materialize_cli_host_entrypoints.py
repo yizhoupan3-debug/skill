@@ -13,7 +13,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "codex_agno_runtime" / "src"))
 
-from codex_agno_runtime.runtime_registry import shared_project_mcp_servers
+from codex_agno_runtime.runtime_registry import framework_native_aliases, shared_project_mcp_servers
 from scripts.host_integration_rs import run_host_integration_rs
 
 
@@ -182,15 +182,15 @@ and artifact rules still come from `AGENT.md`.
 """
 
 CLAUDE_REFRESH_COMMAND = """---
-description: Build the next-turn execution prompt, copy it to the clipboard, and reply with one fixed sentence.
-allowed-tools: Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *), Bash(*/scripts/router-rs/target/debug/router-rs *)
+description: Generate and copy the next-turn execution prompt with the Rust refresh command.
+allowed-tools: Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *)
 ---
 
-If `scripts/router-rs/Cargo.toml` exists in the current repository, run:
+Run:
 
-`cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --framework-recap-json`
+`cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --framework-refresh-json`
 
-Then copy `recap.workflow_prompt` to the macOS clipboard yourself, and reply with exactly:
+Then reply with exactly:
 `下一轮执行 prompt 已准备好，并且已经复制到剪贴板。`
 """
 
@@ -217,17 +217,130 @@ Always relay the command's JSON result and then summarize it briefly in plain Ch
 Do not invent batch state that the command did not return.
 """
 
-CLAUDE_AUTOPILOT_COMMAND = """---
+def _framework_alias_payload(alias_name: str) -> dict[str, Any]:
+    payload = framework_native_aliases().get(alias_name)
+    if not isinstance(payload, dict):
+        raise ValueError(f"framework_native_aliases missing alias payload for {alias_name!r}")
+    return payload
+
+
+def _framework_alias_claude_entrypoint(alias_name: str) -> str:
+    payload = _framework_alias_payload(alias_name)
+    host_entrypoints = payload.get("host_entrypoints")
+    if not isinstance(host_entrypoints, dict):
+        raise ValueError(f"framework_native_aliases[{alias_name!r}] missing host_entrypoints")
+    entrypoint = host_entrypoints.get("claude-code")
+    if not isinstance(entrypoint, str) or not entrypoint:
+        raise ValueError(
+            f"framework_native_aliases[{alias_name!r}] missing claude-code host_entrypoint"
+        )
+    return entrypoint
+
+
+def _framework_alias_implementation_bar(alias_name: str) -> list[str]:
+    payload = _framework_alias_payload(alias_name)
+    raw = payload.get("implementation_bar")
+    if not isinstance(raw, list):
+        return []
+    return [str(item) for item in raw if isinstance(item, str) and item]
+
+
+def _framework_alias_upstream_source(alias_name: str) -> dict[str, str]:
+    payload = _framework_alias_payload(alias_name)
+    raw = payload.get("upstream_source")
+    if not isinstance(raw, dict):
+        return {}
+    return {str(key): str(value) for key, value in raw.items() if isinstance(value, str) and value}
+
+
+def _framework_alias_local_adaptations(alias_name: str) -> list[str]:
+    payload = _framework_alias_payload(alias_name)
+    raw = payload.get("local_adaptations")
+    if not isinstance(raw, list):
+        return []
+    return [str(item) for item in raw if isinstance(item, str) and item]
+
+
+def _framework_alias_workflow_items(alias_name: str, field_name: str) -> list[str]:
+    payload = _framework_alias_payload(alias_name)
+    workflow = payload.get("official_workflow")
+    if not isinstance(workflow, dict):
+        return []
+    raw = workflow.get(field_name)
+    if not isinstance(raw, list):
+        return []
+    return [str(item) for item in raw if isinstance(item, str) and item]
+
+
+def _render_alias_upgrade_requirements(alias_name: str) -> str:
+    requirements = _framework_alias_implementation_bar(alias_name)
+    if not requirements:
+        return ""
+    rendered = "\n".join(f"   - `{item}`" for item in requirements)
+    return (
+        "This alias inherits the original OMC core capability, but this repo must exceed OMC by enforcing:\n\n"
+        f"{rendered}\n"
+    )
+
+
+def _render_alias_upstream_baseline(alias_name: str) -> str:
+    upstream = _framework_alias_upstream_source(alias_name)
+    if not upstream:
+        return ""
+    tag = upstream.get("tag", "unknown")
+    commit = upstream.get("commit", "unknown")
+    skill_path = upstream.get("official_skill_path", "unknown")
+    return (
+        "Official upstream baseline:\n\n"
+        f"- repo: `{upstream.get('repo', 'unknown')}`\n"
+        f"- tag: `{tag}`\n"
+        f"- commit: `{commit}`\n"
+        f"- skill: `{skill_path}`\n"
+    )
+
+
+def _render_alias_list_section(title: str, items: list[str]) -> str:
+    if not items:
+        return ""
+    rendered = "\n".join(f"- `{item}`" for item in items)
+    return f"{title}\n\n{rendered}\n"
+
+
+def _build_claude_autopilot_command() -> str:
+    payload = _framework_alias_payload("autopilot")
+    entrypoint = _framework_alias_claude_entrypoint("autopilot")
+    stronger_requirements = _render_alias_upgrade_requirements("autopilot")
+    upstream_baseline = _render_alias_upstream_baseline("autopilot")
+    official_phases = _render_alias_list_section(
+        "Official OMC phases to preserve:",
+        _framework_alias_workflow_items("autopilot", "phases"),
+    )
+    local_adaptations = _render_alias_list_section(
+        "Local Rust/localization adaptations:",
+        _framework_alias_local_adaptations("autopilot"),
+    )
+    ambiguous_owner = str(payload.get("reroute_when_ambiguous", "idea-to-plan"))
+    unknown_root_cause_owner = str(payload.get("reroute_when_root_cause_unknown", "systematic-debugging"))
+    canonical_owner = str(payload.get("canonical_owner", "execution-controller-coding"))
+    return f"""---
 description: Enter the repo's shared autopilot execution lane.
 ---
 
-Treat `/autopilot` as a thin alias for the repository's native execution lane.
+Treat `{entrypoint}` as a thin alias for the repository's native execution lane.
+
+{upstream_baseline}
+
+{stronger_requirements}
+
+{official_phases}
+
+{local_adaptations}
 
 Follow this routing:
 
-1. If the task is still ambiguous, first structure it the way `idea-to-plan` would.
-2. If the root cause is still unknown, switch into `systematic-debugging`.
-3. Otherwise take the `execution-controller-coding` posture:
+1. If the task is still ambiguous, first structure it the way `{ambiguous_owner}` would.
+2. If the root cause is still unknown, switch into `{unknown_root_cause_owner}`.
+3. Otherwise take the `{canonical_owner}` posture:
    - define the minimum success criteria
    - define the verification path
    - make the smallest complete change
@@ -237,26 +350,55 @@ Use `skills/autopilot/SKILL.md`, `AGENT.md`, and the live continuity artifacts a
 Keep user-facing wording centered on the repository's own capability, not host quirks or external compatibility history.
 """
 
-CLAUDE_DEEPREVIEW_COMMAND = """---
-description: Enter the repo's shared deepreview lane.
+
+def _build_claude_deepinterview_command() -> str:
+    payload = _framework_alias_payload("deepinterview")
+    entrypoint = _framework_alias_claude_entrypoint("deepinterview")
+    stronger_requirements = _render_alias_upgrade_requirements("deepinterview")
+    upstream_baseline = _render_alias_upstream_baseline("deepinterview")
+    official_loop_rules = _render_alias_list_section(
+        "Official OMC loop rules to preserve:",
+        _framework_alias_workflow_items("deepinterview", "loop_rules"),
+    )
+    local_adaptations = _render_alias_list_section(
+        "Local Rust/localization adaptations:",
+        _framework_alias_local_adaptations("deepinterview"),
+    )
+    canonical_owner = str(payload.get("canonical_owner", "code-review"))
+    review_lanes = payload.get("review_lanes")
+    if not isinstance(review_lanes, list):
+        raise ValueError("framework_native_aliases['deepinterview'] missing review_lanes")
+    rendered_review_lanes = "\n".join(f"   - `{lane}`" for lane in review_lanes)
+    return f"""---
+description: Enter the repo's shared deepinterview lane.
 ---
 
-Treat `/deepreview` as a thin alias for the repository's native review lane.
+Treat `{entrypoint}` as a thin alias for the repository's native review lane.
+
+{upstream_baseline}
+
+{stronger_requirements}
+
+{official_loop_rules}
+
+{local_adaptations}
 
 Follow this routing:
 
-1. Primary owner: `code-review`
+1. Primary owner: `{canonical_owner}`
 2. Add review lanes as needed:
-   - `architect-review`
-   - `security-audit`
-   - `test-engineering`
-   - `execution-audit-codex`
-3. Lead with findings, rank by severity, and cite concrete file or behavior evidence.
-4. If the user wants fixes too, keep iterating review -> fix -> verify until the bounded scope converges.
+{rendered_review_lanes}
+3. If the root cause is still unknown, investigate it before summarizing findings.
+4. Lead with findings, rank by severity, and cite concrete file or behavior evidence.
+5. If the user wants fixes too, keep iterating review -> fix -> verify until the bounded scope converges.
 
-Use `skills/deepreview/SKILL.md`, `AGENT.md`, and the live repo state as the truth.
+Use `skills/deepinterview/SKILL.md`, `AGENT.md`, and the live repo state as the truth.
 Keep user-facing wording centered on the repository's own review capability, not host quirks or external compatibility history.
 """
+
+
+CLAUDE_AUTOPILOT_COMMAND = _build_claude_autopilot_command()
+CLAUDE_DEEPINTERVIEW_COMMAND = _build_claude_deepinterview_command()
 
 
 CLAUDE_AGENTS_README = """# Claude Agents Directory
@@ -292,10 +434,6 @@ set -eu
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 
 run_router_rs() {
-  if [ -x "$PROJECT_DIR/scripts/router-rs/target/debug/router-rs" ]; then
-    "$PROJECT_DIR/scripts/router-rs/target/debug/router-rs" "$@"
-    return
-  fi
   cargo run --quiet --manifest-path "$PROJECT_DIR/scripts/router-rs/Cargo.toml" -- "$@"
 }
 """
@@ -315,11 +453,11 @@ Lifecycle matrix:
 
 | Event | Status | Script | Bridge command | Write boundary | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `SessionStart` | enabled | `session_start.sh` | `session-start` | host projection only | Refresh imported Claude projection at session start. |
-| `Stop` | enabled | `stop.sh` | `session-stop` | host projection only | Lightweight per-turn projection refresh only. |
-| `PreCompact` | enabled | `pre_compact.sh` | `pre-compact` | host projection only | Preserve minimal continuity before compaction without consolidation. |
-| `SubagentStop` | enabled | `subagent_stop.sh` | `subagent-stop` | host projection only | Refresh projection after sidecar completion without taking over subagent orchestration. |
-| `SessionEnd` | enabled | `session_end.sh` | `session-end` | project-local memory bundle plus host projection | Consolidates shared memory bundle, then refreshes projection. Never rewrites root continuity artifacts. |
+| `SessionStart` | disabled | `session_start.sh` | `session-start` | host projection only | Keep startup lean; do not auto-refresh projection at session start. Use manually only if needed. |
+| `Stop` | disabled | `stop.sh` | `session-stop` | host projection only | Avoid per-turn background refresh; keep this script only for manual recovery. |
+| `PreCompact` | disabled | `pre_compact.sh` | `pre-compact` | host projection only | Keep compaction cheap; do not auto-refresh before compaction. |
+| `SubagentStop` | disabled | `subagent_stop.sh` | `subagent-stop` | host projection only | Avoid sidecar-completion refresh churn; keep this script only for manual recovery. |
+| `SessionEnd` | enabled | `session_end.sh` | `session-end` | project-local memory bundle plus host projection | Consolidates shared memory bundle, refreshes projection, and may repair stale terminal resume state in `.supervisor_state.json`. |
 | `ConfigChange` | enabled | `config_change.sh` | n/a | host-private audit only | Audit project-level generated-surface drift and remind maintainers to regenerate from source. Never auto-repairs or rewrites shared continuity. |
 | `StopFailure` | enabled | `stop_failure.sh` | n/a | host-private alert only | Classify Claude stop failures and point maintainers back to host projection drift or hook inspection. Never rewrites shared continuity. |
 | `InstructionsLoaded` | document-disable | n/a | n/a | none | Keep startup lean; the Claude projection stays on disk for `/refresh` or manual recovery instead of default auto-import. |
@@ -329,13 +467,16 @@ Lifecycle matrix:
 
 Hook responsibilities:
 
-- `session_start.sh`: refresh the Claude memory projection.
-- `stop.sh`: refresh the Claude memory projection after a completed turn.
-- `pre_compact.sh`: refresh the Claude memory projection before compaction.
-- `subagent_stop.sh`: refresh the Claude memory projection after subagent completion.
 - `session_end.sh`: consolidate shared memory, then refresh the Claude memory projection.
 - `config_change.sh`: audit project settings changes on generated Claude surfaces without blocking or auto-repair.
 - `stop_failure.sh`: emit a host-private failure hint for selected Claude stop failure classes.
+
+Manual-only maintenance scripts:
+
+- `session_start.sh`: one-off projection refresh when you explicitly want to rebuild recovery context.
+- `stop.sh`: one-off projection refresh after a turn if you are debugging projection drift.
+- `pre_compact.sh`: one-off projection refresh before compaction if you are testing that lane.
+- `subagent_stop.sh`: one-off projection refresh after sidecar completion if you are debugging that lane.
 
 Validation commands:
 
@@ -348,16 +489,16 @@ Validation commands:
 - `CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/subagent_stop.sh`
   Expected: projection refresh only after subagent completion; no supervisor-state takeover.
 - `CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/session_end.sh`
-  Expected: project-local memory bundle refresh plus projection refresh; no root continuity rewrite.
-- `printf '{"hook_event_name":"ConfigChange","scope":"project_settings","changed_path":".claude/settings.json"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/config_change.sh`
+  Expected: project-local memory bundle refresh plus projection refresh; may repair stale terminal resume state in `.supervisor_state.json`.
+- `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/config_change.sh`
   Expected: audit-only stderr guidance about regenerating generated Claude host files; exit 0.
-- `printf '{"hook_event_name":"StopFailure","failure_type":"server_error"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/stop_failure.sh`
+- `printf '{"hook_event_name":"StopFailure","error":"server_error"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/stop_failure.sh`
   Expected: host-private failure classification hint on stderr; exit 0.
 - `cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-command session-start --repo-root "$PWD"`
   Expected: JSON result with `canonical_command`, `contract`, and `projection`.
 - `cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-command session-end --repo-root "$PWD"`
   Expected: compatibility alias for `session-end`; same consolidation and projection contract.
-- `printf '{"hook_event_name":"ConfigChange","scope":"project_settings","changed_path":".claude/settings.json"}\n' | cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-audit-command config-change --repo-root "$PWD"`
+- `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}\n' | cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-audit-command config-change --repo-root "$PWD"`
   Expected: JSON on stdout plus audit-only stderr guidance; exit 0.
 
 Shared routing policy still comes from `../../AGENT.md`.
@@ -406,13 +547,11 @@ CLAUDE_PROJECT_SETTINGS = {
             "Bash(git rev-parse *)",
             "Bash(git ls-files *)",
             "Bash(python3 scripts/check_skills.py --verify-sync)",
-            "Bash(python3 scripts/check_skills.py --verify-codex-link)",
             "Bash(python3 scripts/materialize_cli_host_entrypoints.py)",
             "Bash(python3 -m pytest *)",
             "Bash(python3 -m compileall *)",
             "Bash(cargo test *)",
             "Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *)",
-            "Bash(*/scripts/router-rs/target/debug/router-rs *)",
             "Bash(python3 scripts/runtime_background_cli.py *)",
             "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
             "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
@@ -423,48 +562,6 @@ CLAUDE_PROJECT_SETTINGS = {
         {"serverName": server_name} for server_name in shared_project_mcp_servers()
     ],
     "hooks": {
-        "SessionStart": [
-            {
-                "matcher": "*",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_start.sh",
-                    }
-                ],
-            }
-        ],
-        "Stop": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stop.sh",
-                    }
-                ],
-            }
-        ],
-        "PreCompact": [
-            {
-                "matcher": "*",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_compact.sh",
-                    }
-                ],
-            }
-        ],
-        "SubagentStop": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/subagent_stop.sh",
-                    }
-                ],
-            }
-        ],
         "SessionEnd": [
             {
                 "hooks": [
@@ -488,7 +585,7 @@ CLAUDE_PROJECT_SETTINGS = {
         ],
         "StopFailure": [
             {
-                "matcher": "invalid_request|server_error|max_output_tokens|unknown",
+                "matcher": "invalid_request|server_error|max_output_tokens|rate_limit|authentication_failed|billing_error|unknown",
                 "hooks": [
                     {
                         "type": "command",
@@ -511,7 +608,7 @@ HOST_ENTRYPOINT_TEXT_FILES = {
     ".claude/commands/refresh.md": CLAUDE_REFRESH_COMMAND,
     ".claude/commands/background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
     ".claude/commands/autopilot.md": CLAUDE_AUTOPILOT_COMMAND,
-    ".claude/commands/deepreview.md": CLAUDE_DEEPREVIEW_COMMAND,
+    ".claude/commands/deepinterview.md": CLAUDE_DEEPINTERVIEW_COMMAND,
     ".claude/hooks/README.md": CLAUDE_HOOKS_README,
     ".claude/hooks/session_start.sh": CLAUDE_SESSION_START_HOOK,
     ".claude/hooks/stop.sh": CLAUDE_STOP_HOOK,
@@ -540,7 +637,7 @@ PARTIAL_SYNC_TEXT_FILES = (
     ".claude/commands/refresh.md",
     ".claude/commands/background_batch.md",
     ".claude/commands/autopilot.md",
-    ".claude/commands/deepreview.md",
+    ".claude/commands/deepinterview.md",
 )
 
 PARTIAL_SYNC_MANAGED_DIRECTORIES = (
@@ -555,6 +652,7 @@ RETIRED_HOST_ENTRYPOINT_PATHS = (
     "configs/codex/AGENTS.md",
     "configs/claude/CLAUDE.md",
     "configs/gemini/GEMINI.md",
+    ".claude/commands/deepreview.md",
 )
 
 def _write_text(path: Path, content: str) -> bool:

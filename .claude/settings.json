@@ -6,6 +6,9 @@
     },
     {
       "serverName": "framework-mcp"
+    },
+    {
+      "serverName": "openaiDeveloperDocs"
     }
   ],
   "hooks": {
@@ -20,43 +23,11 @@
         "matcher": "project_settings"
       }
     ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_compact.sh",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      }
-    ],
     "SessionEnd": [
       {
         "hooks": [
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_end.sh",
-            "type": "command"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_start.sh",
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stop.sh",
             "type": "command"
           }
         ]
@@ -70,17 +41,7 @@
             "type": "command"
           }
         ],
-        "matcher": "invalid_request|server_error|max_output_tokens|unknown"
-      }
-    ],
-    "SubagentStop": [
-      {
-        "hooks": [
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/subagent_stop.sh",
-            "type": "command"
-          }
-        ]
+        "matcher": "invalid_request|server_error|max_output_tokens|rate_limit|authentication_failed|billing_error|unknown"
       }
     ]
   },
@@ -97,13 +58,11 @@
       "Bash(git rev-parse *)",
       "Bash(git ls-files *)",
       "Bash(python3 scripts/check_skills.py --verify-sync)",
-      "Bash(python3 scripts/check_skills.py --verify-codex-link)",
       "Bash(python3 scripts/materialize_cli_host_entrypoints.py)",
       "Bash(python3 -m pytest *)",
       "Bash(python3 -m compileall *)",
       "Bash(cargo test *)",
       "Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *)",
-      "Bash(*/scripts/router-rs/target/debug/router-rs *)",
       "Bash(python3 scripts/runtime_background_cli.py *)",
       "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
       "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",

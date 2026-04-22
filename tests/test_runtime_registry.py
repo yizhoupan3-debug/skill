@@ -109,17 +109,30 @@ def test_runtime_registry_exposes_framework_native_aliases_and_omc_retirement_co
     aliases = framework_native_aliases()
     assert aliases["autopilot"]["canonical_owner"] == "execution-controller-coding"
     assert aliases["autopilot"]["host_entrypoints"]["codex-cli"] == "$autopilot"
-    assert aliases["deepreview"]["canonical_owner"] == "code-review"
-    assert aliases["deepreview"]["host_entrypoints"]["claude-code"] == "/deepreview"
+    assert aliases["autopilot"]["omc_lineage"]["inherits_core_capabilities"] is True
+    assert aliases["autopilot"]["upstream_source"]["tag"] == "v4.13.2"
+    assert "qa" in aliases["autopilot"]["official_workflow"]["phases"]
+    assert "resume-and-recovery-required" in aliases["autopilot"]["implementation_bar"]
+    assert aliases["deepinterview"]["canonical_owner"] == "code-review"
+    assert aliases["deepinterview"]["host_entrypoints"]["claude-code"] == "/deepinterview"
+    assert aliases["deepinterview"]["omc_lineage"]["inherits_core_capabilities"] is True
+    assert aliases["deepinterview"]["upstream_source"]["official_skill_path"] == "skills/deep-interview/SKILL.md"
+    assert "one-question-at-a-time" in aliases["deepinterview"]["official_workflow"]["loop_rules"]
+    assert "verification-evidence-required" in aliases["deepinterview"]["implementation_bar"]
 
     retirement = omc_retirement_contract()
     assert retirement["runtime_authority"] == "rust-session-supervisor"
     assert ".omc" in retirement["steady_state_forbidden_roots"]
     assert "external_session_supervisor" in retirement["replacement_capabilities"]
+    assert retirement["framework_native_alias_guarantees"]["autopilot"]["inherits_omc_core_capabilities"] is True
+    assert (
+        "fix-verify-loop-until-bounded-scope-clean"
+        in retirement["framework_native_alias_guarantees"]["deepinterview"]["implementation_bar"]
+    )
 
 
 def test_runtime_registry_exposes_shared_project_mcp_servers() -> None:
-    assert shared_project_mcp_servers() == ("browser-mcp", "framework-mcp")
+    assert shared_project_mcp_servers() == ("browser-mcp", "framework-mcp", "openaiDeveloperDocs")
 
 
 def test_runtime_registry_host_records_expose_supervisor_capabilities() -> None:
@@ -134,4 +147,4 @@ def test_runtime_registry_host_records_expose_supervisor_capabilities() -> None:
         assert record["protocol_hints"]["session_supervisor_driver"] == expected_driver
 
     assert codex["protocol_hints"]["framework_alias_entrypoints"]["autopilot"] == "$autopilot"
-    assert claude["protocol_hints"]["framework_alias_entrypoints"]["deepreview"] == "/deepreview"
+    assert claude["protocol_hints"]["framework_alias_entrypoints"]["deepinterview"] == "/deepinterview"

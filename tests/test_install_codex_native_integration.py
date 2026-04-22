@@ -20,6 +20,7 @@ from scripts.install_codex_native_integration import (
     ensure_config_file,
     ensure_default_bootstrap_bundle,
     ensure_home_claude_refresh_command,
+    ensure_home_claude_skills_link,
     ensure_home_codex_skills_link,
     ensure_tui_status_line,
     install_framework_server,
@@ -121,6 +122,7 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     (plugin_root / "plugin.json").write_text('{"name":"skill-framework-native"}\n', encoding="utf-8")
     home_config_path = tmp_path / "home" / ".codex" / "config.toml"
     home_codex_skills_path = tmp_path / "home" / ".codex" / "skills"
+    home_claude_skills_path = tmp_path / "home" / ".claude" / "skills"
     home_claude_refresh_path = tmp_path / "home" / ".claude" / "commands" / "refresh.md"
     home_claude_mcp_config_path = tmp_path / "home" / ".claude.json"
     home_plugin_root = tmp_path / "home" / ".codex" / "plugins" / "skill-framework-native"
@@ -131,6 +133,7 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     first = install_native_integration(
         home_config_path=home_config_path,
         home_codex_skills_path=home_codex_skills_path,
+        home_claude_skills_path=home_claude_skills_path,
         home_claude_refresh_path=home_claude_refresh_path,
         home_claude_mcp_config_path=home_claude_mcp_config_path,
         repo_root=repo_root,
@@ -142,6 +145,7 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     second = install_native_integration(
         home_config_path=home_config_path,
         home_codex_skills_path=home_codex_skills_path,
+        home_claude_skills_path=home_claude_skills_path,
         home_claude_refresh_path=home_claude_refresh_path,
         home_claude_mcp_config_path=home_claude_mcp_config_path,
         repo_root=repo_root,
@@ -160,10 +164,11 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert second["success"] is True
     assert content.count("[mcp_servers.browser-mcp]") == 1
     assert content.count("[mcp_servers.framework-mcp]") == 1
+    assert content.count("[mcp_servers.openaiDeveloperDocs]") == 1
     assert content.count("[tui]") == 1
     assert content.count("status_line = [") == 1
-    assert home_codex_skills_path.is_symlink()
-    assert home_codex_skills_path.resolve() == (repo_root / "skills").resolve()
+    assert not home_codex_skills_path.exists()
+    assert not home_claude_skills_path.exists()
     assert home_claude_refresh_path.read_text(encoding="utf-8") == CLAUDE_REFRESH_COMMAND
     assert claude_mcp_payload["mcpServers"]["browser-mcp"]["command"] == "bash"
     assert claude_mcp_payload["mcpServers"]["browser-mcp"]["cwd"] == str(repo_root.resolve())
@@ -172,6 +177,8 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert claude_mcp_payload["mcpServers"]["framework-mcp"]["env"]["PYTHONPATH"] == str(
         repo_root.resolve()
     )
+    assert claude_mcp_payload["mcpServers"]["openaiDeveloperDocs"]["type"] == "http"
+    assert claude_mcp_payload["mcpServers"]["openaiDeveloperDocs"]["url"] == "https://developers.openai.com/mcp"
     assert (home_plugin_root / ".codex-plugin" / "plugin.json").is_file()
     assert [plugin["name"] for plugin in marketplace["plugins"]].count("skill-framework-native") == 1
     assert instructions == ""
@@ -182,12 +189,16 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert Path(first["default_bootstrap"]["mirror_bootstrap_path"]).is_file()
     assert first["tui_status_line_changed"] is True
     assert second["tui_status_line_changed"] is False
-    assert first["home_codex_skills_link_changed"] is True
+    assert first["home_codex_skills_link_changed"] is False
     assert second["home_codex_skills_link_changed"] is False
+    assert first["home_claude_skills_link_changed"] is False
+    assert second["home_claude_skills_link_changed"] is False
     assert first["home_claude_refresh_changed"] is True
     assert second["home_claude_refresh_changed"] is False
     assert first["home_claude_mcp_config_changed"] is True
     assert second["home_claude_mcp_config_changed"] is False
+    assert first["openai_developer_docs_mcp_changed"] is True
+    assert second["openai_developer_docs_mcp_changed"] is False
 
 
 def test_ensure_default_bootstrap_bundle_is_idempotent(tmp_path: Path) -> None:
@@ -265,6 +276,22 @@ def test_ensure_home_codex_skills_link_repoints_stale_target(tmp_path: Path) -> 
     assert target_path.resolve() == (repo_root / "skills").resolve()
 
 
+def test_ensure_home_claude_skills_link_repoints_stale_target(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / "skills").mkdir(parents=True)
+    stale_root = tmp_path / "stale"
+    stale_root.mkdir(parents=True)
+    target_path = tmp_path / "home" / ".claude" / "skills"
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.symlink_to(stale_root, target_is_directory=True)
+
+    changed = ensure_home_claude_skills_link(repo_root, target_path=target_path)
+
+    assert changed is True
+    assert target_path.is_symlink()
+    assert target_path.resolve() == (repo_root / "skills").resolve()
+
+
 def test_ensure_home_claude_refresh_command_is_idempotent(tmp_path: Path) -> None:
     command_path = tmp_path / "home" / ".claude" / "commands" / "refresh.md"
 
@@ -324,7 +351,9 @@ def test_install_skills_codex_command_routes_through_native_installer(tmp_path: 
     assert "native integration installed" in completed.stdout
     assert "[mcp_servers.browser-mcp]" in content
     assert "[mcp_servers.framework-mcp]" in content
-    assert (Path(env["HOME"]) / ".codex" / "skills").is_symlink()
+    assert "[mcp_servers.openaiDeveloperDocs]" in content
+    assert not (Path(env["HOME"]) / ".codex" / "skills").exists()
+    assert not (Path(env["HOME"]) / ".claude" / "skills").exists()
     assert (tmp_path / "bootstrap" / "framework_default_bootstrap.json").is_file()
 
 
@@ -357,6 +386,7 @@ def test_install_native_integration_repairs_stale_framework_block_and_bootstrap(
     result = install_native_integration(
         home_config_path=home_config_path,
         home_codex_skills_path=tmp_path / "home" / ".codex" / "skills",
+        home_claude_skills_path=tmp_path / "home" / ".claude" / "skills",
         home_claude_refresh_path=tmp_path / "home" / ".claude" / "commands" / "refresh.md",
         repo_root=repo_root,
         home_plugin_root=tmp_path / "home" / ".codex" / "plugins" / "skill-framework-native",
@@ -416,6 +446,7 @@ def test_install_native_integration_repairs_home_claude_mcp_config_and_preserves
     result = install_native_integration(
         home_config_path=tmp_path / "home" / ".codex" / "config.toml",
         home_codex_skills_path=tmp_path / "home" / ".codex" / "skills",
+        home_claude_skills_path=tmp_path / "home" / ".claude" / "skills",
         home_claude_refresh_path=tmp_path / "home" / ".claude" / "commands" / "refresh.md",
         home_claude_mcp_config_path=home_claude_mcp_config_path,
         repo_root=repo_root,
@@ -434,6 +465,8 @@ def test_install_native_integration_repairs_home_claude_mcp_config_and_preserves
     assert payload["mcpServers"]["browser-mcp"]["cwd"] == str(repo_root.resolve())
     assert payload["mcpServers"]["framework-mcp"]["command"] == "python3"
     assert payload["mcpServers"]["framework-mcp"]["env"]["PYTHONPATH"] == str(repo_root.resolve())
+    assert payload["mcpServers"]["openaiDeveloperDocs"]["type"] == "http"
+    assert payload["mcpServers"]["openaiDeveloperDocs"]["url"] == "https://developers.openai.com/mcp"
 
 
 def test_install_native_integration_honors_repo_local_runtime_registry(tmp_path: Path) -> None:
@@ -480,12 +513,14 @@ def test_install_native_integration_honors_repo_local_runtime_registry(tmp_path:
     result = install_native_integration(
         home_config_path=tmp_path / "home" / ".codex" / "config.toml",
         home_codex_skills_path=home_codex_skills_path,
+        home_claude_skills_path=tmp_path / "home" / ".claude" / "skills",
         home_claude_refresh_path=tmp_path / "home" / ".claude" / "commands" / "refresh.md",
         repo_root=repo_root,
         home_plugin_root=home_plugin_root,
         home_marketplace_path=home_marketplace_path,
         project_instructions_path=Path(".codex") / "model_instructions.md",
         install_browser_mcp=False,
+        install_home_codex_skills_link=True,
     )
 
     marketplace = json.loads(home_marketplace_path.read_text(encoding="utf-8"))
@@ -506,6 +541,7 @@ def test_install_skills_all_command_reports_codex_ready_and_links_other_hosts(tm
     home_root = Path(env["HOME"])
     assert "Done!" in completed.stdout
     assert "native integration ready" in status.stdout
+    assert not (home_root / ".codex" / "skills").exists()
     assert (home_root / ".claude" / "skills").is_symlink()
     assert (home_root / ".agents" / "skills").is_symlink()
     assert (home_root / ".gemini" / "skills").is_symlink()

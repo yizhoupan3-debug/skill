@@ -601,7 +601,9 @@ class RustRouteAdapter:
     runtime_observability_dashboard_schema_version = "runtime-observability-dashboard-v1"
     framework_runtime_snapshot_schema_version = "router-rs-framework-runtime-snapshot-v1"
     framework_contract_summary_schema_version = "router-rs-framework-contract-summary-v1"
+    framework_memory_recall_schema_version = "router-rs-framework-memory-recall-v1"
     framework_recap_schema_version = "router-rs-framework-recap-v1"
+    framework_refresh_schema_version = "router-rs-framework-refresh-v1"
     claude_hook_schema_version = "router-rs-claude-hook-response-v1"
     route_authority = "rust-route-core"
     execution_authority = "rust-execution-cli"
@@ -765,7 +767,7 @@ class RustRouteAdapter:
     def compiled_binary(self) -> Path | None:
         """Expose the resolved router binary for thin Python CLI shims."""
 
-        return self._cached_resolved_binary()
+        return self._resolved_binary()
 
     def exec_query_cli(
         self,
@@ -1139,6 +1141,50 @@ class RustRouteAdapter:
             )
         return summary
 
+    def framework_memory_recall(
+        self,
+        *,
+        repo_root: Path,
+        query: str = "",
+        top: int = 8,
+        mode: str = "stable",
+    ) -> dict[str, Any]:
+        """Build the Rust-owned framework memory recall payload."""
+
+        args = [
+            "--framework-memory-recall-json",
+            "--repo-root",
+            str(repo_root),
+            "--query",
+            query,
+            "--limit",
+            str(top),
+            "--framework-memory-mode",
+            mode,
+        ]
+        payload = self._run_hot_json_command(
+            "framework_memory_recall",
+            {"repo_root": str(repo_root), "query": query, "top": top, "mode": mode},
+            [*self._binary_command(), *args],
+            failure_label="framework memory recall compiler",
+        )
+        if payload.get("schema_version") != self.framework_memory_recall_schema_version:
+            raise RuntimeError(
+                "Rust framework memory recall compiler returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
+            )
+        if payload.get("authority") != self.framework_runtime_authority:
+            raise RuntimeError(
+                "Rust framework memory recall compiler returned an unexpected authority marker: "
+                f"{payload.get('authority')!r}"
+            )
+        recall = payload.get("memory_recall")
+        if not isinstance(recall, dict):
+            raise RuntimeError(
+                "Rust framework memory recall compiler returned a missing memory_recall payload."
+            )
+        return recall
+
     def framework_recap(self, *, repo_root: Path, max_lines: int = 6) -> dict[str, Any]:
         """Build the Rust-owned recap surface for thin host shells."""
 
@@ -1171,6 +1217,37 @@ class RustRouteAdapter:
                 "Rust framework recap compiler returned a missing recap payload."
             )
         return recap
+
+    def framework_refresh(self, *, repo_root: Path, max_lines: int = 4) -> dict[str, Any]:
+        """Build and copy the compact Rust-owned refresh prompt."""
+
+        args = [
+            "--framework-refresh-json",
+            "--repo-root",
+            str(repo_root),
+            "--claude-hook-max-lines",
+            str(max_lines),
+        ]
+        payload = self._run_json_command(
+            [*self._binary_command(), *args],
+            failure_label="framework refresh compiler",
+        )
+        if payload.get("schema_version") != self.framework_refresh_schema_version:
+            raise RuntimeError(
+                "Rust framework refresh compiler returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
+            )
+        if payload.get("authority") != self.framework_runtime_authority:
+            raise RuntimeError(
+                "Rust framework refresh compiler returned an unexpected authority marker: "
+                f"{payload.get('authority')!r}"
+            )
+        refresh = payload.get("refresh")
+        if not isinstance(refresh, dict):
+            raise RuntimeError(
+                "Rust framework refresh compiler returned a missing refresh payload."
+            )
+        return refresh
 
     def claude_lifecycle_hook(
         self,
@@ -1735,7 +1812,7 @@ class RustRouteAdapter:
         return [*self._compiled_binary_command(), "--stdio-json"]
 
     def _compiled_binary_command(self) -> list[str]:
-        resolved_binary = self._cached_resolved_binary()
+        resolved_binary = self._fresh_resolved_binary()
         if resolved_binary is None:
             raise RuntimeError(
                 "router-rs requires a prebuilt binary; build scripts/router-rs before running the Python host runtime."
@@ -1762,6 +1839,18 @@ class RustRouteAdapter:
 
     def _resolved_binary(self) -> Path | None:
         return resolve_router_binary_candidate(self.release_bin, self.debug_bin)
+
+    def _fresh_resolved_binary(self) -> Path | None:
+        resolved_binary = self._resolved_binary()
+        if resolved_binary is None:
+            return None
+        latest_source_mtime = self._latest_source_mtime()
+        if resolved_binary.stat().st_mtime < latest_source_mtime:
+            raise RuntimeError(
+                "router-rs prebuilt binary is stale; source files are newer than the compiled artifact. "
+                "Rebuild scripts/router-rs before running the Python host runtime."
+            )
+        return resolved_binary
 
     def _cached_resolved_binary(self) -> Path | None:
         cached = self._cached_runtime_binary
@@ -1850,7 +1939,12 @@ class RustRouteAdapter:
             client.close()
 
     def _stdio_client_key(self, command: list[str]) -> tuple[str, ...]:
-        return (*command, str(self.codex_home))
+        binary_mtime = ""
+        if command:
+            binary_path = Path(command[0])
+            if binary_path.exists():
+                binary_mtime = str(binary_path.stat().st_mtime_ns)
+        return (*command, f"binary-mtime={binary_mtime}", str(self.codex_home))
 
     def _uses_default_json_runner(self) -> bool:
         return getattr(self._run_json_command, "__func__", None) is RustRouteAdapter._run_json_command

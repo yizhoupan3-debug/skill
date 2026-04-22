@@ -1401,6 +1401,34 @@ def test_rust_route_adapter_framework_recap_builds_projection_and_prompt(
     assert "必须先做的下一步：" in recap["workflow_prompt"]
 
 
+def test_rust_route_adapter_framework_refresh_builds_compact_prompt_and_copies_to_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    _seed_framework_runtime_artifacts(tmp_path, terminal=False)
+    (tmp_path / ".codex" / "memory").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".codex" / "memory" / "MEMORY.md").write_text(
+        "# 项目长期记忆\n\n## Active Patterns\n\n- AP-1: Externalize task state\n",
+        encoding="utf-8",
+    )
+    clipboard_path = tmp_path / "refresh_clipboard.txt"
+    monkeypatch.setenv("ROUTER_RS_CLIPBOARD_PATH", str(clipboard_path))
+
+    refresh = adapter.framework_refresh(repo_root=tmp_path, max_lines=6)
+
+    copied = clipboard_path.read_text(encoding="utf-8")
+    assert refresh["ok"] is True
+    assert refresh["confirmation"] == "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。"
+    assert refresh["clipboard"]["backend"] == "file"
+    assert refresh["prompt"] == copied
+    assert "继续当前仓库，先看这些恢复锚点：" in copied
+    assert "先做：" in copied
+    assert "按既定串并行分工直接开始执行。" in copied
+    assert "当前上下文：" not in copied
+    assert "必须先做的下一步：" not in copied
+
+
 def test_rust_route_adapter_framework_runtime_snapshot_prefers_supervisor_owned_continuity(
     tmp_path: Path,
 ) -> None:

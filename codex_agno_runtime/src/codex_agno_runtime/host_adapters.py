@@ -11,7 +11,7 @@ from .framework_profile import (
     ensure_capabilities,
     resolve_host_capability_requirements,
 )
-from .runtime_registry import default_host_peer_set, host_adapter_records
+from .runtime_registry import default_host_peer_set, framework_native_aliases, host_adapter_records
 from .trace import (
     TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
     TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
@@ -108,6 +108,20 @@ def _clone_json_like(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_clone_json_like(item) for item in value]
     return value
+
+
+def _framework_alias_entrypoints_for(host_id: str) -> Dict[str, str]:
+    entrypoints: Dict[str, str] = {}
+    for alias_name, payload in framework_native_aliases().items():
+        if not isinstance(payload, Mapping):
+            continue
+        host_entrypoints = payload.get("host_entrypoints")
+        if not isinstance(host_entrypoints, Mapping):
+            continue
+        entrypoint = host_entrypoints.get(host_id)
+        if isinstance(entrypoint, str) and entrypoint:
+            entrypoints[str(alias_name)] = entrypoint
+    return entrypoints
 
 
 def _split_host_overrides(
@@ -509,7 +523,7 @@ CODEX_CLI_ADAPTER = HostAdapterSpec(
         "mcp_config_paths": (".codex/config.toml",),
         "session_supervisor_driver": "codex_driver",
         "resume_command_examples": ("codex resume --last", "codex resume <session_id>"),
-        "framework_alias_entrypoints": {"autopilot": "$autopilot", "deepreview": "$deepreview"},
+        "framework_alias_entrypoints": _framework_alias_entrypoints_for("codex-cli"),
     },
     notes="Formal headless Codex entrypoint that consumes the shared framework contract.",
 )
@@ -700,7 +714,7 @@ CLAUDE_CODE_ADAPTER = HostAdapterSpec(
         ),
         "session_supervisor_driver": "claude_driver",
         "resume_command_examples": ("claude --continue", "claude --resume <session_id>"),
-        "framework_alias_entrypoints": {"autopilot": "/autopilot", "deepreview": "/deepreview"},
+        "framework_alias_entrypoints": _framework_alias_entrypoints_for("claude-code"),
     },
     notes=(
         "Claude Code projection over the shared framework truth; keep host-specific "
