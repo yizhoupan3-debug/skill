@@ -740,6 +740,20 @@ def test_framework_shared_contract_projection_report_keeps_hosts_on_one_outer_tr
 
     assert report["shared_contract_schema_version"] == "framework-shared-contract-v1"
     assert report["all_shared_contract_projections_match"] is True
+    assert report["all_bridge_contract_projections_match"] is True
+    assert report["canonical_bridge_contract"] == {
+        "skills": {"project_dir": ".codex/skills"},
+        "memory": {
+            "bridge_dir": ".aionrs-memory-bridge",
+            "mounts": [
+                {
+                    "mount_id": "project",
+                    "source": "project",
+                    "bridge_kind": "framework-memory-mount",
+                }
+            ],
+        },
+    }
     assert set(projections) == {
         "cli_common_adapter",
         "codex_common_adapter",
@@ -750,6 +764,10 @@ def test_framework_shared_contract_projection_report_keeps_hosts_on_one_outer_tr
     }
     assert projections["cli_common_adapter"]["projection_field"] == "shared_contract"
     assert projections["cli_common_adapter"]["shared_contract_match"] is True
+    assert projections["cli_common_adapter"]["bridge_contract_match"] is True
+    assert projections["cli_common_adapter"]["bridge_contract"] == report["canonical_bridge_contract"]
+    assert projections["codex_common_adapter"]["bridge_contract_match"] is True
+    assert projections["codex_common_adapter"]["bridge_contract"] == report["canonical_bridge_contract"]
     assert projections["codex_desktop_adapter"]["projection_field"] == "common_contract"
     assert projections["codex_desktop_adapter"]["runtime_surface_match"] is True
     assert projections["codex_cli_adapter"]["runtime_surface_match"] is True

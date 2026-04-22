@@ -8,6 +8,7 @@ from codex_agno_runtime.framework_profile import (
     FrameworkProfile,
     build_framework_session_contract,
     ensure_capabilities,
+    extract_framework_workspace_bridges,
     normalize_framework_mcp_servers,
     resolve_host_capability_requirements,
 )
@@ -60,7 +61,7 @@ def compile_aionrs_companion_adapter(
         "aionrsConfig": _compile_aionrs_config(profile),
         "mcpConfig": {"servers": normalize_framework_mcp_servers(profile.mcp_servers)},
         "workspaceBootstrap": payload["workspace_bootstrap"],
-        "bridges": dict(payload["workspace_bootstrap"].get("bridges", {})),
+        "bridges": extract_framework_workspace_bridges(payload["workspace_bootstrap"]),
         "toolApprovalMapping": _compile_tool_approval_mapping(profile),
         "eventTranslation": _default_event_translation(),
         "fallbackSemantics": {

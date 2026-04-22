@@ -807,7 +807,7 @@ def test_cli_common_shared_contract_keeps_framework_truth_under_host_overrides()
     assert cli_common["shared_contract"]["session_contract"] == canonical_shared_contract[
         "session_contract"
     ]
-    assert cli_common["bridge_contract"] == canonical_shared_contract["workspace_bootstrap"]["bridges"]
+    assert cli_common["bridge_contract"] == profile.shared_contract_bridges()
 
     desktop = compile_codex_desktop_adapter(
         profile,
