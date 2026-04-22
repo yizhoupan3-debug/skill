@@ -63,9 +63,11 @@ install_tool() {
 
   # Check if already correctly linked
   if [ -L "$target" ]; then
-    local current_target
+    local current_target resolved_target resolved_source
     current_target="$(readlink "$target")"
-    if [ "$current_target" = "$SKILLS_ROOT" ]; then
+    resolved_target="$(cd "$(dirname "$target")" && cd "$(dirname "$current_target")" && pwd)/$(basename "$current_target")"
+    resolved_source="$(cd "$SKILLS_ROOT" && pwd)"
+    if [ "$resolved_target" = "$resolved_source" ]; then
       echo "  ✓ $tool — already linked → $SKILLS_ROOT"
       return 0
     else
@@ -114,9 +116,11 @@ show_status() {
     local target
     target="$(get_tool_path "$tool")"
     if [ -L "$target" ]; then
-      local link_target
+      local link_target resolved_target resolved_source
       link_target="$(readlink "$target")"
-      if [ "$link_target" = "$SKILLS_ROOT" ]; then
+      resolved_target="$(cd "$(dirname "$target")" && cd "$(dirname "$link_target")" && pwd)/$(basename "$link_target")"
+      resolved_source="$(cd "$SKILLS_ROOT" && pwd)"
+      if [ "$resolved_target" = "$resolved_source" ]; then
         echo "  ✓ $tool → $target"
       else
         echo "  ⚠ $tool → $target (points to $link_target)"

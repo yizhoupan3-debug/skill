@@ -10,11 +10,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.materialize_cli_host_entrypoints import CLAUDE_REFRESH_COMMAND
 from scripts.install_codex_native_integration import (
     DEFAULT_TUI_STATUS_ITEMS,
     build_personal_marketplace_payload,
     build_framework_server_block,
     ensure_config_file,
+    ensure_home_claude_refresh_command,
+    ensure_home_codex_skills_link,
     ensure_tui_status_line,
     install_native_integration,
     sync_directory,
@@ -47,6 +50,7 @@ def test_ensure_tui_status_line_bootstraps_table_when_missing(tmp_path: Path) ->
     content = config_path.read_text(encoding="utf-8")
     assert changed is True
     assert "[tui]" in content
+    assert 'status_line = ["model-with-reasoning", "git-branch", "context-used", "fast-mode"]' in content
     for item in DEFAULT_TUI_STATUS_ITEMS:
         assert f'"{item}"' in content
 
@@ -76,7 +80,7 @@ def test_ensure_tui_status_line_preserves_existing_tui_keys(tmp_path: Path) -> N
     assert changed is True
     assert 'theme = "monokai-extended-bright"' in content
     assert content.count("[tui]") == 1
-    assert "status_line = [" in content
+    assert 'status_line = ["model-with-reasoning", "git-branch", "context-used", "fast-mode"]' in content
 
 
 def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
@@ -90,12 +94,16 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     plugin_root.mkdir(parents=True)
     (plugin_root / "plugin.json").write_text('{"name":"skill-framework-native"}\n', encoding="utf-8")
     home_config_path = tmp_path / "home" / ".codex" / "config.toml"
+    home_codex_skills_path = tmp_path / "home" / ".codex" / "skills"
+    home_claude_refresh_path = tmp_path / "home" / ".claude" / "commands" / "refresh.md"
     home_plugin_root = tmp_path / "home" / ".codex" / "plugins" / "skill-framework-native"
     home_marketplace_path = tmp_path / "home" / ".agents" / "plugins" / "marketplace.json"
     project_instructions_path = Path(".codex") / "model_instructions.md"
 
     first = install_native_integration(
         home_config_path=home_config_path,
+        home_codex_skills_path=home_codex_skills_path,
+        home_claude_refresh_path=home_claude_refresh_path,
         repo_root=repo_root,
         home_plugin_root=home_plugin_root,
         home_marketplace_path=home_marketplace_path,
@@ -103,6 +111,8 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     )
     second = install_native_integration(
         home_config_path=home_config_path,
+        home_codex_skills_path=home_codex_skills_path,
+        home_claude_refresh_path=home_claude_refresh_path,
         repo_root=repo_root,
         home_plugin_root=home_plugin_root,
         home_marketplace_path=home_marketplace_path,
@@ -119,6 +129,9 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert content.count("[mcp_servers.framework-mcp]") == 1
     assert content.count("[tui]") == 1
     assert content.count("status_line = [") == 1
+    assert home_codex_skills_path.is_symlink()
+    assert home_codex_skills_path.resolve() == (repo_root / "skills").resolve()
+    assert home_claude_refresh_path.read_text(encoding="utf-8") == CLAUDE_REFRESH_COMMAND
     assert (home_plugin_root / ".codex-plugin" / "plugin.json").is_file()
     assert [plugin["name"] for plugin in marketplace["plugins"]].count("skill-framework-native") == 1
     assert instructions == ""
@@ -126,6 +139,37 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert second["framework_overlay_retirement"]["status"] == "already-retired"
     assert first["tui_status_line_changed"] is True
     assert second["tui_status_line_changed"] is False
+    assert first["home_codex_skills_link_changed"] is True
+    assert second["home_codex_skills_link_changed"] is False
+    assert first["home_claude_refresh_changed"] is True
+    assert second["home_claude_refresh_changed"] is False
+
+
+def test_ensure_home_codex_skills_link_repoints_stale_target(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / "skills").mkdir(parents=True)
+    stale_root = tmp_path / "stale"
+    stale_root.mkdir(parents=True)
+    target_path = tmp_path / "home" / ".codex" / "skills"
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.symlink_to(stale_root, target_is_directory=True)
+
+    changed = ensure_home_codex_skills_link(repo_root, target_path=target_path)
+
+    assert changed is True
+    assert target_path.is_symlink()
+    assert target_path.resolve() == (repo_root / "skills").resolve()
+
+
+def test_ensure_home_claude_refresh_command_is_idempotent(tmp_path: Path) -> None:
+    command_path = tmp_path / "home" / ".claude" / "commands" / "refresh.md"
+
+    first = ensure_home_claude_refresh_command(command_path)
+    second = ensure_home_claude_refresh_command(command_path)
+
+    assert first is True
+    assert second is False
+    assert command_path.read_text(encoding="utf-8") == CLAUDE_REFRESH_COMMAND
 
 
 def test_sync_directory_removes_stale_files_and_copies_updates(tmp_path: Path) -> None:

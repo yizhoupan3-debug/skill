@@ -16,11 +16,14 @@ if __package__ in {None, ""}:
 
 from scripts.install_browser_mcp_codex import install_server as install_browser_server
 from scripts.install_codex_framework_default import retire_overlay as retire_framework_overlay
+from scripts.materialize_cli_host_entrypoints import CLAUDE_REFRESH_COMMAND
 from scripts.memory_support import get_repo_root, read_json_if_exists, write_json_if_changed, write_text_if_changed
 
 HOME_CONFIG_PATH = Path.home() / ".codex" / "config.toml"
 HOME_PLUGIN_ROOT = Path.home() / ".codex" / "plugins" / "skill-framework-native"
 HOME_MARKETPLACE_PATH = Path.home() / ".agents" / "plugins" / "marketplace.json"
+HOME_CODEX_SKILLS_PATH = Path.home() / ".codex" / "skills"
+HOME_CLAUDE_REFRESH_PATH = Path.home() / ".claude" / "commands" / "refresh.md"
 PROJECT_INSTRUCTIONS_PATH = Path(".codex") / "model_instructions.md"
 REPO_MARKETPLACE_PATH = Path(".agents") / "plugins" / "marketplace.json"
 PLUGIN_NAME = "skill-framework-native"
@@ -29,8 +32,7 @@ DEFAULT_TUI_STATUS_ITEMS = (
     "model-with-reasoning",
     "git-branch",
     "context-used",
-    "context-remaining",
-    "used-tokens",
+    "fast-mode",
 )
 
 
@@ -151,6 +153,42 @@ def sync_personal_plugin_bundle(repo_root: Path, plugin_root: Path = HOME_PLUGIN
     return sync_directory(source, plugin_root)
 
 
+def ensure_home_codex_skills_link(
+    repo_root: Path,
+    *,
+    target_path: Path = HOME_CODEX_SKILLS_PATH,
+) -> bool:
+    """Ensure ~/.codex/skills points at the repository skill library."""
+
+    source = (repo_root / "skills").resolve()
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if target_path.is_symlink():
+        current_target = target_path.resolve()
+        if current_target == source:
+            return False
+        target_path.unlink()
+    elif target_path.exists():
+        backup_path = target_path.with_name(target_path.name + ".bak")
+        if backup_path.exists() or backup_path.is_symlink():
+            if backup_path.is_dir() and not backup_path.is_symlink():
+                shutil.rmtree(backup_path)
+            else:
+                backup_path.unlink()
+        shutil.move(str(target_path), str(backup_path))
+
+    target_path.symlink_to(source, target_is_directory=True)
+    return True
+
+
+def ensure_home_claude_refresh_command(
+    command_path: Path = HOME_CLAUDE_REFRESH_PATH,
+) -> bool:
+    """Ensure the global Claude refresh command matches the repo canonical text."""
+
+    return write_text_if_changed(command_path, CLAUDE_REFRESH_COMMAND)
+
+
 def build_personal_marketplace_payload(
     plugin_root: Path = HOME_PLUGIN_ROOT,
     *,
@@ -222,12 +260,16 @@ def install_native_integration(
     repo_root: Path | None = None,
     home_plugin_root: Path = HOME_PLUGIN_ROOT,
     home_marketplace_path: Path = HOME_MARKETPLACE_PATH,
+    home_codex_skills_path: Path = HOME_CODEX_SKILLS_PATH,
+    home_claude_refresh_path: Path = HOME_CLAUDE_REFRESH_PATH,
     project_instructions_path: Path = PROJECT_INSTRUCTIONS_PATH,
     install_browser_mcp: bool = True,
     install_framework_mcp: bool = True,
     retire_framework_overlay_file: bool = True,
     install_personal_plugin: bool = True,
     install_personal_marketplace_entry: bool = True,
+    install_home_codex_skills_link: bool = True,
+    install_home_claude_refresh_command: bool = True,
 ) -> dict[str, Any]:
     """Install the repo's Codex-native integration surfaces."""
 
@@ -237,6 +279,8 @@ def install_native_integration(
     framework_changed = False
     personal_plugin_changed = False
     personal_marketplace_changed = False
+    home_codex_skills_link_changed = False
+    home_claude_refresh_changed = False
     framework_overlay_result: dict[str, Any] | None = None
     if install_browser_mcp:
         browser_changed = install_browser_server(config_path=home_config_path, repo_root=resolved_repo_root)
@@ -250,6 +294,13 @@ def install_native_integration(
             marketplace_path=home_marketplace_path,
             plugin_root=home_plugin_root,
         )
+    if install_home_codex_skills_link:
+        home_codex_skills_link_changed = ensure_home_codex_skills_link(
+            resolved_repo_root,
+            target_path=home_codex_skills_path,
+        )
+    if install_home_claude_refresh_command:
+        home_claude_refresh_changed = ensure_home_claude_refresh_command(home_claude_refresh_path)
     if retire_framework_overlay_file:
         framework_overlay_result = retire_framework_overlay(
             (resolved_repo_root / project_instructions_path).resolve()
@@ -260,6 +311,8 @@ def install_native_integration(
         "home_config_path": str(home_config_path),
         "home_plugin_root": str(home_plugin_root),
         "home_marketplace_path": str(home_marketplace_path),
+        "home_codex_skills_path": str(home_codex_skills_path),
+        "home_claude_refresh_path": str(home_claude_refresh_path),
         "repo_marketplace_path": str((resolved_repo_root / REPO_MARKETPLACE_PATH).resolve()),
         "created_config": created_config,
         "browser_mcp_changed": browser_changed,
@@ -267,6 +320,8 @@ def install_native_integration(
         "tui_status_line_changed": tui_changed,
         "personal_plugin_changed": personal_plugin_changed,
         "personal_marketplace_changed": personal_marketplace_changed,
+        "home_codex_skills_link_changed": home_codex_skills_link_changed,
+        "home_claude_refresh_changed": home_claude_refresh_changed,
         "framework_overlay_retirement": framework_overlay_result,
     }
 
@@ -276,6 +331,8 @@ def main() -> int:
     parser.add_argument("--home-config-path", type=Path, default=HOME_CONFIG_PATH)
     parser.add_argument("--home-plugin-root", type=Path, default=HOME_PLUGIN_ROOT)
     parser.add_argument("--home-marketplace-path", type=Path, default=HOME_MARKETPLACE_PATH)
+    parser.add_argument("--home-codex-skills-path", type=Path, default=HOME_CODEX_SKILLS_PATH)
+    parser.add_argument("--home-claude-refresh-path", type=Path, default=HOME_CLAUDE_REFRESH_PATH)
     parser.add_argument("--project-instructions-path", type=Path, default=PROJECT_INSTRUCTIONS_PATH)
     parser.add_argument("--repo-root", type=Path, default=None)
     parser.add_argument("--skip-browser-mcp", action="store_true")
@@ -283,12 +340,16 @@ def main() -> int:
     parser.add_argument("--skip-framework-overlay-retirement", action="store_true")
     parser.add_argument("--skip-personal-plugin", action="store_true")
     parser.add_argument("--skip-personal-marketplace", action="store_true")
+    parser.add_argument("--skip-home-codex-skills-link", action="store_true")
+    parser.add_argument("--skip-home-claude-refresh", action="store_true")
     parser.add_argument("--json", action="store_true", dest="json_output")
     args = parser.parse_args()
     payload = install_native_integration(
         home_config_path=args.home_config_path,
         home_plugin_root=args.home_plugin_root,
         home_marketplace_path=args.home_marketplace_path,
+        home_codex_skills_path=args.home_codex_skills_path,
+        home_claude_refresh_path=args.home_claude_refresh_path,
         repo_root=args.repo_root,
         project_instructions_path=args.project_instructions_path,
         install_browser_mcp=not args.skip_browser_mcp,
@@ -296,6 +357,8 @@ def main() -> int:
         retire_framework_overlay_file=not args.skip_framework_overlay_retirement,
         install_personal_plugin=not args.skip_personal_plugin,
         install_personal_marketplace_entry=not args.skip_personal_marketplace,
+        install_home_codex_skills_link=not args.skip_home_codex_skills_link,
+        install_home_claude_refresh_command=not args.skip_home_claude_refresh,
     )
     if args.json_output:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
