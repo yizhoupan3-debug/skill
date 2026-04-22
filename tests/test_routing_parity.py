@@ -19,6 +19,7 @@ if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
 from codex_agno_runtime.rust_router import RustRouteAdapter
+from codex_agno_runtime.schemas import RouteExecutionPolicy
 from scripts.route import (
     route_decision_json,
     run_rust_route_json,
@@ -682,6 +683,46 @@ def test_route_policy_mode_matrix_stays_rust_authoritative(
     if payload["rollback_active"]:
         assert payload["primary_authority"] == "rust"
         assert payload["route_result_engine"] == "rust"
+
+
+def test_route_execution_policy_rejects_misaligned_python_lane_contract() -> None:
+    """The Python-lane classifier should be the single semantic source of truth."""
+
+    with pytest.raises(ValueError, match="legacy-primary route policy"):
+        RouteExecutionPolicy.model_validate(
+            {
+                "policy_schema_version": "router-rs-route-policy-v1",
+                "authority": "rust-route-core",
+                "mode": "python",
+                "rollback_active": False,
+                "python_route_required": False,
+                "diagnostic_python_lane": False,
+                "python_lane_kind": "legacy-primary",
+                "primary_authority": "python",
+                "route_result_engine": "python",
+                "shadow_engine": None,
+                "diff_report_required": False,
+                "verify_parity_required": False,
+            }
+        )
+
+    with pytest.raises(ValueError, match="diagnostic-compare-only route policy"):
+        RouteExecutionPolicy.model_validate(
+            {
+                "policy_schema_version": "router-rs-route-policy-v1",
+                "authority": "rust-route-core",
+                "mode": "shadow",
+                "rollback_active": False,
+                "python_route_required": False,
+                "diagnostic_python_lane": False,
+                "python_lane_kind": "diagnostic-compare-only",
+                "primary_authority": "rust",
+                "route_result_engine": "rust",
+                "shadow_engine": "python",
+                "diff_report_required": True,
+                "verify_parity_required": False,
+            }
+        )
 
 
 def test_route_report_contract_exposes_schema_and_stable_mismatch_vocabulary() -> None:

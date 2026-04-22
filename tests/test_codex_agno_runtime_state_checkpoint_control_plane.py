@@ -126,6 +126,49 @@ def test_checkpointer_embeds_control_plane_into_manifest_and_transport(tmp_path:
     assert persisted_manifest["control_plane"]["supports_snapshot_delta"] is False
 
 
+def test_checkpoint_manifest_can_carry_parallel_group_summary(tmp_path: Path) -> None:
+    """Resume checkpoints should preserve durable parallel-batch summaries."""
+
+    checkpointer = FilesystemRuntimeCheckpointer(
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "runtime-data" / "TRACE_METADATA.json",
+        control_plane_descriptor=CONTROL_PLANE_DESCRIPTOR,
+    )
+
+    manifest = checkpointer.checkpoint(
+        session_id="session-1",
+        job_id="job-1",
+        status="running",
+        generation=3,
+        latest_cursor=None,
+        event_transport_path=None,
+        artifact_paths=["/tmp/example.json"],
+        parallel_group={
+            "parallel_group_id": "pgroup_123",
+            "job_ids": ["job-1", "job-2"],
+            "session_ids": ["session-1", "session-2"],
+            "lane_ids": ["lane-1", "lane-2"],
+            "parent_job_ids": [],
+            "status_counts": {"queued": 1, "running": 1},
+            "active_job_count": 2,
+            "terminal_job_count": 0,
+            "total_job_count": 2,
+            "latest_updated_at": "2026-04-22T12:00:00+00:00",
+        },
+    )
+
+    assert manifest is not None
+    assert manifest.parallel_group is not None
+    assert manifest.parallel_group.parallel_group_id == "pgroup_123"
+    assert manifest.parallel_group.status_counts == {"queued": 1, "running": 1}
+
+    loaded = checkpointer.load_checkpoint()
+    assert loaded is not None
+    assert loaded.parallel_group is not None
+    assert loaded.parallel_group.lane_ids == ["lane-1", "lane-2"]
+    assert loaded.parallel_group.total_job_count == 2
+
+
 def test_checkpointer_uses_rust_writers_only_for_filesystem_backend(monkeypatch, tmp_path: Path) -> None:
     """Filesystem persistence should prefer Rust writers and keep the same artifact paths."""
 

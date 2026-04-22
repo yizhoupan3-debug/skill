@@ -27,6 +27,8 @@ from codex_agno_runtime.middleware import (
 )
 from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import (
+    BackgroundBatchEnqueueResponse,
+    BackgroundParallelGroupSummary,
     BackgroundRunRequest,
     BackgroundRunStatus,
     PrepareSessionRequest,
@@ -385,6 +387,7 @@ class CodexAgnoRuntime:
                 "route_engine_mode": self.settings.route_engine_mode,
                 "route_engine": routing_result.route_engine,
                 "diagnostic_python_lane_active": routing_result.diagnostic_python_lane_active,
+                "python_lane_kind": routing_result.python_lane_kind,
             },
         )
         self._trace.record(
@@ -399,6 +402,7 @@ class CodexAgnoRuntime:
                 "route_engine": routing_result.route_engine,
                 "route_engine_mode": self.settings.route_engine_mode,
                 "diagnostic_python_lane_active": routing_result.diagnostic_python_lane_active,
+                "python_lane_kind": routing_result.python_lane_kind,
                 "shadow_route_report": (
                     routing_result.shadow_route_report.model_dump(mode="json")
                     if routing_result.shadow_route_report is not None
@@ -417,6 +421,7 @@ class CodexAgnoRuntime:
             loaded_skill_count=len(self.skills),
             route_engine=routing_result.route_engine,
             diagnostic_python_lane_active=routing_result.diagnostic_python_lane_active,
+            python_lane_kind=routing_result.python_lane_kind,
             shadow_route_report=routing_result.shadow_route_report,
         )
 
@@ -536,6 +541,9 @@ class CodexAgnoRuntime:
                 self._background_mutation(
                     status="failed",
                     session_id=effective_session_id,
+                    parallel_group_id=request.parallel_group_id,
+                    lane_id=request.lane_id,
+                    parent_job_id=request.parent_job_id,
                     multitask_strategy=multitask_strategy,
                     error=str(enqueue_policy["error"]),
                     timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
@@ -552,7 +560,11 @@ class CodexAgnoRuntime:
                 job_id=job_id,
                 kind="job.failed",
                 stage="background",
-                payload={"error": status.error, "multitask_strategy": multitask_strategy},
+                payload={
+                    "error": status.error,
+                    "multitask_strategy": multitask_strategy,
+                    **self.background_service._background_trace_context(status),
+                },
             )
             return status
 
@@ -568,10 +580,13 @@ class CodexAgnoRuntime:
                 status = self._apply_background_mutation(
                     job_id,
                     self._background_mutation(
-                        status="failed",
-                        session_id=effective_session_id,
-                        multitask_strategy=multitask_strategy,
-                        error=str(error),
+                    status="failed",
+                    session_id=effective_session_id,
+                    parallel_group_id=request.parallel_group_id,
+                    lane_id=request.lane_id,
+                    parent_job_id=request.parent_job_id,
+                    multitask_strategy=multitask_strategy,
+                    error=str(error),
                         timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
                         max_attempts=request.max_attempts,
                         backoff_base_seconds=request.backoff_base_seconds,
@@ -586,7 +601,12 @@ class CodexAgnoRuntime:
                     job_id=job_id,
                     kind="job.failed",
                     stage="background",
-                    payload={"error": str(error)},
+                    payload={
+                        "error": str(error),
+                        "parallel_group_id": request.parallel_group_id,
+                        "lane_id": request.lane_id,
+                        "parent_job_id": request.parent_job_id,
+                    },
                 )
                 return status
             if active_job_id is not None:
@@ -595,7 +615,13 @@ class CodexAgnoRuntime:
                     job_id=active_job_id,
                     kind="job.multitask_preempt_requested",
                     stage="background",
-                    payload={"multitask_strategy": multitask_strategy, "incoming_job_id": job_id},
+                    payload={
+                        "multitask_strategy": multitask_strategy,
+                        "incoming_job_id": job_id,
+                        "parallel_group_id": request.parallel_group_id,
+                        "lane_id": request.lane_id,
+                        "parent_job_id": request.parent_job_id,
+                    },
                 )
                 await self.request_background_interrupt(active_job_id)
                 try:
@@ -632,6 +658,9 @@ class CodexAgnoRuntime:
                         self._background_mutation(
                             status="failed",
                             session_id=effective_session_id,
+                            parallel_group_id=request.parallel_group_id,
+                            lane_id=request.lane_id,
+                            parent_job_id=request.parent_job_id,
                             multitask_strategy=multitask_strategy,
                             error=str(admission_policy["error"]),
                             timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
@@ -647,6 +676,9 @@ class CodexAgnoRuntime:
                         self._background_mutation(
                             status="queued",
                             session_id=effective_session_id,
+                            parallel_group_id=request.parallel_group_id,
+                            lane_id=request.lane_id,
+                            parent_job_id=request.parent_job_id,
                             multitask_strategy=multitask_strategy,
                             timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
                             max_attempts=request.max_attempts,
@@ -668,6 +700,9 @@ class CodexAgnoRuntime:
                         self._background_mutation(
                             status="failed",
                             session_id=effective_session_id,
+                            parallel_group_id=request.parallel_group_id,
+                            lane_id=request.lane_id,
+                            parent_job_id=request.parent_job_id,
                             multitask_strategy=multitask_strategy,
                             error=str(error),
                             timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
@@ -684,6 +719,9 @@ class CodexAgnoRuntime:
                         self._background_mutation(
                             status="failed",
                             session_id=effective_session_id,
+                            parallel_group_id=request.parallel_group_id,
+                            lane_id=request.lane_id,
+                            parent_job_id=request.parent_job_id,
                             multitask_strategy=multitask_strategy,
                             error=str(error),
                             timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
@@ -699,7 +737,10 @@ class CodexAgnoRuntime:
                 job_id=job_id,
                 kind="job.failed",
                 stage="background",
-                payload={"error": status.error},
+                payload={
+                    "error": status.error,
+                    **self.background_service._background_trace_context(status),
+                },
             )
             return status
 
@@ -719,6 +760,7 @@ class CodexAgnoRuntime:
                 "backoff_multiplier": request.backoff_multiplier,
                 "max_backoff_seconds": request.max_backoff_seconds,
                 "background_policy_authority": self.rust_adapter.background_control_authority,
+                **self.background_service._background_trace_context(status),
             },
         )
 
@@ -728,6 +770,57 @@ class CodexAgnoRuntime:
         )
         self.background_service.start_job(job_id, request, run_task=self.run_task)
         return status
+
+    async def enqueue_background_batch(
+        self,
+        requests: list[BackgroundRunRequest],
+        *,
+        parallel_group_id: str | None = None,
+        lane_id_prefix: str = "lane",
+    ) -> BackgroundBatchEnqueueResponse:
+        """Admit a bounded parallel batch and auto-assign lane ids when needed."""
+
+        if not requests:
+            raise ValueError("enqueue_background_batch requires at least one request.")
+        resolved_group_id = parallel_group_id or f"pgroup_{uuid.uuid4().hex[:12]}"
+        statuses: list[BackgroundRunStatus] = []
+        for index, request in enumerate(requests, start=1):
+            request_group_id = request.parallel_group_id
+            if request_group_id is not None and request_group_id != resolved_group_id:
+                raise ValueError(
+                    "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
+                )
+            lane_id = request.lane_id or f"{lane_id_prefix}-{index}"
+            status = await self.enqueue_background_run(
+                request.model_copy(
+                    update={
+                        "parallel_group_id": resolved_group_id,
+                        "lane_id": lane_id,
+                    }
+                )
+            )
+            statuses.append(status)
+        summary = self.get_background_parallel_group_summary(resolved_group_id)
+        if summary is None:
+            raise RuntimeError(f"Background parallel group {resolved_group_id!r} was not persisted.")
+        return BackgroundBatchEnqueueResponse(
+            parallel_group_id=resolved_group_id,
+            statuses=statuses,
+            summary=summary,
+        )
+
+    def get_background_parallel_group_summary(
+        self,
+        parallel_group_id: str,
+    ) -> BackgroundParallelGroupSummary | None:
+        """Return one durable parallel-batch summary by group id."""
+
+        return self.state_service.parallel_group_summary(parallel_group_id)
+
+    def list_background_parallel_groups(self) -> list[BackgroundParallelGroupSummary]:
+        """Return all durable parallel-batch summaries."""
+
+        return self.state_service.parallel_group_summaries()
 
     async def _arbitrate_background_multitask_takeover(
         self,
@@ -884,6 +977,7 @@ class CodexAgnoRuntime:
                 "route_engine_mode": self.settings.route_engine_mode,
                 "route_engine": routing_result.route_engine,
                 "diagnostic_python_lane_active": routing_result.diagnostic_python_lane_active,
+                "python_lane_kind": routing_result.python_lane_kind,
                 "shadow_route_report": (
                     routing_result.shadow_route_report.model_dump(mode="json")
                     if routing_result.shadow_route_report is not None
@@ -908,6 +1002,7 @@ class CodexAgnoRuntime:
             prompt_preview=prepared.prompt_preview,
             route_engine=prepared.route_engine,
             diagnostic_python_lane_active=prepared.diagnostic_python_lane_active,
+            python_lane_kind=prepared.python_lane_kind,
             shadow_route_report=prepared.shadow_route_report,
         )
 

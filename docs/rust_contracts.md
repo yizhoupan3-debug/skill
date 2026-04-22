@@ -363,6 +363,10 @@ Invariants:
 - `python_lane_kind=legacy-primary` is the only mode where Python is the route
   result authority; `diagnostic-compare-only` marks shadow / verify / rollback
   evidence lanes and must not become the live route-result engine
+- `python_lane_kind` and the legacy booleans must stay aligned:
+  `legacy-primary => python_route_required=true, diagnostic_python_lane=false`,
+  `diagnostic-compare-only => python_route_required=false, diagnostic_python_lane=true`,
+  `none => both false`
 - `primary_authority` and `route_result_engine` must match the engine whose
   route result is returned to the Python runtime
 - `shadow_engine` names the comparison lane only; it may be null for pure

@@ -45,6 +45,7 @@ from codex_agno_runtime.prompt_builder import PromptBuilder
 from codex_agno_runtime.router import SkillRouter
 from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import (
+    BackgroundParallelGroupSummary,
     BackgroundRunRequest,
     BackgroundRunStatus,
     RouteDecisionSnapshot,
@@ -761,6 +762,7 @@ class RouterService:
                 python_result,
                 route_engine="python",
                 diagnostic_python_lane_active=False,
+                python_lane_kind=policy.python_lane_kind,
                 report=None,
             )
 
@@ -782,7 +784,8 @@ class RouterService:
         return self._decorate_route_result(
             rust_result,
             route_engine="rust",
-            diagnostic_python_lane_active=policy.diagnostic_python_lane,
+            diagnostic_python_lane_active=policy.diagnostic_compare_only_python_lane_active,
+            python_lane_kind=policy.python_lane_kind,
             report=report,
         )
 
@@ -802,7 +805,7 @@ class RouterService:
                 "default_route_authority",
                 self._rust_adapter.route_authority,
             ),
-            "diagnostic_python_lane_active": policy.diagnostic_python_lane,
+            "diagnostic_python_lane_active": policy.diagnostic_compare_only_python_lane_active,
             "python_lane_kind": policy.python_lane_kind,
             "configured_rollback_to_python": self.settings.rust_route_rollback_to_python,
             "loaded_skill_count": len(self.skills),
@@ -880,12 +883,14 @@ class RouterService:
         *,
         route_engine: str,
         diagnostic_python_lane_active: bool,
+        python_lane_kind: str,
         report: RouteDiffReport | None,
     ) -> RoutingResult:
         return result.model_copy(
             update={
                 "route_engine": route_engine,
                 "diagnostic_python_lane_active": diagnostic_python_lane_active,
+                "python_lane_kind": python_lane_kind,
                 "shadow_route_report": report,
             }
         )
@@ -901,11 +906,11 @@ class RouterService:
         rust_result: RoutingResult,
     ) -> RouteDiffReport | None:
         if policy.diff_report_required or policy.verify_parity_required:
-            if not policy.diagnostic_python_lane:
+            if not policy.diagnostic_compare_only_python_lane_active:
                 raise RuntimeError(
                     "Rust route policy declared diff/verify requirements outside the diagnostic lane."
                 )
-        if not policy.diagnostic_python_lane:
+        if not policy.diagnostic_compare_only_python_lane_active:
             return None
         python_snapshot = self._route_python_snapshot(
             task=task,
@@ -997,7 +1002,7 @@ class RouterService:
         return self._route_policy
 
     def _python_router_required(self, *, policy: RouteExecutionPolicy | None = None) -> bool:
-        return (policy or self._resolve_route_policy()).python_route_required
+        return (policy or self._resolve_route_policy()).legacy_primary_python_lane_active
 
     def _ensure_python_router(self) -> SkillRouter:
         if self._python_router is None:
@@ -1058,6 +1063,16 @@ class StateService:
         """Return the number of currently admitted background jobs."""
 
         return self.store.active_job_count()
+
+    def parallel_group_summary(self, parallel_group_id: str) -> BackgroundParallelGroupSummary | None:
+        """Return one durable parallel-batch summary."""
+
+        return self.store.parallel_group_summary(parallel_group_id)
+
+    def parallel_group_summaries(self) -> list[BackgroundParallelGroupSummary]:
+        """Return all durable parallel-batch summaries."""
+
+        return self.store.parallel_group_summaries()
 
     def arbitrate_session_takeover(
         self,
@@ -1217,6 +1232,7 @@ class TraceService:
         job_id: str | None,
         status: str,
         artifact_paths: list[str],
+        parallel_group: dict[str, Any] | None = None,
         supervisor_projection: dict[str, Any] | None = None,
     ) -> None:
         """Persist the runtime resume checkpoint through the configured backend."""
@@ -1233,6 +1249,7 @@ class TraceService:
             latest_cursor=self.recorder.latest_cursor(session_id=session_id, job_id=job_id),
             event_transport_path=transport.binding_artifact_path,
             artifact_paths=resolved_artifact_paths,
+            parallel_group=parallel_group,
             supervisor_projection=supervisor_projection,
         )
 
@@ -1754,6 +1771,7 @@ class BackgroundRuntimeHost:
                 "attempt": updated.attempt,
                 "status": updated.status,
                 "background_policy_authority": self._background_control_authority,
+                **self._background_trace_context(updated),
             },
         )
 
@@ -1764,10 +1782,15 @@ class BackgroundRuntimeHost:
         return updated
 
     def health(self) -> dict[str, Any]:
+        parallel_groups = self.state_service.parallel_group_summaries()
         return {
             "max_background_jobs": self._max_background_jobs,
             "background_job_timeout_seconds": self._background_job_timeout_seconds,
             "active_task_count": len([task for task in self._background_tasks.values() if not task.done()]),
+            "parallel_group_count": len(parallel_groups),
+            "active_parallel_group_count": len(
+                [summary for summary in parallel_groups if summary.active_job_count > 0]
+            ),
             "control_plane_authority": self._service_descriptor.get("authority"),
             "control_plane_role": self._service_descriptor.get("role"),
             "control_plane_projection": self._service_descriptor.get("projection"),
@@ -1779,6 +1802,31 @@ class BackgroundRuntimeHost:
                 service_name="background",
             ),
         }
+
+    @staticmethod
+    def _background_trace_context(job: BackgroundRunStatus | BackgroundRunRequest) -> dict[str, Any]:
+        """Project durable parallel-batch identifiers into trace payloads."""
+
+        payload: dict[str, Any] = {}
+        for field in ("parallel_group_id", "lane_id", "parent_job_id"):
+            value = getattr(job, field, None)
+            if value is not None:
+                payload[field] = value
+        return payload
+
+    def _parallel_group_summary_payload(
+        self,
+        *,
+        parallel_group_id: str | None,
+    ) -> dict[str, Any] | None:
+        """Return one JSON-safe parallel-batch summary when the job belongs to a group."""
+
+        if parallel_group_id is None:
+            return None
+        summary = self.state_service.parallel_group_summary(parallel_group_id)
+        if summary is None:
+            return None
+        return summary.model_dump(mode="json")
 
     def _background_policy(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._background_control_provider()(
@@ -1871,6 +1919,7 @@ class BackgroundRuntimeHost:
                         payload={
                             "status": "running",
                             "attempt": running.attempt,
+                            **self._background_trace_context(running),
                             **self.execution_service.kernel_payload(
                                 dry_run=self.execution_service.resolve_dry_run(
                                     request_dry_run=request.dry_run
@@ -1954,6 +2003,7 @@ class BackgroundRuntimeHost:
                         payload={
                             "status": "completed",
                             "attempt": completed.attempt,
+                            **self._background_trace_context(completed),
                             **self.execution_service.kernel_payload(
                                 dry_run=not result.live_run,
                                 metadata=result.metadata,
@@ -1964,6 +2014,7 @@ class BackgroundRuntimeHost:
                         session_id=result.session_id,
                         job_id=job_id,
                         status="completed",
+                        parallel_group_id=completed.parallel_group_id,
                     )
                     return
         except asyncio.CancelledError:
@@ -1997,7 +2048,11 @@ class BackgroundRuntimeHost:
                     job_id=job_id,
                     kind="job.failed",
                     stage="background",
-                    payload={"error": error, "attempt": current.attempt},
+                    payload={
+                        "error": error,
+                        "attempt": current.attempt,
+                        **self._background_trace_context(current),
+                    },
                 )
 
                 retry_policy = self._background_retry_policy(current)
@@ -2023,12 +2078,18 @@ class BackgroundRuntimeHost:
                             job_id=job_id,
                             kind="job.retry_exhausted",
                             stage="background",
-                            payload={"attempt": finalized.attempt, "max_attempts": finalized.max_attempts, "error": error},
+                            payload={
+                                "attempt": finalized.attempt,
+                                "max_attempts": finalized.max_attempts,
+                                "error": error,
+                                **self._background_trace_context(finalized),
+                            },
                         )
                     self._checkpoint_background_resume_manifest(
                         session_id=session_id,
                         job_id=job_id,
                         status=terminal_status,
+                        parallel_group_id=finalized.parallel_group_id,
                     )
                     return False
                 next_retry_count = int(
@@ -2069,6 +2130,7 @@ class BackgroundRuntimeHost:
                 "next_retry_at": scheduled.next_retry_at,
                 "error": error,
                 "background_policy_authority": self._background_control_authority,
+                **self._background_trace_context(scheduled),
             },
         )
 
@@ -2118,7 +2180,11 @@ class BackgroundRuntimeHost:
             job_id=job_id,
             kind="job.retry_claimed",
             stage="background",
-            payload={"attempt": claimed.attempt, "retry_count": claimed.retry_count},
+            payload={
+                "attempt": claimed.attempt,
+                "retry_count": claimed.retry_count,
+                **self._background_trace_context(claimed),
+            },
         )
         return True
 
@@ -2167,12 +2233,14 @@ class BackgroundRuntimeHost:
                 "attempt": interrupted.attempt,
                 "error": error,
                 "background_policy_authority": self._background_control_authority,
+                **self._background_trace_context(interrupted),
             },
         )
         self._checkpoint_background_resume_manifest(
             session_id=session_id,
             job_id=job_id,
             status="interrupted",
+            parallel_group_id=interrupted.parallel_group_id,
         )
         return interrupted
 
@@ -2182,6 +2250,7 @@ class BackgroundRuntimeHost:
         session_id: str,
         job_id: str,
         status: str,
+        parallel_group_id: str | None = None,
     ) -> None:
         """Persist background resume state without routing ownership back through runtime.py."""
 
@@ -2190,5 +2259,6 @@ class BackgroundRuntimeHost:
             job_id=job_id,
             status=status,
             artifact_paths=self._artifact_paths_provider(),
+            parallel_group=self._parallel_group_summary_payload(parallel_group_id=parallel_group_id),
             supervisor_projection=self._supervisor_projection_provider(),
         )

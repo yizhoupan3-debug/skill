@@ -10,7 +10,7 @@ from typing import Any, Literal, Mapping
 from pydantic import BaseModel, Field
 
 from codex_agno_runtime.checkpoint_store import RuntimeStorageBackend, select_runtime_storage_backend
-from codex_agno_runtime.schemas import BackgroundRunStatus, RunTaskResponse
+from codex_agno_runtime.schemas import BackgroundParallelGroupSummary, BackgroundRunStatus, RunTaskResponse
 
 
 ACTIVE_JOB_STATUSES = {
@@ -21,7 +21,7 @@ ACTIVE_JOB_STATUSES = {
     "retry_claimed",
 }
 TERMINAL_JOB_STATUSES = {"completed", "failed", "interrupted", "retry_exhausted"}
-BACKGROUND_STATE_SCHEMA_VERSION = "runtime-background-state-v4"
+BACKGROUND_STATE_SCHEMA_VERSION = "runtime-background-state-v5"
 BACKGROUND_STATE_CONTROL_PLANE_SCHEMA_VERSION = "runtime-background-state-control-plane-v1"
 BACKGROUND_SESSION_TAKEOVER_ARBITRATION_SCHEMA_VERSION = "runtime-background-session-takeover-arbitration-v1"
 _STATE_SERVICE_NAME = "state"
@@ -147,6 +147,9 @@ class BackgroundJobStatusMutation:
 
     status: str
     session_id: str | None = None
+    parallel_group_id: str | None = None
+    lane_id: str | None = None
+    parent_job_id: str | None = None
     multitask_strategy: str | None = None
     result: RunTaskResponse | None = None
     error: str | None = None
@@ -199,6 +202,9 @@ class BackgroundJobStatusMutation:
                 job_id=job_id,
                 session_id=self.session_id,
                 status=self.status,
+                parallel_group_id=self.parallel_group_id,
+                lane_id=self.lane_id,
+                parent_job_id=self.parent_job_id,
                 multitask_strategy=self.multitask_strategy or _DEFAULT_BACKGROUND_JOB_MULTITASK_STRATEGY,
                 result=self.result,
                 error=self.error,
@@ -232,6 +238,17 @@ class BackgroundJobStatusMutation:
         return existing.touch(
             status=self.status,
             session_id=self.session_id,
+            parallel_group_id=(
+                self.parallel_group_id
+                if self.parallel_group_id is not None
+                else existing.parallel_group_id
+            ),
+            lane_id=self.lane_id if self.lane_id is not None else existing.lane_id,
+            parent_job_id=(
+                self.parent_job_id
+                if self.parent_job_id is not None
+                else existing.parent_job_id
+            ),
             multitask_strategy=(
                 self.multitask_strategy
                 if self.multitask_strategy is not None
@@ -353,6 +370,9 @@ class BackgroundJobStore:
         *,
         status: str,
         session_id: str | None = None,
+        parallel_group_id: str | None = None,
+        lane_id: str | None = None,
+        parent_job_id: str | None = None,
         multitask_strategy: str | None = None,
         result: RunTaskResponse | None = None,
         error: str | None = None,
@@ -380,6 +400,9 @@ class BackgroundJobStore:
         mutation = BackgroundJobStatusMutation(
             status=status,
             session_id=session_id,
+            parallel_group_id=parallel_group_id,
+            lane_id=lane_id,
+            parent_job_id=parent_job_id,
             multitask_strategy=multitask_strategy,
             result=result,
             error=error,
@@ -544,6 +567,31 @@ class BackgroundJobStore:
 
         return sum(1 for job in self._jobs.values() if job.status in ACTIVE_JOB_STATUSES)
 
+    def parallel_group_summary(self, parallel_group_id: str) -> BackgroundParallelGroupSummary | None:
+        """Return one aggregate summary for a durable parallel batch."""
+
+        jobs = [
+            job
+            for job in self._jobs.values()
+            if job.parallel_group_id == parallel_group_id
+        ]
+        if not jobs:
+            return None
+        return self._build_parallel_group_summary(parallel_group_id=parallel_group_id, jobs=jobs)
+
+    def parallel_group_summaries(self) -> list[BackgroundParallelGroupSummary]:
+        """Return aggregate summaries for all durable parallel batches."""
+
+        grouped: dict[str, list[BackgroundRunStatus]] = {}
+        for job in self._jobs.values():
+            if job.parallel_group_id is None:
+                continue
+            grouped.setdefault(job.parallel_group_id, []).append(job)
+        return [
+            self._build_parallel_group_summary(parallel_group_id=parallel_group_id, jobs=grouped[parallel_group_id])
+            for parallel_group_id in sorted(grouped)
+        ]
+
     def control_plane_descriptor(self) -> BackgroundStateControlPlaneDescriptor:
         """Return the Rust-owned control-plane projection for this Python store."""
 
@@ -568,6 +616,7 @@ class BackgroundJobStore:
             "state_path": descriptor.state_path,
             "job_count": len(self._jobs),
             "active_job_count": self.active_job_count(),
+            "parallel_group_count": len(self.parallel_group_summaries()),
             "pending_session_takeovers": self.pending_session_takeovers(),
         }
 
@@ -682,3 +731,45 @@ class BackgroundJobStore:
                 continue
             active_sessions[session_id] = job_id
         return active_sessions
+
+    @staticmethod
+    def _build_parallel_group_summary(
+        *,
+        parallel_group_id: str,
+        jobs: list[BackgroundRunStatus],
+    ) -> BackgroundParallelGroupSummary:
+        """Aggregate a stable summary for one background parallel group."""
+
+        status_counts: dict[str, int] = {}
+        session_ids: set[str] = set()
+        lane_ids: set[str] = set()
+        parent_job_ids: set[str] = set()
+        active_job_count = 0
+        terminal_job_count = 0
+        latest_updated_at: str | None = None
+        for job in jobs:
+            status_counts[job.status] = status_counts.get(job.status, 0) + 1
+            if job.session_id is not None:
+                session_ids.add(job.session_id)
+            if job.lane_id is not None:
+                lane_ids.add(job.lane_id)
+            if job.parent_job_id is not None:
+                parent_job_ids.add(job.parent_job_id)
+            if job.status in ACTIVE_JOB_STATUSES:
+                active_job_count += 1
+            if job.status in TERMINAL_JOB_STATUSES:
+                terminal_job_count += 1
+            if latest_updated_at is None or job.updated_at > latest_updated_at:
+                latest_updated_at = job.updated_at
+        return BackgroundParallelGroupSummary(
+            parallel_group_id=parallel_group_id,
+            job_ids=sorted(job.job_id for job in jobs),
+            session_ids=sorted(session_ids),
+            lane_ids=sorted(lane_ids),
+            parent_job_ids=sorted(parent_job_ids),
+            status_counts=dict(sorted(status_counts.items())),
+            active_job_count=active_job_count,
+            terminal_job_count=terminal_job_count,
+            total_job_count=len(jobs),
+            latest_updated_at=latest_updated_at,
+        )

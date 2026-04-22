@@ -349,6 +349,21 @@ class TraceSupervisorProjection(BaseModel):
     delegation: TraceDelegationSummary | None = None
 
 
+class TraceParallelGroupSummary(BaseModel):
+    """Lightweight durable summary for one background parallel batch."""
+
+    parallel_group_id: str
+    job_ids: list[str] = Field(default_factory=list)
+    session_ids: list[str] = Field(default_factory=list)
+    lane_ids: list[str] = Field(default_factory=list)
+    parent_job_ids: list[str] = Field(default_factory=list)
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    active_job_count: int = 0
+    terminal_job_count: int = 0
+    total_job_count: int = 0
+    latest_updated_at: str | None = None
+
+
 class TraceResumeManifest(BaseModel):
     """Versioned runtime-owned resume handle joining trace, state, and artifacts."""
 
@@ -363,6 +378,7 @@ class TraceResumeManifest(BaseModel):
     background_state_path: str | None = None
     latest_cursor: TraceReplayCursor | None = None
     artifact_paths: list[str] = Field(default_factory=list)
+    parallel_group: TraceParallelGroupSummary | None = None
     supervisor_projection: TraceSupervisorProjection | None = None
     control_plane: dict[str, Any] | None = None
     updated_at: str = Field(default_factory=_now_iso)
@@ -1265,6 +1281,7 @@ class RuntimeTraceRecorder:
         verification_status: str,
         session_id: str | None = None,
         job_id: str | None = None,
+        parallel_group: dict[str, Any] | None = None,
         supervisor_projection: dict[str, Any] | None = None,
         reroute_count: int | None = None,
         retry_count: int | None = None,
@@ -1303,6 +1320,7 @@ class RuntimeTraceRecorder:
             "retry_count": resolved_retry_count,
             "artifact_paths": artifact_paths,
             "verification_status": verification_status,
+            "parallel_group": parallel_group,
             "supervisor_projection": supervisor_projection,
             "control_plane": self._control_plane.model_dump(mode="json"),
             "stream": stream_state,
