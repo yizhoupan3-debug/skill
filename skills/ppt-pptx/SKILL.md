@@ -1,25 +1,24 @@
 ---
 name: ppt-pptx
 description: |
-  Create polished editable `.pptx` decks with PptxGenJS, theme-driven styling,
-  local assets, and rendered QA. Use for new deck authoring, outline-to-PPTX,
-  or major redesigns where `deck.js` should become the source of truth. Not for
-  surgical in-place edits of an existing Office file.
+  Create source-first `deck.js` plus editable `.pptx` decks with PptxGenJS,
+  theme-driven styling, local assets, and rendered QA. Use after the `$slides`
+  gate when the user explicitly wants a reusable code-authored PPTX workflow,
+  outline-to-`deck.js` generation, or a major rebuild where `deck.js` should
+  become the source of truth. Not for generic PPT intake or surgical in-place
+  edits of an existing deck.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
 trigger_hints:
-  - ppt
-  - pptx
-  - ppt pptx
-  - PowerPoint
-  - 做个PPT
-  - 生成演示文稿
-  - 从大纲生成 PPT
-  - 重做这份 deck
-  - 按这个内容出可编辑 pptx
-  - 给我一个可复用的 PPT 源码工作流
+  - PptxGenJS
+  - deck.js
+  - source-first pptx workflow
+  - code-authored pptx
+  - 重做这份 deck 成 deck.js
+  - 可复用 deck.js
+  - PPT 源码工作流
 runtime_requirements:
   python:
     - numpy
@@ -46,31 +45,31 @@ metadata:
 
 # PPT PPTX
 
-Build presentations as real editable `.pptx` decks first, not HTML mockups. Use PptxGenJS, explicit theme fonts, reusable layout helpers, and rendered review so the delivered deck stays editable while still looking designed.
+Build presentations as reusable `deck.js` sources that emit real editable `.pptx` decks. Use PptxGenJS, explicit theme fonts, reusable layout helpers, and rendered review so the delivered deck stays editable while the authoring workflow stays reproducible.
 
-Default to this skill when the user says "PPT", "PowerPoint", or "pptx", when the deck will be handed to someone else for editing, or when visual polish must survive outside the browser.
+Do not claim generic "PPT / PowerPoint / pptx" intake. Let `$slides` absorb those requests first, then use this owner only when the task is explicitly the code-authored `deck.js` lane or a rebuild into that lane.
 
 Quick lane rule:
 
-- New deck or major redesign -> `ppt-pptx`
-- Existing `.pptx` small edits / patching / inspection -> `officecli`
+- Generic PPT request, existing deck, or format still unclear -> `$slides`
+- Explicit `deck.js` / PptxGenJS rebuild -> `ppt-pptx`
 
 ## When to use
 
 - The user wants a native editable `.pptx` file
-- The user says "PPT", "PowerPoint", "pptx", "做个PPT", "生成演示文稿"
 - The deck will be edited by non-technical collaborators in PowerPoint
 - Visual polish, overflow detection, and font QA are required
 - The user provides a YAML/JSON outline and wants automated deck generation
-- The user wants to rebuild or substantially redesign an existing deck into a cleaner source-first `.js` + `.pptx` workflow
-- The user says things like "从大纲生成 PPT", "重做这份 deck", "按这个内容出可编辑 pptx", "给我一个可复用的 PPT 源码工作流"
+- The user wants to rebuild or substantially redesign an existing deck into a cleaner source-first `deck.js` + `.pptx` workflow
+- The user explicitly asks for PptxGenJS, `deck.js`, a reusable PPT source workflow, or a code-owned rebuild
 
 ## Do not use
 
+- Do not use for generic "做个PPT" / "PowerPoint" / "pptx" requests with no workflow decision yet; check `$slides` first
 - Do not use when the user wants HTML slides plus browser-matched PDF; use `$ppt-html-export`
 - Do not use when the user wants LaTeX Beamer source plus PDF; use `$ppt-beamer`
 - Do not use when the user wants a fast Markdown-to-slides workflow with Slidev or Marp; use `$ppt-markdown`
-- Do not use when the main job is to inspect, query, patch, or batch-edit an existing `.pptx` in place; prefer `officecli`
+- Do not use when the main job is to inspect, query, patch, or batch-edit an existing `.pptx` in place; keep it on the native `$slides` lane
 - Do not use for requests like "把第 7 页标题改一下", "批量替换这份 deck 里的年份", "检查这个现有 PPT 有没有溢出", or "把这个表格宽一点"
 
 ## Overview
@@ -105,7 +104,7 @@ transitions guidance, and QA sequence, see [references/workflow.md](./references
 Layering rule:
 
 - `ppt-pptx` owns new deck authoring and big redesigns where the source of truth should become `deck.js`
-- `officecli` is the companion lane for in-place inspection, surgical edits, batch patches, and Office-wide automation on existing files
+- `$slides` is the companion gate for existing-deck inspection, surgical edits, and native editable-PowerPoint workflows that should stay artifact-first
 
 ## Non-Negotiables (summary)
 

@@ -263,6 +263,45 @@ def test_persist_memory_bundle_prunes_non_authoritative_memory_sources(tmp_path:
     assert {row["source"] for row in rows} == {"MEMORY.md"}
 
 
+def test_persist_memory_bundle_stores_heading_scoped_segments(tmp_path: Path) -> None:
+    memory_root = tmp_path / ".codex" / "memory"
+    memory_root.mkdir(parents=True, exist_ok=True)
+    store = MemoryStore.for_workspace(tmp_path.name, resolved_dir=memory_root)
+    document = "\n".join(
+        [
+            "# 项目长期记忆",
+            "",
+            "## 稳定决策",
+            "",
+            "### 执行编排",
+            "",
+            "- framework bootstrap 只 propose 上下文",
+            "",
+        ]
+    )
+
+    persist_memory_bundle(
+        tmp_path.name,
+        {
+            "MEMORY.md": document + "\n",
+            "preferences.md": "# preferences\n",
+            "decisions.md": "# decisions\n",
+            "lessons.md": "# lessons\n",
+            "runbooks.md": "# runbooks\n",
+        },
+        resolved_dir=memory_root,
+    )
+
+    rows = store.list_memory_items(limit=100, active=False)
+    memory_rows = [row for row in rows if row["source"] == "MEMORY.md"]
+    assert len(memory_rows) == 1
+    row = memory_rows[0]
+    assert row["summary"] == "framework bootstrap 只 propose 上下文"
+    assert row["notes"] == "稳定决策 / 执行编排"
+    metadata = json.loads(row["metadata_json"])
+    assert metadata["headings"] == ["稳定决策", "执行编排"]
+
+
 def test_default_bootstrap_compacts_evolution_payload(tmp_path: Path) -> None:
     _seed_runtime(
         tmp_path,
@@ -276,3 +315,25 @@ def test_default_bootstrap_compacts_evolution_payload(tmp_path: Path) -> None:
 
     payload = result["payload"]["evolution-proposals"]
     assert set(payload) == {"proposal_count", "proposals"}
+
+
+def test_default_bootstrap_uses_prompt_safe_memory_payload(tmp_path: Path) -> None:
+    _seed_runtime(
+        tmp_path,
+        tmp_path / "artifacts",
+        task_id="bootstrap-task-20260418220000",
+        task="bootstrap task",
+    )
+    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
+
+    result = run_default_bootstrap(
+        repo_root=tmp_path,
+        output_dir=tmp_path / "out",
+        workspace=tmp_path.name,
+        query="artifact anchors",
+    )
+
+    payload = result["payload"]["memory-bootstrap"]
+    assert "retrieval" in payload
+    assert "memory_root" not in payload
+    assert "source_artifacts" not in payload

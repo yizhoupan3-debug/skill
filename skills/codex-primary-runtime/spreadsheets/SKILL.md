@@ -1,8 +1,8 @@
 ---
 name: spreadsheets
 description: |
-  Create, edit, analyze, and review workbook-native spreadsheet artifacts.
-  Use this artifact gate at 每轮对话开始 / first-turn / conversation start when the main artifact is an Excel workbook or spreadsheet-like file and formulas, formatting, charts, or recalculation matter.
+  Route workbook-native spreadsheet artifact work before choosing a narrower implementation lane.
+  Use this artifact gate at 每轮对话开始 / first-turn / conversation start when the main artifact is an Excel workbook or spreadsheet-like file and formulas, formatting, charts, recalculation, or workbook fidelity matter.
 routing_layer: L3
 routing_owner: gate
 routing_gate: artifact
@@ -58,11 +58,12 @@ artifact_outputs:
 
 At every-conversation-start / first turn, check this artifact gate early whenever the primary artifact is an Excel workbook or spreadsheet-like file and the workflow should stay spreadsheet-native.
 
-This skill owns workbook-native spreadsheet work where formulas, formatting, tables, charts, and recalculation matter more than plain text extraction.
+This skill owns the canonical workbook entry gate. Use it to absorb generic Excel / spreadsheet asks first, then either keep the default `@oai/artifact-tool` path or reroute to a narrower lane when the user explicitly wants Python/openpyxl/pandas/LibreOffice-style handling.
 
 ## When to use
 
 - The primary artifact is `.xlsx`, `.xls`, `.csv`, or `.tsv`
+- The user says Excel / spreadsheet / xlsx and the implementation lane is not chosen yet
 - The user wants a real workbook, not just flattened tabular output
 - The task needs formulas, formatting, charts, tables, dashboards, or workbook QA
 - The request is about creating, editing, analyzing, or reviewing spreadsheet artifacts
@@ -70,11 +71,14 @@ This skill owns workbook-native spreadsheet work where formulas, formatting, tab
 ## Do not use
 
 - The task is plain data wrangling with no workbook artifact requirement
+- The user explicitly wants an `openpyxl` / `pandas` / LibreOffice-driven compatibility workflow; hand off to `$xlsx`
 - The user only wants narrative analysis without a spreadsheet deliverable
 - The artifact is primarily a document, slide deck, or PDF
 
 ## Core contract
 
+- Treat this as the canonical first check for generic Excel / spreadsheet requests before any narrower workbook owner claims the task.
+- If the user explicitly asks for `openpyxl`, `pandas`, workbook-structure audit scripts, or LibreOffice render-based repair, reroute to `$xlsx`.
 - Use the installed `@oai/artifact-tool` JS workflow for workbook authoring, editing, rendering, and `.xlsx` export by default.
 - Keep calculations auditable: prefer spreadsheet formulas for workbook logic that users may edit later.
 - Use real spreadsheet structures when they add value: tables, filters, freeze panes, validation, conditional formats, and charts.
@@ -83,12 +87,13 @@ This skill owns workbook-native spreadsheet work where formulas, formatting, tab
 
 ## Required workflow
 
-1. Confirm the workbook goal, target audience, and whether the task is dashboard/report/model/tracker oriented.
-2. Create or import the workbook through the artifact-tool path.
-3. Build inputs, structure, formulas, and formatting in that order.
-4. Add charts or KPI visuals when the prompt implies summary analysis or presentation-ready output.
-5. Inspect key ranges, scan for formula errors, and render the important sheets once before export.
-6. Export the final `.xlsx` and stop once the workbook is correct and legible.
+1. Confirm the workbook goal, target audience, and whether the implementation lane is still undecided.
+2. If the user explicitly wants Python/openpyxl/pandas/LibreOffice handling, reroute to `$xlsx` and stop this gate there.
+3. Otherwise create or import the workbook through the artifact-tool path.
+4. Build inputs, structure, formulas, and formatting in that order.
+5. Add charts or KPI visuals when the prompt implies summary analysis or presentation-ready output.
+6. Inspect key ranges, scan for formula errors, and render the important sheets once before export.
+7. Export the final `.xlsx` and stop once the workbook is correct and legible.
 
 ## Quality rules
 

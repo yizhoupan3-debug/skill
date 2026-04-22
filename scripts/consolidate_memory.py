@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -36,6 +37,52 @@ def _extract_bullet_lines(raw: str) -> list[str]:
         if line.startswith("- "):
             items.append(line[2:].strip())
     return items
+
+
+def _extract_memory_segments(raw: str) -> list[tuple[tuple[str, ...], str]]:
+    """Split markdown into heading-scoped memory segments."""
+
+    segments: list[tuple[tuple[str, ...], str]] = []
+    heading_stack: list[str] = []
+    paragraph: list[str] = []
+
+    def flush_paragraph() -> None:
+        if not paragraph:
+            return
+        body = " ".join(part.strip() for part in paragraph if part.strip()).strip()
+        paragraph.clear()
+        if not body or (body.startswith("_") and body.endswith("_")):
+            return
+        segments.append((tuple(heading_stack), body))
+
+    for raw_line in raw.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            flush_paragraph()
+            continue
+        heading_match = re.match(r"^(#{1,6})\s+(.*)$", stripped)
+        if heading_match:
+            flush_paragraph()
+            level = len(heading_match.group(1))
+            title = heading_match.group(2).strip()
+            if level == 1:
+                heading_stack = []
+                continue
+            depth = max(0, level - 2)
+            heading_stack = heading_stack[:depth]
+            heading_stack.append(title)
+            continue
+        bullet_match = re.match(r"^(?:[-*]|\d+[.)])\s+(.*)$", stripped)
+        if bullet_match:
+            flush_paragraph()
+            body = bullet_match.group(1).strip()
+            if body:
+                segments.append((tuple(heading_stack), body))
+            continue
+        paragraph.append(stripped)
+
+    flush_paragraph()
+    return segments
 
 
 def _memory_category_for_file(file_name: str) -> str:
@@ -168,18 +215,20 @@ def persist_memory_bundle(
     persisted_items = 0
     for file_name, text in documents.items():
         category = _memory_category_for_file(file_name)
-        bullets = _extract_bullet_lines(text)
-        for index, summary in enumerate(bullets, start=1):
+        segments = _extract_memory_segments(text)
+        for index, (headings, summary) in enumerate(segments, start=1):
+            heading_context = " / ".join(headings)
+            keywords = [summary, file_name, *headings]
             store.upsert_memory_item(
                 MemoryItem(
                     item_id=_memory_item_id(workspace, category, index, summary, file_name),
                     category=category,
                     source=file_name,
                     summary=summary,
-                    notes=text[:2000],
+                    notes=heading_context,
                     confidence=0.8,
-                    metadata={"document": file_name},
-                    keywords=[summary, category, file_name],
+                    metadata={"document": file_name, "headings": list(headings)},
+                    keywords=[keyword for keyword in keywords if keyword],
                 )
             )
             persisted_items += 1

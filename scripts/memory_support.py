@@ -870,6 +870,7 @@ def load_runtime_snapshot(
     *,
     repair: bool = True,
     include_contract_snapshots: bool = True,
+    task_id: str | None = None,
 ) -> RuntimeSnapshot:
     """Load the standard runtime artifacts used for consolidation.
 
@@ -902,7 +903,7 @@ def load_runtime_snapshot(
             )
             or read_json_if_exists(source_root / ARTIFACT_NAMES["supervisor_state"])
         )
-    active_task_id = resolve_active_task_id(
+    active_task_id = safe_slug(task_id or "", fallback="") or resolve_active_task_id(
         source_root,
         artifact_root,
         supervisor_state=supervisor_state,

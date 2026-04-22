@@ -25,6 +25,10 @@ const ROUTE_AUTHORITY: &str = "rust-route-core";
 const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
 const EXECUTION_SCHEMA_VERSION: &str = "router-rs-execute-response-v1";
 const EXECUTION_AUTHORITY: &str = "rust-execution-cli";
+const EXECUTION_KERNEL_CONTRACT_MODE: &str = "rust-live-primary";
+const EXECUTION_KERNEL_FALLBACK_POLICY: &str = "infrastructure-only-explicit";
+const EXECUTION_KERNEL_DELEGATE_FAMILY: &str = "rust-cli";
+const EXECUTION_KERNEL_DELEGATE_IMPL: &str = "router-rs";
 const RUNTIME_CONTROL_PLANE_SCHEMA_VERSION: &str = "router-rs-runtime-control-plane-v1";
 const RUNTIME_CONTROL_PLANE_AUTHORITY: &str = "rust-runtime-control-plane";
 const BACKGROUND_CONTROL_SCHEMA_VERSION: &str = "router-rs-background-control-v1";
@@ -1996,6 +2000,68 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     lines.join("\n")
 }
 
+fn build_steady_state_execution_kernel_metadata() -> Map<String, Value> {
+    let mut metadata = Map::new();
+    metadata.insert(
+        "execution_kernel".to_string(),
+        Value::String(EXECUTION_KERNEL_DELEGATE_IMPL.to_string()),
+    );
+    metadata.insert(
+        "execution_kernel_authority".to_string(),
+        Value::String(EXECUTION_AUTHORITY.to_string()),
+    );
+    metadata.insert(
+        "execution_kernel_contract_mode".to_string(),
+        Value::String(EXECUTION_KERNEL_CONTRACT_MODE.to_string()),
+    );
+    metadata.insert(
+        "execution_kernel_fallback_policy".to_string(),
+        Value::String(EXECUTION_KERNEL_FALLBACK_POLICY.to_string()),
+    );
+    metadata.insert(
+        "execution_kernel_in_process_replacement_complete".to_string(),
+        Value::Bool(true),
+    );
+    metadata.insert(
+        "execution_kernel_delegate".to_string(),
+        Value::String(EXECUTION_KERNEL_DELEGATE_IMPL.to_string()),
+    );
+    metadata.insert(
+        "execution_kernel_delegate_authority".to_string(),
+        Value::String(EXECUTION_AUTHORITY.to_string()),
+    );
+    metadata.insert(
+        "execution_kernel_delegate_family".to_string(),
+        Value::String(EXECUTION_KERNEL_DELEGATE_FAMILY.to_string()),
+    );
+    metadata.insert(
+        "execution_kernel_delegate_impl".to_string(),
+        Value::String(EXECUTION_KERNEL_DELEGATE_IMPL.to_string()),
+    );
+    metadata.insert(
+        "execution_kernel_live_primary".to_string(),
+        Value::String(EXECUTION_KERNEL_DELEGATE_IMPL.to_string()),
+    );
+    metadata.insert(
+        "execution_kernel_live_primary_authority".to_string(),
+        Value::String(EXECUTION_AUTHORITY.to_string()),
+    );
+    metadata.insert("execution_kernel_live_fallback".to_string(), Value::Null);
+    metadata.insert(
+        "execution_kernel_live_fallback_authority".to_string(),
+        Value::Null,
+    );
+    metadata.insert(
+        "execution_kernel_live_fallback_enabled".to_string(),
+        Value::Bool(false),
+    );
+    metadata.insert(
+        "execution_kernel_live_fallback_mode".to_string(),
+        Value::String("disabled".to_string()),
+    );
+    metadata
+}
+
 fn build_dry_run_execute_response(
     payload: &ExecuteRequestPayload,
     prompt_preview: Option<String>,
@@ -2006,6 +2072,28 @@ fn build_dry_run_execute_response(
     let content = format!(
         "[dry-run] Routed to `{}` on {}. Session `{}` is ready for Rust-owned execution.",
         payload.selected_skill, payload.layer, payload.session_id
+    );
+    let mut metadata = build_steady_state_execution_kernel_metadata();
+    metadata.insert(
+        "reason".to_string(),
+        Value::String("router-rs returned a deterministic dry-run payload.".to_string()),
+    );
+    metadata.insert(
+        "trace_event_count".to_string(),
+        json!(payload.trace_event_count),
+    );
+    metadata.insert(
+        "trace_output_path".to_string(),
+        json!(payload.trace_output_path),
+    );
+    metadata.insert(
+        "execution_mode".to_string(),
+        Value::String("dry_run".to_string()),
+    );
+    metadata.insert("route_engine".to_string(), json!(payload.route_engine));
+    metadata.insert(
+        "diagnostic_python_lane_active".to_string(),
+        json!(payload.diagnostic_python_lane_active),
     );
     ExecuteResponsePayload {
         execution_schema_version: EXECUTION_SCHEMA_VERSION.to_string(),
@@ -2024,16 +2112,7 @@ fn build_dry_run_execute_response(
         },
         prompt_preview,
         model_id: None,
-        metadata: serde_json::json!({
-            "reason": "router-rs returned a deterministic dry-run payload.",
-            "trace_event_count": payload.trace_event_count,
-            "trace_output_path": payload.trace_output_path,
-            "execution_kernel": "router-rs",
-            "execution_kernel_authority": EXECUTION_AUTHORITY,
-            "execution_mode": "dry_run",
-            "route_engine": payload.route_engine,
-            "diagnostic_python_lane_active": payload.diagnostic_python_lane_active,
-        }),
+        metadata: Value::Object(metadata),
     }
 }
 
@@ -2134,6 +2213,26 @@ fn build_live_execute_response(
     prompt_preview: Option<String>,
     live_result: LiveExecuteResult,
 ) -> ExecuteResponsePayload {
+    let mut metadata = build_steady_state_execution_kernel_metadata();
+    metadata.insert("run_id".to_string(), json!(live_result.run_id));
+    metadata.insert("status".to_string(), json!(live_result.status));
+    metadata.insert(
+        "trace_event_count".to_string(),
+        json!(payload.trace_event_count),
+    );
+    metadata.insert(
+        "trace_output_path".to_string(),
+        json!(payload.trace_output_path),
+    );
+    metadata.insert(
+        "execution_mode".to_string(),
+        Value::String("live".to_string()),
+    );
+    metadata.insert("route_engine".to_string(), json!(payload.route_engine));
+    metadata.insert(
+        "diagnostic_python_lane_active".to_string(),
+        json!(payload.diagnostic_python_lane_active),
+    );
     ExecuteResponsePayload {
         execution_schema_version: EXECUTION_SCHEMA_VERSION.to_string(),
         authority: EXECUTION_AUTHORITY.to_string(),
@@ -2151,25 +2250,7 @@ fn build_live_execute_response(
         },
         prompt_preview,
         model_id: live_result.model_id.clone(),
-        metadata: serde_json::json!({
-            "run_id": live_result.run_id,
-            "status": live_result.status,
-            "trace_event_count": payload.trace_event_count,
-            "trace_output_path": payload.trace_output_path,
-            "execution_kernel": "router-rs",
-            "execution_kernel_authority": EXECUTION_AUTHORITY,
-            "execution_kernel_delegate_family": "rust-cli",
-            "execution_kernel_delegate_impl": "router-rs",
-            "execution_kernel_live_primary": "router-rs",
-            "execution_kernel_live_primary_authority": EXECUTION_AUTHORITY,
-            "execution_kernel_live_fallback": Value::Null,
-            "execution_kernel_live_fallback_authority": Value::Null,
-            "execution_kernel_live_fallback_enabled": false,
-            "execution_kernel_live_fallback_mode": "disabled",
-            "execution_mode": "live",
-            "route_engine": payload.route_engine,
-            "diagnostic_python_lane_active": payload.diagnostic_python_lane_active,
-        }),
+        metadata: Value::Object(metadata),
     }
 }
 

@@ -1,19 +1,22 @@
 ---
 name: xlsx
 description: |
-  Read, create, edit, repair, and review Excel `.xlsx` workbooks when spreadsheet-native behavior matters.
-  Use for `.xlsx` inspection, formula/format fixes, workbook reports, sheet audits, or Excel-native workflows that should not be flattened to CSV. As an artifact gate, check this skill early at 每轮对话开始 / first-turn / conversation start whenever the main artifact is Excel or spreadsheet-like.
+  Use after the `$spreadsheets` gate when the user explicitly wants an
+  `openpyxl` / `pandas` / LibreOffice-driven `.xlsx` workflow. Best for
+  workbook-structure inspection, formula/format repair, compatibility-oriented
+  edits, or render-aware QA that should stay Python/tooling-first rather than
+  defaulting to `@oai/artifact-tool`.
 routing_layer: L3
-routing_owner: gate
-routing_gate: artifact
-session_start: required
+routing_owner: owner
+routing_gate: none
+session_start: n/a
 trigger_hints:
-  - xlsx
-  - excel
-  - spreadsheet
   - openpyxl
   - pandas
   - libreoffice
+  - workbook structure audit
+  - formula format repair
+  - keep formulas and formatting
 runtime_requirements:
   python:
     - openpyxl
@@ -32,8 +35,7 @@ metadata:
     - pandas
     - libreoffice
 framework_roles:
-  - gate
-  - detector
+  - executor
   - verifier
 framework_phase: 2
 framework_contracts:
@@ -60,25 +62,20 @@ artifact_outputs:
 
 # xlsx
 
-This skill owns `.xlsx` workbook work where spreadsheet-native structure,
-formulas, formatting, and rendered sheet behavior matter more than plain tabular
-text alone.
+This skill owns the explicit Python/tooling lane for `.xlsx` work. Use it when
+the workbook path should be driven by `openpyxl`, `pandas`, bundled audit
+scripts, or LibreOffice render checks rather than the default `$spreadsheets`
+artifact-tool path.
 
-## Priority routing rule
+## Routing note
 
-If the primary artifact is an Excel workbook and the task is to inspect,
-generate, edit, repair, validate, or visually recheck that workbook, check this
-skill before generic data-analysis, CSV-only, or prose-only workflows.
-
-In that case:
-
-1. this skill owns the workbook-native workflow
-2. paired skills should build on the workbook artifact rather than flattening it
-   too early
-3. CSV export is only a helper view, not the default source of truth
+Generic Excel / spreadsheet intake should hit `$spreadsheets` first. This skill
+should take over only when the user explicitly wants the Python/openpyxl lane or
+when compatibility / targeted preservation work makes that lane the better fit.
 
 ## When to use
 
+- The user explicitly asks for `openpyxl`, `pandas`, LibreOffice, or a Python-based workbook workflow
 - The task involves an `.xlsx` workbook as the main artifact
 - The user wants to create, read, edit, review, repair, or audit Excel files
 - The task depends on workbook-native features such as:
@@ -92,13 +89,14 @@ In that case:
 - The user wants to preserve Excel behavior rather than converting straight to CSV
 - Layout-sensitive review matters, such as print ranges, clipped headers, or visual sheet QA
 - Best for requests like:
-  - "改这个 Excel / xlsx 文件"
+  - "用 openpyxl 改这个 Excel / xlsx 文件"
   - "生成一个带公式和格式的表格"
   - "检查这个工作簿是不是有坏公式/坏引用"
   - "看一下这个报表 xlsx 的结构和排版"
 
 ## Do not use
 
+- Generic Excel / spreadsheet requests with no explicit engine choice yet → use `$spreadsheets` first
 - The real task is plain CSV or dataframe analysis with no workbook features in scope
 - The artifact is `.docx` or PDF rather than Excel
 - The user only pasted plain text and wants rewriting
@@ -108,6 +106,7 @@ In that case:
 ## Task ownership and boundaries
 
 This skill owns:
+- explicit `openpyxl` / `pandas` / LibreOffice-driven `.xlsx` workflows
 - `.xlsx` workbook reading and generation
 - structure-preserving sheet edits
 - formulas, styles, and workbook-feature-aware repair
@@ -115,6 +114,7 @@ This skill owns:
 - safe export of helper views such as CSV snapshots without losing the workbook source
 
 This skill does not own:
+- generic workbook intake when the implementation lane is still undecided
 - pure dataframe/statistical analysis detached from the workbook artifact
 - legacy `.xls` restoration as a primary workflow
 - database modeling or SQL query design
@@ -128,24 +128,25 @@ If the task shifts to adjacent skill territory, route to:
 
 ## Finding-driven framework role
 
-This skill is a **Phase-2 artifact gate / detector / verifier** in the shared
-finding-driven framework. It should keep workbook work `.xlsx`-native, then
-emit findings or verification results that downstream owners can consume
-without flattening the workbook to CSV first. Use the shared structures in
+This skill is a **Phase-2 implementation / verification lane** in the shared
+finding-driven framework. It should keep workbook work `.xlsx`-native after
+`$spreadsheets` has already decided that the Python/tooling path is the right
+one. Use the shared structures in
 [`../SKILL_FRAMEWORK_PROTOCOLS.md`](../SKILL_FRAMEWORK_PROTOCOLS.md) and the
 verification protocol when formulas, formatting, or rendered layout must be
 rechecked explicitly.
 
 ## Required workflow
 
-1. Identify whether the task is inspect, create, edit, repair, export, or audit.
-2. Preserve the workbook as the source of truth; do not flatten to CSV unless that is explicitly the deliverable.
-3. Choose the right engine:
+1. Confirm this really should not stay on the default `$spreadsheets` artifact-tool path.
+2. Identify whether the task is inspect, create, edit, repair, export, or audit.
+3. Preserve the workbook as the source of truth; do not flatten to CSV unless that is explicitly the deliverable.
+4. Choose the right engine:
    - `openpyxl` for workbook-native structure and edits
    - `pandas` for data transforms feeding workbook output
    - LibreOffice / `soffice` for render-oriented conversion to PDF
-4. Recheck formulas, styles, and sheet-level features after meaningful changes.
-5. If layout matters, render and visually inspect the affected sheets.
+5. Recheck formulas, styles, and sheet-level features after meaningful changes.
+6. If layout matters, render and visually inspect the affected sheets.
 
 ## Core workflow
 

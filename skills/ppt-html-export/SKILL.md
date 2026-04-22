@@ -1,27 +1,22 @@
 ---
 name: ppt-html-export
 description: |
-  Use when the user wants to create, revise, or export a slide deck / PPT /
-  presentation from an outline, notes, markdown, or research materials and the
-  final deliverable should be HTML slides plus a browser-matched PDF. Best for
-  requests like "做个PPT", "生成演示文稿", "根据大纲做汇报 slides", or when
-  HTML/CSS layout control, page-by-page browser QA, and high-fidelity PDF export
-  matter more than editable `.pptx`.
+  Use after the `$slides` gate when the user explicitly wants HTML slides plus a
+  browser-matched PDF from an outline, notes, markdown, or research materials.
+  Best for requests where HTML/CSS layout control, page-by-page browser QA, and
+  high-fidelity PDF export matter more than editable `.pptx`.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
 trigger_hints:
-  - 做个PPT
-  - 生成演示文稿
-  - 根据大纲做汇报 slides
-  - revise
-  - export a slide deck
-  - PPT
-  - presentation from an outline
-  - notes
-  - markdown
-  - research materials
+  - html slides
+  - browser-matched PDF
+  - presentation.html
+  - print_pdf.js
+  - export HTML slides to PDF
+  - browser-native PDF export
+  - 根据大纲做 HTML slides
 runtime_requirements:
   commands:
     - node
@@ -38,16 +33,18 @@ metadata:
 
 Build presentations as fixed-size HTML slides first, audit them page by page in the browser, then export them to PDF with the browser's native PDF renderer.
 
-Default to this skill when visual fidelity matters more than editable `.pptx` output. If the user explicitly needs a native PowerPoint file, say that this skill is still useful for high-fidelity layout prototyping, but the output chain is HTML -> PDF by default.
+Use this owner once the workflow is explicitly HTML-first. Do not absorb generic PPT intake; `$slides` should make that first routing decision.
 
 ## When to use
 
 - The user wants HTML slides with pixel-perfect CSS layout and browser-matched PDF
 - The user wants full control over HTML/CSS styling for presentations
 - Visual fidelity and browser-based QA matter more than PowerPoint editability
+- The user explicitly wants HTML-first authoring rather than native editable PowerPoint
 
 ## Do not use
 
+- Do not use for generic "做个PPT" / presentation asks with no format decision yet; check `$slides` first
 - Do not use when the user wants a native editable `.pptx`; use `$ppt-pptx`
 - Do not use when the user wants LaTeX Beamer source plus PDF; use `$ppt-beamer`
 - Do not use when HTML output is only a temporary scaffold for a native PPTX deliverable

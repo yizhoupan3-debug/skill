@@ -97,6 +97,75 @@ def _read_json(path: Path) -> dict[str, Any] | list[Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return {}
+
+
+BOOTSTRAP_REGISTERED_TASK_LIMIT = 5
+
+
+def _compact_registered_tasks(snapshot: Any, *, limit: int = BOOTSTRAP_REGISTERED_TASK_LIMIT) -> dict[str, Any]:
+    """Keep bootstrap task state compact and prompt-safe."""
+
+    registered_tasks = getattr(snapshot, "registered_tasks", ()) or ()
+    rows: list[dict[str, Any]] = []
+    for item in registered_tasks[:limit]:
+        rows.append(
+            {
+                "task_id": item.task_id,
+                "task": item.task,
+                "phase": item.phase,
+                "status": item.status,
+                "story_state": item.story_state,
+                "updated_at": item.updated_at,
+                "is_focused": item.is_focused,
+            }
+        )
+    total = len(registered_tasks)
+    return {
+        "tasks": rows,
+        "task_count": total,
+        "truncated": total > len(rows),
+        "overflow_count": max(0, total - len(rows)),
+    }
+
+
+def _compact_memory_retrieval_for_prompt(retrieval: dict[str, Any]) -> dict[str, Any]:
+    """Return only the prompt-safe retrieval payload."""
+
+    items = retrieval.get("items", []) if isinstance(retrieval, dict) else []
+    compact_items = [
+        {
+            "path": item.get("path", ""),
+            "content": item.get("content", ""),
+        }
+        for item in items
+        if isinstance(item, dict)
+    ]
+    return {
+        "topic": retrieval.get("topic", ""),
+        "mode": retrieval.get("mode", "stable"),
+        "context": retrieval.get("context", ""),
+        "items": compact_items,
+        "active_task_included": bool(retrieval.get("active_task_included")),
+        "freshness": retrieval.get("freshness", {}),
+        "continuity_state": retrieval.get("continuity_state"),
+    }
+
+
+def _compact_continuity_for_prompt(continuity: dict[str, Any]) -> dict[str, Any]:
+    """Keep only the execution facts that help prompt construction."""
+
+    return {
+        "state": continuity.get("state"),
+        "task": continuity.get("task"),
+        "phase": continuity.get("phase"),
+        "status": continuity.get("status"),
+        "route": continuity.get("route", []),
+        "next_actions": continuity.get("next_actions", []),
+        "blockers": continuity.get("blockers", []),
+        "current_execution": continuity.get("current_execution"),
+        "recent_completed_execution": continuity.get("recent_completed_execution"),
+        "recovery_hints": continuity.get("recovery_hints", []),
+    }
 def export_framework_skills(
     runtime_path: Path | None = None,
     approval_path: Path | None = None,
@@ -251,14 +320,20 @@ def build_framework_memory_bootstrap(
     artifact_source_dir: Path | None = None,
     top: int = 8,
     mode: str = "stable",
+    task_id: str | None = None,
 ) -> dict[str, Any]:
     """Build a memory bootstrap payload for framework consumers."""
 
     repo_root = (source_root or get_repo_root()).resolve()
-    snapshot = load_runtime_snapshot(repo_root, artifact_root=artifact_source_dir)
+    snapshot = load_runtime_snapshot(
+        repo_root,
+        artifact_root=artifact_source_dir,
+        task_id=task_id,
+    )
+    focused_task_id = getattr(snapshot, "focused_task_id", "") or getattr(snapshot, "active_task_id", "")
     continuity = classify_runtime_continuity(snapshot)
     active_task = {
-        "task_id": snapshot.active_task_id or snapshot.supervisor_state.get("task_id"),
+        "task_id": focused_task_id or snapshot.active_task_id or snapshot.supervisor_state.get("task_id"),
         "task": continuity.get("task"),
         "phase": continuity.get("phase"),
         "status": continuity.get("status"),
@@ -334,6 +409,7 @@ def build_framework_memory_bootstrap(
         repo_root=repo_root,
         artifact_root=artifact_source_dir,
         mode=mode,
+        task_id=task_id or "",
     )
     continuity_layout = describe_continuity_layout(repo_root)
     memory_layout = describe_project_local_memory_layout(repo_root)
@@ -344,7 +420,8 @@ def build_framework_memory_bootstrap(
     )
     bootstrap_task_id = resume_task_id or build_task_id(query or workspace, created_at=current_local_timestamp())
     bootstrap_source_task = active_task.get("task") if resume_task_id else None
-    return {
+    compact_registered_tasks = _compact_registered_tasks(snapshot)
+    payload = {
         "workspace": workspace,
         "using_project_local": True,
         "memory_root": str(memory_workspace_root),
@@ -359,6 +436,8 @@ def build_framework_memory_bootstrap(
         "retrieval": retrieval,
         "continuity": effective_continuity,
         "active_task": active_task,
+        "focused_task": active_task,
+        "registered_tasks": compact_registered_tasks,
         "continuity_decision": {
             "query": query,
             "query_matches_active_task": bool(query_matches_active_task),
@@ -366,11 +445,21 @@ def build_framework_memory_bootstrap(
             "task_id": bootstrap_task_id,
             "source_task": bootstrap_source_task,
             "mode": mode,
+            "focused_task_id": focused_task_id or active_task.get("task_id"),
         },
         "source_artifacts": {
             **continuity_layout,
         },
     }
+    payload["prompt_payload"] = {
+        "workspace": workspace,
+        "retrieval": _compact_memory_retrieval_for_prompt(retrieval),
+        "continuity": _compact_continuity_for_prompt(effective_continuity),
+        "active_task": active_task,
+        "registered_tasks": compact_registered_tasks,
+        "continuity_decision": payload["continuity_decision"],
+    }
+    return payload
 
 
 def export_supporting_files(

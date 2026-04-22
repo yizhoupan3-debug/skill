@@ -32,8 +32,8 @@
 | `cloudflare-deploy` | Active | P2 | L3 | owner | none | project | ✓ 98.7 | Deploy, publish, migrate, and operate applications on Cloudflare using Workers,  |
 | `code-acceleration` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Speed up code with measured rewrites, batching, caching, and parallel execution |
 | `code-review` | Active | P2 | L2 | overlay | none | project | ✓ 94.7 | Review code with structured findings and optional quality scoring. Use when the  |
-| `slides` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Create, edit, verify, and export editable `.pptx` slide decks. Use this artifact |
-| `spreadsheets` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Create, edit, analyze, and review workbook-native spreadsheet artifacts. Use thi |
+| `slides` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Route presentation-artifact work before choosing a slide-authoring lane. Use thi |
+| `spreadsheets` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Route workbook-native spreadsheet artifact work before choosing a narrower imple |
 | `coding-standards` | Active | P2 | L1 | overlay | none | project | ✓ 97.7 | Enforce cross-stack coding standards: naming, readability, error handling, immut |
 | `copywriting` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Create persuasive commercial copy for landing pages, ads, product descriptions,  |
 | `css-pro` | Active | P2 | L2 | owner | none | project | ✓ 97.7 | Architect maintainable CSS layout, responsive, animation, and vibrant design-tok |
@@ -61,6 +61,7 @@
 | `git-workflow` | Active | P1 | L2 | owner | none | project | ✓ 100.0 | Safely execute Git operations and remote sync |
 | `github-actions-authoring` | Active | P2 | L3 | owner | none | project | ✓ 97.7 | Produce GitHub Actions workflow YAML with minimal permissions, stable cache keys |
 | `github-investigator` | Active | P2 | L2 | owner | none | project | ⚠ 64.0 | Deep GitHub repo research with issue/PR timeline and code-history evidence |
+| `gitx` | Active | P1 | L2 | owner | none | project | ✓ 100.0 | Run the safe Git review-fix-tidy-commit-merge-push workflow end to end. |
 | `go-pro` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Deliver safe concurrent Go code with managed goroutine lifecycles, composable in |
 | `graphviz-expert` | Active | P2 | L3 | owner | none | project | ✓ 92.8 | Create Graphviz/DOT diagrams for precise, orthogonal, publication-quality flowch |
 | `humanizer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Naturalize existing prose into clearer, more human-sounding text. Use for: 精修, 文 |
@@ -98,9 +99,9 @@
 | `plan-to-code` | Active | P1 | L2 | owner | none | project | ✓ 95.8 | Implement a concrete plan or spec into integrated code |
 | `playwright` | Active | P2 | L3 | gate | evidence | project | ✓ 98.7 | Use a real browser when live evidence or page interaction is required |
 | `ppt-beamer` | Active | P2 | L4 | owner | none | project | ✓ 95.3 | Create, revise, and compile presentation decks with LaTeX Beamer when you want e |
-| `ppt-html-export` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Use when the user wants to create, revise, or export a slide deck / PPT / presen |
-| `ppt-markdown` | Active | P2 | L4 | owner | none | project | ✓ 95.2 | Build slide decks from Markdown using Slidev or Marp. Use when the user wants fa |
-| `ppt-pptx` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Create polished editable `.pptx` decks with PptxGenJS, theme-driven styling, loc |
+| `ppt-html-export` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Use after the `$slides` gate when the user explicitly wants HTML slides plus a b |
+| `ppt-markdown` | Active | P2 | L4 | owner | none | project | ✓ 95.2 | Build slide decks from Markdown using Slidev or Marp. Use for explicit Markdown  |
+| `ppt-pptx` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Create source-first `deck.js` plus editable `.pptx` decks with PptxGenJS, theme- |
 | `prompt-engineer` | Active | P2 | L1 | owner | none | project | ✓ 95.8 | Transform vague instructions into structured prompts with explicit role, constra |
 | `python-pro` | Active | P1 | L4 | owner | none | project | ✓ 98.5 | Deliver production-grade Python 3.12+ code with clean async boundaries, strict t |
 | `react` | Active | P1 | L4 | owner | none | project | ✓ 98.0 | Deliver React 19+ components with correct hook dependencies, optimal Server Comp |
@@ -141,5 +142,5 @@
 | `web-scraping` | Active | P2 | L4 | owner | none | project | ✓ 99.2 | Plan and implement web scraping and structured data extraction workflows. Use wh |
 | `webhook-security` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Secure webhook receivers and callback endpoints for Stripe, GitHub, Slack, Clerk |
 | `writing-skills` | Active | P2 | L0 | overlay | none | project | ✓ 95.2 | Standardize and strengthen multiple `SKILL.md` files and shared skill-writing do |
-| `xlsx` | Active | P2 | L3 | gate | artifact | project | ✓ 98.3 | Read, create, edit, repair, and review Excel `.xlsx` workbooks when spreadsheet- |
+| `xlsx` | Active | P2 | L3 | owner | none | project | ✓ 98.3 | Use after the `$spreadsheets` gate when the user explicitly wants an `openpyxl`  |
 | `youtube-summarizer` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Extract transcripts from YouTube videos and turn them into summaries, notes, key |
