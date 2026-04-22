@@ -46,6 +46,7 @@ npm run test    # run vitest integration tests
 ```bash
 node dist/index.js
 # Flags: --headless true|false  --engine chromium|firefox|webkit  --capture-body
+#        --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
 ```
 
 ### HTTP (Streamable HTTP transport)
@@ -82,3 +83,17 @@ node dist/index.js --capture-body
 ```
 
 Captures request `postData` and JSON response bodies up to 4 KB each.
+
+## Runtime attach diagnostics
+
+If you already have a Rust-first runtime attach descriptor, browser-mcp can
+consume it directly for self-inspection:
+
+```bash
+node dist/index.js --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
+# or
+BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH=/abs/path/runtime-attach-descriptor.json node dist/index.js
+```
+
+Then `browser_diagnostics` includes an `attachedRuntime` block with descriptor
+status, replay readiness, trace path, and the latest replayable event summary.
