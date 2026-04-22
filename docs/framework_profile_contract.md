@@ -106,9 +106,14 @@ runtime kernel 语义。
 它们为下一阶段 bridge / contract emission / runtime handshake 提供稳定入口，并把 nested override、host 能力解析和跨宿主复用边界固定在外层框架。
 当前默认 `emit_framework_contract_artifacts(...)` 继续保留
 `cli_common_adapter` / `cli_family_parity_snapshot` /
-`codex_dual_entry_parity_snapshot` / inventory / contract / parity artifacts，
-但 `codex_desktop_host_adapter` 只会出现在显式 compatibility escape hatch
-里，不再作为默认 peer 输出。
+`codex_dual_entry_parity_snapshot` / contract / parity artifacts；
+`aionrs_companion_adapter`、`aionui_host_adapter`、`generic_host_adapter`
+以及 `codex_desktop_host_adapter` 都要显式 opt-in，才会作为 fallback /
+compatibility lane 被写出，不再占据默认 peer 输出面。
+同时生成物的物理落点也分开：
+默认 contract 写到 `default/`，fallback lane 写到 `fallback/`，continuity lane
+写到 `continuity/`，Rust companion artifacts 写到 `rust/`；根目录只保留
+layout manifest 这类目录说明工件。
 默认 runtime helper lookup 也保持 canonical-only：legacy alias 不再通过通用
 registry / lookup surface 作为 peer adapter 暴露；需要兼容 payload 的调用方
 必须显式 opt-in compatibility lane。

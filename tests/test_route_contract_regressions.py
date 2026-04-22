@@ -14,8 +14,8 @@ if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
 from codex_agno_runtime.router import SkillRouter
+from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import SkillMetadata
-from scripts.route import run_rust_route_json
 
 
 ROUTE_FIXTURE_PATH = PROJECT_ROOT / "tests" / "routing_route_fixtures.json"
@@ -75,6 +75,21 @@ def _python_route_case(case: dict[str, object]) -> tuple[str, str | None, str]:
     )
 
 
+def _rust_route_case(case: dict[str, object]) -> tuple[str, str | None, str]:
+    adapter = RustRouteAdapter(
+        PROJECT_ROOT,
+        runtime_path=MISSING_RUNTIME_PATH,
+        manifest_path=ROUTE_FIXTURE_PATH,
+    )
+    result = adapter.route_contract(
+        query=str(case["query"]),
+        session_id="regression-fixture-session",
+        allow_overlay=bool(case.get("allow_overlay", True)),
+        first_turn=bool(case.get("first_turn", True)),
+    )
+    return (result.selected_skill, result.overlay_skill, result.layer)
+
+
 @pytest.mark.parametrize(
     "case",
     REGRESSION_CASES,
@@ -83,23 +98,18 @@ def _python_route_case(case: dict[str, object]) -> tuple[str, str | None, str]:
 def test_routing_contract_regressions(case: dict[str, object]) -> None:
     expected = case["expected"]
     python_selected, python_overlay, python_layer = _python_route_case(case)
-    rust_decision = run_rust_route_json(
-        str(case["query"]),
-        session_id="regression-fixture-session",
-        allow_overlay=bool(case.get("allow_overlay", True)),
-        first_turn=bool(case.get("first_turn", True)),
-        runtime_path=MISSING_RUNTIME_PATH,
-        manifest_path=ROUTE_FIXTURE_PATH,
-    )
+    rust_selected, rust_overlay, rust_layer = _rust_route_case(case)
 
     assert (python_selected, python_overlay, python_layer) == (
         expected["selected_skill"],
         expected["overlay_skill"],
         expected["layer"],
     )
-    assert rust_decision["selected_skill"] == expected["selected_skill"]
-    assert rust_decision["overlay_skill"] == expected["overlay_skill"]
-    assert rust_decision["layer"] == expected["layer"]
-    assert rust_decision["selected_skill"] == python_selected
-    assert rust_decision["overlay_skill"] == python_overlay
-    assert rust_decision["layer"] == python_layer
+    assert (rust_selected, rust_overlay, rust_layer) == (
+        expected["selected_skill"],
+        expected["overlay_skill"],
+        expected["layer"],
+    )
+    assert rust_selected == python_selected
+    assert rust_overlay == python_overlay
+    assert rust_layer == python_layer

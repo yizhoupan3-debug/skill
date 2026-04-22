@@ -230,8 +230,8 @@ continuity lane 里保留。
 
 - `compile_cli_common_adapter(...)`
 - `compile_codex_common_adapter(...)`
-- `compile_aionrs_companion_adapter(...)`
-- `compile_aionui_host_adapter(...)`
+- `codex_agno_runtime.compatibility.compile_aionrs_companion_adapter(...)`
+- `codex_agno_runtime.compatibility.compile_aionui_host_adapter(...)`
 - `compile_codex_desktop_adapter(...)`
 - `codex_agno_runtime.compatibility.compile_codex_desktop_host_adapter(...)`
 - `compile_codex_cli_adapter(...)`
@@ -244,7 +244,7 @@ continuity lane 里保留。
 - `build_execution_kernel_live_fallback_retirement_status(...)`
 - `build_execution_kernel_live_response_serialization_contract(...)`
 - `build_upgrade_compatibility_matrix(...)`
-- `emit_framework_contract_artifacts(...)`: emits the core bridge / contract artifact set; legacy alias inventory / retirement status stay behind explicit continuity opt-in.
+- `emit_framework_contract_artifacts(...)`: emits the core bridge / contract artifact set under `default/`; fallback host artifacts (`aionrs_companion_adapter`, `aionui_host_adapter`, `generic_host_adapter`) go to `fallback/`, legacy alias inventory / retirement status go to `continuity/`, and Rust companion outputs go to `rust/`, all behind explicit opt-in lanes where applicable.
 - `router-rs --profile-json --framework-profile <path>` for Rust-side profile compilation
 - thin projection / validation helpers used by the adapter contract and tests
 - `scripts/materialize_cli_host_entrypoints.py` for repo-level `AGENTS.md` /

@@ -77,6 +77,37 @@ INDEX_CHECKLIST = [
     "Only then choose the narrowest owner and add at most one overlay.",
 ]
 
+INDEX_GATE_SHORTCUTS = [
+    ("OpenAI API / 模型 / 官方当前文档", "openai-docs"),
+    ("PR 评论 / review comment", "gh-address-comments"),
+    ("CI 失败 / GitHub Actions 报红", "gh-fix-ci"),
+    ("Sentry 告警 / 线上异常", "sentry"),
+    ("根因未知的 bug / 失败 / 报错", "systematic-debugging"),
+    ("需要并行 sidecar / 多代理拆分", "subagent-delegation"),
+    ("PDF / DOCX / 表格产物", "pdf"),
+    ("浏览器实操取证 / 页面交互", "playwright"),
+    ("截图 / 页面 / 图表可视核查", "visual-review"),
+]
+
+INDEX_COMMON_LANES = [
+    ("已有方案，直接落代码", "plan-to-code"),
+    ("重构但不想改行为", "refactoring"),
+    ("测试设计 / flaky / 补测试", "test-engineering"),
+    ("后端运行时问题", "backend-runtime-debugging"),
+    ("前端运行时问题", "frontend-debugging"),
+    ("README / ADR / 项目文档", "documentation-engineering"),
+    ("构建 / 打包 / 工具链", "build-tooling"),
+    ("Git 流程 / 合并 / 推送", "git-workflow"),
+    ("多轮调研 / 对比 / 检索", "information-retrieval"),
+    ("skill 库 / 路由框架自身", "skill-developer-codex"),
+]
+
+INDEX_OVERLAY_SHORTCUTS = [
+    ("需要审查问题清单", "code-review"),
+    ("需要统一编码规范", "coding-standards"),
+    ("需要多轮优化直到收敛", "iterative-optimizer"),
+]
+
 
 def run_git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     """Run a git command from the repository root."""
@@ -459,34 +490,59 @@ def build_registry_and_manifest(
 def build_index(manifest: dict[str, Any]) -> str:
     """Build the lightweight routing index used at conversation start."""
     selected = select_runtime_skills(manifest)
+    skill_lookup = {str(skill[0]): skill for skill in selected}
 
     lines = [
         "# Skill Routing Index",
         "",
-        "> Entry point for rapid lookup.",
-        "> Prefer `skills/SKILL_ROUTING_RUNTIME.json` for the lean machine-readable route map.",
-        "> Prefer `skills/SKILL_MANIFEST.json` for the full manifest (includes owner, priority, source, etc.).",
-        "> RUNTIME (v2) is a compact 8-key subset: slug, layer, owner, gate, session_start, summary, trigger_hints, health.",
-        "> MANIFEST is the full 11-key record: slug, layer, owner, gate, priority, description, session_start, trigger_hints, health, source, source_position.",
+        "> Default read order: `skills/SKILL_ROUTING_RUNTIME.json` -> `skills/SKILL_ROUTING_INDEX.md`.",
+        "> Only open `skills/SKILL_MANIFEST.json` or `skills/SKILL_ROUTING_LAYERS.md` when the first two still leave owner/reroute ambiguity.",
         "",
-        "## 6-rule gate checklist",
+        "## Quick gate checklist",
     ]
     for idx, item in enumerate(INDEX_CHECKLIST, start=1):
         lines.append(f"{idx}. {item}")
 
     lines.extend([
         "",
-        "## Gates & Meta",
-        "| Name | Layer | Owner | Gate | Description |",
-        "|---|---|---|---|---|",
+        "## Gate shortcuts",
+        "| If the task starts with... | Route first | Why |",
+        "|---|---|---|",
     ])
-
-    for skill in selected:
-        lines.append(f"| `{skill[0]}` | {skill[1]} | {skill[2]} | {skill[3]} | {skill[5][:80]} |")
+    for label, slug in INDEX_GATE_SHORTCUTS:
+        skill = skill_lookup.get(slug)
+        if skill is None:
+            continue
+        lines.append(f"| {label} | `{slug}` | {summarize_text(str(skill[5]), limit=56)} |")
 
     lines.extend([
         "",
-        "See `skills/SKILL_ROUTING_LAYERS.md` for the full owner map and reroute rules.",
+        "## Common lanes",
+        "| Common need | Route to | Why |",
+        "|---|---|---|",
+    ])
+    for label, slug in INDEX_COMMON_LANES:
+        skill = skill_lookup.get(slug)
+        if skill is None:
+            continue
+        lines.append(f"| {label} | `{slug}` | {summarize_text(str(skill[5]), limit=56)} |")
+
+    lines.extend([
+        "",
+        "## Optional overlays",
+        "| Add when... | Overlay | Why |",
+        "|---|---|---|",
+    ])
+    for label, slug in INDEX_OVERLAY_SHORTCUTS:
+        skill = skill_lookup.get(slug)
+        if skill is None:
+            continue
+        lines.append(f"| {label} | `{slug}` | {summarize_text(str(skill[5]), limit=56)} |")
+
+    lines.extend([
+        "",
+        "Need the full list? Use `skills/SKILL_ROUTING_RUNTIME.json` or `skills/SKILL_MANIFEST.json`.",
+        "Still ambiguous? See `skills/SKILL_ROUTING_LAYERS.md` for owner/reroute exceptions.",
         "",
     ])
     return "\n".join(lines)

@@ -52,6 +52,37 @@ struct SkillBundle {
     approval_policy: Value,
 }
 
+const INDEX_GATE_SHORTCUTS: [(&str, &str); 9] = [
+    ("OpenAI API / 模型 / 官方当前文档", "openai-docs"),
+    ("PR 评论 / review comment", "gh-address-comments"),
+    ("CI 失败 / GitHub Actions 报红", "gh-fix-ci"),
+    ("Sentry 告警 / 线上异常", "sentry"),
+    ("根因未知的 bug / 失败 / 报错", "systematic-debugging"),
+    ("需要并行 sidecar / 多代理拆分", "subagent-delegation"),
+    ("PDF / DOCX / 表格产物", "pdf"),
+    ("浏览器实操取证 / 页面交互", "playwright"),
+    ("截图 / 页面 / 图表可视核查", "visual-review"),
+];
+
+const INDEX_COMMON_LANES: [(&str, &str); 10] = [
+    ("已有方案，直接落代码", "plan-to-code"),
+    ("重构但不想改行为", "refactoring"),
+    ("测试设计 / flaky / 补测试", "test-engineering"),
+    ("后端运行时问题", "backend-runtime-debugging"),
+    ("前端运行时问题", "frontend-debugging"),
+    ("README / ADR / 项目文档", "documentation-engineering"),
+    ("构建 / 打包 / 工具链", "build-tooling"),
+    ("Git 流程 / 合并 / 推送", "git-workflow"),
+    ("多轮调研 / 对比 / 检索", "information-retrieval"),
+    ("skill 库 / 路由框架自身", "skill-developer-codex"),
+];
+
+const INDEX_OVERLAY_SHORTCUTS: [(&str, &str); 3] = [
+    ("需要审查问题清单", "code-review"),
+    ("需要统一编码规范", "coding-standards"),
+    ("需要多轮优化直到收敛", "iterative-optimizer"),
+];
+
 fn main() -> Result<(), String> {
     let args = Cli::parse();
     let source_manifest = load_source_manifest(&args.source_manifest)?;
@@ -518,39 +549,77 @@ fn select_manifest_docs<'a>(docs: &'a [SkillDoc], skill_entries: &[SkillEntry]) 
 
 fn build_index(manifest: &Value) -> String {
     let selected = select_runtime_skills(manifest);
+    let lookup: HashMap<String, Vec<Value>> = selected
+        .iter()
+        .map(|skill| (string_at(skill, 0), skill.clone()))
+        .collect();
     let mut lines = vec![
         "# Skill Routing Index".to_string(),
         "".to_string(),
-        "> Entry point for rapid lookup.".to_string(),
-        "> Prefer `skills/SKILL_ROUTING_RUNTIME.json` for the lean machine-readable route map.".to_string(),
-        "> Prefer `skills/SKILL_MANIFEST.json` for the full manifest (includes owner, priority, source, etc.).".to_string(),
-        "> RUNTIME (v2) is a compact 8-key subset: slug, layer, owner, gate, session_start, summary, trigger_hints, health.".to_string(),
-        "> MANIFEST is the full 11-key record: slug, layer, owner, gate, priority, description, session_start, trigger_hints, health, source, source_position.".to_string(),
+        "> Default read order: `skills/SKILL_ROUTING_RUNTIME.json` -> `skills/SKILL_ROUTING_INDEX.md`.".to_string(),
+        "> Only open `skills/SKILL_MANIFEST.json` or `skills/SKILL_ROUTING_LAYERS.md` when the first two still leave owner/reroute ambiguity.".to_string(),
         "".to_string(),
-        "## 6-rule gate checklist".to_string(),
+        "## Quick gate checklist".to_string(),
     ];
     for (idx, item) in index_checklist().iter().enumerate() {
         lines.push(format!("{}. {}", idx + 1, item));
     }
     lines.extend([
         "".to_string(),
-        "## Gates & Meta".to_string(),
-        "| Name | Layer | Owner | Gate | Description |".to_string(),
-        "|---|---|---|---|---|".to_string(),
+        "## Gate shortcuts".to_string(),
+        "| If the task starts with... | Route first | Why |".to_string(),
+        "|---|---|---|".to_string(),
     ]);
-    for skill in selected {
+    for (label, slug) in INDEX_GATE_SHORTCUTS {
+        let Some(skill) = lookup.get(slug) else {
+            continue;
+        };
         lines.push(format!(
-            "| `{}` | {} | {} | {} | {} |",
-            string_at(&skill, 0),
-            string_at(&skill, 1),
-            string_at(&skill, 2),
-            string_at(&skill, 3),
-            truncate_chars(&string_at(&skill, 5), 80)
+            "| {} | `{}` | {} |",
+            label,
+            slug,
+            summarize_text(&string_at(skill, 5), 56)
         ));
     }
     lines.extend([
         "".to_string(),
-        "See `skills/SKILL_ROUTING_LAYERS.md` for the full owner map and reroute rules."
+        "## Common lanes".to_string(),
+        "| Common need | Route to | Why |".to_string(),
+        "|---|---|---|".to_string(),
+    ]);
+    for (label, slug) in INDEX_COMMON_LANES {
+        let Some(skill) = lookup.get(slug) else {
+            continue;
+        };
+        lines.push(format!(
+            "| {} | `{}` | {} |",
+            label,
+            slug,
+            summarize_text(&string_at(skill, 5), 56)
+        ));
+    }
+    lines.extend([
+        "".to_string(),
+        "## Optional overlays".to_string(),
+        "| Add when... | Overlay | Why |".to_string(),
+        "|---|---|---|".to_string(),
+    ]);
+    for (label, slug) in INDEX_OVERLAY_SHORTCUTS {
+        let Some(skill) = lookup.get(slug) else {
+            continue;
+        };
+        lines.push(format!(
+            "| {} | `{}` | {} |",
+            label,
+            slug,
+            summarize_text(&string_at(skill, 5), 56)
+        ));
+    }
+    lines.extend([
+        "".to_string(),
+        "Need the full list? Use `skills/SKILL_ROUTING_RUNTIME.json` or `skills/SKILL_MANIFEST.json`."
+            .to_string(),
+        "Still ambiguous? See `skills/SKILL_ROUTING_LAYERS.md` for owner/reroute exceptions."
             .to_string(),
         "".to_string(),
     ]);

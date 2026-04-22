@@ -237,6 +237,23 @@ One additional Rust-authority slice is now implemented in this wave:
 - `router-rs` now also owns the stable `RouteDiffReport` compare path for
   `shadow` / `verify` / rollback semantics, so Python no longer computes the
   Rust-side mismatch vocabulary locally
+- `RustRouteAdapter` now also exposes typed
+  `route_contract / route_policy_contract / route_report_contract / route_snapshot_contract`
+  entrypoints, so the Python runtime can consume validated Rust-owned route
+  contracts instead of continuing to stitch raw JSON payloads ad hoc
+- `RouterService` now consumes those typed route contracts directly, and an
+  unknown Rust-selected skill now fails closed in the Python host instead of
+  silently drifting into a host-side fallback interpretation
+- typed route-contract consumption now also reaches fixture/live parity
+  regressions, and the adapter supports explicit `runtime_path` /
+  `manifest_path` overrides so fixture-backed Rust parity no longer needs to
+  route around the adapter through raw transport helpers
+- the browser-mcp host consumer now replays runtime events through the Rust
+  attach descriptor / handoff / binding-artifact contract instead of treating
+  `binding/handoff/resume` as a hand-assembled second attach protocol
+- runtime observability is no longer only vocabulary-ready; the repo now ships
+  concrete Rust-first exporter-descriptor / metric-record / dashboard helpers,
+  and the same contract is projected through runtime health
 
 ### 已退休
 
@@ -249,10 +266,19 @@ One additional Rust-authority slice is now implemented in this wave:
 
 ### 下一 safe slice
 
-- strengthen backend and transport implementations without widening the live
-  Python authority surface
-- keep pushing non-filesystem concrete backend coverage and transport clarity
-  while preserving the frozen contracts
+- finish turning route-side compatibility helpers into typed-first seams, so
+  `scripts/route.py` and adjacent evaluation/test helpers stop acting like
+  privileged raw-JSON consumers
+- keep pushing execution-kernel metadata / naming bridge canonicalization
+  toward Rust without reopening a Python live authority path
+- close the native install/bootstrap lane so a fresh machine lands on the
+  current Rust-first default without post-install manual switching
+- expand host consumer adoption beyond the already-landed browser-mcp attach
+  descriptor path, so other host-facing readers do not drift into private
+  attach semantics
+- hold integrator/regenerate work until lanes 1/2/3/4 are genuinely stable,
+  then refresh generated artifacts and docs together instead of mixing partial
+  states into the global outputs
 
 ## Contract 0: Desktop Alias Retirement Path
 

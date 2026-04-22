@@ -47,11 +47,18 @@ class RustRouteAdapter:
     trace_stream_io_authority = "rust-runtime-trace-io"
     framework_runtime_authority = "rust-framework-runtime-read-model"
 
-    def __init__(self, codex_home: Path, *, timeout_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        codex_home: Path,
+        *,
+        timeout_seconds: float = 30.0,
+        runtime_path: Path | None = None,
+        manifest_path: Path | None = None,
+    ) -> None:
         self.codex_home = codex_home
         self.timeout_seconds = timeout_seconds
-        self.runtime_path = codex_home / "skills" / "SKILL_ROUTING_RUNTIME.json"
-        self.manifest_path = codex_home / "skills" / "SKILL_MANIFEST.json"
+        self.runtime_path = runtime_path or (codex_home / "skills" / "SKILL_ROUTING_RUNTIME.json")
+        self.manifest_path = manifest_path or (codex_home / "skills" / "SKILL_MANIFEST.json")
         self.router_dir = codex_home / "scripts" / "router-rs"
         self.release_bin = self.router_dir / "target" / "release" / "router-rs"
         self.debug_bin = self.router_dir / "target" / "debug" / "router-rs"
