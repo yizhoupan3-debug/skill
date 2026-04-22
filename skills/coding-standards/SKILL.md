@@ -4,10 +4,11 @@ description: |
   Enforce cross-stack coding standards: naming, readability, error handling,
   immutability, and type safety for backend and full-stack code (Python, Go,
   Node.js, Rust, SQL). Use when reviewing code quality drift, applying 持续改进,
-  防错设计, standardizing, or preventing recurring defects.
+  防错设计, standardizing, preventing recurring defects, or cutting needless
+  abstraction and scope drift.
   For frontend-specific patterns, use $frontend-code-quality instead.
 metadata:
-  version: "4.0.0"
+  version: "4.1.0"
   platforms: [codex, antigravity, claude-code]
   tags:
     - coding-standards
@@ -83,6 +84,8 @@ This skill owns:
 - Error handling patterns (try/catch, explicit exceptions)
 - Async patterns (Promise.all, proper await)
 - Code smell detection (long functions, deep nesting, magic numbers)
+- Simplicity rules: no single-use abstraction, no speculative configurability, no framework for a one-off case
+- Surgical-change discipline: keep diffs traceable to the request and avoid drive-by cleanup
 - API coding conventions (RESTful, Zod validation)
 - Comment standards (why not what, JSDoc for public API)
 - Continuous improvement: mistake-proofing, simplification, standardization
@@ -112,6 +115,8 @@ This skill does not own:
 | Error handling | Complete try/catch, specific exception types |
 | Async | Use `Promise.all` for parallel work |
 | Type safety | No `any`, define concrete interfaces |
+| Simplicity | No speculative flags/options, no single-use abstraction, no future-proofing by default |
+| Change scope | Every changed line should trace back to the request or required fallout |
 | Comments | Explain "why" not "what", JSDoc for public APIs |
 | Code smells | Functions < 50 lines, nesting < 5 levels, no magic numbers |
 
@@ -125,6 +130,8 @@ When doing a process-level review, also check:
 - **Fail-fast**: Does configuration validate at startup, not at request time?
 - **Standardized work**: Do similar code paths follow consistent patterns?
 - **Just-in-time complexity**: Is abstraction added only when a pattern appears 3+ times?
+- **Speculation control**: Did the change add options, layers, or extensibility that no current requirement needs?
+- **Diff discipline**: Did the task widen into unrelated cleanup instead of staying surgical?
 
 ### 4. Validation
 
@@ -162,6 +169,8 @@ When doing a process-level review, also check:
 - Prefer self-documenting code over excessive comments
 - Keep findings actionable with specific file/line locations
 - Only abstract after a pattern appears 3+ times (Rule of Three)
+- Do not add configurability, indirection, or "future use" hooks without a present requirement
+- Do not turn a local fix into adjacent refactoring unless the dependency is real and explained
 - Prefer small, compounding improvements over big rewrites
 
 See [detailed examples and patterns](references/DETAIL.md) for complete code samples.

@@ -549,7 +549,20 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             assert attached["trace_stream_path"].endswith("TRACE_EVENTS.jsonl")
             assert attached["cleanup_semantics"] == "no_persisted_state"
             assert attached["cleanup_preserves_replay"] is True
+            assert attached["source_handoff_method"] == "describe_runtime_event_handoff"
+            assert attached["source_transport_method"] == "describe_runtime_event_transport"
+            assert attached["attach_method"] == "attach_runtime_event_transport"
+            assert attached["subscribe_method"] == "subscribe_attached_runtime_events"
+            assert attached["cleanup_method"] == "cleanup_attached_runtime_event_transport"
+            assert attached["resume_mode"] == "after_event_id"
             assert attached["attach_descriptor"]["schema_version"] == "runtime-event-attach-descriptor-v1"
+            assert attached["attach_descriptor"]["source_handoff_method"] == "describe_runtime_event_handoff"
+            assert attached["attach_descriptor"]["source_transport_method"] == "describe_runtime_event_transport"
+            assert attached["attach_descriptor"]["attach_method"] == "attach_runtime_event_transport"
+            assert attached["attach_descriptor"]["subscribe_method"] == "subscribe_attached_runtime_events"
+            assert attached["attach_descriptor"]["cleanup_method"] == "cleanup_attached_runtime_event_transport"
+            assert attached["attach_descriptor"]["resume_mode"] == "after_event_id"
+            assert attached["attach_descriptor"]["cleanup_semantics"] == "no_persisted_state"
             assert attached["attach_descriptor"]["attach_capabilities"] == {
                 "artifact_replay": True,
                 "live_remote_stream": False,
@@ -953,6 +966,99 @@ def test_runtime_event_attach_rejects_conflicting_attach_descriptor_args(tmp_pat
                         Path(transport["binding_artifact_path"]).with_name("WRONG_RUNTIME_EVENT_TRANSPORT.json")
                     ),
                 )
+
+        asyncio.run(_run())
+
+
+def test_runtime_event_attach_rejects_missing_explicit_binding_artifact(tmp_path: Path) -> None:
+    """Explicit artifact paths should not be ignored just because another handoff artifact exists."""
+
+    with _project_supervisor_state():
+        trace_path = tmp_path / "TRACE_METADATA.json"
+        runtime = CodexAgnoRuntime(
+            RuntimeSettings(
+                codex_home=PROJECT_ROOT,
+                data_dir=tmp_path / "runtime-data",
+                trace_output_path=trace_path,
+                live_model_override=False,
+            )
+        )
+
+        async def _run() -> None:
+            response = await runtime.run_task(
+                RunTaskRequest(
+                    task="帮我写一个 Rust CLI 工具",
+                    session_id="attach-missing-binding-session",
+                    user_id="tester",
+                    dry_run=True,
+                )
+            )
+            transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
+            handoff = runtime.describe_runtime_event_handoff(session_id=response.session_id)
+            handoff_path = Path(transport["binding_artifact_path"]).with_name("ATTACHED_RUNTIME_EVENT_HANDOFF.json")
+            handoff_path.write_text(json.dumps(handoff, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            attached_runtime = CodexAgnoRuntime(
+                RuntimeSettings(
+                    codex_home=PROJECT_ROOT,
+                    data_dir=tmp_path / "attached-runtime-data",
+                    trace_output_path=tmp_path / "ATTACHED_TRACE_METADATA.json",
+                    live_model_override=False,
+                )
+            )
+            with pytest.raises(ValueError, match="requested 'binding_artifact_path' that does not exist"):
+                attached_runtime.attach_runtime_event_transport(
+                    binding_artifact_path=str(
+                        Path(transport["binding_artifact_path"]).with_name("MISSING_RUNTIME_EVENT_TRANSPORT.json")
+                    ),
+                    handoff_path=str(handoff_path),
+                )
+
+        asyncio.run(_run())
+
+
+def test_runtime_event_attach_rejects_descriptor_without_artifact_replay_contract(tmp_path: Path) -> None:
+    """Attach descriptors must keep the replay-only contract instead of silently degrading."""
+
+    with _project_supervisor_state():
+        trace_path = tmp_path / "TRACE_METADATA.json"
+        runtime = CodexAgnoRuntime(
+            RuntimeSettings(
+                codex_home=PROJECT_ROOT,
+                data_dir=tmp_path / "runtime-data",
+                trace_output_path=trace_path,
+                live_model_override=False,
+            )
+        )
+
+        async def _run() -> None:
+            response = await runtime.run_task(
+                RunTaskRequest(
+                    task="帮我写一个 Rust CLI 工具",
+                    session_id="attach-capability-session",
+                    user_id="tester",
+                    dry_run=True,
+                )
+            )
+            transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
+            attached_runtime = CodexAgnoRuntime(
+                RuntimeSettings(
+                    codex_home=PROJECT_ROOT,
+                    data_dir=tmp_path / "attached-runtime-data",
+                    trace_output_path=tmp_path / "ATTACHED_TRACE_METADATA.json",
+                    live_model_override=False,
+                )
+            )
+            attach_descriptor = attached_runtime.attach_runtime_event_transport(
+                binding_artifact_path=transport["binding_artifact_path"]
+            )["attach_descriptor"]
+            attach_descriptor["attach_capabilities"] = {
+                **attach_descriptor["attach_capabilities"],
+                "artifact_replay": False,
+            }
+
+            with pytest.raises(ValueError, match="attach_capabilities\\.artifact_replay=True"):
+                attached_runtime.attach_runtime_event_transport(attach_descriptor=attach_descriptor)
 
         asyncio.run(_run())
 

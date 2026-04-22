@@ -67,6 +67,7 @@ const RUNTIME_VERSION = '0.2.0';
 const RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION = 'runtime-event-attach-descriptor-v1';
 const RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION = 'runtime-event-transport-v1';
 const RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION = 'runtime-event-handoff-v1';
+const TRACE_RESUME_MANIFEST_SCHEMA_VERSION = 'runtime-resume-manifest-v1';
 const ROUTER_RS_TRACE_STREAM_REPLAY_SCHEMA_VERSION = 'router-rs-trace-stream-replay-v1';
 const ROUTER_RS_TRACE_STREAM_INSPECT_SCHEMA_VERSION = 'router-rs-trace-stream-inspect-v1';
 const ROUTER_RS_TRACE_IO_AUTHORITY = 'rust-runtime-trace-io';
@@ -976,8 +977,18 @@ export class BrowserRuntime {
     }
 
     const descriptor = await this.loadRuntimeAttachDescriptor();
-    const traceStreamPath = descriptor.resolved_artifacts?.trace_stream_path ?? null;
     const replaySupported = descriptor.attach_capabilities?.artifact_replay === true;
+    let traceStreamPath: string | null;
+    try {
+      traceStreamPath = await this.resolveAttachedRuntimeTraceStreamPath(descriptor);
+    } catch (error) {
+      throw new BrowserToolError(
+        'ATTACHED_RUNTIME_INVALID_DESCRIPTOR',
+        error instanceof Error ? error.message : 'failed to resolve runtime attach descriptor artifacts',
+        true,
+        ['refresh the descriptor from describe_runtime_event_handoff', 'inspect browser_diagnostics'],
+      );
+    }
     const diagnosticsBase: AttachedRuntimeDiagnostics = {
       status: 'ready',
       descriptorSource: configuredSource.source,
@@ -1020,7 +1031,7 @@ export class BrowserRuntime {
     if (!traceStreamPath) {
       throw new BrowserToolError(
         'ATTACHED_RUNTIME_TRACE_UNAVAILABLE',
-        'runtime attach descriptor does not expose a trace_stream_path',
+        'runtime attach descriptor does not resolve a trace_stream_path from descriptor, handoff, resume manifest, or binding artifacts',
         true,
         ['refresh the descriptor from describe_runtime_event_handoff'],
       );
@@ -1264,6 +1275,140 @@ export class BrowserRuntime {
     };
   }
 
+  private async resolveAttachedRuntimeTraceStreamPath(
+    descriptor: RuntimeAttachDescriptor,
+  ): Promise<string | null> {
+    const resolvedArtifacts = this.asRecord(descriptor.resolved_artifacts) ?? {};
+    const traceCandidates = new Map<string, string[]>();
+    let bindingArtifactPath =
+      typeof resolvedArtifacts.binding_artifact_path === 'string'
+        ? resolvedArtifacts.binding_artifact_path
+        : null;
+    let resumeManifestPath =
+      typeof resolvedArtifacts.resume_manifest_path === 'string'
+        ? resolvedArtifacts.resume_manifest_path
+        : null;
+
+    this.addTraceStreamCandidate(
+      traceCandidates,
+      typeof resolvedArtifacts.trace_stream_path === 'string'
+        ? resolvedArtifacts.trace_stream_path
+        : null,
+      'descriptor',
+    );
+
+    const handoffPath =
+      typeof resolvedArtifacts.handoff_path === 'string' ? resolvedArtifacts.handoff_path : null;
+    if (handoffPath) {
+      const handoff = await this.readOptionalArtifactRecord(handoffPath, 'runtime handoff artifact');
+      if (handoff) {
+        if (handoff.schema_version !== RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION) {
+          throw new Error('runtime handoff artifact returned an unknown schema');
+        }
+        this.addTraceStreamCandidate(
+          traceCandidates,
+          typeof handoff.trace_stream_path === 'string' ? handoff.trace_stream_path : null,
+          'handoff_manifest',
+        );
+        if (!resumeManifestPath && typeof handoff.resume_manifest_path === 'string') {
+          resumeManifestPath = handoff.resume_manifest_path;
+        }
+        const transport = this.asRecord(handoff.transport);
+        if (!bindingArtifactPath && typeof transport?.binding_artifact_path === 'string') {
+          bindingArtifactPath = transport.binding_artifact_path;
+        }
+      }
+    }
+
+    if (!resumeManifestPath && bindingArtifactPath) {
+      resumeManifestPath = await this.inferResumeManifestPathFromBindingArtifact(bindingArtifactPath);
+    }
+    if (resumeManifestPath) {
+      const resumeManifest = await this.readOptionalArtifactRecord(
+        resumeManifestPath,
+        'runtime resume manifest',
+      );
+      if (resumeManifest) {
+        if (resumeManifest.schema_version !== TRACE_RESUME_MANIFEST_SCHEMA_VERSION) {
+          throw new Error('runtime resume manifest returned an unknown schema');
+        }
+        this.addTraceStreamCandidate(
+          traceCandidates,
+          typeof resumeManifest.trace_stream_path === 'string'
+            ? resumeManifest.trace_stream_path
+            : null,
+          'resume_manifest',
+        );
+        if (
+          !bindingArtifactPath &&
+          typeof resumeManifest.event_transport_path === 'string'
+        ) {
+          bindingArtifactPath = resumeManifest.event_transport_path;
+        }
+      }
+    }
+
+    if (bindingArtifactPath) {
+      this.addTraceStreamCandidate(
+        traceCandidates,
+        await this.inferTraceStreamPathFromBindingArtifact(bindingArtifactPath),
+        'binding_artifact_adjacency',
+      );
+    }
+
+    const resolvedPaths = Array.from(traceCandidates.keys());
+    if (resolvedPaths.length === 0) {
+      return null;
+    }
+    if (resolvedPaths.length > 1) {
+      const details = Array.from(traceCandidates.entries())
+        .map(([candidatePath, sources]) => `${sources.join('+')}=${candidatePath}`)
+        .join(', ');
+      throw new Error(`runtime attach artifacts disagree on trace_stream_path (${details})`);
+    }
+    return resolvedPaths[0] ?? null;
+  }
+
+  private addTraceStreamCandidate(
+    candidates: Map<string, string[]>,
+    candidatePath: string | null,
+    source: string,
+  ): void {
+    if (!candidatePath) {
+      return;
+    }
+    const resolvedPath = path.resolve(candidatePath);
+    const existingSources = candidates.get(resolvedPath);
+    if (existingSources) {
+      if (!existingSources.includes(source)) {
+        existingSources.push(source);
+      }
+      return;
+    }
+    candidates.set(resolvedPath, [source]);
+  }
+
+  private async readOptionalArtifactRecord(
+    artifactPath: string,
+    artifactLabel: string,
+  ): Promise<Record<string, unknown> | null> {
+    const resolvedArtifactPath = path.resolve(artifactPath);
+    let raw: string;
+    try {
+      raw = await readFile(resolvedArtifactPath, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
+      }
+      throw error;
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error(`${artifactLabel} must decode to a JSON object`);
+    }
+    return parsed as Record<string, unknown>;
+  }
+
   private asRecord(value: unknown): Record<string, unknown> | null {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return null;
@@ -1278,6 +1423,25 @@ export class BrowserRuntime {
     const candidatePaths = [
       path.resolve(path.dirname(path.dirname(resolvedBindingArtifactPath)), 'TRACE_EVENTS.jsonl'),
       path.resolve(path.dirname(path.dirname(path.dirname(resolvedBindingArtifactPath))), 'TRACE_EVENTS.jsonl'),
+    ];
+    for (const candidatePath of candidatePaths) {
+      try {
+        await stat(candidatePath);
+        return candidatePath;
+      } catch {
+        // Keep searching.
+      }
+    }
+    return null;
+  }
+
+  private async inferResumeManifestPathFromBindingArtifact(
+    bindingArtifactPath: string,
+  ): Promise<string | null> {
+    const resolvedBindingArtifactPath = path.resolve(bindingArtifactPath);
+    const candidatePaths = [
+      path.resolve(path.dirname(path.dirname(resolvedBindingArtifactPath)), 'TRACE_RESUME_MANIFEST.json'),
+      path.resolve(path.dirname(path.dirname(path.dirname(resolvedBindingArtifactPath))), 'TRACE_RESUME_MANIFEST.json'),
     ];
     for (const candidatePath of candidatePaths) {
       try {

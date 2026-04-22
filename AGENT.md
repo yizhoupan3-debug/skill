@@ -11,6 +11,14 @@ framework policy instead of forking per-host routing or memory rules.
 - Execute safe read/search/test/build commands directly when the runtime allows.
 - Default to a get-shit-done posture for clear local tasks: auto-continue safe,
   reversible work, keep ownership local, and verify before handoff.
+- Do not silently choose an ambiguous interpretation when it would materially
+  change the code, output, or risk surface; surface the assumption or ask.
+- Prefer the smallest solution that fully solves the stated problem; do not add
+  speculative abstractions, options, or future-proofing that was not requested.
+- Keep edits surgical: touch only what the task requires, match local style,
+  and clean up only the mess created by the current change.
+- For non-trivial work, define success in a verifiable way before
+  implementation and use that definition to drive execution.
 - Ask before destructive actions, external publishing, or account-impacting work.
 
 ## Communication Style
@@ -48,17 +56,21 @@ framework policy instead of forking per-host routing or memory rules.
 ## Turn-Start Routing
 
 1. Extract `object / action / constraints / deliverable`.
-2. Check gates before owners.
-3. Use the narrowest matching skill.
-4. Read the chosen `SKILL.md` before analysis, search, coding, or edits.
-5. If no skill matches, consult `skills/SKILL_ROUTING_RUNTIME.json` first, then
+2. Surface any assumption or ambiguity that would materially change the route,
+   scope, or implementation.
+3. Check gates before owners.
+4. Use the narrowest matching skill.
+5. Read the chosen `SKILL.md` before analysis, search, coding, or edits.
+6. For non-trivial execution, state the minimum success criteria and intended
+   verification path before coding.
+7. If no skill matches, consult `skills/SKILL_ROUTING_RUNTIME.json` first, then
    `skills/SKILL_ROUTING_INDEX.md` for the human quick scan.
-6. Keep exactly one primary owner and at most one overlay.
-7. For high-load, cross-file, or long-running tasks, invoke
+8. Keep exactly one primary owner and at most one overlay.
+9. For high-load, cross-file, or long-running tasks, invoke
    `execution-controller-coding` and maintain `.supervisor_state.json`.
-8. For complex tasks, check `subagent-delegation` before deciding whether to
+10. For complex tasks, check `subagent-delegation` before deciding whether to
    split bounded sidecars.
-9. Treat explicit `gsd` / `get shit done` / “推进到底” requests as a posture
+11. Treat explicit `gsd` / `get shit done` / “推进到底” requests as a posture
    boost for `execution-controller-coding` plus `anti-laziness`, not as an
    external runtime workflow.
 

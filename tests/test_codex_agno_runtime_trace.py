@@ -1280,3 +1280,26 @@ def test_external_runtime_transport_bridge_subscribe_prefers_rust_trace_io_on_sq
     assert replay.events[0].kind == "job.started"
     resumed = bridge.subscribe(after_event_id=replay.events[0].event_id, limit=5)
     assert [event.kind for event in resumed.events] == ["job.completed"]
+
+
+def test_external_runtime_transport_bridge_rejects_missing_trace_stream_on_binding_only_attach(
+    tmp_path: Path,
+) -> None:
+    """Binding-only attach should fail closed when no replayable trace stream can be resolved."""
+
+    binding_path = tmp_path / "runtime_event_transports" / "session-missing-trace__job-missing-trace.json"
+    binding_path.parent.mkdir(parents=True, exist_ok=True)
+    binding_path.write_text(
+        RuntimeEventTransport(
+            stream_id="stream::session-missing-trace",
+            session_id="session-missing-trace",
+            job_id="job-missing-trace",
+            binding_backend_family="filesystem",
+            binding_artifact_path=str(binding_path),
+        ).model_dump_json(indent=2)
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="External runtime event replay requires"):
+        ExternalRuntimeEventTransportBridge.attach(binding_artifact_path=str(binding_path))
