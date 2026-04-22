@@ -290,7 +290,10 @@ fn backend_capabilities(backend_family: &str) -> Result<(bool, bool, bool, bool)
     match normalized_backend_family(backend_family).as_str() {
         "filesystem" | "file" => Ok((true, false, false, true)),
         "sqlite" | "sqlite3" => Ok((true, true, true, true)),
-        other => Err(format!("Unsupported durable background-state backend family: {other!r}")),
+        other => Err(format!(
+            "Unsupported durable background-state backend family: {:?}",
+            other
+        )),
     }
 }
 
@@ -848,7 +851,12 @@ impl BackgroundStateStore {
                     "noop".to_string()
                 }
             }
-            other => return Err(format!("Unsupported takeover arbitration operation: {other!r}")),
+            other => {
+                return Err(format!(
+                    "Unsupported takeover arbitration operation: {:?}",
+                    other
+                ))
+            }
         };
         if changed {
             self.persist()?;
@@ -1038,7 +1046,10 @@ fn read_persisted_state(
                 .map_err(|err| err.to_string())?;
             Ok(Some(persisted))
         }
-        other => Err(format!("Unsupported durable background-state backend family: {other!r}")),
+        other => Err(format!(
+            "Unsupported durable background-state backend family: {:?}",
+            other
+        )),
     }
 }
 
@@ -1082,7 +1093,10 @@ fn write_persisted_state(
             .map_err(|err| err.to_string())?;
             Ok(())
         }
-        other => Err(format!("Unsupported durable background-state backend family: {other!r}")),
+        other => Err(format!(
+            "Unsupported durable background-state backend family: {:?}",
+            other
+        )),
     }
 }
 
@@ -1141,10 +1155,11 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
         ));
     }
     let mut store = BackgroundStateStore::load(&request)?;
+    let operation = request.operation.clone();
     let mut response = json!({
         "schema_version": BACKGROUND_STATE_STORE_SCHEMA_VERSION,
         "authority": BACKGROUND_STATE_STORE_AUTHORITY,
-        "operation": request.operation,
+        "operation": operation,
         "state": store.snapshot_payload(),
         "health": store.health_payload(),
     });
@@ -1238,7 +1253,10 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
         }
         "health" => {}
         other => {
-            return Err(format!("unsupported background state operation: {other!r}"));
+            return Err(format!(
+                "unsupported background state operation: {:?}",
+                other
+            ));
         }
     }
     Ok(response)
