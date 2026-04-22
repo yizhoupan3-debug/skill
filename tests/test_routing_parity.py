@@ -21,6 +21,7 @@ if str(RUNTIME_SRC) not in sys.path:
 from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import RouteExecutionPolicy
 from scripts.route import (
+    build_rust_router_command,
     route_decision_json,
     run_rust_route_json,
     run_rust_router_json,
@@ -35,6 +36,36 @@ def _write_text(path: Path, content: str) -> None:
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     _write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+
+
+def test_build_rust_router_command_emits_explicit_false_route_flags() -> None:
+    command = build_rust_router_command(
+        query="route me",
+        limit=5,
+        runtime_path=None,
+        manifest_path=None,
+        route_json=True,
+        allow_overlay=False,
+        first_turn=False,
+    )
+
+    assert "--allow-overlay=false" in command
+    assert "--first-turn=false" in command
+
+
+def test_run_rust_route_json_respects_false_overlay_and_first_turn_flags() -> None:
+    decision = run_rust_route_json(
+        "这个仓库的修复你直接 gsd，推进到底，别停，主线程保持简短并给我验证证据",
+        session_id="route-cli-regression",
+        allow_overlay=False,
+        first_turn=False,
+        runtime_path=PROJECT_ROOT / "tests" / "_routing_missing_runtime.json",
+        manifest_path=PROJECT_ROOT / "tests" / "routing_route_fixtures.json",
+    )
+
+    assert decision["selected_skill"] == "execution-controller-coding"
+    assert decision["overlay_skill"] is None
+    assert all("Session-start" not in reason for reason in decision["reasons"])
 
 
 def _seed_framework_runtime_artifacts(repo_root: Path, *, terminal: bool) -> None:

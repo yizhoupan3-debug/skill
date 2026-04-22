@@ -749,10 +749,8 @@ class RustRouteAdapter:
             "--session-id",
             session_id,
         ]
-        if allow_overlay:
-            args.append("--allow-overlay")
-        if first_turn:
-            args.append("--first-turn")
+        args.append(f"--allow-overlay={'true' if allow_overlay else 'false'}")
+        args.append(f"--first-turn={'true' if first_turn else 'false'}")
         return args
 
     def _resolved_binary(self) -> Path | None:

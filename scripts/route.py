@@ -258,10 +258,8 @@ def build_rust_router_command(
         command.append("--json")
     if route_json:
         command.extend(["--route-json", "--session-id", session_id])
-        if allow_overlay:
-            command.append("--allow-overlay")
-        if first_turn:
-            command.append("--first-turn")
+        command.append(f"--allow-overlay={'true' if allow_overlay else 'false'}")
+        command.append(f"--first-turn={'true' if first_turn else 'false'}")
     return command
 
 
