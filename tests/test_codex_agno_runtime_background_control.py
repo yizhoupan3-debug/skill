@@ -743,6 +743,64 @@ def test_background_control_policy_routes_through_rust_adapter(tmp_path: Path) -
     asyncio.run(_run())
 
 
+def test_background_batch_plan_routes_through_rust_adapter(tmp_path: Path) -> None:
+    """Parallel batch group/lane planning should be resolved through the Rust adapter seam."""
+
+    runtime = _build_runtime(tmp_path)
+    seen_operations: list[str] = []
+    original = runtime.rust_adapter.background_control
+
+    def wrapped(payload):
+        seen_operations.append(str(payload["operation"]))
+        return original(payload)
+
+    runtime.rust_adapter.background_control = wrapped  # type: ignore[method-assign]
+
+    async def fake_run_task(request: BackgroundRunRequest) -> RunTaskResponse:
+        return RunTaskResponse(
+            session_id=request.session_id or "batch-plan-session",
+            user_id=request.user_id or "tester",
+            skill="test-skill",
+            live_run=False,
+            content=request.task,
+            usage=UsageMetrics(),
+        )
+
+    runtime.run_task = fake_run_task  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        batch = await runtime.enqueue_background_batch(
+            [
+                BackgroundRunRequest(
+                    task="lane-a",
+                    user_id="tester",
+                    session_id="batch-plan-a",
+                    parallel_group_id="pgroup-contract",
+                    lane_id="lane-a",
+                    dry_run=True,
+                ),
+                BackgroundRunRequest(
+                    task="lane-b",
+                    user_id="tester",
+                    session_id="batch-plan-b",
+                    parallel_group_id="pgroup-contract",
+                    dry_run=True,
+                ),
+            ],
+            parallel_group_id="pgroup-contract",
+        )
+
+        assert batch.parallel_group_id == "pgroup-contract"
+        assert [status.lane_id for status in batch.statuses] == ["lane-a", "lane-2"]
+        assert "batch-plan" in seen_operations
+
+        for status in batch.statuses:
+            final = await _wait_for_status(runtime, status.job_id, {"completed"})
+            assert final.status == "completed"
+
+    asyncio.run(_run())
+
+
 def test_background_retry_exhaustion_marks_terminal_state(tmp_path: Path) -> None:
     """Exhausted retries should end in an explicit retry_exhausted state."""
 

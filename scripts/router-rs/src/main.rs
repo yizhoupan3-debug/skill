@@ -10,8 +10,8 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
-use std::time::Duration;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use strsim::jaro_winkler;
 
 mod framework_profile;
@@ -255,6 +255,19 @@ struct RouteCandidate {
     reasons: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct RecordsCacheKey {
+    runtime_path: Option<PathBuf>,
+    manifest_path: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+struct RecordsCacheEntry {
+    runtime_mtime: Option<SystemTime>,
+    manifest_mtime: Option<SystemTime>,
+    records: Arc<Vec<SkillRecord>>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteDecisionSnapshotPayload {
     engine: String,
@@ -387,6 +400,11 @@ struct BackgroundControlRequestPayload {
     backoff_base_seconds: Option<f64>,
     backoff_multiplier: Option<f64>,
     max_backoff_seconds: Option<f64>,
+    requested_parallel_group_id: Option<String>,
+    request_parallel_group_ids: Option<Vec<Option<String>>>,
+    request_lane_ids: Option<Vec<Option<String>>>,
+    lane_id_prefix: Option<String>,
+    batch_size: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -430,6 +448,8 @@ struct BackgroundControlResponsePayload {
     schema_version: String,
     authority: String,
     operation: String,
+    resolved_parallel_group_id: Option<String>,
+    lane_ids: Option<Vec<String>>,
     normalized_multitask_strategy: Option<String>,
     supported_multitask_strategies: Vec<String>,
     strategy_supported: bool,
@@ -669,12 +689,9 @@ fn main() -> Result<(), String> {
 
     if args.sandbox_control_json {
         let payload = serde_json::from_str::<SandboxControlRequestPayload>(
-            args.sandbox_control_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--sandbox-control-input-json is required with --sandbox-control-json"
-                        .to_string()
-                })?,
+            args.sandbox_control_input_json.as_deref().ok_or_else(|| {
+                "--sandbox-control-input-json is required with --sandbox-control-json".to_string()
+            })?,
         )
         .map_err(|err| format!("parse sandbox control input failed: {err}"))?;
         println!(
@@ -1226,11 +1243,12 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
                 format!("serialize runtime observability exporter output failed: {err}")
             })
         }
-        "runtime_observability_metric_catalog" => {
-            serde_json::to_value(build_runtime_observability_metric_catalog_payload()).map_err(
-                |err| format!("serialize runtime observability metric catalog output failed: {err}"),
-            )
-        }
+        "runtime_observability_metric_catalog" => serde_json::to_value(
+            build_runtime_observability_metric_catalog_payload(),
+        )
+        .map_err(|err| {
+            format!("serialize runtime observability metric catalog output failed: {err}")
+        }),
         "runtime_observability_dashboard_schema" => {
             serde_json::to_value(runtime_observability_dashboard_schema()).map_err(|err| {
                 format!("serialize runtime observability dashboard output failed: {err}")
@@ -1293,9 +1311,9 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
         .unwrap_or(true);
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
     let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
-    let records = load_records(runtime_path.as_deref(), manifest_path.as_deref())?;
+    let records = load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?;
     serde_json::to_value(route_task(
-        &records,
+        records.as_ref(),
         &query,
         &session_id,
         allow_overlay,
@@ -1313,9 +1331,9 @@ fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, String> {
         .unwrap_or(5);
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
     let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
-    let records = load_records(runtime_path.as_deref(), manifest_path.as_deref())?;
+    let records = load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?;
     Ok(json!({
-        "rows": search_skills(&records, &query, limit),
+        "rows": search_skills(records.as_ref(), &query, limit),
     }))
 }
 
@@ -1445,6 +1463,58 @@ fn load_records(
         }
     }
     Err("No routing index found.".to_string())
+}
+
+fn records_cache_key(
+    runtime_path: Option<&Path>,
+    manifest_path: Option<&Path>,
+) -> RecordsCacheKey {
+    RecordsCacheKey {
+        runtime_path: runtime_path.map(Path::to_path_buf),
+        manifest_path: manifest_path.map(Path::to_path_buf),
+    }
+}
+
+fn file_modified_at(path: Option<&Path>) -> Option<SystemTime> {
+    path.and_then(|item| fs::metadata(item).ok()?.modified().ok())
+}
+
+fn records_cache() -> &'static Mutex<HashMap<RecordsCacheKey, RecordsCacheEntry>> {
+    static RECORDS_CACHE: OnceLock<Mutex<HashMap<RecordsCacheKey, RecordsCacheEntry>>> =
+        OnceLock::new();
+    RECORDS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn load_records_cached_for_stdio(
+    runtime_path: Option<&Path>,
+    manifest_path: Option<&Path>,
+) -> Result<Arc<Vec<SkillRecord>>, String> {
+    let key = records_cache_key(runtime_path, manifest_path);
+    let runtime_mtime = file_modified_at(runtime_path);
+    let manifest_mtime = file_modified_at(manifest_path);
+
+    {
+        let cache = records_cache()
+            .lock()
+            .map_err(|_| "route records cache lock poisoned".to_string())?;
+        if let Some(entry) = cache.get(&key) {
+            if entry.runtime_mtime == runtime_mtime && entry.manifest_mtime == manifest_mtime {
+                return Ok(Arc::clone(&entry.records));
+            }
+        }
+    }
+
+    let records = Arc::new(load_records(runtime_path, manifest_path)?);
+    let entry = RecordsCacheEntry {
+        runtime_mtime,
+        manifest_mtime,
+        records: Arc::clone(&records),
+    };
+    let mut cache = records_cache()
+        .lock()
+        .map_err(|_| "route records cache lock poisoned".to_string())?;
+    cache.insert(key, entry);
+    Ok(records)
 }
 
 fn load_manifest_route_meta(path: &Path) -> Result<HashMap<String, (String, String)>, String> {
@@ -2200,11 +2270,177 @@ fn compute_backoff_seconds(
     delay
 }
 
+fn next_background_parallel_group_id() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("pgroup_{nanos:x}")
+}
+
 fn build_background_control_response(
     payload: BackgroundControlRequestPayload,
 ) -> Result<BackgroundControlResponsePayload, String> {
     let supported_multitask_strategies = vec!["interrupt".to_string(), "reject".to_string()];
     match payload.operation.as_str() {
+        "batch-plan" => {
+            let batch_size = payload.batch_size.unwrap_or(0);
+            if batch_size == 0 {
+                let mut effect_plan = background_effect_plan("reject");
+                effect_plan.terminal_status = Some("failed".to_string());
+                return Ok(BackgroundControlResponsePayload {
+                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                    operation: payload.operation,
+                    resolved_parallel_group_id: None,
+                    lane_ids: None,
+                    normalized_multitask_strategy: None,
+                    supported_multitask_strategies,
+                    strategy_supported: true,
+                    accepted: Some(false),
+                    requires_takeover: Some(false),
+                    error: Some(
+                        "enqueue_background_batch requires at least one request.".to_string(),
+                    ),
+                    should_retry: None,
+                    next_retry_count: None,
+                    backoff_seconds: None,
+                    terminal_status: Some("failed".to_string()),
+                    resolved_status: None,
+                    finalize_immediately: Some(true),
+                    cancel_running_task: Some(false),
+                    reason: "batch-plan-empty".to_string(),
+                    effect_plan,
+                });
+            }
+
+            let requested_group_id = payload
+                .requested_parallel_group_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| value.to_string());
+            let mut request_group_ids = HashSet::new();
+            if let Some(values) = payload.request_parallel_group_ids.as_ref() {
+                for value in values {
+                    if let Some(group_id) = value
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|candidate| !candidate.is_empty())
+                    {
+                        request_group_ids.insert(group_id.to_string());
+                    }
+                }
+            }
+            if request_group_ids.len() > 1 {
+                let mut effect_plan = background_effect_plan("reject");
+                effect_plan.terminal_status = Some("failed".to_string());
+                return Ok(BackgroundControlResponsePayload {
+                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                    operation: payload.operation,
+                    resolved_parallel_group_id: None,
+                    lane_ids: None,
+                    normalized_multitask_strategy: None,
+                    supported_multitask_strategies,
+                    strategy_supported: true,
+                    accepted: Some(false),
+                    requires_takeover: Some(false),
+                    error: Some(
+                        "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
+                            .to_string(),
+                    ),
+                    should_retry: None,
+                    next_retry_count: None,
+                    backoff_seconds: None,
+                    terminal_status: Some("failed".to_string()),
+                    resolved_status: None,
+                    finalize_immediately: Some(true),
+                    cancel_running_task: Some(false),
+                    reason: "batch-plan-misaligned-parallel-group".to_string(),
+                    effect_plan,
+                });
+            }
+            if let Some(requested) = requested_group_id.as_ref() {
+                if let Some(existing) = request_group_ids.iter().next() {
+                    if existing != requested {
+                        let mut effect_plan = background_effect_plan("reject");
+                        effect_plan.terminal_status = Some("failed".to_string());
+                        return Ok(BackgroundControlResponsePayload {
+                            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                            authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                            operation: payload.operation,
+                            resolved_parallel_group_id: None,
+                            lane_ids: None,
+                            normalized_multitask_strategy: None,
+                            supported_multitask_strategies,
+                            strategy_supported: true,
+                            accepted: Some(false),
+                            requires_takeover: Some(false),
+                            error: Some(
+                                "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
+                                    .to_string(),
+                            ),
+                            should_retry: None,
+                            next_retry_count: None,
+                            backoff_seconds: None,
+                            terminal_status: Some("failed".to_string()),
+                            resolved_status: None,
+                            finalize_immediately: Some(true),
+                            cancel_running_task: Some(false),
+                            reason: "batch-plan-misaligned-parallel-group".to_string(),
+                            effect_plan,
+                        });
+                    }
+                }
+            }
+
+            let resolved_parallel_group_id = requested_group_id
+                .or_else(|| request_group_ids.into_iter().next())
+                .unwrap_or_else(next_background_parallel_group_id);
+            let lane_id_prefix = payload
+                .lane_id_prefix
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or("lane");
+            let lane_ids = (0..batch_size)
+                .map(|index| {
+                    payload
+                        .request_lane_ids
+                        .as_ref()
+                        .and_then(|values| values.get(index))
+                        .and_then(|value| value.as_deref())
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(|value| value.to_string())
+                        .unwrap_or_else(|| format!("{lane_id_prefix}-{}", index + 1))
+                })
+                .collect::<Vec<_>>();
+            let effect_plan = background_effect_plan("plan_batch");
+            Ok(BackgroundControlResponsePayload {
+                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                operation: payload.operation,
+                resolved_parallel_group_id: Some(resolved_parallel_group_id),
+                lane_ids: Some(lane_ids),
+                normalized_multitask_strategy: None,
+                supported_multitask_strategies,
+                strategy_supported: true,
+                accepted: Some(true),
+                requires_takeover: Some(false),
+                error: None,
+                should_retry: None,
+                next_retry_count: None,
+                backoff_seconds: None,
+                terminal_status: None,
+                resolved_status: None,
+                finalize_immediately: Some(false),
+                cancel_running_task: Some(false),
+                reason: "batch-plan-resolved".to_string(),
+                effect_plan,
+            })
+        }
         "enqueue" => {
             let normalized_multitask_strategy =
                 normalize_multitask_strategy(payload.multitask_strategy.as_deref());
@@ -2218,6 +2454,8 @@ fn build_background_control_response(
                     schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                     authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                     operation: payload.operation,
+                    resolved_parallel_group_id: None,
+                    lane_ids: None,
                     normalized_multitask_strategy: Some(normalized_multitask_strategy),
                     supported_multitask_strategies,
                     strategy_supported: false,
@@ -2247,6 +2485,8 @@ fn build_background_control_response(
                     schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                     authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                     operation: payload.operation,
+                    resolved_parallel_group_id: None,
+                    lane_ids: None,
                     normalized_multitask_strategy: Some(normalized_multitask_strategy.clone()),
                     supported_multitask_strategies,
                     strategy_supported: true,
@@ -2272,6 +2512,8 @@ fn build_background_control_response(
                 schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                 authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                 operation: payload.operation,
+                resolved_parallel_group_id: None,
+                lane_ids: None,
                 normalized_multitask_strategy: Some(normalized_multitask_strategy.clone()),
                 supported_multitask_strategies,
                 strategy_supported: true,
@@ -2317,6 +2559,8 @@ fn build_background_control_response(
                 schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                 authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                 operation: payload.operation,
+                resolved_parallel_group_id: None,
+                lane_ids: None,
                 normalized_multitask_strategy: None,
                 supported_multitask_strategies,
                 strategy_supported: true,
@@ -2346,7 +2590,10 @@ fn build_background_control_response(
             let current_status = payload
                 .current_status
                 .unwrap_or_else(|| "queued".to_string());
-            if matches!(current_status.as_str(), "interrupt_requested" | "interrupted") {
+            if matches!(
+                current_status.as_str(),
+                "interrupt_requested" | "interrupted"
+            ) {
                 let mut effect_plan = background_effect_plan("finalize_interrupted");
                 effect_plan.finalize_immediately = Some(true);
                 effect_plan.terminal_status = Some("interrupted".to_string());
@@ -2355,6 +2602,8 @@ fn build_background_control_response(
                     schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                     authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                     operation: payload.operation,
+                    resolved_parallel_group_id: None,
+                    lane_ids: None,
                     normalized_multitask_strategy: None,
                     supported_multitask_strategies,
                     strategy_supported: true,
@@ -2384,6 +2633,8 @@ fn build_background_control_response(
                     schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                     authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                     operation: payload.operation,
+                    resolved_parallel_group_id: None,
+                    lane_ids: None,
                     normalized_multitask_strategy: None,
                     supported_multitask_strategies,
                     strategy_supported: true,
@@ -2408,6 +2659,8 @@ fn build_background_control_response(
                 schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                 authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                 operation: payload.operation,
+                resolved_parallel_group_id: None,
+                lane_ids: None,
                 normalized_multitask_strategy: None,
                 supported_multitask_strategies,
                 strategy_supported: true,
@@ -2434,6 +2687,8 @@ fn build_background_control_response(
                 schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                 authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                 operation: payload.operation,
+                resolved_parallel_group_id: None,
+                lane_ids: None,
                 normalized_multitask_strategy: None,
                 supported_multitask_strategies,
                 strategy_supported: true,
@@ -2476,6 +2731,8 @@ fn build_background_control_response(
                 schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                 authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                 operation: payload.operation,
+                resolved_parallel_group_id: None,
+                lane_ids: None,
                 normalized_multitask_strategy: None,
                 supported_multitask_strategies,
                 strategy_supported: true,
@@ -2522,6 +2779,8 @@ fn build_background_control_response(
                 schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                 authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                 operation: payload.operation,
+                resolved_parallel_group_id: None,
+                lane_ids: None,
                 normalized_multitask_strategy: None,
                 supported_multitask_strategies,
                 strategy_supported: true,
@@ -2552,6 +2811,8 @@ fn build_background_control_response(
                 schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                 authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                 operation: payload.operation,
+                resolved_parallel_group_id: None,
+                lane_ids: None,
                 normalized_multitask_strategy: None,
                 supported_multitask_strategies,
                 strategy_supported: true,
@@ -2584,6 +2845,8 @@ fn build_background_control_response(
                     schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                     authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                     operation: payload.operation,
+                    resolved_parallel_group_id: None,
+                    lane_ids: None,
                     normalized_multitask_strategy: None,
                     supported_multitask_strategies,
                     strategy_supported: true,
@@ -2620,6 +2883,8 @@ fn build_background_control_response(
                 schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                 authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                 operation: payload.operation,
+                resolved_parallel_group_id: None,
+                lane_ids: None,
                 normalized_multitask_strategy: None,
                 supported_multitask_strategies,
                 strategy_supported: true,
@@ -2645,6 +2910,8 @@ fn build_background_control_response(
                 schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
                 authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
                 operation: payload.operation,
+                resolved_parallel_group_id: None,
+                lane_ids: None,
                 normalized_multitask_strategy: None,
                 supported_multitask_strategies,
                 strategy_supported: true,
@@ -2865,6 +3132,23 @@ fn build_steady_state_execution_kernel_metadata(response_shape: &str) -> Map<Str
         Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string()),
     );
     metadata
+}
+
+fn build_execution_kernel_contracts_by_mode() -> Map<String, Value> {
+    let mut contracts = Map::new();
+    contracts.insert(
+        EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY.to_string(),
+        Value::Object(build_steady_state_execution_kernel_metadata(
+            EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
+        )),
+    );
+    contracts.insert(
+        EXECUTION_RESPONSE_SHAPE_DRY_RUN.to_string(),
+        Value::Object(build_steady_state_execution_kernel_metadata(
+            EXECUTION_RESPONSE_SHAPE_DRY_RUN,
+        )),
+    );
+    contracts
 }
 
 fn build_dry_run_execute_response(
@@ -4379,22 +4663,10 @@ fn build_runtime_control_plane_payload() -> Value {
             "role": "execution-kernel-control",
             "projection": "python-thin-projection",
             "delegate_kind": "rust-execution-kernel-slice",
-            "kernel_contract": {
-                "execution_kernel": "rust-execution-kernel-slice",
-                "execution_kernel_authority": "rust-execution-kernel-authority",
-                "execution_kernel_contract_mode": "rust-live-primary",
-                "execution_kernel_in_process_replacement_complete": true,
-                "execution_kernel_delegate": "router-rs",
-                "execution_kernel_delegate_authority": "rust-execution-cli",
-                "execution_kernel_delegate_family": "rust-cli",
-                "execution_kernel_delegate_impl": "router-rs",
-                "execution_kernel_live_primary": "router-rs",
-                "execution_kernel_live_primary_authority": "rust-execution-cli",
-                "execution_kernel_live_fallback": Value::Null,
-                "execution_kernel_live_fallback_authority": Value::Null,
-                "execution_kernel_live_fallback_enabled": false,
-                "execution_kernel_live_fallback_mode": "disabled",
-            },
+            "kernel_contract": Value::Object(build_steady_state_execution_kernel_metadata(
+                EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
+            )),
+            "kernel_contract_by_mode": Value::Object(build_execution_kernel_contracts_by_mode()),
             "kernel_adapter_kind": "rust-execution-kernel-slice",
             "kernel_authority": "rust-execution-kernel-authority",
             "kernel_owner_family": "rust",
@@ -4478,7 +4750,8 @@ fn build_runtime_control_plane_payload() -> Value {
                     "queued",
                     "running",
                     "interrupt_requested",
-                    "retry_scheduled"
+                    "retry_scheduled",
+                    "retry_claimed"
                 ],
                 "terminal_statuses": [
                     "completed",
@@ -4487,10 +4760,14 @@ fn build_runtime_control_plane_payload() -> Value {
                     "retry_exhausted"
                 ],
                 "policy_operations": [
+                    "batch-plan",
                     "enqueue",
                     "claim",
                     "interrupt",
+                    "interrupt-finalize",
                     "retry",
+                    "retry-claim",
+                    "complete",
                     "completion-race",
                     "session-release"
                 ],
@@ -5973,6 +6250,7 @@ fn write_trace_compaction_delta(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::thread::sleep;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn fixture_path() -> PathBuf {
@@ -6010,6 +6288,38 @@ mod tests {
         std::env::temp_dir().join(format!("router-rs-{name}-{nonce}.jsonl"))
     }
 
+    fn temp_json_path(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("router-rs-{name}-{nonce}.json"))
+    }
+
+    fn write_runtime_fixture(path: &Path, slug: &str) {
+        fs::write(
+            path,
+            json!({
+                "keys": ["slug", "layer", "owner", "gate", "summary", "trigger_hints", "health", "priority", "session_start"],
+                "skills": [[slug, "L2", "primary", "none", format!("{slug} summary"), ["trigger"], 100.0, "P1", "always"]]
+            })
+            .to_string(),
+        )
+        .expect("write runtime fixture");
+    }
+
+    fn write_manifest_fixture(path: &Path, slug: &str, priority: &str) {
+        fs::write(
+            path,
+            json!({
+                "keys": ["slug", "description", "layer", "owner", "gate", "trigger_hints", "health", "priority", "session_start"],
+                "skills": [[slug, format!("{slug} manifest"), "L2", "primary", "none", ["trigger"], 100.0, priority, "always"]]
+            })
+            .to_string(),
+        )
+        .expect("write manifest fixture");
+    }
+
     #[test]
     fn stdio_request_dispatches_route_policy_payload() {
         let response =
@@ -6024,7 +6334,8 @@ mod tests {
 
     #[test]
     fn stdio_request_dispatches_execute_payload() {
-        let payload = serde_json::to_string(&sample_execute_request()).expect("serialize execute payload");
+        let payload =
+            serde_json::to_string(&sample_execute_request()).expect("serialize execute payload");
         let response = handle_stdio_json_line(&format!(
             "{{\"id\":3,\"op\":\"execute\",\"payload\":{payload}}}"
         ));
@@ -6064,6 +6375,32 @@ mod tests {
             json!(ROUTE_SNAPSHOT_SCHEMA_VERSION)
         );
         assert_eq!(payload["route_snapshot"]["selected_skill"], json!("router"));
+    }
+
+    #[test]
+    fn stdio_route_cache_reuses_records_until_runtime_changes() {
+        let runtime_path = temp_json_path("routing-runtime");
+        let manifest_path = temp_json_path("routing-manifest");
+        write_runtime_fixture(&runtime_path, "alpha");
+        write_manifest_fixture(&manifest_path, "alpha", "P1");
+
+        let first = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))
+            .expect("first cache load");
+        let second = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))
+            .expect("second cache load");
+        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(first[0].slug, "alpha");
+
+        sleep(Duration::from_millis(20));
+        write_runtime_fixture(&runtime_path, "beta");
+
+        let third = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))
+            .expect("reload after runtime change");
+        assert!(!Arc::ptr_eq(&second, &third));
+        assert_eq!(third[0].slug, "beta");
+
+        let _ = fs::remove_file(runtime_path);
+        let _ = fs::remove_file(manifest_path);
     }
 
     #[test]
@@ -6236,8 +6573,32 @@ mod tests {
             Value::String("router-rs".to_string())
         );
         assert_eq!(
-            payload["services"]["execution"]["kernel_contract"]["execution_kernel_live_fallback_enabled"],
+            payload["services"]["execution"]["kernel_contract"]
+                ["execution_kernel_metadata_schema_version"],
+            Value::String(EXECUTION_METADATA_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_contract"]["execution_kernel_fallback_policy"],
+            Value::String(EXECUTION_KERNEL_FALLBACK_POLICY.to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_contract"]["execution_kernel_response_shape"],
+            Value::String(EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY.to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_contract"]
+                ["execution_kernel_live_fallback_enabled"],
             Value::Bool(false)
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_contract_by_mode"]
+                [EXECUTION_RESPONSE_SHAPE_DRY_RUN]["execution_kernel_response_shape"],
+            Value::String(EXECUTION_RESPONSE_SHAPE_DRY_RUN.to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_contract_by_mode"]
+                [EXECUTION_RESPONSE_SHAPE_DRY_RUN]["execution_kernel_prompt_preview_owner"],
+            Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string())
         );
         assert_eq!(
             payload["services"]["execution"]["kernel_live_delegate_authority"],
@@ -6274,6 +6635,18 @@ mod tests {
         assert_eq!(
             payload["services"]["background"]["orchestration_contract"]["policy_schema_version"],
             Value::String(BACKGROUND_CONTROL_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            payload["services"]["background"]["orchestration_contract"]["active_statuses"][4],
+            Value::String("retry_claimed".to_string())
+        );
+        assert_eq!(
+            payload["services"]["background"]["orchestration_contract"]["policy_operations"][0],
+            Value::String("batch-plan".to_string())
+        );
+        assert_eq!(
+            payload["services"]["background"]["orchestration_contract"]["policy_operations"][5],
+            Value::String("retry".to_string())
         );
     }
 
@@ -6319,7 +6692,9 @@ mod tests {
             catalog["metric_catalog_version"],
             Value::String(RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION.to_string())
         );
-        assert!(metrics.iter().all(|metric| metric.get("dimensions").is_some()));
+        assert!(metrics
+            .iter()
+            .all(|metric| metric.get("dimensions").is_some()));
         assert!(metrics
             .iter()
             .all(|metric| metric.get("base_dimensions").is_none()));
@@ -6466,6 +6841,30 @@ mod tests {
         assert_eq!(failed.resolved_state.as_deref(), Some("failed"));
     }
 
+    fn background_control_request_defaults() -> BackgroundControlRequestPayload {
+        BackgroundControlRequestPayload {
+            schema_version: String::new(),
+            operation: String::new(),
+            multitask_strategy: None,
+            current_status: None,
+            task_active: None,
+            task_done: None,
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+            requested_parallel_group_id: None,
+            request_parallel_group_ids: None,
+            request_lane_ids: None,
+            lane_id_prefix: None,
+            batch_size: None,
+        }
+    }
+
     #[test]
     fn background_control_enqueue_rejects_invalid_strategy_and_capacity() {
         let invalid = build_background_control_response(BackgroundControlRequestPayload {
@@ -6483,6 +6882,7 @@ mod tests {
             backoff_base_seconds: None,
             backoff_multiplier: None,
             max_backoff_seconds: None,
+            ..background_control_request_defaults()
         })
         .expect("invalid strategy response");
         assert_eq!(invalid.authority, BACKGROUND_CONTROL_AUTHORITY);
@@ -6504,12 +6904,62 @@ mod tests {
             backoff_base_seconds: None,
             backoff_multiplier: None,
             max_backoff_seconds: None,
+            ..background_control_request_defaults()
         })
         .expect("capacity response");
         assert!(capacity.strategy_supported);
         assert_eq!(capacity.accepted, Some(false));
         assert_eq!(capacity.requires_takeover, Some(true));
         assert_eq!(capacity.reason, "capacity-rejected");
+    }
+
+    #[test]
+    fn background_control_batch_plan_resolves_group_and_lane_assignments() {
+        let planned = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "batch-plan".to_string(),
+            requested_parallel_group_id: Some("pgroup-contract".to_string()),
+            request_parallel_group_ids: Some(vec![
+                Some("pgroup-contract".to_string()),
+                Some("pgroup-contract".to_string()),
+            ]),
+            request_lane_ids: Some(vec![Some("lane-a".to_string()), None]),
+            lane_id_prefix: Some("lane".to_string()),
+            batch_size: Some(2),
+            ..background_control_request_defaults()
+        })
+        .expect("batch plan response");
+        assert_eq!(planned.accepted, Some(true));
+        assert_eq!(
+            planned.resolved_parallel_group_id.as_deref(),
+            Some("pgroup-contract")
+        );
+        assert_eq!(
+            planned.lane_ids,
+            Some(vec!["lane-a".to_string(), "lane-2".to_string()])
+        );
+        assert_eq!(planned.reason, "batch-plan-resolved");
+        assert_eq!(planned.effect_plan.next_step, "plan_batch");
+
+        let rejected = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "batch-plan".to_string(),
+            request_parallel_group_ids: Some(vec![
+                Some("pgroup-a".to_string()),
+                Some("pgroup-b".to_string()),
+            ]),
+            batch_size: Some(2),
+            ..background_control_request_defaults()
+        })
+        .expect("rejected batch plan response");
+        assert_eq!(rejected.accepted, Some(false));
+        assert_eq!(rejected.reason, "batch-plan-misaligned-parallel-group");
+        assert_eq!(
+            rejected.error.as_deref(),
+            Some(
+                "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
+            )
+        );
     }
 
     #[test]
@@ -6529,6 +6979,7 @@ mod tests {
             backoff_base_seconds: Some(0.5),
             backoff_multiplier: Some(2.0),
             max_backoff_seconds: Some(1.0),
+            ..background_control_request_defaults()
         })
         .expect("retry response");
         assert_eq!(retry.should_retry, Some(true));
@@ -6554,6 +7005,7 @@ mod tests {
             backoff_base_seconds: Some(0.5),
             backoff_multiplier: Some(2.0),
             max_backoff_seconds: Some(1.0),
+            ..background_control_request_defaults()
         })
         .expect("retry exhausted response");
         assert_eq!(exhausted.should_retry, Some(false));
@@ -6581,6 +7033,7 @@ mod tests {
             backoff_base_seconds: None,
             backoff_multiplier: None,
             max_backoff_seconds: None,
+            ..background_control_request_defaults()
         })
         .expect("queued interrupt response");
         assert_eq!(
@@ -6607,6 +7060,7 @@ mod tests {
             backoff_base_seconds: None,
             backoff_multiplier: None,
             max_backoff_seconds: None,
+            ..background_control_request_defaults()
         })
         .expect("running interrupt response");
         assert_eq!(running.finalize_immediately, Some(false));
@@ -6635,6 +7089,7 @@ mod tests {
             backoff_base_seconds: None,
             backoff_multiplier: None,
             max_backoff_seconds: None,
+            ..background_control_request_defaults()
         })
         .expect("queued claim response");
         assert_eq!(queued.resolved_status.as_deref(), Some("running"));
@@ -6656,6 +7111,7 @@ mod tests {
             backoff_base_seconds: None,
             backoff_multiplier: None,
             max_backoff_seconds: None,
+            ..background_control_request_defaults()
         })
         .expect("interrupt claim response");
         assert_eq!(interrupted.terminal_status.as_deref(), Some("interrupted"));
@@ -6680,6 +7136,7 @@ mod tests {
             backoff_base_seconds: None,
             backoff_multiplier: None,
             max_backoff_seconds: None,
+            ..background_control_request_defaults()
         })
         .expect("complete response");
         assert_eq!(complete.terminal_status.as_deref(), Some("completed"));
@@ -6701,6 +7158,7 @@ mod tests {
             backoff_base_seconds: None,
             backoff_multiplier: None,
             max_backoff_seconds: None,
+            ..background_control_request_defaults()
         })
         .expect("completion race won response");
         assert_eq!(race_won.terminal_status.as_deref(), Some("completed"));
@@ -6722,6 +7180,7 @@ mod tests {
             backoff_base_seconds: None,
             backoff_multiplier: None,
             max_backoff_seconds: None,
+            ..background_control_request_defaults()
         })
         .expect("completion race lost response");
         assert_eq!(race_lost.terminal_status.as_deref(), Some("interrupted"));
@@ -6747,6 +7206,7 @@ mod tests {
             backoff_base_seconds: None,
             backoff_multiplier: None,
             max_backoff_seconds: None,
+            ..background_control_request_defaults()
         })
         .expect("retry claim response");
         assert_eq!(claimed.terminal_status.as_deref(), Some("retry_claimed"));
@@ -6769,6 +7229,7 @@ mod tests {
             backoff_base_seconds: None,
             backoff_multiplier: None,
             max_backoff_seconds: None,
+            ..background_control_request_defaults()
         })
         .expect("retry claim interrupted response");
         assert_eq!(interrupted.terminal_status.as_deref(), Some("interrupted"));
@@ -6791,6 +7252,7 @@ mod tests {
             backoff_base_seconds: None,
             backoff_multiplier: None,
             max_backoff_seconds: None,
+            ..background_control_request_defaults()
         })
         .expect("interrupt finalize response");
         assert_eq!(finalize.terminal_status.as_deref(), Some("interrupted"));
@@ -6816,6 +7278,7 @@ mod tests {
             backoff_base_seconds: None,
             backoff_multiplier: None,
             max_backoff_seconds: None,
+            ..background_control_request_defaults()
         })
         .expect("session release response");
         assert_eq!(release.reason, "session-release-wait");

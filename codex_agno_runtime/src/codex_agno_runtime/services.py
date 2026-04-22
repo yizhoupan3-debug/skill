@@ -38,6 +38,12 @@ from codex_agno_runtime.execution_kernel import (
 from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_BRIDGE_AUTHORITY,
     EXECUTION_KERNEL_BRIDGE_KIND,
+    EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
+    EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
+    EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
+    EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
+    EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
+    validate_execution_kernel_steady_state_metadata,
 )
 from codex_agno_runtime.host_adapters import (
     build_control_plane_contract_descriptors,
@@ -69,22 +75,7 @@ from codex_agno_runtime.state import (
 from codex_agno_runtime.trace import InMemoryRuntimeEventBridge, RuntimeEventHandoff, RuntimeEventStreamChunk
 from codex_agno_runtime.trace import RuntimeEventTransport
 
-_KERNEL_CONTRACT_FIELDS = (
-    "execution_kernel",
-    "execution_kernel_authority",
-    "execution_kernel_contract_mode",
-    "execution_kernel_in_process_replacement_complete",
-    "execution_kernel_delegate",
-    "execution_kernel_delegate_authority",
-    "execution_kernel_delegate_family",
-    "execution_kernel_delegate_impl",
-    "execution_kernel_live_primary",
-    "execution_kernel_live_primary_authority",
-    "execution_kernel_live_fallback",
-    "execution_kernel_live_fallback_authority",
-    "execution_kernel_live_fallback_enabled",
-    "execution_kernel_live_fallback_mode",
-)
+_KERNEL_CONTRACT_FIELDS = EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS
 _KERNEL_HEALTH_FIELDS = (
     "kernel_adapter_kind",
     "kernel_authority",
@@ -138,6 +129,7 @@ _DEFAULT_BACKGROUND_ACTIVE_STATUSES = (
     "running",
     "interrupt_requested",
     "retry_scheduled",
+    "retry_claimed",
 )
 _DEFAULT_RUNTIME_STARTUP_ORDER = (
     "router",
@@ -192,36 +184,107 @@ def _runtime_control_plane_rustification_status(
     return dict(status)
 
 
-def _runtime_execution_kernel_contract(service_descriptor: Mapping[str, Any] | None) -> dict[str, Any]:
+def _runtime_execution_kernel_contract(
+    service_descriptor: Mapping[str, Any] | None,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
     """Return the Rust-owned execution kernel contract projected by the control plane."""
 
     if not isinstance(service_descriptor, Mapping):
         raise RuntimeError("runtime control plane execution descriptor is missing.")
-    contract = service_descriptor.get("kernel_contract")
+    contract_modes = service_descriptor.get("kernel_contract_by_mode")
+    response_shape = (
+        EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
+        if dry_run
+        else EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
+    )
+    contract = None
+    if isinstance(contract_modes, Mapping):
+        contract = contract_modes.get(response_shape)
+    if not isinstance(contract, Mapping):
+        if dry_run:
+            raise RuntimeError(
+                "runtime control plane execution descriptor is missing "
+                f"kernel_contract_by_mode.{response_shape}."
+            )
+        contract = service_descriptor.get("kernel_contract")
     if not isinstance(contract, Mapping):
         raise RuntimeError("runtime control plane execution descriptor is missing kernel_contract.")
-    payload = dict(contract)
-    missing = [field for field in _KERNEL_CONTRACT_FIELDS if field not in payload]
-    if missing:
-        raise RuntimeError(
-            "runtime control plane execution kernel_contract is missing fields: "
-            + ", ".join(sorted(missing))
-        )
-    return payload
+    return validate_execution_kernel_steady_state_metadata(
+        metadata=contract,
+        execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
+        execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
+        response_shape=response_shape,
+    )
 
 
 def project_execution_kernel_payload(
     service_descriptor: Mapping[str, Any] | None,
     *,
+    dry_run: bool = False,
     metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Merge explicit execution metadata onto the Rust-owned kernel contract."""
 
-    payload = dict(_runtime_execution_kernel_contract(service_descriptor))
+    payload = dict(_runtime_execution_kernel_contract(service_descriptor, dry_run=dry_run))
     if metadata is not None:
+        projected_metadata = dict(payload)
         for field in _KERNEL_CONTRACT_FIELDS:
             if field in metadata:
-                payload[field] = metadata[field]
+                projected_metadata[field] = metadata[field]
+        metadata_execution_kernel = metadata.get("execution_kernel")
+        metadata_execution_kernel_authority = metadata.get("execution_kernel_authority")
+        if (metadata_execution_kernel is None) != (metadata_execution_kernel_authority is None):
+            provided_field = (
+                "execution_kernel"
+                if metadata_execution_kernel is not None
+                else "execution_kernel_authority"
+            )
+            provided_value = (
+                metadata_execution_kernel
+                if metadata_execution_kernel is not None
+                else metadata_execution_kernel_authority
+            )
+            raise RuntimeError(
+                "execution-kernel steady-state metadata returned an unexpected value: "
+                f"{provided_field}={provided_value!r}"
+            )
+        validated_execution_kernel = (
+            str(metadata_execution_kernel)
+            if metadata_execution_kernel is not None
+            else str(payload.get("execution_kernel", EXECUTION_KERNEL_BRIDGE_KIND))
+        )
+        validated_execution_kernel_authority = (
+            str(metadata_execution_kernel_authority)
+            if metadata_execution_kernel_authority is not None
+            else str(
+                payload.get(
+                    "execution_kernel_authority",
+                    EXECUTION_KERNEL_BRIDGE_AUTHORITY,
+                )
+            )
+        )
+        validated_metadata = validate_execution_kernel_steady_state_metadata(
+            metadata=projected_metadata,
+            execution_kernel=validated_execution_kernel,
+            execution_kernel_authority=validated_execution_kernel_authority,
+            execution_kernel_delegate=str(
+                payload.get(
+                    "execution_kernel_delegate",
+                    EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
+                )
+            ),
+            execution_kernel_delegate_authority=str(
+                payload.get(
+                    "execution_kernel_delegate_authority",
+                    EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
+                )
+            ),
+            response_shape=str(payload["execution_kernel_response_shape"]),
+        )
+        for field in _KERNEL_CONTRACT_FIELDS:
+            payload[field] = validated_metadata[field]
     return {key: value for key, value in payload.items() if value is not None}
 
 
@@ -292,10 +355,14 @@ def _runtime_background_orchestration_contract(
         "active_statuses": list(_DEFAULT_BACKGROUND_ACTIVE_STATUSES),
         "terminal_statuses": list(_DEFAULT_BACKGROUND_TERMINAL_STATUSES),
         "policy_operations": [
+            "batch-plan",
             "enqueue",
             "claim",
             "interrupt",
+            "interrupt-finalize",
             "retry",
+            "retry-claim",
+            "complete",
             "completion-race",
             "session-release",
         ],
@@ -1645,7 +1712,7 @@ class ExecutionEnvironmentService:
     def describe_kernel_contract(self, *, dry_run: bool = False) -> dict[str, Any]:
         """Return the stable kernel-owner descriptor used by runtime surfaces."""
 
-        return _runtime_execution_kernel_contract(self._service_descriptor)
+        return _runtime_execution_kernel_contract(self._service_descriptor, dry_run=dry_run)
 
     def kernel_payload(
         self,
@@ -1655,7 +1722,11 @@ class ExecutionEnvironmentService:
     ) -> dict[str, Any]:
         """Merge explicit execution metadata onto the stable kernel contract."""
 
-        return project_execution_kernel_payload(self._service_descriptor, metadata=metadata)
+        return project_execution_kernel_payload(
+            self._service_descriptor,
+            dry_run=dry_run,
+            metadata=metadata,
+        )
 
     async def _execute_request_via_rust_adapter(
         self,
@@ -2071,15 +2142,27 @@ class BackgroundRuntimeHost:
 
         if not requests:
             raise ValueError("enqueue_background_batch requires at least one request.")
-        resolved_group_id = parallel_group_id or f"pgroup_{uuid4().hex[:12]}"
-        statuses: list[BackgroundRunStatus] = []
-        for index, request in enumerate(requests, start=1):
-            request_group_id = request.parallel_group_id
-            if request_group_id is not None and request_group_id != resolved_group_id:
-                raise ValueError(
-                    "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
+        batch_plan = self._background_batch_plan(
+            requests=requests,
+            parallel_group_id=parallel_group_id,
+            lane_id_prefix=lane_id_prefix,
+        )
+        if not bool(batch_plan.get("accepted")):
+            raise ValueError(
+                str(
+                    batch_plan.get("error")
+                    or "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
                 )
-            lane_id = request.lane_id or f"{lane_id_prefix}-{index}"
+            )
+        resolved_group_id = str(batch_plan.get("resolved_parallel_group_id") or "")
+        if not resolved_group_id:
+            raise RuntimeError("Rust background control returned an empty batch parallel_group_id.")
+        lane_ids = batch_plan.get("lane_ids")
+        if not isinstance(lane_ids, list) or len(lane_ids) != len(requests):
+            raise RuntimeError("Rust background control returned an invalid batch lane plan.")
+        statuses: list[BackgroundRunStatus] = []
+        for request, lane_id_value in zip(requests, lane_ids):
+            lane_id = str(lane_id_value)
             status = await self.enqueue_job(
                 request.model_copy(
                     update={
@@ -2417,6 +2500,26 @@ class BackgroundRuntimeHost:
             }
         )
 
+    def _background_batch_plan(
+        self,
+        *,
+        requests: list[BackgroundRunRequest],
+        parallel_group_id: str | None,
+        lane_id_prefix: str,
+    ) -> dict[str, Any]:
+        """Resolve batch-level parallel group and lane assignment through the Rust control seam."""
+
+        return self._background_policy(
+            {
+                "operation": "batch-plan",
+                "requested_parallel_group_id": parallel_group_id,
+                "request_parallel_group_ids": [request.parallel_group_id for request in requests],
+                "request_lane_ids": [request.lane_id for request in requests],
+                "lane_id_prefix": lane_id_prefix,
+                "batch_size": len(requests),
+            }
+        )
+
     async def _run_background_job(
         self,
         job_id: str,
@@ -2494,7 +2597,10 @@ class BackgroundRuntimeHost:
                             "attempt": running.attempt,
                             "background_policy_authority": self._background_control_authority,
                             **self._background_trace_context(running),
-                            **project_execution_kernel_payload(self.execution_service._service_descriptor),
+                            **project_execution_kernel_payload(
+                                self.execution_service._service_descriptor,
+                                dry_run=bool(request.dry_run),
+                            ),
                         },
                     )
 
@@ -2576,6 +2682,7 @@ class BackgroundRuntimeHost:
                             **self._background_trace_context(completed),
                             **project_execution_kernel_payload(
                                 self.execution_service._service_descriptor,
+                                dry_run=not result.live_run,
                                 metadata=result.metadata,
                             ),
                         },

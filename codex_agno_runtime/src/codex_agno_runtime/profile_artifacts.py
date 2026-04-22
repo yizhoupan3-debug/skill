@@ -277,6 +277,8 @@ def _classify_alias_reference(path: Path) -> tuple[str, str]:
         return "compatibility_escape_hatch", "compatibility_only"
     if path.name == "write_framework_contract_artifacts.py":
         return "compatibility_emitter_cli", "compatibility_only"
+    if path.name == "rust_router.py":
+        return "compatibility_router_cli", "compatibility_only"
     if path.name == "__init__.py":
         return "retired_root_export_surface", "compatibility_only"
     if path.name == "framework_profile.rs":

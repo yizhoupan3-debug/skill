@@ -367,6 +367,84 @@ def build_execution_kernel_dry_run_response(
     )
 
 
+def validate_execution_kernel_steady_state_metadata(
+    *,
+    metadata: Mapping[str, Any],
+    execution_kernel: str,
+    execution_kernel_authority: str,
+    execution_kernel_delegate: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
+    execution_kernel_delegate_authority: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
+    response_shape: str | None = None,
+) -> dict[str, Any]:
+    """Validate the steady-state execution-kernel metadata owned by Rust."""
+
+    normalized = dict(metadata)
+    missing = [field for field in EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS if field not in normalized]
+    if missing:
+        raise RuntimeError(
+            "execution-kernel steady-state metadata is incomplete: "
+            + ", ".join(sorted(missing))
+        )
+
+    actual_shape = normalized.get(EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY)
+    if response_shape is None:
+        response_shape = str(actual_shape)
+    if response_shape not in (
+        EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
+        EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
+    ):
+        raise RuntimeError(
+            "execution-kernel steady-state metadata returned an unsupported response_shape: "
+            f"{actual_shape!r}"
+        )
+    expected_prompt_preview_owner = (
+        LIVE_PRIMARY_PROMPT_PREVIEW_OWNER
+        if response_shape == EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
+        else DRY_RUN_PROMPT_PREVIEW_OWNER
+    )
+    expected_pairs = {
+        EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY: (
+            EXECUTION_KERNEL_METADATA_SCHEMA_VERSION
+        ),
+        "execution_kernel": execution_kernel,
+        "execution_kernel_authority": execution_kernel_authority,
+        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY: EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
+        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY: (
+            EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
+        ),
+        "execution_kernel_in_process_replacement_complete": True,
+        "execution_kernel_delegate": execution_kernel_delegate,
+        "execution_kernel_delegate_authority": execution_kernel_delegate_authority,
+        "execution_kernel_live_fallback_enabled": False,
+        "execution_kernel_live_fallback_mode": "disabled",
+        EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY: response_shape,
+        EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY: expected_prompt_preview_owner,
+    }
+    for field, expected in expected_pairs.items():
+        if normalized.get(field) != expected:
+            raise RuntimeError(
+                "execution-kernel steady-state metadata returned an unexpected value: "
+                f"{field}={normalized.get(field)!r}"
+            )
+    for field in (
+        "execution_kernel_delegate_family",
+        "execution_kernel_delegate_impl",
+        "execution_kernel_live_primary",
+        "execution_kernel_live_primary_authority",
+    ):
+        value = normalized.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise RuntimeError(
+                "execution-kernel steady-state metadata returned an invalid value: "
+                f"{field}={value!r}"
+            )
+    if normalized.get("execution_kernel_live_fallback") is not None:
+        raise RuntimeError("execution-kernel steady-state metadata returned a live fallback marker.")
+    if normalized.get("execution_kernel_live_fallback_authority") is not None:
+        raise RuntimeError("execution-kernel steady-state metadata returned a live fallback authority.")
+    return normalized
+
+
 def validate_router_rs_execution_metadata(
     *,
     metadata: Mapping[str, Any],
@@ -381,9 +459,19 @@ def validate_router_rs_execution_metadata(
 ) -> dict[str, Any]:
     """Validate one Rust-owned execution response metadata payload."""
 
-    normalized = dict(metadata)
+    normalized = validate_execution_kernel_steady_state_metadata(
+        metadata=metadata,
+        execution_kernel=execution_kernel,
+        execution_kernel_authority=execution_kernel_authority,
+        execution_kernel_delegate=execution_kernel_delegate,
+        execution_kernel_delegate_authority=execution_kernel_delegate_authority,
+        response_shape=(
+            EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
+            if live_run
+            else EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
+        ),
+    )
     required_fields = (
-        *EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
         *(
             LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS
             if live_run
@@ -403,34 +491,8 @@ def validate_router_rs_execution_metadata(
             f"{usage_mode!r} != {expected_usage_mode!r}"
         )
 
-    expected_shape = (
-        EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
-        if live_run
-        else EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
-    )
     expected_execution_mode = "live" if live_run else "dry_run"
-    expected_prompt_preview_owner = (
-        LIVE_PRIMARY_PROMPT_PREVIEW_OWNER
-        if live_run
-        else DRY_RUN_PROMPT_PREVIEW_OWNER
-    )
     expected_pairs = {
-        EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY: (
-            EXECUTION_KERNEL_METADATA_SCHEMA_VERSION
-        ),
-        "execution_kernel": execution_kernel,
-        "execution_kernel_authority": execution_kernel_authority,
-        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY: EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
-        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY: (
-            EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
-        ),
-        "execution_kernel_in_process_replacement_complete": True,
-        "execution_kernel_delegate": execution_kernel_delegate,
-        "execution_kernel_delegate_authority": execution_kernel_delegate_authority,
-        "execution_kernel_live_fallback_enabled": False,
-        "execution_kernel_live_fallback_mode": "disabled",
-        EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY: expected_shape,
-        EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY: expected_prompt_preview_owner,
         "execution_mode": expected_execution_mode,
     }
     if live_run:
@@ -443,22 +505,6 @@ def validate_router_rs_execution_metadata(
                 "router-rs execute returned an unexpected metadata value: "
                 f"{field}={normalized.get(field)!r}"
             )
-    for field in (
-        "execution_kernel_delegate_family",
-        "execution_kernel_delegate_impl",
-        "execution_kernel_live_primary",
-        "execution_kernel_live_primary_authority",
-    ):
-        value = normalized.get(field)
-        if not isinstance(value, str) or not value.strip():
-            raise RuntimeError(
-                "router-rs execute returned an invalid metadata value: "
-                f"{field}={value!r}"
-            )
-    if normalized.get("execution_kernel_live_fallback") is not None:
-        raise RuntimeError("router-rs execute returned an unexpected live fallback marker.")
-    if normalized.get("execution_kernel_live_fallback_authority") is not None:
-        raise RuntimeError("router-rs execute returned an unexpected live fallback authority.")
     return normalized
 
 

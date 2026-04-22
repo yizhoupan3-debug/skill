@@ -1030,4 +1030,51 @@ describe('BrowserRuntime', () => {
       await rm(tempRoot, { recursive: true, force: true });
     }
   }, 15000);
+
+  it('hydrates a canonical descriptor from a sqlite binding artifact path', async () => {
+    const { tempRoot, bindingArtifactPath, traceStreamPath } = await createAttachedRuntimeSqliteFixture();
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeBindingArtifactPath: bindingArtifactPath,
+      screenshotDir: path.join(tempRoot, 'screenshots'),
+    });
+
+    try {
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.attachedRuntime.status).toBe('ready');
+      expect(diagnostics.attachedRuntime.descriptorSource).toBe('binding_artifact_path');
+      expect(diagnostics.attachedRuntime.artifactBackendFamily).toBe('sqlite');
+      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+
+      const descriptor = await (
+        attachedRuntime as unknown as {
+          loadRuntimeAttachDescriptor(): Promise<Record<string, unknown>>;
+        }
+      ).loadRuntimeAttachDescriptor();
+      expect(descriptor.schema_version).toBe('runtime-event-attach-descriptor-v1');
+      expect(descriptor.source_handoff_method).toBe('describe_runtime_event_handoff');
+      expect(descriptor.source_transport_method).toBe('describe_runtime_event_transport');
+      expect(descriptor.attach_method).toBe('attach_runtime_event_transport');
+      expect(descriptor.subscribe_method).toBe('subscribe_attached_runtime_events');
+      expect(descriptor.cleanup_method).toBe('cleanup_attached_runtime_event_transport');
+      expect(descriptor.resume_mode).toBe('after_event_id');
+      expect((descriptor.resolution as Record<string, unknown>).binding_artifact_path).toBe(
+        'explicit_request',
+      );
+      expect(
+        ((descriptor.resolved_artifacts as Record<string, unknown>).binding_artifact_path as string),
+      ).toBe(bindingArtifactPath);
+      expect(
+        ((descriptor.resolved_artifacts as Record<string, unknown>).trace_stream_path as string),
+      ).toBe(traceStreamPath);
+
+      const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
+      expect(replay.events).toHaveLength(2);
+      expect(replay.events[0]!.event_id).toBe('evt-sqlite-1');
+      expect(replay.events[1]!.event_id).toBe('evt-sqlite-2');
+    } finally {
+      await attachedRuntime.shutdown();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  }, 15000);
 });

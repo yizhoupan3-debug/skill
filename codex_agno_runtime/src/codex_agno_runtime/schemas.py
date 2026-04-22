@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, Mapping
 
 from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
@@ -62,6 +62,37 @@ class SearchMatchResult(BaseModel):
     score: float
     matched_terms: int
     total_terms: int
+
+    @classmethod
+    def from_transport_row(cls, row: Mapping[str, Any]) -> "SearchMatchResult":
+        """Hydrate one Rust search transport row into the shared typed contract."""
+
+        return cls(
+            record=SkillMetadata(
+                name=str(row["slug"]),
+                description=str(row["description"]),
+                routing_layer=str(row["layer"]),
+                routing_gate=str(row["gate"]),
+                routing_owner=str(row["owner"]),
+            ),
+            score=float(row["score"]),
+            matched_terms=int(row["matched_terms"]),
+            total_terms=int(row["total_terms"]),
+        )
+
+    def to_transport_row(self) -> dict[str, Any]:
+        """Project one typed search match back to the Rust JSON transport shape."""
+
+        return {
+            "slug": self.record.name,
+            "description": self.record.description,
+            "layer": self.record.routing_layer,
+            "gate": self.record.routing_gate,
+            "owner": self.record.routing_owner,
+            "score": self.score,
+            "matched_terms": self.matched_terms,
+            "total_terms": self.total_terms,
+        }
 
 
 class RoutingResult(BaseModel):

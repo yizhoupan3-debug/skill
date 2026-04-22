@@ -88,18 +88,59 @@ const CLI_FAMILY_HOST_CAPABILITIES: [&str; 9] = [
     "workspace_bootstrap",
     "session_contract",
 ];
+const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
+    "adapter_id",
+    "adapter_alias_of",
+    "automation_bridge_required",
+    "canonical_adapter_id",
+    "checkpointing_supported",
+    "claude_directory_features",
+    "config_root_env_var",
+    "context_files",
+    "controller_is_cli",
+    "entrypoint_kind",
+    "host_cli",
+    "host_id",
+    "hook_control_settings",
+    "hook_definition_sources",
+    "hook_environment_markers",
+    "hook_event_names",
+    "hook_handler_types",
+    "hook_inspection_commands",
+    "managed_mcp_paths",
+    "managed_settings_paths",
+    "mcp_config_paths",
+    "plugin_hook_manifest_paths",
+    "settings_paths",
+    "settings_scope_order",
+    "settings_scopes",
+    "shared_adapter",
+    "structured_output_modes",
+    "subagent_paths",
+    "supports_batch",
+    "supports_ci",
+    "supports_cron",
+    "thread_binding",
+    "transport",
+];
 const CLI_COMMON_ADAPTER_ID: &str = "cli_common_adapter";
 const CODEX_COMMON_ADAPTER_ID: &str = "codex_common_adapter";
 const CODEX_CLI_ADAPTER_ID: &str = "codex_cli_adapter";
 const CLAUDE_CODE_ADAPTER_ID: &str = "claude_code_adapter";
 const GEMINI_CLI_ADAPTER_ID: &str = "gemini_cli_adapter";
+const CODEX_DESKTOP_ADAPTER_ID: &str = "codex_desktop_adapter";
+const DEFAULT_HOST_PEER_SET: &[&str] = &[
+    CODEX_DESKTOP_ADAPTER_ID,
+    CODEX_CLI_ADAPTER_ID,
+    CLAUDE_CODE_ADAPTER_ID,
+    GEMINI_CLI_ADAPTER_ID,
+];
 const CLI_FAMILY_TARGETS: [&str; 3] = [
     CODEX_CLI_ADAPTER_ID,
     CLAUDE_CODE_ADAPTER_ID,
     GEMINI_CLI_ADAPTER_ID,
 ];
 const CLI_FAMILY_PARITY_ARTIFACT_ID: &str = "cli_family_parity_snapshot";
-const CODEX_DESKTOP_ADAPTER_ID: &str = "codex_desktop_adapter";
 const LEGACY_CODEX_DESKTOP_ADAPTER_ID: &str = "codex_desktop_host_adapter";
 const EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID: &str = "execution_controller_contract";
 const DELEGATION_CONTRACT_ARTIFACT_ID: &str = "delegation_contract";
@@ -590,6 +631,18 @@ fn validate_framework_profile(profile: &FrameworkProfileContract) -> Result<(), 
             missing.join(", ")
         ));
     }
+    let host_specific_metadata = profile
+        .metadata
+        .keys()
+        .filter(|key| HOST_SPECIFIC_METADATA_KEYS.contains(&key.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !host_specific_metadata.is_empty() {
+        return Err(format!(
+            "framework profile metadata must stay host-neutral; move host-specific keys into adapter projections: {}",
+            host_specific_metadata.join(", ")
+        ));
+    }
     Ok(())
 }
 
@@ -923,12 +976,7 @@ fn build_cli_common_controller_boundary() -> Map<String, Value> {
     );
     boundary.insert(
         "host_entrypoints".to_string(),
-        Value::Array(vec![
-            Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-            Value::String(CODEX_CLI_ADAPTER_ID.to_string()),
-            Value::String(CLAUDE_CODE_ADAPTER_ID.to_string()),
-            Value::String(GEMINI_CLI_ADAPTER_ID.to_string()),
-        ]),
+        string_array(DEFAULT_HOST_PEER_SET),
     );
     boundary.insert("single_source_of_truth".to_string(), Value::Bool(true));
     boundary.insert("codexcli_is_controller".to_string(), Value::Bool(false));
@@ -1113,10 +1161,7 @@ fn build_cli_common_adapter(
     );
     payload.insert(
         "bridge_contract".to_string(),
-        workspace_bootstrap
-            .get("bridges")
-            .cloned()
-            .unwrap_or_else(|| Value::Object(Map::new())),
+        shared_contract_workspace_bridges(shared_contract),
     );
     payload.insert(
         "controller_boundary".to_string(),
@@ -1137,6 +1182,15 @@ fn build_runtime_surface(shared_contract: &Map<String, Value>) -> Map<String, Va
         }
     }
     runtime_surface
+}
+
+fn shared_contract_workspace_bridges(shared_contract: &Map<String, Value>) -> Value {
+    shared_contract
+        .get("workspace_bootstrap")
+        .and_then(Value::as_object)
+        .and_then(|bootstrap| bootstrap.get("bridges"))
+        .cloned()
+        .unwrap_or_else(|| Value::Object(Map::new()))
 }
 
 fn build_codex_common_adapter(
@@ -1168,10 +1222,7 @@ fn build_codex_common_adapter(
     );
     payload.insert(
         "bridge_contract".to_string(),
-        workspace_bootstrap
-            .get("bridges")
-            .cloned()
-            .unwrap_or_else(|| Value::Object(Map::new())),
+        shared_contract_workspace_bridges(shared_contract),
     );
     payload.insert(
         "controller_boundary".to_string(),
@@ -3652,6 +3703,10 @@ fn collect_files(root: &Path) -> Vec<PathBuf> {
     entries.sort();
     for path in entries {
         if path.is_dir() {
+            let directory_name = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
+            if matches!(directory_name, "target" | "__pycache__" | ".pytest_cache") {
+                continue;
+            }
             files.extend(collect_files(&path));
             continue;
         }
@@ -3682,6 +3737,9 @@ fn classify_alias_reference(path: &Path) -> (&'static str, &'static str) {
     }
     if file_name == "write_framework_contract_artifacts.py" {
         return ("compatibility_emitter_cli", "compatibility_only");
+    }
+    if file_name == "rust_router.py" {
+        return ("compatibility_router_cli", "compatibility_only");
     }
     if file_name == "__init__.py" {
         return ("retired_root_export_surface", "compatibility_only");
@@ -4361,5 +4419,17 @@ mod tests {
         profile.host_family = "aionrs".to_string();
         let error = build_profile_bundle(&profile).expect_err("should reject pinned host family");
         assert!(error.contains("must not be pinned directly to aionrs"));
+    }
+
+    #[test]
+    fn validation_rejects_host_specific_metadata_in_framework_truth() {
+        let mut profile = sample_profile();
+        profile
+            .metadata
+            .insert("hook_event_names".to_string(), json!(["PreToolUse"]));
+        let error = build_profile_bundle(&profile)
+            .expect_err("should reject host-specific metadata in framework truth");
+        assert!(error.contains("host-neutral"));
+        assert!(error.contains("hook_event_names"));
     }
 }

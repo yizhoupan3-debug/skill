@@ -47,6 +47,7 @@ from codex_agno_runtime.execution_kernel_contracts import (
     build_execution_kernel_live_response_serialization_contract_core,
     build_execution_kernel_runtime_metadata,
     build_trace_runtime_metadata,
+    validate_execution_kernel_steady_state_metadata,
 )
 from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import RoutingResult, SkillMetadata
@@ -432,6 +433,18 @@ def test_execution_kernel_contract_helpers_stay_rust_primary() -> None:
         EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
         EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
     ]
+
+    validated_contract = validate_execution_kernel_steady_state_metadata(
+        metadata={
+            field: runtime_metadata[field]
+            for field in EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS
+        },
+        execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
+        execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
+    )
+    assert validated_contract["execution_kernel_response_shape"] == (
+        EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
+    )
 
 
 def test_execution_kernel_dry_run_response_stays_rust_primary() -> None:

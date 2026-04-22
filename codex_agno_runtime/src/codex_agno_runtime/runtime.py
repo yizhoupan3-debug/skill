@@ -9,7 +9,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from codex_agno_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
-from codex_agno_runtime.event_transport import _unwrap_rust_attach_error
+from codex_agno_runtime.event_transport import (
+    _build_external_runtime_attach_request,
+    _unwrap_rust_attach_error,
+)
 from codex_agno_runtime.trace import (
     TRACE_EVENT_HANDOFF_SCHEMA_VERSION,
     TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
@@ -238,12 +241,12 @@ class CodexAgnoRuntime:
 
         try:
             return self.rust_adapter.attach_runtime_event_transport(
-                {
-                    "attach_descriptor": attach_descriptor,
-                    "binding_artifact_path": binding_artifact_path,
-                    "handoff_path": handoff_path,
-                    "resume_manifest_path": resume_manifest_path,
-                }
+                _build_external_runtime_attach_request(
+                    attach_descriptor=attach_descriptor,
+                    binding_artifact_path=binding_artifact_path,
+                    handoff_path=handoff_path,
+                    resume_manifest_path=resume_manifest_path,
+                )
             )
         except RuntimeError as exc:
             attach_error = _unwrap_rust_attach_error(exc)
@@ -266,10 +269,12 @@ class CodexAgnoRuntime:
 
         return self.rust_adapter.subscribe_attached_runtime_events(
             {
-                "attach_descriptor": attach_descriptor,
-                "binding_artifact_path": binding_artifact_path,
-                "handoff_path": handoff_path,
-                "resume_manifest_path": resume_manifest_path,
+                **_build_external_runtime_attach_request(
+                    attach_descriptor=attach_descriptor,
+                    binding_artifact_path=binding_artifact_path,
+                    handoff_path=handoff_path,
+                    resume_manifest_path=resume_manifest_path,
+                ),
                 "after_event_id": after_event_id,
                 "limit": limit,
                 "heartbeat": heartbeat,
@@ -288,12 +293,12 @@ class CodexAgnoRuntime:
 
         try:
             return self.rust_adapter.cleanup_attached_runtime_event_transport(
-                {
-                    "attach_descriptor": attach_descriptor,
-                    "binding_artifact_path": binding_artifact_path,
-                    "handoff_path": handoff_path,
-                    "resume_manifest_path": resume_manifest_path,
-                }
+                _build_external_runtime_attach_request(
+                    attach_descriptor=attach_descriptor,
+                    binding_artifact_path=binding_artifact_path,
+                    handoff_path=handoff_path,
+                    resume_manifest_path=resume_manifest_path,
+                )
             )
         except RuntimeError as exc:
             attach_error = _unwrap_rust_attach_error(exc)
@@ -462,7 +467,10 @@ class CodexAgnoRuntime:
             include_prompt_preview=execution_is_dry_run,
         )
         routing_result = self._to_routing_result(request.task, prepared)
-        kernel_contract = _runtime_execution_kernel_contract(self.execution_service._service_descriptor)
+        kernel_contract = _runtime_execution_kernel_contract(
+            self.execution_service._service_descriptor,
+            dry_run=execution_is_dry_run,
+        )
         self._trace.record(
             session_id=prepared.session_id,
             job_id=request.job_id,
@@ -471,7 +479,11 @@ class CodexAgnoRuntime:
             payload={
                 "skill": prepared.skill,
                 "live_run": not execution_is_dry_run,
-                **project_execution_kernel_payload(self.execution_service._service_descriptor, metadata=kernel_contract),
+                **project_execution_kernel_payload(
+                    self.execution_service._service_descriptor,
+                    dry_run=execution_is_dry_run,
+                    metadata=kernel_contract,
+                ),
             },
         )
 
@@ -522,6 +534,7 @@ class CodexAgnoRuntime:
                 "mode": "dry-run" if execution_is_dry_run else "live",
                 **project_execution_kernel_payload(
                     self.execution_service._service_descriptor,
+                    dry_run=execution_is_dry_run,
                     metadata=result.metadata,
                 ),
                 **({"model_id": result.model_id} if result.live_run else {}),

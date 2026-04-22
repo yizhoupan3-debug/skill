@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -59,6 +60,36 @@ def test_resolver_prefers_newest_resume_manifest_event_transport_path(tmp_path: 
             "updated_at": "2026-04-23T00:05:00+00:00",
         },
     )
+
+    assert (
+        MODULE.resolve_runtime_attach_artifact(search_root)
+        == "/tmp/runtime_event_transports/newer.json"
+    )
+
+
+def test_resolver_falls_back_to_manifest_file_recency_when_updated_at_is_invalid(tmp_path: Path) -> None:
+    search_root = tmp_path / "scratch"
+    older_manifest = search_root / "older" / "TRACE_RESUME_MANIFEST.json"
+    newer_manifest = search_root / "newer" / "TRACE_RESUME_MANIFEST.json"
+
+    _write_json(
+        older_manifest,
+        {
+            "schema_version": "runtime-resume-manifest-v1",
+            "event_transport_path": "/tmp/runtime_event_transports/older.json",
+            "updated_at": "not-a-timestamp",
+        },
+    )
+    _write_json(
+        newer_manifest,
+        {
+            "schema_version": "runtime-resume-manifest-v1",
+            "event_transport_path": "/tmp/runtime_event_transports/newer.json",
+            "updated_at": "still-not-a-timestamp",
+        },
+    )
+    os.utime(older_manifest, (1_700_000_000, 1_700_000_000))
+    os.utime(newer_manifest, (1_700_000_100, 1_700_000_100))
 
     assert (
         MODULE.resolve_runtime_attach_artifact(search_root)
@@ -138,6 +169,37 @@ def test_resolver_falls_back_to_binding_artifact_when_manifest_is_missing(tmp_pa
     )
 
     assert MODULE.resolve_runtime_attach_artifact(search_root) == str(binding_path)
+
+
+def test_resolver_prefers_manifest_candidates_over_binding_candidates_when_manifest_has_timestamp(
+    tmp_path: Path,
+) -> None:
+    search_root = tmp_path / "scratch"
+    manifest_path = search_root / "manifest" / "TRACE_RESUME_MANIFEST.json"
+    binding_path = search_root / "binding" / "data" / "runtime_event_transports" / "session__job.json"
+
+    _write_json(
+        manifest_path,
+        {
+            "schema_version": "runtime-resume-manifest-v1",
+            "event_transport_path": "/tmp/runtime_event_transports/from-manifest.json",
+            "updated_at": "2026-04-23T00:00:01+00:00",
+        },
+    )
+    _write_json(
+        binding_path,
+        {
+            "schema_version": "runtime-event-transport-v1",
+            "binding_artifact_path": "/tmp/runtime_event_transports/from-binding.json",
+            "binding_backend_family": "filesystem",
+        },
+    )
+    os.utime(binding_path, (1_800_000_000, 1_800_000_000))
+
+    assert (
+        MODULE.resolve_runtime_attach_artifact(search_root)
+        == "/tmp/runtime_event_transports/from-manifest.json"
+    )
 
 
 def test_resolver_ignores_invalid_payloads_and_keeps_valid_binding_fallback(tmp_path: Path) -> None:
