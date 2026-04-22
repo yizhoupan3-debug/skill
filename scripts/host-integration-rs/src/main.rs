@@ -25,6 +25,7 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
 const DEFAULT_SHARED_PROJECT_MCP_SERVERS: [&str; 3] =
     ["browser-mcp", "framework-mcp", "openaiDeveloperDocs"];
 const OPENAI_DEVELOPER_DOCS_MCP_URL: &str = "https://developers.openai.com/mcp";
+const PERSONAL_PLUGIN_LIVE_PROJECTION_EXCLUDES: [&str; 2] = ["skills", ".mcp.json"];
 
 #[derive(Deserialize)]
 struct SyncSectionManifest {
@@ -129,10 +130,6 @@ enum Commands {
         #[arg(long)]
         skip_personal_marketplace: bool,
         #[arg(long)]
-        install_home_codex_skills_link: bool,
-        #[arg(long)]
-        install_home_claude_skills_link: bool,
-        #[arg(long)]
         skip_home_codex_skills_link: bool,
         #[arg(long)]
         skip_home_claude_skills_link: bool,
@@ -189,8 +186,6 @@ fn main() -> Result<(), String> {
             skip_framework_overlay_retirement,
             skip_personal_plugin,
             skip_personal_marketplace,
-            install_home_codex_skills_link,
-            install_home_claude_skills_link,
             skip_home_codex_skills_link,
             skip_home_claude_skills_link,
             skip_home_claude_refresh,
@@ -214,8 +209,8 @@ fn main() -> Result<(), String> {
             !skip_framework_overlay_retirement,
             !skip_personal_plugin,
             !skip_personal_marketplace,
-            install_home_codex_skills_link && !skip_home_codex_skills_link,
-            install_home_claude_skills_link && !skip_home_claude_skills_link,
+            !skip_home_codex_skills_link,
+            !skip_home_claude_skills_link,
             !skip_home_claude_refresh,
             !skip_home_claude_mcp_sync,
             !skip_default_bootstrap,
@@ -583,7 +578,8 @@ fn install_native_integration(
     };
     let tui_changed = ensure_tui_status_line(&home_config_path)?;
     let personal_plugin_changed = if install_personal_plugin {
-        sync_directory(
+        ensure_personal_plugin_live_projection(
+            &repo_root,
             &repo_root.join(&plugin_registration.source_rel),
             &home_plugin_root,
         )?
@@ -922,7 +918,11 @@ fn format_status_line() -> String {
     format!("status_line = [{items}]")
 }
 
-fn sync_directory(source: &Path, destination: &Path) -> Result<bool, String> {
+fn sync_directory(
+    source: &Path,
+    destination: &Path,
+    skip_names: &[&str],
+) -> Result<bool, String> {
     if !source.is_dir() {
         return Err(format!(
             "Plugin source directory not found: {}",
@@ -936,6 +936,9 @@ fn sync_directory(source: &Path, destination: &Path) -> Result<bool, String> {
     let destination_children = read_dir_map(destination)?;
 
     for (name, stale_path) in destination_children {
+        if skip_names.contains(&name.as_str()) {
+            continue;
+        }
         if source_children.contains_key(&name) {
             continue;
         }
@@ -944,13 +947,16 @@ fn sync_directory(source: &Path, destination: &Path) -> Result<bool, String> {
     }
 
     for (name, source_path) in source_children {
+        if skip_names.contains(&name.as_str()) {
+            continue;
+        }
         let destination_path = destination.join(name);
         if source_path.is_dir() {
             if destination_path.exists() && !destination_path.is_dir() {
                 remove_path(&destination_path).map_err(|err| err.to_string())?;
                 changed = true;
             }
-            changed = sync_directory(&source_path, &destination_path)? || changed;
+            changed = sync_directory(&source_path, &destination_path, skip_names)? || changed;
             continue;
         }
         let source_bytes = fs::read(&source_path).map_err(|err| err.to_string())?;
@@ -980,8 +986,7 @@ fn read_dir_map(root: &Path) -> Result<BTreeMap<String, PathBuf>, String> {
     Ok(entries)
 }
 
-fn ensure_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool, String> {
-    let source = repo_root.join(skill_bridge_source_rel(repo_root)?);
+fn ensure_directory_symlink(source: &Path, target_path: &Path) -> Result<bool, String> {
     if let Some(parent) = target_path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
@@ -1016,7 +1021,7 @@ fn ensure_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool,
 
     #[cfg(unix)]
     {
-        unix_fs::symlink(&source, target_path).map_err(|err| err.to_string())?;
+        unix_fs::symlink(source, target_path).map_err(|err| err.to_string())?;
         Ok(true)
     }
     #[cfg(not(unix))]
@@ -1025,6 +1030,11 @@ fn ensure_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool,
         let _ = target_path;
         Err("home codex skills link requires unix symlink support".to_string())
     }
+}
+
+fn ensure_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool, String> {
+    let source = repo_root.join(skill_bridge_source_rel(repo_root)?);
+    ensure_directory_symlink(&source, target_path)
 }
 
 fn ensure_home_claude_refresh_command(
@@ -1083,6 +1093,53 @@ fn managed_home_claude_mcp_server(repo_root: &Path, server_name: &str) -> Result
             "Unsupported shared project MCP server for Claude global sync: {other}"
         )),
     }
+}
+
+fn build_personal_plugin_mcp_payload(repo_root: &Path) -> Value {
+    let repo_root_value = repo_root.to_string_lossy().into_owned();
+    let browser_script = repo_root
+        .join("tools/browser-mcp/scripts/start_browser_mcp.sh")
+        .to_string_lossy()
+        .into_owned();
+    json!({
+        "mcpServers": {
+            "framework-mcp": {
+                "command": "python3",
+                "args": ["-m", "scripts.framework_mcp"],
+                "cwd": repo_root_value,
+            },
+            "browser-mcp": {
+                "command": "bash",
+                "args": [browser_script],
+                "cwd": repo_root_value,
+            },
+            "openaiDeveloperDocs": {
+                "type": "http",
+                "url": OPENAI_DEVELOPER_DOCS_MCP_URL,
+            },
+        }
+    })
+}
+
+fn ensure_personal_plugin_live_projection(
+    repo_root: &Path,
+    plugin_source: &Path,
+    plugin_root: &Path,
+) -> Result<bool, String> {
+    let mut changed = sync_directory(
+        plugin_source,
+        plugin_root,
+        &PERSONAL_PLUGIN_LIVE_PROJECTION_EXCLUDES,
+    )?;
+    changed = ensure_directory_symlink(
+        &repo_root.join(skill_bridge_source_rel(repo_root)?),
+        &plugin_root.join("skills"),
+    )? || changed;
+    changed = write_json_if_changed(
+        &plugin_root.join(".mcp.json"),
+        &build_personal_plugin_mcp_payload(repo_root),
+    )? || changed;
+    Ok(changed)
 }
 
 fn install_personal_marketplace(

@@ -149,7 +149,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         "Bash(python3 -m pytest *)",
         "Bash(python3 -m compileall *)",
         "Bash(cargo test *)",
-        "Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *)",
+        "Bash(python3 scripts/router_rs_runner.py *)",
         "Bash(python3 scripts/runtime_background_cli.py *)",
         "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
         "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
@@ -191,43 +191,47 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert background_batch_command == CLAUDE_BACKGROUND_BATCH_COMMAND
     assert autopilot_command == CLAUDE_AUTOPILOT_COMMAND
     assert deepinterview_command == CLAUDE_DEEPINTERVIEW_COMMAND
-    assert "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --framework-refresh-json" in refresh_command
+    assert "python3 scripts/router_rs_runner.py --framework-refresh-json --claude-hook-max-lines 4" in refresh_command
     assert "reply with exactly" in refresh_command
     assert "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。" in refresh_command
     assert "summary" not in refresh_command.lower()
     assert "clear" not in refresh_command.lower()
     assert "CLAUDE_PROJECT_DIR" not in refresh_command
-    assert "allowed-tools: Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *)" in refresh_command
+    assert "allowed-tools: Bash(python3 scripts/router_rs_runner.py *)" in refresh_command
     assert "copy `recap.workflow_prompt`" not in refresh_command
     assert "runtime_background_cli.py" in background_batch_command
     assert "enqueue-batch" in background_batch_command
     assert "group-summary" in background_batch_command
     assert "list-groups" in background_batch_command
     assert "allowed-tools: Bash(python3 scripts/runtime_background_cli.py *)" in background_batch_command
-    assert "thin alias" in autopilot_command
-    assert aliases["autopilot"]["canonical_owner"] in autopilot_command
-    assert aliases["autopilot"]["reroute_when_ambiguous"] in autopilot_command
-    assert aliases["autopilot"]["reroute_when_root_cause_unknown"] in autopilot_command
+    assert "thin Rust-first alias" in autopilot_command
     assert aliases["autopilot"]["host_entrypoints"]["claude-code"] in autopilot_command
-    assert "original OMC core capability" in autopilot_command
-    assert aliases["autopilot"]["upstream_source"]["tag"] in autopilot_command
+    assert "--framework-alias-json" in autopilot_command
+    assert "--framework-alias autopilot" in autopilot_command
+    assert "--compact-output" in autopilot_command
+    assert "--claude-hook-max-lines 3" in autopilot_command
+    assert "resident router-rs stdio hot path" in autopilot_command
+    assert "alias.state_machine" in autopilot_command
+    assert "alias.entry_contract" in autopilot_command
+    assert "alias.entry_prompt" in autopilot_command
+    assert "python3 scripts/router_rs_runner.py" in autopilot_command
     assert aliases["autopilot"]["upstream_source"]["official_skill_path"] in autopilot_command
-    for phase in aliases["autopilot"]["official_workflow"]["phases"]:
-        assert phase in autopilot_command
-    for requirement in aliases["autopilot"]["implementation_bar"]:
-        assert requirement in autopilot_command
-    assert "thin alias" in deepinterview_command
-    assert aliases["deepinterview"]["canonical_owner"] in deepinterview_command
+    assert "Only open" in autopilot_command
+    assert "thin Rust-first alias" in deepinterview_command
     assert aliases["deepinterview"]["host_entrypoints"]["claude-code"] in deepinterview_command
-    assert "original OMC core capability" in deepinterview_command
-    assert aliases["deepinterview"]["upstream_source"]["tag"] in deepinterview_command
+    assert "--framework-alias-json" in deepinterview_command
+    assert "--framework-alias deepinterview" in deepinterview_command
+    assert "--compact-output" in deepinterview_command
+    assert "--claude-hook-max-lines 3" in deepinterview_command
+    assert "resident router-rs stdio hot path" in deepinterview_command
+    assert "alias.state_machine" in deepinterview_command
+    assert "alias.entry_contract" in deepinterview_command
+    assert "alias.entry_prompt" in deepinterview_command
+    assert "python3 scripts/router_rs_runner.py" in deepinterview_command
     assert aliases["deepinterview"]["upstream_source"]["official_skill_path"] in deepinterview_command
-    for rule in aliases["deepinterview"]["official_workflow"]["loop_rules"]:
-        assert rule in deepinterview_command
-    for requirement in aliases["deepinterview"]["implementation_bar"]:
-        assert requirement in deepinterview_command
-    for lane in aliases["deepinterview"]["review_lanes"]:
-        assert lane in deepinterview_command
+    assert "Only open" in deepinterview_command
+    assert "Otherwise run" not in autopilot_command
+    assert "Otherwise run" not in deepinterview_command
     assert (tmp_path / ".claude" / "hooks" / "README.md").is_file()
     hooks_readme = (tmp_path / ".claude" / "hooks" / "README.md").read_text(encoding="utf-8")
     assert "Generated-first maintenance" in hooks_readme

@@ -6,15 +6,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from codex_agno_runtime.rust_router import RustRouteAdapter
 from scripts.framework_bridge import (
     build_evolution_proposals,
-    build_framework_memory_bootstrap,
     export_framework_skills,
 )
 from scripts.memory_support import (
@@ -27,6 +28,13 @@ from scripts.memory_support import (
 )
 
 BOOTSTRAP_FILENAME = "framework_default_bootstrap.json"
+
+
+@lru_cache(maxsize=1)
+def _framework_rust_adapter() -> RustRouteAdapter:
+    """Return the shared Rust adapter used by default bootstrap flows."""
+
+    return RustRouteAdapter(get_repo_root())
 
 
 def resolve_bootstrap_path(output_dir: Path) -> Path:
@@ -67,14 +75,13 @@ def run_default_bootstrap(
     output_dir = (output_dir or bootstrap_artifact_root(repo_root)).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     runtime = export_framework_skills()
-    memory = build_framework_memory_bootstrap(
-        workspace=workspace,
+    memory = _framework_rust_adapter().framework_memory_recall(
+        repo_root=repo_root,
         query=query,
-        source_root=repo_root,
-        memory_root=memory_root,
-        artifact_source_dir=artifact_source_dir,
         top=top,
         mode="active",
+        memory_root=memory_root,
+        artifact_source_dir=artifact_source_dir,
     )
     proposals = build_evolution_proposals()
     created_at = current_local_timestamp()

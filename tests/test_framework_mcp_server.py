@@ -181,6 +181,61 @@ def test_memory_recall_and_resource_read_return_repo_backed_content(tmp_path: Pa
     assert "prefer concise closeouts" in resource["result"]["contents"][0]["text"]
 
 
+def test_memory_recall_without_query_stays_compact(tmp_path: Path) -> None:
+    _seed_runtime_artifacts(tmp_path, terminal=False)
+    _write_text(
+        tmp_path / ".codex" / "memory" / "MEMORY.md",
+        "\n".join(
+            [
+                "# 项目长期记忆",
+                "",
+                "## Active Patterns",
+                "",
+                "- AP-1: keep recall compact",
+                "- AP-2: use stable summaries",
+                "",
+                "## 稳定决策",
+                "",
+                "- SD-1: avoid full document injection",
+                "",
+            ]
+        )
+        + "\n",
+    )
+    _write_text(
+        tmp_path / ".codex" / "memory" / "runbooks.md",
+        "\n".join(
+            [
+                "# runbooks",
+                "",
+                "## 标准操作",
+                "",
+                "- step 1",
+                "- step 2",
+                "- step 3",
+                "",
+            ]
+        )
+        + "\n",
+    )
+    _seed_memory_state(tmp_path)
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
+
+    recall = _tool_call(
+        server=server,
+        request_id=54,
+        name="framework_memory_recall",
+        arguments={"query": "", "top": 8, "mode": "stable"},
+    )
+
+    memory_item = next(item for item in recall["retrieval"]["items"] if item["path"] == "MEMORY.md")
+    runbook_item = next(item for item in recall["retrieval"]["items"] if item["path"] == "runbooks.md")
+    assert "AP-1: keep recall compact" in memory_item["content"]
+    assert "avoid full document injection" not in memory_item["content"]
+    assert "step 1" in runbook_item["content"]
+    assert "step 3" not in runbook_item["content"]
+
+
 def test_memory_project_resource_reads_logical_codex_memory_root(tmp_path: Path) -> None:
     _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 逻辑长期记忆\n")
     server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")

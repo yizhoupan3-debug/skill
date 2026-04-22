@@ -12,6 +12,7 @@ pub const FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION: &str =
     "router-rs-framework-contract-summary-v1";
 pub const FRAMEWORK_MEMORY_RECALL_SCHEMA_VERSION: &str = "router-rs-framework-memory-recall-v1";
 pub const FRAMEWORK_RECAP_SCHEMA_VERSION: &str = "router-rs-framework-recap-v1";
+pub const FRAMEWORK_ALIAS_SCHEMA_VERSION: &str = "router-rs-framework-alias-v1";
 pub const FRAMEWORK_RUNTIME_AUTHORITY: &str = "rust-framework-runtime-read-model";
 
 const CURRENT_ARTIFACT_DIR: &str = "current";
@@ -90,7 +91,7 @@ pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String
 }
 
 pub fn build_framework_runtime_snapshot_envelope(repo_root: &Path) -> Result<Value, String> {
-    let snapshot = load_framework_runtime_view(repo_root);
+    let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let continuity_route = continuity
         .get("route")
@@ -151,7 +152,7 @@ pub fn build_framework_runtime_snapshot_envelope(repo_root: &Path) -> Result<Val
 }
 
 pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Value, String> {
-    let snapshot = load_framework_runtime_view(repo_root);
+    let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
     let continuity_route = continuity
@@ -222,11 +223,17 @@ pub fn build_framework_memory_recall_envelope(
     query: &str,
     max_items: usize,
     mode: &str,
+    memory_root_override: Option<&Path>,
+    artifact_root_override: Option<&Path>,
+    task_id_override: Option<&str>,
 ) -> Result<Value, String> {
     if !matches!(mode, "stable" | "active" | "history" | "debug") {
         return Err(format!("Unsupported memory recall mode: {mode}"));
     }
-    let snapshot = load_framework_runtime_view(repo_root);
+    let snapshot = load_framework_runtime_view(repo_root, artifact_root_override, task_id_override);
+    let memory_root = resolve_framework_memory_root(repo_root, memory_root_override);
+    let (changed_files, consolidation_note) =
+        ensure_framework_memory_seeded(repo_root, &snapshot, &memory_root, artifact_root_override)?;
     let continuity = classify_runtime_continuity(&snapshot);
     let task = value_text(continuity.get("task"));
     let active_task = json!({
@@ -248,8 +255,14 @@ pub fn build_framework_memory_recall_envelope(
     } else {
         continuity.clone()
     };
-    let retrieval = render_framework_memory_context(repo_root, &snapshot, query, max_items, mode)?;
-    let memory_root = repo_root.join(".codex").join("memory");
+    let retrieval = render_framework_memory_context(
+        repo_root,
+        &snapshot,
+        &memory_root,
+        query,
+        max_items,
+        mode,
+    )?;
     let sqlite_path = resolve_memory_sqlite_path(&memory_root)
         .map(|path| path.display().to_string())
         .unwrap_or_default();
@@ -293,9 +306,9 @@ pub fn build_framework_memory_recall_envelope(
             "workspace": workspace_name_from_root(repo_root),
             "using_project_local": true,
             "memory_root": memory_root.display().to_string(),
-            "memory_layout": describe_project_local_memory_layout(repo_root),
-            "consolidation_note": "",
-            "changed_files": [],
+            "memory_layout": describe_project_local_memory_layout(&memory_root),
+            "consolidation_note": consolidation_note,
+            "changed_files": changed_files,
             "sqlite": {
                 "path": sqlite_path,
                 "has_sqlite": !sqlite_path.is_empty(),
@@ -319,14 +332,14 @@ pub fn build_framework_memory_recall_envelope(
                 "mode": mode,
                 "focused_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
             },
-            "source_artifacts": describe_continuity_layout(repo_root),
+            "source_artifacts": describe_continuity_layout(repo_root, &snapshot.artifact_base),
             "prompt_payload": prompt_payload,
         }
     }))
 }
 
 pub fn build_framework_recap_envelope(repo_root: &Path, max_lines: usize) -> Result<Value, String> {
-    let snapshot = load_framework_runtime_view(repo_root);
+    let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
     let stable_documents = read_stable_memory_documents(repo_root);
@@ -369,7 +382,7 @@ pub fn build_framework_recap_projection(
     repo_root: &Path,
     max_lines: usize,
 ) -> Result<String, String> {
-    let snapshot = load_framework_runtime_view(repo_root);
+    let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let stable_documents = read_stable_memory_documents(repo_root);
     Ok(render_framework_recap_projection(
@@ -381,8 +394,11 @@ pub fn build_framework_recap_projection(
     ))
 }
 
-pub fn build_framework_refresh_payload(repo_root: &Path, max_lines: usize) -> Result<Value, String> {
-    let snapshot = load_framework_runtime_view(repo_root);
+pub fn build_framework_refresh_payload(
+    repo_root: &Path,
+    max_lines: usize,
+) -> Result<Value, String> {
+    let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
     let prompt = render_framework_refresh_prompt(&continuity, &contract, max_lines);
@@ -397,24 +413,537 @@ pub fn build_framework_refresh_payload(repo_root: &Path, max_lines: usize) -> Re
     }))
 }
 
-fn load_framework_runtime_view(repo_root: &Path) -> FrameworkRuntimeView {
-    let artifact_base = repo_root.join("artifacts");
+pub fn build_framework_alias_envelope(
+    repo_root: &Path,
+    alias_name: &str,
+    max_lines: usize,
+    compact: bool,
+) -> Result<Value, String> {
+    let snapshot = load_framework_runtime_view(repo_root, None, None);
+    let continuity = classify_runtime_continuity(&snapshot);
+    let contract = supervisor_contract(&snapshot.supervisor_state);
+    let alias_record = load_framework_alias_record(repo_root, alias_name)?;
+    let host_entrypoint = alias_record_text(&alias_record, &["host_entrypoints", "claude-code"]);
+    let canonical_owner = alias_record_text(&alias_record, &["canonical_owner"]);
+    let upstream = alias_value_at_path(&alias_record, &["upstream_source"])
+        .cloned()
+        .unwrap_or(Value::Null);
+    let official_workflow = alias_value_at_path(&alias_record, &["official_workflow"])
+        .cloned()
+        .unwrap_or(Value::Null);
+    let skill_path = alias_record_text(&alias_record, &["upstream_source", "official_skill_path"]);
+    let implementation_bar = alias_record_list(&alias_record, &["implementation_bar"]);
+    let local_adaptations = alias_record_list(&alias_record, &["local_adaptations"]);
+    let routing_hints = match alias_name {
+        "autopilot" => json!({
+            "reroute_when_ambiguous": alias_record_text(&alias_record, &["reroute_when_ambiguous"]),
+            "reroute_when_root_cause_unknown": alias_record_text(&alias_record, &["reroute_when_root_cause_unknown"]),
+        }),
+        "deepinterview" => json!({
+            "review_lanes": alias_record_list(&alias_record, &["review_lanes"]),
+        }),
+        _ => Value::Null,
+    };
+    let entry_contract = build_framework_alias_entry_contract(
+        alias_name,
+        &alias_record,
+        &continuity,
+        &contract,
+        &skill_path,
+        max_lines,
+    );
+    let state_machine = build_framework_alias_state_machine(
+        alias_name,
+        &alias_record,
+        &continuity,
+        &skill_path,
+        max_lines,
+    );
+    let entry_prompt = render_framework_alias_prompt(&entry_contract);
+    let alias_payload = if compact {
+        json!({
+            "ok": true,
+            "name": alias_name,
+            "host_entrypoint": if host_entrypoint.is_empty() { Value::Null } else { Value::String(host_entrypoint) },
+            "canonical_owner": if canonical_owner.is_empty() { Value::Null } else { Value::String(canonical_owner) },
+            "routing_hints": routing_hints,
+            "continuity": {
+                "state": continuity.get("state").cloned().unwrap_or(Value::Null),
+                "can_resume": continuity.get("can_resume").cloned().unwrap_or(Value::Bool(false)),
+                "task": continuity.get("task").cloned().unwrap_or(Value::Null),
+                "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
+                "status": continuity.get("status").cloned().unwrap_or(Value::Null),
+                "next_actions": compact_alias_next_actions(&continuity, max_lines),
+            },
+            "state_machine": state_machine,
+            "entry_contract": entry_contract,
+            "entry_prompt": entry_prompt,
+            "entry_prompt_token_estimate": estimate_token_count(&entry_prompt),
+            "compact": true,
+        })
+    } else {
+        json!({
+            "ok": true,
+            "name": alias_name,
+            "workspace": workspace_name_from_root(repo_root),
+            "host_entrypoint": if host_entrypoint.is_empty() { Value::Null } else { Value::String(host_entrypoint) },
+            "canonical_owner": if canonical_owner.is_empty() { Value::Null } else { Value::String(canonical_owner) },
+            "upstream_source": upstream,
+            "official_workflow": official_workflow,
+            "implementation_bar": implementation_bar,
+            "local_adaptations": local_adaptations,
+            "routing_hints": routing_hints,
+            "continuity": {
+                "state": continuity.get("state").cloned().unwrap_or(Value::Null),
+                "can_resume": continuity.get("can_resume").cloned().unwrap_or(Value::Bool(false)),
+                "task": continuity.get("task").cloned().unwrap_or(Value::Null),
+                "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
+                "status": continuity.get("status").cloned().unwrap_or(Value::Null),
+                "next_actions": compact_alias_next_actions(&continuity, max_lines),
+            },
+            "state_machine": state_machine,
+            "entry_contract": entry_contract,
+            "optimization_hints": [
+                "prefer alias.state_machine and alias.entry_contract over opening full SKILL docs",
+                "prefer live continuity over long prose restatement",
+                "open SKILL.md only when the alias payload is insufficient"
+            ],
+            "entry_prompt": entry_prompt,
+            "entry_prompt_token_estimate": estimate_token_count(&entry_prompt),
+            "compact": false,
+        })
+    };
+    Ok(json!({
+        "schema_version": FRAMEWORK_ALIAS_SCHEMA_VERSION,
+        "authority": FRAMEWORK_RUNTIME_AUTHORITY,
+        "alias": alias_payload
+    }))
+}
+
+fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Value, String> {
+    let registry_path = repo_root
+        .join("configs")
+        .join("framework")
+        .join("RUNTIME_REGISTRY.json");
+    if let Ok(raw) = fs::read_to_string(&registry_path) {
+        if let Ok(payload) = serde_json::from_str::<Value>(&raw) {
+            if let Some(record) = payload
+                .get("framework_native_aliases")
+                .and_then(Value::as_object)
+                .and_then(|aliases| aliases.get(alias_name))
+                .cloned()
+            {
+                return Ok(record);
+            }
+        }
+    }
+    fallback_framework_alias_record(alias_name)
+        .ok_or_else(|| format!("Unknown framework alias: {alias_name}"))
+}
+
+fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
+    match alias_name {
+        "autopilot" => Some(json!({
+            "canonical_owner": "execution-controller-coding",
+            "reroute_when_ambiguous": "idea-to-plan",
+            "reroute_when_root_cause_unknown": "systematic-debugging",
+            "upstream_source": {
+                "repo": "https://github.com/Yeachan-Heo/oh-my-claudecode",
+                "tag": "v4.13.2",
+                "commit": "0ac52cdaa093d6c41763e47055e995adaa4f8987",
+                "official_skill_path": "skills/autopilot/SKILL.md"
+            },
+            "official_workflow": {
+                "phases": ["expansion", "planning", "execution", "qa", "validation", "cleanup"]
+            },
+            "implementation_bar": [
+                "root-cause-first-when-unknown",
+                "verification-evidence-required",
+                "resume-and-recovery-required",
+                "converge-until-bounded-scope-clean"
+            ],
+            "local_adaptations": [
+                "replace .omc state files with rust-session-supervisor plus continuity artifacts",
+                "replace .omc specs and plans with artifacts/current task-local bootstrap outputs",
+                "keep deepinterview handoff as the first-class clarification gate for vague requests"
+            ],
+            "host_entrypoints": {"claude-code": "/autopilot"}
+        })),
+        "deepinterview" => Some(json!({
+            "canonical_owner": "code-review",
+            "upstream_source": {
+                "repo": "https://github.com/Yeachan-Heo/oh-my-claudecode",
+                "tag": "v4.13.2",
+                "commit": "0ac52cdaa093d6c41763e47055e995adaa4f8987",
+                "official_skill_path": "skills/deep-interview/SKILL.md"
+            },
+            "official_workflow": {
+                "loop_rules": [
+                    "one-question-at-a-time",
+                    "target-weakest-clarity-dimension",
+                    "score-ambiguity-after-each-answer",
+                    "handoff-to-execution-only-below-threshold"
+                ]
+            },
+            "implementation_bar": [
+                "root-cause-first-when-unknown",
+                "findings-first-with-severity-order",
+                "verification-evidence-required",
+                "fix-verify-loop-until-bounded-scope-clean"
+            ],
+            "local_adaptations": [
+                "reuse official deep-interview questioning model but store progress in continuity artifacts instead of .omc state",
+                "use live repo evidence first for brownfield clarification before asking the user",
+                "handoff into local autopilot and rust-session-supervisor instead of OMC slash pipeline"
+            ],
+            "review_lanes": [
+                "architect-review",
+                "security-audit",
+                "test-engineering",
+                "execution-audit-codex"
+            ],
+            "host_entrypoints": {"claude-code": "/deepinterview"}
+        })),
+        _ => None,
+    }
+}
+
+fn alias_value_at_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    Some(current)
+}
+
+fn alias_record_text(value: &Value, path: &[&str]) -> String {
+    value_text(alias_value_at_path(value, path))
+}
+
+fn alias_record_list(value: &Value, path: &[&str]) -> Vec<String> {
+    alias_value_at_path(value, path)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| value_text(Some(item)))
+                .filter(|item| !item.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn compact_alias_next_actions(continuity: &Value, max_lines: usize) -> Vec<String> {
+    continuity
+        .get("next_actions")
+        .and_then(Value::as_array)
+        .map(|items| {
+            stable_line_items(
+                items
+                    .iter()
+                    .map(|item| value_text(Some(item)))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .unwrap_or_default()
+        .into_iter()
+        .take(max_lines.max(1).min(3))
+        .collect()
+}
+
+fn build_framework_alias_entry_contract(
+    alias_name: &str,
+    alias_record: &Value,
+    continuity: &Value,
+    contract: &Map<String, Value>,
+    skill_path: &str,
+    max_lines: usize,
+) -> Value {
+    let tag = alias_record_text(alias_record, &["upstream_source", "tag"]);
+    let task = value_text(continuity.get("task"));
+    let phase = value_text(continuity.get("phase"));
+    let status = value_text(continuity.get("status"));
+    let continuity_state = value_text(continuity.get("state"));
+    let next_actions = compact_alias_next_actions(continuity, max_lines);
+    let acceptance = value_string_list(contract.get("acceptance_criteria"))
+        .into_iter()
+        .take(max_lines.max(1).min(2))
+        .collect::<Vec<_>>();
+    let implementation_bar = alias_record_list(alias_record, &["implementation_bar"]);
+    let mut route_rules = Vec::new();
+    let summary = match alias_name {
+        "autopilot" => {
+            let ambiguous = alias_record_text(alias_record, &["reroute_when_ambiguous"]);
+            let root_cause = alias_record_text(alias_record, &["reroute_when_root_cause_unknown"]);
+            let owner = alias_record_text(alias_record, &["canonical_owner"]);
+            route_rules.push(format!("模糊需求 -> `{ambiguous}`"));
+            route_rules.push(format!("根因未知 -> `{root_cause}`"));
+            route_rules.push(format!("其他情况 -> `{owner}`"));
+            format!(
+                "进入 autopilot。OMC {tag} 执行流保留，但状态、恢复和续跑都走本地 Rust/continuity。"
+            )
+        }
+        "deepinterview" => {
+            let owner = alias_record_text(alias_record, &["canonical_owner"]);
+            let review_lanes = alias_record_list(alias_record, &["review_lanes"]);
+            route_rules.push(format!("主 owner -> `{owner}`"));
+            route_rules.push("每轮只问一个问题".to_string());
+            route_rules.push("先查仓库证据，再问用户".to_string());
+            route_rules.push("清晰度过线后 handoff 到 `autopilot`".to_string());
+            if !review_lanes.is_empty() {
+                route_rules.push(format!("review lanes -> {}", review_lanes.join(", ")));
+            }
+            format!(
+                "进入 deepinterview。OMC {tag} 访谈流保留，但访谈状态与 handoff 都走本地 Rust/continuity。"
+            )
+        }
+        _ => format!(
+            "进入 {alias_name}。优先使用本地 Rust/continuity alias 载荷，不要回退成长文说明。"
+        ),
+    };
+
+    let guardrails = implementation_bar
+        .into_iter()
+        .take(max_lines.max(1).min(3))
+        .collect::<Vec<_>>();
+    json!({
+        "summary": summary,
+        "context": {
+            "continuity_state": continuity_state,
+            "task": if task.is_empty() { Value::Null } else { Value::String(task) },
+            "phase": if phase.is_empty() { Value::Null } else { Value::String(phase) },
+            "status": if status.is_empty() { Value::Null } else { Value::String(status) },
+        },
+        "route_rules": route_rules,
+        "guardrails": guardrails,
+        "acceptance": acceptance,
+        "next_actions": next_actions,
+        "skill_fallback_path": if skill_path.is_empty() { Value::Null } else { Value::String(skill_path.to_string()) },
+    })
+}
+
+fn build_framework_alias_state_machine(
+    alias_name: &str,
+    alias_record: &Value,
+    continuity: &Value,
+    skill_path: &str,
+    max_lines: usize,
+) -> Value {
+    let state = value_text(continuity.get("state"));
+    let task = value_text(continuity.get("task"));
+    let phase = value_text(continuity.get("phase"));
+    let status = value_text(continuity.get("status"));
+    let can_resume = continuity
+        .get("can_resume")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let next_steps = compact_alias_next_actions(continuity, max_lines);
+    let recovery_hints = value_string_list(continuity.get("recovery_hints"))
+        .into_iter()
+        .take(max_lines.max(1).min(2))
+        .collect::<Vec<_>>();
+    let required_anchors = continuity
+        .get("paths")
+        .and_then(Value::as_object)
+        .map(|paths| {
+            stable_line_items(vec![
+                value_text(paths.get("session_summary")),
+                value_text(paths.get("next_actions")),
+                value_text(paths.get("trace_metadata")),
+                value_text(paths.get("supervisor_state")),
+            ])
+        })
+        .unwrap_or_default();
+    let (current_state, recommended_action, resume_mode, resume_reason) = match state.as_str() {
+        "active" => (
+            "resume_active",
+            if alias_name == "deepinterview" {
+                "resume_interview"
+            } else {
+                "resume_current_task"
+            },
+            "continue-current-task",
+            "live continuity is active",
+        ),
+        "completed" => (
+            "resume_blocked_completed",
+            "start_new_task",
+            "start-new-task",
+            "completed work should stay historical; start a new bounded task",
+        ),
+        "stale" => (
+            "resume_requires_refresh",
+            "refresh_continuity_then_resume",
+            "refresh-continuity",
+            "stale continuity cannot be resumed directly",
+        ),
+        "inconsistent" => (
+            "resume_requires_repair",
+            "repair_continuity_then_resume",
+            "repair-continuity",
+            "continuity artifacts disagree and must be repaired first",
+        ),
+        _ => (
+            "fresh_entry",
+            if alias_name == "deepinterview" {
+                "start_interview"
+            } else {
+                "start_execution"
+            },
+            "fresh-start",
+            "no active continuity is available; enter as a fresh task",
+        ),
+    };
+    let handoff = match alias_name {
+        "autopilot" => json!({
+            "default_mode": "stay-in-autopilot",
+            "rules": [
+                {
+                    "when": "task is still ambiguous",
+                    "target": alias_record_text(alias_record, &["reroute_when_ambiguous"]),
+                    "action": "handoff_for_clarification",
+                },
+                {
+                    "when": "root cause is still unknown",
+                    "target": alias_record_text(alias_record, &["reroute_when_root_cause_unknown"]),
+                    "action": "handoff_for_debugging",
+                }
+            ]
+        }),
+        "deepinterview" => json!({
+            "default_mode": "clarify-in-deepinterview",
+            "rules": [
+                {
+                    "when": "clarity is still below threshold",
+                    "target": "deepinterview",
+                    "action": "stay_and_ask_next_question",
+                },
+                {
+                    "when": "clarity is high enough to execute",
+                    "target": "autopilot",
+                    "action": "handoff_to_execution",
+                }
+            ]
+        }),
+        _ => json!({
+            "default_mode": "stay-in-alias",
+            "rules": []
+        }),
+    };
+    json!({
+        "schema_version": "framework-alias-state-machine-v1",
+        "current_state": current_state,
+        "recommended_action": recommended_action,
+        "resume": {
+            "allowed": can_resume,
+            "mode": resume_mode,
+            "reason": resume_reason,
+            "task": if task.is_empty() { Value::Null } else { Value::String(task) },
+            "phase": if phase.is_empty() { Value::Null } else { Value::String(phase) },
+            "status": if status.is_empty() { Value::Null } else { Value::String(status) },
+        },
+        "handoff": handoff,
+        "next_steps": if state == "active" { next_steps } else { recovery_hints },
+        "required_anchors": required_anchors,
+        "skill_fallback_path": if skill_path.is_empty() { Value::Null } else { Value::String(skill_path.to_string()) },
+    })
+}
+
+fn render_framework_alias_prompt(entry_contract: &Value) -> String {
+    let summary = value_text(entry_contract.get("summary"));
+    let context = entry_contract
+        .get("context")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let route_rules = value_string_list(entry_contract.get("route_rules"));
+    let guardrails = value_string_list(entry_contract.get("guardrails"));
+    let acceptance = value_string_list(entry_contract.get("acceptance"));
+    let next_actions = value_string_list(entry_contract.get("next_actions"));
+    let skill_path = value_text(entry_contract.get("skill_fallback_path"));
+    let mut lines = Vec::new();
+    if !summary.is_empty() {
+        lines.push(summary);
+    }
+    let task = value_text(context.get("task"));
+    let phase = value_text(context.get("phase"));
+    let status = value_text(context.get("status"));
+    if !task.is_empty() || !phase.is_empty() || !status.is_empty() {
+        lines.push(format!(
+            "当前：{} / {} / {}",
+            if task.is_empty() {
+                "未记录"
+            } else {
+                task.as_str()
+            },
+            if phase.is_empty() {
+                "未记录"
+            } else {
+                phase.as_str()
+            },
+            if status.is_empty() {
+                "未记录"
+            } else {
+                status.as_str()
+            },
+        ));
+    }
+    if !route_rules.is_empty() {
+        lines.push(format!("路由：{}", route_rules.join("；")));
+    }
+    if !guardrails.is_empty() {
+        lines.push(format!("硬约束：{}", guardrails.join("；")));
+    }
+    if !acceptance.is_empty() {
+        lines.push(format!("验收：{}", acceptance.join("；")));
+    }
+    if !next_actions.is_empty() {
+        lines.push(format!("下一步：{}", next_actions.join("；")));
+    }
+    if !skill_path.is_empty() {
+        lines.push(format!("不够再开 `{skill_path}`。"));
+    }
+    lines.join("\n")
+}
+
+fn estimate_token_count(text: &str) -> usize {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        0
+    } else {
+        (trimmed.chars().count() / 4).max(1)
+    }
+}
+
+fn load_framework_runtime_view(
+    repo_root: &Path,
+    artifact_root_override: Option<&Path>,
+    task_id_override: Option<&str>,
+) -> FrameworkRuntimeView {
+    let artifact_base = artifact_root_override
+        .map(|path| path.to_path_buf())
+        .unwrap_or_else(|| repo_root.join("artifacts"));
     let mirror_root = artifact_base.join(CURRENT_ARTIFACT_DIR);
     let supervisor_state = normalize_supervisor_state(&read_json_if_exists(
         &repo_root.join(SUPERVISOR_STATE_FILENAME),
     ));
     let pointer = read_json_if_exists(&mirror_root.join(ACTIVE_TASK_POINTER_NAME));
     let active_task_id = {
-        let direct = safe_slug(&value_text(supervisor_state.get("task_id")));
-        if direct.is_empty() {
-            let pointer_task_id = safe_slug(&value_text(pointer.get("task_id")));
-            if pointer_task_id.is_empty() {
-                None
-            } else {
-                Some(pointer_task_id)
-            }
-        } else {
+        let direct = safe_slug(task_id_override.unwrap_or(""));
+        if !direct.is_empty() {
             Some(direct)
+        } else {
+            let direct = safe_slug(&value_text(supervisor_state.get("task_id")));
+            if direct.is_empty() {
+                let pointer_task_id = safe_slug(&value_text(pointer.get("task_id")));
+                if pointer_task_id.is_empty() {
+                    None
+                } else {
+                    Some(pointer_task_id)
+                }
+            } else {
+                Some(direct)
+            }
         }
     };
     let task_root = active_task_id
@@ -1360,8 +1889,7 @@ fn markdown_block(title: &str, items: &[String]) -> String {
     lines.join("\n")
 }
 
-fn read_stable_memory_documents(repo_root: &Path) -> Vec<(String, String)> {
-    let memory_root = repo_root.join(".codex").join("memory");
+fn read_stable_memory_documents_from_root(memory_root: &Path) -> Vec<(String, String)> {
     STABLE_MEMORY_FILENAMES
         .iter()
         .filter_map(|file_name| {
@@ -1373,6 +1901,10 @@ fn read_stable_memory_documents(repo_root: &Path) -> Vec<(String, String)> {
             }
         })
         .collect()
+}
+
+fn read_stable_memory_documents(repo_root: &Path) -> Vec<(String, String)> {
+    read_stable_memory_documents_from_root(&repo_root.join(".codex").join("memory"))
 }
 
 fn stable_document_text(stable_documents: &[(String, String)], file_name: &str) -> String {
@@ -1402,15 +1934,15 @@ fn render_project_memory_bundle(stable_documents: &[(String, String)]) -> String
 fn render_framework_memory_context(
     repo_root: &Path,
     snapshot: &FrameworkRuntimeView,
+    memory_root: &Path,
     query: &str,
     max_items: usize,
     mode: &str,
 ) -> Result<Value, String> {
-    let memory_root = repo_root.join(".codex").join("memory");
     fs::create_dir_all(&memory_root)
         .map_err(|err| format!("create framework memory root failed: {err}"))?;
     refresh_memory_state_if_needed(snapshot, &memory_root)?;
-    let stable_documents = read_stable_memory_documents(repo_root);
+    let stable_documents = read_stable_memory_documents_from_root(memory_root);
     let mut sections = collect_stable_memory_sections(&stable_documents, query, max_items);
     let mut freshness = json!({
         "state": "not-requested",
@@ -1485,10 +2017,11 @@ fn collect_stable_memory_sections(
         return stable_documents
             .iter()
             .filter_map(|(name, text)| {
-                if text.trim().is_empty() {
+                let compact = compact_memory_document_without_query(text, 2);
+                if compact.is_empty() {
                     None
                 } else {
-                    Some((name.clone(), text.trim().to_string()))
+                    Some((name.clone(), compact))
                 }
             })
             .collect();
@@ -1527,6 +2060,28 @@ fn collect_stable_memory_sections(
         return deduped;
     }
     Vec::new()
+}
+
+fn compact_memory_document_without_query(text: &str, max_segments: usize) -> String {
+    let segments = extract_markdown_segments(text);
+    if !segments.is_empty() {
+        return segments
+            .into_iter()
+            .take(max_segments.max(1))
+            .map(|(headings, body)| render_memory_segment(&headings, &body))
+            .collect::<Vec<_>>()
+            .join("\n\n")
+            .trim()
+            .to_string();
+    }
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .take(max_segments.max(1))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
 }
 
 fn build_active_task_memory_section(
@@ -1624,7 +2179,7 @@ fn collect_archive_sections(
             read_text_if_exists(&path)
         };
         let filtered = if query.trim().is_empty() {
-            text.trim().to_string()
+            compact_memory_document_without_query(&text, 2)
         } else {
             let mut matches = extract_markdown_segments(&text)
                 .into_iter()
@@ -1978,8 +2533,142 @@ fn build_memory_source_hash(snapshot: &FrameworkRuntimeView) -> String {
     format!("{:x}", hasher.finish())
 }
 
-fn describe_project_local_memory_layout(repo_root: &Path) -> Value {
-    let logical_root = repo_root.join(".codex").join("memory");
+fn resolve_framework_memory_root(repo_root: &Path, memory_root_override: Option<&Path>) -> PathBuf {
+    memory_root_override
+        .map(|path| path.to_path_buf())
+        .unwrap_or_else(|| repo_root.join(".codex").join("memory"))
+}
+
+fn current_local_date() -> String {
+    Local::now().format("%Y-%m-%d").to_string()
+}
+
+fn move_to_archive(source: &Path, destination: &Path) -> Result<PathBuf, String> {
+    let mut target = destination.to_path_buf();
+    if target.exists() {
+        let suffix = current_local_timestamp().replace(':', "").replace('+', "_");
+        let stem = target
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("archive");
+        let ext = target
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
+        let file_name = if ext.is_empty() {
+            format!("{stem}-{suffix}")
+        } else {
+            format!("{stem}-{suffix}.{ext}")
+        };
+        target = target.with_file_name(file_name);
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|err| format!("create archive parent failed: {err}"))?;
+    }
+    fs::rename(source, &target).map_err(|err| format!("move archive surface failed: {err}"))?;
+    Ok(target)
+}
+
+fn archive_legacy_memory_surfaces(memory_root: &Path) -> Result<(), String> {
+    let archive_root = memory_root
+        .join("archive")
+        .join(format!("pre-cutover-{}", current_local_date()));
+    let legacy_memory_auto = memory_root.join("MEMORY_AUTO.md");
+    if legacy_memory_auto.exists() {
+        move_to_archive(&legacy_memory_auto, &archive_root.join("MEMORY_AUTO.md"))?;
+    }
+    let sessions_dir = memory_root.join("sessions");
+    if sessions_dir.exists() {
+        move_to_archive(&sessions_dir, &archive_root.join("sessions"))?;
+    }
+    Ok(())
+}
+
+fn default_memory_md(repo_root: &Path) -> String {
+    [
+        "# 项目长期记忆",
+        "",
+        "_本文件沉淀跨会话稳定的项目事实、决策与约定。当前任务态以 continuity artifacts 为准；历史/debug 归档到 `memory/archive/`。_",
+        "",
+        "## 项目身份",
+        "",
+        &format!("- **仓库**: `{}`", repo_root.display()),
+        "- **闭环事实源**: `artifacts/current/<task_id>/` + `artifacts/current/active_task.json` + `.supervisor_state.json`",
+        "- **默认召回策略**: 稳定层优先，仅在 query 明确命中 active task 且 freshness gate 通过时追加当前任务态",
+        "- **Artifact 分层**: `artifacts/bootstrap/` / `artifacts/ops/memory_automation/` / `artifacts/evidence/` / `artifacts/scratch/`",
+        "",
+    ]
+    .join("\n")
+        + "\n"
+}
+
+fn default_runbooks() -> String {
+    [
+        "# runbooks",
+        "",
+        "## 标准操作",
+        "",
+        "- 统一维护入口：python3 scripts/run_memory_automation.py --workspace <workspace>",
+        "- 需要迁移旧 artifact 布局时显式执行：python3 scripts/run_memory_automation.py --workspace <workspace> --apply-artifact-migrations",
+        "- 合并稳定记忆：python3 scripts/consolidate_memory.py --workspace <workspace>",
+        "- 召回上下文：python3 scripts/retrieve_memory.py --workspace <workspace> --mode stable|active|history|debug --topic <关键词>",
+        "- 生命周期收口：python3 scripts/router_rs_runner.py --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4",
+        "- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。",
+        "",
+    ]
+    .join("\n")
+        + "\n"
+}
+
+fn ensure_framework_memory_seeded(
+    repo_root: &Path,
+    snapshot: &FrameworkRuntimeView,
+    memory_root: &Path,
+    artifact_root_override: Option<&Path>,
+) -> Result<(Vec<String>, String), String> {
+    fs::create_dir_all(memory_root)
+        .map_err(|err| format!("create framework memory root failed: {err}"))?;
+    let memory_md_path = memory_root.join("MEMORY.md");
+    if memory_md_path.is_file() || artifact_root_override.is_some() {
+        return Ok((Vec::new(), String::new()));
+    }
+    archive_legacy_memory_surfaces(memory_root)?;
+    let mut changed_files = Vec::new();
+    let defaults = [
+        ("MEMORY.md", default_memory_md(repo_root)),
+        ("preferences.md", "# preferences\n".to_string()),
+        ("decisions.md", "# decisions\n".to_string()),
+        ("lessons.md", "# lessons\n".to_string()),
+        ("runbooks.md", default_runbooks()),
+    ];
+    for (file_name, fallback_text) in defaults {
+        let path = memory_root.join(file_name);
+        let text = {
+            let existing = read_text_if_exists(&path);
+            if existing.trim().is_empty() {
+                fallback_text
+            } else {
+                existing
+            }
+        };
+        if write_text_if_changed(&path, &text)? {
+            changed_files.push(path.display().to_string());
+        }
+    }
+    let state_path = memory_root.join(MEMORY_STATE_FILENAME);
+    let state_text = serde_json::to_string_pretty(&build_memory_state(snapshot))
+        .map_err(|err| format!("serialize memory state failed: {err}"))?;
+    if write_text_if_changed(&state_path, &(state_text + "\n"))? {
+        changed_files.push(state_path.display().to_string());
+    }
+    Ok((
+        changed_files,
+        "memory_workspace was empty; bridge ran one-shot consolidation".to_string(),
+    ))
+}
+
+fn describe_project_local_memory_layout(memory_root: &Path) -> Value {
+    let logical_root = memory_root.to_path_buf();
     let physical_root = logical_root
         .canonicalize()
         .unwrap_or_else(|_| logical_root.clone());
@@ -1991,8 +2680,8 @@ fn describe_project_local_memory_layout(repo_root: &Path) -> Value {
     })
 }
 
-fn describe_continuity_layout(repo_root: &Path) -> Value {
-    let current_root = repo_root.join("artifacts").join(CURRENT_ARTIFACT_DIR);
+fn describe_continuity_layout(repo_root: &Path, artifact_base: &Path) -> Value {
+    let current_root = artifact_base.join(CURRENT_ARTIFACT_DIR);
     json!({
         "task_scoped_current": {
             "template": current_root.join("<task_id>").display().to_string(),
@@ -2012,10 +2701,10 @@ fn describe_continuity_layout(repo_root: &Path) -> Value {
             "trace_metadata": current_root.join(TRACE_METADATA_FILENAME).display().to_string(),
         },
         "artifact_lanes": {
-            "bootstrap": repo_root.join("artifacts").join("bootstrap").join("<task_id>").display().to_string(),
-            "ops_memory_automation": repo_root.join("artifacts").join("ops").join("memory_automation").join("<run_id>").display().to_string(),
-            "evidence": repo_root.join("artifacts").join("evidence").join("<task_id>").display().to_string(),
-            "scratch": repo_root.join("artifacts").join("scratch").join("<run_id>").display().to_string(),
+            "bootstrap": artifact_base.join("bootstrap").join("<task_id>").display().to_string(),
+            "ops_memory_automation": artifact_base.join("ops").join("memory_automation").join("<run_id>").display().to_string(),
+            "evidence": artifact_base.join("evidence").join("<task_id>").display().to_string(),
+            "scratch": artifact_base.join("scratch").join("<run_id>").display().to_string(),
         },
         "sync_responsibility": "Supervisor writes task-scoped continuity under artifacts/current/<task_id>/ and keeps root plus artifacts/current compatibility mirrors aligned to the same task. artifacts/current/ should contain only the active-task pointer, four mirror files, and task-scoped continuity directories; bootstrap, ops, evidence, and scratch belong elsewhere.",
     })

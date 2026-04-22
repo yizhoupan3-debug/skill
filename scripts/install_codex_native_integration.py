@@ -9,6 +9,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 if __package__ in {None, ""}:
@@ -18,7 +19,10 @@ if __package__ in {None, ""}:
 from codex_agno_runtime.runtime_registry import primary_plugin_record, workspace_bootstrap_defaults
 
 from scripts.default_bootstrap import resolve_bootstrap_path, run_default_bootstrap
-from scripts.materialize_cli_host_entrypoints import CLAUDE_REFRESH_COMMAND
+from scripts.materialize_cli_host_entrypoints import (
+    CLAUDE_REFRESH_COMMAND,
+    write_host_entrypoint_template,
+)
 from scripts.host_integration_rs import run_host_integration_rs
 from scripts.memory_support import (
     bootstrap_artifact_root,
@@ -46,6 +50,7 @@ DEFAULT_TUI_STATUS_ITEMS = (
     "context-used",
     "fast-mode",
 )
+PERSONAL_PLUGIN_LIVE_PROJECTION_EXCLUDES = frozenset({"skills", ".mcp.json"})
 FRAMEWORK_SERVER_PATTERN = re.compile(r"(?ms)^\[mcp_servers\.framework-mcp\]\n.*?(?=^\[|\Z)")
 OPENAI_DEVELOPER_DOCS_SERVER_PATTERN = re.compile(r"(?ms)^\[mcp_servers\.openaiDeveloperDocs\]\n.*?(?=^\[|\Z)")
 
@@ -221,19 +226,35 @@ def ensure_tui_status_line(
     return write_text_if_changed(config_path, updated)
 
 
-def sync_directory(source: Path, destination: Path) -> bool:
+def skill_bridge_source_path(repo_root: Path) -> Path:
+    """Return the canonical shared skill source for this repository."""
+
+    skill_bridge = workspace_bootstrap_defaults(repo_root=repo_root).get("skill_bridge", {})
+    source_rel = str(skill_bridge.get("source_rel", "skills"))
+    return (repo_root / source_rel).resolve()
+
+
+def sync_directory(
+    source: Path,
+    destination: Path,
+    *,
+    skip_names: set[str] | frozenset[str] | None = None,
+) -> bool:
     """Mirror one directory tree into another."""
 
     if not source.is_dir():
         raise FileNotFoundError(f"Plugin source directory not found: {source}")
 
     changed = False
+    skipped = skip_names or set()
     destination.mkdir(parents=True, exist_ok=True)
 
     source_children = {item.name: item for item in source.iterdir()}
     destination_children = {item.name: item for item in destination.iterdir()}
 
     for stale_name, stale_path in destination_children.items():
+        if stale_name in skipped:
+            continue
         if stale_name in source_children:
             continue
         changed = True
@@ -243,9 +264,11 @@ def sync_directory(source: Path, destination: Path) -> bool:
             stale_path.unlink()
 
     for name, source_path in source_children.items():
+        if name in skipped:
+            continue
         destination_path = destination / name
         if source_path.is_dir():
-            changed = sync_directory(source_path, destination_path) or changed
+            changed = sync_directory(source_path, destination_path, skip_names=skip_names) or changed
             continue
         source_bytes = source_path.read_bytes()
         destination_bytes = destination_path.read_bytes() if destination_path.is_file() else None
@@ -258,24 +281,13 @@ def sync_directory(source: Path, destination: Path) -> bool:
     return changed
 
 
-def sync_personal_plugin_bundle(repo_root: Path, plugin_root: Path = HOME_PLUGIN_ROOT) -> bool:
-    """Copy the repo-local plugin bundle into the user's Codex plugin directory."""
-
-    source_rel = str(primary_plugin_record(repo_root=repo_root).get("source_rel", f"plugins/{PLUGIN_NAME}"))
-    source = repo_root / source_rel
-    return sync_directory(source, plugin_root)
-
-
-def _ensure_home_skills_link(
-    repo_root: Path,
+def _ensure_directory_symlink(
+    source: Path,
     *,
     target_path: Path,
 ) -> bool:
-    """Ensure one host skill directory points at the repository skill library."""
+    """Ensure one directory path is a symlink to the shared source tree."""
 
-    skill_bridge = workspace_bootstrap_defaults(repo_root=repo_root).get("skill_bridge", {})
-    source_rel = str(skill_bridge.get("source_rel", "skills"))
-    source = (repo_root / source_rel).resolve()
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
     if target_path.is_symlink():
@@ -294,6 +306,16 @@ def _ensure_home_skills_link(
 
     target_path.symlink_to(source, target_is_directory=True)
     return True
+
+
+def _ensure_home_skills_link(
+    repo_root: Path,
+    *,
+    target_path: Path,
+) -> bool:
+    """Ensure one host skill directory points at the repository skill library."""
+
+    return _ensure_directory_symlink(skill_bridge_source_path(repo_root), target_path=target_path)
 
 
 def ensure_home_codex_skills_link(
@@ -322,6 +344,45 @@ def ensure_home_claude_refresh_command(
     """Ensure the global Claude refresh command matches the repo canonical text."""
 
     return write_text_if_changed(command_path, CLAUDE_REFRESH_COMMAND)
+
+
+def build_personal_plugin_mcp_payload(repo_root: Path) -> dict[str, Any]:
+    """Build the home-plugin MCP payload with stable absolute repo pointers."""
+
+    resolved_repo_root = repo_root.resolve()
+    browser_script = (resolved_repo_root / "tools" / "browser-mcp" / "scripts" / "start_browser_mcp.sh").resolve()
+    return {
+        "mcpServers": {
+            "framework-mcp": {
+                "command": "python3",
+                "args": ["-m", "scripts.framework_mcp"],
+                "cwd": str(resolved_repo_root),
+            },
+            "browser-mcp": {
+                "command": "bash",
+                "args": [str(browser_script)],
+                "cwd": str(resolved_repo_root),
+            },
+            "openaiDeveloperDocs": {
+                "type": "http",
+                "url": OPENAI_DEVELOPER_DOCS_MCP_URL,
+            },
+        }
+    }
+
+
+def ensure_personal_plugin_live_projection(
+    repo_root: Path,
+    plugin_root: Path = HOME_PLUGIN_ROOT,
+) -> bool:
+    """Install the home plugin as a thin live projection onto repo-owned skills/runtime."""
+
+    source_rel = str(primary_plugin_record(repo_root=repo_root).get("source_rel", f"plugins/{PLUGIN_NAME}"))
+    source = repo_root / source_rel
+    changed = sync_directory(source, plugin_root, skip_names=PERSONAL_PLUGIN_LIVE_PROJECTION_EXCLUDES)
+    changed = _ensure_directory_symlink(skill_bridge_source_path(repo_root), target_path=plugin_root / "skills") or changed
+    changed = write_json_if_changed(plugin_root / ".mcp.json", build_personal_plugin_mcp_payload(repo_root)) or changed
+    return changed
 
 
 def build_personal_marketplace_payload(
@@ -416,8 +477,8 @@ def install_native_integration(
     retire_framework_overlay_file: bool = True,
     install_personal_plugin: bool = True,
     install_personal_marketplace_entry: bool = True,
-    install_home_codex_skills_link: bool = False,
-    install_home_claude_skills_link: bool = False,
+    install_home_codex_skills_link: bool = True,
+    install_home_claude_skills_link: bool = True,
     install_home_claude_refresh_command: bool = True,
     install_home_claude_mcp_sync: bool = True,
     install_default_bootstrap: bool = True,
@@ -426,54 +487,57 @@ def install_native_integration(
     """Rust-owned installer wrapper kept behind the legacy Python API."""
 
     resolved_repo_root = (repo_root or get_repo_root()).resolve()
-    command = [
-        "install-native-integration",
-        "--template-root",
-        str(Path(__file__).resolve().parents[1]),
-        "--repo-root",
-        str(resolved_repo_root),
-        "--home-config-path",
-        str(home_config_path),
-        "--home-plugin-root",
-        str(home_plugin_root),
-        "--home-marketplace-path",
-        str(home_marketplace_path),
-        "--home-codex-skills-path",
-        str(home_codex_skills_path),
-        "--home-claude-skills-path",
-        str(home_claude_skills_path),
-        "--home-claude-refresh-path",
-        str(home_claude_refresh_path),
-        "--home-claude-mcp-config-path",
-        str(home_claude_mcp_config_path),
-        "--project-instructions-path",
-        str(project_instructions_path),
-    ]
-    if bootstrap_output_dir is not None:
-        command.extend(["--bootstrap-output-dir", str(bootstrap_output_dir)])
-    if not install_browser_mcp:
-        command.append("--skip-browser-mcp")
-    if not install_framework_mcp:
-        command.append("--skip-framework-mcp")
-    if not install_openai_developer_docs_mcp:
-        command.append("--skip-openai-developer-docs-mcp")
-    if not retire_framework_overlay_file:
-        command.append("--skip-framework-overlay-retirement")
-    if not install_personal_plugin:
-        command.append("--skip-personal-plugin")
-    if not install_personal_marketplace_entry:
-        command.append("--skip-personal-marketplace")
-    if install_home_codex_skills_link:
-        command.append("--install-home-codex-skills-link")
-    if install_home_claude_skills_link:
-        command.append("--install-home-claude-skills-link")
-    if not install_home_claude_refresh_command:
-        command.append("--skip-home-claude-refresh")
-    if not install_home_claude_mcp_sync:
-        command.append("--skip-home-claude-mcp-sync")
-    if not install_default_bootstrap:
-        command.append("--skip-default-bootstrap")
-    return run_host_integration_rs(*command)
+    with TemporaryDirectory() as temp_dir:
+        template_root = Path(temp_dir)
+        write_host_entrypoint_template(template_root)
+        command = [
+            "install-native-integration",
+            "--template-root",
+            str(template_root),
+            "--repo-root",
+            str(resolved_repo_root),
+            "--home-config-path",
+            str(home_config_path),
+            "--home-plugin-root",
+            str(home_plugin_root),
+            "--home-marketplace-path",
+            str(home_marketplace_path),
+            "--home-codex-skills-path",
+            str(home_codex_skills_path),
+            "--home-claude-skills-path",
+            str(home_claude_skills_path),
+            "--home-claude-refresh-path",
+            str(home_claude_refresh_path),
+            "--home-claude-mcp-config-path",
+            str(home_claude_mcp_config_path),
+            "--project-instructions-path",
+            str(project_instructions_path),
+        ]
+        if bootstrap_output_dir is not None:
+            command.extend(["--bootstrap-output-dir", str(bootstrap_output_dir)])
+        if not install_browser_mcp:
+            command.append("--skip-browser-mcp")
+        if not install_framework_mcp:
+            command.append("--skip-framework-mcp")
+        if not install_openai_developer_docs_mcp:
+            command.append("--skip-openai-developer-docs-mcp")
+        if not retire_framework_overlay_file:
+            command.append("--skip-framework-overlay-retirement")
+        if not install_personal_plugin:
+            command.append("--skip-personal-plugin")
+        if not install_personal_marketplace_entry:
+            command.append("--skip-personal-marketplace")
+        if not install_home_codex_skills_link:
+            command.append("--skip-home-codex-skills-link")
+        if not install_home_claude_skills_link:
+            command.append("--skip-home-claude-skills-link")
+        if not install_home_claude_refresh_command:
+            command.append("--skip-home-claude-refresh")
+        if not install_home_claude_mcp_sync:
+            command.append("--skip-home-claude-mcp-sync")
+        if not install_default_bootstrap:
+            command.append("--skip-default-bootstrap")
+        return run_host_integration_rs(*command)
 
 
 def main() -> int:
@@ -494,8 +558,6 @@ def main() -> int:
     parser.add_argument("--skip-framework-overlay-retirement", action="store_true")
     parser.add_argument("--skip-personal-plugin", action="store_true")
     parser.add_argument("--skip-personal-marketplace", action="store_true")
-    parser.add_argument("--install-home-codex-skills-link", action="store_true")
-    parser.add_argument("--install-home-claude-skills-link", action="store_true")
     parser.add_argument("--skip-home-codex-skills-link", action="store_true")
     parser.add_argument("--skip-home-claude-skills-link", action="store_true")
     parser.add_argument("--skip-home-claude-refresh", action="store_true")
@@ -519,12 +581,8 @@ def main() -> int:
         retire_framework_overlay_file=not args.skip_framework_overlay_retirement,
         install_personal_plugin=not args.skip_personal_plugin,
         install_personal_marketplace_entry=not args.skip_personal_marketplace,
-        install_home_codex_skills_link=(
-            args.install_home_codex_skills_link and not args.skip_home_codex_skills_link
-        ),
-        install_home_claude_skills_link=(
-            args.install_home_claude_skills_link and not args.skip_home_claude_skills_link
-        ),
+        install_home_codex_skills_link=not args.skip_home_codex_skills_link,
+        install_home_claude_skills_link=not args.skip_home_claude_skills_link,
         install_home_claude_refresh_command=not args.skip_home_claude_refresh,
         install_home_claude_mcp_sync=not args.skip_home_claude_mcp_sync,
         install_default_bootstrap=not args.skip_default_bootstrap,

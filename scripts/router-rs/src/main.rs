@@ -28,9 +28,9 @@ use framework_profile::{
     load_framework_profile,
 };
 use framework_runtime::{
-    build_framework_contract_summary_envelope, build_framework_memory_recall_envelope,
-    build_framework_recap_envelope, build_framework_refresh_payload,
-    build_framework_runtime_snapshot_envelope,
+    build_framework_alias_envelope, build_framework_contract_summary_envelope,
+    build_framework_memory_recall_envelope, build_framework_recap_envelope,
+    build_framework_refresh_payload, build_framework_runtime_snapshot_envelope,
     resolve_repo_root_arg,
 };
 use session_supervisor::handle_session_supervisor_operation;
@@ -70,6 +70,7 @@ const TRACE_DESCRIPTOR_AUTHORITY: &str = "rust-runtime-trace-descriptor";
 const CHECKPOINT_RESUME_MANIFEST_SCHEMA_VERSION: &str = "router-rs-checkpoint-resume-manifest-v1";
 const CHECKPOINT_RESUME_MANIFEST_AUTHORITY: &str = "rust-runtime-checkpoint-manifest";
 const FRAMEWORK_REFRESH_SCHEMA_VERSION: &str = "router-rs-framework-refresh-v1";
+const FRAMEWORK_ALIAS_SCHEMA_VERSION: &str = "router-rs-framework-alias-v1";
 const FRAMEWORK_REFRESH_CONFIRMATION: &str = "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。";
 const TRANSPORT_BINDING_WRITE_SCHEMA_VERSION: &str = "router-rs-transport-binding-write-v1";
 const TRANSPORT_BINDING_WRITE_AUTHORITY: &str = "rust-runtime-transport-binding-writer";
@@ -189,6 +190,12 @@ struct Cli {
     #[arg(long)]
     framework_refresh_json: bool,
     #[arg(long)]
+    framework_alias_json: bool,
+    #[arg(long)]
+    framework_alias: Option<String>,
+    #[arg(long)]
+    compact_output: bool,
+    #[arg(long)]
     profile_json: bool,
     #[arg(long)]
     profile_artifacts_json: bool,
@@ -198,10 +205,16 @@ struct Cli {
     claude_hook_command: Option<String>,
     #[arg(long)]
     claude_hook_audit_command: Option<String>,
-    #[arg(long, default_value_t = 6)]
+    #[arg(long, default_value_t = 4)]
     claude_hook_max_lines: usize,
     #[arg(long, default_value = "stable")]
     framework_memory_mode: String,
+    #[arg(long)]
+    framework_memory_root: Option<PathBuf>,
+    #[arg(long)]
+    framework_artifact_source_dir: Option<PathBuf>,
+    #[arg(long)]
+    framework_task_id: Option<String>,
     #[arg(long)]
     include_legacy_alias_artifact: bool,
     #[arg(long)]
@@ -719,6 +732,8 @@ fn main() -> Result<(), String> {
         args.framework_contract_summary_json,
         args.framework_memory_recall_json,
         args.framework_recap_json,
+        args.framework_refresh_json,
+        args.framework_alias_json,
         args.profile_json,
         args.profile_artifacts_json,
         args.route_report_json,
@@ -731,7 +746,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --route-report-json, --profile-json, and --profile-artifacts-json"
+            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-recap-json, --framework-refresh-json, --framework-alias-json, --route-report-json, --profile-json, and --profile-artifacts-json"
                 .to_string(),
         );
     }
@@ -1084,6 +1099,9 @@ fn main() -> Result<(), String> {
                 args.query.as_deref().unwrap_or(""),
                 args.limit,
                 &args.framework_memory_mode,
+                args.framework_memory_root.as_deref(),
+                args.framework_artifact_source_dir.as_deref(),
+                args.framework_task_id.as_deref(),
             )?)
             .map_err(|err| format!("serialize output failed: {err}"))?
         );
@@ -1105,7 +1123,8 @@ fn main() -> Result<(), String> {
 
     if args.framework_refresh_json {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
-        let refresh_payload = build_framework_refresh_payload(&repo_root, args.claude_hook_max_lines)?;
+        let refresh_payload =
+            build_framework_refresh_payload(&repo_root, args.claude_hook_max_lines)?;
         let prompt = refresh_payload
             .get("prompt")
             .and_then(Value::as_str)
@@ -1127,6 +1146,24 @@ fn main() -> Result<(), String> {
                 "authority": framework_runtime::FRAMEWORK_RUNTIME_AUTHORITY,
                 "refresh": Value::Object(refresh),
             }))
+            .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.framework_alias_json {
+        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+        let alias_name = args.framework_alias.as_deref().ok_or_else(|| {
+            "--framework-alias is required with --framework-alias-json".to_string()
+        })?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_framework_alias_envelope(
+                &repo_root,
+                alias_name,
+                args.claude_hook_max_lines,
+                args.compact_output,
+            )?)
             .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());
@@ -1475,6 +1512,7 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
         "framework_contract_summary" => dispatch_stdio_framework_contract_summary(payload),
         "framework_memory_recall" => dispatch_stdio_framework_memory_recall(payload),
         "framework_recap" => dispatch_stdio_framework_recap(payload),
+        "framework_alias" => dispatch_stdio_framework_alias(payload),
         _ => Err(format!("unsupported stdio operation: {op}")),
     }
 }
@@ -1604,11 +1642,23 @@ fn dispatch_stdio_framework_memory_recall(payload: Value) -> Result<Value, Strin
         .get("mode")
         .and_then(Value::as_str)
         .unwrap_or("stable");
+    let memory_root = payload
+        .get("memory_root")
+        .and_then(Value::as_str)
+        .map(Path::new);
+    let artifact_source_dir = payload
+        .get("artifact_source_dir")
+        .and_then(Value::as_str)
+        .map(Path::new);
+    let task_id = payload.get("task_id").and_then(Value::as_str);
     serde_json::to_value(build_framework_memory_recall_envelope(
         Path::new(&repo_root),
         query,
         max_items,
         mode,
+        memory_root,
+        artifact_source_dir,
+        task_id,
     )?)
     .map_err(|err| format!("serialize framework memory recall output failed: {err}"))
 }
@@ -1625,6 +1675,27 @@ fn dispatch_stdio_framework_recap(payload: Value) -> Result<Value, String> {
         max_lines,
     )?)
     .map_err(|err| format!("serialize framework recap output failed: {err}"))
+}
+
+fn dispatch_stdio_framework_alias(payload: Value) -> Result<Value, String> {
+    let repo_root = required_non_empty_string(&payload, "repo_root", "stdio framework alias")?;
+    let alias_name = required_non_empty_string(&payload, "alias", "stdio framework alias")?;
+    let max_lines = payload
+        .get("max_lines")
+        .and_then(Value::as_u64)
+        .map(|value| value as usize)
+        .unwrap_or(4);
+    let compact = payload
+        .get("compact")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    serde_json::to_value(build_framework_alias_envelope(
+        Path::new(&repo_root),
+        &alias_name,
+        max_lines,
+        compact,
+    )?)
+    .map_err(|err| format!("serialize framework alias output failed: {err}"))
 }
 
 fn dispatch_stdio_compile_profile_bundle(payload: Value) -> Result<Value, String> {
@@ -6844,7 +6915,8 @@ mod tests {
 
         let clipboard_path = repo_root.join("clipboard.txt");
         std::env::set_var("ROUTER_RS_CLIPBOARD_PATH", &clipboard_path);
-        let refresh = build_framework_refresh_payload(&repo_root, 6).expect("build refresh payload");
+        let refresh =
+            build_framework_refresh_payload(&repo_root, 6).expect("build refresh payload");
         let prompt = refresh
             .get("prompt")
             .and_then(Value::as_str)
@@ -6859,6 +6931,90 @@ mod tests {
         assert!(copied.contains("按既定串并行分工直接开始执行。"));
         assert!(!copied.contains("当前上下文："));
         assert!(!copied.contains("必须先做的下一步："));
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_alias_builds_compact_autopilot_payload() {
+        let repo_root = std::env::temp_dir().join(format!(
+            "router-rs-alias-fixture-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock before epoch")
+                .as_nanos()
+        ));
+        let task_root = repo_root
+            .join("artifacts")
+            .join("current")
+            .join("active-bootstrap-repair-20260418210000");
+        fs::create_dir_all(&task_root).expect("create task root");
+        fs::create_dir_all(repo_root.join("artifacts").join("current"))
+            .expect("create current root");
+        fs::write(
+            task_root.join("SESSION_SUMMARY.md"),
+            "- task: active bootstrap repair\n- phase: implementation\n- status: in_progress\n",
+        )
+        .expect("write session summary");
+        fs::write(
+            task_root.join("NEXT_ACTIONS.json"),
+            r#"{"next_actions":["Patch classifier","Run MCP regression tests"]}"#,
+        )
+        .expect("write next actions");
+        fs::write(task_root.join("EVIDENCE_INDEX.json"), r#"{"artifacts":[]}"#)
+            .expect("write evidence index");
+        fs::write(
+            task_root.join("TRACE_METADATA.json"),
+            r#"{"task":"active bootstrap repair","matched_skills":["execution-controller-coding"]}"#,
+        )
+        .expect("write trace metadata");
+        fs::write(
+            repo_root.join("artifacts").join("current").join("active_task.json"),
+            r#"{"task_id":"active-bootstrap-repair-20260418210000","task":"active bootstrap repair"}"#,
+        )
+        .expect("write active task");
+        fs::write(
+            repo_root.join(".supervisor_state.json"),
+            r#"{
+                "task_id":"active-bootstrap-repair-20260418210000",
+                "task_summary":"active bootstrap repair",
+                "active_phase":"implementation",
+                "verification":{"verification_status":"in_progress"},
+                "continuity":{"story_state":"active","resume_allowed":true},
+                "execution_contract":{"acceptance_criteria":["completed tasks never appear as current execution"]}
+            }"#,
+        )
+        .expect("write supervisor state");
+
+        let payload = build_framework_alias_envelope(&repo_root, "autopilot", 4, false)
+            .expect("build alias payload");
+        let alias = payload
+            .get("alias")
+            .and_then(Value::as_object)
+            .expect("alias payload");
+        let prompt = alias
+            .get("entry_prompt")
+            .and_then(Value::as_str)
+            .expect("entry prompt");
+
+        assert_eq!(
+            payload["schema_version"],
+            json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
+        );
+        assert_eq!(alias["name"], json!("autopilot"));
+        assert_eq!(alias["host_entrypoint"], json!("/autopilot"));
+        assert_eq!(alias["compact"], json!(false));
+        assert!(prompt.contains("进入 autopilot"));
+        assert!(prompt.contains("本地 Rust"));
+        assert!(prompt.contains("路由："));
+        assert_eq!(
+            alias["state_machine"]["current_state"],
+            json!("resume_active")
+        );
+        assert_eq!(
+            alias["entry_contract"]["route_rules"][0],
+            json!("模糊需求 -> `idea-to-plan`")
+        );
 
         let _ = fs::remove_dir_all(&repo_root);
     }

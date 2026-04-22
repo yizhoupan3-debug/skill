@@ -17,6 +17,7 @@ DEFAULT_BOOTSTRAP_PATH="$REPO_ROOT/artifacts/bootstrap/framework_default_bootstr
 PLUGIN_NAME="skill-framework-native"
 HOME_PLUGIN_ROOT="$HOME/.codex/plugins/$PLUGIN_NAME"
 HOME_MARKETPLACE_PATH="$HOME/.agents/plugins/marketplace.json"
+HOME_CODEX_SKILLS_PATH="$HOME/.codex/skills"
 HOME_CLAUDE_SKILLS_PATH="$HOME/.claude/skills"
 HOME_CLAUDE_REFRESH_PATH="$HOME/.claude/commands/refresh.md"
 HOME_CLAUDE_MCP_CONFIG_PATH="$HOME/.claude.json"
@@ -160,8 +161,29 @@ if openai_docs.get("url") != "https://developers.openai.com/mcp":
 PY
 }
 
-skills_link_matches_repo() {
+resolve_shared_skills_root() {
+  python3 - "$REPO_ROOT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+repo_root = Path(sys.argv[1]).resolve()
+registry_path = repo_root / "configs" / "framework" / "RUNTIME_REGISTRY.json"
+source_rel = "skills"
+if registry_path.is_file():
+    payload = json.loads(registry_path.read_text(encoding="utf-8"))
+    source_rel = (
+        payload.get("workspace_bootstrap_defaults", {})
+        .get("skill_bridge", {})
+        .get("source_rel", "skills")
+    )
+print((repo_root / source_rel).resolve())
+PY
+}
+
+skills_link_matches_source() {
   local target_path="$1"
+  local expected_source="$2"
 
   if [ ! -L "$target_path" ]; then
     return 1
@@ -170,8 +192,50 @@ skills_link_matches_repo() {
   local current_target resolved_target resolved_source
   current_target="$(readlink "$target_path")"
   resolved_target="$(cd "$(dirname "$target_path")" && cd "$(dirname "$current_target")" && pwd)/$(basename "$current_target")"
-  resolved_source="$(cd "$SKILLS_ROOT" && pwd)"
+  resolved_source="$(cd "$expected_source" && pwd)"
   [ "$resolved_target" = "$resolved_source" ]
+}
+
+plugin_mcp_matches_contract() {
+  local config_path="$1"
+  if [ ! -f "$config_path" ]; then
+    return 1
+  fi
+
+  python3 - "$config_path" "$REPO_ROOT" <<'PY' >/dev/null
+import json
+import sys
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+repo_root = str(Path(sys.argv[2]).resolve())
+browser_script = str((Path(sys.argv[2]).resolve() / "tools/browser-mcp/scripts/start_browser_mcp.sh").resolve())
+payload = json.loads(config_path.read_text(encoding="utf-8"))
+servers = payload.get("mcpServers")
+if not isinstance(servers, dict):
+    raise SystemExit(1)
+browser = servers.get("browser-mcp")
+framework = servers.get("framework-mcp")
+openai_docs = servers.get("openaiDeveloperDocs")
+if not isinstance(browser, dict) or not isinstance(framework, dict) or not isinstance(openai_docs, dict):
+    raise SystemExit(1)
+if framework.get("command") != "python3":
+    raise SystemExit(1)
+if framework.get("args") != ["-m", "scripts.framework_mcp"]:
+    raise SystemExit(1)
+if framework.get("cwd") != repo_root:
+    raise SystemExit(1)
+if browser.get("command") != "bash":
+    raise SystemExit(1)
+if browser.get("args") != [browser_script]:
+    raise SystemExit(1)
+if browser.get("cwd") != repo_root:
+    raise SystemExit(1)
+if openai_docs.get("type") != "http":
+    raise SystemExit(1)
+if openai_docs.get("url") != "https://developers.openai.com/mcp":
+    raise SystemExit(1)
+PY
 }
 
 show_codex_status() {
@@ -180,11 +244,16 @@ show_codex_status() {
   local config_ok="false"
   local bootstrap_ok="false"
   local plugin_ok="false"
+  local plugin_skills_ok="false"
+  local plugin_mcp_ok="false"
   local marketplace_ok="false"
+  local codex_skills_ok="false"
   local claude_skills_ok="false"
   local refresh_ok="false"
   local claude_mcp_ok="false"
   local overlay_ok="false"
+  local shared_skills_root
+  shared_skills_root="$(resolve_shared_skills_root)"
 
   if [ -n "${CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR:-}" ]; then
     case "$CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR" in
@@ -201,7 +270,10 @@ show_codex_status() {
     && grep -Eq '^[[:space:]]*status_line[[:space:]]*=' "$config_path"; then
     config_ok="true"
   fi
-  if skills_link_matches_repo "$HOME_CLAUDE_SKILLS_PATH"; then
+  if skills_link_matches_source "$HOME_CODEX_SKILLS_PATH" "$shared_skills_root"; then
+    codex_skills_ok="true"
+  fi
+  if skills_link_matches_source "$HOME_CLAUDE_SKILLS_PATH" "$shared_skills_root"; then
     claude_skills_ok="true"
   fi
   if bootstrap_payload_matches_contract "$bootstrap_path"; then
@@ -209,6 +281,12 @@ show_codex_status() {
   fi
   if [ -f "$HOME_PLUGIN_ROOT/.codex-plugin/plugin.json" ]; then
     plugin_ok="true"
+  fi
+  if skills_link_matches_source "$HOME_PLUGIN_ROOT/skills" "$shared_skills_root"; then
+    plugin_skills_ok="true"
+  fi
+  if plugin_mcp_matches_contract "$HOME_PLUGIN_ROOT/.mcp.json"; then
+    plugin_mcp_ok="true"
   fi
   if marketplace_has_framework_plugin "$HOME_MARKETPLACE_PATH"; then
     marketplace_ok="true"
@@ -226,14 +304,17 @@ show_codex_status() {
   if [ "$config_ok" = "true" ] \
     && [ "$bootstrap_ok" = "true" ] \
     && [ "$plugin_ok" = "true" ] \
+    && [ "$plugin_skills_ok" = "true" ] \
+    && [ "$plugin_mcp_ok" = "true" ] \
     && [ "$marketplace_ok" = "true" ] \
+    && [ "$codex_skills_ok" = "true" ] \
     && [ "$claude_skills_ok" = "true" ] \
     && [ "$refresh_ok" = "true" ] \
     && [ "$claude_mcp_ok" = "true" ] \
     && [ "$overlay_ok" = "true" ]; then
     echo "  ✓ codex → native integration ready"
   else
-    echo "  ⚠ codex → native integration incomplete (config:$config_ok bootstrap:$bootstrap_ok plugin:$plugin_ok marketplace:$marketplace_ok claude_skills:$claude_skills_ok refresh:$refresh_ok claude_mcp:$claude_mcp_ok overlay:$overlay_ok)"
+    echo "  ⚠ codex → native integration incomplete (config:$config_ok bootstrap:$bootstrap_ok plugin:$plugin_ok plugin_skills:$plugin_skills_ok plugin_mcp:$plugin_mcp_ok marketplace:$marketplace_ok codex_skills:$codex_skills_ok claude_skills:$claude_skills_ok refresh:$refresh_ok claude_mcp:$claude_mcp_ok overlay:$overlay_ok)"
   fi
 }
 

@@ -8,6 +8,6 @@ def test_refresh_skill_stays_available_for_codex_global_entry() -> None:
     assert skill_path.is_file()
     assert "name: refresh" in content
     assert "$refresh" in content
-    assert "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --framework-refresh-json" in content
+    assert "python3 scripts/router_rs_runner.py --framework-refresh-json --claude-hook-max-lines 4" in content
     assert "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。" in content
     assert "manual next-turn execution prompt" not in content
