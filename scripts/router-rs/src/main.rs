@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -159,9 +159,9 @@ struct Cli {
     runtime_metric_record_input_json: Option<String>,
     #[arg(long, default_value = "route-cli")]
     session_id: String,
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value_t = true, action = ArgAction::Set, num_args = 1)]
     allow_overlay: bool,
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value_t = true, action = ArgAction::Set, num_args = 1)]
     first_turn: bool,
 }
 
