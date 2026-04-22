@@ -16,7 +16,11 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-from codex_agno_runtime.execution_kernel import ExecutionKernelRequest, RouterRsExecutionKernel
+from codex_agno_runtime.execution_kernel import (
+    ExecutionKernelRequest,
+    execute_router_rs_request,
+    preview_router_rs_request_prompt,
+)
 from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_BRIDGE_AUTHORITY,
     EXECUTION_KERNEL_BRIDGE_KIND,
@@ -44,6 +48,7 @@ from codex_agno_runtime.execution_kernel_contracts import (
     build_execution_kernel_runtime_metadata,
     build_trace_runtime_metadata,
 )
+from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import RoutingResult, SkillMetadata
 
 
@@ -96,6 +101,13 @@ def _settings() -> SimpleNamespace:
     )
 
 
+def _adapter(settings: SimpleNamespace) -> RustRouteAdapter:
+    return RustRouteAdapter(
+        settings.codex_home,
+        timeout_seconds=settings.rust_router_timeout_seconds,
+    )
+
+
 def test_router_rs_execution_kernel_prefers_release_binary() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         codex_home = Path(tmpdir)
@@ -115,13 +127,14 @@ def test_router_rs_execution_kernel_prefers_release_binary() -> None:
         os.utime(debug_bin, (1_700_000_100, 1_700_000_100))
         os.utime(release_bin, (1_700_000_200, 1_700_000_200))
 
-        kernel = RouterRsExecutionKernel(_settings())  # type: ignore[arg-type]
-        kernel.settings.codex_home = codex_home
-        kernel._rust_adapter.router_dir = router_dir
-        kernel._rust_adapter.release_bin = release_bin
-        kernel._rust_adapter.debug_bin = debug_bin
+        settings = _settings()
+        settings.codex_home = codex_home
+        adapter = _adapter(settings)
+        adapter.router_dir = router_dir
+        adapter.release_bin = release_bin
+        adapter.debug_bin = debug_bin
 
-        assert kernel._rust_adapter._binary_command() == [str(release_bin)]
+        assert adapter._binary_command() == [str(release_bin)]
 
 
 def test_router_rs_execution_kernel_requires_prebuilt_binary_when_missing() -> None:
@@ -131,18 +144,20 @@ def test_router_rs_execution_kernel_requires_prebuilt_binary_when_missing() -> N
         router_dir.mkdir(parents=True)
         (router_dir / "Cargo.toml").write_text("[package]\nname='router-rs'\nversion='0.1.0'\n", encoding="utf-8")
 
-        kernel = RouterRsExecutionKernel(_settings())  # type: ignore[arg-type]
-        kernel.settings.codex_home = codex_home
-        kernel._rust_adapter.router_dir = router_dir
-        kernel._rust_adapter.release_bin = router_dir / "target" / "release" / "router-rs"
-        kernel._rust_adapter.debug_bin = router_dir / "target" / "debug" / "router-rs"
+        settings = _settings()
+        settings.codex_home = codex_home
+        adapter = _adapter(settings)
+        adapter.router_dir = router_dir
+        adapter.release_bin = router_dir / "target" / "release" / "router-rs"
+        adapter.debug_bin = router_dir / "target" / "debug" / "router-rs"
 
         with pytest.raises(RuntimeError, match="requires a prebuilt binary"):
-            kernel._rust_adapter._binary_command()
+            adapter._binary_command()
 
 
 def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
-    kernel = RouterRsExecutionKernel(_settings())  # type: ignore[arg-type]
+    settings = _settings()
+    adapter = _adapter(settings)
 
     def fake_execute(payload):
         return {
@@ -173,9 +188,9 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
             ),
         }
 
-    monkeypatch.setattr(kernel._rust_adapter, "execute", fake_execute)
+    monkeypatch.setattr(adapter, "execute", fake_execute)
 
-    response = asyncio.run(kernel.execute(_request()))
+    response = asyncio.run(execute_router_rs_request(_request(), settings=settings, rust_adapter=adapter))
 
     assert response.live_run is True
     assert response.content == "router-rs content"
@@ -208,8 +223,54 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
     assert response.usage.total_tokens == 34
 
 
+def test_preview_router_rs_request_prompt_uses_dry_run_contract(monkeypatch) -> None:
+    settings = _settings()
+    adapter = _adapter(settings)
+
+    def fake_execute(payload):
+        return {
+            "execution_schema_version": "router-rs-execute-response-v1",
+            "authority": "rust-execution-cli",
+            "session_id": payload["session_id"],
+            "user_id": payload["user_id"],
+            "skill": payload["selected_skill"],
+            "overlay": payload["overlay_skill"],
+            "live_run": False,
+            "content": "",
+            "usage": {
+                "input_tokens": 21,
+                "output_tokens": 0,
+                "total_tokens": 21,
+                "mode": "estimated",
+            },
+            "prompt_preview": "Rust-owned dry-run prompt",
+            "model_id": settings.model_id,
+                "metadata": build_execution_kernel_runtime_metadata(
+                    execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
+                    execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
+                    trace_event_count=payload["trace_event_count"],
+                    trace_output_path=payload["trace_output_path"],
+                    extra_fields={
+                        "execution_mode": "dry_run",
+                        "reason": "Live model execution is disabled; returned a deterministic dry-run payload.",
+                    },
+                ),
+            }
+
+    monkeypatch.setattr(adapter, "execute", fake_execute)
+
+    prompt_preview = preview_router_rs_request_prompt(
+        _request(dry_run=True),
+        settings=settings,
+        rust_adapter=adapter,
+    )
+
+    assert prompt_preview == "Rust-owned dry-run prompt"
+
+
 def test_router_rs_execution_kernel_rejects_missing_steady_state_metadata(monkeypatch) -> None:
-    kernel = RouterRsExecutionKernel(_settings())  # type: ignore[arg-type]
+    settings = _settings()
+    adapter = _adapter(settings)
 
     def fake_execute(payload):
         broken_metadata = _steady_state_kernel_metadata(
@@ -242,14 +303,15 @@ def test_router_rs_execution_kernel_rejects_missing_steady_state_metadata(monkey
             "metadata": broken_metadata,
         }
 
-    monkeypatch.setattr(kernel._rust_adapter, "execute", fake_execute)
+    monkeypatch.setattr(adapter, "execute", fake_execute)
 
     with pytest.raises(RuntimeError, match="execution_kernel_delegate_authority"):
-        asyncio.run(kernel.execute(_request()))
+        asyncio.run(execute_router_rs_request(_request(), settings=settings, rust_adapter=adapter))
 
 
 def test_router_rs_execution_kernel_rejects_legacy_delegate_first_metadata(monkeypatch) -> None:
-    kernel = RouterRsExecutionKernel(_settings())  # type: ignore[arg-type]
+    settings = _settings()
+    adapter = _adapter(settings)
 
     def fake_execute(payload):
         legacy_metadata = _steady_state_kernel_metadata(
@@ -283,10 +345,10 @@ def test_router_rs_execution_kernel_rejects_legacy_delegate_first_metadata(monke
             "metadata": legacy_metadata,
         }
 
-    monkeypatch.setattr(kernel._rust_adapter, "execute", fake_execute)
+    monkeypatch.setattr(adapter, "execute", fake_execute)
 
     with pytest.raises(RuntimeError, match="execution_kernel='router-rs'"):
-        asyncio.run(kernel.execute(_request()))
+        asyncio.run(execute_router_rs_request(_request(), settings=settings, rust_adapter=adapter))
 
 
 def test_execution_kernel_contract_helpers_stay_rust_primary() -> None:

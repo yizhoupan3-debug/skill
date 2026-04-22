@@ -15,32 +15,12 @@ CRATE_ROOT = PROJECT_ROOT / "scripts" / "host-integration-rs"
 MANIFEST_PATH = CRATE_ROOT / "Cargo.toml"
 RELEASE_BINARY_PATH = CRATE_ROOT / "target" / "release" / "host-integration-rs"
 
-
-def _rust_sources() -> list[Path]:
-    return [
-        MANIFEST_PATH,
-        CRATE_ROOT / "Cargo.lock",
-        *sorted((CRATE_ROOT / "src").glob("**/*.rs")),
-    ]
-
-
-def _binary_is_fresh(binary_path: Path) -> bool:
-    if not binary_path.is_file():
-        return False
-    binary_mtime = binary_path.stat().st_mtime
-    return all(not source.exists() or source.stat().st_mtime <= binary_mtime for source in _rust_sources())
-
-
 def _ensure_binary() -> Path:
-    if _binary_is_fresh(RELEASE_BINARY_PATH):
+    if RELEASE_BINARY_PATH.is_file():
         return RELEASE_BINARY_PATH
-    subprocess.run(
-        ["cargo", "build", "--release", "--quiet", "--manifest-path", str(MANIFEST_PATH)],
-        cwd=PROJECT_ROOT,
-        check=True,
-        text=True,
+    raise RuntimeError(
+        "host-integration-rs requires a prebuilt release binary; build scripts/host-integration-rs before invoking the Python bridge."
     )
-    return RELEASE_BINARY_PATH
 
 
 def run_host_integration_rs(*args: str) -> dict[str, Any]:

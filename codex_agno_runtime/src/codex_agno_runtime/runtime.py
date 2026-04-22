@@ -95,7 +95,6 @@ class CodexAgnoRuntime:
         )
         self.execution_service = ExecutionEnvironmentService(
             settings,
-            self.router_service.prompt_builder,
             max_background_jobs=_MAX_BACKGROUND_JOBS,
             background_job_timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
             control_plane_descriptor=self.control_plane_descriptor,

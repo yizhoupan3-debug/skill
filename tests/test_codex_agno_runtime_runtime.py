@@ -127,7 +127,7 @@ def test_runtime_shares_one_rust_adapter_across_route_and_execute(tmp_path: Path
     runtime = CodexAgnoRuntime(settings)
 
     assert runtime.router_service._rust_adapter is runtime.rust_adapter
-    assert runtime.execution_service.primary_kernel._rust_adapter is runtime.rust_adapter
+    assert runtime.execution_service._rust_adapter is runtime.rust_adapter
 
 
 def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> None:

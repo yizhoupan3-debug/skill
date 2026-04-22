@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -11,7 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from scripts import host_integration_rs, sync_skills
 
 
-def test_host_integration_rs_uses_fresh_release_binary(tmp_path: Path, monkeypatch) -> None:
+def test_host_integration_rs_uses_release_binary_when_present(tmp_path: Path, monkeypatch) -> None:
     crate_root = tmp_path / "host-integration-rs"
     src_dir = crate_root / "src"
     release_bin = crate_root / "target" / "release" / "host-integration-rs"
@@ -29,14 +29,14 @@ def test_host_integration_rs_uses_fresh_release_binary(tmp_path: Path, monkeypat
     monkeypatch.setattr(host_integration_rs, "RELEASE_BINARY_PATH", release_bin)
 
     def fail_run(*args, **kwargs):
-        raise AssertionError("subprocess.run should not be called for a fresh release binary")
+        raise AssertionError("subprocess.run should not be called while resolving the binary")
 
     monkeypatch.setattr(host_integration_rs.subprocess, "run", fail_run)
 
     assert host_integration_rs._ensure_binary() == release_bin
 
 
-def test_host_integration_rs_builds_release_binary_when_missing(
+def test_host_integration_rs_requires_prebuilt_release_binary_when_missing(
     tmp_path: Path, monkeypatch
 ) -> None:
     crate_root = tmp_path / "host-integration-rs"
@@ -53,25 +53,8 @@ def test_host_integration_rs_builds_release_binary_when_missing(
     monkeypatch.setattr(host_integration_rs, "MANIFEST_PATH", manifest_path)
     monkeypatch.setattr(host_integration_rs, "RELEASE_BINARY_PATH", release_bin)
 
-    seen: dict[str, object] = {}
-
-    def fake_run(command, **kwargs):
-        seen["command"] = command
-        seen["cwd"] = kwargs.get("cwd")
-        return SimpleNamespace(returncode=0)
-
-    monkeypatch.setattr(host_integration_rs.subprocess, "run", fake_run)
-
-    assert host_integration_rs._ensure_binary() == release_bin
-    assert seen["command"] == [
-        "cargo",
-        "build",
-        "--release",
-        "--quiet",
-        "--manifest-path",
-        str(manifest_path),
-    ]
-    assert seen["cwd"] == host_integration_rs.PROJECT_ROOT
+    with pytest.raises(RuntimeError, match="requires a prebuilt release binary"):
+        host_integration_rs._ensure_binary()
 
 
 def test_sync_skills_ignores_debug_skill_compiler_binary(

@@ -55,6 +55,15 @@ class ScoredSkill(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
+class SearchMatchResult(BaseModel):
+    """Hydrated Rust search row backed by shared skill metadata."""
+
+    record: SkillMetadata
+    score: float
+    matched_terms: int
+    total_terms: int
+
+
 class RoutingResult(BaseModel):
     """Final routing decision."""
 
@@ -111,11 +120,6 @@ class RouteDecisionContract(BaseModel):
     score: float = 0.0
     reasons: list[str] = Field(default_factory=list)
     route_snapshot: RouteDecisionSnapshot
-
-    def to_transport_payload(self) -> dict[str, Any]:
-        """Serialize the typed contract back to the transport JSON shape."""
-
-        return self.model_dump(mode="json")
 
     @model_validator(mode="after")
     def _validate_rust_route_decision_contract(self) -> "RouteDecisionContract":

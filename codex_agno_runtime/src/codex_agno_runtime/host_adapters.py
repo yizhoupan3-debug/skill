@@ -1655,7 +1655,7 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
             "observation_sources": {
                 "local_runtime_health": [
                     "ExecutionEnvironmentService.describe_kernel_contract()",
-                    "RouterRsExecutionKernel.health().kernel_live_backend_impl",
+                    "ExecutionEnvironmentService.health().kernel_live_backend_impl",
                 ],
                 "local_contract_artifacts": [
                     "execution_kernel_live_fallback_retirement_status.control_surfaces",
