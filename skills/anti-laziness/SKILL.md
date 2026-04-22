@@ -2,7 +2,7 @@
 name: anti-laziness
 description: |
   Use proactively to detect and counter AI laziness patterns (spinning wheels, manual work offload, idling, truncation).
-  Triggers on failures, excuses, passive declarations, and explicit gsd / get shit done posture requests.
+  Triggers on failures, excuses, passive declarations, silent assumption jumps, scope drift, and explicit gsd / get shit done posture requests.
   Forces empirical execution and evidence-based verification.
   At 每轮对话开始 / first-turn / conversation start, check whether there is any laziness signal before proceeding.
 routing_layer: L1
@@ -40,7 +40,7 @@ framework_contracts:
   emits_verification_results: true
   cognitive_escalation: true
 metadata:
-  version: "2.3.0"
+  version: "2.4.0"
   platforms: [codex, antigravity]
   tags: [pua, anti-laziness, quality-enforcement, mental-rigor, token-optimized, gsd, get-shit-done]
 ---
@@ -53,6 +53,9 @@ Cross-domain enforcement overlay. Activates when dodging work, repeating failure
 
 - **Lazy Phrasing**: Use of "should be", "probably", "may", "might work", "I think", "is likely".
 - **Complexity Dodging**: Simplifying a user's multi-step request into a single "generic" step.
+- **Assumption Jumping**: Picking one plausible interpretation and coding without surfacing the fork.
+- **Scope Drift**: Fixing one bug/request while also rewriting adjacent code, comments, or structure.
+- **Overbuilding**: Adding abstractions, config knobs, or edge-case machinery that the request did not need.
 - **Spinning Wheels**: 2+ failed attempts with identical core approach.
 - **Blame Shifting**: Suggesting manual checks before exhausting local diagnostic tools.
 - **Passive Finish**: Claims of "It should work" without providing `stdout/stderr` evidence.
@@ -73,6 +76,7 @@ Cross-domain enforcement overlay. Activates when dodging work, repeating failure
 ## GSD posture
 
 - Treat explicit `gsd` / `get shit done` wording as a demand for stronger execution ownership, not as permission to skip verification.
+- Strong execution does not permit silent guessing, speculative design, or wider diffs than the task requires.
 - Keep pushing through safe local steps without handing routine work back to the user.
 - Convert "done" claims into evidence: command output, test result, or artifact path.
 - If a lane blocks, pivot the approach before narrating defeat.
@@ -80,17 +84,23 @@ Cross-domain enforcement overlay. Activates when dodging work, repeating failure
 ## PUA Protocol: Thorough & Token-Efficient
 
 1. **Stop & Observe**: Read error word-by-word. MANDATORY `cat` of 50 lines context.
-2. **Search First**: MUST use `context7` for any library-related error. No guessing.
-3. **Evidence or Silence**: NO declaration of success without `stdout/stderr`.
-4. **Zero Truncation**: Write FULL files or use tight `multi_replace_file_content`.
-5. **False Convergence**: `grep` repository for similar patterns after ANY fix.
+2. **Ambiguity First**: If 2+ materially different interpretations exist, surface them before coding. No silent branch-picking.
+3. **Search First**: MUST use `context7` for any library-related error. No guessing.
+4. **Simplify Before Expanding**: Prefer the smallest route that can honestly satisfy the request. No speculative flexibility.
+5. **Evidence or Silence**: NO declaration of success without `stdout/stderr`.
+6. **Surgical Scope**: Do not rewrite adjacent code, comments, or formatting unless the current fix truly requires it.
+7. **Zero Truncation**: Write FULL files or use tight `multi_replace_file_content`.
+8. **False Convergence**: `grep` repository for similar patterns after ANY fix.
 
 ## Token-Saving Cheat Sheet (Context density: High)
 | Pattern | Signal | Mandatory Penalty Action |
 | :--- | :--- | :--- |
 | **Wheels** | Repeated `ls`/`cat` | Pivot to callers/callees or orthogonal layer. |
+| **Guess** | Silent interpretation choice | Surface assumptions or ask before writing code. |
+| **Bloat** | New abstraction/config for one use | Collapse to the minimal direct solution. |
 | **Shift** | "Check your port" | Run `netstat`/`lsof` FIRST. |
 | **Wait** | "It works now" | Run verification script + show logs. |
+| **Drift** | Touching nearby unrelated code | Re-scope to the exact requested surface. |
 | **Trunc** | `...` or `// same` | Rewrite full code block. No placeholders. |
 | **Avoid** | Guessing API | `context7-query-docs` mandatory. |
 

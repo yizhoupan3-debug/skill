@@ -16,6 +16,11 @@ from codex_agno_runtime.trace import (
 )
 
 RUNTIME_EVENT_ATTACH_DESCRIPTOR_SCHEMA_VERSION = "runtime-event-attach-descriptor-v1"
+RUNTIME_EVENT_ATTACH_SOURCE_HANDOFF_METHOD = "describe_runtime_event_handoff"
+RUNTIME_EVENT_ATTACH_SOURCE_TRANSPORT_METHOD = "describe_runtime_event_transport"
+RUNTIME_EVENT_ATTACH_METHOD = "attach_runtime_event_transport"
+RUNTIME_EVENT_ATTACH_SUBSCRIBE_METHOD = "subscribe_attached_runtime_events"
+RUNTIME_EVENT_ATTACH_CLEANUP_METHOD = "cleanup_attached_runtime_event_transport"
 
 
 class ExternalRuntimeEventTransportBridge:
@@ -76,6 +81,21 @@ class ExternalRuntimeEventTransportBridge:
         resume_source = "explicit_request" if resume_file is not None else None
 
         storage_backend = cls._resolve_storage_backend(binding_path, handoff_file, resume_file)
+        cls._require_requested_artifact(
+            binding_path,
+            storage_backend=storage_backend,
+            field_name="binding_artifact_path",
+        )
+        cls._require_requested_artifact(
+            handoff_file,
+            storage_backend=storage_backend,
+            field_name="handoff_path",
+        )
+        cls._require_requested_artifact(
+            resume_file,
+            storage_backend=storage_backend,
+            field_name="resume_manifest_path",
+        )
         handoff = cls._load_handoff(handoff_file, storage_backend=storage_backend)
         resume_manifest = cls._load_resume_manifest(resume_file, storage_backend=storage_backend)
 
@@ -124,7 +144,7 @@ class ExternalRuntimeEventTransportBridge:
             binding_artifact_path=transport_path,
             resume_manifest_path=resume_file,
         )
-        return cls(
+        bridge = cls(
             transport=transport,
             handoff=handoff,
             resume_manifest=resume_manifest,
@@ -136,6 +156,8 @@ class ExternalRuntimeEventTransportBridge:
             handoff_source=handoff_source,
             resume_manifest_source=resume_source,
         )
+        bridge._required_trace_stream_path()
+        return bridge
 
     def describe(self) -> dict[str, Any]:
         """Describe the resolved process-external attach bridge."""
@@ -143,6 +165,12 @@ class ExternalRuntimeEventTransportBridge:
         return {
             "attach_mode": "process_external_artifact_replay",
             "artifact_backend_family": self.transport.binding_backend_family,
+            "source_handoff_method": RUNTIME_EVENT_ATTACH_SOURCE_HANDOFF_METHOD,
+            "source_transport_method": RUNTIME_EVENT_ATTACH_SOURCE_TRANSPORT_METHOD,
+            "attach_method": RUNTIME_EVENT_ATTACH_METHOD,
+            "subscribe_method": RUNTIME_EVENT_ATTACH_SUBSCRIBE_METHOD,
+            "cleanup_method": RUNTIME_EVENT_ATTACH_CLEANUP_METHOD,
+            "resume_mode": self.transport.resume_mode,
             "transport": self.transport.model_dump(mode="json"),
             "handoff": self.handoff.model_dump(mode="json") if self.handoff is not None else None,
             "resume_manifest": (
@@ -168,12 +196,19 @@ class ExternalRuntimeEventTransportBridge:
             "schema_version": RUNTIME_EVENT_ATTACH_DESCRIPTOR_SCHEMA_VERSION,
             "attach_mode": "process_external_artifact_replay",
             "artifact_backend_family": self.transport.binding_backend_family,
+            "source_transport_method": RUNTIME_EVENT_ATTACH_SOURCE_TRANSPORT_METHOD,
+            "source_handoff_method": RUNTIME_EVENT_ATTACH_SOURCE_HANDOFF_METHOD,
+            "attach_method": RUNTIME_EVENT_ATTACH_METHOD,
+            "subscribe_method": RUNTIME_EVENT_ATTACH_SUBSCRIBE_METHOD,
+            "cleanup_method": RUNTIME_EVENT_ATTACH_CLEANUP_METHOD,
+            "resume_mode": self.transport.resume_mode,
+            "cleanup_semantics": "no_persisted_state",
             "attach_capabilities": {
                 "artifact_replay": True,
                 "live_remote_stream": False,
                 "cleanup_preserves_replay": True,
             },
-            "recommended_entrypoint": "describe_runtime_event_handoff",
+            "recommended_entrypoint": RUNTIME_EVENT_ATTACH_SOURCE_HANDOFF_METHOD,
             "requested_artifacts": {
                 "binding_artifact_path": str(self.binding_artifact_path) if self.binding_artifact_path is not None else None,
                 "handoff_path": str(self.handoff_path) if self.handoff_path is not None else None,
@@ -226,6 +261,7 @@ class ExternalRuntimeEventTransportBridge:
         return {
             "cleanup_semantics": "no_persisted_state",
             "cleanup_preserves_replay": True,
+            "cleanup_method": RUNTIME_EVENT_ATTACH_CLEANUP_METHOD,
             "binding_artifact_path": str(self.binding_artifact_path) if self.binding_artifact_path is not None else None,
             "trace_stream_path": str(trace_stream_path) if trace_stream_path is not None else None,
         }
@@ -258,7 +294,6 @@ class ExternalRuntimeEventTransportBridge:
                 resolved = candidate.resolve()
                 if self._artifact_exists(resolved, storage_backend=self.storage_backend):
                     return resolved, "binding_artifact_adjacency"
-            return candidates[0].resolve(), "binding_artifact_adjacency"
         return None, None
 
     @classmethod
@@ -281,8 +316,24 @@ class ExternalRuntimeEventTransportBridge:
         if attach_mode is not None and attach_mode != "process_external_artifact_replay":
             raise ValueError(f"Unsupported runtime event attach mode: {attach_mode!r}")
 
-        resolved_artifacts = attach_descriptor.get("resolved_artifacts")
-        resolved_mapping = resolved_artifacts if isinstance(resolved_artifacts, Mapping) else attach_descriptor
+        attach_capabilities = cls._descriptor_mapping(attach_descriptor, "attach_capabilities")
+        if attach_capabilities is not None:
+            if attach_capabilities.get("artifact_replay") is not True:
+                raise ValueError(
+                    "External runtime event attach descriptor must advertise attach_capabilities.artifact_replay=True."
+                )
+            if attach_capabilities.get("live_remote_stream") not in (None, False):
+                raise ValueError(
+                    "External runtime event attach descriptor must advertise attach_capabilities.live_remote_stream=False."
+                )
+            if attach_capabilities.get("cleanup_preserves_replay") not in (None, True):
+                raise ValueError(
+                    "External runtime event attach descriptor must advertise attach_capabilities.cleanup_preserves_replay=True."
+                )
+
+        cls._descriptor_mapping(attach_descriptor, "requested_artifacts")
+        cls._descriptor_mapping(attach_descriptor, "resolution")
+        resolved_mapping = cls._descriptor_mapping(attach_descriptor, "resolved_artifacts") or attach_descriptor
         descriptor_binding = cls._mapping_string(resolved_mapping, "binding_artifact_path")
         descriptor_handoff = cls._mapping_string(resolved_mapping, "handoff_path")
         descriptor_resume = cls._mapping_string(resolved_mapping, "resume_manifest_path")
@@ -304,6 +355,18 @@ class ExternalRuntimeEventTransportBridge:
                 field_name="resume_manifest_path",
             ),
         )
+
+    @staticmethod
+    def _descriptor_mapping(
+        attach_descriptor: Mapping[str, Any],
+        field_name: str,
+    ) -> Mapping[str, Any] | None:
+        value = attach_descriptor.get(field_name)
+        if value is None:
+            return None
+        if isinstance(value, Mapping):
+            return value
+        raise ValueError(f"External runtime event attach descriptor field {field_name!r} must be a mapping.")
 
     @staticmethod
     def _mapping_string(mapping: Mapping[str, Any], field_name: str) -> str | None:
@@ -328,6 +391,19 @@ class ExternalRuntimeEventTransportBridge:
         raise ValueError(
             f"External runtime event attach received conflicting {field_name!r} values between direct args and attach_descriptor."
         )
+
+    @staticmethod
+    def _require_requested_artifact(
+        path: Path | None,
+        *,
+        storage_backend: SQLiteRuntimeStorageBackend | None,
+        field_name: str,
+    ) -> None:
+        if path is None:
+            return
+        if ExternalRuntimeEventTransportBridge._artifact_exists(path, storage_backend=storage_backend):
+            return
+        raise ValueError(f"External runtime event attach requested {field_name!r} that does not exist: {path}")
 
     @staticmethod
     def _load_transport(

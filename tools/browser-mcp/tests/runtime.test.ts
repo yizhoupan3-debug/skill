@@ -13,16 +13,20 @@ let runtime: BrowserRuntime;
 async function createAttachedRuntimeFixture(): Promise<{
   tempRoot: string;
   traceStreamPath: string;
+  alternateTraceStreamPath: string;
   descriptorPath: string;
   bindingArtifactPath: string;
   handoffPath: string;
+  resumeManifestPath: string;
 }> {
   const tempRoot = await mkdtemp(path.join(tmpdir(), 'browser-mcp-attach-'));
   const transportDir = path.join(tempRoot, 'data', 'runtime_event_transports');
   const traceStreamPath = path.join(tempRoot, 'TRACE_EVENTS.jsonl');
+  const alternateTraceStreamPath = path.join(tempRoot, 'TRACE_EVENTS_ALT.jsonl');
   const descriptorPath = path.join(tempRoot, 'runtime-attach-descriptor.json');
   const bindingArtifactPath = path.join(transportDir, 'session-1__job-1.json');
   const handoffPath = path.join(tempRoot, 'ATTACHED_RUNTIME_EVENT_HANDOFF.json');
+  const resumeManifestPath = path.join(tempRoot, 'TRACE_RESUME_MANIFEST.json');
 
   await mkdir(transportDir, { recursive: true });
   await writeFile(
@@ -45,6 +49,15 @@ async function createAttachedRuntimeFixture(): Promise<{
       'utf8',
     );
   await writeFile(
+    alternateTraceStreamPath,
+    JSON.stringify({
+      ts: '2026-04-22T10:00:02.000Z',
+      event_id: 'evt-alt-1',
+      kind: 'job.alternate',
+    }) + '\n',
+    'utf8',
+  );
+  await writeFile(
     bindingArtifactPath,
     JSON.stringify(
       {
@@ -63,6 +76,24 @@ async function createAttachedRuntimeFixture(): Promise<{
     'utf8',
   );
   await writeFile(
+    resumeManifestPath,
+    JSON.stringify(
+      {
+        schema_version: 'runtime-resume-manifest-v1',
+        session_id: 'session-1',
+        job_id: 'job-1',
+        status: 'completed',
+        trace_stream_path: traceStreamPath,
+        event_transport_path: bindingArtifactPath,
+        artifact_paths: [bindingArtifactPath, traceStreamPath],
+        updated_at: '2026-04-22T10:00:01.000Z',
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
+  await writeFile(
     handoffPath,
     JSON.stringify(
       {
@@ -71,7 +102,7 @@ async function createAttachedRuntimeFixture(): Promise<{
         job_id: 'job-1',
         checkpoint_backend_family: 'filesystem',
         trace_stream_path: traceStreamPath,
-        resume_manifest_path: path.join(tempRoot, 'TRACE_RESUME_MANIFEST.json'),
+        resume_manifest_path: resumeManifestPath,
         cleanup_preserves_replay: true,
         attach_target: {
           handoff_method: 'describe_runtime_event_handoff',
@@ -109,7 +140,15 @@ async function createAttachedRuntimeFixture(): Promise<{
     'utf8',
   );
 
-  return { tempRoot, traceStreamPath, descriptorPath, bindingArtifactPath, handoffPath };
+  return {
+    tempRoot,
+    traceStreamPath,
+    alternateTraceStreamPath,
+    descriptorPath,
+    bindingArtifactPath,
+    handoffPath,
+    resumeManifestPath,
+  };
 }
 
 /**
@@ -604,6 +643,52 @@ describe('BrowserRuntime', () => {
     }
   });
 
+  it('hydrates replay from a handoff artifact path after handoff cleanup leaves only the resume manifest trace', async () => {
+    const { tempRoot, traceStreamPath, handoffPath, resumeManifestPath } = await createAttachedRuntimeFixture();
+    await writeFile(
+      handoffPath,
+      JSON.stringify(
+        {
+          schema_version: 'runtime-event-handoff-v1',
+          session_id: 'session-1',
+          job_id: 'job-1',
+          checkpoint_backend_family: 'filesystem',
+          trace_stream_path: null,
+          resume_manifest_path: resumeManifestPath,
+          cleanup_preserves_replay: true,
+          attach_target: {
+            handoff_method: 'describe_runtime_event_handoff',
+          },
+          transport: {
+            binding_backend_family: 'filesystem',
+          },
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeHandoffPath: handoffPath,
+      screenshotDir: path.join(tempRoot, 'screenshots'),
+    });
+
+    try {
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.attachedRuntime.status).toBe('ready');
+      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+
+      const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
+      expect(replay.events).toHaveLength(2);
+      expect(replay.events[1]!.event_id).toBe('evt-2');
+    } finally {
+      await attachedRuntime.shutdown();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it('auto-detects handoff artifacts through the canonical attach artifact path', async () => {
     const { tempRoot, traceStreamPath, handoffPath } = await createAttachedRuntimeFixture();
     const attachedRuntime = new BrowserRuntime({
@@ -621,6 +706,77 @@ describe('BrowserRuntime', () => {
       const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
       expect(replay.events).toHaveLength(2);
       expect(replay.events[1]!.event_id).toBe('evt-2');
+    } finally {
+      await attachedRuntime.shutdown();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed when descriptor and resume manifest disagree on the trace stream path', async () => {
+    const {
+      tempRoot,
+      descriptorPath,
+      traceStreamPath,
+      alternateTraceStreamPath,
+      resumeManifestPath,
+    } = await createAttachedRuntimeFixture();
+    await writeFile(
+      resumeManifestPath,
+      JSON.stringify(
+        {
+          schema_version: 'runtime-resume-manifest-v1',
+          session_id: 'session-1',
+          job_id: 'job-1',
+          status: 'completed',
+          trace_stream_path: alternateTraceStreamPath,
+          event_transport_path: path.join(tempRoot, 'data', 'runtime_event_transports', 'session-1__job-1.json'),
+          artifact_paths: [alternateTraceStreamPath],
+          updated_at: '2026-04-22T10:00:03.000Z',
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+    await writeFile(
+      descriptorPath,
+      JSON.stringify(
+        {
+          schema_version: 'runtime-event-attach-descriptor-v1',
+          attach_mode: 'process_external_artifact_replay',
+          artifact_backend_family: 'filesystem',
+          attach_capabilities: {
+            artifact_replay: true,
+            live_remote_stream: false,
+            cleanup_preserves_replay: true,
+          },
+          recommended_entrypoint: 'describe_runtime_event_handoff',
+          resolved_artifacts: {
+            trace_stream_path: traceStreamPath,
+            resume_manifest_path: resumeManifestPath,
+          },
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeAttachDescriptorPath: descriptorPath,
+      screenshotDir: path.join(tempRoot, 'screenshots'),
+    });
+
+    try {
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.attachedRuntime.status).toBe('invalid_descriptor');
+      expect(diagnostics.attachedRuntime.warning).toContain(
+        'runtime attach artifacts disagree on trace_stream_path',
+      );
+      await expect(attachedRuntime.getAttachedRuntimeEvents({ limit: 5 })).rejects.toMatchObject({
+        code: 'ATTACHED_RUNTIME_INVALID_DESCRIPTOR',
+      });
     } finally {
       await attachedRuntime.shutdown();
       await rm(tempRoot, { recursive: true, force: true });

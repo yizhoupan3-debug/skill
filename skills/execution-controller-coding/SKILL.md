@@ -36,7 +36,7 @@ framework_contracts:
   consumes_execution_items: true
   emits_verification_results: true
 metadata:
-  version: "2.4.0"
+  version: "2.5.0"
   platforms: [codex]
   tags:
     - orchestrator
@@ -98,6 +98,9 @@ bridge_behavior: mobile_complete_once
 
 - `gsd` 不是独立运行时，而是这个 controller 的强执行姿态。
 - 默认自动继续清晰、低风险、可逆的本地 edit/test/verify 链路，不做无意义权限交还。
+- 强执行不等于盲猜：如果不同解释会明显改变方案、风险或改动面，必须先显式化。
+- 强执行不等于做大：默认走最小可行路线，不为“以后也许会用到”提前加层、加开关、加抽象。
+- 强执行不等于大 diff：改动面要能逐条追溯到当前目标或必要 fallout。
 - 主线程只报告决策、证据和 blocker，不复述大量过程。
 - 没有验证证据就不宣告完成。
 - 卡住时优先换招，不优先请求人工代劳。
@@ -112,6 +115,12 @@ bridge_behavior: mobile_complete_once
 - `TRACE_METADATA.json`
 - `.supervisor_state.json`
 
+非平凡执行在开工前还要先定清：
+
+- success criteria：什么现象算完成
+- verification path：用什么测试/命令/证据验收
+- minimum route：先走哪条最小实现路径
+
 连续性写入规则：
 
 - 这些文件是 **supervisor-only** 全局写面
@@ -122,6 +131,7 @@ bridge_behavior: mobile_complete_once
 主线程只保留：
 
 - objective / current phase
+- active assumptions that materially affect execution
 - reroute or delegation decision
 - top blockers
 - integration result

@@ -111,6 +111,9 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "what now works or what" in agent_policy
     assert "effect was achieved" in agent_policy
     assert "Avoid internal runtime, routing, framework, or tool jargon" in agent_policy
+    assert "Do not silently choose an ambiguous interpretation" in agent_policy
+    assert "Prefer the smallest solution that fully solves the stated problem" in agent_policy
+    assert "For non-trivial execution, state the minimum success criteria" in agent_policy
     assert "configs/framework/FRAMEWORK_SURFACE_POLICY.json" in agent_policy
     assert "AGENT.md" in (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     assert not (tmp_path / ".claude" / "CLAUDE.md").exists()
