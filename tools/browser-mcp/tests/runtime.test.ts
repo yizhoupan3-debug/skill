@@ -1070,7 +1070,11 @@ describe('BrowserRuntime', () => {
       expect(diagnostics.attachedRuntime.status).toBe('ready');
       expect(diagnostics.attachedRuntime.artifactBackendFamily).toBe('sqlite');
       expect(diagnostics.attachedRuntime.inputArtifactKind).toBe('attach_descriptor');
+      expect(diagnostics.attachedRuntime.sourceTransportMethod).toBe('describe_runtime_event_transport');
+      expect(diagnostics.attachedRuntime.sourceHandoffMethod).toBe('describe_runtime_event_handoff');
       expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+      expect(diagnostics.attachedRuntime.bindingArtifactSource).toBe('explicit_request');
+      expect(diagnostics.attachedRuntime.traceStreamSource).toBe('handoff_manifest');
       expect(diagnostics.attachedRuntime.eventCount).toBe(2);
       expect(diagnostics.attachedRuntime.latestEventId).toBe('evt-sqlite-2');
 
@@ -1078,6 +1082,8 @@ describe('BrowserRuntime', () => {
       expect(replay.replayContext.descriptorSource).toBe('descriptor_path');
       expect(replay.replayContext.inputArtifactKind).toBe('attach_descriptor');
       expect(replay.replayContext.artifactBackendFamily).toBe('sqlite');
+      expect(replay.replayContext.sourceTransportMethod).toBe('describe_runtime_event_transport');
+      expect(replay.replayContext.traceStreamSource).toBe('handoff_manifest');
       expect(replay.events).toHaveLength(2);
       expect(replay.events[0]!.event_id).toBe('evt-sqlite-1');
       expect(replay.events[1]!.event_id).toBe('evt-sqlite-2');
