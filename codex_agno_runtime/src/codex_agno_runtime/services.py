@@ -47,6 +47,7 @@ from codex_agno_runtime.schemas import (
     BackgroundParallelGroupSummary,
     BackgroundRunRequest,
     BackgroundRunStatus,
+    RouteDecisionContract,
     RouteDiagnosticReport,
     RouteDecisionSnapshot,
     RouteExecutionPolicy,
@@ -797,23 +798,27 @@ class RouterService:
         }
 
     def _route_rust(self, *, task: str, session_id: str, allow_overlay: bool, first_turn: bool) -> RoutingResult:
-        decision = self._rust_adapter.route(
+        decision = self._rust_adapter.route_contract(
             query=task,
             session_id=session_id,
             allow_overlay=allow_overlay,
             first_turn=first_turn,
         )
-        selected = next(skill for skill in self.skills if skill.name == decision["selected_skill"])
-        overlay = next((skill for skill in self.skills if skill.name == decision["overlay_skill"]), None)
+        selected = self._resolve_loaded_skill(decision.selected_skill, decision=decision)
+        overlay = (
+            self._resolve_loaded_skill(decision.overlay_skill, decision=decision)
+            if decision.overlay_skill
+            else None
+        )
         return RoutingResult(
-            task=task,
-            session_id=session_id,
+            task=decision.task,
+            session_id=decision.session_id,
             selected_skill=selected,
             overlay_skill=overlay,
-            score=float(decision.get("score", 0.0)),
-            layer=str(decision["layer"]),
-            reasons=[str(reason) for reason in decision.get("reasons", [])],
-            route_snapshot=decision.get("route_snapshot"),
+            score=float(decision.score),
+            layer=decision.layer,
+            reasons=[str(reason) for reason in decision.reasons],
+            route_snapshot=decision.route_snapshot,
         )
 
     def _decorate_route_result(
@@ -852,24 +857,21 @@ class RouterService:
         mode: str,
         rust_snapshot: RouteDecisionSnapshot,
     ) -> RouteDiagnosticReport:
-        payload = self._rust_adapter.route_report(
+        return self._rust_adapter.route_report_contract(
             mode=mode,
-            rust_route_snapshot=rust_snapshot.model_dump(mode="json"),
+            rust_route_snapshot=rust_snapshot,
         )
-        return RouteDiagnosticReport.model_validate(payload)
 
     def _build_route_snapshot(self, engine: str, result: RoutingResult) -> RouteDecisionSnapshot:
         if result.route_snapshot is not None:
             return result.route_snapshot
-        return RouteDecisionSnapshot.model_validate(
-            self._rust_adapter.route_snapshot(
-                engine=engine,
-                selected_skill=result.selected_skill.name,
-                overlay_skill=result.overlay_skill.name if result.overlay_skill else None,
-                layer=result.layer,
-                score=float(result.score),
-                reasons=[str(reason) for reason in result.reasons],
-            )
+        return self._rust_adapter.route_snapshot_contract(
+            engine=engine,
+            selected_skill=result.selected_skill.name,
+            overlay_skill=result.overlay_skill.name if result.overlay_skill else None,
+            layer=result.layer,
+            score=float(result.score),
+            reasons=[str(reason) for reason in result.reasons],
         )
 
     def _assert_rust_route_contract(
@@ -889,12 +891,24 @@ class RouterService:
 
     def _resolve_route_policy(self, *, refresh: bool = False) -> RouteExecutionPolicy:
         if refresh or self._route_policy is None:
-            self._route_policy = RouteExecutionPolicy.model_validate(
-                self._rust_adapter.route_policy(
-                    mode=self.settings.route_engine_mode,
-                )
+            self._route_policy = self._rust_adapter.route_policy_contract(
+                mode=self.settings.route_engine_mode,
             )
         return self._route_policy
+
+    def _resolve_loaded_skill(
+        self,
+        skill_name: str,
+        *,
+        decision: RouteDecisionContract,
+    ) -> Any:
+        skill = next((item for item in self.skills if item.name == skill_name), None)
+        if skill is None:
+            raise RuntimeError(
+                "Rust route decision referenced a skill that is not loaded by the Python host: "
+                f"{skill_name!r} (session_id={decision.session_id!r})"
+            )
+        return skill
 
 class StateService:
     """Own durable background-job state and session reservations."""
