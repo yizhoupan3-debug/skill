@@ -401,7 +401,7 @@ def run_route_cli(
     codex_home: Path,
     argv: list[str] | None = None,
 ) -> int:
-    """Run the shared route CLI flow for one repo."""
+    """Run the shared Rust-owned route CLI flow for one repo."""
 
     args = build_route_cli_parser().parse_args(argv)
     if args.route_json and args.json:
@@ -409,7 +409,7 @@ def run_route_cli(
         return 2
 
     adapter = route_adapter(codex_home=codex_home)
-    if adapter.exec_query_cli(
+    adapter.exec_query_cli(
         query=args.query,
         limit=args.limit,
         json_output=args.json,
@@ -417,19 +417,6 @@ def run_route_cli(
         session_id=args.session_id,
         allow_overlay=args.allow_overlay,
         first_turn=args.first_turn,
-    ):
-        return 0
-
-    print(
-        adapter.query_output_text(
-            query=args.query,
-            limit=args.limit,
-            json_output=args.json,
-            route_json=args.route_json,
-            session_id=args.session_id,
-            allow_overlay=args.allow_overlay,
-            first_turn=args.first_turn,
-        )
     )
     return 0
 
@@ -737,22 +724,11 @@ class RustRouteAdapter:
             command,
             failure_label="search engine",
         )
-        if isinstance(resolved, list):
-            resolved = {
-                "search_schema_version": self.search_schema_version,
-                "authority": self.route_authority,
-                "query": query,
-                "matches": resolved,
-            }
         if not isinstance(resolved, Mapping):
             raise RuntimeError(
                 f"Rust search engine returned an unexpected payload: {resolved!r}"
             )
-        payload = dict(resolved)
-        payload.setdefault("search_schema_version", self.search_schema_version)
-        payload.setdefault("authority", self.route_authority)
-        payload.setdefault("query", query)
-        contract = SearchMatchesContract.model_validate(payload)
+        contract = SearchMatchesContract.model_validate(dict(resolved))
         if contract.search_schema_version != self.search_schema_version:
             raise RuntimeError(
                 "Rust search engine returned an unknown schema: "
@@ -780,98 +756,6 @@ class RustRouteAdapter:
 
         return self.search_skill_matches_contract(query=query, limit=limit).matches
 
-    def render_search_matches_text(
-        self,
-        *,
-        query: str,
-        matches: list[SearchMatchResult],
-    ) -> str:
-        """Render typed search matches into the plain-text CLI table."""
-
-        lines = [
-            f"Found {len(matches)} matches for '{query}':",
-            "",
-            f"{'Skill':<30} | {'Layer':<5} | {'Gate':<10} | {'Score':<6} | {'Description'}",
-            "-" * 120,
-        ]
-        for match in matches:
-            description = match.record.description
-            if len(description) > 60:
-                description = description[:57] + "..."
-            lines.append(
-                f"{match.record.name:<30} | {match.record.routing_layer:<5} | "
-                f"{match.record.routing_gate:<10} | {match.score:<6} | {description}"
-            )
-        return "\n".join(lines)
-
-    def search_skill_rows_json_text(
-        self,
-        *,
-        query: str,
-        limit: int,
-    ) -> str:
-        """Render the typed search contract JSON at the CLI transport boundary."""
-
-        contract = self.search_skill_matches_contract(query=query, limit=limit)
-        return json.dumps(contract.to_transport_payload(), indent=2, ensure_ascii=False)
-
-    def route_contract_json_text(
-        self,
-        *,
-        query: str,
-        session_id: str,
-        allow_overlay: bool,
-        first_turn: bool,
-    ) -> str:
-        """Render one typed route contract as formatted JSON text."""
-
-        contract = self.route_contract(
-            query=query,
-            session_id=session_id,
-            allow_overlay=allow_overlay,
-            first_turn=first_turn,
-        )
-        return json.dumps(contract.model_dump(mode="json"), indent=2, ensure_ascii=False)
-
-    def search_skill_matches_text(
-        self,
-        *,
-        query: str,
-        limit: int,
-    ) -> str:
-        """Render the default human-readable search output for one query."""
-
-        matches = self.search_skill_matches(query=query, limit=limit)
-        if not matches:
-            return f"No skills found matching: {query}"
-        return self.render_search_matches_text(query=query, matches=matches)
-
-    def query_output_text(
-        self,
-        *,
-        query: str,
-        limit: int,
-        json_output: bool = False,
-        route_json: bool = False,
-        session_id: str = "route-cli",
-        allow_overlay: bool = True,
-        first_turn: bool = True,
-    ) -> str:
-        """Render the requested non-exec CLI output for one query."""
-
-        if route_json and json_output:
-            raise ValueError("choose either json_output or route_json")
-        if route_json:
-            return self.route_contract_json_text(
-                query=query,
-                session_id=session_id,
-                allow_overlay=allow_overlay,
-                first_turn=first_turn,
-            )
-        if json_output:
-            return self.search_skill_rows_json_text(query=query, limit=limit)
-        return self.search_skill_matches_text(query=query, limit=limit)
-
     def compiled_binary(self) -> Path | None:
         """Expose the resolved router binary for thin Python CLI shims."""
 
@@ -887,12 +771,9 @@ class RustRouteAdapter:
         session_id: str = "route-cli",
         allow_overlay: bool = True,
         first_turn: bool = True,
-    ) -> bool:
-        """Replace the current process with router-rs when a compiled binary exists."""
+    ) -> None:
+        """Replace the current process with router-rs and fail loudly if unavailable."""
 
-        binary = self.compiled_binary()
-        if binary is None:
-            return False
         command = self.query_cli_command(
             query=query,
             limit=limit,
@@ -903,10 +784,9 @@ class RustRouteAdapter:
             first_turn=first_turn,
         )
         try:
-            os.execv(str(binary), command)
-        except OSError:
-            return False
-        return True
+            os.execv(command[0], command)
+        except OSError as exc:
+            raise RuntimeError(f"router-rs route CLI exec failed: {exc}") from exc
 
     def query_cli_command(
         self,

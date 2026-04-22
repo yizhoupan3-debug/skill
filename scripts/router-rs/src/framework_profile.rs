@@ -1013,6 +1013,8 @@ fn build_codex_adapter_base(
     descriptor: AdapterDescriptor<'_>,
     context: &AdapterBuildContext<'_>,
 ) -> Map<String, Value> {
+    let resolved_host_capability_requirements =
+        resolve_host_capability_requirements(profile, descriptor.host_id, descriptor.adapter_id);
     let mut capabilities = Map::new();
     capabilities.insert(
         "core".to_string(),
@@ -1126,7 +1128,7 @@ fn build_codex_adapter_base(
     );
     payload.insert(
         "host_capability_requirements".to_string(),
-        Value::Object(profile.host_capability_requirements.clone()),
+        Value::Object(resolved_host_capability_requirements),
     );
     payload.insert("metadata".to_string(), Value::Object(metadata));
     payload
@@ -3392,12 +3394,12 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         Value::String("execution_kernel_delegate_impl".to_string()),
         Value::String("execution_kernel_live_primary".to_string()),
         Value::String("execution_kernel_live_primary_authority".to_string()),
+        Value::String("execution_kernel_response_shape".to_string()),
+        Value::String("execution_kernel_prompt_preview_owner".to_string()),
         Value::String("execution_kernel_live_fallback".to_string()),
         Value::String("execution_kernel_live_fallback_authority".to_string()),
         Value::String("execution_kernel_live_fallback_enabled".to_string()),
         Value::String("execution_kernel_live_fallback_mode".to_string()),
-        Value::String("execution_kernel_response_shape".to_string()),
-        Value::String("execution_kernel_prompt_preview_owner".to_string()),
     ];
     let mut live_primary_required_metadata_fields = steady_state_kernel_fields.clone();
     live_primary_required_metadata_fields.extend(vec![
@@ -3895,6 +3897,9 @@ fn classify_alias_reference(path: &Path) -> (&'static str, &'static str) {
     if file_name == "profile_artifacts.py" {
         return ("artifact_emitter", "compatibility_only");
     }
+    if file_name == "runtime_registry.py" {
+        return ("runtime_registry_contract", "compatibility_only");
+    }
     if file_name == "compatibility.py" {
         return ("compatibility_escape_hatch", "compatibility_only");
     }
@@ -4273,6 +4278,71 @@ mod tests {
             bundle.codex_cli_adapter["source_contract"]["contract_source_fields"]
                 ["execution_surface"],
             Value::String("execution_surface".to_string())
+        );
+    }
+
+    #[test]
+    fn profile_bundle_resolves_host_capability_requirements_per_adapter() {
+        let mut profile = sample_profile();
+        profile.host_capability_requirements = serde_json::from_value(json!({
+            "default": {
+                "required_host_capabilities": ["artifact_contract"]
+            },
+            "codex-desktop": {
+                "required_host_capabilities": ["automation_bridge"]
+            },
+            "codex_desktop_adapter": {
+                "required_host_capabilities": ["local_runtime"]
+            },
+            "codex-cli": {
+                "required_host_capabilities": ["batch_execution"]
+            }
+        }))
+        .expect("host capability requirements should deserialize");
+
+        let bundle = build_profile_bundle(&profile).expect("bundle should build");
+
+        assert_eq!(
+            Value::Object(bundle.host_capability_requirements.clone()),
+            json!({
+                "default": {
+                    "required_host_capabilities": ["artifact_contract"]
+                },
+                "codex-desktop": {
+                    "required_host_capabilities": ["automation_bridge"]
+                },
+                "codex_desktop_adapter": {
+                    "required_host_capabilities": ["local_runtime"]
+                },
+                "codex-cli": {
+                    "required_host_capabilities": ["batch_execution"]
+                }
+            })
+        );
+        assert_eq!(
+            bundle.cli_common_adapter["host_capability_requirements"],
+            json!({
+                "required_host_capabilities": ["artifact_contract"]
+            })
+        );
+        assert_eq!(
+            bundle.codex_desktop_adapter["host_capability_requirements"],
+            json!({
+                "required_host_capabilities": [
+                    "artifact_contract",
+                    "automation_bridge",
+                    "local_runtime"
+                ]
+            })
+        );
+        assert_eq!(
+            bundle.codex_cli_adapter["host_capability_requirements"],
+            json!({
+                "required_host_capabilities": [
+                    "artifact_contract",
+                    "batch_execution"
+                ]
+            })
         );
     }
 

@@ -143,38 +143,42 @@ def _coerce_naming_bridge_field(
 
 def _resolve_rust_owned_naming_bridge(
     kernel_contract: Mapping[str, Any] | None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> tuple[str, str, str, str, str, str]:
     """Resolve Rust-owned naming-bridge outputs used by execution-kernel decode."""
 
     contract = kernel_contract or {}
+    response_metadata = metadata or {}
+
+    def _resolve_field(key: str, fallback: str) -> str:
+        return _coerce_naming_bridge_field(
+            contract if key in contract else response_metadata,
+            key,
+            fallback,
+        )
+
     return (
-        _coerce_naming_bridge_field(
-            contract,
+        _resolve_field(
             "execution_kernel",
             EXECUTION_KERNEL_BRIDGE_KIND,
         ),
-        _coerce_naming_bridge_field(
-            contract,
+        _resolve_field(
             "execution_kernel_authority",
             EXECUTION_KERNEL_BRIDGE_AUTHORITY,
         ),
-        _coerce_naming_bridge_field(
-            contract,
+        _resolve_field(
             "execution_kernel_delegate",
             EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
         ),
-        _coerce_naming_bridge_field(
-            contract,
+        _resolve_field(
             "execution_kernel_delegate_authority",
             EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
         ),
-        _coerce_naming_bridge_field(
-            contract,
+        _resolve_field(
             "execution_kernel_delegate_family",
             EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
         ),
-        _coerce_naming_bridge_field(
-            contract,
+        _resolve_field(
             "execution_kernel_delegate_impl",
             EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
         ),
@@ -234,7 +238,7 @@ def decode_router_rs_execution_payload_with_contract(
         execution_kernel_delegate_authority,
         execution_kernel_delegate_family,
         execution_kernel_delegate_impl,
-    ) = _resolve_rust_owned_naming_bridge(contract)
+    ) = _resolve_rust_owned_naming_bridge(contract, payload.get("metadata"))
     return decode_router_rs_execution_response(
         payload,
         execution_kernel=execution_kernel,

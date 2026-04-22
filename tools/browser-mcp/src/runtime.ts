@@ -1161,22 +1161,24 @@ export class BrowserRuntime {
       );
     }
 
-    const loaded = await this.loadRuntimeAttachDescriptor();
+    let loaded: LoadedRuntimeAttachDescriptor;
+    try {
+      loaded = await this.loadRuntimeAttachDescriptor();
+    } catch (error) {
+      throw new BrowserToolError(
+        'ATTACHED_RUNTIME_INVALID_DESCRIPTOR',
+        error instanceof Error ? error.message : 'failed to load runtime attach descriptor',
+        true,
+        ['refresh the descriptor from describe_runtime_event_handoff', 'inspect browser_diagnostics'],
+      );
+    }
     const descriptor = loaded.descriptor;
     const replaySupported = descriptor.attach_capabilities?.artifact_replay === true;
-    let traceStreamPath = this.traceStreamPathFromAttachedPayload(loaded.attachedPayload);
-    if (!traceStreamPath) {
-      try {
-        traceStreamPath = await this.resolveAttachedRuntimeTraceStreamPath(descriptor);
-      } catch (error) {
-        throw new BrowserToolError(
-          'ATTACHED_RUNTIME_INVALID_DESCRIPTOR',
-          error instanceof Error ? error.message : 'failed to resolve runtime attach descriptor artifacts',
-          true,
-          ['refresh the descriptor from describe_runtime_event_handoff', 'inspect browser_diagnostics'],
-        );
-      }
-    }
+    const traceStreamPath =
+      this.traceStreamPathFromAttachedPayload(loaded.attachedPayload) ??
+      (typeof descriptor.resolved_artifacts?.trace_stream_path === 'string'
+        ? path.resolve(descriptor.resolved_artifacts.trace_stream_path)
+        : null);
     const diagnosticsBase = this.projectAttachedRuntimeDiagnostics({
       configuredSource,
       descriptor,
@@ -1212,7 +1214,7 @@ export class BrowserRuntime {
     if (!traceStreamPath) {
       throw new BrowserToolError(
         'ATTACHED_RUNTIME_TRACE_UNAVAILABLE',
-        'runtime attach descriptor does not resolve a trace_stream_path from descriptor, handoff, resume manifest, or binding artifacts',
+        'runtime attach descriptor must carry a canonical resolved_artifacts.trace_stream_path',
         true,
         ['refresh the descriptor from describe_runtime_event_handoff'],
       );
@@ -1408,17 +1410,23 @@ export class BrowserRuntime {
   private async canonicalizeAttachDescriptorIfPossible(
     descriptor: RuntimeAttachDescriptor,
   ): Promise<LoadedRuntimeAttachDescriptor> {
+    let hydrated: LoadedRuntimeAttachDescriptor;
     try {
-      return await this.hydrateRuntimeAttachDescriptorViaRust({
+      hydrated = await this.hydrateRuntimeAttachDescriptorViaRust({
         attach_descriptor: descriptor,
       });
-    } catch {
+    } catch (error) {
+      if (this.attachDescriptorNeedsRustHydration(descriptor)) {
+        throw error;
+      }
       return {
         descriptor,
         inputArtifactKind: 'attach_descriptor',
         attachedPayload: null,
       };
     }
+    this.assertAttachDescriptorMatchesCanonical(descriptor, hydrated.descriptor);
+    return hydrated;
   }
 
   private async buildRuntimeAttachDescriptorFromBindingArtifact(
@@ -1448,138 +1456,101 @@ export class BrowserRuntime {
     });
   }
 
-  private async resolveAttachedRuntimeTraceStreamPath(
+  private descriptorLeaf(
     descriptor: RuntimeAttachDescriptor,
-  ): Promise<string | null> {
-    const resolvedArtifacts = this.asRecord(descriptor.resolved_artifacts) ?? {};
-    const traceCandidates = new Map<string, string[]>();
-    let bindingArtifactPath =
-      typeof resolvedArtifacts.binding_artifact_path === 'string'
-        ? resolvedArtifacts.binding_artifact_path
-        : null;
-    let resumeManifestPath =
-      typeof resolvedArtifacts.resume_manifest_path === 'string'
-        ? resolvedArtifacts.resume_manifest_path
-        : null;
-
-    this.addTraceStreamCandidate(
-      traceCandidates,
-      typeof resolvedArtifacts.trace_stream_path === 'string'
-        ? resolvedArtifacts.trace_stream_path
-        : null,
-      'descriptor',
-    );
-
-    const handoffPath =
-      typeof resolvedArtifacts.handoff_path === 'string' ? resolvedArtifacts.handoff_path : null;
-    if (handoffPath) {
-      const handoff = await this.readOptionalArtifactRecord(handoffPath, 'runtime handoff artifact');
-      if (handoff) {
-        if (handoff.schema_version !== RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION) {
-          throw new Error('runtime handoff artifact returned an unknown schema');
-        }
-        this.addTraceStreamCandidate(
-          traceCandidates,
-          typeof handoff.trace_stream_path === 'string' ? handoff.trace_stream_path : null,
-          'handoff_manifest',
-        );
-        if (!resumeManifestPath && typeof handoff.resume_manifest_path === 'string') {
-          resumeManifestPath = handoff.resume_manifest_path;
-        }
-        const transport = this.asRecord(handoff.transport);
-        if (!bindingArtifactPath && typeof transport?.binding_artifact_path === 'string') {
-          bindingArtifactPath = transport.binding_artifact_path;
-        }
-      }
-    }
-
-    if (!resumeManifestPath && bindingArtifactPath) {
-      resumeManifestPath = await this.inferResumeManifestPathFromBindingArtifact(bindingArtifactPath);
-    }
-    if (resumeManifestPath) {
-      const resumeManifest = await this.readOptionalArtifactRecord(
-        resumeManifestPath,
-        'runtime resume manifest',
-      );
-      if (resumeManifest) {
-        if (resumeManifest.schema_version !== TRACE_RESUME_MANIFEST_SCHEMA_VERSION) {
-          throw new Error('runtime resume manifest returned an unknown schema');
-        }
-        this.addTraceStreamCandidate(
-          traceCandidates,
-          typeof resumeManifest.trace_stream_path === 'string'
-            ? resumeManifest.trace_stream_path
-            : null,
-          'resume_manifest',
-        );
-        if (
-          !bindingArtifactPath &&
-          typeof resumeManifest.event_transport_path === 'string'
-        ) {
-          bindingArtifactPath = resumeManifest.event_transport_path;
-        }
-      }
-    }
-
-    if (bindingArtifactPath) {
-      this.addTraceStreamCandidate(
-        traceCandidates,
-        await this.inferTraceStreamPathFromBindingArtifact(bindingArtifactPath),
-        'binding_artifact_adjacency',
-      );
-    }
-
-    const resolvedPaths = Array.from(traceCandidates.keys());
-    if (resolvedPaths.length === 0) {
-      return null;
-    }
-    if (resolvedPaths.length > 1) {
-      const details = Array.from(traceCandidates.entries())
-        .map(([candidatePath, sources]) => `${sources.join('+')}=${candidatePath}`)
-        .join(', ');
-      throw new Error(`runtime attach artifacts disagree on trace_stream_path (${details})`);
-    }
-    return resolvedPaths[0] ?? null;
-  }
-
-  private addTraceStreamCandidate(
-    candidates: Map<string, string[]>,
-    candidatePath: string | null,
-    source: string,
-  ): void {
-    if (!candidatePath) {
-      return;
-    }
-    const resolvedPath = path.resolve(candidatePath);
-    const existingSources = candidates.get(resolvedPath);
-    if (existingSources) {
-      if (!existingSources.includes(source)) {
-        existingSources.push(source);
-      }
-      return;
-    }
-    candidates.set(resolvedPath, [source]);
-  }
-
-  private async readOptionalArtifactRecord(
-    artifactPath: string,
-    artifactLabel: string,
-  ): Promise<Record<string, unknown> | null> {
-    const resolvedArtifactPath = path.resolve(artifactPath);
-    let raw: string;
-    try {
-      raw = await readFile(resolvedArtifactPath, 'utf8');
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    pathParts: string[],
+  ): unknown {
+    let current: unknown = descriptor;
+    for (const part of pathParts) {
+      if (!current || typeof current !== 'object' || Array.isArray(current)) {
         return null;
       }
-      throw error;
+      current = (current as Record<string, unknown>)[part];
     }
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error(`${artifactLabel} must decode to a JSON object`);
+    return current;
+  }
+
+  private attachDescriptorNeedsRustHydration(descriptor: RuntimeAttachDescriptor): boolean {
+    return [
+      ['requested_artifacts', 'binding_artifact_path'],
+      ['requested_artifacts', 'handoff_path'],
+      ['requested_artifacts', 'resume_manifest_path'],
+      ['resolved_artifacts', 'binding_artifact_path'],
+      ['resolved_artifacts', 'handoff_path'],
+      ['resolved_artifacts', 'resume_manifest_path'],
+    ].some((field) => {
+      const value = this.descriptorLeaf(descriptor, field);
+      return typeof value === 'string' && value.length > 0;
+    });
+  }
+
+  private normalizeDescriptorPathValue(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 ? path.resolve(value) : null;
+  }
+
+  private assertAttachDescriptorLeafMatchesCanonical(
+    original: RuntimeAttachDescriptor,
+    canonical: RuntimeAttachDescriptor,
+    pathParts: string[],
+    pathLike: boolean,
+  ): void {
+    const requested = this.descriptorLeaf(original, pathParts);
+    if (requested === null || requested === undefined) {
+      return;
     }
-    return parsed as Record<string, unknown>;
+    const resolved = this.descriptorLeaf(canonical, pathParts);
+    if (resolved === null || resolved === undefined) {
+      throw new Error(
+        `runtime attach descriptor must already carry canonical ${pathParts.join('.')}`,
+      );
+    }
+    const requestedValue = pathLike ? this.normalizeDescriptorPathValue(requested) : requested;
+    const resolvedValue = pathLike ? this.normalizeDescriptorPathValue(resolved) : resolved;
+    if (requestedValue !== resolvedValue) {
+      throw new Error(
+        `runtime attach descriptor must already match canonical ${pathParts.join('.')}`,
+      );
+    }
+  }
+
+  private assertAttachDescriptorMatchesCanonical(
+    original: RuntimeAttachDescriptor,
+    canonical: RuntimeAttachDescriptor,
+  ): void {
+    const pathFields = [
+      ['requested_artifacts', 'binding_artifact_path'],
+      ['requested_artifacts', 'handoff_path'],
+      ['requested_artifacts', 'resume_manifest_path'],
+      ['resolved_artifacts', 'binding_artifact_path'],
+      ['resolved_artifacts', 'handoff_path'],
+      ['resolved_artifacts', 'resume_manifest_path'],
+      ['resolved_artifacts', 'trace_stream_path'],
+    ];
+    const scalarFields = [
+      ['attach_mode'],
+      ['artifact_backend_family'],
+      ['source_transport_method'],
+      ['source_handoff_method'],
+      ['attach_method'],
+      ['subscribe_method'],
+      ['cleanup_method'],
+      ['resume_mode'],
+      ['cleanup_semantics'],
+      ['recommended_entrypoint'],
+      ['attach_capabilities', 'artifact_replay'],
+      ['attach_capabilities', 'live_remote_stream'],
+      ['attach_capabilities', 'cleanup_preserves_replay'],
+      ['resolution', 'binding_artifact_path'],
+      ['resolution', 'handoff_path'],
+      ['resolution', 'resume_manifest_path'],
+      ['resolution', 'trace_stream_path'],
+    ];
+    for (const field of pathFields) {
+      this.assertAttachDescriptorLeafMatchesCanonical(original, canonical, field, true);
+    }
+    for (const field of scalarFields) {
+      this.assertAttachDescriptorLeafMatchesCanonical(original, canonical, field, false);
+    }
   }
 
   private async normalizeRuntimeAttachLocator(locator: string): Promise<string> {
@@ -1645,44 +1616,6 @@ export class BrowserRuntime {
       return null;
     }
     return value as Record<string, unknown>;
-  }
-
-  private async inferTraceStreamPathFromBindingArtifact(
-    bindingArtifactPath: string,
-  ): Promise<string | null> {
-    const resolvedBindingArtifactPath = path.resolve(bindingArtifactPath);
-    const candidatePaths = [
-      path.resolve(path.dirname(path.dirname(resolvedBindingArtifactPath)), 'TRACE_EVENTS.jsonl'),
-      path.resolve(path.dirname(path.dirname(path.dirname(resolvedBindingArtifactPath))), 'TRACE_EVENTS.jsonl'),
-    ];
-    for (const candidatePath of candidatePaths) {
-      try {
-        await stat(candidatePath);
-        return candidatePath;
-      } catch {
-        // Keep searching.
-      }
-    }
-    return null;
-  }
-
-  private async inferResumeManifestPathFromBindingArtifact(
-    bindingArtifactPath: string,
-  ): Promise<string | null> {
-    const resolvedBindingArtifactPath = path.resolve(bindingArtifactPath);
-    const candidatePaths = [
-      path.resolve(path.dirname(path.dirname(resolvedBindingArtifactPath)), 'TRACE_RESUME_MANIFEST.json'),
-      path.resolve(path.dirname(path.dirname(path.dirname(resolvedBindingArtifactPath))), 'TRACE_RESUME_MANIFEST.json'),
-    ];
-    for (const candidatePath of candidatePaths) {
-      try {
-        await stat(candidatePath);
-        return candidatePath;
-      } catch {
-        // Keep searching.
-      }
-    }
-    return null;
   }
 
   private async resolveTab(tabId?: string): Promise<TabRecord> {

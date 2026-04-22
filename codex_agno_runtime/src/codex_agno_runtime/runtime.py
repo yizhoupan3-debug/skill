@@ -10,8 +10,8 @@ from typing import Any
 
 from codex_agno_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
 from codex_agno_runtime.event_transport import (
-    _build_external_runtime_attach_request,
-    _unwrap_rust_attach_error,
+    cleanup_external_runtime_event_transport,
+    resolve_external_runtime_event_transport,
 )
 from codex_agno_runtime.trace import (
     TRACE_EVENT_HANDOFF_SCHEMA_VERSION,
@@ -240,20 +240,13 @@ class CodexAgnoRuntime:
     ) -> dict[str, Any]:
         """Resolve a process-external attach bridge from persisted runtime artifacts."""
 
-        try:
-            return self.rust_adapter.attach_runtime_event_transport(
-                _build_external_runtime_attach_request(
-                    attach_descriptor=attach_descriptor,
-                    binding_artifact_path=binding_artifact_path,
-                    handoff_path=handoff_path,
-                    resume_manifest_path=resume_manifest_path,
-                )
-            )
-        except RuntimeError as exc:
-            attach_error = _unwrap_rust_attach_error(exc)
-            if attach_error is not None:
-                raise attach_error from exc
-            raise
+        return resolve_external_runtime_event_transport(
+            adapter=self.rust_adapter,
+            attach_descriptor=attach_descriptor,
+            binding_artifact_path=binding_artifact_path,
+            handoff_path=handoff_path,
+            resume_manifest_path=resume_manifest_path,
+        ).model_dump(mode="json")
 
     def subscribe_attached_runtime_events(
         self,
@@ -268,14 +261,16 @@ class CodexAgnoRuntime:
     ) -> dict[str, Any]:
         """Replay runtime events through the process-external attach bridge."""
 
+        attachment = resolve_external_runtime_event_transport(
+            adapter=self.rust_adapter,
+            attach_descriptor=attach_descriptor,
+            binding_artifact_path=binding_artifact_path,
+            handoff_path=handoff_path,
+            resume_manifest_path=resume_manifest_path,
+        )
         return self.rust_adapter.subscribe_attached_runtime_events(
             {
-                **_build_external_runtime_attach_request(
-                    attach_descriptor=attach_descriptor,
-                    binding_artifact_path=binding_artifact_path,
-                    handoff_path=handoff_path,
-                    resume_manifest_path=resume_manifest_path,
-                ),
+                "attach_descriptor": attachment.attach_descriptor.model_dump(mode="json"),
                 "after_event_id": after_event_id,
                 "limit": limit,
                 "heartbeat": heartbeat,
@@ -292,20 +287,13 @@ class CodexAgnoRuntime:
     ) -> dict[str, Any]:
         """Describe cleanup semantics for the process-external attach bridge."""
 
-        try:
-            return self.rust_adapter.cleanup_attached_runtime_event_transport(
-                _build_external_runtime_attach_request(
-                    attach_descriptor=attach_descriptor,
-                    binding_artifact_path=binding_artifact_path,
-                    handoff_path=handoff_path,
-                    resume_manifest_path=resume_manifest_path,
-                )
-            )
-        except RuntimeError as exc:
-            attach_error = _unwrap_rust_attach_error(exc)
-            if attach_error is not None:
-                raise attach_error from exc
-            raise
+        return cleanup_external_runtime_event_transport(
+            adapter=self.rust_adapter,
+            attach_descriptor=attach_descriptor,
+            binding_artifact_path=binding_artifact_path,
+            handoff_path=handoff_path,
+            resume_manifest_path=resume_manifest_path,
+        ).model_dump(mode="json")
 
     def _build_middleware_chain(self) -> MiddlewareChain:
         """Build the ordered middleware pipeline."""

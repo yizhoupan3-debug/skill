@@ -404,6 +404,12 @@ def resolve_host_capability_requirements(
     host_id: str,
     adapter_id: str | None = None,
 ) -> Dict[str, Any]:
+    """Compile the host-facing requirement view for one concrete host projection.
+
+    The raw `profile.host_capability_requirements` mapping stays framework-owned
+    truth. Adapter payloads should emit only this resolved slice so host-private
+    routing hints do not leak back into the shared contract surface.
+    """
     merged: Dict[str, Any] = {}
     merge_order = ["default", host_id]
     if adapter_id:

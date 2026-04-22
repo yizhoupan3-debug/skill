@@ -277,6 +277,8 @@ def _classify_alias_reference(path: Path) -> tuple[str, str]:
         return "compatibility_infrastructure", "compatibility_only"
     if path.name == "profile_artifacts.py":
         return "artifact_emitter", "compatibility_only"
+    if path.name == "runtime_registry.py":
+        return "runtime_registry_contract", "compatibility_only"
     if path.name == "compatibility.py":
         return "compatibility_escape_hatch", "compatibility_only"
     if path.name == "write_framework_contract_artifacts.py":

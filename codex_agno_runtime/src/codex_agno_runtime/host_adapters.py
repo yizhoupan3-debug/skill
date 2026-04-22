@@ -170,6 +170,17 @@ def _normalize_bundle_items(
     return [{"bundle_id": str(bundle)}]
 
 
+def _resolve_adapter_host_capability_requirements(
+    profile: FrameworkProfile,
+    adapter_spec: HostAdapterSpec,
+) -> Dict[str, Any]:
+    return resolve_host_capability_requirements(
+        profile,
+        host_id=adapter_spec.host_id,
+        adapter_id=adapter_spec.adapter_id,
+    )
+
+
 def _compile_session_mode(profile: FrameworkProfile) -> Dict[str, Any]:
     return build_framework_session_contract(profile.session_policy)
 
@@ -812,10 +823,9 @@ def adapt_framework_profile(
         "memory_mounts": _clone_json_like(shared_contract_surface["memory_mounts"]),
         "mcp_servers": _clone_json_like(shared_contract_surface["mcp_servers"]),
         "workspace_bootstrap": _clone_json_like(shared_contract_surface["workspace_bootstrap"]),
-        "host_capability_requirements": resolve_host_capability_requirements(
+        "host_capability_requirements": _resolve_adapter_host_capability_requirements(
             profile,
-            host_id=adapter_spec.host_id,
-            adapter_id=adapter_spec.adapter_id,
+            adapter_spec,
         ),
         "metadata": {
             **dict(_clone_json_like(profile.metadata)),

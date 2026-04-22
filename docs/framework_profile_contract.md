@@ -67,6 +67,9 @@ discovery 这些稳定层持续 Rust 化。
    这一个编译入口；adapter 的 `host_overrides` 只能改宿主投影，不能回写
    `cli_common_adapter.shared_contract`、`common_contract`、`runtime_surface`
    里的 shared contract truth。
+   同理，adapter payload 里的 `host_capability_requirements` 只允许是当前
+   `host_id + adapter_id` 解析后的结果，不能把 `framework_profile` 里的原始
+   requirements 总表整包重新发成 host-facing contract。
 7. `metadata` 必须保持 host-neutral；像 `transport`、`context_files`、
    `mcp_config_paths`、`hook_event_names`、`settings_scope_order` 这类宿主投影字段，
    Python 与 Rust 都必须直接拒绝写进 framework truth。
@@ -153,6 +156,9 @@ Python host adapter shared contract 直接复用 `FrameworkProfile.shared_contra
 镜像到 `shared_contract` / `common_contract` / `runtime_surface`，避免 host layer
 自己再维护一份默认桥接逻辑；`bridge_contract` 也必须继续从这份 canonical
 bootstrap 的 `bridges` 字段投影，而不是和 shared contract 平行生长。
+`host_capability_requirements` 也分成两层：`framework_profile` 顶层继续保留原始
+requirements 总表，adapter payload 则只发当前宿主解析后的视图，避免把 host-private
+差异重新回灌成 shared contract 漂移面。
 execution-kernel 相关 contract 现在以 Rust-only 默认执行、prepare_session /
 dry-run preview 走 router-rs、以及隔离的 compatibility lane 为主线，不再保留
 过渡期口径作为 steady-state 叙事。
