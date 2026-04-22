@@ -292,6 +292,7 @@ def _build_state_control_plane_descriptor(
 ) -> BackgroundStateControlPlaneDescriptor:
     capabilities = storage_backend.capabilities()
     payload: dict[str, Any] = {
+        "delegate_kind": f"{capabilities.backend_family.strip().lower().replace('_', '-')}-state-store",
         "backend_family": capabilities.backend_family,
         "supports_atomic_replace": capabilities.supports_atomic_replace,
         "supports_compaction": capabilities.supports_compaction,
@@ -312,6 +313,13 @@ def _build_state_control_plane_descriptor(
                     value = service.get(field)
                     if value is not None:
                         payload[field] = value
+    if (
+        capabilities.backend_family != "filesystem"
+        and payload.get("delegate_kind") == "filesystem-state-store"
+    ):
+        payload["delegate_kind"] = (
+            f"{capabilities.backend_family.strip().lower().replace('_', '-')}-state-store"
+        )
     return BackgroundStateControlPlaneDescriptor.model_validate(payload)
 
 

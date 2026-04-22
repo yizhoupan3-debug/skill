@@ -68,8 +68,18 @@ class RoutingResult(BaseModel):
     route_snapshot: "RouteDecisionSnapshot | None" = None
     prompt_preview: str | None = None
     route_engine: str = "rust"
-    rollback_to_python: bool = False
+    diagnostic_python_lane_active: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("diagnostic_python_lane_active", "rollback_to_python"),
+        serialization_alias="diagnostic_python_lane_active",
+    )
     shadow_route_report: "RouteDiffReport | None" = None
+
+    @property
+    def rollback_to_python(self) -> bool:
+        """Backward-compatible attribute kept during the naming migration."""
+
+        return self.diagnostic_python_lane_active
 
 
 class RouteDecisionSnapshot(BaseModel):
@@ -217,8 +227,18 @@ class PrepareSessionResponse(BaseModel):
     prompt_preview: str | None = None
     loaded_skill_count: int = 0
     route_engine: str = "rust"
-    rollback_to_python: bool = False
+    diagnostic_python_lane_active: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("diagnostic_python_lane_active", "rollback_to_python"),
+        serialization_alias="diagnostic_python_lane_active",
+    )
     shadow_route_report: RouteDiffReport | None = None
+
+    @property
+    def rollback_to_python(self) -> bool:
+        """Backward-compatible attribute kept during the naming migration."""
+
+        return self.diagnostic_python_lane_active
 
 
 class UsageMetrics(BaseModel):

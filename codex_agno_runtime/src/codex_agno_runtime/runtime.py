@@ -245,13 +245,15 @@ class CodexAgnoRuntime:
     def attach_runtime_event_transport(
         self,
         *,
+        attach_descriptor: dict[str, Any] | None = None,
         binding_artifact_path: str | None = None,
         handoff_path: str | None = None,
         resume_manifest_path: str | None = None,
     ) -> dict[str, Any]:
         """Resolve a process-external attach bridge from persisted runtime artifacts."""
 
-        return ExternalRuntimeEventTransportBridge.attach(
+        return self._attach_runtime_event_bridge(
+            attach_descriptor=attach_descriptor,
             binding_artifact_path=binding_artifact_path,
             handoff_path=handoff_path,
             resume_manifest_path=resume_manifest_path,
@@ -260,6 +262,7 @@ class CodexAgnoRuntime:
     def subscribe_attached_runtime_events(
         self,
         *,
+        attach_descriptor: dict[str, Any] | None = None,
         binding_artifact_path: str | None = None,
         handoff_path: str | None = None,
         resume_manifest_path: str | None = None,
@@ -269,7 +272,8 @@ class CodexAgnoRuntime:
     ) -> dict[str, Any]:
         """Replay runtime events through the process-external attach bridge."""
 
-        return ExternalRuntimeEventTransportBridge.attach(
+        return self._attach_runtime_event_bridge(
+            attach_descriptor=attach_descriptor,
             binding_artifact_path=binding_artifact_path,
             handoff_path=handoff_path,
             resume_manifest_path=resume_manifest_path,
@@ -282,17 +286,36 @@ class CodexAgnoRuntime:
     def cleanup_attached_runtime_event_transport(
         self,
         *,
+        attach_descriptor: dict[str, Any] | None = None,
         binding_artifact_path: str | None = None,
         handoff_path: str | None = None,
         resume_manifest_path: str | None = None,
     ) -> dict[str, Any]:
         """Describe cleanup semantics for the process-external attach bridge."""
 
-        return ExternalRuntimeEventTransportBridge.attach(
+        return self._attach_runtime_event_bridge(
+            attach_descriptor=attach_descriptor,
             binding_artifact_path=binding_artifact_path,
             handoff_path=handoff_path,
             resume_manifest_path=resume_manifest_path,
         ).cleanup()
+
+    def _attach_runtime_event_bridge(
+        self,
+        *,
+        attach_descriptor: dict[str, Any] | None = None,
+        binding_artifact_path: str | None = None,
+        handoff_path: str | None = None,
+        resume_manifest_path: str | None = None,
+    ) -> ExternalRuntimeEventTransportBridge:
+        """Resolve one external attach bridge from either a stable descriptor or explicit paths."""
+
+        return ExternalRuntimeEventTransportBridge.attach(
+            attach_descriptor=attach_descriptor,
+            binding_artifact_path=binding_artifact_path,
+            handoff_path=handoff_path,
+            resume_manifest_path=resume_manifest_path,
+        )
 
     def _build_middleware_chain(self) -> MiddlewareChain:
         """Build the ordered middleware pipeline."""
@@ -361,7 +384,7 @@ class CodexAgnoRuntime:
                 "loaded_skill_count": len(self.skills),
                 "route_engine_mode": self.settings.route_engine_mode,
                 "route_engine": routing_result.route_engine,
-                "rollback_to_python": routing_result.rollback_to_python,
+                "diagnostic_python_lane_active": routing_result.diagnostic_python_lane_active,
             },
         )
         self._trace.record(
@@ -375,7 +398,7 @@ class CodexAgnoRuntime:
                 "reasons": routing_result.reasons,
                 "route_engine": routing_result.route_engine,
                 "route_engine_mode": self.settings.route_engine_mode,
-                "rollback_to_python": routing_result.rollback_to_python,
+                "diagnostic_python_lane_active": routing_result.diagnostic_python_lane_active,
                 "shadow_route_report": (
                     routing_result.shadow_route_report.model_dump(mode="json")
                     if routing_result.shadow_route_report is not None
@@ -393,7 +416,7 @@ class CodexAgnoRuntime:
             prompt_preview=routing_result.prompt_preview,
             loaded_skill_count=len(self.skills),
             route_engine=routing_result.route_engine,
-            rollback_to_python=routing_result.rollback_to_python,
+            diagnostic_python_lane_active=routing_result.diagnostic_python_lane_active,
             shadow_route_report=routing_result.shadow_route_report,
         )
 
@@ -860,7 +883,7 @@ class CodexAgnoRuntime:
                 "retry_count": retry_count,
                 "route_engine_mode": self.settings.route_engine_mode,
                 "route_engine": routing_result.route_engine,
-                "rollback_to_python": routing_result.rollback_to_python,
+                "diagnostic_python_lane_active": routing_result.diagnostic_python_lane_active,
                 "shadow_route_report": (
                     routing_result.shadow_route_report.model_dump(mode="json")
                     if routing_result.shadow_route_report is not None
@@ -884,7 +907,7 @@ class CodexAgnoRuntime:
             reasons=prepared.reasons,
             prompt_preview=prepared.prompt_preview,
             route_engine=prepared.route_engine,
-            rollback_to_python=prepared.rollback_to_python,
+            diagnostic_python_lane_active=prepared.diagnostic_python_lane_active,
             shadow_route_report=prepared.shadow_route_report,
         )
 

@@ -654,7 +654,7 @@ def test_python_kernel_dry_run_still_works_when_live_fallback_is_disabled(monkey
                         "execution_kernel_authority": "rust-execution-cli",
                         "execution_mode": "dry_run",
                         "route_engine": payload["route_engine"],
-                        "rollback_to_python": payload["rollback_to_python"],
+                        "diagnostic_python_lane_active": payload["diagnostic_python_lane_active"],
                     },
                 }
             ),

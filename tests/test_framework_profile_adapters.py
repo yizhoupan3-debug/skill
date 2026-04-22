@@ -1150,6 +1150,7 @@ def test_router_rs_profile_json_matches_outer_framework_contract() -> None:
     assert payload["gemini_cli_adapter"]["host_projection"]["context_files"] == ["GEMINI.md"]
     assert payload["cli_family_parity_snapshot"]["all_shared_contract_checks_pass"] is True
     assert "codex_desktop_host_adapter" not in payload
+    assert "codex_desktop_alias_retirement_status" not in payload
 
 
 def test_router_rs_profile_json_can_opt_in_legacy_alias_output() -> None:
@@ -1188,6 +1189,7 @@ def test_router_rs_profile_json_can_opt_in_legacy_alias_output() -> None:
     assert payload["compatibility_lane"]["codex_desktop_host_adapter"]["metadata"]["adapter_alias_of"] == (
         "codex_desktop_adapter"
     )
+    assert payload["codex_desktop_alias_retirement_status"]["alias_lifecycle"] == "compatibility-only"
 
 
 def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() -> None:

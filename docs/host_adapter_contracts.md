@@ -29,8 +29,9 @@ compatibility inventory / smoke 角色，不能替代 `cli_family_parity_snapsho
 `codex_desktop_alias_inventory.json` 或
 `codex_desktop_alias_retirement_status.json`；默认 Rust
 `--profile-artifacts-json` 也不再把 `codex_desktop_alias_retirement_status`
-当作 first-class 输出。这些 alias continuity 证据只在显式 continuity
-lane 里保留。
+当作 first-class 输出，默认 Rust `--profile-json` / `ProfileBundle`
+也同样不再内联这类 retirement 证据。这些 alias continuity 证据只在显式
+continuity lane 里保留。
 
 ## Adapter Set
 

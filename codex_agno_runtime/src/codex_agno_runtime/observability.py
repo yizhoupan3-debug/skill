@@ -61,6 +61,7 @@ __all__ = [
     "RuntimeMetricSpec",
     "build_runtime_metric_record",
     "build_runtime_observability_exporter_descriptor",
+    "build_runtime_observability_health_snapshot",
     "build_runtime_observability_resource_attributes",
     "runtime_observability_dashboard_schema",
 ]
@@ -286,6 +287,24 @@ def build_runtime_observability_exporter_descriptor() -> dict[str, Any]:
         "trace_bridge_schema_version": TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
         "trace_handoff_schema_version": TRACE_EVENT_HANDOFF_SCHEMA_VERSION,
         **RUNTIME_OBSERVABILITY_OWNERSHIP,
+    }
+
+
+@lru_cache(maxsize=1)
+def build_runtime_observability_health_snapshot() -> dict[str, Any]:
+    """Return one cached runtime-health projection of the observability contract."""
+
+    exporter = build_runtime_observability_exporter_descriptor()
+    dashboard = runtime_observability_dashboard_schema()
+    return {
+        "ownership_lane": exporter["ownership_lane"],
+        "metric_catalog_version": exporter["metric_catalog_version"],
+        "dashboard_schema_version": dashboard["schema_version"],
+        "resource_dimensions": list(dashboard["resource_dimensions"]),
+        "metric_names": [spec.metric_name for spec in RUNTIME_OBSERVABILITY_METRIC_SPECS],
+        "dashboard_panel_count": len(dashboard["panels"]),
+        "dashboard_alert_count": len(dashboard["alerts"]),
+        "exporter": exporter,
     }
 
 

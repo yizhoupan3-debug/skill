@@ -339,7 +339,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     ] == [
         "execution_mode",
         "route_engine",
-        "rollback_to_python",
+        "diagnostic_python_lane_active",
     ]
     assert response_serialization["current_contract_truth"]["steady_state_response_shapes"] == [
         "live_primary",
@@ -860,7 +860,7 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
     ]["live_primary"]["pass_through_metadata_fields"] == [
         "execution_mode",
         "route_engine",
-        "rollback_to_python",
+        "diagnostic_python_lane_active",
     ]
     assert payload["gemini_cli_adapter"]["host_projection"]["context_files"] == ["GEMINI.md"]
     assert payload["cli_family_capability_discovery"]["all_cli_hosts_compatible"] is True

@@ -212,7 +212,7 @@ class RouterRsExecutionKernel(ExecutionKernel):
             "overlay_skill": routing_result.overlay_skill.name if routing_result.overlay_skill else None,
             "layer": routing_result.layer,
             "route_engine": routing_result.route_engine,
-            "rollback_to_python": routing_result.rollback_to_python,
+            "diagnostic_python_lane_active": routing_result.diagnostic_python_lane_active,
             "reasons": [str(reason) for reason in routing_result.reasons],
             "prompt_preview": request.prompt_preview if request.dry_run else None,
             "dry_run": request.dry_run,

@@ -195,6 +195,14 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert trace_health["replay_supported"] is True
     assert trace_health["event_bridge_supported"] is True
     assert trace_health["event_bridge_schema_version"] == "runtime-event-bridge-v1"
+    assert trace_health["observability"]["ownership_lane"] == "rust-contract-lane"
+    assert trace_health["observability"]["metric_catalog_version"] == "runtime-observability-metrics-v1"
+    assert trace_health["observability"]["dashboard_schema_version"] == "runtime-observability-dashboard-v1"
+    assert trace_health["observability"]["dashboard_panel_count"] == 6
+    assert trace_health["observability"]["dashboard_alert_count"] == 3
+    assert "runtime.route_mismatch_total" in trace_health["observability"]["metric_names"]
+    assert trace_health["observability"]["exporter"]["schema_version"] == "runtime-observability-exporter-v1"
+    assert trace_health["observability"]["exporter"]["producer_owner"] == "rust-control-plane"
     assert trace_health["background_effect_host_contract"]["service"] == "trace"
     assert trace_health["background_effect_host_contract"]["control_plane_delegate_kind"] == (
         "filesystem-trace-store"
@@ -1374,7 +1382,7 @@ def test_router_service_verify_mode_keeps_rust_primary_and_emits_diagnostic_evid
     )
 
     assert verify_result.route_engine == "rust"
-    assert verify_result.rollback_to_python is False
+    assert verify_result.diagnostic_python_lane_active is True
     assert verify_result.shadow_route_report is not None
     assert verify_result.shadow_route_report.report_schema_version == "router-rs-route-report-v1"
     assert verify_result.shadow_route_report.authority == "rust-route-core"
@@ -1411,7 +1419,7 @@ def test_router_service_shadow_mode_keeps_rust_primary_and_records_diff() -> Non
     )
 
     assert result.route_engine == "rust"
-    assert result.rollback_to_python is False
+    assert result.diagnostic_python_lane_active is True
     assert result.shadow_route_report is not None
     assert result.shadow_route_report.report_schema_version == "router-rs-route-report-v1"
     assert result.shadow_route_report.authority == "rust-route-core"
@@ -1445,7 +1453,7 @@ def test_router_service_rust_mode_keeps_rollback_as_diagnostic_lane() -> None:
     )
 
     assert result.route_engine == "rust"
-    assert result.rollback_to_python is False
+    assert result.diagnostic_python_lane_active is True
     assert result.shadow_route_report is not None
     assert result.shadow_route_report.report_schema_version == "router-rs-route-report-v1"
     assert result.shadow_route_report.authority == "rust-route-core"
@@ -1456,7 +1464,7 @@ def test_router_service_rust_mode_keeps_rollback_as_diagnostic_lane() -> None:
     assert rollback_service.health()["primary_authority"] == "rust"
     assert rollback_service.health()["route_result_engine"] == "rust"
     assert rollback_service.health()["shadow_engine"] == "python"
-    assert rollback_service.health()["rollback_to_python"] is False
+    assert rollback_service.health()["diagnostic_python_lane_active"] is True
     assert rollback_service.health()["python_router_required"] is False
     assert rollback_service.health()["python_router_required"] is False
 

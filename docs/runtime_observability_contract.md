@@ -149,6 +149,40 @@ Metric invariants:
   mutable state machine.
 - Latency metrics must be recorded as histograms with millisecond units.
 
+## Concrete Exporter Path
+
+The runtime now exposes a concrete exporter and metric-record helper surface at
+`codex_agno_runtime.observability`.
+
+- Public helper calls should delegate to `router-rs` whenever the repo-local
+  Rust lane is available; Python stays as a thin projection and compatibility
+  fallback only.
+- `build_runtime_observability_exporter_descriptor()` freezes the Rust-owned
+  exporter lane and ties it to the JSONL sink plus replay/handoff schema
+  versions used by the trace lane.
+- `build_runtime_metric_record()` emits one versioned metric payload using only
+  cataloged metric names and the shared base dimensions above.
+- `runtime_observability_dashboard_schema()` returns the machine-readable
+  dashboard payload that mirrors the JSON block below.
+- `build_runtime_observability_health_snapshot()` exposes the same Rust-owned
+  contract through the runtime health surface, and
+  `CodexAgnoRuntime.health()["trace"]["observability"]` is the steady-state
+  projection.
+
+Concrete path invariants:
+
+- exporter helpers must stay inside the frozen JSONL / OTel vocabulary
+  contract.
+- metric helpers may emit only cataloged metric names.
+- unknown metric names must fail closed with an explicit error instead of
+  silently emitting ad hoc payloads.
+- required resource and shared runtime dimensions must reject empty strings, and
+  metric values must reject `NaN` / infinity payloads.
+- `runtime.attempt` must stay a non-negative integer, not a float, bool, or
+  negative retry marker.
+- helper payloads must not introduce host-private or high-cardinality
+  dimensions outside the base dimensions table.
+
 ## Dashboard Schema
 
 The dashboard schema is intentionally explicit so the same JSON can back a

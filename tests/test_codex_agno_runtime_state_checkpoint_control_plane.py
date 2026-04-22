@@ -207,6 +207,7 @@ def test_background_state_uses_non_filesystem_backend_family(tmp_path: Path) -> 
     assert not state_path.exists()
     payload = json.loads(backend.read_text(state_path))
     assert payload["control_plane"]["backend_family"] == "memory"
+    assert payload["control_plane"]["delegate_kind"] == "memory-state-store"
     assert payload["control_plane"]["supports_atomic_replace"] is False
     assert payload["control_plane"]["supports_compaction"] is False
     assert payload["control_plane"]["supports_snapshot_delta"] is False
@@ -221,6 +222,7 @@ def test_background_state_uses_non_filesystem_backend_family(tmp_path: Path) -> 
     assert recovered_row is not None
     assert recovered_row.status == "queued"
     assert recovered.health()["backend_family"] == "memory"
+    assert recovered.health()["control_plane_delegate_kind"] == "memory-state-store"
     assert recovered.health()["supports_atomic_replace"] is False
     assert recovered.health()["supports_compaction"] is False
     assert recovered.health()["supports_snapshot_delta"] is False
@@ -269,6 +271,8 @@ def test_checkpointer_uses_non_filesystem_backend_family(tmp_path: Path) -> None
     assert loaded.job_id == "job-1"
     assert loaded.control_plane is not None
     assert loaded.control_plane["backend_family"] == "memory"
+    assert loaded.control_plane["trace_service"]["delegate_kind"] == "memory-trace-store"
+    assert loaded.control_plane["state_service"]["delegate_kind"] == "memory-state-store"
     assert loaded.control_plane["supports_atomic_replace"] is False
     assert loaded.control_plane["supports_compaction"] is False
     assert loaded.control_plane["supports_snapshot_delta"] is False
@@ -402,6 +406,7 @@ def test_sqlite_backend_family_can_be_selected_and_round_tripped_via_config(
     ).exists(), "sqlite backend should materialize a concrete backing store file"
 
     binding_payload = json.loads(checkpointer.storage_backend.read_text(binding_path))
+    assert binding_payload["control_plane_delegate_kind"] == "sqlite-trace-store"
     assert binding_payload["transport_health"]["backend_family"] == "sqlite"
     assert binding_payload["transport_health"]["supports_atomic_replace"] is True
     assert binding_payload["transport_health"]["supports_compaction"] is True
@@ -409,12 +414,16 @@ def test_sqlite_backend_family_can_be_selected_and_round_tripped_via_config(
     assert binding_payload["transport_health"]["supports_remote_event_transport"] is True
     assert loaded.control_plane is not None
     assert loaded.control_plane["backend_family"] == "sqlite"
+    assert loaded.control_plane["trace_service"]["delegate_kind"] == "sqlite-trace-store"
+    assert loaded.control_plane["state_service"]["delegate_kind"] == "sqlite-state-store"
     assert loaded.control_plane["supports_atomic_replace"] is True
     assert loaded.control_plane["supports_compaction"] is True
     assert loaded.control_plane["supports_snapshot_delta"] is True
     assert loaded.control_plane["supports_remote_event_transport"] is True
     assert manifest.control_plane is not None
     assert manifest.control_plane["backend_family"] == "sqlite"
+    assert manifest.control_plane["trace_service"]["delegate_kind"] == "sqlite-trace-store"
+    assert manifest.control_plane["state_service"]["delegate_kind"] == "sqlite-state-store"
     assert manifest.control_plane["supports_compaction"] is True
     assert manifest.control_plane["supports_snapshot_delta"] is True
     assert reopened_loaded.session_id == "session-1"

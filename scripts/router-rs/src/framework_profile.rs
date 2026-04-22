@@ -201,7 +201,8 @@ pub struct ProfileBundle {
     pub cli_family_capability_discovery: Value,
     pub cli_family_parity_snapshot: Value,
     pub codex_dual_entry_parity_snapshot: Value,
-    pub codex_desktop_alias_retirement_status: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codex_desktop_alias_retirement_status: Option<Value>,
     pub execution_controller_contract: Value,
     pub delegation_contract: Value,
     pub supervisor_state_contract: Value,
@@ -365,7 +366,11 @@ pub fn build_profile_bundle_with_legacy_alias(
         &codex_desktop_adapter,
         &codex_cli_adapter,
     )?;
-    let codex_desktop_alias_retirement_status = build_codex_desktop_alias_retirement_status();
+    let codex_desktop_alias_retirement_status = if include_legacy_alias_artifact {
+        Some(Value::Object(build_codex_desktop_alias_retirement_status()))
+    } else {
+        None
+    };
     let mut control_plane_contracts = build_control_plane_contract_descriptors();
     let execution_controller_contract = control_plane_contracts
         .remove(EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID)
@@ -465,7 +470,7 @@ pub fn build_profile_bundle_with_legacy_alias(
         cli_family_capability_discovery: Value::Object(cli_family_capability_discovery),
         cli_family_parity_snapshot: Value::Object(cli_family_parity_snapshot),
         codex_dual_entry_parity_snapshot: Value::Object(codex_dual_entry_parity_snapshot),
-        codex_desktop_alias_retirement_status: Value::Object(codex_desktop_alias_retirement_status),
+        codex_desktop_alias_retirement_status,
         execution_controller_contract,
         delegation_contract,
         supervisor_state_contract,
@@ -514,9 +519,15 @@ pub fn build_codex_artifact_bundle(
         bundle.codex_dual_entry_parity_snapshot,
     );
     if include_legacy_alias_artifact {
+        let codex_desktop_alias_retirement_status = bundle
+            .codex_desktop_alias_retirement_status
+            .ok_or_else(|| {
+                "missing codex desktop alias retirement status for explicit continuity lane"
+                    .to_string()
+            })?;
         artifacts.insert(
             "codex_desktop_alias_retirement_status".to_string(),
-            bundle.codex_desktop_alias_retirement_status,
+            codex_desktop_alias_retirement_status,
         );
     }
     artifacts.insert(
@@ -2376,10 +2387,7 @@ fn build_codex_desktop_alias_retirement_status() -> Map<String, Value> {
         "python_emits_alias_artifact".to_string(),
         Value::Bool(false),
     );
-    emitter_contract.insert(
-        "rust_emits_alias_artifact".to_string(),
-        Value::Bool(false),
-    );
+    emitter_contract.insert("rust_emits_alias_artifact".to_string(), Value::Bool(false));
     emitter_contract.insert(
         "drop_requires_joint_emitter_flip".to_string(),
         Value::Bool(true),
@@ -2477,10 +2485,7 @@ fn build_execution_controller_contract() -> Map<String, Value> {
         "main_thread_stays_decision_heavy".to_string(),
         Value::Bool(true),
     );
-    gsd_execution_posture.insert(
-        "verify_before_done".to_string(),
-        Value::Bool(true),
-    );
+    gsd_execution_posture.insert("verify_before_done".to_string(), Value::Bool(true));
     gsd_execution_posture.insert(
         "runtime_dependency".to_string(),
         Value::String("none".to_string()),
@@ -2872,8 +2877,7 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
     retirement_exit_observation_sources.insert(
         "local_runtime_health".to_string(),
         Value::Array(vec![Value::String(
-            "PythonAgnoExecutionKernel.health().kernel_live_fallback_request_status"
-                .to_string(),
+            "PythonAgnoExecutionKernel.health().kernel_live_fallback_request_status".to_string(),
         )]),
     );
     retirement_exit_observation_sources.insert(
@@ -3201,7 +3205,7 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
             Value::String("status".to_string()),
             Value::String("execution_mode".to_string()),
             Value::String("route_engine".to_string()),
-            Value::String("rollback_to_python".to_string()),
+            Value::String("diagnostic_python_lane_active".to_string()),
         ]),
     );
     runtime_response_metadata_fields.insert(
@@ -3308,7 +3312,7 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         Value::Array(vec![
             Value::String("execution_mode".to_string()),
             Value::String("route_engine".to_string()),
-            Value::String("rollback_to_python".to_string()),
+            Value::String("diagnostic_python_lane_active".to_string()),
         ]),
     );
 
@@ -3843,19 +3847,7 @@ mod tests {
             bundle.codex_dual_entry_parity_snapshot["parity_checks"]["artifact_contract"],
             Value::Bool(true)
         );
-        assert_eq!(
-            bundle.codex_desktop_alias_retirement_status["canonical_adapter_id"],
-            Value::String("codex_desktop_adapter".to_string())
-        );
-        assert_eq!(
-            bundle.codex_desktop_alias_retirement_status["primary_regression_artifact"],
-            Value::String("cli_family_parity_snapshot".to_string())
-        );
-        assert_eq!(
-            bundle.codex_desktop_alias_retirement_status["retirement_gates"]
-                ["runtime_primary_identity_consumers_cleared"],
-            Value::Bool(true)
-        );
+        assert!(bundle.codex_desktop_alias_retirement_status.is_none());
         assert_eq!(
             bundle.execution_controller_contract["status_contract"],
             Value::String("execution_controller_contract_v1".to_string())
@@ -4127,7 +4119,7 @@ mod tests {
                 "status",
                 "execution_mode",
                 "route_engine",
-                "rollback_to_python"
+                "diagnostic_python_lane_active"
             ])
         );
         assert_eq!(
@@ -4161,6 +4153,14 @@ mod tests {
         assert_eq!(
             artifacts["codex_cli_adapter"]["execution_surface"]["entrypoint_kind"],
             Value::String("headless".to_string())
+        );
+        assert_eq!(
+            artifacts["codex_desktop_alias_retirement_status"]["canonical_adapter_id"],
+            Value::String("codex_desktop_adapter".to_string())
+        );
+        assert_eq!(
+            artifacts["codex_desktop_alias_retirement_status"]["primary_regression_artifact"],
+            Value::String("cli_family_parity_snapshot".to_string())
         );
         assert_eq!(
             artifacts["claude_code_adapter"]["host_projection"]["settings_paths"],
