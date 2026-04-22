@@ -16,6 +16,7 @@ const { values: args } = parseArgs({
     headless: { type: 'string', default: 'true' },
     engine: { type: 'string', default: 'chromium' },
     'capture-body': { type: 'boolean', default: false },
+    'runtime-attach-descriptor-path': { type: 'string' },
   },
   strict: false,
 });
@@ -25,6 +26,10 @@ const port = parseInt(String(args['port'] ?? '3721'), 10);
 const headless = String(args['headless'] ?? 'true') !== 'false';
 const engine = String(args['engine'] ?? 'chromium') as 'chromium' | 'firefox' | 'webkit';
 const captureBody = Boolean(args['capture-body']);
+const runtimeAttachDescriptorPath =
+  typeof args['runtime-attach-descriptor-path'] === 'string'
+    ? String(args['runtime-attach-descriptor-path'])
+    : process.env.BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH ?? null;
 
 // ---------------------------------------------------------------------------
 // Server startup
@@ -38,6 +43,7 @@ async function main(): Promise<void> {
     headless,
     browserEngine: engine,
     captureBody,
+    runtimeAttachDescriptorPath,
   });
 
   const server = createBrowserMcpServer(runtime);
@@ -71,7 +77,7 @@ async function main(): Promise<void> {
     const stdioTransport = new StdioServerTransport();
     await server.connect(stdioTransport);
     console.error(
-      `browser-mcp stdio server running [engine=${engine} headless=${headless} captureBody=${captureBody}]`,
+      `browser-mcp stdio server running [engine=${engine} headless=${headless} captureBody=${captureBody} runtimeAttach=${runtimeAttachDescriptorPath ?? 'off'}]`,
     );
   }
 }
