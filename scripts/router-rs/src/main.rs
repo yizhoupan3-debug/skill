@@ -1287,6 +1287,7 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
             serde_json::to_value(build_background_control_response(request)?)
                 .map_err(|err| format!("serialize background control output failed: {err}"))
         }
+        "background_state" => handle_background_state_operation(payload),
         "describe_transport" => build_trace_transport_descriptor(payload),
         "describe_handoff" => build_trace_handoff_descriptor(payload),
         "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload),
