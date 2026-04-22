@@ -19,7 +19,12 @@ if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
 from codex_agno_runtime.rust_router import RustRouteAdapter
-from codex_agno_runtime.schemas import RouteExecutionPolicy
+from codex_agno_runtime.schemas import (
+    RouteDecisionContract,
+    RouteDecisionSnapshot,
+    RouteDiagnosticReport,
+    RouteExecutionPolicy,
+)
 from scripts.route import (
     build_rust_router_command,
     route_decision_json,
@@ -36,6 +41,18 @@ def _write_text(path: Path, content: str) -> None:
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     _write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+
+
+def _fixture_route_adapter() -> RustRouteAdapter:
+    return RustRouteAdapter(
+        PROJECT_ROOT,
+        runtime_path=MISSING_RUNTIME_PATH,
+        manifest_path=ROUTE_FIXTURE_PATH,
+    )
+
+
+def _live_route_adapter() -> RustRouteAdapter:
+    return RustRouteAdapter(PROJECT_ROOT)
 
 
 def test_build_rust_router_command_emits_explicit_false_route_flags() -> None:
@@ -523,21 +540,20 @@ def test_rust_route_json_matches_python_route_decision(case: dict[str, object]) 
         runtime_path=MISSING_RUNTIME_PATH,
         manifest_path=ROUTE_FIXTURE_PATH,
     )
-    rust_decision = run_rust_route_json(
-        query,
+    rust_contract = _fixture_route_adapter().route_contract(
+        query=query,
         session_id="fixture-session",
         allow_overlay=allow_overlay,
         first_turn=first_turn,
-        runtime_path=MISSING_RUNTIME_PATH,
-        manifest_path=ROUTE_FIXTURE_PATH,
     )
+    rust_decision = rust_contract.model_dump(mode="json")
 
     assert rust_decision == python_decision
 
     expected = case["expected"]
-    assert rust_decision["selected_skill"] == expected["selected_skill"]
-    assert rust_decision["overlay_skill"] == expected["overlay_skill"]
-    assert rust_decision["layer"] == expected["layer"]
+    assert rust_contract.selected_skill == expected["selected_skill"]
+    assert rust_contract.overlay_skill == expected["overlay_skill"]
+    assert rust_contract.layer == expected["layer"]
 
 
 @pytest.mark.parametrize("query", REAL_TASK_REPLAY_QUERIES)
@@ -550,12 +566,12 @@ def test_real_task_replay_queries_match_shadow_diff_fields(query: str) -> None:
         allow_overlay=True,
         first_turn=True,
     )
-    rust_decision = run_rust_route_json(
-        query,
+    rust_decision = _live_route_adapter().route_contract(
+        query=query,
         session_id="shadow-replay-session",
         allow_overlay=True,
         first_turn=True,
-    )
+    ).model_dump(mode="json")
 
     assert rust_decision["selected_skill"] == python_decision["selected_skill"]
     assert rust_decision["overlay_skill"] == python_decision["overlay_skill"]
@@ -597,12 +613,12 @@ def test_live_route_expectations_hold_for_framework_and_openai_queries(
         allow_overlay=True,
         first_turn=True,
     )
-    rust_decision = run_rust_route_json(
-        query,
+    rust_decision = _live_route_adapter().route_contract(
+        query=query,
         session_id="live-expectation-session",
         allow_overlay=True,
         first_turn=True,
-    )
+    ).model_dump(mode="json")
 
     assert rust_decision == python_decision
     assert rust_decision["selected_skill"] == selected_skill
@@ -652,15 +668,65 @@ def test_route_policy_mode_matrix_stays_rust_authoritative(
     """Primary route-result policy should come from router-rs under the Rust-only contract."""
 
     adapter = RustRouteAdapter(PROJECT_ROOT)
-    payload = adapter.route_policy(mode=mode)
+    contract = adapter.route_policy_contract(mode=mode)
 
-    assert payload["policy_schema_version"] == adapter.route_policy_schema_version
-    assert payload["authority"] == adapter.route_authority
-    assert payload["mode"] == mode
+    assert contract.policy_schema_version == adapter.route_policy_schema_version
+    assert contract.authority == adapter.route_authority
+    assert contract.mode == mode
     for key, value in expected.items():
-        assert payload[key] == value
-    assert payload["primary_authority"] == "rust"
-    assert payload["route_result_engine"] == "rust"
+        assert getattr(contract, key) == value
+    assert contract.primary_authority == "rust"
+    assert contract.route_result_engine == "rust"
+
+
+def test_rust_route_adapter_route_contract_returns_typed_rust_owned_contract() -> None:
+    """The Python host should consume a typed Rust route contract, not stitch raw fields ad hoc."""
+
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    contract = adapter.route_contract(
+        query="帮我写一个 Rust CLI 工具",
+        session_id="typed-route-contract-session",
+        allow_overlay=True,
+        first_turn=True,
+    )
+
+    assert isinstance(contract, RouteDecisionContract)
+    assert contract.decision_schema_version == adapter.route_decision_schema_version
+    assert contract.authority == adapter.route_authority
+    assert contract.route_snapshot.engine == "rust"
+    assert contract.route_snapshot.selected_skill == contract.selected_skill
+    assert contract.route_snapshot.overlay_skill == contract.overlay_skill
+    assert contract.route_snapshot.layer == contract.layer
+
+
+def test_route_decision_contract_rejects_snapshot_drift() -> None:
+    """The typed route contract should fail closed if top-level fields drift from the Rust snapshot."""
+
+    with pytest.raises(ValueError, match="selected_skill must match route_snapshot"):
+        RouteDecisionContract.model_validate(
+            {
+                "decision_schema_version": "router-rs-route-decision-v1",
+                "authority": "rust-route-core",
+                "compile_authority": "rust-route-compiler",
+                "task": "route drift regression",
+                "session_id": "typed-route-contract-session",
+                "selected_skill": "plan-to-code",
+                "overlay_skill": "anti-laziness",
+                "layer": "L2",
+                "score": 42.0,
+                "reasons": ["Trigger phrase matched: 直接做代码."],
+                "route_snapshot": {
+                    "engine": "rust",
+                    "selected_skill": "idea-to-plan",
+                    "overlay_skill": "anti-laziness",
+                    "layer": "L2",
+                    "score": 42.0,
+                    "score_bucket": "40-49",
+                    "reasons": ["Trigger phrase matched: 直接做代码."],
+                    "reasons_class": "trigger phrase matched: 直接做代码.",
+                },
+            }
+        )
 
 
 def test_route_execution_policy_rejects_misaligned_rust_only_contract() -> None:
@@ -699,51 +765,78 @@ def test_route_report_contract_exposes_schema_and_rust_owned_snapshot_evidence()
     """The Rust diagnostic report should expose the Rust-only evidence contract."""
 
     adapter = RustRouteAdapter(PROJECT_ROOT)
-    baseline = route_decision_json(
-        "帮我写一个 Rust CLI 工具",
-        session_id="route-report-contract-session",
-        allow_overlay=True,
-        first_turn=True,
-    )["route_snapshot"]
+    baseline = RouteDecisionSnapshot.model_validate(
+        route_decision_json(
+            "帮我写一个 Rust CLI 工具",
+            session_id="route-report-contract-session",
+            allow_overlay=True,
+            first_turn=True,
+        )["route_snapshot"]
+    )
 
-    report = adapter.route_report(
+    report = adapter.route_report_contract(
         mode="shadow",
         rust_route_snapshot=baseline,
     )
 
-    assert report["report_schema_version"] == adapter.route_report_schema_version
-    assert report["authority"] == adapter.route_authority
-    assert report["mode"] == "shadow"
-    assert report["primary_engine"] == "rust"
-    assert report["evidence_kind"] == "rust-owned-snapshot"
-    assert report["strict_verification"] is False
-    assert report["verification_passed"] is True
-    assert report["route_snapshot"] == baseline
+    assert isinstance(report, RouteDiagnosticReport)
+    assert report.report_schema_version == adapter.route_report_schema_version
+    assert report.authority == adapter.route_authority
+    assert report.mode == "shadow"
+    assert report.primary_engine == "rust"
+    assert report.evidence_kind == "rust-owned-snapshot"
+    assert report.strict_verification is False
+    assert report.verification_passed is True
+    assert report.route_snapshot == baseline
 
 
 def test_route_report_verify_mode_requires_strict_verification() -> None:
     """Verify mode should mark the diagnostic report as strict Rust verification."""
 
     adapter = RustRouteAdapter(PROJECT_ROOT)
-    baseline = route_decision_json(
-        "帮我写一个 Rust CLI 工具",
-        session_id="route-report-verify-session",
-        allow_overlay=True,
-        first_turn=True,
-    )["route_snapshot"]
+    baseline = RouteDecisionSnapshot.model_validate(
+        route_decision_json(
+            "帮我写一个 Rust CLI 工具",
+            session_id="route-report-verify-session",
+            allow_overlay=True,
+            first_turn=True,
+        )["route_snapshot"]
+    )
 
-    report = adapter.route_report(
+    report = adapter.route_report_contract(
         mode="verify",
         rust_route_snapshot=baseline,
     )
 
-    assert report["report_schema_version"] == adapter.route_report_schema_version
-    assert report["authority"] == adapter.route_authority
-    assert report["mode"] == "verify"
-    assert report["primary_engine"] == "rust"
-    assert report["evidence_kind"] == "rust-owned-snapshot"
-    assert report["strict_verification"] is True
-    assert report["verification_passed"] is True
+    assert isinstance(report, RouteDiagnosticReport)
+    assert report.report_schema_version == adapter.route_report_schema_version
+    assert report.authority == adapter.route_authority
+    assert report.mode == "verify"
+    assert report.primary_engine == "rust"
+    assert report.evidence_kind == "rust-owned-snapshot"
+    assert report.strict_verification is True
+    assert report.verification_passed is True
+
+
+def test_route_report_contract_accepts_snapshot_dict_for_compatibility_callers() -> None:
+    """Compatibility callers can still pass a dict while the adapter validates into the typed contract."""
+
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    baseline = route_decision_json(
+        "帮我写一个 Rust CLI 工具",
+        session_id="route-report-compat-session",
+        allow_overlay=True,
+        first_turn=True,
+    )["route_snapshot"]
+
+    report = adapter.route_report_contract(
+        mode="shadow",
+        rust_route_snapshot=baseline,
+    )
+
+    assert isinstance(report, RouteDiagnosticReport)
+    assert report.mode == "shadow"
+    assert report.route_snapshot.selected_skill == baseline["selected_skill"]
 
 
 def test_rust_route_adapter_framework_runtime_snapshot_reads_workspace_artifacts(
