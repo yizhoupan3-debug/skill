@@ -254,6 +254,55 @@
 2. 判断哪些变化需要 `sync_skills` / docs / generated artifact refresh。
 3. 做最终 verification，并把本轮 closeout 口径固定下来。
 
+### lane5 小任务 1：真实 contract 变化与最小刷新清单（基于 2026-04-23 live diff）
+
+#### 前 4 条 lane 的真实 contract 变化
+
+- `lane1 / Route Consumer Typed-First Cutover`
+  route search 的 JSON 输出不再只是裸 row 列表，而是 typed envelope：显式带上
+  `search_schema_version`、`authority`、`query`、`matches`，并保留 `rows` 作为
+  transport alias；routing eval 输入/输出也开始走 typed schema，而不是继续吃任意
+  JSON shape；diagnostic report 新增结构化 `route_diff` 承载 contract mismatch。
+- `lane2 / Execution Kernel Metadata Canonicalization Phase B`
+  steady-state execution metadata 现在只把 Rust canonical 字段当真源；旧的
+  live-fallback / compatibility-fallback 字段不再属于 steady-state contract，
+  若混入 live payload 必须直接拒绝；retired response shape 被显式收口成单独 shape，
+  不再靠 Python compatibility 痕迹偷带语义。
+- `lane3 / Workspace Bootstrap / Shared Contract Parity`
+  host adapter 现在显式区分 framework truth 与 host-private override：任何 host 私有
+  字段都必须通过 `host_private` 显式 opt-in；CLI-family / desktop adapter 产物新增
+  first-class `bridge_contract` 与 `source_contract`，把 bridge 来源与 adapter 别名关系
+ 写成 contract；native install / host integration 也开始从
+  `configs/framework/RUNTIME_REGISTRY.json` 读取 plugin 与 skill bridge 默认值，而不是
+  继续写死路径。
+- `lane4 / Process-External Attach Surface Hardening`
+  process-external attach descriptor 现在有了 Python 侧 typed schema 校验；browser-mcp
+  对 attach descriptor、binding artifact、handoff、resume manifest 的解析入口被收口到
+  同一套 hydrate/fallback 路径，避免 consumer 再各自补第二套 descriptor 语义。
+
+#### 最小化 docs / generated artifacts 刷新清单
+
+- 现在必须刷新的 docs：
+  `docs/framework_profile_contract.md`。
+- 现在必须刷新的 generated artifacts：
+  framework-profile / host-adapter contract artifacts，重点是所有会落出
+  `bridge_contract`、`source_contract`、compatibility alias mirror、shared contract
+  projection report 的输出面；native integration / host integration 相关派生产物也要跟着
+  runtime registry 的 plugin / skill bridge 默认值一起重投影。
+- 现在明确不需要刷新的面：
+  `skills/SKILL_*`、`skills/SKILL_ROUTING_*`、`sync_skills` 全部先不动，因为本轮没有改
+  skill catalog 或 routing source；`docs/host_adapter_contracts.md`、
+  `docs/rust_contracts.md`、`docs/upgrade_compatibility_matrix.md` 也先不机械重写，只有
+  regenerate 后出现文档口径缺口时再补。
+- lane5 集成时应配套跑的 targeted verification：
+  `tests/test_routing_parity.py`、`tests/test_codex_agno_runtime_rust_projection.py`、
+  `tests/test_execution_kernel_router_rs_contract.py`、
+  `tests/test_codex_agno_runtime_services.py`、
+  `tests/test_framework_profile_adapters.py`、
+  `tests/test_framework_contract_artifacts.py`、
+  `tests/test_install_codex_native_integration.py`、
+  `tests/test_runtime_registry.py`。
+
 ---
 
 ## 推荐执行顺序

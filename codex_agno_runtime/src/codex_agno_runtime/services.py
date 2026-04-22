@@ -266,9 +266,7 @@ def project_execution_kernel_payload(
     payload = dict(_runtime_execution_kernel_contract(service_descriptor, dry_run=dry_run))
     if metadata is not None:
         projected_metadata = dict(payload)
-        for field in contract_fields:
-            if field in metadata:
-                projected_metadata[field] = metadata[field]
+        projected_metadata.update(metadata)
         metadata_execution_kernel = metadata.get("execution_kernel")
         metadata_execution_kernel_authority = metadata.get("execution_kernel_authority")
         if (metadata_execution_kernel is None) != (metadata_execution_kernel_authority is None):
@@ -352,7 +350,7 @@ def _runtime_sandbox_lifecycle_contract(service_descriptor: Mapping[str, Any] | 
         "schema_version": "runtime-sandbox-lifecycle-v1",
         "authority": "rust-runtime-control-plane",
         "role": "sandbox-lifecycle-control",
-        "projection": "python-thin-projection",
+        "projection": "python-diagnosis-only-projection",
         "delegate_kind": "rust-runtime-control-plane",
         "lifecycle_states": list(_DEFAULT_SANDBOX_LIFECYCLE_STATES),
         "allowed_transitions": [list(edge) for edge in sorted(_DEFAULT_SANDBOX_ALLOWED_TRANSITIONS)],
@@ -383,7 +381,7 @@ def _runtime_background_orchestration_contract(
         "schema_version": "runtime-background-orchestration-v1",
         "authority": "rust-runtime-control-plane",
         "role": "background-orchestration-control",
-        "projection": "python-thin-projection",
+        "projection": "python-diagnosis-only-projection",
         "delegate_kind": "rust-background-control-policy",
         "policy_schema_version": "router-rs-background-control-v1",
         "queue_model": "bounded-async-host",
@@ -417,7 +415,7 @@ def _runtime_host_contract(control_plane_descriptor: Mapping[str, Any] | None) -
     payload = {
         "authority": "rust-runtime-control-plane",
         "role": "runtime-orchestration",
-        "projection": "python-thin-projection",
+        "projection": "python-diagnosis-only-projection",
         "delegate_kind": "rust-runtime-control-plane",
         "startup_order": list(_DEFAULT_RUNTIME_STARTUP_ORDER),
         "shutdown_order": list(_DEFAULT_RUNTIME_SHUTDOWN_ORDER),

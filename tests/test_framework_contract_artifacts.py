@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from typing import Any, Mapping
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,7 +20,17 @@ from codex_agno_runtime.profile_artifacts import (
     build_framework_shared_contract_projection_report,
     emit_framework_contract_artifacts,
 )
+from codex_agno_runtime.framework_profile import FrameworkProfile
 from codex_agno_runtime.rust_router import RustRouteAdapter
+
+
+def _load_json_payload(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _read_shared_contract_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    assert "shared_contract" in payload or "common_contract" in payload
+    return FrameworkProfile.from_dict(payload).shared_contract_surface()
 
 
 def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_rust_outputs(
@@ -769,9 +780,15 @@ def test_framework_shared_contract_projection_report_keeps_hosts_on_one_outer_tr
     assert projections["codex_common_adapter"]["bridge_contract_match"] is True
     assert projections["codex_common_adapter"]["bridge_contract"] == report["canonical_bridge_contract"]
     assert projections["codex_desktop_adapter"]["projection_field"] == "common_contract"
+    assert projections["codex_desktop_adapter"]["bridge_contract_match"] is True
+    assert projections["codex_desktop_adapter"]["bridge_contract"] == report["canonical_bridge_contract"]
     assert projections["codex_desktop_adapter"]["runtime_surface_match"] is True
+    assert projections["codex_cli_adapter"]["bridge_contract_match"] is True
+    assert projections["codex_cli_adapter"]["bridge_contract"] == report["canonical_bridge_contract"]
     assert projections["codex_cli_adapter"]["runtime_surface_match"] is True
+    assert projections["claude_code_adapter"]["bridge_contract_match"] is True
     assert projections["claude_code_adapter"]["runtime_surface_match"] is True
+    assert projections["gemini_cli_adapter"]["bridge_contract_match"] is True
     assert projections["gemini_cli_adapter"]["runtime_surface_match"] is True
     assert projections["gemini_cli_adapter"]["projected_contract"]["workspace_bootstrap"][
         "bridges"
@@ -782,6 +799,55 @@ def test_framework_shared_contract_projection_report_keeps_hosts_on_one_outer_tr
             "bridge_kind": "framework-memory-mount",
         }
     ]
+
+
+def test_framework_profile_artifact_bidirectional_shared_contract_consistency(tmp_path: Path) -> None:
+    profile = build_framework_profile(
+        profile_id="bidirectional-profile",
+        display_name="Bidirectional Contract Profile",
+        rules_bundle={"rules": [{"id": "outer-owned"}]},
+        skill_bundle={"skills": ["router", "memory-bridge"]},
+        session_policy={"mode": "bounded", "approval_mode": "manual"},
+        tool_policy={"shell": "allow"},
+        approval_policy={"mode": "manual"},
+        loadout_policy={"default": "framework"},
+        artifact_contract={"layout": "stable-v1"},
+        memory_mounts=("project",),
+        mcp_servers=("local-memory",),
+        workspace_bootstrap={"skill_bridge": {"project_dir": ".codex/skills"}},
+    )
+    paths = emit_framework_contract_artifacts(
+        tmp_path,
+        profile=profile,
+        rust_adapter=RustRouteAdapter(PROJECT_ROOT, timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS),
+    )
+
+    framework_profile = FrameworkProfile.from_dict(
+        _load_json_payload(Path(paths["framework_profile"]))
+    )
+    canonical_surface = framework_profile.shared_contract_surface()
+
+    contract_payloads = {
+        "cli_common_adapter": _load_json_payload(Path(paths["cli_common_adapter"])),
+        "codex_common_adapter": _load_json_payload(Path(paths["codex_common_adapter"])),
+        "codex_desktop_adapter": _load_json_payload(Path(paths["codex_desktop_adapter"])),
+        "codex_cli_adapter": _load_json_payload(Path(paths["codex_cli_adapter"])),
+        "claude_code_adapter": _load_json_payload(Path(paths["claude_code_adapter"])),
+        "gemini_cli_adapter": _load_json_payload(Path(paths["gemini_cli_adapter"])),
+    }
+
+    for adapter_id, payload in contract_payloads.items():
+        assert _read_shared_contract_payload(payload) == canonical_surface, (
+            f"{adapter_id} shared-contract payload not aligned with framework_profile"
+        )
+
+    report = build_framework_shared_contract_projection_report(
+        framework_profile,
+        adapter_payloads=contract_payloads,
+    )
+    assert report["shared_contract_schema_version"] == "framework-shared-contract-v1"
+    assert report["all_shared_contract_projections_match"] is True
+    assert report["all_bridge_contract_projections_match"] is True
 
 
 def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
@@ -842,6 +908,10 @@ def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
         Path(paths["rust_codex_desktop_host_adapter"]).read_text(encoding="utf-8")
     )
     assert rust_alias_payload["metadata"]["adapter_alias_of"] == "codex_desktop_adapter"
+    assert rust_alias_payload["bridge_contract"] == (
+        rust_alias_payload["common_contract"]["workspace_bootstrap"]["bridges"]
+    )
+    assert rust_alias_payload["source_contract"]["adapter_alias_of"] == "codex_desktop_adapter"
     rust_alias_retirement = json.loads(
         Path(paths["rust_codex_desktop_alias_retirement_status"]).read_text(encoding="utf-8")
     )
@@ -996,3 +1066,7 @@ def test_rust_route_adapter_can_opt_in_continuity_alias_artifact(tmp_path: Path)
         "stream-json",
     ]
     assert payload["codex_desktop_host_adapter"]["metadata"]["adapter_alias_of"] == "codex_desktop_adapter"
+    assert payload["codex_desktop_host_adapter"]["bridge_contract"] == (
+        payload["codex_desktop_host_adapter"]["common_contract"]["workspace_bootstrap"]["bridges"]
+    )
+    assert payload["codex_desktop_host_adapter"]["source_contract"]["alias_mode"] == "mirror-only"

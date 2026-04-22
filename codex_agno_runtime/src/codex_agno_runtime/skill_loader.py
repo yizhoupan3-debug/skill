@@ -252,7 +252,9 @@ class SkillLoader:
                     health=_safe_float(runtime_record.get("health", manifest_record.get("health", 100.0))),
                     body="",
                     body_loaded=False,
-                    source_path=self._resolve_source_path(slug),
+                    # Keep compatibility JSON loading as a read-only fallback lane.
+                    # Source documents are only opened on explicit load_body requests.
+                    source_path=None,
                 )
             )
         return records

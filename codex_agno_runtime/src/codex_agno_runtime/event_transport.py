@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Mapping
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from codex_agno_runtime.config import RuntimeSettings
 from codex_agno_runtime.rust_router import RustRouteAdapter
@@ -20,6 +23,63 @@ RUNTIME_EVENT_ATTACH_SOURCE_TRANSPORT_METHOD = "describe_runtime_event_transport
 RUNTIME_EVENT_ATTACH_METHOD = "attach_runtime_event_transport"
 RUNTIME_EVENT_ATTACH_SUBSCRIBE_METHOD = "subscribe_attached_runtime_events"
 RUNTIME_EVENT_ATTACH_CLEANUP_METHOD = "cleanup_attached_runtime_event_transport"
+
+
+class _RuntimeEventAttachDescriptorArtifacts(BaseModel):
+    """Optional artifact path bundle carried by attach descriptors."""
+
+    model_config = ConfigDict(extra="allow")
+
+    binding_artifact_path: str | None = None
+    handoff_path: str | None = None
+    resume_manifest_path: str | None = None
+    trace_stream_path: str | None = None
+
+
+class _RuntimeEventAttachDescriptorCapabilities(BaseModel):
+    """Optional capability bits carried by attach descriptors."""
+
+    model_config = ConfigDict(extra="allow")
+
+    artifact_replay: bool | None = None
+    live_remote_stream: bool | None = None
+    cleanup_preserves_replay: bool | None = None
+
+
+class RuntimeEventAttachDescriptor(BaseModel):
+    """Single source-of-truth schema for process-external runtime attach descriptors."""
+
+    model_config = ConfigDict(extra="allow")
+
+    schema_version: Literal[RUNTIME_EVENT_ATTACH_DESCRIPTOR_SCHEMA_VERSION]
+    attach_mode: str | None = None
+    artifact_backend_family: str | None = None
+    source_transport_method: str | None = None
+    source_handoff_method: str | None = None
+    attach_method: str | None = None
+    subscribe_method: str | None = None
+    cleanup_method: str | None = None
+    resume_mode: str | None = None
+    cleanup_semantics: str | None = None
+    recommended_entrypoint: str | None = None
+    attach_capabilities: _RuntimeEventAttachDescriptorCapabilities | None = None
+    requested_artifacts: _RuntimeEventAttachDescriptorArtifacts | None = None
+    resolved_artifacts: _RuntimeEventAttachDescriptorArtifacts | None = None
+    resolution: _RuntimeEventAttachDescriptorArtifacts | None = None
+
+    @classmethod
+    def from_payload(cls, payload: Mapping[str, Any]) -> "RuntimeEventAttachDescriptor":
+        """Validate and normalize a raw attach descriptor payload."""
+
+        try:
+            return cls.model_validate(payload)
+        except ValidationError as exc:
+            errors = exc.errors()
+            if any(err.get("loc") == ("schema_version",) for err in errors):
+                raise ValueError(
+                    "External runtime event attach payload returned an unknown attach_descriptor schema_version."
+                ) from exc
+            raise ValueError("External runtime event attach payload returned an invalid attach_descriptor.") from exc
 
 
 def _clone_json(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -68,12 +128,7 @@ def _validated_attach_descriptor(payload: Mapping[str, Any]) -> dict[str, Any]:
     attach_descriptor = payload.get("attach_descriptor")
     if not isinstance(attach_descriptor, Mapping):
         raise ValueError("External runtime event attach payload is missing attach_descriptor.")
-    descriptor = dict(attach_descriptor)
-    if descriptor.get("schema_version") != RUNTIME_EVENT_ATTACH_DESCRIPTOR_SCHEMA_VERSION:
-        raise ValueError(
-            "External runtime event attach payload returned an unknown attach_descriptor schema_version."
-        )
-    return descriptor
+    return RuntimeEventAttachDescriptor.from_payload(attach_descriptor).model_dump(mode="json")
 
 
 class ExternalRuntimeEventTransportBridge:

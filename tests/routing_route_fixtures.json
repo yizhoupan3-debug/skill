@@ -511,6 +511,28 @@
       }
     },
     {
+      "name": "first-turn-disable-gate-falls-back-to-frontend-design",
+      "query": "基于这组 screenshot 做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题",
+      "first_turn": false,
+      "allow_overlay": null,
+      "expected": {
+        "selected_skill": "frontend-design",
+        "overlay_skill": null,
+        "layer": "L3"
+      }
+    },
+    {
+      "name": "overlay-disabled-suppresses-anti-laziness-overlay",
+      "query": "这是高负载跨文件任务，需要 sidecar delegation 并行处理",
+      "first_turn": null,
+      "allow_overlay": false,
+      "expected": {
+        "selected_skill": "subagent-delegation",
+        "overlay_skill": null,
+        "layer": "L0"
+      }
+    },
+    {
       "name": "frontend-design-motion-boundary",
       "query": "用 Framer Motion 给这个界面做磁性按钮、page transition 和微交互，重点是动效质感",
       "expected": {

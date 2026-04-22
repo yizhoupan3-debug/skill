@@ -53,6 +53,43 @@ def _live_route_adapter() -> RustRouteAdapter:
     return RustRouteAdapter(PROJECT_ROOT)
 
 
+ROUTE_DECISION_KNOB_CASES = [
+    (
+        "深度review现在的路由系统和 skill 边界。",
+        "skill-developer-codex",
+        None,
+        "L0",
+        False,
+        True,
+    ),
+]
+
+
+def _fallback_route_contract_payload(*, adapter: RustRouteAdapter) -> dict[str, object]:
+    return {
+        "decision_schema_version": adapter.route_decision_schema_version,
+        "authority": adapter.route_authority,
+        "compile_authority": adapter.compile_authority,
+        "task": "route adapter fallback regression",
+        "session_id": "fallback-regression-session",
+        "selected_skill": "execution-controller-coding",
+        "overlay_skill": None,
+        "layer": "L0",
+        "score": 49.0,
+        "reasons": ["Fallback transport exercised for regression."],
+        "route_snapshot": {
+            "engine": "rust",
+            "selected_skill": "execution-controller-coding",
+            "overlay_skill": None,
+            "layer": "L0",
+            "score": 49.0,
+            "score_bucket": "40-49",
+            "reasons": ["Fallback transport exercised for regression."],
+            "reasons_class": "fallback transport",
+        },
+    }
+
+
 def test_route_adapter_query_cli_args_emits_explicit_false_route_flags() -> None:
     command = _live_route_adapter().query_cli_args(
         query="route me",
@@ -97,6 +134,116 @@ def test_route_decision_contract_exposes_typed_decision() -> None:
     assert decision.selected_skill == "execution-controller-coding"
     assert decision.overlay_skill is None
     assert decision.route_snapshot.selected_skill == decision.selected_skill
+
+
+@pytest.mark.parametrize(
+    ("query", "selected_skill", "overlay_skill", "layer", "allow_overlay", "first_turn"),
+    ROUTE_DECISION_KNOB_CASES,
+)
+def test_route_decision_contract_live_matches_python_for_knobbed_inputs(
+    query: str,
+    selected_skill: str,
+    overlay_skill: str | None,
+    layer: str,
+    allow_overlay: bool,
+    first_turn: bool,
+) -> None:
+    python_decision = route_decision_contract(
+        query,
+        codex_home=PROJECT_ROOT,
+        session_id="route-knob-live-parity",
+        allow_overlay=allow_overlay,
+        first_turn=first_turn,
+    ).model_dump(mode="json")
+    rust_decision = _live_route_adapter().route_contract(
+        query=query,
+        session_id="route-knob-live-parity",
+        allow_overlay=allow_overlay,
+        first_turn=first_turn,
+    ).model_dump(mode="json")
+
+    assert rust_decision == python_decision
+    assert rust_decision["selected_skill"] == selected_skill
+    assert rust_decision["overlay_skill"] == overlay_skill
+    assert rust_decision["layer"] == layer
+
+
+def test_route_contract_falls_back_to_default_runner_when_stdio_reports_unsupported_operation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = RustRouteAdapter(
+        PROJECT_ROOT,
+        runtime_path=MISSING_RUNTIME_PATH,
+        manifest_path=ROUTE_FIXTURE_PATH,
+    )
+
+    class _UnsupportedOperationClient:
+        def request(self, operation: str, payload: object) -> dict[str, object]:
+            raise RuntimeError("unsupported stdio operation: route")
+
+        def close(self) -> None:
+            pass
+
+    calls = {"json_runner_calls": 0}
+
+    def fake_run_json_command(command: list[str], *, failure_label: str) -> dict[str, object]:
+        calls["json_runner_calls"] += 1
+        return _fallback_route_contract_payload(adapter=adapter)
+
+    monkeypatch.setattr(adapter, "_stdio_client", lambda: _UnsupportedOperationClient())
+    monkeypatch.setattr(adapter, "_reset_stdio_client", lambda: None)
+    monkeypatch.setattr(adapter, "_run_json_command", fake_run_json_command)
+
+    contract = adapter.route_contract(
+        query="这个仓库的修复你直接 gsd，推进到底，别停，主线程保持简短并给我验证证据",
+        session_id="route-contract-fallback-session",
+        allow_overlay=True,
+        first_turn=False,
+    )
+
+    assert calls["json_runner_calls"] == 1
+    assert contract.selected_skill == "execution-controller-coding"
+    assert contract.overlay_skill is None
+
+
+def test_route_contract_rejects_unknown_decision_schema_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = _fixture_route_adapter()
+
+    def fake_run_hot_json_command(*args, **kwargs):
+        payload = _fallback_route_contract_payload(adapter=adapter).copy()
+        payload["decision_schema_version"] = "router-rs-route-decision-vX"
+        return payload
+
+    monkeypatch.setattr(adapter, "_run_hot_json_command", fake_run_hot_json_command)
+    with pytest.raises(RuntimeError, match="unknown decision schema"):
+        adapter.route_contract(
+            query="这个仓库的修复你直接 gsd，推进到底，别停，主线程保持简短并给我验证证据",
+            session_id="route-contract-unknown-schema",
+            allow_overlay=True,
+            first_turn=True,
+        )
+
+
+def test_route_contract_rejects_unknown_decision_authority_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = _fixture_route_adapter()
+
+    def fake_run_hot_json_command(*args, **kwargs):
+        payload = _fallback_route_contract_payload(adapter=adapter).copy()
+        payload["authority"] = "legacy-route-core"
+        return payload
+
+    monkeypatch.setattr(adapter, "_run_hot_json_command", fake_run_hot_json_command)
+    with pytest.raises(RuntimeError, match="unexpected authority marker"):
+        adapter.route_contract(
+            query="这个仓库的修复你直接 gsd，推进到底，别停，主线程保持简短并给我验证证据",
+            session_id="route-contract-unknown-authority",
+            allow_overlay=True,
+            first_turn=True,
+        )
 
 
 def test_search_skills_uses_route_adapter_hot_path(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -221,7 +368,7 @@ def test_search_skill_rows_json_text_exports_transport_payload_from_typed_matche
 
     payload = json.loads(adapter.search_skill_rows_json_text(query="typed first", limit=1))
 
-    assert payload == contract.to_transport_rows()
+    assert payload == contract.to_transport_payload()
 
 
 def test_route_decision_contract_stays_typed_first_transport_payload(

@@ -54,6 +54,7 @@ HOST_SPECIFIC_METADATA_KEYS = frozenset(
         "transport",
     }
 )
+# Must match scripts/router-rs/src/framework_profile.rs::HOST_SPECIFIC_METADATA_KEYS
 
 CORE_CAPABILITIES = (
     "runtime",

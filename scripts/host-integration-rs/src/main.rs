@@ -14,7 +14,7 @@ const CONFIG_SCHEMA_HEADER: &str =
     "#:schema https://developers.openai.com/codex/config-schema.json\n";
 const FRAMEWORK_START_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_START -->";
 const FRAMEWORK_END_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_END -->";
-const PLUGIN_NAME: &str = "skill-framework-native";
+const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v1";
 const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
 const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "model-with-reasoning",
@@ -36,6 +36,37 @@ struct SyncSectionManifest {
 struct SyncManifest {
     full_sync: SyncSectionManifest,
     partial_sync: SyncSectionManifest,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RuntimeRegistry {
+    schema_version: String,
+    #[serde(default)]
+    plugins: Vec<RuntimePluginRegistration>,
+    #[serde(default)]
+    workspace_bootstrap_defaults: RuntimeWorkspaceBootstrapDefaults,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RuntimePluginRegistration {
+    plugin_name: String,
+    source_rel: String,
+    #[serde(default)]
+    marketplace_name: Option<String>,
+    #[serde(default)]
+    marketplace_category: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct RuntimeWorkspaceBootstrapDefaults {
+    #[serde(default)]
+    skill_bridge: RuntimeSkillBridgeDefaults,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct RuntimeSkillBridgeDefaults {
+    #[serde(default)]
+    source_rel: Option<String>,
 }
 
 #[derive(Parser)]
@@ -381,6 +412,48 @@ fn normalize_path(path: &Path) -> Result<PathBuf, String> {
     }
 }
 
+fn runtime_registry_path(repo_root: &Path) -> PathBuf {
+    let repo_candidate = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
+    if repo_candidate.is_file() {
+        return repo_candidate;
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../configs/framework/RUNTIME_REGISTRY.json")
+}
+
+fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, String> {
+    let path = runtime_registry_path(repo_root);
+    let payload = fs::read_to_string(&path).map_err(|err| err.to_string())?;
+    let registry =
+        serde_json::from_str::<RuntimeRegistry>(&payload).map_err(|err| err.to_string())?;
+    if registry.schema_version != RUNTIME_REGISTRY_SCHEMA_VERSION {
+        return Err(format!(
+            "Unsupported runtime registry schema_version {:?} at {}",
+            registry.schema_version,
+            path.to_string_lossy()
+        ));
+    }
+    Ok(registry)
+}
+
+fn primary_plugin_registration(repo_root: &Path) -> Result<RuntimePluginRegistration, String> {
+    let registry = load_runtime_registry(repo_root)?;
+    registry
+        .plugins
+        .into_iter()
+        .next()
+        .ok_or_else(|| "Runtime registry must define at least one plugin.".to_string())
+}
+
+fn skill_bridge_source_rel(repo_root: &Path) -> Result<String, String> {
+    let registry = load_runtime_registry(repo_root)?;
+    Ok(registry
+        .workspace_bootstrap_defaults
+        .skill_bridge
+        .source_rel
+        .unwrap_or_else(|| "skills".to_string()))
+}
+
 fn describe_path(report_root: &Path, target_root: &Path, path: &Path) -> String {
     if let Ok(relative) = path.strip_prefix(report_root) {
         return relative.to_string_lossy().into_owned();
@@ -416,6 +489,15 @@ fn install_native_integration(
 ) -> Result<Value, String> {
     let template_root = normalize_path(template_root)?;
     let repo_root = normalize_path(repo_root)?;
+    let plugin_registration = primary_plugin_registration(&repo_root)?;
+    let plugin_name = plugin_registration
+        .marketplace_name
+        .clone()
+        .unwrap_or_else(|| plugin_registration.plugin_name.clone());
+    let plugin_category = plugin_registration
+        .marketplace_category
+        .clone()
+        .unwrap_or_else(|| "Developer Tools".to_string());
     let home_config_path = normalize_path(home_config_path)?;
     let home_plugin_root = normalize_path(home_plugin_root)?;
     let home_marketplace_path = normalize_path(home_marketplace_path)?;
@@ -446,15 +528,17 @@ fn install_native_integration(
     };
     let tui_changed = ensure_tui_status_line(&home_config_path)?;
     let personal_plugin_changed = if install_personal_plugin {
-        sync_directory(
-            &repo_root.join("plugins").join(PLUGIN_NAME),
-            &home_plugin_root,
-        )?
+        sync_directory(&repo_root.join(&plugin_registration.source_rel), &home_plugin_root)?
     } else {
         false
     };
     let personal_marketplace_changed = if install_personal_marketplace_entry {
-        install_personal_marketplace(&home_marketplace_path, &home_plugin_root)?
+        install_personal_marketplace(
+            &home_marketplace_path,
+            &home_plugin_root,
+            &plugin_name,
+            &plugin_category,
+        )?
     } else {
         false
     };
@@ -817,7 +901,7 @@ fn read_dir_map(root: &Path) -> Result<BTreeMap<String, PathBuf>, String> {
 }
 
 fn ensure_home_codex_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool, String> {
-    let source = repo_root.join("skills");
+    let source = repo_root.join(skill_bridge_source_rel(repo_root)?);
     if let Some(parent) = target_path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
@@ -874,10 +958,18 @@ fn ensure_home_claude_refresh_command(
 fn install_personal_marketplace(
     marketplace_path: &Path,
     plugin_root: &Path,
+    plugin_name: &str,
+    plugin_category: &str,
 ) -> Result<bool, String> {
     let existing = read_json_map_if_exists(marketplace_path)?;
     let relative_base = marketplace_root(marketplace_path)?;
-    let payload = build_personal_marketplace_payload(plugin_root, &relative_base, existing)?;
+    let payload = build_personal_marketplace_payload(
+        plugin_root,
+        &relative_base,
+        existing,
+        plugin_name,
+        plugin_category,
+    )?;
     write_json_if_changed(marketplace_path, &Value::Object(payload))
 }
 
@@ -900,6 +992,8 @@ fn build_personal_marketplace_payload(
     plugin_root: &Path,
     marketplace_root: &Path,
     existing: Option<Map<String, Value>>,
+    plugin_name: &str,
+    plugin_category: &str,
 ) -> Result<Map<String, Value>, String> {
     let mut payload = existing.unwrap_or_default();
     let plugin_relative = plugin_root
@@ -948,29 +1042,30 @@ fn build_personal_marketplace_payload(
         let Value::Object(mut row_map) = row else {
             continue;
         };
-        if row_map.get("name").and_then(Value::as_str) != Some(PLUGIN_NAME) {
+        if row_map.get("name").and_then(Value::as_str) != Some(plugin_name) {
             updated_plugins.push(Value::Object(row_map));
             continue;
         }
         replaced = true;
         let category = row_map
             .remove("category")
-            .unwrap_or_else(|| Value::String("Developer Tools".to_string()));
-        updated_plugins.push(plugin_marketplace_row(&plugin_path, category));
+            .unwrap_or_else(|| Value::String(plugin_category.to_string()));
+        updated_plugins.push(plugin_marketplace_row(plugin_name, &plugin_path, category));
     }
     if !replaced {
         updated_plugins.push(plugin_marketplace_row(
+            plugin_name,
             &plugin_path,
-            Value::String("Developer Tools".to_string()),
+            Value::String(plugin_category.to_string()),
         ));
     }
     payload.insert("plugins".to_string(), Value::Array(updated_plugins));
     Ok(payload)
 }
 
-fn plugin_marketplace_row(plugin_path: &str, category: Value) -> Value {
+fn plugin_marketplace_row(plugin_name: &str, plugin_path: &str, category: Value) -> Value {
     json!({
-        "name": PLUGIN_NAME,
+        "name": plugin_name,
         "source": {"source": "local", "path": plugin_path},
         "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
         "category": category,

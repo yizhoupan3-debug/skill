@@ -15,6 +15,10 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from codex_agno_runtime.schemas import (
+    RoutingEvalCases,
+    RoutingEvalMetrics,
+    RoutingEvalReport,
+    RoutingEvalResult,
     RouteDecisionContract,
     RouteDecisionSnapshot,
     RouteDiagnosticReport,
@@ -31,6 +35,27 @@ def resolve_router_binary_candidate(*candidates: Path) -> Path | None:
         if candidate.is_file():
             return candidate
     return None
+
+
+def _load_json_object(payload: str, *, source: str) -> dict[str, Any]:
+    """Load a typed JSON object and fail with a clear transport error."""
+
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{source}: invalid JSON payload") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"{source}: expected JSON object, got {type(data).__name__}")
+    return data
+
+
+def _load_json_object_from_file(path: Path, *, source: str) -> dict[str, Any]:
+    """Load and normalize one JSON file payload."""
+
+    try:
+        return _load_json_object(path.read_text(encoding="utf-8"), source=source)
+    except OSError as exc:
+        raise RuntimeError(f"{source}: failed reading {path}") from exc
 
 
 def discover_codex_home(start_path: Path) -> Path:
@@ -57,7 +82,7 @@ def build_route_cli_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Lookup skills by query.")
     parser.add_argument("--query", type=str, required=True, help="Natural-language search query.")
     parser.add_argument("--limit", type=int, default=5, help="Max results to return.")
-    parser.add_argument("--json", action="store_true", help="Output ranked search rows in JSON format.")
+    parser.add_argument("--json", action="store_true", help="Output typed search contract JSON.")
     parser.add_argument("--route-json", action="store_true", help="Output final route decision in JSON format.")
     parser.add_argument("--session-id", type=str, default="route-cli", help="Session id used in route decision.")
     parser.add_argument(
@@ -171,8 +196,8 @@ class _RouterStdioClient:
                 raise RuntimeError("router stdio pipe broke while sending request") from exc
             response_line = self._read_response_line_locked(proc)
             try:
-                response = json.loads(response_line)
-            except json.JSONDecodeError as exc:
+                response = _load_json_object(response_line, source="router stdio response")
+            except RuntimeError as exc:
                 raise RuntimeError(f"router stdio returned invalid JSON: {response_line!r}") from exc
             if response.get("id") != request_id:
                 raise RuntimeError(
@@ -409,16 +434,18 @@ def run_route_cli(
     return 0
 
 
-def load_routing_eval_cases(path: Path) -> dict[str, Any]:
+def load_routing_eval_cases(path: Path) -> RoutingEvalCases:
     """Load offline routing evaluation cases from JSON."""
 
-    return json.loads(path.read_text(encoding="utf-8"))
+    return RoutingEvalCases.model_validate(
+        _load_json_object_from_file(path, source=f"routing eval case file: {path}")
+    )
 
 
 def evaluate_routing_cases(
     *,
     skills_root: Path,
-    cases_payload: dict[str, Any],
+    cases_payload: RoutingEvalCases | dict[str, Any],
 ) -> dict[str, Any]:
     """Run offline routing evaluation cases through the Rust-backed route contract."""
 
@@ -426,87 +453,86 @@ def evaluate_routing_cases(
     manifest_path = skills_root / "SKILL_MANIFEST.json"
     codex_home = skills_root.parent
 
-    metrics = {
-        "case_count": 0,
-        "trigger_hit": 0,
-        "trigger_miss": 0,
-        "overtrigger": 0,
-        "owner_correct": 0,
-        "overlay_correct": 0,
-    }
-    results: list[dict[str, Any]] = []
+    if isinstance(cases_payload, dict):
+        cases_payload = RoutingEvalCases.model_validate(cases_payload)
+    metrics = RoutingEvalMetrics()
+    results: list[RoutingEvalResult] = []
 
-    for case in cases_payload.get("cases", []):
-        if not isinstance(case, dict):
-            continue
-        task = str(case.get("task", "")).strip()
+    for case in cases_payload.cases:
+        task = case.task.strip()
         if not task:
             continue
 
-        metrics["case_count"] += 1
         contract = route_decision_contract(
             task,
             codex_home=codex_home,
-            session_id=f"routing-eval::{case.get('id', metrics['case_count'])}",
+            session_id=f"routing-eval::{case.id or metrics.case_count + 1}",
             allow_overlay=True,
-            first_turn=bool(case.get("first_turn", True)),
+            first_turn=case.first_turn,
             runtime_path=runtime_path,
             manifest_path=manifest_path,
         )
         selected_owner = contract.selected_skill
         selected_overlay = contract.overlay_skill
-        category = str(case.get("category", "")).strip()
-        expected_owner = case.get("expected_owner")
-        expected_overlay = case.get("expected_overlay")
-        focus_skill = case.get("focus_skill")
-        forbidden_owners = {str(item) for item in case.get("forbidden_owners", [])}
+        metrics.case_count += 1
+        category = case.category.strip()
+        expected_owner = case.expected_owner
+        expected_overlay = case.expected_overlay
+        focus_skill = case.focus_skill
+        forbidden_owners = {str(item) for item in case.forbidden_owners}
 
         trigger_hit = False
         overtrigger = False
         owner_correct = expected_owner == selected_owner if expected_owner else False
-        overlay_correct = expected_overlay == selected_overlay if "expected_overlay" in case else False
+        overlay_correct = expected_overlay == selected_overlay if expected_overlay is not None else False
 
         if category == "should-trigger":
             trigger_hit = focus_skill == selected_owner
-            metrics["trigger_hit" if trigger_hit else "trigger_miss"] += 1
+            if trigger_hit:
+                metrics.trigger_hit += 1
+            else:
+                metrics.trigger_miss += 1
         elif category == "should-not-trigger":
             overtrigger = selected_owner in forbidden_owners
             if overtrigger:
-                metrics["overtrigger"] += 1
+                metrics.overtrigger += 1
         elif category in {"wrong-owner-near-miss", "gate-vs-owner-conflict"}:
             trigger_hit = focus_skill == selected_owner
-            metrics["trigger_hit" if trigger_hit else "trigger_miss"] += 1
+            if trigger_hit:
+                metrics.trigger_hit += 1
+            else:
+                metrics.trigger_miss += 1
             if selected_owner in forbidden_owners:
-                metrics["overtrigger"] += 1
+                metrics.overtrigger += 1
 
         if owner_correct:
-            metrics["owner_correct"] += 1
+            metrics.owner_correct += 1
         if overlay_correct:
-            metrics["overlay_correct"] += 1
+            metrics.overlay_correct += 1
 
         results.append(
-            {
-                "id": case.get("id"),
-                "category": category,
-                "task": task,
-                "focus_skill": focus_skill,
-                "selected_owner": selected_owner,
-                "selected_overlay": selected_overlay,
-                "expected_owner": expected_owner,
-                "expected_overlay": expected_overlay,
-                "forbidden_owners": sorted(forbidden_owners),
-                "trigger_hit": trigger_hit,
-                "overtrigger": overtrigger,
-                "owner_correct": owner_correct,
-                "overlay_correct": overlay_correct,
-            }
+            RoutingEvalResult(
+                id=case.id,
+                category=category,
+                task=task,
+                focus_skill=focus_skill,
+                selected_owner=selected_owner,
+                selected_overlay=selected_overlay,
+                expected_owner=expected_owner,
+                expected_overlay=expected_overlay,
+                forbidden_owners=sorted(forbidden_owners),
+                trigger_hit=trigger_hit,
+                overtrigger=overtrigger,
+                owner_correct=owner_correct,
+                overlay_correct=overlay_correct,
+            )
         )
 
-    return {
-        "schema_version": "routing-eval-v1",
-        "metrics": metrics,
-        "results": results,
-    }
+    return RoutingEvalReport(
+        schema_version="routing-eval-v1",
+        metrics=metrics,
+        results=results,
+    ).model_dump(mode="json")
 
 
 def run_routing_eval_cli(
@@ -540,9 +566,11 @@ def run_framework_contract_artifacts_cli(
     from codex_agno_runtime.profile_artifacts import emit_framework_contract_artifacts
 
     args = build_framework_contract_artifacts_cli_parser().parse_args(argv)
-    profile = FrameworkProfile.from_dict(
-        json.loads(args.framework_profile.read_text(encoding="utf-8"))
+    profile_payload = _load_json_object_from_file(
+        args.framework_profile,
+        source=f"framework profile file: {args.framework_profile}",
     )
+    profile = FrameworkProfile.from_dict(profile_payload)
     rust_adapter = route_adapter(codex_home=codex_home) if args.include_rust_bundle else None
     paths = emit_framework_contract_artifacts(
         args.output_dir,
@@ -782,10 +810,10 @@ class RustRouteAdapter:
         query: str,
         limit: int,
     ) -> str:
-        """Render search JSON only at the CLI transport boundary."""
+        """Render the typed search contract JSON at the CLI transport boundary."""
 
         contract = self.search_skill_matches_contract(query=query, limit=limit)
-        return json.dumps(contract.to_transport_rows(), indent=2, ensure_ascii=False)
+        return json.dumps(contract.to_transport_payload(), indent=2, ensure_ascii=False)
 
     def route_contract_json_text(
         self,
@@ -1825,7 +1853,7 @@ class RustRouteAdapter:
             raise RuntimeError(f"Rust {failure_label} failed: {stderr}") from exc
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(f"Rust {failure_label} timed out after {self.timeout_seconds}s.") from exc
-        return json.loads(proc.stdout)
+        return _load_json_object(proc.stdout, source=f"Rust {failure_label} command output")
 
     def _run_hot_json_command(
         self,
