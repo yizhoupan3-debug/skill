@@ -42,6 +42,44 @@ DEFAULT_TUI_STATUS_ITEMS = (
     "context-used",
     "fast-mode",
 )
+FRAMEWORK_SERVER_PATTERN = re.compile(r"(?ms)^\[mcp_servers\.framework-mcp\]\n.*?(?=^\[|\Z)")
+
+
+def _bootstrap_payload_matches_contract(payload: dict[str, Any], repo_root: Path) -> bool:
+    """Return whether one bootstrap payload still matches the current repo contract."""
+
+    bootstrap = payload.get("bootstrap")
+    memory = payload.get("memory-bootstrap")
+    skills = payload.get("skills-export")
+    proposals = payload.get("evolution-proposals")
+    return (
+        isinstance(bootstrap, dict)
+        and bootstrap.get("repo_root") == str(repo_root.resolve())
+        and isinstance(memory, dict)
+        and isinstance(skills, dict)
+        and skills.get("source") == "skills/SKILL_ROUTING_RUNTIME.json"
+        and isinstance(proposals, dict)
+    )
+
+
+def _bootstrap_file_matches_contract(path: Path, repo_root: Path) -> bool:
+    """Return whether an existing bootstrap file is usable as-is."""
+
+    payload = read_json_if_exists(path)
+    return bool(payload) and _bootstrap_payload_matches_contract(payload, repo_root)
+
+
+def _upsert_named_toml_block(content: str, *, block: str, pattern: re.Pattern[str]) -> str:
+    """Replace or append one named TOML block while preserving surrounding content."""
+
+    match = pattern.search(content)
+    if match:
+        existing = match.group(0).rstrip("\n")
+        if existing == block:
+            return content
+        replacement = block + "\n"
+        return content[: match.start()] + replacement + content[match.end() :]
+    return content.rstrip() + ("\n\n" if content.strip() else "") + block + "\n"
 
 
 def ensure_default_bootstrap_bundle(
@@ -55,7 +93,8 @@ def ensure_default_bootstrap_bundle(
     resolved_output_dir = (output_dir or bootstrap_artifact_root(resolved_repo_root)).resolve()
     resolved_output_dir.mkdir(parents=True, exist_ok=True)
     mirror_bootstrap_path = resolve_bootstrap_path(resolved_output_dir)
-    if mirror_bootstrap_path.is_file():
+    had_existing_file = mirror_bootstrap_path.exists()
+    if _bootstrap_file_matches_contract(mirror_bootstrap_path, resolved_repo_root):
         return {
             "success": True,
             "changed": False,
@@ -69,7 +108,7 @@ def ensure_default_bootstrap_bundle(
     return {
         "success": True,
         "changed": True,
-        "status": "materialized",
+        "status": "repaired-stale" if had_existing_file else "materialized",
         "output_dir": result["paths"]["output_dir"],
         "task_output_dir": result["paths"]["task_output_dir"],
         "bootstrap_path": result["bootstrap_path"],
@@ -106,9 +145,11 @@ def install_framework_server(config_path: Path, repo_root: Path) -> bool:
     """Install the framework MCP entry into a Codex config file."""
 
     content = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
-    if "[mcp_servers.framework-mcp]" in content:
-        return False
-    updated = content.rstrip() + ("\n\n" if content.strip() else "") + build_framework_server_block(repo_root) + "\n"
+    updated = _upsert_named_toml_block(
+        content,
+        block=build_framework_server_block(repo_root),
+        pattern=FRAMEWORK_SERVER_PATTERN,
+    )
     return write_text_if_changed(config_path, updated)
 
 

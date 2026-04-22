@@ -22,6 +22,7 @@ from scripts.install_codex_native_integration import (
     ensure_home_claude_refresh_command,
     ensure_home_codex_skills_link,
     ensure_tui_status_line,
+    install_framework_server,
     install_native_integration,
     sync_directory,
 )
@@ -190,6 +191,51 @@ def test_ensure_default_bootstrap_bundle_is_idempotent(tmp_path: Path) -> None:
     assert Path(second["mirror_bootstrap_path"]).is_file()
 
 
+def test_ensure_default_bootstrap_bundle_rebuilds_invalid_existing_payload(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    output_dir = tmp_path / "bootstrap"
+    repo_root.mkdir(parents=True)
+    output_dir.mkdir(parents=True)
+    (output_dir / "framework_default_bootstrap.json").write_text("{}", encoding="utf-8")
+
+    result = ensure_default_bootstrap_bundle(repo_root, output_dir=output_dir)
+    payload = json.loads((output_dir / "framework_default_bootstrap.json").read_text(encoding="utf-8"))
+
+    assert result["status"] == "repaired-stale"
+    assert payload["bootstrap"]["repo_root"] == str(repo_root.resolve())
+    assert "memory-bootstrap" in payload
+
+
+def test_install_framework_server_replaces_stale_block(tmp_path: Path) -> None:
+    config_path = tmp_path / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "\n".join(
+            [
+                "#:schema https://developers.openai.com/codex/config-schema.json",
+                "",
+                "[mcp_servers.framework-mcp]",
+                'command = "python3"',
+                'args = ["-m", "scripts.framework_mcp"]',
+                'cwd = "/stale/repo"',
+                "",
+                "[tui]",
+                'status_line = ["context-used"]',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    changed = install_framework_server(config_path, tmp_path / "repo")
+    content = config_path.read_text(encoding="utf-8")
+
+    assert changed is True
+    assert content.count("[mcp_servers.framework-mcp]") == 1
+    assert f'cwd = "{tmp_path / "repo"}"' in content
+    assert "[tui]" in content
+
+
 def test_ensure_home_codex_skills_link_repoints_stale_target(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     (repo_root / "skills").mkdir(parents=True)
@@ -267,6 +313,53 @@ def test_install_skills_codex_command_routes_through_native_installer(tmp_path: 
     assert "[mcp_servers.framework-mcp]" in content
     assert (Path(env["HOME"]) / ".codex" / "skills").is_symlink()
     assert (tmp_path / "bootstrap" / "framework_default_bootstrap.json").is_file()
+
+
+def test_install_native_integration_repairs_stale_framework_block_and_bootstrap(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / ".codex").mkdir(parents=True)
+    (repo_root / "skills").mkdir(parents=True)
+    (repo_root / ".codex" / "model_instructions.md").write_text("", encoding="utf-8")
+    plugin_root = repo_root / "plugins" / "skill-framework-native" / ".codex-plugin"
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "plugin.json").write_text('{"name":"skill-framework-native"}\n', encoding="utf-8")
+    home_config_path = tmp_path / "home" / ".codex" / "config.toml"
+    home_config_path.parent.mkdir(parents=True, exist_ok=True)
+    home_config_path.write_text(
+        "\n".join(
+            [
+                "[mcp_servers.framework-mcp]",
+                'command = "python3"',
+                'args = ["-m", "scripts.framework_mcp"]',
+                'cwd = "/stale/repo"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    bootstrap_output_dir = tmp_path / "bootstrap"
+    bootstrap_output_dir.mkdir(parents=True, exist_ok=True)
+    (bootstrap_output_dir / "framework_default_bootstrap.json").write_text("{}", encoding="utf-8")
+
+    result = install_native_integration(
+        home_config_path=home_config_path,
+        home_codex_skills_path=tmp_path / "home" / ".codex" / "skills",
+        home_claude_refresh_path=tmp_path / "home" / ".claude" / "commands" / "refresh.md",
+        repo_root=repo_root,
+        home_plugin_root=tmp_path / "home" / ".codex" / "plugins" / "skill-framework-native",
+        home_marketplace_path=tmp_path / "home" / ".agents" / "plugins" / "marketplace.json",
+        project_instructions_path=Path(".codex") / "model_instructions.md",
+        bootstrap_output_dir=bootstrap_output_dir,
+        install_browser_mcp=False,
+    )
+
+    content = home_config_path.read_text(encoding="utf-8")
+    payload = json.loads((bootstrap_output_dir / "framework_default_bootstrap.json").read_text(encoding="utf-8"))
+
+    assert result["framework_mcp_changed"] is True
+    assert result["default_bootstrap"]["status"] == "repaired-stale"
+    assert f'cwd = "{repo_root.resolve()}"' in content
+    assert payload["bootstrap"]["repo_root"] == str(repo_root.resolve())
 
 
 def test_install_skills_all_command_reports_codex_ready_and_links_other_hosts(tmp_path: Path) -> None:

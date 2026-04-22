@@ -529,6 +529,25 @@ fn default_bootstrap_mirror_path(output_dir: &Path) -> PathBuf {
     output_dir.join("framework_default_bootstrap.json")
 }
 
+fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> bool {
+    payload
+        .get("bootstrap")
+        .and_then(Value::as_object)
+        .zip(payload.get("memory-bootstrap").and_then(Value::as_object))
+        .zip(payload.get("skills-export").and_then(Value::as_object))
+        .zip(payload.get("evolution-proposals").and_then(Value::as_object))
+        .map(|(((bootstrap, _memory), skills), _proposals)| {
+            bootstrap
+                .get("repo_root")
+                .and_then(Value::as_str)
+                .map(|value| value == repo_root.to_string_lossy())
+                .unwrap_or(false)
+                && skills.get("source").and_then(Value::as_str)
+                    == Some("skills/SKILL_ROUTING_RUNTIME.json")
+        })
+        .unwrap_or(false)
+}
+
 fn ensure_default_bootstrap(
     template_root: &Path,
     repo_root: &Path,
@@ -539,7 +558,14 @@ fn ensure_default_bootstrap(
         .unwrap_or_else(|| default_bootstrap_output_dir(repo_root));
     fs::create_dir_all(&resolved_output_dir).map_err(|err| err.to_string())?;
     let mirror_bootstrap_path = default_bootstrap_mirror_path(&resolved_output_dir);
-    if mirror_bootstrap_path.is_file() {
+    let had_existing_file = mirror_bootstrap_path.exists();
+    let existing_payload = read_text_if_exists(&mirror_bootstrap_path)?
+        .and_then(|content| serde_json::from_str::<Value>(&content).ok());
+    if mirror_bootstrap_path.is_file()
+        && existing_payload
+            .as_ref()
+            .is_some_and(|payload| bootstrap_payload_matches_contract(payload, repo_root))
+    {
         return Ok(json!({
             "success": true,
             "changed": false,
@@ -607,7 +633,7 @@ print(json.dumps(result, ensure_ascii=False))
     Ok(json!({
         "success": true,
         "changed": true,
-        "status": "materialized",
+        "status": if had_existing_file { "repaired-stale" } else { "materialized" },
         "output_dir": output_dir_value,
         "task_output_dir": task_output_dir_value,
         "bootstrap_path": bootstrap_path_value,
@@ -645,11 +671,33 @@ fn build_framework_server_block(repo_root: &Path) -> String {
     )
 }
 
+fn find_named_block_bounds(content: &str, marker: &str) -> Option<(usize, usize)> {
+    let mut offset = 0usize;
+    let mut start: Option<usize> = None;
+    for line in content.split_inclusive('\n') {
+        let normalized = line.trim_end_matches('\n');
+        if start.is_none() {
+            if normalized == marker {
+                start = Some(offset);
+            }
+        } else if normalized.starts_with('[') {
+            return Some((start.unwrap_or(0), offset));
+        }
+        offset += line.len();
+    }
+    start.map(|value| (value, content.len()))
+}
+
 fn install_mcp_block(config_path: &Path, marker: &str, block: &str) -> Result<bool, String> {
     let content = read_text_if_exists(config_path)?;
     let existing = content.unwrap_or_default();
-    if existing.contains(marker) {
-        return Ok(false);
+    if let Some((start, end)) = find_named_block_bounds(&existing, marker) {
+        let current_block = existing[start..end].trim_end_matches('\n');
+        if current_block == block {
+            return Ok(false);
+        }
+        let updated = format!("{}{}\n{}", &existing[..start], block, &existing[end..]);
+        return write_text_if_changed(config_path, &updated);
     }
     let updated = if existing.trim().is_empty() {
         format!("{block}\n")
