@@ -14,6 +14,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKILLS_ROOT="$REPO_ROOT/skills"
 DEFAULT_BOOTSTRAP_PATH="$REPO_ROOT/artifacts/bootstrap/framework_default_bootstrap.json"
+PLUGIN_NAME="skill-framework-native"
+HOME_PLUGIN_ROOT="$HOME/.codex/plugins/$PLUGIN_NAME"
+HOME_MARKETPLACE_PATH="$HOME/.agents/plugins/marketplace.json"
+HOME_CLAUDE_REFRESH_PATH="$HOME/.claude/commands/refresh.md"
+PROJECT_INSTRUCTIONS_PATH="$REPO_ROOT/.codex/model_instructions.md"
+FRAMEWORK_START_MARKER="<!-- FRAMEWORK_DEFAULT_RUNTIME_START -->"
 
 # Supported tools and their skill paths
 TOOLS="codex claude agents gemini"
@@ -57,15 +63,85 @@ run_codex_native_install() {
   echo "  ✓ codex — native integration installed"
 }
 
+bootstrap_payload_matches_contract() {
+  local bootstrap_path="$1"
+  if [ ! -f "$bootstrap_path" ]; then
+    return 1
+  fi
+
+  python3 - "$bootstrap_path" "$REPO_ROOT" <<'PY' >/dev/null
+import json
+import sys
+from pathlib import Path
+
+bootstrap_path = Path(sys.argv[1])
+repo_root = str(Path(sys.argv[2]).resolve())
+payload = json.loads(bootstrap_path.read_text(encoding="utf-8"))
+
+bootstrap = payload.get("bootstrap")
+memory = payload.get("memory-bootstrap")
+skills = payload.get("skills-export")
+proposals = payload.get("evolution-proposals")
+
+if not isinstance(bootstrap, dict):
+    raise SystemExit(1)
+if bootstrap.get("repo_root") != repo_root:
+    raise SystemExit(1)
+if not isinstance(memory, dict):
+    raise SystemExit(1)
+if not isinstance(skills, dict) or skills.get("source") != "skills/SKILL_ROUTING_RUNTIME.json":
+    raise SystemExit(1)
+if not isinstance(proposals, dict):
+    raise SystemExit(1)
+PY
+}
+
+marketplace_has_framework_plugin() {
+  local marketplace_path="$1"
+  if [ ! -f "$marketplace_path" ]; then
+    return 1
+  fi
+
+  python3 - "$marketplace_path" "$PLUGIN_NAME" <<'PY' >/dev/null
+import json
+import sys
+from pathlib import Path
+
+marketplace_path = Path(sys.argv[1])
+plugin_name = sys.argv[2]
+payload = json.loads(marketplace_path.read_text(encoding="utf-8"))
+plugins = payload.get("plugins")
+if not isinstance(plugins, list):
+    raise SystemExit(1)
+if not any(isinstance(plugin, dict) and plugin.get("name") == plugin_name for plugin in plugins):
+    raise SystemExit(1)
+PY
+}
+
 show_codex_status() {
   local config_path="$HOME/.codex/config.toml"
   local skills_path="$HOME/.codex/skills"
-  local bootstrap_path="${CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR:-$DEFAULT_BOOTSTRAP_PATH}"
+  local bootstrap_path="$DEFAULT_BOOTSTRAP_PATH"
   local config_ok="false"
   local skills_ok="false"
   local bootstrap_ok="false"
+  local plugin_ok="false"
+  local marketplace_ok="false"
+  local refresh_ok="false"
+  local overlay_ok="false"
 
-  if [ -f "$config_path" ] && grep -q '\[mcp_servers.browser-mcp\]' "$config_path" && grep -q '\[mcp_servers.framework-mcp\]' "$config_path"; then
+  if [ -n "${CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR:-}" ]; then
+    case "$CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR" in
+      *.json) bootstrap_path="$CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR" ;;
+      *) bootstrap_path="${CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR%/}/framework_default_bootstrap.json" ;;
+    esac
+  fi
+
+  if [ -f "$config_path" ] \
+    && grep -q '\[mcp_servers.browser-mcp\]' "$config_path" \
+    && grep -q '\[mcp_servers.framework-mcp\]' "$config_path" \
+    && grep -q '^\[tui\]' "$config_path" \
+    && grep -Eq '^[[:space:]]*status_line[[:space:]]*=' "$config_path"; then
     config_ok="true"
   fi
   if [ -L "$skills_path" ]; then
@@ -76,14 +152,32 @@ show_codex_status() {
       skills_ok="true"
     fi
   fi
-  if [ -f "$bootstrap_path" ]; then
+  if bootstrap_payload_matches_contract "$bootstrap_path"; then
     bootstrap_ok="true"
   fi
+  if [ -f "$HOME_PLUGIN_ROOT/.codex-plugin/plugin.json" ]; then
+    plugin_ok="true"
+  fi
+  if marketplace_has_framework_plugin "$HOME_MARKETPLACE_PATH"; then
+    marketplace_ok="true"
+  fi
+  if [ -f "$HOME_CLAUDE_REFRESH_PATH" ] && cmp -s "$HOME_CLAUDE_REFRESH_PATH" "$REPO_ROOT/.claude/commands/refresh.md"; then
+    refresh_ok="true"
+  fi
+  if [ ! -e "$PROJECT_INSTRUCTIONS_PATH" ] || ! grep -q "$FRAMEWORK_START_MARKER" "$PROJECT_INSTRUCTIONS_PATH"; then
+    overlay_ok="true"
+  fi
 
-  if [ "$config_ok" = "true" ] && [ "$skills_ok" = "true" ] && [ "$bootstrap_ok" = "true" ]; then
+  if [ "$config_ok" = "true" ] \
+    && [ "$skills_ok" = "true" ] \
+    && [ "$bootstrap_ok" = "true" ] \
+    && [ "$plugin_ok" = "true" ] \
+    && [ "$marketplace_ok" = "true" ] \
+    && [ "$refresh_ok" = "true" ] \
+    && [ "$overlay_ok" = "true" ]; then
     echo "  ✓ codex → native integration ready"
   else
-    echo "  ⚠ codex → native integration incomplete (config:$config_ok skills:$skills_ok bootstrap:$bootstrap_ok)"
+    echo "  ⚠ codex → native integration incomplete (config:$config_ok skills:$skills_ok bootstrap:$bootstrap_ok plugin:$plugin_ok marketplace:$marketplace_ok refresh:$refresh_ok overlay:$overlay_ok)"
   fi
 }
 

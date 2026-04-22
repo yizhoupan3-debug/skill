@@ -27,6 +27,28 @@ from scripts.install_codex_native_integration import (
 )
 
 
+def _install_env(tmp_path: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    env["HOME"] = str(tmp_path / "home")
+    env["CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR"] = str(tmp_path / "bootstrap")
+    if "RUSTUP_HOME" not in env:
+        env["RUSTUP_HOME"] = str(Path.home() / ".rustup")
+    if "CARGO_HOME" not in env:
+        env["CARGO_HOME"] = str(Path.home() / ".cargo")
+    return env
+
+
+def _run_install_skills(*args: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash", "scripts/install_skills.sh", *args],
+        cwd=PROJECT_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+
 def test_build_framework_server_block_uses_python_module_and_repo_cwd(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     block = build_framework_server_block(repo_root)
@@ -235,22 +257,8 @@ def test_build_personal_marketplace_payload_preserves_existing_plugins() -> None
 
 
 def test_install_skills_codex_command_routes_through_native_installer(tmp_path: Path) -> None:
-    env = os.environ.copy()
-    env["HOME"] = str(tmp_path / "home")
-    env["CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR"] = str(tmp_path / "bootstrap")
-    if "RUSTUP_HOME" not in env:
-        env["RUSTUP_HOME"] = str(Path.home() / ".rustup")
-    if "CARGO_HOME" not in env:
-        env["CARGO_HOME"] = str(Path.home() / ".cargo")
-
-    completed = subprocess.run(
-        ["bash", "scripts/install_skills.sh", "codex"],
-        cwd=PROJECT_ROOT,
-        env=env,
-        text=True,
-        capture_output=True,
-        check=True,
-    )
+    env = _install_env(tmp_path)
+    completed = _run_install_skills("codex", env=env)
 
     config_path = Path(env["HOME"]) / ".codex" / "config.toml"
     content = config_path.read_text(encoding="utf-8")
@@ -259,3 +267,30 @@ def test_install_skills_codex_command_routes_through_native_installer(tmp_path: 
     assert "[mcp_servers.framework-mcp]" in content
     assert (Path(env["HOME"]) / ".codex" / "skills").is_symlink()
     assert (tmp_path / "bootstrap" / "framework_default_bootstrap.json").is_file()
+
+
+def test_install_skills_all_command_reports_codex_ready_and_links_other_hosts(tmp_path: Path) -> None:
+    env = _install_env(tmp_path)
+
+    completed = _run_install_skills("all", env=env)
+    status = _run_install_skills("status", env=env)
+
+    home_root = Path(env["HOME"])
+    assert "Done!" in completed.stdout
+    assert "native integration ready" in status.stdout
+    assert (home_root / ".claude" / "skills").is_symlink()
+    assert (home_root / ".agents" / "skills").is_symlink()
+    assert (home_root / ".gemini" / "skills").is_symlink()
+
+
+def test_install_skills_status_rejects_invalid_bootstrap_contract(tmp_path: Path) -> None:
+    env = _install_env(tmp_path)
+    _run_install_skills("codex", env=env)
+
+    bootstrap_path = tmp_path / "bootstrap" / "framework_default_bootstrap.json"
+    bootstrap_path.write_text("{}", encoding="utf-8")
+
+    status = _run_install_skills("ls", env=env)
+
+    assert "native integration incomplete" in status.stdout
+    assert "bootstrap:false" in status.stdout
