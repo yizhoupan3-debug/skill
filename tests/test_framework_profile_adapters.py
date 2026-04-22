@@ -89,7 +89,7 @@ def _router_rs_command() -> list[str]:
     return RustRouteAdapter(PROJECT_ROOT)._binary_command()
 
 
-def test_rust_route_adapter_rejects_stale_debug_binary_when_sources_are_newer() -> None:
+def test_rust_route_adapter_uses_debug_binary_even_when_sources_are_newer() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         codex_home = Path(tmpdir)
         router_dir = codex_home / "scripts" / "router-rs"
@@ -106,11 +106,10 @@ def test_rust_route_adapter_rejects_stale_debug_binary_when_sources_are_newer() 
 
         adapter = RustRouteAdapter(codex_home)
 
-        with pytest.raises(RuntimeError, match="requires a prebuilt binary"):
-            adapter._binary_command()
+        assert adapter._binary_command() == [str(debug_bin)]
         health = adapter.health()
-        assert health["resolved_binary"] is None
-        assert health["source_newer_than_resolved_binary"] is None
+        assert health["resolved_binary"] == str(debug_bin)
+        assert health["source_newer_than_resolved_binary"] is True
 
 
 def test_rust_route_adapter_uses_fresh_debug_binary_when_release_missing() -> None:
