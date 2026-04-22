@@ -151,6 +151,10 @@ export interface BrowserRuntimeOptions {
   runtimeAttachDescriptorPath: string | null;
   /** Optional inline runtime attach descriptor for tests or embedded hosts. */
   runtimeAttachDescriptor: RuntimeAttachDescriptor | null;
+  /** Optional path to a persisted runtime transport binding artifact. */
+  runtimeBindingArtifactPath: string | null;
+  /** Optional path to a persisted runtime handoff artifact. */
+  runtimeHandoffPath: string | null;
 }
 
 /** Captures the common tab identity returned to the agent. */
@@ -270,6 +274,13 @@ export interface WaitForInput {
   timeoutMs?: number;
 }
 
+/** Captures input for replaying attached runtime events through a Rust attach descriptor. */
+export interface GetAttachedRuntimeEventsInput {
+  afterEventId?: string;
+  limit?: number;
+  heartbeat?: boolean;
+}
+
 /** Captures one action response. */
 export interface ActionResult {
   ok: true;
@@ -313,6 +324,27 @@ export interface DiagnosticsResult {
   attachedRuntime: AttachedRuntimeDiagnostics;
 }
 
+/** One replayed runtime event consumed from the Rust-first attach surface. */
+export interface AttachedRuntimeEvent {
+  [key: string]: unknown;
+}
+
+/** Replay result for an attached runtime stream. */
+export interface AttachedRuntimeEventsResult {
+  ok: true;
+  attachedRuntime: AttachedRuntimeDiagnostics;
+  events: AttachedRuntimeEvent[];
+  afterEventId: string | null;
+  hasMore: boolean;
+  nextCursor: {
+    eventId: string | null;
+    eventIndex: number;
+  } | null;
+  heartbeat: {
+    status: 'idle';
+  } | null;
+}
+
 /** Stable attach descriptor emitted by the Rust-first runtime replay bridge. */
 export interface RuntimeAttachDescriptor {
   schema_version: string;
@@ -340,7 +372,12 @@ export interface AttachedRuntimeDiagnostics {
     | 'invalid_descriptor'
     | 'unsupported_backend'
     | 'trace_unavailable';
-  descriptorSource: 'inline' | 'path' | null;
+  descriptorSource:
+    | 'inline'
+    | 'descriptor_path'
+    | 'binding_artifact_path'
+    | 'handoff_path'
+    | null;
   descriptorPath: string | null;
   schemaVersion: string | null;
   attachMode: string | null;

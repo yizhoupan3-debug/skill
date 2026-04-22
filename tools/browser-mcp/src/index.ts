@@ -17,6 +17,8 @@ const { values: args } = parseArgs({
     engine: { type: 'string', default: 'chromium' },
     'capture-body': { type: 'boolean', default: false },
     'runtime-attach-descriptor-path': { type: 'string' },
+    'runtime-binding-artifact-path': { type: 'string' },
+    'runtime-handoff-path': { type: 'string' },
   },
   strict: false,
 });
@@ -30,6 +32,16 @@ const runtimeAttachDescriptorPath =
   typeof args['runtime-attach-descriptor-path'] === 'string'
     ? String(args['runtime-attach-descriptor-path'])
     : process.env.BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH ?? null;
+const runtimeBindingArtifactPath =
+  typeof args['runtime-binding-artifact-path'] === 'string'
+    ? String(args['runtime-binding-artifact-path'])
+    : process.env.BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH ?? null;
+const runtimeHandoffPath =
+  typeof args['runtime-handoff-path'] === 'string'
+    ? String(args['runtime-handoff-path'])
+    : process.env.BROWSER_MCP_RUNTIME_HANDOFF_PATH ?? null;
+const runtimeAttachSource =
+  runtimeAttachDescriptorPath ?? runtimeBindingArtifactPath ?? runtimeHandoffPath ?? 'off';
 
 // ---------------------------------------------------------------------------
 // Server startup
@@ -44,6 +56,8 @@ async function main(): Promise<void> {
     browserEngine: engine,
     captureBody,
     runtimeAttachDescriptorPath,
+    runtimeBindingArtifactPath,
+    runtimeHandoffPath,
   });
 
   const server = createBrowserMcpServer(runtime);
@@ -77,7 +91,7 @@ async function main(): Promise<void> {
     const stdioTransport = new StdioServerTransport();
     await server.connect(stdioTransport);
     console.error(
-      `browser-mcp stdio server running [engine=${engine} headless=${headless} captureBody=${captureBody} runtimeAttach=${runtimeAttachDescriptorPath ?? 'off'}]`,
+      `browser-mcp stdio server running [engine=${engine} headless=${headless} captureBody=${captureBody} runtimeAttach=${runtimeAttachSource}]`,
     );
   }
 }

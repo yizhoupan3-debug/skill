@@ -258,6 +258,7 @@ struct RouteExecutionPolicyPayload {
     rollback_active: bool,
     python_route_required: bool,
     diagnostic_python_lane: bool,
+    python_lane_kind: String,
     primary_authority: String,
     route_result_engine: String,
     shadow_engine: Option<String>,
@@ -3056,6 +3057,7 @@ fn build_route_policy(
         rollback_active,
         python_route_required: false,
         diagnostic_python_lane: false,
+        python_lane_kind: "none".to_string(),
         primary_authority: "rust".to_string(),
         route_result_engine: "rust".to_string(),
         shadow_engine: None,
@@ -3065,18 +3067,21 @@ fn build_route_policy(
     let policy = match normalized_mode.as_str() {
         "python" => RouteExecutionPolicyPayload {
             python_route_required: true,
+            python_lane_kind: "legacy-primary".to_string(),
             primary_authority: "python".to_string(),
             route_result_engine: "python".to_string(),
             ..base
         },
         "shadow" => RouteExecutionPolicyPayload {
             diagnostic_python_lane: true,
+            python_lane_kind: "diagnostic-compare-only".to_string(),
             shadow_engine: Some("python".to_string()),
             diff_report_required: true,
             ..base
         },
         "verify" => RouteExecutionPolicyPayload {
             diagnostic_python_lane: true,
+            python_lane_kind: "diagnostic-compare-only".to_string(),
             shadow_engine: Some("python".to_string()),
             diff_report_required: true,
             verify_parity_required: true,
@@ -3084,6 +3089,7 @@ fn build_route_policy(
         },
         "rust" if rollback_active => RouteExecutionPolicyPayload {
             diagnostic_python_lane: true,
+            python_lane_kind: "diagnostic-compare-only".to_string(),
             shadow_engine: Some("python".to_string()),
             diff_report_required: true,
             ..base
@@ -3691,6 +3697,7 @@ mod tests {
         let python = build_route_policy("python", false).expect("python policy");
         assert!(python.python_route_required);
         assert!(!python.diagnostic_python_lane);
+        assert_eq!(python.python_lane_kind, "legacy-primary");
         assert_eq!(python.primary_authority, "python");
         assert_eq!(python.route_result_engine, "python");
         assert!(python.shadow_engine.is_none());
@@ -3700,6 +3707,7 @@ mod tests {
         let shadow = build_route_policy("shadow", false).expect("shadow policy");
         assert!(!shadow.python_route_required);
         assert!(shadow.diagnostic_python_lane);
+        assert_eq!(shadow.python_lane_kind, "diagnostic-compare-only");
         assert_eq!(shadow.primary_authority, "rust");
         assert_eq!(shadow.route_result_engine, "rust");
         assert_eq!(shadow.shadow_engine.as_deref(), Some("python"));
@@ -3709,6 +3717,7 @@ mod tests {
         let verify = build_route_policy("verify", false).expect("verify policy");
         assert!(!verify.python_route_required);
         assert!(verify.diagnostic_python_lane);
+        assert_eq!(verify.python_lane_kind, "diagnostic-compare-only");
         assert_eq!(verify.primary_authority, "rust");
         assert_eq!(verify.route_result_engine, "rust");
         assert_eq!(verify.shadow_engine.as_deref(), Some("python"));
@@ -3718,6 +3727,7 @@ mod tests {
         let rust = build_route_policy("rust", false).expect("rust policy");
         assert!(!rust.python_route_required);
         assert!(!rust.diagnostic_python_lane);
+        assert_eq!(rust.python_lane_kind, "none");
         assert_eq!(rust.primary_authority, "rust");
         assert_eq!(rust.route_result_engine, "rust");
         assert!(rust.shadow_engine.is_none());
@@ -3727,6 +3737,7 @@ mod tests {
         let rollback = build_route_policy("rust", true).expect("rollback policy");
         assert!(!rollback.python_route_required);
         assert!(rollback.diagnostic_python_lane);
+        assert_eq!(rollback.python_lane_kind, "diagnostic-compare-only");
         assert_eq!(rollback.primary_authority, "rust");
         assert_eq!(rollback.route_result_engine, "rust");
         assert_eq!(rollback.shadow_engine.as_deref(), Some("python"));

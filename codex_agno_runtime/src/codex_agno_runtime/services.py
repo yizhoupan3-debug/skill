@@ -803,6 +803,7 @@ class RouterService:
                 self._rust_adapter.route_authority,
             ),
             "diagnostic_python_lane_active": policy.diagnostic_python_lane,
+            "python_lane_kind": policy.python_lane_kind,
             "configured_rollback_to_python": self.settings.rust_route_rollback_to_python,
             "loaded_skill_count": len(self.skills),
             "skill_root": str(self.settings.codex_home / "skills"),
