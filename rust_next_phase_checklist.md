@@ -19,6 +19,10 @@
   - `RustRouteAdapter` 已暴露 `route_contract / route_policy_contract / route_report_contract / route_snapshot_contract`。
   - fixture/live parity 回归也已经优先走 typed contract；unknown skill 会 fail-closed，而不是让 Python 默默兜底。
   - `tests/test_routing_parity.py`、`tests/test_codex_agno_runtime_services.py`、`tests/test_execution_kernel_router_rs_contract.py` 已覆盖这条收口。
+- **Lane 2 / Native Install / Bootstrap** 已完成当前 phase 收口：
+  - `scripts/install_skills.sh` 现在按完整默认 contract 判定 Codex ready，而不是只看 config / skills link / bootstrap 文件是否存在。
+  - bootstrap 校验会确认 payload 仍对齐当前 repo root 与 `skills/SKILL_ROUTING_RUNTIME.json` 这条 Rust-first runtime surface，不再把坏文件误判成 ready。
+  - `tests/test_install_codex_native_integration.py` 已补齐 `all/status` shell 回归，证明新机器安装后默认入口直接落到当前 contract。
 - **Lane 3 / Observability Activation** 已完成当前目标收口：
   - `codex_agno_runtime.observability` 已提供 exporter descriptor / metric record / dashboard schema / health snapshot。
   - `docs/runtime_observability_contract.md` 与 `tests/test_runtime_observability_contracts.py` 已把 vocabulary、exporter、metric、dashboard 对齐锁住。
@@ -32,7 +36,7 @@
 
 ### 仍未收口的内容
 
-- **Lane 2 / Native Install / Bootstrap** 还没有实质推进；默认安装/初始化入口是否天然落在当前 Rust-first contract 上，仍需要专门收口。
+- 当前这轮 checklist 的 1-5 已全部收口；后续只在出现新的 contract 变更时再开下一轮 safe slice。
 
 ---
 
@@ -96,8 +100,8 @@
 
 ### 当前状态
 
-- 安装与初始化入口已经可用，但默认 bootstrap 仍可能留下人工补步骤或 host-side 语义偏移。
-- 下一步更值钱的是：**新机器默认起步就是当前 Rust-first contract**。
+- 安装与初始化入口已经收口到当前 Rust-first contract。
+- `install_skills.sh` 的 shell status 也已经和默认 contract 对齐，不再把缺 plugin / marketplace / refresh / overlay / 有效 bootstrap 的安装误判为 ready。
 
 ### 目标
 

@@ -271,14 +271,15 @@ One additional Rust-authority slice is now implemented in this wave:
   privileged raw-JSON consumers
 - keep pushing execution-kernel metadata / naming bridge canonicalization
   toward Rust without reopening a Python live authority path
-- close the native install/bootstrap lane so a fresh machine lands on the
-  current Rust-first default without post-install manual switching
+- keep the native install/bootstrap lane closed: a fresh machine should keep
+  landing on the current Rust-first default, and installer/status regressions
+  should fail if the bootstrap payload drifts away from that contract
 - keep lane-4 closure intact: browser-mcp stays on the Rust attach descriptor
   contract, while fallback / continuity host consumers remain explicit opt-in
   lanes instead of drifting back into the default outward surface
-- hold integrator/regenerate work until lanes 1/2/3/4 are genuinely stable,
-  then refresh generated artifacts and docs together instead of mixing partial
-  states into the global outputs
+- only reopen integrator/regenerate when a later contract change actually
+  alters generated outputs or docs, instead of refreshing global outputs just
+  because the installer lane was re-verified
 
 ## Contract 0: Desktop Alias Retirement Path
 
