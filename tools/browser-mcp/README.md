@@ -104,7 +104,10 @@ BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH=/abs/path/runtime-attach-descriptor.jso
 older `--runtime-binding-artifact-path` and `--runtime-handoff-path` flags are
 still accepted as compatibility aliases, and `TRACE_RESUME_MANIFEST.json` can
 also flow through the same canonical attach-artifact flag when recovery is the
-only persisted entrypoint you have.
+only persisted entrypoint you have. When an explicit attach descriptor already
+contains enough artifact hints, browser-mcp now canonicalizes it through the
+same Rust attach bridge first, so provenance and resolution fields stay aligned
+with the artifact-based entrypoints.
 
 Then `browser_diagnostics` includes an `attachedRuntime` block with descriptor
 status, replay readiness, trace path, the concrete input artifact kind
