@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterable, Mapping, Sequence
 from .framework_profile import (
     CORE_CAPABILITIES,
     FrameworkProfile,
+    build_framework_workspace_bootstrap,
     ensure_capabilities,
     resolve_host_capability_requirements,
 )
@@ -202,32 +203,10 @@ def _compile_aionrs_config(profile: FrameworkProfile) -> Dict[str, Any]:
 
 
 def _compile_workspace_bootstrap(profile: FrameworkProfile) -> Dict[str, Any]:
-    workspace_bootstrap = dict(_clone_json_like(profile.workspace_bootstrap))
-    bridges = dict(workspace_bootstrap.get("bridges", {}))
-    bridges.setdefault(
-        "skills",
-        workspace_bootstrap.get(
-            "skill_bridge",
-            {
-                "project_dir": ".codex/skills",
-                "user_dir": "~/.codex/skills",
-                "bridge_dir": ".aionrs/skills",
-            },
-        ),
+    return build_framework_workspace_bootstrap(
+        profile.workspace_bootstrap,
+        profile.memory_mounts,
     )
-    bridges.setdefault(
-        "memory",
-        workspace_bootstrap.get(
-            "memory_bridge",
-            {
-                "bridge_dir": ".aionrs-memory-bridge",
-                "mounts": _normalize_memory_mounts(profile.memory_mounts),
-            },
-        ),
-    )
-    compiled = dict(workspace_bootstrap)
-    compiled["bridges"] = bridges
-    return compiled
 
 
 def _compile_tool_approval_mapping(profile: FrameworkProfile) -> Dict[str, Any]:
@@ -963,21 +942,12 @@ def compile_aionui_host_adapter(
     )
 
 
-def _build_codex_shared_contract(payload: Mapping[str, Any]) -> Dict[str, Any]:
-    return {
-        "artifact_contract": _clone_json_like(payload["artifact_contract"]),
-        "memory_mounts": _clone_json_like(payload["memory_mounts"]),
-        "mcp_servers": _clone_json_like(payload["mcp_servers"]),
-        "tool_policy": _clone_json_like(payload["tool_policy"]),
-        "approval_policy": _clone_json_like(payload["approval_policy"]),
-        "loadout_policy": _clone_json_like(payload["loadout_policy"]),
-        "framework_surface_policy": _clone_json_like(payload["framework_surface_policy"]),
-        "workspace_bootstrap": _clone_json_like(payload["workspace_bootstrap"]),
-        "session_contract": _compile_session_mode(payload["framework_profile"]),
-        "execution_controller_contract": build_execution_controller_contract(),
-        "delegation_contract": build_delegation_contract(),
-        "supervisor_state_contract": build_supervisor_state_contract(),
-    }
+def _build_codex_shared_contract(profile: FrameworkProfile) -> Dict[str, Any]:
+    shared_contract = profile.shared_contract_surface()
+    shared_contract["execution_controller_contract"] = build_execution_controller_contract()
+    shared_contract["delegation_contract"] = build_delegation_contract()
+    shared_contract["supervisor_state_contract"] = build_supervisor_state_contract()
+    return shared_contract
 
 
 def _build_cli_controller_boundary() -> Dict[str, Any]:
@@ -1121,12 +1091,7 @@ def compile_cli_common_adapter(
 ) -> AdaptedHostProfile:
     adapted = adapt_framework_profile(profile, CLI_COMMON_ADAPTER, host_overrides=host_overrides)
     payload = dict(adapted.host_payload)
-    payload["shared_contract"] = _build_codex_shared_contract(
-        {
-            **payload,
-            "framework_profile": profile,
-        }
-    )
+    payload["shared_contract"] = _build_codex_shared_contract(profile)
     payload["bridge_contract"] = dict(payload["shared_contract"]["workspace_bootstrap"].get("bridges", {}))
     payload["controller_boundary"] = _build_cli_controller_boundary()
     payload["parity_contract"] = _build_cli_parity_contract()

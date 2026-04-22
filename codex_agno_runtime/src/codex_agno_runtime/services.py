@@ -35,6 +35,11 @@ from codex_agno_runtime.execution_kernel import (
     SandboxResourceBudget,
     SandboxRuntimeProbe,
 )
+from codex_agno_runtime.execution_kernel_contracts import (
+    EXECUTION_KERNEL_BRIDGE_AUTHORITY,
+    EXECUTION_KERNEL_BRIDGE_KIND,
+    build_execution_kernel_bridge_metadata_projection,
+)
 from codex_agno_runtime.host_adapters import (
     build_control_plane_contract_descriptors,
 )
@@ -1218,8 +1223,8 @@ class MemoryService:
 class _RustExecutionKernelAuthorityAdapter:
     """Present a Rust-owned kernel seam while live fallback remains compatibility-safe."""
 
-    adapter_kind = "rust-execution-kernel-slice"
-    authority = "rust-execution-kernel-authority"
+    adapter_kind = EXECUTION_KERNEL_BRIDGE_KIND
+    authority = EXECUTION_KERNEL_BRIDGE_AUTHORITY
 
     def __init__(self, delegate: RouterRsExecutionKernel) -> None:
         self._delegate = delegate
@@ -1230,66 +1235,19 @@ class _RustExecutionKernelAuthorityAdapter:
 
     async def execute(self, request: ExecutionKernelRequest) -> RunTaskResponse:
         response = await self._delegate.execute(request)
+        if (
+            response.metadata.get("execution_kernel") == self.adapter_kind
+            and response.metadata.get("execution_kernel_authority") == self.authority
+        ):
+            return response
+
         delegate_health = self._delegate.health()
-
-        def _response_metadata(field: str, default: Any) -> Any:
-            if field in response.metadata:
-                return response.metadata[field]
-            return default
-
-        delegate_kind = str(
-            response.metadata.get("execution_kernel")
-            or delegate_health.get("kernel_live_delegate_primary_kind")
-            or delegate_health["kernel_adapter_kind"]
-        )
-        delegate_authority = str(
-            response.metadata.get("execution_kernel_authority")
-            or delegate_health.get("kernel_live_delegate_primary_authority")
-            or delegate_health["kernel_authority"]
-        )
-        delegate_family_default = delegate_health.get("kernel_live_backend_family")
-        delegate_impl_default = delegate_health.get("kernel_live_backend_impl")
-        live_fallback_enabled = False
-        live_fallback_mode = "disabled"
-        response.metadata.update(
-            {
-                "execution_kernel": self.adapter_kind,
-                "execution_kernel_authority": self.authority,
-                "execution_kernel_contract_mode": self._contract_mode(),
-                "execution_kernel_in_process_replacement_complete": True,
-                "execution_kernel_delegate": delegate_kind,
-                "execution_kernel_delegate_authority": delegate_authority,
-                "execution_kernel_live_primary": _response_metadata(
-                    "execution_kernel_live_primary",
-                    response.metadata.get("execution_kernel_primary")
-                    or delegate_health.get("kernel_live_delegate_primary_kind")
-                    or delegate_health.get("kernel_adapter_kind"),
-                ),
-                "execution_kernel_live_primary_authority": _response_metadata(
-                    "execution_kernel_live_primary_authority",
-                    response.metadata.get("execution_kernel_primary_authority")
-                    or delegate_health.get("kernel_live_delegate_primary_authority")
-                    or delegate_health.get("kernel_authority"),
-                ),
-                "execution_kernel_live_fallback": _response_metadata(
-                    "execution_kernel_live_fallback",
-                    None,
-                ),
-                "execution_kernel_live_fallback_authority": _response_metadata(
-                    "execution_kernel_live_fallback_authority",
-                    None,
-                ),
-                "execution_kernel_live_fallback_enabled": live_fallback_enabled,
-                "execution_kernel_live_fallback_mode": live_fallback_mode,
-                "execution_kernel_delegate_family": response.metadata.get(
-                    "execution_kernel_delegate_family",
-                    delegate_family_default,
-                ),
-                "execution_kernel_delegate_impl": response.metadata.get(
-                    "execution_kernel_delegate_impl",
-                    delegate_impl_default,
-                ),
-            }
+        response.metadata = build_execution_kernel_bridge_metadata_projection(
+            response.metadata,
+            delegate_kind=str(delegate_health.get("kernel_adapter_kind", "router-rs")),
+            delegate_authority=str(delegate_health.get("kernel_authority", "rust-execution-cli")),
+            delegate_family=str(delegate_health.get("kernel_live_backend_family", "rust-cli")),
+            delegate_impl=str(delegate_health.get("kernel_live_backend_impl", "router-rs")),
         )
         return response
 

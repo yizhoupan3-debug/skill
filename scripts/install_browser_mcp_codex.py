@@ -3,10 +3,13 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".codex" / "config.toml"
 REPO_ROOT = Path(__file__).resolve().parents[1]
+CONFIG_SCHEMA_HEADER = "#:schema https://developers.openai.com/codex/config-schema.json\n"
+BROWSER_SERVER_PATTERN = re.compile(r"(?ms)^\[mcp_servers\.browser-mcp\]\n.*?(?=^\[|\Z)")
 
 
 def build_server_block(repo_root: Path) -> str:
@@ -28,6 +31,28 @@ def build_server_block(repo_root: Path) -> str:
     )
 
 
+def ensure_config_file(config_path: Path) -> bool:
+    """Ensure the target Codex config file exists with a schema header."""
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    if config_path.exists():
+        return False
+    config_path.write_text(CONFIG_SCHEMA_HEADER, encoding="utf-8")
+    return True
+
+
+def _upsert_browser_server_block(content: str, block: str) -> str:
+    """Replace or append the browser-mcp block without disturbing other tables."""
+
+    match = BROWSER_SERVER_PATTERN.search(content)
+    if match:
+        existing = match.group(0).rstrip("\n")
+        if existing == block:
+            return content
+        return content[: match.start()] + block + "\n" + content[match.end() :]
+    return content.rstrip() + ("\n\n" if content.strip() else "") + block + "\n"
+
+
 def install_server(config_path: Path, repo_root: Path) -> bool:
     """Install the browser MCP entry into a Codex config file.
 
@@ -39,16 +64,11 @@ def install_server(config_path: Path, repo_root: Path) -> bool:
         bool: True when a new entry was written, False when already present.
     """
 
-    if not config_path.exists():
-        raise SystemExit(f"Codex config not found: {config_path}")
-
+    ensure_config_file(config_path)
     content = config_path.read_text(encoding="utf-8")
-    if "[mcp_servers.browser-mcp]" in content:
-        return False
-
-    updated = content.rstrip() + "\n\n" + build_server_block(repo_root) + "\n"
+    updated = _upsert_browser_server_block(content, build_server_block(repo_root))
     config_path.write_text(updated, encoding="utf-8")
-    return True
+    return updated != content
 
 
 def main() -> None:

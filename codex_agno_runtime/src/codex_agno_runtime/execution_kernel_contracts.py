@@ -30,6 +30,12 @@ EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY = (
 )
 EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE = "rust-live-primary"
 EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY = "infrastructure-only-explicit"
+EXECUTION_KERNEL_BRIDGE_KIND = "rust-execution-kernel-slice"
+EXECUTION_KERNEL_BRIDGE_AUTHORITY = "rust-execution-kernel-authority"
+EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND = "router-rs"
+EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY = "rust-execution-cli"
+EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY = "rust-cli"
+EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL = "router-rs"
 EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION = (
     "execution-kernel-compatibility-agent-v1"
 )
@@ -152,6 +158,10 @@ def build_execution_kernel_runtime_metadata(
     *,
     execution_kernel: str,
     execution_kernel_authority: str,
+    execution_kernel_delegate: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
+    execution_kernel_delegate_authority: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
+    execution_kernel_delegate_family: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
+    execution_kernel_delegate_impl: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
     trace_event_count: int,
     trace_output_path: str | None,
     response_shape: str = EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
@@ -183,12 +193,12 @@ def build_execution_kernel_runtime_metadata(
             EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
         ),
         "execution_kernel_in_process_replacement_complete": True,
-        "execution_kernel_delegate": execution_kernel,
-        "execution_kernel_delegate_authority": execution_kernel_authority,
-        "execution_kernel_delegate_family": "rust-cli",
-        "execution_kernel_delegate_impl": execution_kernel,
-        "execution_kernel_live_primary": execution_kernel,
-        "execution_kernel_live_primary_authority": execution_kernel_authority,
+        "execution_kernel_delegate": execution_kernel_delegate,
+        "execution_kernel_delegate_authority": execution_kernel_delegate_authority,
+        "execution_kernel_delegate_family": execution_kernel_delegate_family,
+        "execution_kernel_delegate_impl": execution_kernel_delegate_impl,
+        "execution_kernel_live_primary": execution_kernel_delegate,
+        "execution_kernel_live_primary_authority": execution_kernel_delegate_authority,
         "execution_kernel_live_fallback": None,
         "execution_kernel_live_fallback_authority": None,
         "execution_kernel_live_fallback_enabled": False,
@@ -205,6 +215,58 @@ def build_execution_kernel_runtime_metadata(
         )
     )
     return metadata
+
+
+def build_execution_kernel_bridge_metadata_projection(
+    metadata: Mapping[str, Any] | None,
+    *,
+    delegate_kind: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
+    delegate_authority: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
+    delegate_family: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
+    delegate_impl: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
+) -> dict[str, Any]:
+    """Project legacy delegate-first metadata onto the steady-state bridge shape."""
+
+    normalized = dict(metadata or {})
+    legacy_kind = normalized.get("execution_kernel")
+    legacy_authority = normalized.get("execution_kernel_authority")
+    normalized["execution_kernel"] = EXECUTION_KERNEL_BRIDGE_KIND
+    normalized["execution_kernel_authority"] = EXECUTION_KERNEL_BRIDGE_AUTHORITY
+    normalized.setdefault(
+        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
+        EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
+    )
+    normalized.setdefault(
+        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
+        EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
+    )
+    normalized.setdefault("execution_kernel_in_process_replacement_complete", True)
+    normalized.setdefault("execution_kernel_delegate", legacy_kind or delegate_kind)
+    normalized.setdefault(
+        "execution_kernel_delegate_authority",
+        legacy_authority or delegate_authority,
+    )
+    normalized.setdefault("execution_kernel_delegate_family", delegate_family)
+    normalized.setdefault("execution_kernel_delegate_impl", delegate_impl)
+    normalized.setdefault(
+        "execution_kernel_live_primary",
+        normalized.get("execution_kernel_primary")
+        or normalized.get("execution_kernel_delegate")
+        or legacy_kind
+        or delegate_kind,
+    )
+    normalized.setdefault(
+        "execution_kernel_live_primary_authority",
+        normalized.get("execution_kernel_primary_authority")
+        or normalized.get("execution_kernel_delegate_authority")
+        or legacy_authority
+        or delegate_authority,
+    )
+    normalized.setdefault("execution_kernel_live_fallback", None)
+    normalized.setdefault("execution_kernel_live_fallback_authority", None)
+    normalized.setdefault("execution_kernel_live_fallback_enabled", False)
+    normalized.setdefault("execution_kernel_live_fallback_mode", "disabled")
+    return normalized
 
 
 def build_execution_kernel_live_response_serialization_contract_core() -> dict[str, Any]:
@@ -364,6 +426,10 @@ def validate_router_rs_execution_metadata(
     usage_mode: str,
     execution_kernel: str,
     execution_kernel_authority: str,
+    execution_kernel_delegate: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
+    execution_kernel_delegate_authority: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
+    execution_kernel_delegate_family: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
+    execution_kernel_delegate_impl: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
 ) -> dict[str, Any]:
     """Validate one Rust-owned execution response metadata payload."""
 
@@ -400,6 +466,18 @@ def validate_router_rs_execution_metadata(
         if live_run
         else DRY_RUN_PROMPT_PREVIEW_OWNER
     )
+    legacy_top_level = (
+        normalized.get("execution_kernel") == execution_kernel_delegate
+        and normalized.get("execution_kernel_authority") == execution_kernel_delegate_authority
+    )
+    if legacy_top_level:
+        normalized = build_execution_kernel_bridge_metadata_projection(
+            normalized,
+            delegate_kind=execution_kernel_delegate,
+            delegate_authority=execution_kernel_delegate_authority,
+            delegate_family=execution_kernel_delegate_family,
+            delegate_impl=execution_kernel_delegate_impl,
+        )
     expected_pairs = {
         EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY: (
             EXECUTION_KERNEL_METADATA_SCHEMA_VERSION
@@ -411,12 +489,12 @@ def validate_router_rs_execution_metadata(
             EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
         ),
         "execution_kernel_in_process_replacement_complete": True,
-        "execution_kernel_delegate": execution_kernel,
-        "execution_kernel_delegate_authority": execution_kernel_authority,
-        "execution_kernel_delegate_family": "rust-cli",
-        "execution_kernel_delegate_impl": execution_kernel,
-        "execution_kernel_live_primary": execution_kernel,
-        "execution_kernel_live_primary_authority": execution_kernel_authority,
+        "execution_kernel_delegate": execution_kernel_delegate,
+        "execution_kernel_delegate_authority": execution_kernel_delegate_authority,
+        "execution_kernel_delegate_family": execution_kernel_delegate_family,
+        "execution_kernel_delegate_impl": execution_kernel_delegate_impl,
+        "execution_kernel_live_primary": execution_kernel_delegate,
+        "execution_kernel_live_primary_authority": execution_kernel_delegate_authority,
         "execution_kernel_live_fallback_enabled": False,
         "execution_kernel_live_fallback_mode": "disabled",
         EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY: expected_shape,
@@ -445,6 +523,10 @@ def decode_router_rs_execution_response(
     *,
     execution_kernel: str,
     execution_kernel_authority: str,
+    execution_kernel_delegate: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
+    execution_kernel_delegate_authority: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
+    execution_kernel_delegate_family: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
+    execution_kernel_delegate_impl: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
 ) -> RunTaskResponse:
     """Decode one validated router-rs execute payload into ``RunTaskResponse``."""
 
@@ -456,6 +538,10 @@ def decode_router_rs_execution_response(
         usage_mode=str(usage_payload.get("mode", "live")),
         execution_kernel=execution_kernel,
         execution_kernel_authority=execution_kernel_authority,
+        execution_kernel_delegate=execution_kernel_delegate,
+        execution_kernel_delegate_authority=execution_kernel_delegate_authority,
+        execution_kernel_delegate_family=execution_kernel_delegate_family,
+        execution_kernel_delegate_impl=execution_kernel_delegate_impl,
     )
     return RunTaskResponse(
         session_id=str(payload["session_id"]),

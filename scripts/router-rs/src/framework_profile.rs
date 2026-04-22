@@ -3977,6 +3977,65 @@ mod tests {
     }
 
     #[test]
+    fn profile_bundle_keeps_workspace_bootstrap_single_sourced() {
+        let mut profile = sample_profile();
+        profile.memory_mounts = vec![json!({
+            "mount_id": "project",
+            "source": ".codex/memory"
+        })];
+        profile.workspace_bootstrap = serde_json::from_value(json!({
+            "skill_bridge": {
+                "project_dir": ".codex/skills"
+            },
+            "bridges": {
+                "memory": {
+                    "bridge_dir": ".memory-shadow",
+                    "mounts": []
+                }
+            }
+        }))
+        .expect("workspace bootstrap should deserialize");
+
+        let bundle = build_profile_bundle(&profile).expect("bundle should build");
+        let expected_bootstrap = json!({
+            "skill_bridge": {
+                "project_dir": ".codex/skills"
+            },
+            "bridges": {
+                "memory": {
+                    "bridge_dir": ".memory-shadow",
+                    "mounts": []
+                },
+                "skills": {
+                    "project_dir": ".codex/skills"
+                }
+            }
+        });
+
+        assert_eq!(Value::Object(bundle.workspace_bootstrap.clone()), expected_bootstrap);
+        assert_eq!(
+            bundle.cli_common_adapter["shared_contract"]["workspace_bootstrap"],
+            expected_bootstrap
+        );
+        assert_eq!(
+            bundle.cli_common_adapter["bridge_contract"],
+            expected_bootstrap["bridges"]
+        );
+        assert_eq!(
+            bundle.codex_desktop_adapter["common_contract"]["workspace_bootstrap"],
+            expected_bootstrap
+        );
+        assert_eq!(
+            bundle.codex_cli_adapter["common_contract"]["workspace_bootstrap"],
+            expected_bootstrap
+        );
+        assert_eq!(
+            bundle.codex_cli_adapter["runtime_surface"]["workspace_bootstrap"],
+            expected_bootstrap
+        );
+    }
+
+    #[test]
     fn profile_bundle_quarantines_legacy_alias_in_compatibility_lane() {
         let bundle = build_profile_bundle_with_legacy_alias(&sample_profile(), true)
             .expect("bundle should build");

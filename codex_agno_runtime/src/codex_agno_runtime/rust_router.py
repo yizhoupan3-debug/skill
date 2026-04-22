@@ -71,14 +71,14 @@ class RustRouteAdapter:
         allow_overlay: bool,
         first_turn: bool,
     ) -> dict[str, Any]:
-        """Return one Rust-backed route decision JSON payload."""
+        """Return one compatibility transport payload derived from the typed route contract."""
 
         return self.route_contract(
             query=query,
             session_id=session_id,
             allow_overlay=allow_overlay,
             first_turn=first_turn,
-        ).model_dump(mode="json")
+        ).to_transport_payload()
 
     def route_contract(
         self,

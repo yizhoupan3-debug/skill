@@ -63,6 +63,10 @@ discovery 这些稳定层持续 Rust 化。
 3. adapter 只能投影 `framework_profile`，不能篡改其核心语义。
 4. nested policy 使用 merge override，不使用 host-specific hard fork。
 5. artifact / memory / orchestration 的 schema 以框架 contract 为中心，不以单个 host 事件流为中心。
+6. `workspace_bootstrap` 的补默认与桥接归一化只允许来自 `framework_profile`
+   这一个编译入口；adapter 的 `host_overrides` 只能改宿主投影，不能回写
+   `cli_common_adapter.shared_contract`、`common_contract`、`runtime_surface`
+   里的 shared contract truth。
 
 ## Surface Compaction Direction
 
@@ -118,6 +122,11 @@ layout manifest 这类目录说明工件。
 默认 runtime helper lookup 也保持 canonical-only：legacy alias 不再通过通用
 registry / lookup surface 作为 peer adapter 暴露；需要兼容 payload 的调用方
 必须显式 opt-in compatibility lane。
+`workspace_bootstrap` 的 steady-state 口径也同样收敛到一条线：
+Python host adapter shared contract 直接复用 `FrameworkProfile.shared_contract_surface()`
+编译出的 canonical bootstrap，Rust profile bundle 也把同一份 compiled bootstrap
+镜像到 `shared_contract` / `common_contract` / `runtime_surface`，避免 host layer
+自己再维护一份默认桥接逻辑。
 execution-kernel 相关 contract 现在以 Rust-only 默认执行、prepare_session /
 dry-run preview 走 router-rs、以及隔离的 compatibility lane 为主线，不再保留
 过渡期口径作为 steady-state 叙事。
