@@ -106,20 +106,6 @@ class SearchMatchResult(BaseModel):
             total_terms=payload.total_terms,
         )
 
-    def to_transport_row(self) -> dict[str, Any]:
-        """Project one typed search match back to the Rust JSON transport shape."""
-
-        return {
-            "slug": self.record.name,
-            "description": self.record.description,
-            "layer": self.record.routing_layer,
-            "gate": self.record.routing_gate,
-            "owner": self.record.routing_owner,
-            "score": self.score,
-            "matched_terms": self.matched_terms,
-            "total_terms": self.total_terms,
-        }
-
 
 class SearchMatchesContract(BaseModel):
     """Stable Rust-owned search envelope consumed by Python route helpers."""
@@ -127,16 +113,7 @@ class SearchMatchesContract(BaseModel):
     search_schema_version: str
     authority: str
     query: str
-    matches: list[SearchMatchResult] = Field(default_factory=list)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _coerce_legacy_rows_field(cls, value: Any) -> Any:
-        if isinstance(value, Mapping) and "matches" not in value and "rows" in value:
-            payload = dict(value)
-            payload["matches"] = payload.get("rows")
-            return payload
-        return value
+    matches: list[SearchMatchResult]
 
     @field_validator("matches", mode="before")
     @classmethod
@@ -150,23 +127,6 @@ class SearchMatchesContract(BaseModel):
             else:
                 resolved.append(item)
         return resolved
-
-    def to_transport_rows(self) -> list[dict[str, Any]]:
-        """Project typed search matches back to the CLI transport row shape."""
-
-        return [match.to_transport_row() for match in self.matches]
-
-    def to_transport_payload(self) -> dict[str, Any]:
-        """Project one stable search envelope with explicit typed fields and row alias."""
-
-        rows = self.to_transport_rows()
-        return {
-            "search_schema_version": self.search_schema_version,
-            "authority": self.authority,
-            "query": self.query,
-            "matches": rows,
-            "rows": rows,
-        }
 
 
 class RouteContractDiffField(BaseModel):

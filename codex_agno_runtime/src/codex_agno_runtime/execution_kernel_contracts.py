@@ -45,6 +45,7 @@ EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION = (
 EXECUTION_KERNEL_LIVE_PRIMARY_SCHEMA_VERSION = "router-rs-execute-response-v1"
 EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY = "live_primary"
 EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN = "dry_run"
+EXECUTION_KERNEL_RESPONSE_SHAPE_RETIRED = "retired"
 EXECUTION_KERNEL_LIVE_RESPONSE_SERIALIZATION_STATUS_CONTRACT = (
     "execution_kernel_live_response_serialization_contract_v1"
 )
@@ -79,14 +80,15 @@ EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS = (
     "execution_kernel_delegate_impl",
     "execution_kernel_live_primary",
     "execution_kernel_live_primary_authority",
+    EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
+    EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY,
+)
+EXECUTION_KERNEL_RETIRED_LIVE_FALLBACK_MARKER_METADATA_FIELDS = (
     "execution_kernel_live_fallback",
     "execution_kernel_live_fallback_authority",
     "execution_kernel_live_fallback_enabled",
     "execution_kernel_live_fallback_mode",
-    EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
-    EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY,
 )
-EXECUTION_KERNEL_RETIRED_LIVE_FALLBACK_MARKER_METADATA_FIELDS = ()
 EXECUTION_KERNEL_RETIRED_COMPATIBILITY_FALLBACK_METADATA_FIELDS = (
     EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
@@ -183,11 +185,15 @@ def _normalize_execution_kernel_metadata_bridge(
                         LIVE_PRIMARY_PROMPT_PREVIEW_OWNER
                     ),
                     EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN: DRY_RUN_PROMPT_PREVIEW_OWNER,
+                    EXECUTION_KERNEL_RESPONSE_SHAPE_RETIRED: (
+                        COMPATIBILITY_FALLBACK_PROMPT_PREVIEW_OWNER
+                    ),
                 },
                 "live_primary_model_id_source": LIVE_PRIMARY_MODEL_ID_SOURCE,
                 "supported_response_shapes": (
                     EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
                     EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
+                    EXECUTION_KERNEL_RESPONSE_SHAPE_RETIRED,
                 ),
             },
         }

@@ -402,6 +402,22 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
             metadata={
                 "execution_kernel": "fake-kernel",
                 "execution_kernel_authority": "test-adapter",
+                "execution_kernel_contract_mode": "rust-live-primary",
+                "execution_kernel_fallback_policy": "infrastructure-only-explicit",
+                "execution_kernel_in_process_replacement_complete": True,
+                "execution_kernel_delegate": "router-rs",
+                "execution_kernel_delegate_authority": "rust-execution-cli",
+                "execution_kernel_delegate_family": "rust-cli",
+                "execution_kernel_delegate_impl": "router-rs",
+                "execution_kernel_live_primary": "router-rs",
+                "execution_kernel_live_primary_authority": "rust-execution-cli",
+                "execution_kernel_live_fallback": None,
+                "execution_kernel_live_fallback_authority": None,
+                "execution_kernel_live_fallback_enabled": False,
+                "execution_kernel_live_fallback_mode": "disabled",
+                "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
+                "execution_kernel_response_shape": "dry_run",
+                "execution_kernel_prompt_preview_owner": "rust-execution-cli",
                 "trace_event_count": trace_event_count,
                 "trace_output_path": trace_output_path,
             },
@@ -432,8 +448,8 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
         assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-        assert "execution_kernel_live_fallback" not in response.metadata
-        assert "execution_kernel_live_fallback_authority" not in response.metadata
+        assert response.metadata["execution_kernel_live_fallback"] is None
+        assert response.metadata["execution_kernel_live_fallback_authority"] is None
         assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
         assert response.metadata["trace_event_schema_version"] == TRACE_EVENT_SCHEMA_VERSION
 
@@ -470,12 +486,22 @@ def test_runtime_live_path_tolerates_empty_python_prompt_context(tmp_path: Path)
             metadata={
                 "execution_kernel": "rust-execution-kernel-slice",
                 "execution_kernel_authority": "rust-execution-kernel-authority",
+                "execution_kernel_contract_mode": "rust-live-primary",
+                "execution_kernel_fallback_policy": "infrastructure-only-explicit",
+                "execution_kernel_in_process_replacement_complete": True,
                 "execution_kernel_delegate": "router-rs",
                 "execution_kernel_delegate_authority": "rust-execution-cli",
+                "execution_kernel_delegate_family": "rust-cli",
+                "execution_kernel_delegate_impl": "router-rs",
                 "execution_kernel_live_primary": "router-rs",
                 "execution_kernel_live_primary_authority": "rust-execution-cli",
                 "execution_kernel_live_fallback": None,
                 "execution_kernel_live_fallback_authority": None,
+                "execution_kernel_live_fallback_enabled": False,
+                "execution_kernel_live_fallback_mode": "disabled",
+                "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
+                "execution_kernel_response_shape": "live_primary",
+                "execution_kernel_prompt_preview_owner": "rust-execution-cli",
             },
         )
 
@@ -1222,6 +1248,62 @@ def test_runtime_event_attach_rejects_descriptor_without_artifact_replay_contrac
 
             with pytest.raises(ValueError, match="attach_capabilities\\.artifact_replay=True"):
                 attached_runtime.attach_runtime_event_transport(attach_descriptor=attach_descriptor)
+
+        asyncio.run(_run())
+
+
+def test_runtime_attached_replay_rejects_descriptor_that_drifts_from_canonical_trace_stream(
+    tmp_path: Path,
+) -> None:
+    """Replay should fail closed when a caller mutates the canonical descriptor trace stream."""
+
+    with _project_supervisor_state():
+        trace_path = tmp_path / "TRACE_METADATA.json"
+        runtime = CodexAgnoRuntime(
+            RuntimeSettings(
+                codex_home=PROJECT_ROOT,
+                data_dir=tmp_path / "runtime-data",
+                trace_output_path=trace_path,
+                live_model_override=False,
+            )
+        )
+
+        async def _run() -> None:
+            response = await runtime.run_task(
+                RunTaskRequest(
+                    task="帮我写一个 Rust CLI 工具",
+                    session_id="attach-drift-session",
+                    user_id="tester",
+                    dry_run=True,
+                )
+            )
+            transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
+            attached_runtime = CodexAgnoRuntime(
+                RuntimeSettings(
+                    codex_home=PROJECT_ROOT,
+                    data_dir=tmp_path / "attached-runtime-data",
+                    trace_output_path=tmp_path / "ATTACHED_TRACE_METADATA.json",
+                    live_model_override=False,
+                )
+            )
+            attach_descriptor = attached_runtime.attach_runtime_event_transport(
+                binding_artifact_path=transport["binding_artifact_path"]
+            )["attach_descriptor"]
+            attach_descriptor["resolved_artifacts"] = {
+                **attach_descriptor["resolved_artifacts"],
+                "trace_stream_path": str(
+                    Path(transport["binding_artifact_path"]).with_name("WRONG_TRACE_EVENTS.jsonl")
+                ),
+            }
+
+            with pytest.raises(
+                ValueError,
+                match="canonical 'resolved_artifacts\\.trace_stream_path'",
+            ):
+                attached_runtime.subscribe_attached_runtime_events(
+                    attach_descriptor=attach_descriptor,
+                    limit=5,
+                )
 
         asyncio.run(_run())
 

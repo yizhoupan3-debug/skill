@@ -1310,6 +1310,40 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     assert gemini.host_payload["host_projection"]["checkpointing_supported"] is True
 
 
+def test_host_adapter_payload_resolves_host_capability_requirements_per_adapter() -> None:
+    profile = build_framework_profile(
+        profile_id="resolved-host-requirements",
+        display_name="Resolved Host Requirements",
+        host_capability_requirements={
+            "default": {"required_host_capabilities": ["artifact_contract"]},
+            "codex-desktop": {"required_host_capabilities": ["automation_bridge"]},
+            "codex_desktop_adapter": {"required_host_capabilities": ["local_runtime"]},
+            "codex-cli": {"required_host_capabilities": ["batch_execution"]},
+        },
+    )
+
+    cli_common = compile_cli_common_adapter(profile)
+    desktop = compile_codex_desktop_adapter(profile)
+    cli = compile_codex_cli_adapter(profile)
+
+    assert cli_common.host_payload["host_capability_requirements"] == {
+        "required_host_capabilities": ["artifact_contract"],
+    }
+    assert desktop.host_payload["host_capability_requirements"] == {
+        "required_host_capabilities": [
+            "artifact_contract",
+            "automation_bridge",
+            "local_runtime",
+        ],
+    }
+    assert cli.host_payload["host_capability_requirements"] == {
+        "required_host_capabilities": [
+            "artifact_contract",
+            "batch_execution",
+        ],
+    }
+
+
 def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapshot() -> None:
     profile = build_framework_profile(
         profile_id="portable",
@@ -2001,6 +2035,55 @@ def test_router_rs_profile_json_can_opt_in_legacy_alias_output() -> None:
         "mirror-only"
     )
     assert payload["codex_desktop_alias_retirement_status"]["alias_lifecycle"] == "compatibility-only"
+
+
+def test_router_rs_profile_json_resolves_host_capability_requirements_per_adapter() -> None:
+    profile = build_framework_profile(
+        profile_id="rust-profile-host-requirements",
+        display_name="Rust Profile Host Requirements",
+        host_capability_requirements={
+            "default": {"required_host_capabilities": ["artifact_contract"]},
+            "codex-desktop": {"required_host_capabilities": ["automation_bridge"]},
+            "codex_desktop_adapter": {"required_host_capabilities": ["local_runtime"]},
+            "codex-cli": {"required_host_capabilities": ["batch_execution"]},
+        },
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        profile_path = Path(tmpdir) / "framework_profile.json"
+        profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False), encoding="utf-8")
+
+        proc = subprocess.run(
+            [
+                *_router_rs_command(),
+                "--profile-json",
+                "--framework-profile",
+                str(profile_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT,
+        )
+
+    payload = json.loads(proc.stdout)
+    assert payload["host_capability_requirements"] == profile.host_capability_requirements
+    assert payload["cli_common_adapter"]["host_capability_requirements"] == {
+        "required_host_capabilities": ["artifact_contract"],
+    }
+    assert payload["codex_desktop_adapter"]["host_capability_requirements"] == {
+        "required_host_capabilities": [
+            "artifact_contract",
+            "automation_bridge",
+            "local_runtime",
+        ],
+    }
+    assert payload["codex_cli_adapter"]["host_capability_requirements"] == {
+        "required_host_capabilities": [
+            "artifact_contract",
+            "batch_execution",
+        ],
+    }
 
 
 def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() -> None:

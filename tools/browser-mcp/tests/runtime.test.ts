@@ -1046,7 +1046,7 @@ describe('BrowserRuntime', () => {
       const diagnostics = await attachedRuntime.getDiagnostics();
       expect(diagnostics.attachedRuntime.status).toBe('invalid_descriptor');
       expect(diagnostics.attachedRuntime.warning).toContain(
-        'runtime attach artifacts disagree on trace_stream_path',
+        'mismatched binding/resume trace stream paths',
       );
       await expect(attachedRuntime.getAttachedRuntimeEvents({ limit: 5 })).rejects.toMatchObject({
         code: 'ATTACHED_RUNTIME_INVALID_DESCRIPTOR',

@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -26,7 +27,6 @@ from codex_agno_runtime.schemas import (
     RouteDecisionSnapshot,
     RouteDiagnosticReport,
     RouteExecutionPolicy,
-    SearchMatchesContract,
     SearchMatchResult,
     SkillMetadata,
 )
@@ -246,6 +246,53 @@ def test_route_contract_rejects_unknown_decision_authority_shape(
         )
 
 
+def test_run_route_cli_stays_rust_only_and_never_falls_back_to_python_rendering(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    class _FakeAdapter:
+        def exec_query_cli(self, **kwargs) -> None:
+            calls.append(dict(kwargs))
+
+    monkeypatch.setattr(rust_router_module, "route_adapter", lambda **kwargs: _FakeAdapter())
+
+    assert (
+        rust_router_module.run_route_cli(
+            codex_home=PROJECT_ROOT,
+            argv=["--query", "typed first route cli", "--route-json", "--limit", "7"],
+        )
+        == 0
+    )
+    assert calls == [
+        {
+            "query": "typed first route cli",
+            "limit": 7,
+            "json_output": False,
+            "route_json": True,
+            "session_id": "route-cli",
+            "allow_overlay": True,
+            "first_turn": True,
+        }
+    ]
+
+
+def test_run_route_cli_requires_prebuilt_rust_binary_instead_of_python_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeAdapter:
+        def exec_query_cli(self, **kwargs) -> None:
+            raise RuntimeError("router-rs requires a prebuilt binary")
+
+    monkeypatch.setattr(rust_router_module, "route_adapter", lambda **kwargs: _FakeAdapter())
+
+    with pytest.raises(RuntimeError, match="requires a prebuilt binary"):
+        rust_router_module.run_route_cli(
+            codex_home=PROJECT_ROOT,
+            argv=["--query", "typed first route cli"],
+        )
+
+
 def test_search_skills_uses_route_adapter_hot_path(monkeypatch: pytest.MonkeyPatch) -> None:
     rows = [
         SearchMatchResult(
@@ -299,10 +346,9 @@ def test_search_match_result_round_trips_transport_row() -> None:
 
     assert match.record.name == "iterative-optimizer"
     assert match.record.routing_layer == "L2"
-    assert match.to_transport_row() == row
 
 
-def test_search_skill_matches_contract_accepts_legacy_transport_rows(
+def test_search_skill_matches_contract_rejects_legacy_transport_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     transport_rows = [
@@ -328,24 +374,26 @@ def test_search_skill_matches_contract_accepts_legacy_transport_rows(
         lambda *args, **kwargs: transport_rows,
     )
 
-    contract = adapter.search_skill_matches_contract(query="typed first", limit=1)
-
-    assert isinstance(contract, SearchMatchesContract)
-    assert contract.search_schema_version == adapter.search_schema_version
-    assert contract.authority == adapter.route_authority
-    assert contract.query == "typed first"
-    assert contract.to_transport_rows() == transport_rows
+    with pytest.raises(RuntimeError, match="unexpected payload"):
+        adapter.search_skill_matches_contract(query="typed first", limit=1)
 
 
-def test_search_skill_rows_json_text_exports_transport_payload_from_typed_matches(
+def test_search_skill_matches_contract_rejects_rows_only_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    contract = SearchMatchesContract.model_validate(
-        {
-            "search_schema_version": "router-rs-search-results-v1",
-            "authority": "rust-route-core",
+    adapter = RustRouteAdapter(
+        PROJECT_ROOT,
+        runtime_path=MISSING_RUNTIME_PATH,
+        manifest_path=ROUTE_FIXTURE_PATH,
+    )
+    monkeypatch.setattr(
+        adapter,
+        "_run_hot_json_command",
+        lambda *args, **kwargs: {
+            "search_schema_version": adapter.search_schema_version,
+            "authority": adapter.route_authority,
             "query": "typed first",
-            "matches": [
+            "rows": [
                 {
                     "slug": "iterative-optimizer",
                     "description": "Iterative optimization loop",
@@ -357,18 +405,11 @@ def test_search_skill_rows_json_text_exports_transport_payload_from_typed_matche
                     "total_terms": 2,
                 }
             ],
-        }
+        },
     )
-    adapter = RustRouteAdapter(
-        PROJECT_ROOT,
-        runtime_path=MISSING_RUNTIME_PATH,
-        manifest_path=ROUTE_FIXTURE_PATH,
-    )
-    monkeypatch.setattr(adapter, "search_skill_matches_contract", lambda **kwargs: contract)
 
-    payload = json.loads(adapter.search_skill_rows_json_text(query="typed first", limit=1))
-
-    assert payload == contract.to_transport_payload()
+    with pytest.raises(ValidationError, match="matches"):
+        adapter.search_skill_matches_contract(query="typed first", limit=1)
 
 
 def test_route_decision_contract_stays_typed_first_transport_payload(

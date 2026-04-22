@@ -1359,6 +1359,38 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
     asyncio.run(_run())
 
 
+def test_execution_service_exposes_retired_kernel_contract_shape_from_rust_control_plane(
+    tmp_path: Path,
+) -> None:
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=False,
+    )
+    router_service = RouterService(settings)
+    execution_service = ExecutionEnvironmentService(
+        settings,
+        max_background_jobs=4,
+        background_job_timeout_seconds=30.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
+    )
+
+    retired_contract = execution_service.describe_kernel_contract(response_shape="retired")
+    retired_payload = execution_service.kernel_payload(response_shape="retired")
+
+    assert retired_contract["execution_kernel_response_shape"] == "retired"
+    assert retired_contract["execution_kernel_prompt_preview_owner"] == (
+        "python-agno-kernel-adapter"
+    )
+    assert retired_contract["execution_kernel_live_fallback_enabled"] is False
+    assert retired_contract["execution_kernel_live_fallback_mode"] == "disabled"
+    assert retired_payload["execution_kernel_response_shape"] == "retired"
+    assert retired_payload["execution_kernel_prompt_preview_owner"] == (
+        "python-agno-kernel-adapter"
+    )
+
+
 def test_execution_service_prefers_rust_live_metadata_when_present(tmp_path: Path) -> None:
     """Authority adapter should preserve Rust-emitted live metadata instead of rehydrating defaults."""
 
@@ -1777,6 +1809,35 @@ def test_execution_service_kernel_payload_rejects_partial_python_override(tmp_pa
         )
 
 
+def test_execution_service_kernel_payload_rejects_partial_python_steady_state_metadata_without_fallback(
+    tmp_path: Path,
+) -> None:
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=True,
+    )
+    router_service = RouterService(settings)
+    execution_service = ExecutionEnvironmentService(
+        settings,
+        max_background_jobs=4,
+        background_job_timeout_seconds=30.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="execution-kernel projection metadata is missing steady-state fields:",
+    ):
+        execution_service.kernel_payload(
+            dry_run=False,
+            metadata={
+                "execution_kernel_delegate_family": "custom-live-family",
+            },
+        )
+
+
 @pytest.mark.parametrize(
     ("metadata_field", "metadata_value"),
     [
@@ -1835,6 +1896,11 @@ def test_execution_service_kernel_payload_rejects_retired_python_fallback_metada
                 "execution_kernel_delegate_impl": "custom-live-impl",
                 "execution_kernel_live_primary": "router-rs-live-primary",
                 "execution_kernel_live_primary_authority": "custom-live-authority",
+                "execution_kernel_live_fallback": None,
+                "execution_kernel_live_fallback_authority": None,
+                "execution_kernel_live_fallback_enabled": False,
+                "execution_kernel_live_fallback_mode": "disabled",
+                "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
                 "execution_kernel_response_shape": "live_primary",
                 "execution_kernel_prompt_preview_owner": "rust-execution-cli",
                 metadata_field: metadata_value,
