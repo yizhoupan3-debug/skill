@@ -45,9 +45,7 @@ from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
     validate_execution_kernel_steady_state_metadata,
 )
-from codex_agno_runtime.host_adapters import (
-    build_control_plane_contract_descriptors,
-)
+from codex_agno_runtime.control_plane_contracts import build_control_plane_contract_descriptors
 from codex_agno_runtime.memory import FactMemoryStore
 from codex_agno_runtime.middleware import MiddlewareContext
 from codex_agno_runtime.observability import build_runtime_observability_health_snapshot

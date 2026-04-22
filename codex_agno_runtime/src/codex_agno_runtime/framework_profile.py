@@ -169,6 +169,13 @@ def build_framework_workspace_bootstrap(
     return compiled
 
 
+def extract_framework_workspace_bridges(workspace_bootstrap: Mapping[str, Any]) -> Dict[str, Any]:
+    bridges = workspace_bootstrap.get("bridges", {})
+    if not isinstance(bridges, Mapping):
+        return {}
+    return dict(_clone_json_like(bridges))
+
+
 @dataclass(frozen=True)
 class FrameworkProfile:
     """Host-agnostic framework contract.
@@ -216,6 +223,11 @@ class FrameworkProfile:
             ),
             "session_contract": build_framework_session_contract(self.session_policy),
         }
+
+    def shared_contract_bridges(self) -> Dict[str, Any]:
+        return extract_framework_workspace_bridges(
+            self.shared_contract_surface()["workspace_bootstrap"]
+        )
 
     def shared_contract_payload(self) -> Dict[str, Any]:
         return {

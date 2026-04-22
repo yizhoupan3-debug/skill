@@ -328,6 +328,9 @@ class FrameworkSharedContractProjection(BaseModel):
     projected_contract: FrameworkSharedContractSurface = Field(
         default_factory=FrameworkSharedContractSurface
     )
+    bridge_contract_match: bool | None = None
+    bridge_contract_mismatch_fields: list[str] = Field(default_factory=list)
+    bridge_contract: dict[str, Any] | None = None
     runtime_surface_match: bool | None = None
     runtime_surface_mismatch_fields: list[str] = Field(default_factory=list)
     runtime_surface: FrameworkSharedContractSurface | None = None
@@ -345,8 +348,10 @@ class FrameworkSharedContractProjectionReport(BaseModel):
     canonical_shared_contract: FrameworkSharedContractSurface = Field(
         default_factory=FrameworkSharedContractSurface
     )
+    canonical_bridge_contract: dict[str, Any] = Field(default_factory=dict)
     adapter_projections: list[FrameworkSharedContractProjection] = Field(default_factory=list)
     all_shared_contract_projections_match: bool = True
+    all_bridge_contract_projections_match: bool = True
 
 
 class PrepareSessionRequest(BaseModel):
