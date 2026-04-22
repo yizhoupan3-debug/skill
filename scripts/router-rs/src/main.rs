@@ -14,9 +14,11 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use strsim::jaro_winkler;
 
+mod background_state;
 mod framework_profile;
 mod framework_runtime;
 
+use background_state::handle_background_state_operation;
 use framework_profile::{
     build_codex_artifact_bundle, build_profile_bundle, build_profile_bundle_with_legacy_alias,
     load_framework_profile,
@@ -129,6 +131,8 @@ struct Cli {
     #[arg(long)]
     background_control_json: bool,
     #[arg(long)]
+    background_state_json: bool,
+    #[arg(long)]
     describe_transport_json: bool,
     #[arg(long)]
     describe_handoff_json: bool,
@@ -184,6 +188,8 @@ struct Cli {
     sandbox_control_input_json: Option<String>,
     #[arg(long)]
     background_control_input_json: Option<String>,
+    #[arg(long)]
+    background_state_input_json: Option<String>,
     #[arg(long)]
     describe_transport_input_json: Option<String>,
     #[arg(long)]
@@ -651,6 +657,7 @@ fn main() -> Result<(), String> {
         args.runtime_control_plane_json,
         args.sandbox_control_json,
         args.background_control_json,
+        args.background_state_json,
         args.describe_transport_json,
         args.describe_handoff_json,
         args.checkpoint_resume_manifest_json,
@@ -678,7 +685,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --route-report-json, --profile-json, and --profile-artifacts-json"
+            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --route-report-json, --profile-json, and --profile-artifacts-json"
                 .to_string(),
         );
     }
@@ -715,6 +722,24 @@ fn main() -> Result<(), String> {
         println!(
             "{}",
             serde_json::to_string(&build_background_control_response(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.background_state_json {
+        let payload = serde_json::from_str::<Value>(
+            args.background_state_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--background-state-input-json is required with --background-state-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse background state input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&handle_background_state_operation(payload)?)
                 .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());
