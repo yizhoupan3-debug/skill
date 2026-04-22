@@ -272,7 +272,7 @@ def test_rust_route_adapter_prefers_release_binary_across_debug_and_release() ->
         assert adapter.health()["resolved_binary"] == str(release_bin)
 
 
-def test_rust_route_adapter_prefers_fresher_debug_binary_over_stale_release() -> None:
+def test_rust_route_adapter_keeps_release_binary_even_when_debug_is_newer() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         codex_home = Path(tmpdir)
         router_dir = codex_home / "scripts" / "router-rs"
@@ -293,8 +293,8 @@ def test_rust_route_adapter_prefers_fresher_debug_binary_over_stale_release() ->
         os.utime(debug_bin, (1_700_000_200, 1_700_000_200))
 
         adapter = RustRouteAdapter(codex_home)
-        assert adapter._binary_command() == [str(debug_bin)]
-        assert adapter.health()["resolved_binary"] == str(debug_bin)
+        assert adapter._binary_command() == [str(release_bin)]
+        assert adapter.health()["resolved_binary"] == str(release_bin)
 
 
 def test_rust_route_adapter_health_reuses_cached_source_mtime() -> None:

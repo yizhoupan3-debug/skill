@@ -24,15 +24,12 @@ from codex_agno_runtime.schemas import (
 
 
 def resolve_router_binary_candidate(*candidates: Path) -> Path | None:
-    """Return the freshest existing router-rs binary, preserving caller order on ties."""
+    """Prefer the first existing router-rs binary, falling back only when needed."""
 
-    existing = [candidate for candidate in candidates if candidate.is_file()]
-    if not existing:
-        return None
-    return max(
-        enumerate(existing),
-        key=lambda item: (item[1].stat().st_mtime, -item[0]),
-    )[1]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def discover_codex_home(start_path: Path) -> Path:
