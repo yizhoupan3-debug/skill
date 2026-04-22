@@ -1,25 +1,20 @@
 ---
 name: execution-controller-coding
 description: |
-  内核级执行控制器 (Kernel-level Execution Controller)：负责高负载、跨文件、长运行周期任务的自动化编排、状态恢复、skill 路由、subagent 派发与结果集成。
-  它也是仓库内 get-shit-done / gsd 执行姿态的主 owner：自动推进安全本地步骤，压缩主线程，直到有真实验证证据。
-  适用于“系统指挥中心 / SCR / 状态持久化 / 并行 sidecar / 心跳监控 / 回滚 / 跨文件执行 / 主线程极简”。每轮对话开始 / first-turn / conversation start，复杂执行任务必须优先检查此控制层。
+  内核级执行控制器：负责高负载、跨文件、长运行任务的编排、状态维护、subagent 派发与结果集成。
+  它也是仓库内 get-shit-done / gsd 执行姿态的主 owner：自动推进安全本地步骤，直到有真实验证证据。
+  适用于复杂执行任务的统一收口，而不是普通单点实现。
 routing_layer: L0
 routing_owner: "@kernel-controller"
 routing_gate: delegation
 routing_priority: P0
 session_start: required
-short_description: Orchestrate complex execution with aggressive routing, state, delegation, and compressed context
+short_description: Orchestrate complex execution with clear scope, state, delegation, and verification.
 trigger_hints:
   - 高负载
   - 跨文件
   - 长运行周期
-  - 系统指挥中心
-  - SCR架构
-  - 协同式确定性治理
-  - 内核级控制器
   - 状态持久化
-  - 纳米级心跳
   - gsd
   - get shit done
   - 推进到底
@@ -36,7 +31,7 @@ framework_contracts:
   consumes_execution_items: true
   emits_verification_results: true
 metadata:
-  version: "2.5.0"
+  version: "2.6.0"
   platforms: [codex]
   tags:
     - orchestrator
@@ -44,9 +39,6 @@ metadata:
     - routing
     - subagent
     - checkpoint
-    - heartbeat
-    - rollback
-    - state-machine
     - gsd
     - get-shit-done
 risk: high
@@ -84,7 +76,6 @@ bridge_behavior: mobile_complete_once
 - 高负载、跨文件、长运行、多阶段集成、多验证面并存
 - 需要显式维护 `.supervisor_state.json` 和 continuity artifacts
 - 并行 lane 存在共享状态冲突风险，需要由单一控制器收口 continuity 写入
-- 主线程必须只保留决策与集成，细节需要下沉到 sidecars、state、artifacts
 - 用户明确要求 `gsd` / `get shit done` / “推进到底” / “别停”
 
 ## Do not use
@@ -98,9 +89,7 @@ bridge_behavior: mobile_complete_once
 
 - `gsd` 不是独立运行时，而是这个 controller 的强执行姿态。
 - 默认自动继续清晰、低风险、可逆的本地 edit/test/verify 链路，不做无意义权限交还。
-- 强执行不等于盲猜：如果不同解释会明显改变方案、风险或改动面，必须先显式化。
-- 强执行不等于做大：默认走最小可行路线，不为“以后也许会用到”提前加层、加开关、加抽象。
-- 强执行不等于大 diff：改动面要能逐条追溯到当前目标或必要 fallout。
+- 不盲猜，不做大，不放大 diff；改动必须能追溯到当前目标。
 - 主线程只报告决策、证据和 blocker，不复述大量过程。
 - 没有验证证据就不宣告完成。
 - 卡住时优先换招，不优先请求人工代劳。
@@ -115,7 +104,7 @@ bridge_behavior: mobile_complete_once
 - `TRACE_METADATA.json`
 - `.supervisor_state.json`
 
-非平凡执行在开工前还要先定清：
+非平凡执行在开工前先定清：
 
 - success criteria：什么现象算完成
 - verification path：用什么测试/命令/证据验收

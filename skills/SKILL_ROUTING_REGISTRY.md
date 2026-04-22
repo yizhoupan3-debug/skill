@@ -12,7 +12,7 @@
 | `agent-swarm-orchestration` | Active | P2 | L4 | owner | none | project | ✓ 91.5 | Design and debug multi-agent systems with planners, routers, workers, reviewers, |
 | `ai-research` | Active | P2 | L4 | owner | none | project | ✓ 94.6 | AI/ML research engineering for model training, experiment pipelines, evaluation, |
 | `algo-trading` | Active | P2 | L4 | owner | none | project | ✓ 93.3 | Design, analyze, and implement algorithmic trading strategies, backtests, execut |
-| `anti-laziness` | Active | P1 | L1 | overlay | none | project | ✓ 95.0 | Fused overlay to detect/counter cognitive laziness and force empirical evidence. |
+| `anti-laziness` | Active | P1 | L1 | overlay | none | project | ✓ 95.0 | Evidence-first overlay that blocks guessing, bloat, and unverified completion cl |
 | `api-design` | Active | P2 | L3 | owner | none | project | ✓ 96.7 | Design, review, and refactor API interfaces covering REST, GraphQL, gRPC, versio |
 | `api-integration-debugging` | Active | P2 | L1 | owner | none | project | ✓ 97.3 | Diagnose and fix API integration failures at service boundaries. Produces reprod |
 | `api-load-tester` | Active | P2 | L3 | owner | none | project | ✓ 93.6 | Design and run API load, stress, soak, and spike tests with k6, wrk, or autocann |
@@ -49,7 +49,7 @@
 | `error-handling-patterns` | Active | P2 | L1 | overlay | none | project | ✓ 97.2 | Design cross-language error-handling architectures such as custom errors, retry/ |
 | `execution-audit-codex` | Active | P1 | L1 | overlay | none | project | ✓ 100.0 | Audit execution quality with evidence, sidecar-first collection, and compressed  |
 | `execution-controller-app` | Active | P0 | L0 | @app-controller | delegation | project | ✓ 100.0 | Master orchestrator for production-grade app optimization, refactor, and full-st |
-| `execution-controller-coding` | Active | P0 | L0 | @kernel-controller | delegation | project | ✓ 100.0 | Orchestrate complex execution with aggressive routing, state, delegation, and co |
+| `execution-controller-coding` | Active | P0 | L0 | @kernel-controller | delegation | project | ✓ 100.0 | Orchestrate complex execution with clear scope, state, delegation, and verificat |
 | `experiment-reproducibility` | Active | P2 | L3 | owner | none | project | ✓ 96.2 | Ensure and manage research experiment reproducibility: environment capture, rand |
 | `financial-data-fetching` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Fetch, validate, normalize, and export real financial market data: OHLCV, financ |
 | `frontend-code-quality` | Active | P2 | L3 | overlay | none | project | ✓ 95.8 | Enforce frontend code-quality rules such as ≤150-line files, early returns, and  |

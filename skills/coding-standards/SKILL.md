@@ -3,12 +3,11 @@ name: coding-standards
 description: |
   Enforce cross-stack coding standards: naming, readability, error handling,
   immutability, and type safety for backend and full-stack code (Python, Go,
-  Node.js, Rust, SQL). Use when reviewing code quality drift, applying 持续改进,
-  防错设计, standardizing, preventing recurring defects, or cutting needless
-  abstraction and scope drift.
+  Node.js, Rust, SQL). Use when reviewing code quality drift, preventing
+  recurring defects, and cutting needless abstraction or scope drift.
   For frontend-specific patterns, use $frontend-code-quality instead.
 metadata:
-  version: "4.1.0"
+  version: "4.2.0"
   platforms: [codex, antigravity, claude-code]
   tags:
     - coding-standards
@@ -45,27 +44,17 @@ approval_required_tools: []
 
 This skill owns **cross-stack and backend coding standards** as an overlay:
 naming, readability, error handling, immutability, type safety, anti-pattern
-detection, and continuous improvement practices.
-
-> `kaizen` (continuous improvement) has been merged into this skill as a
-> natural extension of coding standards enforcement.
+detection, and practical simplification.
 
 ## When to use
 
 - The user asks for coding standards, naming conventions, or style enforcement on backend or full-stack code
 - The task involves code quality drift cleanup across Python, Go, Node.js backend, Rust, or SQL
 - The user says "编码规范", "代码风格统一", "anti-pattern 检测", "后端代码规范"
-- The user wants continuous improvement or process-level quality analysis applied to a codebase
-- The task involves mistake-proofing (poka-yoke), simplification, or standardization across workflows
+- The user wants simplification, mistake-proofing, or standardization across workflows
 - The user says "持续改进", "防错设计", "标准化", "流程优化", "质量改进"
 - The user wants to reduce rework, prevent recurring defects, or unify scattered patterns
 - Use as an overlay when another domain skill owns the task but coding standard compliance is also needed
-- Best for requests like:
-  - "检查一下这个 Python 代码规范"
-  - "后端代码风格统一一下"
-  - "这个 Go 代码有没有 anti-pattern"
-  - "持续改进一下这些代码"
-  - "防错设计怎么做"
 
 ## Do not use
 
@@ -79,18 +68,12 @@ detection, and continuous improvement practices.
 ## Task ownership and boundaries
 
 This skill owns:
-- Cross-language naming conventions (Python snake_case, Go camelCase, etc.)
-- Immutability and type safety rules
-- Error handling patterns (try/catch, explicit exceptions)
-- Async patterns (Promise.all, proper await)
-- Code smell detection (long functions, deep nesting, magic numbers)
+- Cross-language naming, readability, immutability, type safety, and error handling
+- Async patterns and common code-smell detection
 - Simplicity rules: no single-use abstraction, no speculative configurability, no framework for a one-off case
 - Surgical-change discipline: keep diffs traceable to the request and avoid drive-by cleanup
-- API coding conventions (RESTful, Zod validation)
-- Comment standards (why not what, JSDoc for public API)
-- Continuous improvement: mistake-proofing, simplification, standardization
-- Poka-yoke patterns: making invalid states unrepresentable, branded types, guard clauses
-- Process-level quality patterns: fail-fast config, consistent API patterns, Rule of Three
+- API and comment conventions
+- Process-level quality patterns such as fail-fast config, guard clauses, and Rule of Three
 
 This skill does not own:
 - Frontend-specific patterns → `$frontend-code-quality`
@@ -120,12 +103,11 @@ This skill does not own:
 | Comments | Explain "why" not "what", JSDoc for public APIs |
 | Code smells | Functions < 50 lines, nesting < 5 levels, no magic numbers |
 
-### 3. Continuous Improvement (Kaizen) Checks
+### 3. Process checks
 
 When doing a process-level review, also check:
 
-- **Iterative refinement**: Is the code at appropriate maturity (working → clear → robust)?
-- **Poka-yoke**: Are invalid states representable? Could branded types or discriminated unions prevent bugs?
+- **Invalid-state control**: Can simple guard rails or types prevent recurring bugs?
 - **Guard clauses**: Are there opportunities to replace deep nesting with early returns?
 - **Fail-fast**: Does configuration validate at startup, not at request time?
 - **Standardized work**: Do similar code paths follow consistent patterns?
@@ -137,29 +119,6 @@ When doing a process-level review, also check:
 
 - Verify fixes do not break existing tests
 - Run language-specific linter if available
-
-## Output defaults
-
-```markdown
-## Coding Standards Review
-- Scope: [project/module/file]
-- Language: [Python/Go/TS/etc]
-
-## Findings
-1. [Area] Issue description
-   - Location: ...
-   - Fix: ...
-
-## Continuous Improvement Opportunities
-1. [Pattern] Description
-   - Current: ...
-   - Recommended: ...
-   - Impact: ...
-
-## Summary
-- Total issues: N
-- By area: naming (N), error handling (N), improvement (N), ...
-```
 
 ## Hard constraints
 
