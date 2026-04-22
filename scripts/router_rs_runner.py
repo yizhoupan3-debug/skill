@@ -67,17 +67,26 @@ def _socket_path(binary_path: Path, repo_root: Path) -> Path:
 
 
 def _parse_hot_request(argv: list[str], *, binary_path: Path) -> HotRequest | None:
-    if "--framework-alias-json" not in argv:
-        return None
-    alias_name = _option_value(argv, "--framework-alias")
-    if not alias_name:
-        return None
     repo_root = Path(_option_value(argv, "--repo-root") or PROJECT_ROOT).resolve()
     max_lines_raw = _option_value(argv, "--claude-hook-max-lines")
     try:
         max_lines = int(max_lines_raw) if max_lines_raw is not None else 4
     except ValueError:
         max_lines = 4
+    if "--framework-refresh-json" in argv:
+        return HotRequest(
+            op="framework_refresh",
+            payload={
+                "repo_root": str(repo_root),
+                "max_lines": max_lines,
+            },
+            socket_path=_socket_path(binary_path, repo_root),
+        )
+    if "--framework-alias-json" not in argv:
+        return None
+    alias_name = _option_value(argv, "--framework-alias")
+    if not alias_name:
+        return None
     return HotRequest(
         op="framework_alias",
         payload={
@@ -173,6 +182,17 @@ def _request_hot_daemon(request: HotRequest) -> dict[str, Any]:
 
 
 def _dispatch_hot_request(request: HotRequest, *, adapter: RustRouteAdapter) -> dict[str, Any]:
+    if request.op == "framework_refresh":
+        repo_root = Path(str(request.payload["repo_root"]))
+        refresh_payload = adapter.framework_refresh(
+            repo_root=repo_root,
+            max_lines=int(request.payload.get("max_lines", 4)),
+        )
+        return {
+            "schema_version": adapter.framework_refresh_schema_version,
+            "authority": adapter.framework_runtime_authority,
+            "refresh": refresh_payload,
+        }
     if request.op == "framework_alias":
         repo_root = Path(str(request.payload["repo_root"]))
         alias_payload = adapter.framework_alias(

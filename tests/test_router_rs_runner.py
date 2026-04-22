@@ -12,6 +12,28 @@ if str(SCRIPTS_ROOT) not in sys.path:
 import router_rs_runner
 
 
+def test_parse_hot_request_for_framework_refresh(tmp_path: Path) -> None:
+    binary_path = tmp_path / "router-rs"
+    binary_path.write_text("", encoding="utf-8")
+
+    request = router_rs_runner._parse_hot_request(
+        [
+            "--framework-refresh-json",
+            "--claude-hook-max-lines",
+            "6",
+            "--repo-root",
+            str(tmp_path),
+        ],
+        binary_path=binary_path,
+    )
+
+    assert request is not None
+    assert request.op == "framework_refresh"
+    assert request.payload["max_lines"] == 6
+    assert request.payload["repo_root"] == str(tmp_path.resolve())
+    assert request.socket_path.name.startswith("router-rs-hot-")
+
+
 def test_parse_hot_request_for_framework_alias(tmp_path: Path) -> None:
     binary_path = tmp_path / "router-rs"
     binary_path.write_text("", encoding="utf-8")
@@ -81,4 +103,41 @@ def test_dispatch_hot_request_wraps_framework_alias_envelope(tmp_path: Path) -> 
         "alias": "deepinterview",
         "max_lines": 5,
         "compact": True,
+    }
+
+
+def test_dispatch_hot_request_wraps_framework_refresh_envelope(tmp_path: Path) -> None:
+    request = router_rs_runner.HotRequest(
+        op="framework_refresh",
+        payload={
+            "repo_root": str(tmp_path),
+            "max_lines": 6,
+        },
+        socket_path=tmp_path / "router-rs.sock",
+    )
+
+    calls: dict[str, object] = {}
+
+    class FakeAdapter:
+        framework_refresh_schema_version = "router-rs-framework-refresh-v1"
+        framework_runtime_authority = "rust-framework-runtime-read-model"
+
+        def framework_refresh(
+            self,
+            *,
+            repo_root: Path,
+            max_lines: int,
+        ) -> dict[str, object]:
+            calls["repo_root"] = repo_root
+            calls["max_lines"] = max_lines
+            return {"ok": True, "confirmation": "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。"}
+
+    response = router_rs_runner._dispatch_hot_request(request, adapter=FakeAdapter())
+
+    assert response["schema_version"] == "router-rs-framework-refresh-v1"
+    assert response["authority"] == "rust-framework-runtime-read-model"
+    assert response["refresh"]["ok"] is True
+    assert calls == {
+        "repo_root": tmp_path,
+        "max_lines": 6,
     }
