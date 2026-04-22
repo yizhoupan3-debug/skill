@@ -44,6 +44,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     )
 
     expected_keys = {
+        "artifact_layout_manifest",
         "framework_profile",
         "framework_surface_policy",
         "cli_common_adapter",
@@ -53,9 +54,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "gemini_cli_adapter",
         "cli_family_capability_discovery",
         "codex_desktop_adapter",
-        "aionrs_companion_adapter",
-        "aionui_host_adapter",
-        "generic_host_adapter",
         "upgrade_compatibility_matrix",
         "cli_family_parity_snapshot",
         "codex_dual_entry_parity_snapshot",
@@ -86,6 +84,19 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert "codex_desktop_alias_inventory" not in paths
     assert "codex_desktop_alias_retirement_status" not in paths
     assert "rust_codex_desktop_host_adapter" not in paths
+    assert Path(paths["framework_profile"]).parent.name == "default"
+    assert Path(paths["cli_common_adapter"]).parent.name == "default"
+    assert Path(paths["framework_surface_policy"]).parent.name == "default"
+    assert Path(paths["rust_profile_bundle"]).parent.name == "rust"
+    layout_manifest = json.loads(Path(paths["artifact_layout_manifest"]).read_text(encoding="utf-8"))
+    assert layout_manifest["directory_policy"] == {
+        "default": "default",
+        "fallback": "fallback",
+        "continuity": "continuity",
+        "rust": "rust",
+    }
+    assert "cli_common_adapter" in layout_manifest["artifacts_by_lane"]["default"]
+    assert "rust_profile_bundle" in layout_manifest["artifacts_by_lane"]["rust"]
 
     cli_common = json.loads(Path(paths["cli_common_adapter"]).read_text(encoding="utf-8"))
     surface_policy = json.loads(Path(paths["framework_surface_policy"]).read_text(encoding="utf-8"))
@@ -113,28 +124,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     common = json.loads(Path(paths["codex_common_adapter"]).read_text(encoding="utf-8"))
     assert common["controller_boundary"]["framework_truth"] == "framework_core"
     assert common["metadata"]["adapter_alias_of"] == "cli_common_adapter"
-
-    companion = json.loads(Path(paths["aionrs_companion_adapter"]).read_text(encoding="utf-8"))
-    assert companion["companion_contract"]["fallbackSemantics"]["fallback_adapter"] == "codex_desktop_adapter"
-    assert companion["companion_contract"]["fallbackSemantics"]["default_host_peer_set"] == [
-        "codex_desktop_adapter",
-        "codex_cli_adapter",
-        "claude_code_adapter",
-        "gemini_cli_adapter",
-    ]
-    assert companion["legacy_boundary"]["exposure_lane"] == "fallback-only-explicit"
-    assert companion["legacy_boundary"]["default_host_peer_set_member"] is False
-
-    aionui = json.loads(Path(paths["aionui_host_adapter"]).read_text(encoding="utf-8"))
-    assert aionui["host_runtime_contract"]["preferred_backend"] == "aionrs_companion_adapter"
-    assert aionui["host_runtime_contract"]["fallback_semantics"]["default_host_peer_set"] == [
-        "codex_desktop_adapter",
-        "codex_cli_adapter",
-        "claude_code_adapter",
-        "gemini_cli_adapter",
-    ]
-    assert aionui["legacy_boundary"]["exposure_lane"] == "fallback-only-explicit"
-    assert aionui["legacy_boundary"]["default_host_peer_set_member"] is False
 
     claude = json.loads(Path(paths["claude_code_adapter"]).read_text(encoding="utf-8"))
     assert claude["host_projection"]["context_files"] == [
@@ -645,6 +634,59 @@ def test_emit_framework_contract_artifacts_requires_explicit_opt_in_for_continui
     assert "codex_desktop_host_adapter" not in paths
     assert "codex_desktop_alias_inventory" not in paths
     assert "codex_desktop_alias_retirement_status" not in paths
+    assert "aionrs_companion_adapter" not in paths
+    assert "aionui_host_adapter" not in paths
+    assert "generic_host_adapter" not in paths
+    manifest = json.loads(Path(paths["artifact_layout_manifest"]).read_text(encoding="utf-8"))
+    assert "fallback" not in manifest["artifacts_by_lane"]
+    assert "continuity" not in manifest["artifacts_by_lane"]
+
+
+def test_emit_framework_contract_artifacts_can_opt_in_fallback_host_outputs(
+    tmp_path: Path,
+) -> None:
+    profile = build_framework_profile(
+        profile_id="artifact-profile-fallbacks",
+        display_name="Artifact Profile Fallbacks",
+        rules_bundle={"rules": [{"id": "outer-owned"}]},
+        skill_bundle={"skills": ["router"]},
+        session_policy={"mode": "bounded"},
+    )
+
+    paths = emit_framework_contract_artifacts(
+        tmp_path,
+        profile=profile,
+        include_fallback_artifacts=True,
+    )
+
+    companion = json.loads(Path(paths["aionrs_companion_adapter"]).read_text(encoding="utf-8"))
+    assert Path(paths["aionrs_companion_adapter"]).parent.name == "fallback"
+    assert companion["companion_contract"]["fallbackSemantics"]["fallback_adapter"] == "codex_desktop_adapter"
+    assert companion["companion_contract"]["fallbackSemantics"]["default_host_peer_set"] == [
+        "codex_desktop_adapter",
+        "codex_cli_adapter",
+        "claude_code_adapter",
+        "gemini_cli_adapter",
+    ]
+    assert companion["legacy_boundary"]["exposure_lane"] == "fallback-only-explicit"
+    assert companion["legacy_boundary"]["default_host_peer_set_member"] is False
+
+    aionui = json.loads(Path(paths["aionui_host_adapter"]).read_text(encoding="utf-8"))
+    assert aionui["host_runtime_contract"]["preferred_backend"] == "aionrs_companion_adapter"
+    assert aionui["host_runtime_contract"]["fallback_semantics"]["default_host_peer_set"] == [
+        "codex_desktop_adapter",
+        "codex_cli_adapter",
+        "claude_code_adapter",
+        "gemini_cli_adapter",
+    ]
+    assert aionui["legacy_boundary"]["exposure_lane"] == "fallback-only-explicit"
+    assert aionui["legacy_boundary"]["default_host_peer_set_member"] is False
+
+    generic = json.loads(Path(paths["generic_host_adapter"]).read_text(encoding="utf-8"))
+    assert Path(paths["generic_host_adapter"]).parent.name == "fallback"
+    assert generic["metadata"]["adapter_id"] == "generic_host_adapter"
+    assert generic["metadata"]["host_id"] == "generic"
+    assert generic["capabilities"]["host"] == ["local_runtime", "artifact_contract", "memory_mounts"]
 
 
 def test_framework_shared_contract_projection_report_keeps_hosts_on_one_outer_truth() -> None:
@@ -713,6 +755,7 @@ def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
     )
 
     alias_payload = json.loads(Path(paths["codex_desktop_host_adapter"]).read_text(encoding="utf-8"))
+    assert Path(paths["codex_desktop_host_adapter"]).parent.name == "continuity"
     assert alias_payload["metadata"]["adapter_alias_of"] == "codex_desktop_adapter"
     alias_inventory = json.loads(
         Path(paths["codex_desktop_alias_inventory"]).read_text(encoding="utf-8")

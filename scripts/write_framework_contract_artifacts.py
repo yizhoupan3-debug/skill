@@ -30,6 +30,11 @@ def main() -> int:
         help="Also compile the Rust-side profile bundle via router-rs.",
     )
     parser.add_argument(
+        "--include-fallback-artifacts",
+        action="store_true",
+        help="Also write fallback/compatibility host artifacts such as aionrs_companion_adapter, aionui_host_adapter, and generic_host_adapter.",
+    )
+    parser.add_argument(
         "--include-legacy-alias-artifact",
         action="store_true",
         help="Force legacy codex_desktop_host_adapter artifacts to be written alongside the parity-first defaults.",
@@ -44,6 +49,7 @@ def main() -> int:
         args.output_dir,
         profile=profile,
         rust_adapter=rust_adapter,
+        include_fallback_artifacts=args.include_fallback_artifacts,
         include_legacy_alias_artifact=args.include_legacy_alias_artifact,
     )
     print(json.dumps(paths, ensure_ascii=False, indent=2))

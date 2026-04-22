@@ -10,6 +10,32 @@
 - 当前最值钱的工作已经不再是继续局部修补旧 lane，而是把 Rust-first contract 扩展到 execution kernel、bootstrap、observability activation、以及 host consumer adoption。
 - 本阶段按 **4 个并行 lane + 1 个集成 lane** 推进。
 
+## 2026-04-22 进度同步
+
+### 已推进到的状态
+
+- **Lane 1 / Kernel Contract Canonicalization** 已经前进了一步：
+  - `RouterService` 默认消费 typed Rust contract，而不是继续手拼原始 route JSON。
+  - `RustRouteAdapter` 已暴露 `route_contract / route_policy_contract / route_report_contract / route_snapshot_contract`。
+  - fixture/live parity 回归也已经优先走 typed contract；unknown skill 会 fail-closed，而不是让 Python 默默兜底。
+  - `tests/test_routing_parity.py`、`tests/test_codex_agno_runtime_services.py`、`tests/test_execution_kernel_router_rs_contract.py` 已覆盖这条收口。
+- **Lane 3 / Observability Activation** 已基本具备 concrete contract 面：
+  - `codex_agno_runtime.observability` 已提供 exporter descriptor / metric record / dashboard schema / health snapshot。
+  - `docs/runtime_observability_contract.md` 与 `tests/test_runtime_observability_contracts.py` 已把 vocabulary、exporter、metric、dashboard 对齐锁住。
+- **Lane 4 / Host Consumer Adoption** 已有 browser-mcp 基线落地：
+  - `tools/browser-mcp/src/runtime.ts` 已围绕 Rust attach descriptor / handoff / binding artifact 做 replay-capable attach 消费，不再只是旧三路径手搓逻辑。
+
+### 仍未收口的内容
+
+- **Lane 1** 还没彻底结束：
+  - route diagnostic 的 typed contract 已收薄，但 execution kernel 的其余 metadata / naming bridge 还没完全压成 Rust canonical producer。
+  - `scripts/route.py` 这类兼容 shim 还存在，虽然 steady-state runtime 已不靠它，但旁路 helper 仍需继续 typed-first 化。
+- **Lane 2 / Native Install / Bootstrap** 还没有实质推进；默认安装/初始化入口是否天然落在当前 Rust-first contract 上，仍需要专门收口。
+- **Lane 4** 还没有完成“更广 host family adoption”：
+  - browser-mcp 已经吃上 attach descriptor，但其他 host-facing consumer 是否全部切到同一 Rust-first surface，仍要继续核查和统一。
+- **Lane 5 / Integrator / Regenerate** 现在还不该启动：
+  - 只有当前 1/2/3/4 真正稳定后，才适合统一刷新 generated artifacts / docs / manifests / verification evidence。
+
 ---
 
 ## 本阶段并行任务总表

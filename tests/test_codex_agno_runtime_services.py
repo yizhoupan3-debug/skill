@@ -33,7 +33,11 @@ from codex_agno_runtime.execution_kernel import (
 )
 from codex_agno_runtime.middleware import MiddlewareContext
 from codex_agno_runtime.memory import FactMemoryStore
-from codex_agno_runtime.schemas import RunTaskResponse, UsageMetrics
+from codex_agno_runtime.schemas import (
+    RouteDecisionContract,
+    RunTaskResponse,
+    UsageMetrics,
+)
 from codex_agno_runtime.services import (
     ExecutionEnvironmentService,
     MemoryService,
@@ -1442,6 +1446,53 @@ def test_router_service_shadow_mode_keeps_rust_primary_and_records_diff() -> Non
     assert shadow_service.health()["diagnostic_report_required"] is True
     assert shadow_service.health()["strict_verification_required"] is False
     assert shadow_service.health()["route_policy"]["diagnostic_route_mode"] == "shadow"
+
+
+def test_router_service_rejects_unloaded_skill_from_rust_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Rust route contract that references an unknown skill should fail closed in the host."""
+
+    router_service = RouterService(
+        RuntimeSettings(
+            codex_home=PROJECT_ROOT,
+            live_model_override=False,
+            route_engine_mode="rust",
+        )
+    )
+
+    contract = RouteDecisionContract.model_validate(
+        {
+            "decision_schema_version": "router-rs-route-decision-v1",
+            "authority": "rust-route-core",
+            "compile_authority": "rust-route-compiler",
+            "task": "reject unknown rust skill",
+            "session_id": "unknown-skill-session",
+            "selected_skill": "not-a-real-skill",
+            "overlay_skill": None,
+            "layer": "L2",
+            "score": 13.0,
+            "reasons": ["Synthetic regression contract."],
+            "route_snapshot": {
+                "engine": "rust",
+                "selected_skill": "not-a-real-skill",
+                "overlay_skill": None,
+                "layer": "L2",
+                "score": 13.0,
+                "score_bucket": "10-19",
+                "reasons": ["Synthetic regression contract."],
+                "reasons_class": "synthetic regression contract.",
+            },
+        }
+    )
+
+    monkeypatch.setattr(router_service._rust_adapter, "route_contract", lambda **_: contract)
+
+    with pytest.raises(RuntimeError, match="not loaded by the Python host"):
+        router_service.route(
+            task="reject unknown rust skill",
+            session_id="unknown-skill-session",
+            allow_overlay=True,
+            first_turn=True,
+        )
 
 
 def test_runtime_checkpointer_round_trips_resume_manifest(tmp_path: Path) -> None:

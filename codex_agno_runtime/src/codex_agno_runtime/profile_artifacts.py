@@ -43,9 +43,15 @@ from codex_agno_runtime.schemas import (
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 LEGACY_DESKTOP_ALIAS_ID = "codex_desktop_host_adapter"
 FRAMEWORK_SURFACE_POLICY_PATH = PROJECT_ROOT / "configs" / "framework" / "FRAMEWORK_SURFACE_POLICY.json"
+DEFAULT_ARTIFACT_DIRNAME = "default"
+FALLBACK_ARTIFACT_DIRNAME = "fallback"
+CONTINUITY_ARTIFACT_DIRNAME = "continuity"
+RUST_ARTIFACT_DIRNAME = "rust"
+ARTIFACT_LAYOUT_MANIFEST_FILENAME = "framework_artifact_layout_manifest.json"
 
 
 def _write_json(path: Path, payload: Any) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return str(path)
 
@@ -209,6 +215,55 @@ def build_rust_python_artifact_parity_report(
         "raw_all_artifacts_match": raw_all_match,
         "all_artifacts_match_after_normalization": normalized_all_match,
         "artifacts": artifacts,
+    }
+
+
+def build_framework_artifact_layout_manifest(
+    *,
+    output_dir: Path,
+    paths: Mapping[str, str],
+) -> dict[str, Any]:
+    grouped_keys = {
+        "default": [],
+        "fallback": [],
+        "continuity": [],
+        "rust": [],
+        "root": [],
+    }
+    for artifact_key, artifact_path in paths.items():
+        try:
+            relative = Path(artifact_path).resolve().relative_to(output_dir.resolve())
+        except ValueError:
+            grouped_keys["root"].append(artifact_key)
+            continue
+        top = relative.parts[0] if relative.parts else ""
+        if top == DEFAULT_ARTIFACT_DIRNAME:
+            grouped_keys["default"].append(artifact_key)
+        elif top == FALLBACK_ARTIFACT_DIRNAME:
+            grouped_keys["fallback"].append(artifact_key)
+        elif top == CONTINUITY_ARTIFACT_DIRNAME:
+            grouped_keys["continuity"].append(artifact_key)
+        elif top == RUST_ARTIFACT_DIRNAME:
+            grouped_keys["rust"].append(artifact_key)
+        else:
+            grouped_keys["root"].append(artifact_key)
+    return {
+        "schema_version": "framework-artifact-layout-manifest-v1",
+        "authority": "framework-contract-emitter",
+        "output_root": str(output_dir),
+        "directory_policy": {
+            "default": DEFAULT_ARTIFACT_DIRNAME,
+            "fallback": FALLBACK_ARTIFACT_DIRNAME,
+            "continuity": CONTINUITY_ARTIFACT_DIRNAME,
+            "rust": RUST_ARTIFACT_DIRNAME,
+        },
+        "artifacts_by_lane": {
+            lane: sorted(keys) for lane, keys in grouped_keys.items() if keys
+        },
+        "artifacts": {
+            key: str(Path(path).resolve().relative_to(output_dir.resolve()))
+            for key, path in sorted(paths.items())
+        },
     }
 
 
@@ -415,6 +470,7 @@ def emit_framework_contract_artifacts(
     profile: FrameworkProfile,
     host_overrides: Mapping[str, Any] | None = None,
     rust_adapter: RustRouteAdapter | None = None,
+    include_fallback_artifacts: bool = False,
     include_legacy_alias_artifact: bool | None = None,
 ) -> dict[str, str]:
     """Write concrete framework-profile and adapter artifacts for bridge consumers."""
@@ -423,8 +479,12 @@ def emit_framework_contract_artifacts(
     profile = _profile_with_surface_policy(profile)
     alias_inventory = build_codex_desktop_alias_inventory()
     emit_legacy_alias_artifact = include_legacy_alias_artifact is True
+    default_dir = output_dir / DEFAULT_ARTIFACT_DIRNAME
+    fallback_dir = output_dir / FALLBACK_ARTIFACT_DIRNAME
+    continuity_dir = output_dir / CONTINUITY_ARTIFACT_DIRNAME
+    rust_dir = output_dir / RUST_ARTIFACT_DIRNAME
 
-    profile_path = output_dir / "framework_profile.json"
+    profile_path = default_dir / "framework_profile.json"
     python_artifacts = {
         "framework_profile": profile.to_dict(),
         "framework_surface_policy": profile.framework_surface_policy,
@@ -448,19 +508,6 @@ def emit_framework_contract_artifacts(
         ),
         "codex_desktop_adapter": compile_codex_desktop_adapter(
             profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "aionrs_companion_adapter": compile_aionrs_companion_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "aionui_host_adapter": compile_aionui_host_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "generic_host_adapter": adapt_framework_profile(
-            profile,
-            GENERIC_HOST_ADAPTER,
             host_overrides=host_overrides,
         ).host_payload,
         "upgrade_compatibility_matrix": build_upgrade_compatibility_matrix(
@@ -494,87 +541,101 @@ def emit_framework_contract_artifacts(
     paths = {
         "framework_profile": _write_json(profile_path, python_artifacts["framework_profile"]),
         "framework_surface_policy": _write_json(
-            output_dir / "framework_surface_policy.json",
+            default_dir / "framework_surface_policy.json",
             python_artifacts["framework_surface_policy"],
         ),
-        "cli_common_adapter": _write_json(output_dir / "cli_common_adapter.json", python_artifacts["cli_common_adapter"]),
+        "cli_common_adapter": _write_json(default_dir / "cli_common_adapter.json", python_artifacts["cli_common_adapter"]),
         "codex_common_adapter": _write_json(
-            output_dir / "codex_common_adapter.json",
+            default_dir / "codex_common_adapter.json",
             python_artifacts["codex_common_adapter"],
         ),
-        "codex_cli_adapter": _write_json(output_dir / "codex_cli_adapter.json", python_artifacts["codex_cli_adapter"]),
+        "codex_cli_adapter": _write_json(default_dir / "codex_cli_adapter.json", python_artifacts["codex_cli_adapter"]),
         "claude_code_adapter": _write_json(
-            output_dir / "claude_code_adapter.json",
+            default_dir / "claude_code_adapter.json",
             python_artifacts["claude_code_adapter"],
         ),
         "gemini_cli_adapter": _write_json(
-            output_dir / "gemini_cli_adapter.json",
+            default_dir / "gemini_cli_adapter.json",
             python_artifacts["gemini_cli_adapter"],
         ),
         "cli_family_capability_discovery": _write_json(
-            output_dir / "cli_family_capability_discovery.json",
+            default_dir / "cli_family_capability_discovery.json",
             python_artifacts["cli_family_capability_discovery"],
         ),
         "codex_desktop_adapter": _write_json(
-            output_dir / "codex_desktop_adapter.json",
+            default_dir / "codex_desktop_adapter.json",
             python_artifacts["codex_desktop_adapter"],
         ),
-        "aionrs_companion_adapter": _write_json(
-            output_dir / "aionrs_companion_adapter.json",
-            python_artifacts["aionrs_companion_adapter"],
-        ),
-        "aionui_host_adapter": _write_json(
-            output_dir / "aionui_host_adapter.json",
-            python_artifacts["aionui_host_adapter"],
-        ),
-        "generic_host_adapter": _write_json(
-            output_dir / "generic_host_adapter.json",
-            python_artifacts["generic_host_adapter"],
-        ),
         "upgrade_compatibility_matrix": _write_json(
-            output_dir / "upgrade_compatibility_matrix.json",
+            default_dir / "upgrade_compatibility_matrix.json",
             python_artifacts["upgrade_compatibility_matrix"],
         ),
         "cli_family_parity_snapshot": _write_json(
-            output_dir / "cli_family_parity_snapshot.json",
+            default_dir / "cli_family_parity_snapshot.json",
             python_artifacts["cli_family_parity_snapshot"],
         ),
         "codex_dual_entry_parity_snapshot": _write_json(
-            output_dir / "codex_dual_entry_parity_snapshot.json",
+            default_dir / "codex_dual_entry_parity_snapshot.json",
             python_artifacts["codex_dual_entry_parity_snapshot"],
         ),
         "execution_controller_contract": _write_json(
-            output_dir / f"{EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID}.json",
+            default_dir / f"{EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID}.json",
             python_artifacts["execution_controller_contract"],
         ),
         "delegation_contract": _write_json(
-            output_dir / f"{DELEGATION_CONTRACT_ARTIFACT_ID}.json",
+            default_dir / f"{DELEGATION_CONTRACT_ARTIFACT_ID}.json",
             python_artifacts["delegation_contract"],
         ),
         "supervisor_state_contract": _write_json(
-            output_dir / f"{SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID}.json",
+            default_dir / f"{SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID}.json",
             python_artifacts["supervisor_state_contract"],
         ),
         "execution_kernel_live_fallback_retirement_status": _write_json(
-            output_dir / "execution_kernel_live_fallback_retirement_status.json",
+            default_dir / "execution_kernel_live_fallback_retirement_status.json",
             python_artifacts["execution_kernel_live_fallback_retirement_status"],
         ),
         "execution_kernel_live_response_serialization_contract": _write_json(
-            output_dir / "execution_kernel_live_response_serialization_contract.json",
+            default_dir / "execution_kernel_live_response_serialization_contract.json",
             python_artifacts["execution_kernel_live_response_serialization_contract"],
         ),
     }
+    if include_fallback_artifacts:
+        python_artifacts["aionrs_companion_adapter"] = compile_aionrs_companion_adapter(
+            profile,
+            host_overrides=host_overrides,
+        ).host_payload
+        python_artifacts["aionui_host_adapter"] = compile_aionui_host_adapter(
+            profile,
+            host_overrides=host_overrides,
+        ).host_payload
+        python_artifacts["generic_host_adapter"] = adapt_framework_profile(
+            profile,
+            GENERIC_HOST_ADAPTER,
+            host_overrides=host_overrides,
+        ).host_payload
+        paths["aionrs_companion_adapter"] = _write_json(
+            fallback_dir / "aionrs_companion_adapter.json",
+            python_artifacts["aionrs_companion_adapter"],
+        )
+        paths["aionui_host_adapter"] = _write_json(
+            fallback_dir / "aionui_host_adapter.json",
+            python_artifacts["aionui_host_adapter"],
+        )
+        paths["generic_host_adapter"] = _write_json(
+            fallback_dir / "generic_host_adapter.json",
+            python_artifacts["generic_host_adapter"],
+        )
     if emit_legacy_alias_artifact:
         paths["codex_desktop_host_adapter"] = _write_json(
-            output_dir / "codex_desktop_host_adapter.json",
+            continuity_dir / "codex_desktop_host_adapter.json",
             compile_codex_desktop_host_adapter(profile, host_overrides=host_overrides).host_payload,
         )
         paths["codex_desktop_alias_inventory"] = _write_json(
-            output_dir / "codex_desktop_alias_inventory.json",
+            continuity_dir / "codex_desktop_alias_inventory.json",
             python_artifacts["codex_desktop_alias_inventory"],
         )
         paths["codex_desktop_alias_retirement_status"] = _write_json(
-            output_dir / "codex_desktop_alias_retirement_status.json",
+            continuity_dir / "codex_desktop_alias_retirement_status.json",
             python_artifacts["codex_desktop_alias_retirement_status"],
         )
 
@@ -585,25 +646,25 @@ def emit_framework_contract_artifacts(
             include_legacy_alias_artifact=emit_legacy_alias_artifact,
         )
         paths["rust_profile_bundle"] = _write_json(
-            output_dir / "router_rs_profile_bundle.json",
+            rust_dir / "router_rs_profile_bundle.json",
             rust_bundle,
         )
         for artifact_key, filename in DEFAULT_RUST_CODEX_ARTIFACT_FILENAMES.items():
             if artifact_key not in rust_codex_artifacts:
                 continue
             paths[f"rust_{artifact_key}"] = _write_json(
-                output_dir / filename,
+                rust_dir / filename,
                 rust_codex_artifacts[artifact_key],
             )
         legacy_artifact_key, legacy_filename = LEGACY_RUST_CODEX_ARTIFACT_FILENAME
         if legacy_artifact_key in rust_codex_artifacts:
             paths[f"rust_{legacy_artifact_key}"] = _write_json(
-                output_dir / legacy_filename,
+                rust_dir / legacy_filename,
                 rust_codex_artifacts[legacy_artifact_key],
             )
         if emit_legacy_alias_artifact and "codex_desktop_alias_retirement_status" in rust_codex_artifacts:
             paths["rust_codex_desktop_alias_retirement_status"] = _write_json(
-                output_dir / "router_rs_codex_desktop_alias_retirement_status.json",
+                rust_dir / "router_rs_codex_desktop_alias_retirement_status.json",
                 rust_codex_artifacts["codex_desktop_alias_retirement_status"],
             )
         rust_parity_report = build_rust_python_artifact_parity_report(
@@ -611,8 +672,16 @@ def emit_framework_contract_artifacts(
             rust_artifacts={f"rust_{key}": value for key, value in rust_codex_artifacts.items()},
         )
         paths["rust_python_artifact_parity_report"] = _write_json(
-            output_dir / RUST_PYTHON_PARITY_REPORT_FILENAME,
+            rust_dir / RUST_PYTHON_PARITY_REPORT_FILENAME,
             rust_parity_report,
         )
+    layout_manifest = build_framework_artifact_layout_manifest(
+        output_dir=output_dir,
+        paths=paths,
+    )
+    paths["artifact_layout_manifest"] = _write_json(
+        output_dir / ARTIFACT_LAYOUT_MANIFEST_FILENAME,
+        layout_manifest,
+    )
 
     return paths

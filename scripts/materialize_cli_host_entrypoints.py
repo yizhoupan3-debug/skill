@@ -141,7 +141,7 @@ Primary routing entrypoints:
 
 Extended generated references, only when needed:
 
-- `skills/SKILL_ROUTING_LAYERS.md`: owner and reroute map
+- `skills/SKILL_ROUTING_LAYERS.md`: only for owner/reroute ambiguity
 - `skills/SKILL_SOURCE_MANIFEST.json`: source precedence
 - `skills/SKILL_SHADOW_MAP.json`: shadow audit
 - `skills/SKILL_LOADOUTS.json`: loadout definitions
