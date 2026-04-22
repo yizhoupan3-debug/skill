@@ -1,0 +1,297 @@
+{
+  "schema_version": "framework-runtime-registry-v1",
+  "default_host_peer_set": [
+    "codex_desktop_adapter",
+    "codex_cli_adapter",
+    "claude_code_adapter",
+    "gemini_cli_adapter"
+  ],
+  "workspace_bootstrap_defaults": {
+    "skill_bridge": {
+      "source_rel": "skills",
+      "project_dir": ".codex/skills",
+      "user_dir": "~/.codex/skills",
+      "bridge_dir": ".aionrs/skills"
+    },
+    "memory_bridge": {
+      "bridge_dir": ".aionrs-memory-bridge"
+    }
+  },
+  "plugins": [
+    {
+      "plugin_name": "skill-framework-native",
+      "source_rel": "plugins/skill-framework-native",
+      "home_subpath": ".codex/plugins/skill-framework-native",
+      "marketplace_name": "skill-framework-native",
+      "marketplace_category": "Developer Tools"
+    }
+  ],
+  "host_adapters": [
+    {
+      "adapter_id": "aionrs_companion_adapter",
+      "registry_lane": "compatibility",
+      "host_id": "aionrs-companion",
+      "transport": "stdio-jsonl",
+      "required_capabilities": ["runtime", "artifact"],
+      "optional_capabilities": ["memory", "orchestration"],
+      "host_capabilities": ["streaming_events", "tool_approval", "session_mode", "dynamic_config", "mcp_config", "workspace_bootstrap", "skill_bridge", "memory_bridge"],
+      "emits_artifacts": true,
+      "supports_memory_mounts": true,
+      "supports_orchestration": true,
+      "upgrade_zone": "upstream-safe-zone",
+      "thin_patch_surfaces": ["startup_wrapper", "default_config_injection", "bridge_cleanup_strategy"],
+      "fork_danger_surfaces": ["aionrs_session_protocol", "aionrs_event_grammar", "aionrs_resume_semantics", "aionrs_tool_approval_semantics", "aionrs_provider_plumbing"],
+      "protocol_hints": {
+        "mode": "companion",
+        "host_boundary": "outer-framework-owned",
+        "deep_adaptation_not_fork": true,
+        "legacy_surface": true,
+        "legacy_lane": "fallback",
+        "default_host_peer_set_member": false,
+        "works_without_aionrs": false
+      },
+      "notes": "Legacy compatibility companion surface only; does not modify aionrs internals and may not re-enter the default host peer set."
+    },
+    {
+      "adapter_id": "aionui_host_adapter",
+      "registry_lane": "compatibility",
+      "host_id": "aionui",
+      "transport": "bridge-contract",
+      "required_capabilities": ["runtime", "artifact", "memory"],
+      "optional_capabilities": ["orchestration"],
+      "host_capabilities": ["conversation_bootstrap", "tool_approval_ui", "event_stream_binding", "workspace_sync", "team_mode_sync"],
+      "emits_artifacts": true,
+      "supports_memory_mounts": true,
+      "supports_orchestration": true,
+      "upgrade_zone": "upstream-safe-zone",
+      "thin_patch_surfaces": ["host_metadata_injection", "bridge_path_cleanup"],
+      "fork_danger_surfaces": ["aionrs_session_protocol", "aionrs_event_grammar", "aionrs_resume_semantics", "aionrs_tool_approval_semantics", "aionrs_provider_plumbing"],
+      "protocol_hints": {
+        "ui_binding": "host-shell",
+        "state_source": "framework_profile",
+        "deep_adaptation_not_fork": true,
+        "legacy_surface": true,
+        "legacy_lane": "fallback",
+        "default_host_peer_set_member": false,
+        "preferred_backend": "aionrs_companion_adapter"
+      },
+      "notes": "Legacy compatibility host shell only; maps the framework contract into AionUI without re-entering the default host peer set."
+    },
+    {
+      "adapter_id": "cli_common_adapter",
+      "registry_lane": "default",
+      "host_id": "cli-family-shared",
+      "transport": "host-neutral-contract",
+      "required_capabilities": ["runtime", "memory", "artifact", "orchestration"],
+      "optional_capabilities": [],
+      "host_capabilities": ["artifact_contract", "memory_mounts", "mcp_servers", "tool_policy", "approval_policy", "loadout_policy", "framework_surface_policy", "workspace_bootstrap", "session_contract"],
+      "emits_artifacts": true,
+      "supports_memory_mounts": true,
+      "supports_orchestration": true,
+      "upgrade_zone": "upstream-safe-zone",
+      "thin_patch_surfaces": [],
+      "fork_danger_surfaces": ["aionrs_session_protocol", "aionrs_event_grammar", "aionrs_resume_semantics", "aionrs_tool_approval_semantics", "aionrs_provider_plumbing"],
+      "protocol_hints": {
+        "single_framework_truth": true,
+        "shared_between_hosts": ["codex_desktop_adapter", "codex_cli_adapter", "claude_code_adapter", "gemini_cli_adapter"],
+        "codexcli_is_controller": false,
+        "cli_family_projection": true
+      },
+      "notes": "Shared outer contract projection reused by Codex Desktop and the multi-host CLI family without forking framework truth."
+    },
+    {
+      "adapter_id": "codex_common_adapter",
+      "registry_lane": "default",
+      "host_id": "codex-shared",
+      "transport": "host-neutral-contract",
+      "required_capabilities": ["runtime", "memory", "artifact", "orchestration"],
+      "optional_capabilities": [],
+      "host_capabilities": ["artifact_contract", "memory_mounts", "mcp_servers", "tool_policy", "approval_policy", "loadout_policy", "framework_surface_policy", "workspace_bootstrap", "session_contract"],
+      "emits_artifacts": true,
+      "supports_memory_mounts": true,
+      "supports_orchestration": true,
+      "upgrade_zone": "upstream-safe-zone",
+      "thin_patch_surfaces": [],
+      "fork_danger_surfaces": ["aionrs_session_protocol", "aionrs_event_grammar", "aionrs_resume_semantics", "aionrs_tool_approval_semantics", "aionrs_provider_plumbing"],
+      "protocol_hints": {
+        "single_framework_truth": true,
+        "shared_between_hosts": ["codex_desktop_adapter", "codex_cli_adapter", "claude_code_adapter", "gemini_cli_adapter"],
+        "codexcli_is_controller": false,
+        "cli_family_projection": true,
+        "canonical_adapter_id": "cli_common_adapter",
+        "compatibility_projection": true
+      },
+      "notes": "Legacy Codex-flavored view of the shared CLI-family contract; keep for continuity while cli_common_adapter becomes canonical."
+    },
+    {
+      "adapter_id": "codex_desktop_adapter",
+      "registry_lane": "default",
+      "host_id": "codex-desktop",
+      "transport": "local-bridge",
+      "required_capabilities": ["runtime", "memory", "artifact", "orchestration"],
+      "optional_capabilities": [],
+      "host_capabilities": ["local_runtime", "artifact_contract", "memory_mounts", "mcp_servers", "automation_bridge", "orchestration_control"],
+      "emits_artifacts": true,
+      "supports_memory_mounts": true,
+      "supports_orchestration": true,
+      "upgrade_zone": "upstream-safe-zone",
+      "thin_patch_surfaces": ["desktop_metadata_injection"],
+      "fork_danger_surfaces": ["aionrs_session_protocol", "aionrs_event_grammar", "aionrs_resume_semantics", "aionrs_tool_approval_semantics", "aionrs_provider_plumbing"],
+      "protocol_hints": {
+        "desktop_mode": true,
+        "state_source": "framework_profile",
+        "works_without_aionrs": true
+      },
+      "notes": "Primary non-aionrs host path for preserving portable framework core."
+    },
+    {
+      "adapter_id": "codex_desktop_host_adapter",
+      "registry_lane": "compatibility",
+      "host_id": "codex-desktop",
+      "transport": "local-bridge",
+      "required_capabilities": ["runtime", "memory", "artifact", "orchestration"],
+      "optional_capabilities": [],
+      "host_capabilities": ["local_runtime", "artifact_contract", "memory_mounts", "mcp_servers", "automation_bridge", "orchestration_control"],
+      "emits_artifacts": true,
+      "supports_memory_mounts": true,
+      "supports_orchestration": true,
+      "upgrade_zone": "upstream-safe-zone",
+      "thin_patch_surfaces": ["desktop_metadata_injection"],
+      "fork_danger_surfaces": ["aionrs_session_protocol", "aionrs_event_grammar", "aionrs_resume_semantics", "aionrs_tool_approval_semantics", "aionrs_provider_plumbing"],
+      "protocol_hints": {
+        "desktop_mode": true,
+        "state_source": "framework_profile",
+        "works_without_aionrs": true,
+        "canonical_adapter_id": "codex_desktop_adapter",
+        "legacy_alias": true,
+        "legacy_surface": true,
+        "legacy_lane": "compatibility",
+        "default_host_peer_set_member": false
+      },
+      "notes": "Compatibility alias for codex_desktop_adapter; preserves the legacy host-specific name."
+    },
+    {
+      "adapter_id": "codex_cli_adapter",
+      "registry_lane": "default",
+      "host_id": "codex-cli",
+      "transport": "headless-exec",
+      "required_capabilities": ["runtime", "memory", "artifact", "orchestration"],
+      "optional_capabilities": [],
+      "host_capabilities": ["artifact_contract", "memory_mounts", "mcp_servers", "workspace_bootstrap", "batch_execution", "cron_execution", "ci_runner", "non_interactive_entrypoint"],
+      "emits_artifacts": true,
+      "supports_memory_mounts": true,
+      "supports_orchestration": true,
+      "upgrade_zone": "upstream-safe-zone",
+      "thin_patch_surfaces": ["cli_metadata_injection"],
+      "fork_danger_surfaces": ["aionrs_session_protocol", "aionrs_event_grammar", "aionrs_resume_semantics", "aionrs_tool_approval_semantics", "aionrs_provider_plumbing"],
+      "protocol_hints": {
+        "headless_mode": true,
+        "state_source": "framework_profile",
+        "works_without_aionrs": true,
+        "codexcli_is_controller": false,
+        "context_files": ["AGENTS.md"],
+        "settings_paths": ["~/.codex/config.toml", ".codex/config.toml"],
+        "mcp_config_paths": [".codex/config.toml"]
+      },
+      "notes": "Formal headless Codex entrypoint that consumes the shared framework contract."
+    },
+    {
+      "adapter_id": "claude_code_adapter",
+      "registry_lane": "default",
+      "host_id": "claude-code",
+      "transport": "headless-exec",
+      "required_capabilities": ["runtime", "memory", "artifact", "orchestration"],
+      "optional_capabilities": [],
+      "host_capabilities": ["artifact_contract", "memory_mounts", "mcp_servers", "workspace_bootstrap", "batch_execution", "ci_runner", "non_interactive_entrypoint", "context_file", "settings_json", "settings_scope_hierarchy", "subagent_registry", "managed_policy", "hook_registry", "hook_policy", "hook_browser", "checkpoint_restore"],
+      "emits_artifacts": true,
+      "supports_memory_mounts": true,
+      "supports_orchestration": true,
+      "upgrade_zone": "upstream-safe-zone",
+      "thin_patch_surfaces": ["cli_metadata_injection", "settings_bridge_projection"],
+      "fork_danger_surfaces": ["aionrs_session_protocol", "aionrs_event_grammar", "aionrs_resume_semantics", "aionrs_tool_approval_semantics", "aionrs_provider_plumbing"],
+      "protocol_hints": {
+        "headless_mode": true,
+        "state_source": "framework_profile",
+        "works_without_aionrs": true,
+        "config_root_env_var": "CLAUDE_CONFIG_DIR",
+        "context_files": ["CLAUDE.md", "CLAUDE.local.md"],
+        "settings_paths": ["~/.claude/settings.json", ".claude/settings.json", ".claude/settings.local.json"],
+        "mcp_config_paths": ["~/.claude.json"],
+        "settings_scope_order": ["managed", "command_line", "local", "project", "user"],
+        "settings_scopes": [
+          {"scope": "managed", "locations": ["server-managed", "managed-settings.json", "managed-settings.d/*.json", "managed-mcp.json"], "shared_with_team": true},
+          {"scope": "user", "locations": ["~/.claude/settings.json", "~/.claude/CLAUDE.md", "~/.claude/agents/"], "shared_with_team": false},
+          {"scope": "project", "locations": [".claude/settings.json", "CLAUDE.md", ".claude/agents/"], "shared_with_team": true},
+          {"scope": "local", "locations": [".claude/settings.local.json", "CLAUDE.local.md"], "shared_with_team": false}
+        ],
+        "subagent_paths": ["~/.claude/agents/", ".claude/agents/"],
+        "claude_directory_features": [".claude/settings.json", ".claude/settings.local.json", ".claude/hooks/", ".claude/agents/", ".claude/commands/", ".claude/rules/", ".claude/output-styles/"],
+        "hook_event_names": ["PreToolUse", "PostToolUse", "Notification", "Stop", "SubagentStart", "SubagentStop", "PreCompact", "PostCompact", "SessionStart", "SessionEnd", "UserPromptSubmit", "PostToolUseFailure", "StopFailure", "PermissionRequest", "PermissionDenied", "InstructionsLoaded", "ConfigChange", "CwdChanged", "FileChanged", "TaskCreated", "TaskCompleted", "WorktreeCreate", "WorktreeRemove", "TeammateIdle", "Elicitation", "ElicitationResult"],
+        "hook_handler_types": ["command", "prompt", "agent", "http"],
+        "hook_control_settings": ["disableAllHooks", "allowManagedHooksOnly", "allowedHttpHookUrls", "httpHookAllowedEnvVars"],
+        "hook_definition_sources": [
+          {"source": "managed_settings", "locations": ["/Library/Application Support/ClaudeCode/managed-settings.json", "/etc/claude-code/managed-settings.json", "C:/Program Files/ClaudeCode/managed-settings.json"]},
+          {"source": "user_settings", "locations": ["~/.claude/settings.json"]},
+          {"source": "project_settings", "locations": [".claude/settings.json"]},
+          {"source": "local_settings", "locations": [".claude/settings.local.json"]},
+          {"source": "plugin_manifest", "locations": ["hooks/hooks.json"]},
+          {"source": "agent_frontmatter", "locations": ["~/.claude/agents/*.md", ".claude/agents/*.md"]},
+          {"source": "skill_frontmatter", "locations": [".claude/skills/*.md"]},
+          {"source": "session", "locations": ["/hooks"]},
+          {"source": "built_in", "locations": ["/hooks"]},
+          {"source": "sdk", "locations": ["sdk_message_stream"]}
+        ],
+        "hook_inspection_commands": ["/hooks"],
+        "plugin_hook_manifest_paths": ["hooks/hooks.json"],
+        "hook_environment_markers": ["CLAUDE_ENV_FILE", "CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT", "CLAUDE_PLUGIN_DATA", "CLAUDE_CODE_REMOTE"],
+        "managed_settings_paths": ["/Library/Application Support/ClaudeCode/managed-settings.json", "/etc/claude-code/managed-settings.json", "C:/Program Files/ClaudeCode/managed-settings.json"],
+        "managed_mcp_paths": ["/Library/Application Support/ClaudeCode/managed-mcp.json", "/etc/claude-code/managed-mcp.json", "C:/Program Files/ClaudeCode/managed-mcp.json"],
+        "checkpointing_supported": true
+      },
+      "notes": "Headless Claude Code projection that stays host-specific only at the projection layer."
+    },
+    {
+      "adapter_id": "gemini_cli_adapter",
+      "registry_lane": "default",
+      "host_id": "gemini-cli",
+      "transport": "headless-exec",
+      "required_capabilities": ["runtime", "memory", "artifact", "orchestration"],
+      "optional_capabilities": [],
+      "host_capabilities": ["artifact_contract", "memory_mounts", "mcp_servers", "workspace_bootstrap", "batch_execution", "ci_runner", "non_interactive_entrypoint", "context_file", "settings_json"],
+      "emits_artifacts": true,
+      "supports_memory_mounts": true,
+      "supports_orchestration": true,
+      "upgrade_zone": "upstream-safe-zone",
+      "thin_patch_surfaces": ["cli_metadata_injection"],
+      "fork_danger_surfaces": ["aionrs_session_protocol", "aionrs_event_grammar", "aionrs_resume_semantics", "aionrs_tool_approval_semantics", "aionrs_provider_plumbing"],
+      "protocol_hints": {
+        "headless_mode": true,
+        "state_source": "framework_profile",
+        "works_without_aionrs": true,
+        "context_files": ["GEMINI.md"],
+        "settings_paths": ["~/.gemini/settings.json"],
+        "mcp_config_paths": ["~/.gemini/settings.json"],
+        "structured_output_modes": ["json", "stream-json"],
+        "checkpointing_supported": true
+      },
+      "notes": "Headless Gemini CLI projection that consumes the shared framework contract."
+    },
+    {
+      "adapter_id": "generic_host_adapter",
+      "registry_lane": "default",
+      "host_id": "generic-host",
+      "transport": "inproc",
+      "required_capabilities": ["runtime", "memory", "artifact", "orchestration"],
+      "optional_capabilities": [],
+      "host_capabilities": ["local_runtime", "artifact_contract", "memory_mounts"],
+      "emits_artifacts": false,
+      "supports_memory_mounts": true,
+      "supports_orchestration": true,
+      "upgrade_zone": "upstream-safe-zone",
+      "thin_patch_surfaces": [],
+      "fork_danger_surfaces": ["aionrs_session_protocol", "aionrs_event_grammar", "aionrs_resume_semantics", "aionrs_tool_approval_semantics", "aionrs_provider_plumbing"],
+      "protocol_hints": {"works_without_aionrs": true},
+      "notes": "Fallback adapter for any host that only needs the outer framework contract."
+    }
+  ]
+}

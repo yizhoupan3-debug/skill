@@ -362,6 +362,67 @@ def test_install_native_integration_repairs_stale_framework_block_and_bootstrap(
     assert payload["bootstrap"]["repo_root"] == str(repo_root.resolve())
 
 
+def test_install_native_integration_honors_repo_local_runtime_registry(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / ".codex").mkdir(parents=True)
+    (repo_root / ".codex" / "model_instructions.md").write_text("", encoding="utf-8")
+    (repo_root / "custom-plugin-bundle" / ".codex-plugin").mkdir(parents=True)
+    (repo_root / "custom-plugin-bundle" / ".codex-plugin" / "plugin.json").write_text(
+        '{"name":"repo-local-plugin"}\n',
+        encoding="utf-8",
+    )
+    (repo_root / "custom-skills-catalog").mkdir(parents=True)
+    (repo_root / "configs" / "framework").mkdir(parents=True)
+    (repo_root / "configs" / "framework" / "RUNTIME_REGISTRY.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "framework-runtime-registry-v1",
+                "plugins": [
+                    {
+                        "plugin_name": "repo-local-plugin",
+                        "source_rel": "custom-plugin-bundle",
+                        "marketplace_name": "repo-local-plugin",
+                        "marketplace_category": "Custom Tools",
+                    }
+                ],
+                "workspace_bootstrap_defaults": {
+                    "skill_bridge": {
+                        "source_rel": "custom-skills-catalog",
+                        "project_dir": ".codex/skills",
+                        "user_dir": "~/.codex/skills",
+                        "bridge_dir": ".aionrs/skills",
+                    }
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    home_codex_skills_path = tmp_path / "home" / ".codex" / "skills"
+    home_plugin_root = tmp_path / "home" / ".codex" / "plugins" / "repo-local-plugin"
+    home_marketplace_path = tmp_path / "home" / ".agents" / "plugins" / "marketplace.json"
+    result = install_native_integration(
+        home_config_path=tmp_path / "home" / ".codex" / "config.toml",
+        home_codex_skills_path=home_codex_skills_path,
+        home_claude_refresh_path=tmp_path / "home" / ".claude" / "commands" / "refresh.md",
+        repo_root=repo_root,
+        home_plugin_root=home_plugin_root,
+        home_marketplace_path=home_marketplace_path,
+        project_instructions_path=Path(".codex") / "model_instructions.md",
+        install_browser_mcp=False,
+    )
+
+    marketplace = json.loads(home_marketplace_path.read_text(encoding="utf-8"))
+    assert result["success"] is True
+    assert (home_plugin_root / ".codex-plugin" / "plugin.json").is_file()
+    assert home_codex_skills_path.is_symlink()
+    assert home_codex_skills_path.resolve() == (repo_root / "custom-skills-catalog").resolve()
+    assert marketplace["plugins"][0]["name"] == "repo-local-plugin"
+    assert marketplace["plugins"][0]["category"] == "Custom Tools"
+
+
 def test_install_skills_all_command_reports_codex_ready_and_links_other_hosts(tmp_path: Path) -> None:
     env = _install_env(tmp_path)
 

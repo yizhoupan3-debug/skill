@@ -48,6 +48,8 @@ const EXECUTION_KERNEL_DELEGATE_FAMILY: &str = "rust-cli";
 const EXECUTION_KERNEL_DELEGATE_IMPL: &str = "router-rs";
 const EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY: &str = "live_primary";
 const EXECUTION_RESPONSE_SHAPE_DRY_RUN: &str = "dry_run";
+const EXECUTION_RESPONSE_SHAPE_RETIRED: &str = "retired";
+const EXECUTION_RESPONSE_SHAPE_RETIRED_PROMPT_PREVIEW_OWNER: &str = "python-agno-kernel-adapter";
 const EXECUTION_PROMPT_PREVIEW_OWNER: &str = "rust-execution-cli";
 const EXECUTION_MODEL_ID_SOURCE: &str = "aggregator-response.model";
 const RUNTIME_CONTROL_PLANE_SCHEMA_VERSION: &str = "router-rs-runtime-control-plane-v1";
@@ -263,6 +265,7 @@ struct SearchResultsPayload {
     authority: String,
     query: String,
     matches: Vec<MatchRow>,
+    rows: Vec<MatchRow>,
 }
 
 #[derive(Debug, Clone)]
@@ -1167,28 +1170,29 @@ fn main() -> Result<(), String> {
     }
 
     let rows = search_skills(&records, query, args.limit);
+    let payload = build_search_results_payload(query, rows.clone());
     if args.json {
         println!(
             "{}",
-            serde_json::to_string(&rows)
+            serde_json::to_string(&payload)
                 .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());
     }
 
-    if rows.is_empty() {
+    if payload.matches.is_empty() {
         println!("No skills found matching: {}", query);
         return Ok(());
     }
 
-    println!("Found {} matches for '{}':", rows.len(), query);
+    println!("Found {} matches for '{}':", payload.matches.len(), query);
     println!();
     println!(
         "{:<30} | {:<5} | {:<10} | {:<6} | Description",
         "Skill", "Layer", "Gate", "Score"
     );
     println!("{}", "-".repeat(120));
-    for row in rows {
+    for row in payload.matches {
         let mut description = row.description.clone();
         if description.chars().count() > 60 {
             description = description.chars().take(57).collect::<String>() + "...";
@@ -1199,6 +1203,16 @@ fn main() -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+fn build_search_results_payload(query: &str, matches: Vec<MatchRow>) -> SearchResultsPayload {
+    SearchResultsPayload {
+        search_schema_version: SEARCH_RESULTS_SCHEMA_VERSION.to_string(),
+        authority: ROUTE_AUTHORITY.to_string(),
+        query: query.to_string(),
+        matches: matches.clone(),
+        rows: matches,
+    }
 }
 
 fn run_stdio_json_loop() -> Result<(), String> {
@@ -1367,22 +1381,8 @@ fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, String> {
     let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
     let records = load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?;
     let matches = search_skills(records.as_ref(), &query, limit);
-    let mut resolved = serde_json::to_value(SearchResultsPayload {
-        search_schema_version: SEARCH_RESULTS_SCHEMA_VERSION.to_string(),
-        authority: ROUTE_AUTHORITY.to_string(),
-        query,
-        matches: matches.clone(),
-    })
-    .map_err(|err| format!("serialize search output failed: {err}"))?;
-    let resolved_object = resolved
-        .as_object_mut()
-        .ok_or_else(|| "search output did not serialize to an object".to_string())?;
-    resolved_object.insert(
-        "rows".to_string(),
-        serde_json::to_value(matches)
-            .map_err(|err| format!("serialize search rows failed: {err}"))?,
-    );
-    Ok(resolved)
+    let resolved = build_search_results_payload(&query, matches);
+    serde_json::to_value(resolved).map_err(|err| format!("serialize search output failed: {err}"))
 }
 
 fn dispatch_stdio_route_report(payload: Value) -> Result<Value, String> {
@@ -3155,6 +3155,14 @@ fn build_steady_state_execution_kernel_metadata(response_shape: &str) -> Map<Str
         "execution_kernel_live_primary_authority".to_string(),
         Value::String(EXECUTION_AUTHORITY.to_string()),
     );
+    metadata.insert(
+        "execution_kernel_response_shape".to_string(),
+        Value::String(response_shape.to_string()),
+    );
+    metadata.insert(
+        "execution_kernel_prompt_preview_owner".to_string(),
+        Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string()),
+    );
     metadata.insert("execution_kernel_live_fallback".to_string(), Value::Null);
     metadata.insert(
         "execution_kernel_live_fallback_authority".to_string(),
@@ -3168,13 +3176,15 @@ fn build_steady_state_execution_kernel_metadata(response_shape: &str) -> Map<Str
         "execution_kernel_live_fallback_mode".to_string(),
         Value::String("disabled".to_string()),
     );
-    metadata.insert(
-        "execution_kernel_response_shape".to_string(),
-        Value::String(response_shape.to_string()),
-    );
+    metadata
+}
+
+fn build_retired_execution_kernel_metadata() -> Map<String, Value> {
+    let mut metadata =
+        build_steady_state_execution_kernel_metadata(EXECUTION_RESPONSE_SHAPE_RETIRED);
     metadata.insert(
         "execution_kernel_prompt_preview_owner".to_string(),
-        Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string()),
+        Value::String(EXECUTION_RESPONSE_SHAPE_RETIRED_PROMPT_PREVIEW_OWNER.to_string()),
     );
     metadata
 }
@@ -3197,12 +3207,12 @@ fn build_execution_kernel_metadata_bridge() -> Value {
             "execution_kernel_delegate_impl",
             "execution_kernel_live_primary",
             "execution_kernel_live_primary_authority",
+            "execution_kernel_response_shape",
+            "execution_kernel_prompt_preview_owner",
             "execution_kernel_live_fallback",
             "execution_kernel_live_fallback_authority",
             "execution_kernel_live_fallback_enabled",
             "execution_kernel_live_fallback_mode",
-            "execution_kernel_response_shape",
-            "execution_kernel_prompt_preview_owner",
         ],
         "runtime_fields": {
             "shared": [
@@ -3223,6 +3233,18 @@ fn build_execution_kernel_metadata_bridge() -> Value {
                 "trace_event_count",
                 "trace_output_path",
             ],
+            "retired_required": [
+                "execution_kernel_fallback_reason",
+                "execution_kernel_contract_mode",
+                "execution_kernel_fallback_policy",
+                "execution_kernel_primary",
+                "execution_kernel_primary_authority",
+                "execution_kernel_compatibility_agent_contract",
+                "execution_kernel_compatibility_agent_kind",
+                "execution_kernel_compatibility_agent_authority",
+                "trace_event_count",
+                "trace_output_path",
+            ],
         },
         "metadata_keys": {
             "metadata_schema_version": "execution_kernel_metadata_schema_version",
@@ -3238,11 +3260,15 @@ fn build_execution_kernel_metadata_bridge() -> Value {
             "prompt_preview_owner_by_mode": {
                 EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY: EXECUTION_PROMPT_PREVIEW_OWNER,
                 EXECUTION_RESPONSE_SHAPE_DRY_RUN: EXECUTION_PROMPT_PREVIEW_OWNER,
+                EXECUTION_RESPONSE_SHAPE_RETIRED: (
+                    EXECUTION_RESPONSE_SHAPE_RETIRED_PROMPT_PREVIEW_OWNER
+                ),
             },
             "live_primary_model_id_source": EXECUTION_MODEL_ID_SOURCE,
             "supported_response_shapes": [
                 EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
                 EXECUTION_RESPONSE_SHAPE_DRY_RUN,
+                EXECUTION_RESPONSE_SHAPE_RETIRED,
             ],
         },
     })
@@ -3261,6 +3287,10 @@ fn build_execution_kernel_contracts_by_mode() -> Map<String, Value> {
         Value::Object(build_steady_state_execution_kernel_metadata(
             EXECUTION_RESPONSE_SHAPE_DRY_RUN,
         )),
+    );
+    contracts.insert(
+        EXECUTION_RESPONSE_SHAPE_RETIRED.to_string(),
+        Value::Object(build_retired_execution_kernel_metadata()),
     );
     contracts
 }
@@ -6714,6 +6744,27 @@ mod tests {
                 ["live_primary_model_id_source"],
             Value::String(EXECUTION_MODEL_ID_SOURCE.to_string())
         );
+        let supported_shapes = payload["services"]["execution"]["kernel_metadata_bridge"]
+            ["defaults"]["supported_response_shapes"]
+            .as_array()
+            .expect("supported_response_shapes");
+        let supported_shape_values: Vec<String> = supported_shapes
+            .iter()
+            .map(|value| value.as_str().unwrap_or_default().to_string())
+            .collect();
+        assert_eq!(
+            supported_shape_values,
+            vec![
+                EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY.to_string(),
+                EXECUTION_RESPONSE_SHAPE_DRY_RUN.to_string(),
+                EXECUTION_RESPONSE_SHAPE_RETIRED.to_string(),
+            ]
+        );
+        let retired_required = payload["services"]["execution"]["kernel_metadata_bridge"]
+            ["runtime_fields"]["retired_required"]
+            .as_array()
+            .expect("retired_required");
+        assert!(retired_required.len() > 4);
         assert_eq!(
             payload["services"]["execution"]["kernel_metadata_bridge"]["steady_state_fields"][0],
             Value::String("execution_kernel_metadata_schema_version".to_string())
@@ -6736,6 +6787,16 @@ mod tests {
             payload["services"]["execution"]["kernel_contract_by_mode"]
                 [EXECUTION_RESPONSE_SHAPE_DRY_RUN]["execution_kernel_prompt_preview_owner"],
             Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_contract_by_mode"]
+                [EXECUTION_RESPONSE_SHAPE_RETIRED]["execution_kernel_response_shape"],
+            Value::String(EXECUTION_RESPONSE_SHAPE_RETIRED.to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_contract_by_mode"]
+                [EXECUTION_RESPONSE_SHAPE_RETIRED]["execution_kernel_prompt_preview_owner"],
+            Value::String(EXECUTION_RESPONSE_SHAPE_RETIRED_PROMPT_PREVIEW_OWNER.to_string())
         );
         assert_eq!(
             payload["services"]["execution"]["kernel_live_delegate_authority"],
@@ -6785,6 +6846,55 @@ mod tests {
             payload["services"]["background"]["orchestration_contract"]["policy_operations"][5],
             Value::String("retry".to_string())
         );
+    }
+
+    fn execution_kernel_contract_shape_fields(shape: &Value) -> Vec<String> {
+        let object = shape.as_object().expect("contract shape object");
+        let mut keys: Vec<String> = object.keys().cloned().collect();
+        keys.sort_unstable();
+        keys
+    }
+
+    #[test]
+    fn execution_kernel_metadata_shape_consistency_regression_for_primary_dry_run_retired() {
+        let contracts = build_execution_kernel_contracts_by_mode();
+        let live_primary = contracts
+            .get(EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY)
+            .expect("live primary contract");
+        let dry_run = contracts
+            .get(EXECUTION_RESPONSE_SHAPE_DRY_RUN)
+            .expect("dry run contract");
+        let retired = contracts
+            .get(EXECUTION_RESPONSE_SHAPE_RETIRED)
+            .expect("retired contract");
+        let base_fields = execution_kernel_contract_shape_fields(live_primary);
+        assert_eq!(base_fields, execution_kernel_contract_shape_fields(dry_run));
+        assert_eq!(base_fields, execution_kernel_contract_shape_fields(retired));
+        assert_eq!(
+            live_primary["execution_kernel_response_shape"],
+            Value::String(EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY.to_string())
+        );
+        assert_eq!(
+            dry_run["execution_kernel_response_shape"],
+            Value::String(EXECUTION_RESPONSE_SHAPE_DRY_RUN.to_string())
+        );
+        assert_eq!(
+            retired["execution_kernel_response_shape"],
+            Value::String(EXECUTION_RESPONSE_SHAPE_RETIRED.to_string())
+        );
+        assert_eq!(
+            live_primary["execution_kernel_prompt_preview_owner"],
+            Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string())
+        );
+        assert_eq!(
+            dry_run["execution_kernel_prompt_preview_owner"],
+            Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string())
+        );
+        assert_eq!(
+            retired["execution_kernel_prompt_preview_owner"],
+            Value::String(EXECUTION_RESPONSE_SHAPE_RETIRED_PROMPT_PREVIEW_OWNER.to_string())
+        );
+        assert_eq!(contracts.len(), 3);
     }
 
     #[test]

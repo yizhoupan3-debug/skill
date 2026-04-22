@@ -18,6 +18,7 @@ if str(RUNTIME_SRC) not in sys.path:
 
 from codex_agno_runtime.execution_kernel import (
     ExecutionKernelRequest,
+    RouterRsInfrastructureError,
     build_router_rs_execution_request_payload,
     execute_router_rs_request,
     preview_router_rs_request_prompt,
@@ -41,6 +42,7 @@ from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
     EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
     EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
+    EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS,
     EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
     EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
     LIVE_PRIMARY_MODEL_ID_SOURCE,
@@ -102,7 +104,7 @@ def _kernel_contract(*, response_shape: str) -> dict[str, object]:
     )
     return {
         field: metadata[field]
-        for field in EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS
+        for field in EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS
     }
 
 
@@ -116,7 +118,9 @@ def _metadata_bridge(
         "schema_version": EXECUTION_KERNEL_METADATA_BRIDGE_SCHEMA_VERSION,
         "authority": "rust-runtime-control-plane",
         "projection": "python-thin-projection",
-        "steady_state_fields": [*EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS],
+        "steady_state_fields": [
+            *EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS
+        ],
         "metadata_keys": {
             "metadata_schema_version": EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY,
             "contract_mode": EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
@@ -252,10 +256,10 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
     assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
     assert response.metadata["execution_kernel_live_primary"] == "router-rs"
     assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-    assert response.metadata["execution_kernel_live_fallback"] is None
-    assert response.metadata["execution_kernel_live_fallback_authority"] is None
-    assert response.metadata["execution_kernel_live_fallback_enabled"] is False
-    assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
+    assert "execution_kernel_live_fallback" not in response.metadata
+    assert "execution_kernel_live_fallback_authority" not in response.metadata
+    assert response.metadata.get("execution_kernel_live_fallback_enabled") is None
+    assert response.metadata.get("execution_kernel_live_fallback_mode") is None
     assert (
         response.metadata[EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY]
         == EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
@@ -558,7 +562,7 @@ def test_execution_kernel_contract_helpers_stay_rust_primary() -> None:
     validated_contract = validate_execution_kernel_steady_state_metadata(
         metadata={
             field: runtime_metadata[field]
-            for field in EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS
+            for field in EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS
         },
         execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
         execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
@@ -615,3 +619,72 @@ def test_execution_kernel_dry_run_response_stays_rust_primary() -> None:
         dry_run_response.metadata[EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY]
         == "rust-execution-cli"
     )
+
+
+@pytest.mark.parametrize(
+    ("metadata_field", "metadata_value"),
+    [
+        (
+            EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+            "legacy-python-fallback",
+        ),
+        (
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION,
+        ),
+        (
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
+            "python-agno-kernel-adapter",
+        ),
+        (
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
+            "python-agno-kernel-adapter",
+        ),
+    ],
+)
+def test_router_rs_execution_kernel_rejects_retired_python_fallback_metadata(
+    monkeypatch,
+    metadata_field: str,
+    metadata_value: object,
+) -> None:
+    settings = _settings()
+    adapter = _adapter(settings)
+
+    def fake_execute(payload):
+        metadata = _steady_state_kernel_metadata(
+            run_id="run-legacy",
+            status="completed",
+            trace_event_count=payload["trace_event_count"],
+            trace_output_path=payload["trace_output_path"],
+            execution_mode="live",
+            route_engine=payload["route_engine"],
+            diagnostic_route_mode=payload["diagnostic_route_mode"],
+        )
+        metadata[metadata_field] = metadata_value
+        return {
+            "execution_schema_version": "router-rs-execute-response-v1",
+            "authority": "rust-execution-cli",
+            "session_id": payload["session_id"],
+            "user_id": payload["user_id"],
+            "skill": payload["selected_skill"],
+            "overlay": payload["overlay_skill"],
+            "live_run": True,
+            "content": "router-rs content",
+            "usage": {
+                "input_tokens": 21,
+                "output_tokens": 13,
+                "total_tokens": 34,
+                "mode": "live",
+            },
+            "prompt_preview": payload["prompt_preview"],
+            "model_id": "gpt-5.4",
+            "metadata": metadata,
+        }
+
+    monkeypatch.setattr(adapter, "execute", fake_execute)
+
+    with pytest.raises(
+        RouterRsInfrastructureError,
+        match=rf"retired compatibility fallback field: {metadata_field}",
+    ):
+        asyncio.run(execute_router_rs_request(_request(), settings=settings, rust_adapter=adapter))

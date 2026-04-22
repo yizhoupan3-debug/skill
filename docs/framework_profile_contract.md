@@ -73,6 +73,26 @@ discovery 这些稳定层持续 Rust 化。
 8. `bridge_contract` 只能从 canonical shared contract 的
    `workspace_bootstrap.bridges` 投影出来，不能再单独维护第二份 bridge 默认值。
 
+## 字段所有权说明
+
+`framework_profile` 的字段只允许三类写入所有权：
+
+- framework-owned（真源）：所有 `Canonical Fields`（含
+  `execution_controller_contract`、`delegation_contract`、`supervisor_state_contract`）默认由外层框架持有，adapter 只能读、过滤、重投影，不能改写这些字段的语义。
+- projection-owned（宿主投影）：host 私有运行语义只能在 host projection 层表达，例如
+  `transport`、`context_files`、`mcp_config_paths`、`hook_event_names`、`settings_scope_order`
+  等字段。它们只允许出现在兼容/continuity lane 或 host_projection 输出，不可进入 canonical 真源层。
+- continuity-owned：兼容债务证据（如 alias retirement / compatibility inventory）仅在显式
+  continuity/compatibility lane 中输出，不能进入 steady-state 默认集合。
+
+不可回落规则（重点）：
+
+- canonical lane 与 default lane 不得回落到 host 私有语义；一旦 host-only 字段试图回填
+  `framework_profile` 真源字段，应直接拒绝并报错。
+- `metadata` 只能承载 host-neutral 描述；若出现 host 私有子键，必须将其移到 projection/continuity lane，或移除再发出。
+- 通过 `shared_contract_surface()` 或 Rust 对应 lane 产物生成的 canonical output
+  是最终真源落点，adapter 只能在该输出之外承接私有语义。
+
 ## Surface Compaction Direction
 
 为避免和当前 Rust 主线冲突，后续收口优先落在外层 surface policy，而不是重新改

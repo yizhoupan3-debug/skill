@@ -66,7 +66,7 @@ EXECUTION_KERNEL_USAGE_FIELDS = (
     "total_tokens",
     "mode",
 )
-EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS = (
+EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS = (
     EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY,
     "execution_kernel",
     "execution_kernel_authority",
@@ -85,6 +85,17 @@ EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS = (
     "execution_kernel_live_fallback_mode",
     EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
     EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY,
+)
+EXECUTION_KERNEL_RETIRED_LIVE_FALLBACK_MARKER_METADATA_FIELDS = ()
+EXECUTION_KERNEL_RETIRED_COMPATIBILITY_FALLBACK_METADATA_FIELDS = (
+    EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
+)
+EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS = (
+    *EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS,
+    *EXECUTION_KERNEL_RETIRED_LIVE_FALLBACK_MARKER_METADATA_FIELDS,
 )
 RUNTIME_TRACE_METADATA_FIELDS = (
     "trace_event_count",
@@ -151,7 +162,7 @@ def _normalize_execution_kernel_metadata_bridge(
 
     if metadata_bridge is None:
         return {
-            "steady_state_fields": EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
+            "steady_state_fields": EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS,
             "metadata_keys": {
                 "metadata_schema_version": (
                     EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY
@@ -306,7 +317,7 @@ def build_execution_kernel_runtime_metadata(
     prompt_preview_owner: str | None = None,
     extra_fields: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return compatibility metadata for Python projection-only kernel responses."""
+    """Return Rust canonical steady-state metadata for projection responses."""
 
     if response_shape not in (
         EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
@@ -337,10 +348,6 @@ def build_execution_kernel_runtime_metadata(
         "execution_kernel_delegate_impl": execution_kernel_delegate_impl,
         "execution_kernel_live_primary": execution_kernel_delegate,
         "execution_kernel_live_primary_authority": execution_kernel_delegate_authority,
-        "execution_kernel_live_fallback": None,
-        "execution_kernel_live_fallback_authority": None,
-        "execution_kernel_live_fallback_enabled": False,
-        "execution_kernel_live_fallback_mode": "disabled",
         EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY: response_shape,
         EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY: prompt_preview_owner,
     }
@@ -551,8 +558,6 @@ def validate_execution_kernel_steady_state_metadata(
         "execution_kernel_in_process_replacement_complete": True,
         "execution_kernel_delegate": execution_kernel_delegate,
         "execution_kernel_delegate_authority": execution_kernel_delegate_authority,
-        "execution_kernel_live_fallback_enabled": False,
-        "execution_kernel_live_fallback_mode": "disabled",
         response_shape_key: response_shape,
         metadata_keys["prompt_preview_owner"]: expected_prompt_preview_owner,
     }
@@ -562,6 +567,24 @@ def validate_execution_kernel_steady_state_metadata(
                 "execution-kernel steady-state metadata returned an unexpected value: "
                 f"{field}={normalized.get(field)!r}"
             )
+    if (
+        "execution_kernel_live_fallback_enabled" in normalized
+        and normalized.get("execution_kernel_live_fallback_enabled") is not False
+    ):
+        raise RuntimeError(
+            "execution-kernel steady-state metadata returned an unexpected value: "
+            f"execution_kernel_live_fallback_enabled="
+            f"{normalized.get('execution_kernel_live_fallback_enabled')!r}"
+        )
+    if (
+        "execution_kernel_live_fallback_mode" in normalized
+        and normalized.get("execution_kernel_live_fallback_mode") != "disabled"
+    ):
+        raise RuntimeError(
+            "execution-kernel steady-state metadata returned an unexpected value: "
+            f"execution_kernel_live_fallback_mode="
+            f"{normalized.get('execution_kernel_live_fallback_mode')!r}"
+        )
     for field in (
         "execution_kernel_delegate_family",
         "execution_kernel_delegate_impl",
@@ -574,10 +597,22 @@ def validate_execution_kernel_steady_state_metadata(
                 "execution-kernel steady-state metadata returned an invalid value: "
                 f"{field}={value!r}"
             )
-    if normalized.get("execution_kernel_live_fallback") is not None:
+    if (
+        "execution_kernel_live_fallback" in normalized
+        and normalized.get("execution_kernel_live_fallback") is not None
+    ):
         raise RuntimeError("execution-kernel steady-state metadata returned a live fallback marker.")
-    if normalized.get("execution_kernel_live_fallback_authority") is not None:
+    if (
+        "execution_kernel_live_fallback_authority" in normalized
+        and normalized.get("execution_kernel_live_fallback_authority") is not None
+    ):
         raise RuntimeError("execution-kernel steady-state metadata returned a live fallback authority.")
+    for field in EXECUTION_KERNEL_RETIRED_COMPATIBILITY_FALLBACK_METADATA_FIELDS:
+        if field in normalized:
+            raise RuntimeError(
+                "execution-kernel steady-state metadata returned a retired compatibility "
+                f"fallback field: {field}"
+            )
     return normalized
 
 

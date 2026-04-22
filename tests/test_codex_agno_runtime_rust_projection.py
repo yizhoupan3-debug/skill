@@ -90,8 +90,7 @@ Implement the spec directly.
     assert skill.name == "plan-to-code"
     assert skill.description == "Lean compiled summary"
     assert skill.body_loaded is False
-    assert skill.source_path is not None
-    assert skill.source_path.endswith("plan-to-code/SKILL.md")
+    assert skill.source_path is None
 
     loader.load_body(skill)
 
@@ -99,6 +98,53 @@ Implement the spec directly.
     assert "## Core workflow" in skill.body
     assert skill.when_to_use == "Use when implementation should happen immediately."
     assert skill.do_not_use == "Do not use for pure planning."
+
+
+def test_skill_loader_compatibility_json_load_is_read_only_fallback(monkeypatch, tmp_path: Path) -> None:
+    skill_dir = tmp_path / "plan-to-code"
+    skill_dir.mkdir(parents=True)
+    (tmp_path / "SKILL_ROUTING_RUNTIME.json").write_text(
+        """
+{
+  "keys": ["slug", "layer", "owner", "gate", "session_start", "summary", "trigger_hints", "health"],
+  "skills": [
+    ["plan-to-code", "L2", "owner", "none", "preferred", "Lean compiled summary", ["直接做代码"], 95.8]
+  ]
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    (tmp_path / "SKILL_MANIFEST.json").write_text(
+        """
+{
+  "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "health", "source", "source_position"],
+  "skills": [
+    ["plan-to-code", "L2", "owner", "none", "P1", "Manifest description", "preferred", ["直接做代码"], 95.8, "project", 3]
+  ]
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    (skill_dir / "SKILL.md").write_text(
+        """
+# plan-to-code
+
+## When to use
+
+Should never be read during compatibility load.
+""",
+        encoding="utf-8",
+    )
+
+    loader = SkillLoader(tmp_path)
+
+    def _assert_not_reached(_: str) -> str:
+        raise AssertionError("compatibility JSON load must stay read-only and avoid SKILL.md resolution")
+
+    monkeypatch.setattr(loader, "_resolve_source_path", _assert_not_reached)
+
+    [skill] = loader.load(refresh=True, load_bodies=False)
+    assert skill.source_path is None
 
 
 def test_prompt_builder_passthroughs_explicit_rust_owned_prompt_preview() -> None:

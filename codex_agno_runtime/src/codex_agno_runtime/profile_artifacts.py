@@ -692,10 +692,10 @@ def build_framework_shared_contract_projection_report(
     adapter_projection_map = (
         ("cli_common_adapter", "shared_contract", None, "bridge_contract"),
         ("codex_common_adapter", "shared_contract", None, "bridge_contract"),
-        ("codex_desktop_adapter", "common_contract", "runtime_surface", None),
-        ("codex_cli_adapter", "common_contract", "runtime_surface", None),
-        ("claude_code_adapter", "common_contract", "runtime_surface", None),
-        ("gemini_cli_adapter", "common_contract", "runtime_surface", None),
+        ("codex_desktop_adapter", "common_contract", "runtime_surface", "bridge_contract"),
+        ("codex_cli_adapter", "common_contract", "runtime_surface", "bridge_contract"),
+        ("claude_code_adapter", "common_contract", "runtime_surface", "bridge_contract"),
+        ("gemini_cli_adapter", "common_contract", "runtime_surface", "bridge_contract"),
     )
     projections: list[dict[str, Any]] = []
     all_match = True

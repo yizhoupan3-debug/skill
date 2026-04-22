@@ -121,6 +121,66 @@ class RouterRsInfrastructureError(RouterRsExecutionError):
     """Router-rs failed before a valid execution result could be produced."""
 
 
+def _coerce_naming_bridge_field(
+    contract: Mapping[str, Any] | None,
+    key: str,
+    fallback: str,
+) -> str:
+    """Resolve one Rust-owned naming bridge field with Python-safe fallback behavior."""
+
+    if not isinstance(contract, Mapping):
+        return fallback
+    value = contract.get(key)
+    if value is None:
+        return fallback
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return fallback
+        return stripped
+    return str(value)
+
+
+def _resolve_rust_owned_naming_bridge(
+    kernel_contract: Mapping[str, Any] | None,
+) -> tuple[str, str, str, str, str, str]:
+    """Resolve Rust-owned naming-bridge outputs used by execution-kernel decode."""
+
+    contract = kernel_contract or {}
+    return (
+        _coerce_naming_bridge_field(
+            contract,
+            "execution_kernel",
+            EXECUTION_KERNEL_BRIDGE_KIND,
+        ),
+        _coerce_naming_bridge_field(
+            contract,
+            "execution_kernel_authority",
+            EXECUTION_KERNEL_BRIDGE_AUTHORITY,
+        ),
+        _coerce_naming_bridge_field(
+            contract,
+            "execution_kernel_delegate",
+            EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
+        ),
+        _coerce_naming_bridge_field(
+            contract,
+            "execution_kernel_delegate_authority",
+            EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
+        ),
+        _coerce_naming_bridge_field(
+            contract,
+            "execution_kernel_delegate_family",
+            EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
+        ),
+        _coerce_naming_bridge_field(
+            contract,
+            "execution_kernel_delegate_impl",
+            EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
+        ),
+    )
+
+
 def build_router_rs_execution_request_payload(
     request: ExecutionKernelRequest,
     *,
@@ -155,15 +215,7 @@ def build_router_rs_execution_request_payload(
 def decode_router_rs_execution_payload(payload: dict[str, Any]) -> RunTaskResponse:
     """Decode one router-rs execution payload through the shared bridge contract."""
 
-    return decode_router_rs_execution_response(
-        payload,
-        execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
-        execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
-        execution_kernel_delegate=EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
-        execution_kernel_delegate_authority=EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
-        execution_kernel_delegate_family=EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
-        execution_kernel_delegate_impl=EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
-    )
+    return decode_router_rs_execution_payload_with_contract(payload)
 
 
 def decode_router_rs_execution_payload_with_contract(
@@ -175,30 +227,22 @@ def decode_router_rs_execution_payload_with_contract(
     """Decode one router-rs execution payload using the Rust control-plane contract when present."""
 
     contract = dict(kernel_contract or {})
+    (
+        execution_kernel,
+        execution_kernel_authority,
+        execution_kernel_delegate,
+        execution_kernel_delegate_authority,
+        execution_kernel_delegate_family,
+        execution_kernel_delegate_impl,
+    ) = _resolve_rust_owned_naming_bridge(contract)
     return decode_router_rs_execution_response(
         payload,
-        execution_kernel=str(contract.get("execution_kernel", EXECUTION_KERNEL_BRIDGE_KIND)),
-        execution_kernel_authority=str(
-            contract.get("execution_kernel_authority", EXECUTION_KERNEL_BRIDGE_AUTHORITY)
-        ),
-        execution_kernel_delegate=str(
-            contract.get("execution_kernel_delegate", EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL)
-        ),
-        execution_kernel_delegate_authority=str(
-            contract.get(
-                "execution_kernel_delegate_authority",
-                EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
-            )
-        ),
-        execution_kernel_delegate_family=str(
-            contract.get(
-                "execution_kernel_delegate_family",
-                EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
-            )
-        ),
-        execution_kernel_delegate_impl=str(
-            contract.get("execution_kernel_delegate_impl", EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL)
-        ),
+        execution_kernel=execution_kernel,
+        execution_kernel_authority=execution_kernel_authority,
+        execution_kernel_delegate=execution_kernel_delegate,
+        execution_kernel_delegate_authority=execution_kernel_delegate_authority,
+        execution_kernel_delegate_family=execution_kernel_delegate_family,
+        execution_kernel_delegate_impl=execution_kernel_delegate_impl,
         metadata_bridge=metadata_bridge,
     )
 

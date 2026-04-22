@@ -1354,52 +1354,55 @@ export class BrowserRuntime {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error;
       }
-      const hydratedFromBinding = await this.tryHydrateRuntimeAttachDescriptorViaRust({
-        binding_artifact_path: artifactLocator,
-      });
-      if (hydratedFromBinding) {
-        return hydratedFromBinding;
-      }
-      const hydratedFromHandoff = await this.tryHydrateRuntimeAttachDescriptorViaRust({
-        handoff_path: artifactLocator,
-      });
-      if (hydratedFromHandoff) {
-        return hydratedFromHandoff;
-      }
-      const hydratedFromResumeManifest = await this.tryHydrateRuntimeAttachDescriptorViaRust({
-        resume_manifest_path: artifactLocator,
-      });
-      if (hydratedFromResumeManifest) {
-        return hydratedFromResumeManifest;
+      const hydratedFromMissingFile = await this.tryHydrateRuntimeAttachDescriptorFromArtifactPath(
+        artifactLocator,
+      );
+      if (hydratedFromMissingFile) {
+        return hydratedFromMissingFile;
       }
       throw error;
     }
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const schemaVersion =
-      typeof parsed?.schema_version === 'string' ? parsed.schema_version : null;
-    if (schemaVersion === RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION) {
-      return {
-        descriptor: parsed as unknown as RuntimeAttachDescriptor,
-        inputArtifactKind: 'attach_descriptor',
-        attachedPayload: null,
-      };
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('runtime attach artifact returned an unknown schema');
     }
-    if (schemaVersion === RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION) {
-      return this.hydrateRuntimeAttachDescriptorViaRust({
-        binding_artifact_path: resolvedArtifactPath,
-      });
+
+    const descriptorCandidate = await this.canonicalizeAttachDescriptorIfPossible(
+      parsed as RuntimeAttachDescriptor,
+    );
+    if (descriptorCandidate.descriptor.schema_version === RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION) {
+      return descriptorCandidate;
     }
-    if (schemaVersion === RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION) {
-      return this.hydrateRuntimeAttachDescriptorViaRust({
-        handoff_path: resolvedArtifactPath,
-      });
+
+    const hydratedFromExistingFile = await this.tryHydrateRuntimeAttachDescriptorFromArtifactPath(
+      resolvedArtifactPath,
+    );
+    if (hydratedFromExistingFile) {
+      return hydratedFromExistingFile;
     }
-    if (schemaVersion === TRACE_RESUME_MANIFEST_SCHEMA_VERSION) {
-      return this.hydrateRuntimeAttachDescriptorViaRust({
-        resume_manifest_path: resolvedArtifactPath,
-      });
-    }
+
     throw new Error('runtime attach artifact returned an unknown schema');
+  }
+
+  private async tryHydrateRuntimeAttachDescriptorFromArtifactPath(
+    artifactPath: string,
+  ): Promise<LoadedRuntimeAttachDescriptor | null> {
+    const hydratedFromBinding = await this.tryHydrateRuntimeAttachDescriptorViaRust({
+      binding_artifact_path: artifactPath,
+    });
+    if (hydratedFromBinding) {
+      return hydratedFromBinding;
+    }
+    const hydratedFromHandoff = await this.tryHydrateRuntimeAttachDescriptorViaRust({
+      handoff_path: artifactPath,
+    });
+    if (hydratedFromHandoff) {
+      return hydratedFromHandoff;
+    }
+    return this.tryHydrateRuntimeAttachDescriptorViaRust({
+      resume_manifest_path: artifactPath,
+    });
   }
 
   private async canonicalizeAttachDescriptorIfPossible(

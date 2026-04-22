@@ -859,32 +859,8 @@ describe('BrowserRuntime', () => {
     }
   }, 15000);
 
-  it('hydrates replay from a handoff artifact path after handoff cleanup leaves only the resume manifest trace', async () => {
+  it('keeps replay and resume semantics consistent after handoff cleanup falls back to the resume manifest', async () => {
     const { tempRoot, traceStreamPath, handoffPath, resumeManifestPath } = await createAttachedRuntimeFixture();
-    await writeFile(
-      handoffPath,
-      JSON.stringify(
-        {
-          schema_version: 'runtime-event-handoff-v1',
-          session_id: 'session-1',
-          job_id: 'job-1',
-          checkpoint_backend_family: 'filesystem',
-          trace_stream_path: null,
-          resume_manifest_path: resumeManifestPath,
-          cleanup_preserves_replay: true,
-          attach_target: {
-            handoff_method: 'describe_runtime_event_handoff',
-          },
-          transport: {
-            binding_backend_family: 'filesystem',
-          },
-        },
-        null,
-        2,
-      ),
-      'utf8',
-    );
-
     const attachedRuntime = new BrowserRuntime({
       headless: true,
       runtimeHandoffPath: handoffPath,
@@ -892,17 +868,70 @@ describe('BrowserRuntime', () => {
     });
 
     try {
+      const loaded = await (
+        attachedRuntime as unknown as {
+          loadRuntimeAttachDescriptor(): Promise<{
+            descriptor: Record<string, unknown>;
+            inputArtifactKind: string | null;
+          }>;
+        }
+      ).loadRuntimeAttachDescriptor();
+      expect(loaded.inputArtifactKind).toBe('handoff');
+      expect(loaded.descriptor.cleanup_method).toBe('cleanup_attached_runtime_event_transport');
+      expect(loaded.descriptor.resume_mode).toBe('after_event_id');
+      expect(
+        ((loaded.descriptor.attach_capabilities as Record<string, unknown> | undefined)
+          ?.cleanup_preserves_replay as boolean | undefined) ?? false,
+      ).toBe(true);
+
+      const firstWindow = await attachedRuntime.getAttachedRuntimeEvents({ limit: 1 });
+      const afterEventId = firstWindow.events[0]?.event_id;
+      expect(firstWindow.events).toHaveLength(1);
+      expect(afterEventId).toBe('evt-1');
+      expect(firstWindow.nextCursor?.eventId).toBe('evt-1');
+
+      await writeFile(
+        handoffPath,
+        JSON.stringify(
+          {
+            schema_version: 'runtime-event-handoff-v1',
+            session_id: 'session-1',
+            job_id: 'job-1',
+            checkpoint_backend_family: 'filesystem',
+            trace_stream_path: null,
+            resume_manifest_path: resumeManifestPath,
+            cleanup_preserves_replay: true,
+            attach_target: {
+              handoff_method: 'describe_runtime_event_handoff',
+            },
+            transport: {
+              binding_backend_family: 'filesystem',
+            },
+          },
+          null,
+          2,
+        ),
+        'utf8',
+      );
+
       const diagnostics = await attachedRuntime.getDiagnostics();
       expect(diagnostics.attachedRuntime.status).toBe('ready');
       expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+      expect(diagnostics.attachedRuntime.resumeManifestSource).toBe('handoff_manifest');
+      expect(diagnostics.attachedRuntime.traceStreamSource).toBe('resume_manifest');
 
-      const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
-      expect(replay.replayContext.descriptorSource).toBe('handoff_path');
-      expect(replay.replayContext.inputArtifactKind).toBe('handoff');
-      expect(replay.replayContext.resumeManifestSource).toBe('handoff_manifest');
-      expect(replay.replayContext.traceStreamSource).toBe('resume_manifest');
-      expect(replay.events).toHaveLength(2);
-      expect(replay.events[1]!.event_id).toBe('evt-2');
+      const resumed = await attachedRuntime.getAttachedRuntimeEvents({
+        afterEventId: afterEventId as string,
+        limit: 5,
+      });
+      expect(resumed.afterEventId).toBe('evt-1');
+      expect(resumed.replayContext.descriptorSource).toBe('handoff_path');
+      expect(resumed.replayContext.inputArtifactKind).toBe('handoff');
+      expect(resumed.replayContext.resumeManifestSource).toBe('handoff_manifest');
+      expect(resumed.replayContext.traceStreamSource).toBe('resume_manifest');
+      expect(resumed.events).toHaveLength(1);
+      expect(resumed.events[0]!.event_id).toBe('evt-2');
+      expect(resumed.hasMore).toBe(false);
     } finally {
       await attachedRuntime.shutdown();
       await rm(tempRoot, { recursive: true, force: true });

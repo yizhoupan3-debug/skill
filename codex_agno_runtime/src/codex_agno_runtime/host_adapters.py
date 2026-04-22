@@ -11,15 +11,18 @@ from .framework_profile import (
     ensure_capabilities,
     resolve_host_capability_requirements,
 )
+from .runtime_registry import default_host_peer_set, host_adapter_records
 from .trace import (
     TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
     TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
     TRACE_REPLAY_CURSOR_SCHEMA_VERSION,
 )
+from .runtime_registry import default_host_peer_set
 
 UPSTREAM_SAFE_ZONE = "upstream-safe-zone"
 THIN_PATCH_ZONE = "thin-patch-zone"
 FORK_DANGER_ZONE = "fork-danger-zone"
+_HOST_PRIVATE_OVERRIDE_KEY = "host_private"
 
 COMMON_FORK_DANGER_SURFACES = (
     "aionrs_session_protocol",
@@ -42,6 +45,31 @@ COMMON_PARITY_FIELDS = (
     "execution_controller_contract",
     "delegation_contract",
     "supervisor_state_contract",
+)
+
+_CANONICAL_HOST_ADAPTER_PAYLOAD_FIELDS = frozenset(
+    {
+        "profile_id",
+        "display_name",
+        "framework_profile_version",
+        "host_family",
+        "runtime_family",
+        "capabilities",
+        "rules_bundle",
+        "skill_bundle",
+        "session_policy",
+        "tool_policy",
+        "approval_policy",
+        "loadout_policy",
+        "framework_surface_policy",
+        "artifact_contract",
+        "model_policy",
+        "memory_mounts",
+        "mcp_servers",
+        "workspace_bootstrap",
+        "host_capability_requirements",
+        "metadata",
+    }
 )
 
 CODEX_DESKTOP_ADAPTER_ID = "codex_desktop_adapter"
@@ -80,6 +108,26 @@ def _clone_json_like(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_clone_json_like(item) for item in value]
     return value
+
+
+def _split_host_overrides(
+    host_overrides: Mapping[str, Any],
+) -> tuple[Dict[str, Any], Dict[str, Any] | None]:
+    normalized = _clone_json_like(host_overrides)
+    host_private = normalized.pop(_HOST_PRIVATE_OVERRIDE_KEY, None)
+    public_keys = [key for key in normalized if key not in _CANONICAL_HOST_ADAPTER_PAYLOAD_FIELDS]
+    if public_keys:
+        raise ValueError(
+            "host_private field updates require explicit opt-in via "
+            f"{_HOST_PRIVATE_OVERRIDE_KEY}: <mapping>."
+        )
+    if host_private is None:
+        return normalized, None
+    if not isinstance(host_private, Mapping):
+        raise ValueError(
+            f"{_HOST_PRIVATE_OVERRIDE_KEY} must be a mapping when provided in host_overrides."
+        )
+    return normalized, _clone_json_like(host_private)
 
 
 def _merge_mapping(base: Mapping[str, Any], override: Mapping[str, Any]) -> Dict[str, Any]:
@@ -779,7 +827,11 @@ def adapt_framework_profile(
         },
     }
     if host_overrides:
-        payload = _merge_mapping(payload, host_overrides)
+        public_overrides, host_private_overrides = _split_host_overrides(host_overrides)
+        if public_overrides:
+            payload = _merge_mapping(payload, public_overrides)
+        if host_private_overrides:
+            payload = _merge_mapping(payload, host_private_overrides)
     return AdaptedHostProfile(
         framework_profile=profile,
         adapter=adapter_spec,
@@ -846,6 +898,48 @@ def _build_cli_runtime_surface(common_contract: Mapping[str, Any]) -> Dict[str, 
     }
 
 
+def _build_adapter_source_contract(
+    *,
+    canonical_adapter_id: str,
+    shared_contract_field: str,
+    runtime_surface_field: str | None = None,
+    bridge_contract_field: str | None = "bridge_contract",
+    entrypoint_surface_field: str | None = None,
+    execution_surface_field: str | None = None,
+    adapter_alias_of: str | None = None,
+    alias_mode: str | None = None,
+) -> Dict[str, Any]:
+    contract_source_fields: Dict[str, Any] = {
+        "shared_contract": shared_contract_field,
+    }
+    if runtime_surface_field is not None:
+        contract_source_fields["runtime_surface"] = runtime_surface_field
+    if bridge_contract_field is not None:
+        contract_source_fields["bridge_contract"] = bridge_contract_field
+    if entrypoint_surface_field is not None:
+        contract_source_fields["entrypoint_surface"] = entrypoint_surface_field
+    if execution_surface_field is not None:
+        contract_source_fields["execution_surface"] = execution_surface_field
+
+    payload: Dict[str, Any] = {
+        "framework_truth": "framework_core",
+        "state_source": "framework_profile",
+        "single_source_of_truth": True,
+        "shared_adapter": CLI_COMMON_ADAPTER_ID,
+        "canonical_adapter_id": canonical_adapter_id,
+        "contract_source_fields": contract_source_fields,
+    }
+    if bridge_contract_field is not None:
+        payload["bridge_contract_source"] = (
+            f"{shared_contract_field}.workspace_bootstrap.bridges"
+        )
+    if adapter_alias_of is not None:
+        payload["adapter_alias_of"] = adapter_alias_of
+    if alias_mode is not None:
+        payload["alias_mode"] = alias_mode
+    return payload
+
+
 def _compile_cli_host_surface(adapter_spec: HostAdapterSpec) -> Dict[str, Any]:
     return {
         "host_cli": adapter_spec.host_id,
@@ -899,6 +993,15 @@ def _compile_cli_entrypoint_payload(
     payload["common_contract"] = _clone_json_like(common_contract["shared_contract"])
     payload["controller_boundary"] = _clone_json_like(common_contract["controller_boundary"])
     payload["runtime_surface"] = _build_cli_runtime_surface(common_contract)
+    payload["bridge_contract"] = extract_framework_workspace_bridges(
+        payload["common_contract"]["workspace_bootstrap"]
+    )
+    payload["source_contract"] = _build_adapter_source_contract(
+        canonical_adapter_id=adapter_spec.adapter_id,
+        shared_contract_field="common_contract",
+        runtime_surface_field="runtime_surface",
+        execution_surface_field="execution_surface",
+    )
     payload["host_projection"] = _compile_cli_host_surface(adapter_spec)
     payload["execution_surface"] = {
         "entrypoint_kind": "headless",
@@ -942,6 +1045,12 @@ def _compile_shared_adapter_alias(
     payload["metadata"]["adapter_alias_of"] = CLI_COMMON_ADAPTER_ID
     payload["metadata"]["canonical_adapter_id"] = CLI_COMMON_ADAPTER_ID
     payload["parity_contract"]["compatibility_aliases"] = [alias_spec.adapter_id]
+    payload["source_contract"] = _build_adapter_source_contract(
+        canonical_adapter_id=CLI_COMMON_ADAPTER_ID,
+        shared_contract_field="shared_contract",
+        adapter_alias_of=CLI_COMMON_ADAPTER_ID,
+        alias_mode="mirror-only",
+    )
     return AdaptedHostProfile(
         framework_profile=canonical.framework_profile,
         adapter=alias_spec,
@@ -962,6 +1071,10 @@ def compile_cli_common_adapter(
     )
     payload["controller_boundary"] = _build_cli_controller_boundary()
     payload["parity_contract"] = _build_cli_parity_contract()
+    payload["source_contract"] = _build_adapter_source_contract(
+        canonical_adapter_id=CLI_COMMON_ADAPTER_ID,
+        shared_contract_field="shared_contract",
+    )
     return AdaptedHostProfile(
         framework_profile=adapted.framework_profile,
         adapter=adapted.adapter,
@@ -988,6 +1101,15 @@ def compile_codex_desktop_adapter(
     payload["common_contract"] = _clone_json_like(common_contract["shared_contract"])
     payload["controller_boundary"] = _clone_json_like(common_contract["controller_boundary"])
     payload["runtime_surface"] = _build_cli_runtime_surface(common_contract)
+    payload["bridge_contract"] = extract_framework_workspace_bridges(
+        payload["common_contract"]["workspace_bootstrap"]
+    )
+    payload["source_contract"] = _build_adapter_source_contract(
+        canonical_adapter_id=CODEX_DESKTOP_ADAPTER_ID,
+        shared_contract_field="common_contract",
+        runtime_surface_field="runtime_surface",
+        entrypoint_surface_field="entrypoint_contract",
+    )
     payload["entrypoint_contract"] = {
         "entrypoint_kind": "interactive",
         "thread_binding": "desktop-thread",

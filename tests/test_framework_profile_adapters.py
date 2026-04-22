@@ -808,6 +808,10 @@ def test_cli_common_shared_contract_keeps_framework_truth_under_host_overrides()
         "session_contract"
     ]
     assert cli_common["bridge_contract"] == profile.shared_contract_bridges()
+    assert cli_common["source_contract"]["bridge_contract_source"] == (
+        "shared_contract.workspace_bootstrap.bridges"
+    )
+    assert cli_common["source_contract"]["canonical_adapter_id"] == "cli_common_adapter"
 
     desktop = compile_codex_desktop_adapter(
         profile,
@@ -828,6 +832,16 @@ def test_cli_common_shared_contract_keeps_framework_truth_under_host_overrides()
     assert desktop["runtime_surface"]["workspace_bootstrap"] == canonical_shared_contract[
         "workspace_bootstrap"
     ]
+    assert desktop["bridge_contract"] == canonical_shared_contract["workspace_bootstrap"]["bridges"]
+    assert desktop["source_contract"]["contract_source_fields"]["shared_contract"] == (
+        "common_contract"
+    )
+    assert desktop["source_contract"]["contract_source_fields"]["bridge_contract"] == (
+        "bridge_contract"
+    )
+    assert desktop["source_contract"]["bridge_contract_source"] == (
+        "common_contract.workspace_bootstrap.bridges"
+    )
 
 
 def test_adapted_host_payload_reuses_framework_shared_contract_surface() -> None:
@@ -863,6 +877,62 @@ def test_adapted_host_payload_reuses_framework_shared_contract_surface() -> None
     assert adapted["workspace_bootstrap"] == canonical_shared_contract["workspace_bootstrap"]
 
 
+def test_adapt_framework_profile_rejects_implicit_host_private_override_fields() -> None:
+    profile = build_framework_profile(
+        profile_id="host-private-blocked",
+        display_name="Host Private Blocked",
+        session_policy={"mode": "bounded", "approval_mode": "manual"},
+        tool_policy={"shell": "allow"},
+        approval_policy={"mode": "manual"},
+        loadout_policy={"default": "framework"},
+        artifact_contract={"layout": "stable-v1"},
+        memory_mounts=(
+            {"mount_id": "project", "source": ".codex/memory"},
+            "user",
+        ),
+        mcp_servers=({"server_id": "local-memory", "transport": "stdio"},),
+        workspace_bootstrap={"skill_bridge": {"project_dir": ".codex/skills"}},
+    )
+
+    try:
+        adapt_framework_profile(
+            profile,
+            CODEX_CLI_ADAPTER,
+            host_overrides={"host_projection": {"context_files": ["AGENTS.md"]}},
+        )
+    except ValueError as exc:
+        assert "host_private" in str(exc)
+        assert "explicit opt-in" in str(exc)
+    else:
+        raise AssertionError("expected host-private override injection to require explicit opt-in")
+
+
+def test_adapt_framework_profile_allows_explicit_host_private_opt_in() -> None:
+    profile = build_framework_profile(
+        profile_id="host-private-optin",
+        display_name="Host Private Optin",
+        session_policy={"mode": "bounded", "approval_mode": "manual"},
+        tool_policy={"shell": "allow"},
+        approval_policy={"mode": "manual"},
+        loadout_policy={"default": "framework"},
+        artifact_contract={"layout": "stable-v1"},
+        memory_mounts=(
+            {"mount_id": "project", "source": ".codex/memory"},
+            "user",
+        ),
+        mcp_servers=({"server_id": "local-memory", "transport": "stdio"},),
+        workspace_bootstrap={"skill_bridge": {"project_dir": ".codex/skills"}},
+    )
+    adapted = adapt_framework_profile(
+        profile,
+        CODEX_CLI_ADAPTER,
+        host_overrides={
+            "host_private": {"host_projection": {"context_files": ["AGENTS.md"]}}
+        },
+    ).host_payload
+    assert adapted["host_projection"]["context_files"] == ["AGENTS.md"]
+
+
 def test_framework_profile_rejects_host_specific_metadata_in_framework_truth() -> None:
     try:
         build_framework_profile(
@@ -878,17 +948,21 @@ def test_framework_profile_rejects_host_specific_metadata_in_framework_truth() -
 
 
 def test_framework_profile_rejects_host_projection_metadata_in_framework_truth() -> None:
-    try:
-        build_framework_profile(
-            profile_id="bad-hook-metadata",
-            display_name="Bad Hook Metadata",
-            metadata={"hook_event_names": ["PreToolUse"]},
-        )
-    except ValueError as exc:
-        assert "host-neutral" in str(exc)
-        assert "hook_event_names" in str(exc)
-    else:
-        raise AssertionError("expected ValueError")
+    for bad_field, bad_value in {
+        "context_files": ["AGENTS.md"],
+        "hook_event_names": ["PreToolUse"],
+    }.items():
+        try:
+            build_framework_profile(
+                profile_id=f"bad-host-metadata-{bad_field}",
+                display_name="Bad Host Metadata",
+                metadata={bad_field: bad_value},
+            )
+        except ValueError as exc:
+            assert "host-neutral" in str(exc)
+            assert bad_field in str(exc)
+        else:
+            raise AssertionError("expected ValueError")
 
 
 def test_framework_profile_rejects_aionrs_pinned_host_core() -> None:
@@ -1847,12 +1921,33 @@ def test_router_rs_profile_json_matches_outer_framework_contract() -> None:
         canonical_shared_contract["session_contract"]
     )
     assert payload["codex_common_adapter"]["metadata"]["adapter_alias_of"] == "cli_common_adapter"
+    assert payload["cli_common_adapter"]["source_contract"]["bridge_contract_source"] == (
+        "shared_contract.workspace_bootstrap.bridges"
+    )
     assert payload["codex_desktop_adapter"]["common_contract"]["workspace_bootstrap"] == (
         canonical_shared_contract["workspace_bootstrap"]
     )
+    assert payload["codex_desktop_adapter"]["bridge_contract"] == (
+        canonical_shared_contract["workspace_bootstrap"]["bridges"]
+    )
+    assert payload["codex_desktop_adapter"]["source_contract"]["contract_source_fields"] == {
+        "shared_contract": "common_contract",
+        "runtime_surface": "runtime_surface",
+        "bridge_contract": "bridge_contract",
+        "entrypoint_surface": "entrypoint_contract",
+    }
     assert payload["codex_cli_adapter"]["runtime_surface"]["workspace_bootstrap"] == (
         canonical_shared_contract["workspace_bootstrap"]
     )
+    assert payload["codex_cli_adapter"]["bridge_contract"] == (
+        canonical_shared_contract["workspace_bootstrap"]["bridges"]
+    )
+    assert payload["codex_cli_adapter"]["source_contract"]["contract_source_fields"] == {
+        "shared_contract": "common_contract",
+        "runtime_surface": "runtime_surface",
+        "bridge_contract": "bridge_contract",
+        "execution_surface": "execution_surface",
+    }
     assert payload["claude_code_adapter"]["host_projection"]["context_files"] == [
         "CLAUDE.md",
         "CLAUDE.local.md",
@@ -1898,6 +1993,12 @@ def test_router_rs_profile_json_can_opt_in_legacy_alias_output() -> None:
     assert "codex_desktop_host_adapter" not in payload
     assert payload["compatibility_lane"]["codex_desktop_host_adapter"]["metadata"]["adapter_alias_of"] == (
         "codex_desktop_adapter"
+    )
+    assert payload["compatibility_lane"]["codex_desktop_host_adapter"]["source_contract"][
+        "bridge_contract_source"
+    ] == "common_contract.workspace_bootstrap.bridges"
+    assert payload["compatibility_lane"]["codex_desktop_host_adapter"]["source_contract"]["alias_mode"] == (
+        "mirror-only"
     )
     assert payload["codex_desktop_alias_retirement_status"]["alias_lifecycle"] == "compatibility-only"
 
@@ -1951,7 +2052,13 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     assert payload["cli_common_adapter"]["controller_boundary"]["shared_adapter"] == "cli_common_adapter"
     assert payload["codex_common_adapter"]["controller_boundary"]["framework_truth"] == "framework_core"
     assert payload["codex_desktop_adapter"]["entrypoint_contract"]["entrypoint_kind"] == "interactive"
+    assert payload["codex_desktop_adapter"]["bridge_contract"] == (
+        payload["codex_desktop_adapter"]["common_contract"]["workspace_bootstrap"]["bridges"]
+    )
     assert payload["codex_cli_adapter"]["execution_surface"]["controller_is_cli"] is False
+    assert payload["codex_cli_adapter"]["bridge_contract"] == (
+        payload["codex_cli_adapter"]["common_contract"]["workspace_bootstrap"]["bridges"]
+    )
     assert payload["claude_code_adapter"]["host_projection"]["settings_paths"] == [
         "~/.claude/settings.json",
         ".claude/settings.json",
@@ -2073,6 +2180,12 @@ def test_router_rs_profile_artifacts_json_can_opt_in_continuity_alias_artifact()
         "stream-json",
     ]
     assert payload["codex_desktop_host_adapter"]["metadata"]["adapter_alias_of"] == "codex_desktop_adapter"
+    assert payload["codex_desktop_host_adapter"]["bridge_contract"] == (
+        payload["codex_desktop_host_adapter"]["common_contract"]["workspace_bootstrap"]["bridges"]
+    )
+    assert payload["codex_desktop_host_adapter"]["source_contract"]["adapter_alias_of"] == (
+        "codex_desktop_adapter"
+    )
     assert payload["codex_desktop_alias_retirement_status"]["alias_lifecycle"] == "compatibility-only"
     assert payload["codex_desktop_alias_retirement_status"]["emitter_contract"]["rust_emits_alias_artifact"] is False
 

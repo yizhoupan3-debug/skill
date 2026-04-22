@@ -1164,6 +1164,19 @@ fn build_cli_common_adapter(
         shared_contract_workspace_bridges(shared_contract),
     );
     payload.insert(
+        "source_contract".to_string(),
+        Value::Object(build_source_contract(
+            CLI_COMMON_ADAPTER_ID,
+            "shared_contract",
+            None,
+            Some("bridge_contract"),
+            None,
+            None,
+            None,
+            None,
+        )),
+    );
+    payload.insert(
         "controller_boundary".to_string(),
         Value::Object(controller_boundary.clone()),
     );
@@ -1191,6 +1204,88 @@ fn shared_contract_workspace_bridges(shared_contract: &Map<String, Value>) -> Va
         .and_then(|bootstrap| bootstrap.get("bridges"))
         .cloned()
         .unwrap_or_else(|| Value::Object(Map::new()))
+}
+
+fn build_source_contract(
+    canonical_adapter_id: &str,
+    shared_contract_field: &str,
+    runtime_surface_field: Option<&str>,
+    bridge_contract_field: Option<&str>,
+    entrypoint_surface_field: Option<&str>,
+    execution_surface_field: Option<&str>,
+    adapter_alias_of: Option<&str>,
+    alias_mode: Option<&str>,
+) -> Map<String, Value> {
+    let mut contract_source_fields = Map::new();
+    contract_source_fields.insert(
+        "shared_contract".to_string(),
+        Value::String(shared_contract_field.to_string()),
+    );
+    if let Some(field) = runtime_surface_field {
+        contract_source_fields.insert(
+            "runtime_surface".to_string(),
+            Value::String(field.to_string()),
+        );
+    }
+    if let Some(field) = bridge_contract_field {
+        contract_source_fields.insert(
+            "bridge_contract".to_string(),
+            Value::String(field.to_string()),
+        );
+    }
+    if let Some(field) = entrypoint_surface_field {
+        contract_source_fields.insert(
+            "entrypoint_surface".to_string(),
+            Value::String(field.to_string()),
+        );
+    }
+    if let Some(field) = execution_surface_field {
+        contract_source_fields.insert(
+            "execution_surface".to_string(),
+            Value::String(field.to_string()),
+        );
+    }
+
+    let mut payload = Map::new();
+    payload.insert(
+        "framework_truth".to_string(),
+        Value::String("framework_core".to_string()),
+    );
+    payload.insert(
+        "state_source".to_string(),
+        Value::String("framework_profile".to_string()),
+    );
+    payload.insert("single_source_of_truth".to_string(), Value::Bool(true));
+    payload.insert(
+        "shared_adapter".to_string(),
+        Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
+    );
+    payload.insert(
+        "canonical_adapter_id".to_string(),
+        Value::String(canonical_adapter_id.to_string()),
+    );
+    payload.insert(
+        "contract_source_fields".to_string(),
+        Value::Object(contract_source_fields),
+    );
+    if bridge_contract_field.is_some() {
+        payload.insert(
+            "bridge_contract_source".to_string(),
+            Value::String(format!(
+                "{shared_contract_field}.workspace_bootstrap.bridges"
+            )),
+        );
+    }
+    if let Some(alias_of) = adapter_alias_of {
+        payload.insert(
+            "adapter_alias_of".to_string(),
+            Value::String(alias_of.to_string()),
+        );
+    }
+    if let Some(mode) = alias_mode {
+        payload.insert("alias_mode".to_string(), Value::String(mode.to_string()));
+    }
+    payload
 }
 
 fn build_codex_common_adapter(
@@ -1223,6 +1318,19 @@ fn build_codex_common_adapter(
     payload.insert(
         "bridge_contract".to_string(),
         shared_contract_workspace_bridges(shared_contract),
+    );
+    payload.insert(
+        "source_contract".to_string(),
+        Value::Object(build_source_contract(
+            CLI_COMMON_ADAPTER_ID,
+            "shared_contract",
+            None,
+            Some("bridge_contract"),
+            None,
+            None,
+            Some(CLI_COMMON_ADAPTER_ID),
+            Some("mirror-only"),
+        )),
     );
     payload.insert(
         "controller_boundary".to_string(),
@@ -1274,6 +1382,10 @@ fn build_cli_family_host_adapter(
         Value::Object(build_runtime_surface(inputs.shared_contract)),
     );
     payload.insert(
+        "bridge_contract".to_string(),
+        shared_contract_workspace_bridges(inputs.shared_contract),
+    );
+    payload.insert(
         "execution_surface".to_string(),
         value_object([
             ("entrypoint_kind", Value::String("headless".to_string())),
@@ -1301,6 +1413,19 @@ fn build_cli_family_host_adapter(
             ),
             ("host_cli", Value::String(descriptor.host_id.to_string())),
         ]),
+    );
+    payload.insert(
+        "source_contract".to_string(),
+        Value::Object(build_source_contract(
+            descriptor.adapter_id,
+            "common_contract",
+            Some("runtime_surface"),
+            Some("bridge_contract"),
+            None,
+            Some("execution_surface"),
+            None,
+            None,
+        )),
     );
     payload.insert(
         "host_projection".to_string(),
@@ -1687,6 +1812,10 @@ fn build_codex_desktop_adapter(
         Value::Object(build_runtime_surface(shared_contract)),
     );
     payload.insert(
+        "bridge_contract".to_string(),
+        shared_contract_workspace_bridges(shared_contract),
+    );
+    payload.insert(
         "entrypoint_contract".to_string(),
         value_object([
             ("entrypoint_kind", Value::String("interactive".to_string())),
@@ -1723,6 +1852,19 @@ fn build_codex_desktop_adapter(
             ),
             ("cli_peer", Value::String("codex_cli_adapter".to_string())),
         ]),
+    );
+    payload.insert(
+        "source_contract".to_string(),
+        Value::Object(build_source_contract(
+            CODEX_DESKTOP_ADAPTER_ID,
+            "common_contract",
+            Some("runtime_surface"),
+            Some("bridge_contract"),
+            Some("entrypoint_contract"),
+            None,
+            None,
+            None,
+        )),
     );
     payload
 }
@@ -1768,6 +1910,22 @@ fn build_codex_desktop_host_adapter(
     fallback_semantics.insert(
         "legacy_adapter_id".to_string(),
         Value::String(LEGACY_CODEX_DESKTOP_ADAPTER_ID.to_string()),
+    );
+    let source_contract = payload
+        .get_mut("source_contract")
+        .and_then(Value::as_object_mut)
+        .ok_or_else(|| "codex desktop adapter missing source_contract".to_string())?;
+    source_contract.insert(
+        "canonical_adapter_id".to_string(),
+        Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
+    );
+    source_contract.insert(
+        "adapter_alias_of".to_string(),
+        Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
+    );
+    source_contract.insert(
+        "alias_mode".to_string(),
+        Value::String("mirror-only".to_string()),
     );
     Ok(payload)
 }
@@ -4092,12 +4250,29 @@ mod tests {
             expected_bootstrap
         );
         assert_eq!(
+            bundle.codex_desktop_adapter["bridge_contract"],
+            expected_bootstrap["bridges"]
+        );
+        assert_eq!(
+            bundle.codex_desktop_adapter["source_contract"]["bridge_contract_source"],
+            Value::String("common_contract.workspace_bootstrap.bridges".to_string())
+        );
+        assert_eq!(
             bundle.codex_cli_adapter["common_contract"]["workspace_bootstrap"],
             expected_bootstrap
         );
         assert_eq!(
             bundle.codex_cli_adapter["runtime_surface"]["workspace_bootstrap"],
             expected_bootstrap
+        );
+        assert_eq!(
+            bundle.codex_cli_adapter["bridge_contract"],
+            expected_bootstrap["bridges"]
+        );
+        assert_eq!(
+            bundle.codex_cli_adapter["source_contract"]["contract_source_fields"]
+                ["execution_surface"],
+            Value::String("execution_surface".to_string())
         );
     }
 
@@ -4114,6 +4289,14 @@ mod tests {
         assert_eq!(
             compatibility_lane.codex_desktop_host_adapter["metadata"]["adapter_alias_of"],
             Value::String("codex_desktop_adapter".to_string())
+        );
+        assert_eq!(
+            compatibility_lane.codex_desktop_host_adapter["bridge_contract"],
+            bundle.codex_desktop_adapter["bridge_contract"]
+        );
+        assert_eq!(
+            compatibility_lane.codex_desktop_host_adapter["source_contract"]["alias_mode"],
+            Value::String("mirror-only".to_string())
         );
         assert!(serialized.get("codex_desktop_host_adapter").is_none());
         assert_eq!(

@@ -47,6 +47,25 @@ class SkillMetadata(BaseModel):
         return self.trigger_hints
 
 
+class SearchMatchTransportRow(BaseModel):
+    """Raw transport row shape for route match results."""
+
+    slug: str
+    description: str
+    layer: str
+    gate: str
+    owner: str
+    score: float = Field(ge=0.0)
+    matched_terms: int = Field(ge=0)
+    total_terms: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _validate_match_counts(self) -> "SearchMatchTransportRow":
+        if self.matched_terms > self.total_terms:
+            raise ValueError("matched_terms cannot exceed total_terms")
+        return self
+
+
 class ScoredSkill(BaseModel):
     """Scored routing candidate."""
 
@@ -59,25 +78,32 @@ class SearchMatchResult(BaseModel):
     """Hydrated Rust search row backed by shared skill metadata."""
 
     record: SkillMetadata
-    score: float
-    matched_terms: int
-    total_terms: int
+    score: float = Field(ge=0.0)
+    matched_terms: int = Field(ge=0)
+    total_terms: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _validate_match_counts(self) -> "SearchMatchResult":
+        if self.matched_terms > self.total_terms:
+            raise ValueError("matched_terms cannot exceed total_terms")
+        return self
 
     @classmethod
     def from_transport_row(cls, row: Mapping[str, Any]) -> "SearchMatchResult":
         """Hydrate one Rust search transport row into the shared typed contract."""
 
+        payload = SearchMatchTransportRow.model_validate(row)
         return cls(
             record=SkillMetadata(
-                name=str(row["slug"]),
-                description=str(row["description"]),
-                routing_layer=str(row["layer"]),
-                routing_gate=str(row["gate"]),
-                routing_owner=str(row["owner"]),
+                name=payload.slug,
+                description=payload.description,
+                routing_layer=payload.layer,
+                routing_gate=payload.gate,
+                routing_owner=payload.owner,
             ),
-            score=float(row["score"]),
-            matched_terms=int(row["matched_terms"]),
-            total_terms=int(row["total_terms"]),
+            score=payload.score,
+            matched_terms=payload.matched_terms,
+            total_terms=payload.total_terms,
         )
 
     def to_transport_row(self) -> dict[str, Any]:
@@ -129,6 +155,34 @@ class SearchMatchesContract(BaseModel):
         """Project typed search matches back to the CLI transport row shape."""
 
         return [match.to_transport_row() for match in self.matches]
+
+    def to_transport_payload(self) -> dict[str, Any]:
+        """Project one stable search envelope with explicit typed fields and row alias."""
+
+        rows = self.to_transport_rows()
+        return {
+            "search_schema_version": self.search_schema_version,
+            "authority": self.authority,
+            "query": self.query,
+            "matches": rows,
+            "rows": rows,
+        }
+
+
+class RouteContractDiffField(BaseModel):
+    """One typed route contract mismatch field."""
+
+    field: str
+    rust_value: Any | None = None
+    python_value: Any | None = None
+
+
+class RouteContractDiffReport(BaseModel):
+    """Structured route decision diff report."""
+
+    verified_contract_fields: list[str] = Field(default_factory=list)
+    contract_mismatch_fields: list[str] = Field(default_factory=list)
+    mismatched_fields: list[RouteContractDiffField] = Field(default_factory=list)
 
 
 class RoutingResult(BaseModel):
@@ -262,6 +316,7 @@ class RouteDiagnosticReport(BaseModel):
     verification_passed: bool = True
     verified_contract_fields: list[str] = Field(default_factory=list)
     contract_mismatch_fields: list[str] = Field(default_factory=list)
+    route_diff: RouteContractDiffReport | None = None
     route_snapshot: RouteDecisionSnapshot
 
     @model_validator(mode="after")
@@ -352,6 +407,63 @@ class FrameworkSharedContractProjectionReport(BaseModel):
     adapter_projections: list[FrameworkSharedContractProjection] = Field(default_factory=list)
     all_shared_contract_projections_match: bool = True
     all_bridge_contract_projections_match: bool = True
+
+
+class RoutingEvalCase(BaseModel):
+    """One routing-eval input row."""
+
+    id: str | int | None = None
+    task: str
+    category: str
+    first_turn: bool = True
+    expected_owner: str | None = None
+    expected_overlay: str | None = None
+    focus_skill: str | None = None
+    forbidden_owners: list[str] = Field(default_factory=list)
+
+
+class RoutingEvalCases(BaseModel):
+    """Typed payload loaded from `routing_eval_cases.json`."""
+
+    schema_version: str
+    cases: list[RoutingEvalCase] = Field(default_factory=list)
+
+
+class RoutingEvalResult(BaseModel):
+    """One typed routing-eval output row."""
+
+    id: str | int | None = None
+    category: str
+    task: str
+    focus_skill: str | None = None
+    selected_owner: str
+    selected_overlay: str | None = None
+    expected_owner: str | None = None
+    expected_overlay: str | None = None
+    forbidden_owners: list[str] = Field(default_factory=list)
+    trigger_hit: bool = False
+    overtrigger: bool = False
+    owner_correct: bool = False
+    overlay_correct: bool = False
+
+
+class RoutingEvalMetrics(BaseModel):
+    """Aggregated routing-eval metrics."""
+
+    case_count: int = 0
+    trigger_hit: int = 0
+    trigger_miss: int = 0
+    overtrigger: int = 0
+    owner_correct: int = 0
+    overlay_correct: int = 0
+
+
+class RoutingEvalReport(BaseModel):
+    """Typed routing-eval output."""
+
+    schema_version: str
+    metrics: RoutingEvalMetrics
+    results: list[RoutingEvalResult] = Field(default_factory=list)
 
 
 class PrepareSessionRequest(BaseModel):

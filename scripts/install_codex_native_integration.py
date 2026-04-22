@@ -13,6 +13,9 @@ from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "codex_agno_runtime" / "src"))
+
+from codex_agno_runtime.runtime_registry import primary_plugin_record, workspace_bootstrap_defaults
 
 from scripts.install_browser_mcp_codex import install_server as install_browser_server
 from scripts.install_codex_framework_default import retire_overlay as retire_framework_overlay
@@ -34,7 +37,7 @@ HOME_CODEX_SKILLS_PATH = Path.home() / ".codex" / "skills"
 HOME_CLAUDE_REFRESH_PATH = Path.home() / ".claude" / "commands" / "refresh.md"
 PROJECT_INSTRUCTIONS_PATH = Path(".codex") / "model_instructions.md"
 REPO_MARKETPLACE_PATH = Path(".agents") / "plugins" / "marketplace.json"
-PLUGIN_NAME = "skill-framework-native"
+PLUGIN_NAME = str(primary_plugin_record().get("plugin_name", "skill-framework-native"))
 CONFIG_SCHEMA_HEADER = "#:schema https://developers.openai.com/codex/config-schema.json\n"
 DEFAULT_TUI_STATUS_ITEMS = (
     "model-with-reasoning",
@@ -233,7 +236,8 @@ def sync_directory(source: Path, destination: Path) -> bool:
 def sync_personal_plugin_bundle(repo_root: Path, plugin_root: Path = HOME_PLUGIN_ROOT) -> bool:
     """Copy the repo-local plugin bundle into the user's Codex plugin directory."""
 
-    source = repo_root / "plugins" / PLUGIN_NAME
+    source_rel = str(primary_plugin_record(repo_root=repo_root).get("source_rel", f"plugins/{PLUGIN_NAME}"))
+    source = repo_root / source_rel
     return sync_directory(source, plugin_root)
 
 
@@ -244,7 +248,9 @@ def ensure_home_codex_skills_link(
 ) -> bool:
     """Ensure ~/.codex/skills points at the repository skill library."""
 
-    source = (repo_root / "skills").resolve()
+    skill_bridge = workspace_bootstrap_defaults(repo_root=repo_root).get("skill_bridge", {})
+    source_rel = str(skill_bridge.get("source_rel", "skills"))
+    source = (repo_root / source_rel).resolve()
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
     if target_path.is_symlink():
@@ -278,9 +284,15 @@ def build_personal_marketplace_payload(
     *,
     marketplace_root: Path | None = None,
     existing_marketplace: dict[str, Any] | None = None,
+    plugin_name: str | None = None,
+    plugin_category: str | None = None,
 ) -> dict[str, Any]:
     """Build a personal marketplace payload that exposes the framework plugin."""
 
+    resolved_plugin_name = plugin_name or str(primary_plugin_record().get("marketplace_name", PLUGIN_NAME))
+    resolved_category = plugin_category or str(
+        primary_plugin_record().get("marketplace_category", "Developer Tools")
+    )
     payload = existing_marketplace.copy() if isinstance(existing_marketplace, dict) else {}
     payload["name"] = payload.get("name") or "skill-personal-marketplace"
     interface = payload.get("interface")
@@ -295,26 +307,26 @@ def build_personal_marketplace_payload(
     replaced = False
 
     for row in plugin_rows:
-        if row.get("name") != PLUGIN_NAME:
+        if row.get("name") != resolved_plugin_name:
             updated_plugins.append(row)
             continue
         replaced = True
         updated_plugins.append(
             {
-                "name": PLUGIN_NAME,
+                "name": resolved_plugin_name,
                 "source": {"source": "local", "path": plugin_path},
                 "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
-                "category": row.get("category", "Developer Tools"),
+                "category": row.get("category", resolved_category),
             }
         )
 
     if not replaced:
         updated_plugins.append(
             {
-                "name": PLUGIN_NAME,
+                "name": resolved_plugin_name,
                 "source": {"source": "local", "path": plugin_path},
                 "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
-                "category": "Developer Tools",
+                "category": resolved_category,
             }
         )
 
@@ -326,14 +338,18 @@ def install_personal_marketplace(
     marketplace_path: Path = HOME_MARKETPLACE_PATH,
     *,
     plugin_root: Path = HOME_PLUGIN_ROOT,
+    repo_root: Path | None = None,
 ) -> bool:
     """Ensure the user's personal plugin marketplace exposes the framework plugin."""
 
     existing = read_json_if_exists(marketplace_path)
+    plugin_record = primary_plugin_record(repo_root=repo_root)
     payload = build_personal_marketplace_payload(
         plugin_root,
         marketplace_root=marketplace_path.resolve().parents[2],
         existing_marketplace=existing,
+        plugin_name=str(plugin_record.get("marketplace_name", plugin_record.get("plugin_name", PLUGIN_NAME))),
+        plugin_category=str(plugin_record.get("marketplace_category", "Developer Tools")),
     )
     return write_json_if_changed(marketplace_path, payload)
 
@@ -380,6 +396,7 @@ def install_native_integration(
         personal_marketplace_changed = install_personal_marketplace(
             marketplace_path=home_marketplace_path,
             plugin_root=home_plugin_root,
+            repo_root=resolved_repo_root,
         )
     if install_home_codex_skills_link:
         home_codex_skills_link_changed = ensure_home_codex_skills_link(

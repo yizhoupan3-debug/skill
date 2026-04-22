@@ -32,6 +32,13 @@ from codex_agno_runtime.execution_kernel import (
     SandboxResourceBudget,
     SandboxRuntimeProbe,
 )
+from codex_agno_runtime.execution_kernel_contracts import (
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION,
+    EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
+    EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+)
 from codex_agno_runtime.middleware import MiddlewareContext
 from codex_agno_runtime.memory import FactMemoryStore
 from codex_agno_runtime.schemas import (
@@ -1766,6 +1773,71 @@ def test_execution_service_kernel_payload_rejects_partial_python_override(tmp_pa
             metadata={
                 "execution_kernel_authority": "custom-runtime-authority",
                 "execution_kernel_delegate_family": "custom-live-family",
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    ("metadata_field", "metadata_value"),
+    [
+        (
+            EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+            "legacy-python-fallback",
+        ),
+        (
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION,
+        ),
+        (
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
+            "python-agno-kernel-adapter",
+        ),
+        (
+            EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
+            "python-agno-kernel-adapter",
+        ),
+    ],
+)
+def test_execution_service_kernel_payload_rejects_retired_python_fallback_metadata(
+    tmp_path: Path,
+    metadata_field: str,
+    metadata_value: object,
+) -> None:
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=True,
+    )
+    router_service = RouterService(settings)
+    execution_service = ExecutionEnvironmentService(
+        settings,
+        max_background_jobs=4,
+        background_job_timeout_seconds=30.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=rf"retired compatibility fallback field: {metadata_field}",
+    ):
+        execution_service.kernel_payload(
+            dry_run=False,
+            metadata={
+                "execution_kernel": "rust-execution-kernel-slice",
+                "execution_kernel_authority": "rust-execution-kernel-authority",
+                "execution_kernel_contract_mode": "rust-live-primary",
+                "execution_kernel_fallback_policy": "infrastructure-only-explicit",
+                "execution_kernel_in_process_replacement_complete": True,
+                "execution_kernel_delegate": "router-rs",
+                "execution_kernel_delegate_authority": "rust-execution-cli",
+                "execution_kernel_delegate_family": "custom-live-family",
+                "execution_kernel_delegate_impl": "custom-live-impl",
+                "execution_kernel_live_primary": "router-rs-live-primary",
+                "execution_kernel_live_primary_authority": "custom-live-authority",
+                "execution_kernel_response_shape": "live_primary",
+                "execution_kernel_prompt_preview_owner": "rust-execution-cli",
+                metadata_field: metadata_value,
             },
         )
 
