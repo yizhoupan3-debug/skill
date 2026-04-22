@@ -604,6 +604,7 @@ class RustRouteAdapter:
     framework_memory_recall_schema_version = "router-rs-framework-memory-recall-v1"
     framework_recap_schema_version = "router-rs-framework-recap-v1"
     framework_refresh_schema_version = "router-rs-framework-refresh-v1"
+    framework_alias_schema_version = "router-rs-framework-alias-v1"
     claude_hook_schema_version = "router-rs-claude-hook-response-v1"
     route_authority = "rust-route-core"
     execution_authority = "rust-execution-cli"
@@ -1148,6 +1149,9 @@ class RustRouteAdapter:
         query: str = "",
         top: int = 8,
         mode: str = "stable",
+        memory_root: Path | None = None,
+        artifact_source_dir: Path | None = None,
+        task_id: str | None = None,
     ) -> dict[str, Any]:
         """Build the Rust-owned framework memory recall payload."""
 
@@ -1162,9 +1166,25 @@ class RustRouteAdapter:
             "--framework-memory-mode",
             mode,
         ]
+        if memory_root is not None:
+            args.extend(["--framework-memory-root", str(memory_root)])
+        if artifact_source_dir is not None:
+            args.extend(["--framework-artifact-source-dir", str(artifact_source_dir)])
+        if task_id:
+            args.extend(["--framework-task-id", task_id])
         payload = self._run_hot_json_command(
             "framework_memory_recall",
-            {"repo_root": str(repo_root), "query": query, "top": top, "mode": mode},
+            {
+                "repo_root": str(repo_root),
+                "query": query,
+                "top": top,
+                "mode": mode,
+                "memory_root": str(memory_root) if memory_root is not None else None,
+                "artifact_source_dir": (
+                    str(artifact_source_dir) if artifact_source_dir is not None else None
+                ),
+                "task_id": task_id,
+            },
             [*self._binary_command(), *args],
             failure_label="framework memory recall compiler",
         )
@@ -1248,6 +1268,55 @@ class RustRouteAdapter:
                 "Rust framework refresh compiler returned a missing refresh payload."
             )
         return refresh
+
+    def framework_alias(
+        self,
+        *,
+        repo_root: Path,
+        alias: str,
+        max_lines: int = 4,
+        compact: bool = False,
+    ) -> dict[str, Any]:
+        """Build the compact Rust-owned alias contract for autopilot/deepinterview."""
+
+        args = [
+            "--framework-alias-json",
+            "--framework-alias",
+            alias,
+            "--repo-root",
+            str(repo_root),
+            "--claude-hook-max-lines",
+            str(max_lines),
+        ]
+        if compact:
+            args.append("--compact-output")
+        payload = self._run_hot_json_command(
+            "framework_alias",
+            {
+                "repo_root": str(repo_root),
+                "alias": alias,
+                "max_lines": max_lines,
+                "compact": compact,
+            },
+            [*self._binary_command(), *args],
+            failure_label="framework alias compiler",
+        )
+        if payload.get("schema_version") != self.framework_alias_schema_version:
+            raise RuntimeError(
+                "Rust framework alias compiler returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
+            )
+        if payload.get("authority") != self.framework_runtime_authority:
+            raise RuntimeError(
+                "Rust framework alias compiler returned an unexpected authority marker: "
+                f"{payload.get('authority')!r}"
+            )
+        alias_payload = payload.get("alias")
+        if not isinstance(alias_payload, dict):
+            raise RuntimeError(
+                "Rust framework alias compiler returned a missing alias payload."
+            )
+        return alias_payload
 
     def claude_lifecycle_hook(
         self,
@@ -1812,7 +1881,7 @@ class RustRouteAdapter:
         return [*self._compiled_binary_command(), "--stdio-json"]
 
     def _compiled_binary_command(self) -> list[str]:
-        resolved_binary = self._fresh_resolved_binary()
+        resolved_binary = self._ensure_binary_current()
         if resolved_binary is None:
             raise RuntimeError(
                 "router-rs requires a prebuilt binary; build scripts/router-rs before running the Python host runtime."
@@ -1846,11 +1915,29 @@ class RustRouteAdapter:
             return None
         latest_source_mtime = self._latest_source_mtime()
         if resolved_binary.stat().st_mtime < latest_source_mtime:
-            raise RuntimeError(
-                "router-rs prebuilt binary is stale; source files are newer than the compiled artifact. "
-                "Rebuild scripts/router-rs before running the Python host runtime."
-            )
+            return None
         return resolved_binary
+
+    def _ensure_binary_current(self) -> Path | None:
+        resolved_binary = self._fresh_resolved_binary()
+        if resolved_binary is not None:
+            return resolved_binary
+        try:
+            subprocess.run(
+                ["cargo", "build", "--quiet", "--manifest-path", str(self.router_dir / "Cargo.toml")],
+                capture_output=True,
+                text=True,
+                check=True,
+                cwd=self.codex_home,
+                timeout=self.timeout_seconds,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            fallback_binary = self._resolved_binary()
+            if fallback_binary is not None:
+                return fallback_binary
+            raise
+        self._invalidate_binary_cache()
+        return self._resolved_binary()
 
     def _cached_resolved_binary(self) -> Path | None:
         cached = self._cached_runtime_binary

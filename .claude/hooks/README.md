@@ -56,12 +56,12 @@ Validation commands:
 - `printf '{"hook_event_name":"StopFailure","error":"server_error"}
 ' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/stop_failure.sh`
   Expected: host-private failure classification hint on stderr; exit 0.
-- `cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-command session-start --repo-root "$PWD"`
+- `python3 scripts/router_rs_runner.py --claude-hook-command session-start --repo-root "$PWD" --claude-hook-max-lines 4`
   Expected: JSON result with `canonical_command`, `contract`, and `projection`.
-- `cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-command session-end --repo-root "$PWD"`
+- `python3 scripts/router_rs_runner.py --claude-hook-command session-end --repo-root "$PWD" --claude-hook-max-lines 4`
   Expected: compatibility alias for `session-end`; same consolidation and projection contract.
 - `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}
-' | cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-audit-command config-change --repo-root "$PWD"`
+' | python3 scripts/router_rs_runner.py --claude-hook-audit-command config-change --repo-root "$PWD"`
   Expected: JSON on stdout plus audit-only stderr guidance; exit 0.
 
 Shared routing policy still comes from `../../AGENT.md`.

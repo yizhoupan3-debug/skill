@@ -37,7 +37,7 @@ Codex-side equivalent of Claude Code `/refresh`.
 1. Run:
 
 ```bash
-cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --framework-refresh-json
+python3 scripts/router_rs_runner.py --framework-refresh-json --claude-hook-max-lines 4
 ```
 
 2. Then reply with exactly:

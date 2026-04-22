@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Framework-facing bridge for skill export, memory bootstrap, and evolution proposals."""
+"""Framework-facing bridge for skill export and evolution proposals."""
 
 from __future__ import annotations
 
@@ -16,31 +16,12 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from codex_agno_runtime.rust_router import RustRouteAdapter
-from scripts.consolidate_memory import (
-    archive_legacy_memory_bundle,
-    build_memory_documents,
-    persist_memory_bundle,
-    write_documents,
-    write_memory_state,
-)
 from scripts.memory_support import (
-    DEFAULT_MEMORY_ROOT,
-    build_task_id,
     current_local_timestamp,
-    classify_runtime_continuity,
-    describe_continuity_layout,
-    describe_project_local_memory_layout,
     get_repo_root,
-    is_generic_query,
-    load_runtime_snapshot,
-    query_matches_task,
-    refresh_memory_state_if_needed,
-    resolve_effective_memory_dir,
-    workspace_dir,
     write_json_if_changed,
     write_text_if_changed,
 )
-from scripts.retrieve_memory import render_context
 
 RUNTIME_PATH = Path(
     os.environ.get(
@@ -100,81 +81,12 @@ def _read_json(path: Path) -> dict[str, Any] | list[Any]:
     except json.JSONDecodeError:
         return {}
 
-
-BOOTSTRAP_REGISTERED_TASK_LIMIT = 5
-
-
-def _compact_registered_tasks(snapshot: Any, *, limit: int = BOOTSTRAP_REGISTERED_TASK_LIMIT) -> dict[str, Any]:
-    """Keep bootstrap task state compact and prompt-safe."""
-
-    registered_tasks = getattr(snapshot, "registered_tasks", ()) or ()
-    rows: list[dict[str, Any]] = []
-    for item in registered_tasks[:limit]:
-        rows.append(
-            {
-                "task_id": item.task_id,
-                "task": item.task,
-                "phase": item.phase,
-                "status": item.status,
-                "story_state": item.story_state,
-                "updated_at": item.updated_at,
-                "is_focused": item.is_focused,
-            }
-        )
-    total = len(registered_tasks)
-    return {
-        "tasks": rows,
-        "task_count": total,
-        "truncated": total > len(rows),
-        "overflow_count": max(0, total - len(rows)),
-    }
-
-
 @lru_cache(maxsize=1)
 def _framework_rust_adapter() -> RustRouteAdapter:
     """Return the shared Rust adapter used by thin Python bridge paths."""
 
     return RustRouteAdapter(get_repo_root())
 
-
-def _compact_memory_retrieval_for_prompt(retrieval: dict[str, Any]) -> dict[str, Any]:
-    """Return only the prompt-safe retrieval payload."""
-
-    items = retrieval.get("items", []) if isinstance(retrieval, dict) else []
-    compact_items = [
-        {
-            "path": item.get("path", ""),
-            "content": item.get("content", ""),
-        }
-        for item in items
-        if isinstance(item, dict)
-    ]
-    return {
-        "topic": retrieval.get("topic", ""),
-        "mode": retrieval.get("mode", "stable"),
-        "context": retrieval.get("context", ""),
-        "items": compact_items,
-        "active_task_included": bool(retrieval.get("active_task_included")),
-        "freshness": retrieval.get("freshness", {}),
-        "continuity_state": retrieval.get("continuity_state"),
-    }
-
-
-def _compact_continuity_for_prompt(continuity: dict[str, Any]) -> dict[str, Any]:
-    """Keep only the execution facts that help prompt construction."""
-
-    return {
-        "state": continuity.get("state"),
-        "task": continuity.get("task"),
-        "phase": continuity.get("phase"),
-        "status": continuity.get("status"),
-        "route": continuity.get("route", []),
-        "next_actions": continuity.get("next_actions", []),
-        "blockers": continuity.get("blockers", []),
-        "current_execution": continuity.get("current_execution"),
-        "recent_completed_execution": continuity.get("recent_completed_execution"),
-        "recovery_hints": continuity.get("recovery_hints", []),
-    }
 def export_framework_skills(
     runtime_path: Path | None = None,
     approval_path: Path | None = None,
@@ -318,206 +230,6 @@ def build_evolution_proposals(
         "valid_skills": sorted(valid_skills),
         "health": health,
     }
-
-
-def _build_framework_memory_bootstrap_python(
-    *,
-    workspace: str,
-    query: str = "",
-    source_root: Path | None = None,
-    memory_root: Path | None = None,
-    artifact_source_dir: Path | None = None,
-    top: int = 8,
-    mode: str = "stable",
-    task_id: str | None = None,
-) -> dict[str, Any]:
-    """Build a memory bootstrap payload for framework consumers."""
-
-    repo_root = (source_root or get_repo_root()).resolve()
-    snapshot = load_runtime_snapshot(
-        repo_root,
-        artifact_root=artifact_source_dir,
-        task_id=task_id,
-    )
-    focused_task_id = getattr(snapshot, "focused_task_id", "") or getattr(snapshot, "active_task_id", "")
-    continuity = classify_runtime_continuity(snapshot)
-    active_task = {
-        "task_id": focused_task_id or snapshot.active_task_id or snapshot.supervisor_state.get("task_id"),
-        "task": continuity.get("task"),
-        "phase": continuity.get("phase"),
-        "status": continuity.get("status"),
-    }
-    query_matches_active_task = (
-        continuity["state"] == "active"
-        and continuity.get("task")
-        and not is_generic_query(query)
-        and query_matches_task(query, str(continuity.get("task")))
-    )
-    effective_continuity = continuity
-    ignored_active_task: dict[str, Any] | None = None
-    if continuity["state"] == "active" and continuity.get("task") and not query_matches_active_task:
-        ignored_active_task = active_task
-        effective_continuity = {
-            "state": "query-mismatch",
-            "can_resume": False,
-            "task": None,
-            "phase": None,
-            "status": "isolated_bootstrap",
-            "route": [],
-            "next_actions": [],
-            "blockers": [],
-            "current_execution": None,
-            "recent_completed_execution": None,
-            "stale_reasons": [],
-            "terminal_reasons": [],
-            "inconsistency_reasons": [],
-            "recovery_hints": [
-                "Query does not match the active task; ignore live continuity and start from an isolated task scope.",
-            ],
-            "continuity": {
-                "story_state": "query-mismatch",
-                "resume_allowed": False,
-                "last_updated_at": current_local_timestamp(),
-                "active_lease_expires_at": None,
-                "state_reason": "active task ignored because bootstrap query targets a different task",
-            },
-            "summary_fields": {},
-            "paths": continuity.get("paths", {}),
-            "ignored_active_task": ignored_active_task,
-        }
-    memory_workspace_root = resolve_effective_memory_dir(
-        workspace=workspace,
-        memory_root=memory_root,
-        repo_root=repo_root,
-    )
-    memory_workspace_root.mkdir(parents=True, exist_ok=True)
-    memory_exists = (memory_workspace_root / "MEMORY.md").is_file()
-    sqlite_candidates = [
-        memory_workspace_root / "memory.sqlite3",
-        memory_workspace_root / "memory.db",
-        memory_workspace_root / ".memory.sqlite3",
-    ]
-    has_sqlite = any(path.is_file() for path in sqlite_candidates)
-    has_memory_md = (memory_workspace_root / "MEMORY.md").is_file()
-    changed_files: list[str] = []
-    consolidation_note = ""
-    if not memory_exists and artifact_source_dir is None:
-        archive_legacy_memory_bundle(workspace, memory_workspace_root, memory_root=memory_root)
-        documents = build_memory_documents(workspace=workspace, snapshot=snapshot)
-        changed_files = write_documents(documents, memory_workspace_root)
-        state_path = write_memory_state(snapshot, memory_workspace_root)
-        if state_path:
-            changed_files.append(state_path)
-        persist_memory_bundle(workspace, documents, resolved_dir=memory_workspace_root)
-        consolidation_note = "memory_workspace was empty; bridge ran one-shot consolidation"
-    refresh_memory_state_if_needed(snapshot, memory_workspace_root)
-    retrieval = render_context(
-        workspace=workspace,
-        topic=query,
-        max_items=top,
-        repo_root=repo_root,
-        artifact_root=artifact_source_dir,
-        mode=mode,
-        task_id=task_id or "",
-    )
-    continuity_layout = describe_continuity_layout(repo_root)
-    memory_layout = describe_project_local_memory_layout(repo_root)
-    resume_task_id = (
-        active_task.get("task_id")
-        if continuity["state"] == "active" and query_matches_active_task
-        else None
-    )
-    bootstrap_task_id = resume_task_id or build_task_id(query or workspace, created_at=current_local_timestamp())
-    bootstrap_source_task = active_task.get("task") if resume_task_id else None
-    compact_registered_tasks = _compact_registered_tasks(snapshot)
-    payload = {
-        "workspace": workspace,
-        "using_project_local": True,
-        "memory_root": str(memory_workspace_root),
-        "memory_layout": memory_layout,
-        "consolidation_note": consolidation_note,
-        "changed_files": changed_files,
-        "sqlite": {
-            "path": retrieval.get("sqlite_path", ""),
-            "has_sqlite": has_sqlite,
-            "has_memory_md": has_memory_md,
-        },
-        "retrieval": retrieval,
-        "continuity": effective_continuity,
-        "active_task": active_task,
-        "focused_task": active_task,
-        "registered_tasks": compact_registered_tasks,
-        "continuity_decision": {
-            "query": query,
-            "query_matches_active_task": bool(query_matches_active_task),
-            "ignored_root_continuity": bool(ignored_active_task),
-            "task_id": bootstrap_task_id,
-            "source_task": bootstrap_source_task,
-            "mode": mode,
-            "focused_task_id": focused_task_id or active_task.get("task_id"),
-        },
-        "source_artifacts": {
-            **continuity_layout,
-        },
-    }
-    payload["prompt_payload"] = {
-        "workspace": workspace,
-        "retrieval": _compact_memory_retrieval_for_prompt(retrieval),
-        "continuity": _compact_continuity_for_prompt(effective_continuity),
-        "active_task": active_task,
-        "registered_tasks": compact_registered_tasks,
-        "continuity_decision": payload["continuity_decision"],
-    }
-    return payload
-
-
-def build_framework_memory_bootstrap(
-    *,
-    workspace: str,
-    query: str = "",
-    source_root: Path | None = None,
-    memory_root: Path | None = None,
-    artifact_source_dir: Path | None = None,
-    top: int = 8,
-    mode: str = "stable",
-    task_id: str | None = None,
-) -> dict[str, Any]:
-    """Build a memory bootstrap payload for framework consumers."""
-
-    repo_root = (source_root or get_repo_root()).resolve()
-    default_memory_root = resolve_effective_memory_dir(
-        workspace=workspace,
-        memory_root=None,
-        repo_root=repo_root,
-    )
-    can_use_rust_authority = (
-        memory_root is None
-        and artifact_source_dir is None
-        and task_id is None
-        and (default_memory_root / "MEMORY.md").is_file()
-    )
-    if can_use_rust_authority:
-        try:
-            return _framework_rust_adapter().framework_memory_recall(
-                repo_root=repo_root,
-                query=query,
-                top=top,
-                mode=mode,
-            )
-        except Exception:
-            pass
-    return _build_framework_memory_bootstrap_python(
-        workspace=workspace,
-        query=query,
-        source_root=repo_root,
-        memory_root=memory_root,
-        artifact_source_dir=artifact_source_dir,
-        top=top,
-        mode=mode,
-        task_id=task_id,
-    )
-
-
 def export_supporting_files(
     *,
     workspace: str,
@@ -530,11 +242,11 @@ def export_supporting_files(
 
     payload = export_framework_skills()
     repo_root = (source_root or get_repo_root()).resolve()
-    memory = build_framework_memory_bootstrap(
-        workspace=workspace,
+    memory = _framework_rust_adapter().framework_memory_recall(
+        repo_root=repo_root,
         query=query,
-        source_root=repo_root,
         top=top,
+        mode="active",
     )
     proposals = build_evolution_proposals()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -558,7 +270,6 @@ def export_supporting_files(
                 f"- skills: {payload['count']}",
                 f"- proposal_count: {proposals['proposal_count']}",
                 f"- memory_root: {memory['memory_root']}",
-                f"- workspace_dir: {workspace_dir(workspace, DEFAULT_MEMORY_ROOT)}",
                 "",
                 "These files are bridge-friendly exports, not the canonical runtime source of truth.",
             ]

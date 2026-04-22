@@ -35,7 +35,7 @@
 - Mirror authority: `artifacts/current/SESSION_SUMMARY.md`, `artifacts/current/NEXT_ACTIONS.json`, `artifacts/current/EVIDENCE_INDEX.json`, `artifacts/current/TRACE_METADATA.json`
 - Verification:
   - `cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json`
-  - `cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-command refresh-projection --repo-root "$PWD"`
+  - `python3 scripts/router_rs_runner.py --claude-hook-command refresh-projection --repo-root "$PWD" --claude-hook-max-lines 4`
   - `rg -n "checklist-series final closeout|no active checklist|keep-temporarily|pending-removal|runtime-integrator-with-host-confirmation" audit_report.md archives/artifact-history/completed-tasks-2026-q2/root-checklist-history-20260418/checklist_v2.md archives/artifact-history/completed-tasks-2026-q2/root-checklist-history-20260418/checklist_v4.md SESSION_SUMMARY.md NEXT_ACTIONS.json EVIDENCE_INDEX.json TRACE_METADATA.json .supervisor_state.json artifacts/current/SESSION_SUMMARY.md artifacts/current/NEXT_ACTIONS.json artifacts/current/EVIDENCE_INDEX.json artifacts/current/TRACE_METADATA.json memory/CLAUDE_MEMORY.md`
 
 ## 6. Final Quality Note

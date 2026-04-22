@@ -33,6 +33,7 @@ from scripts.memory_support import (
 SQLITE_FILENAMES = ("memory.sqlite3", "memory.db", ".memory.sqlite3")
 STABLE_MEMORY_FILES = ("MEMORY.md", "preferences.md", "decisions.md", "lessons.md", "runbooks.md")
 VALID_MODES = {"stable", "active", "history", "debug"}
+NO_TOPIC_SECTION_SEGMENTS = 2
 
 
 def _normalize_for_match(text: str) -> str:
@@ -113,6 +114,17 @@ def _render_segment(headings: tuple[str, ...], body: str) -> str:
     if title:
         return f"### {title}\n- {body}".strip()
     return f"- {body}"
+
+
+def _compact_document_without_topic(text: str, *, max_segments: int = NO_TOPIC_SECTION_SEGMENTS) -> str:
+    segments = _extract_markdown_segments(text)
+    if segments:
+        return "\n\n".join(
+            _render_segment(headings, body)
+            for headings, body in segments[:max_segments]
+        ).strip()
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return "\n".join(lines[:max_segments]).strip()
 
 
 def _stable_fallback_sections_from_store(
@@ -237,7 +249,9 @@ def _stable_sections(
         for name in STABLE_MEMORY_FILES:
             text = read_text_if_exists(memory_workspace_root / name).strip()
             if text:
-                sections.append((name, text))
+                compact = _compact_document_without_topic(text)
+                if compact:
+                    sections.append((name, compact))
         return sections
 
     ranked: list[tuple[float, str, str]] = []
@@ -339,7 +353,7 @@ def _archive_sections(memory_workspace_root: Path, *, topic: str, max_items: int
             matches.sort(key=lambda item: item[0], reverse=True)
             filtered = "\n\n".join(content for _, content in matches[:max_items]).strip()
         else:
-            filtered = text.strip()
+            filtered = _compact_document_without_topic(text)
         if filtered.strip():
             sections.append((str(rel_path), filtered))
         if len(sections) >= max_items:

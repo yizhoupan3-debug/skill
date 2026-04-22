@@ -1429,6 +1429,72 @@ def test_rust_route_adapter_framework_refresh_builds_compact_prompt_and_copies_t
     assert "必须先做的下一步：" not in copied
 
 
+def test_rust_route_adapter_framework_alias_builds_compact_autopilot_contract(
+    tmp_path: Path,
+) -> None:
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    _seed_framework_runtime_artifacts(tmp_path, terminal=False)
+
+    alias = adapter.framework_alias(repo_root=tmp_path, alias="autopilot", max_lines=5)
+
+    assert alias["ok"] is True
+    assert alias["name"] == "autopilot"
+    assert alias["host_entrypoint"] == "/autopilot"
+    assert alias["canonical_owner"] == "execution-controller-coding"
+    assert alias["upstream_source"]["tag"] == "v4.13.2"
+    assert "root-cause-first-when-unknown" in alias["implementation_bar"]
+    assert alias["routing_hints"]["reroute_when_ambiguous"] == "idea-to-plan"
+    assert alias["state_machine"]["current_state"] == "resume_active"
+    assert alias["state_machine"]["recommended_action"] == "resume_current_task"
+    assert alias["entry_contract"]["route_rules"][0] == "模糊需求 -> `idea-to-plan`"
+    assert "进入 autopilot" in alias["entry_prompt"]
+    assert "本地 Rust" in alias["entry_prompt"]
+    assert "路由：" in alias["entry_prompt"]
+    assert "下一步：" in alias["entry_prompt"]
+    assert alias["entry_prompt_token_estimate"] > 0
+    assert alias["compact"] is False
+
+
+def test_rust_route_adapter_framework_alias_builds_compact_deepinterview_contract(
+    tmp_path: Path,
+) -> None:
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    _seed_framework_runtime_artifacts(tmp_path, terminal=False)
+
+    alias = adapter.framework_alias(repo_root=tmp_path, alias="deepinterview", max_lines=5)
+
+    assert alias["ok"] is True
+    assert alias["name"] == "deepinterview"
+    assert alias["host_entrypoint"] == "/deepinterview"
+    assert alias["canonical_owner"] == "code-review"
+    assert alias["upstream_source"]["official_skill_path"] == "skills/deep-interview/SKILL.md"
+    assert "findings-first-with-severity-order" in alias["implementation_bar"]
+    assert "architect-review" in alias["routing_hints"]["review_lanes"]
+    assert alias["state_machine"]["handoff"]["rules"][1]["target"] == "autopilot"
+    assert alias["entry_contract"]["route_rules"][0] == "主 owner -> `code-review`"
+    assert "进入 deepinterview" in alias["entry_prompt"]
+    assert "每轮只问一个问题" in alias["entry_prompt"]
+    assert "review lanes ->" in alias["entry_prompt"]
+
+
+def test_rust_route_adapter_framework_alias_compact_mode_omits_heavy_metadata(
+    tmp_path: Path,
+) -> None:
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    _seed_framework_runtime_artifacts(tmp_path, terminal=False)
+
+    alias = adapter.framework_alias(repo_root=tmp_path, alias="autopilot", max_lines=3, compact=True)
+
+    assert alias["compact"] is True
+    assert alias["entry_prompt_token_estimate"] > 0
+    assert "upstream_source" not in alias
+    assert "official_workflow" not in alias
+    assert "local_adaptations" not in alias
+    assert alias["host_entrypoint"] == "/autopilot"
+    assert alias["state_machine"]["resume"]["mode"] == "continue-current-task"
+    assert alias["entry_contract"]["skill_fallback_path"] == "skills/autopilot/SKILL.md"
+
+
 def test_rust_route_adapter_framework_runtime_snapshot_prefers_supervisor_owned_continuity(
     tmp_path: Path,
 ) -> None:

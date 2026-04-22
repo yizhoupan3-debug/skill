@@ -62,7 +62,7 @@
       "Bash(python3 -m pytest *)",
       "Bash(python3 -m compileall *)",
       "Bash(cargo test *)",
-      "Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *)",
+      "Bash(python3 scripts/router_rs_runner.py *)",
       "Bash(python3 scripts/runtime_background_cli.py *)",
       "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
       "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",

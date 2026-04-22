@@ -191,6 +191,60 @@ def test_default_modes_do_not_include_sqlite_sections(tmp_path: Path) -> None:
         assert all(not item["path"].startswith("sqlite/") for item in result["items"])
 
 
+def test_stable_mode_without_topic_compacts_stable_documents(tmp_path: Path) -> None:
+    _seed_runtime(tmp_path)
+    memory_root = tmp_path / ".codex" / "memory"
+    _write_text(
+        memory_root / "MEMORY.md",
+        "\n".join(
+            [
+                "# 项目长期记忆",
+                "",
+                "## Active Patterns",
+                "",
+                "- AP-1: keep recall compact",
+                "- AP-2: use stable summaries",
+                "",
+                "## 稳定决策",
+                "",
+                "- SD-1: avoid full document injection",
+                "",
+            ]
+        )
+        + "\n",
+    )
+    _write_text(
+        memory_root / "runbooks.md",
+        "\n".join(
+            [
+                "# runbooks",
+                "",
+                "## 标准操作",
+                "",
+                "- step 1",
+                "- step 2",
+                "- step 3",
+                "",
+            ]
+        )
+        + "\n",
+    )
+
+    result = render_context(
+        workspace=tmp_path.name,
+        topic="",
+        repo_root=tmp_path,
+        mode="stable",
+    )
+
+    memory_item = next(item for item in result["items"] if item["path"] == "MEMORY.md")
+    runbook_item = next(item for item in result["items"] if item["path"] == "runbooks.md")
+    assert "AP-1: keep recall compact" in memory_item["content"]
+    assert "avoid full document injection" not in memory_item["content"]
+    assert "step 1" in runbook_item["content"]
+    assert "step 3" not in runbook_item["content"]
+
+
 def test_debug_mode_exposes_sqlite_sections(tmp_path: Path) -> None:
     _seed_runtime(tmp_path)
     _seed_stable_memory(tmp_path)

@@ -11,8 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from scripts.consolidate_memory import archive_legacy_memory_bundle, persist_memory_bundle
 from scripts.default_bootstrap import run_default_bootstrap
 from scripts.memory_store import MemoryItem, MemoryStore
-import scripts.framework_bridge as framework_bridge
-from scripts.framework_bridge import build_framework_memory_bootstrap
+from codex_agno_runtime.rust_router import RustRouteAdapter
 from scripts.memory_support import build_memory_state, load_runtime_snapshot
 from scripts.run_memory_automation import (
     migrate_current_artifact_clutter,
@@ -28,6 +27,10 @@ def _write_text(path: Path, content: str) -> None:
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     _write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+
+
+def _rust_adapter() -> RustRouteAdapter:
+    return RustRouteAdapter(PROJECT_ROOT)
 
 
 def _seed_runtime(repo_root: Path, artifact_base: Path, *, task_id: str, task: str) -> None:
@@ -56,10 +59,7 @@ def _seed_runtime(repo_root: Path, artifact_base: Path, *, task_id: str, task: s
     )
 
 
-def test_build_framework_memory_bootstrap_respects_artifact_source_dir(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
+def test_framework_memory_recall_respects_artifact_source_dir_and_task_id(tmp_path: Path) -> None:
     repo_artifacts = tmp_path / "artifacts"
     isolated_artifacts = tmp_path / "isolated-artifacts"
     _seed_runtime(tmp_path, repo_artifacts, task_id="repo-task-20260418210000", task="repo default task")
@@ -67,32 +67,37 @@ def test_build_framework_memory_bootstrap_respects_artifact_source_dir(
     _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
     snapshot = load_runtime_snapshot(tmp_path, artifact_root=isolated_artifacts)
     _write_json(tmp_path / ".codex" / "memory" / "state.json", build_memory_state(snapshot))
-    rust_calls: list[str] = []
-
-    def fake_adapter() -> object:
-        rust_calls.append("used")
-        raise AssertionError("artifact_source_dir path should stay on the Python bootstrap fallback")
-
-    monkeypatch.setattr(framework_bridge, "_framework_rust_adapter", fake_adapter)
-
-    payload = build_framework_memory_bootstrap(
-        workspace=tmp_path.name,
+    payload = _rust_adapter().framework_memory_recall(
+        repo_root=tmp_path,
         query="isolated active task",
-        source_root=tmp_path,
         artifact_source_dir=isolated_artifacts,
+        task_id="isolated-task-20260418220000",
+        top=8,
         mode="active",
     )
 
     assert payload["active_task"]["task_id"] == "isolated-task-20260418220000"
     assert payload["continuity"]["task"] == "isolated active task"
     assert payload["retrieval"]["active_task_included"] is True
-    assert rust_calls == []
+    assert (
+        payload["source_artifacts"]["artifact_lanes"]["bootstrap"]
+        == str(isolated_artifacts / "bootstrap" / "<task_id>")
+    )
+    assert (
+        payload["source_artifacts"]["artifact_lanes"]["ops_memory_automation"]
+        == str(isolated_artifacts / "ops" / "memory_automation" / "<run_id>")
+    )
+    assert (
+        payload["source_artifacts"]["artifact_lanes"]["evidence"]
+        == str(isolated_artifacts / "evidence" / "<task_id>")
+    )
+    assert (
+        payload["source_artifacts"]["artifact_lanes"]["scratch"]
+        == str(isolated_artifacts / "scratch" / "<run_id>")
+    )
 
 
-def test_build_framework_memory_bootstrap_uses_rust_authority_on_default_path(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
+def test_framework_memory_recall_uses_rust_authority_on_default_path(tmp_path: Path) -> None:
     _seed_runtime(
         tmp_path,
         tmp_path / "artifacts",
@@ -100,63 +105,20 @@ def test_build_framework_memory_bootstrap_uses_rust_authority_on_default_path(
         task="bootstrap task",
     )
     _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
-    recorded: dict[str, object] = {}
-    rust_payload = {
-        "workspace": tmp_path.name,
-        "memory_root": str(tmp_path / ".codex" / "memory"),
-        "retrieval": {"items": [], "active_task_included": True},
-        "continuity": {"state": "active", "task": "bootstrap task"},
-        "active_task": {"task_id": "bootstrap-task-20260418220000", "task": "bootstrap task"},
-        "continuity_decision": {
-            "query": "bootstrap task",
-            "query_matches_active_task": True,
-            "ignored_root_continuity": False,
-            "task_id": "bootstrap-task-20260418220000",
-            "source_task": "bootstrap task",
-            "mode": "active",
-            "focused_task_id": "bootstrap-task-20260418220000",
-        },
-        "prompt_payload": {"workspace": tmp_path.name},
-    }
-
-    class FakeRustAdapter:
-        def framework_memory_recall(
-            self,
-            *,
-            repo_root: Path,
-            query: str = "",
-            top: int = 8,
-            mode: str = "stable",
-        ) -> dict[str, object]:
-            recorded.update(
-                {
-                    "repo_root": repo_root,
-                    "query": query,
-                    "top": top,
-                    "mode": mode,
-                }
-            )
-            return rust_payload
-
-    monkeypatch.setattr(framework_bridge, "_framework_rust_adapter", lambda: FakeRustAdapter())
-
-    payload = build_framework_memory_bootstrap(
-        workspace=tmp_path.name,
+    payload = _rust_adapter().framework_memory_recall(
+        repo_root=tmp_path,
         query="bootstrap task",
-        source_root=tmp_path,
+        top=8,
         mode="active",
     )
 
-    assert payload is rust_payload
-    assert recorded == {
-        "repo_root": tmp_path.resolve(),
-        "query": "bootstrap task",
-        "top": 8,
-        "mode": "active",
-    }
+    assert payload["continuity"]["state"] == "active"
+    assert payload["continuity"]["task"] == "bootstrap task"
+    assert payload["continuity_decision"]["source_task"] == "bootstrap task"
+    assert payload["continuity_decision"]["task_id"] == "bootstrap-task-20260418220000"
 
 
-def test_build_framework_memory_bootstrap_does_not_reuse_completed_task_identity(tmp_path: Path) -> None:
+def test_framework_memory_recall_does_not_reuse_completed_task_identity(tmp_path: Path) -> None:
     repo_artifacts = tmp_path / "artifacts"
     _seed_runtime(
         tmp_path,
@@ -176,16 +138,45 @@ def test_build_framework_memory_bootstrap_does_not_reuse_completed_task_identity
     )
     _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
 
-    payload = build_framework_memory_bootstrap(
-        workspace=tmp_path.name,
+    payload = _rust_adapter().framework_memory_recall(
+        repo_root=tmp_path,
         query="fresh unrelated repair",
-        source_root=tmp_path,
+        top=8,
         mode="active",
     )
 
     assert payload["continuity"]["state"] == "completed"
     assert payload["continuity_decision"]["source_task"] is None
     assert payload["continuity_decision"]["task_id"] != "completed-task-20260418220000"
+
+
+def test_framework_memory_recall_bootstraps_empty_memory_through_rust(
+    tmp_path: Path,
+) -> None:
+    _seed_runtime(
+        tmp_path,
+        tmp_path / "artifacts",
+        task_id="bootstrap-task-20260418220000",
+        task="bootstrap task",
+    )
+    memory_root = tmp_path / ".codex" / "memory"
+    _write_text(memory_root / "MEMORY_AUTO.md", "# legacy auto memory\n")
+    _write_text(memory_root / "sessions" / "2026-04-18.md", "old session\n")
+
+    payload = _rust_adapter().framework_memory_recall(
+        repo_root=tmp_path,
+        query="bootstrap task",
+        top=8,
+        mode="active",
+    )
+
+    assert payload["consolidation_note"] == "memory_workspace was empty; bridge ran one-shot consolidation"
+    assert (memory_root / "MEMORY.md").is_file()
+    assert any(path.endswith("MEMORY.md") for path in payload["changed_files"])
+    assert not (memory_root / "MEMORY_AUTO.md").exists()
+    assert not (memory_root / "sessions").exists()
+    assert list((memory_root / "archive").glob("pre-cutover-*/MEMORY_AUTO.md"))
+    assert list((memory_root / "archive").glob("pre-cutover-*/sessions"))
 
 
 def test_migrate_current_artifact_clutter_clears_non_continuity_entries(tmp_path: Path) -> None:

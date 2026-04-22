@@ -181,14 +181,16 @@ Gemini-specific config belongs in `.gemini/`, but the shared routing, memory,
 and artifact rules still come from `AGENT.md`.
 """
 
+CLAUDE_ROUTER_RS_RUNNER = "python3 scripts/router_rs_runner.py"
+
 CLAUDE_REFRESH_COMMAND = """---
 description: Generate and copy the next-turn execution prompt with the Rust refresh command.
-allowed-tools: Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *)
+allowed-tools: Bash(python3 scripts/router_rs_runner.py *)
 ---
 
 Run:
 
-`cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --framework-refresh-json`
+`python3 scripts/router_rs_runner.py --framework-refresh-json --claude-hook-max-lines 4`
 
 Then reply with exactly:
 `下一轮执行 prompt 已准备好，并且已经复制到剪贴板。`
@@ -237,14 +239,6 @@ def _framework_alias_claude_entrypoint(alias_name: str) -> str:
     return entrypoint
 
 
-def _framework_alias_implementation_bar(alias_name: str) -> list[str]:
-    payload = _framework_alias_payload(alias_name)
-    raw = payload.get("implementation_bar")
-    if not isinstance(raw, list):
-        return []
-    return [str(item) for item in raw if isinstance(item, str) and item]
-
-
 def _framework_alias_upstream_source(alias_name: str) -> dict[str, str]:
     payload = _framework_alias_payload(alias_name)
     raw = payload.get("upstream_source")
@@ -253,148 +247,38 @@ def _framework_alias_upstream_source(alias_name: str) -> dict[str, str]:
     return {str(key): str(value) for key, value in raw.items() if isinstance(value, str) and value}
 
 
-def _framework_alias_local_adaptations(alias_name: str) -> list[str]:
-    payload = _framework_alias_payload(alias_name)
-    raw = payload.get("local_adaptations")
-    if not isinstance(raw, list):
-        return []
-    return [str(item) for item in raw if isinstance(item, str) and item]
-
-
-def _framework_alias_workflow_items(alias_name: str, field_name: str) -> list[str]:
-    payload = _framework_alias_payload(alias_name)
-    workflow = payload.get("official_workflow")
-    if not isinstance(workflow, dict):
-        return []
-    raw = workflow.get(field_name)
-    if not isinstance(raw, list):
-        return []
-    return [str(item) for item in raw if isinstance(item, str) and item]
-
-
-def _render_alias_upgrade_requirements(alias_name: str) -> str:
-    requirements = _framework_alias_implementation_bar(alias_name)
-    if not requirements:
-        return ""
-    rendered = "\n".join(f"   - `{item}`" for item in requirements)
-    return (
-        "This alias inherits the original OMC core capability, but this repo must exceed OMC by enforcing:\n\n"
-        f"{rendered}\n"
+def _build_claude_framework_alias_command(alias_name: str) -> str:
+    entrypoint = _framework_alias_claude_entrypoint(alias_name)
+    skill_path = _framework_alias_upstream_source(alias_name).get(
+        "official_skill_path",
+        f"skills/{alias_name}/SKILL.md",
     )
+    return f"""---
+description: Enter the repo's Rust-owned {alias_name} lane.
+allowed-tools: Bash(python3 scripts/router_rs_runner.py *)
+---
 
+Treat `{entrypoint}` as a thin Rust-first alias.
+This command prefers the repo's resident router-rs stdio hot path.
 
-def _render_alias_upstream_baseline(alias_name: str) -> str:
-    upstream = _framework_alias_upstream_source(alias_name)
-    if not upstream:
-        return ""
-    tag = upstream.get("tag", "unknown")
-    commit = upstream.get("commit", "unknown")
-    skill_path = upstream.get("official_skill_path", "unknown")
-    return (
-        "Official upstream baseline:\n\n"
-        f"- repo: `{upstream.get('repo', 'unknown')}`\n"
-        f"- tag: `{tag}`\n"
-        f"- commit: `{commit}`\n"
-        f"- skill: `{skill_path}`\n"
-    )
+Run:
 
+`python3 scripts/router_rs_runner.py --framework-alias-json --framework-alias {alias_name} --compact-output --claude-hook-max-lines 3 --repo-root "$PWD"`
 
-def _render_alias_list_section(title: str, items: list[str]) -> str:
-    if not items:
-        return ""
-    rendered = "\n".join(f"- `{item}`" for item in items)
-    return f"{title}\n\n{rendered}\n"
+Use `alias.state_machine` and `alias.entry_contract` as the working contract for this turn.
+Only fall back to `alias.entry_prompt` if you need the compact prose form.
+Prefer the Rust alias payload over opening long docs or restating OMC background.
+Only open `{skill_path}` if the alias payload is missing something you still need.
+Keep execution inside the repo's native Rust/continuity lane.
+"""
 
 
 def _build_claude_autopilot_command() -> str:
-    payload = _framework_alias_payload("autopilot")
-    entrypoint = _framework_alias_claude_entrypoint("autopilot")
-    stronger_requirements = _render_alias_upgrade_requirements("autopilot")
-    upstream_baseline = _render_alias_upstream_baseline("autopilot")
-    official_phases = _render_alias_list_section(
-        "Official OMC phases to preserve:",
-        _framework_alias_workflow_items("autopilot", "phases"),
-    )
-    local_adaptations = _render_alias_list_section(
-        "Local Rust/localization adaptations:",
-        _framework_alias_local_adaptations("autopilot"),
-    )
-    ambiguous_owner = str(payload.get("reroute_when_ambiguous", "idea-to-plan"))
-    unknown_root_cause_owner = str(payload.get("reroute_when_root_cause_unknown", "systematic-debugging"))
-    canonical_owner = str(payload.get("canonical_owner", "execution-controller-coding"))
-    return f"""---
-description: Enter the repo's shared autopilot execution lane.
----
-
-Treat `{entrypoint}` as a thin alias for the repository's native execution lane.
-
-{upstream_baseline}
-
-{stronger_requirements}
-
-{official_phases}
-
-{local_adaptations}
-
-Follow this routing:
-
-1. If the task is still ambiguous, first structure it the way `{ambiguous_owner}` would.
-2. If the root cause is still unknown, switch into `{unknown_root_cause_owner}`.
-3. Otherwise take the `{canonical_owner}` posture:
-   - define the minimum success criteria
-   - define the verification path
-   - make the smallest complete change
-   - keep going until the repo has real verification evidence or a real blocker
-
-Use `skills/autopilot/SKILL.md`, `AGENT.md`, and the live continuity artifacts as the truth.
-Keep user-facing wording centered on the repository's own capability, not host quirks or external compatibility history.
-"""
+    return _build_claude_framework_alias_command("autopilot")
 
 
 def _build_claude_deepinterview_command() -> str:
-    payload = _framework_alias_payload("deepinterview")
-    entrypoint = _framework_alias_claude_entrypoint("deepinterview")
-    stronger_requirements = _render_alias_upgrade_requirements("deepinterview")
-    upstream_baseline = _render_alias_upstream_baseline("deepinterview")
-    official_loop_rules = _render_alias_list_section(
-        "Official OMC loop rules to preserve:",
-        _framework_alias_workflow_items("deepinterview", "loop_rules"),
-    )
-    local_adaptations = _render_alias_list_section(
-        "Local Rust/localization adaptations:",
-        _framework_alias_local_adaptations("deepinterview"),
-    )
-    canonical_owner = str(payload.get("canonical_owner", "code-review"))
-    review_lanes = payload.get("review_lanes")
-    if not isinstance(review_lanes, list):
-        raise ValueError("framework_native_aliases['deepinterview'] missing review_lanes")
-    rendered_review_lanes = "\n".join(f"   - `{lane}`" for lane in review_lanes)
-    return f"""---
-description: Enter the repo's shared deepinterview lane.
----
-
-Treat `{entrypoint}` as a thin alias for the repository's native review lane.
-
-{upstream_baseline}
-
-{stronger_requirements}
-
-{official_loop_rules}
-
-{local_adaptations}
-
-Follow this routing:
-
-1. Primary owner: `{canonical_owner}`
-2. Add review lanes as needed:
-{rendered_review_lanes}
-3. If the root cause is still unknown, investigate it before summarizing findings.
-4. Lead with findings, rank by severity, and cite concrete file or behavior evidence.
-5. If the user wants fixes too, keep iterating review -> fix -> verify until the bounded scope converges.
-
-Use `skills/deepinterview/SKILL.md`, `AGENT.md`, and the live repo state as the truth.
-Keep user-facing wording centered on the repository's own review capability, not host quirks or external compatibility history.
-"""
+    return _build_claude_framework_alias_command("deepinterview")
 
 
 CLAUDE_AUTOPILOT_COMMAND = _build_claude_autopilot_command()
@@ -432,9 +316,14 @@ CLAUDE_ROUTER_RS_HOOK_RUNNER = """#!/bin/sh
 set -eu
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
+ROUTER_RS_RUNNER="$PROJECT_DIR/scripts/router_rs_runner.py"
 
 run_router_rs() {
-  cargo run --quiet --manifest-path "$PROJECT_DIR/scripts/router-rs/Cargo.toml" -- "$@"
+  if [ ! -f "$ROUTER_RS_RUNNER" ]; then
+    echo "Missing required router-rs runner: $ROUTER_RS_RUNNER" >&2
+    exit 1
+  fi
+  python3 "$ROUTER_RS_RUNNER" "$@"
 }
 """
 
@@ -494,11 +383,11 @@ Validation commands:
   Expected: audit-only stderr guidance about regenerating generated Claude host files; exit 0.
 - `printf '{"hook_event_name":"StopFailure","error":"server_error"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/stop_failure.sh`
   Expected: host-private failure classification hint on stderr; exit 0.
-- `cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-command session-start --repo-root "$PWD"`
+- `python3 scripts/router_rs_runner.py --claude-hook-command session-start --repo-root "$PWD" --claude-hook-max-lines 4`
   Expected: JSON result with `canonical_command`, `contract`, and `projection`.
-- `cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-command session-end --repo-root "$PWD"`
+- `python3 scripts/router_rs_runner.py --claude-hook-command session-end --repo-root "$PWD" --claude-hook-max-lines 4`
   Expected: compatibility alias for `session-end`; same consolidation and projection contract.
-- `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}\n' | cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-audit-command config-change --repo-root "$PWD"`
+- `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}\n' | python3 scripts/router_rs_runner.py --claude-hook-audit-command config-change --repo-root "$PWD"`
   Expected: JSON on stdout plus audit-only stderr guidance; exit 0.
 
 Shared routing policy still comes from `../../AGENT.md`.
@@ -551,7 +440,7 @@ CLAUDE_PROJECT_SETTINGS = {
             "Bash(python3 -m pytest *)",
             "Bash(python3 -m compileall *)",
             "Bash(cargo test *)",
-            "Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *)",
+            "Bash(python3 scripts/router_rs_runner.py *)",
             "Bash(python3 scripts/runtime_background_cli.py *)",
             "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
             "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
@@ -698,6 +587,12 @@ def _write_host_entrypoint_template(template_root: Path) -> None:
     )
 
 
+def write_host_entrypoint_template(template_root: Path) -> None:
+    """Materialize one temporary template tree for host-entrypoint consumers."""
+
+    _write_host_entrypoint_template(template_root)
+
+
 def sync_repo_host_entrypoints(
     repo_root: Path | None = None,
     *,
@@ -708,7 +603,7 @@ def sync_repo_host_entrypoints(
     root = (repo_root or Path(__file__).resolve().parents[1]).resolve()
     with TemporaryDirectory() as temp_dir:
         template_root = Path(temp_dir)
-        _write_host_entrypoint_template(template_root)
+        write_host_entrypoint_template(template_root)
         return run_host_integration_rs(
             "sync-host-entrypoints",
             "--template-root",
