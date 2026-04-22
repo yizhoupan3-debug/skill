@@ -566,6 +566,7 @@ class RustRouteAdapter:
     runtime_control_plane_schema_version = "router-rs-runtime-control-plane-v1"
     sandbox_control_schema_version = "router-rs-sandbox-control-v1"
     background_control_schema_version = "router-rs-background-control-v1"
+    background_state_store_schema_version = "router-rs-background-state-store-v1"
     trace_descriptor_schema_version = "router-rs-trace-descriptor-v1"
     checkpoint_resume_manifest_schema_version = "router-rs-checkpoint-resume-manifest-v1"
     transport_binding_write_schema_version = "router-rs-transport-binding-write-v1"
@@ -586,6 +587,7 @@ class RustRouteAdapter:
     runtime_control_plane_authority = "rust-runtime-control-plane"
     sandbox_control_authority = "rust-sandbox-control"
     background_control_authority = "rust-background-control"
+    background_state_store_authority = "rust-background-state-store"
     trace_descriptor_authority = "rust-runtime-trace-descriptor"
     checkpoint_resume_manifest_authority = "rust-runtime-checkpoint-manifest"
     transport_binding_write_authority = "rust-runtime-transport-binding-writer"
@@ -1346,6 +1348,32 @@ class RustRouteAdapter:
         if resolved.get("authority") != self.background_control_authority:
             raise RuntimeError(
                 "Rust background control compiler returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        return resolved
+
+    def background_state(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Resolve durable background state operations through the Rust runtime core."""
+
+        args = [
+            "--background-state-json",
+            "--background-state-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        resolved = self._run_hot_json_command(
+            "background_state",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="background state compiler",
+        )
+        if resolved.get("schema_version") != self.background_state_store_schema_version:
+            raise RuntimeError(
+                "Rust background state compiler returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
+            )
+        if resolved.get("authority") != self.background_state_store_authority:
+            raise RuntimeError(
+                "Rust background state compiler returned an unexpected authority marker: "
                 f"{resolved.get('authority')!r}"
             )
         return resolved
