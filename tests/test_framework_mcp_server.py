@@ -336,6 +336,56 @@ def test_runtime_snapshot_falls_back_to_trace_skill_for_primary_owner(tmp_path: 
     assert snapshot["supervisor_state"]["primary_owner"] == "execution-controller-coding"
 
 
+def test_runtime_snapshot_uses_rust_adapter(tmp_path: Path) -> None:
+    _seed_runtime_artifacts(tmp_path, terminal=False)
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
+    seen: dict[str, Path] = {}
+
+    def fake_runtime_snapshot(*, repo_root: Path) -> dict[str, object]:
+        seen["repo_root"] = repo_root
+        return {
+            "ok": True,
+            "workspace": tmp_path.name,
+            "continuity": {"state": "active"},
+            "paths": {"supervisor_state": str(tmp_path / ".supervisor_state.json")},
+        }
+
+    server._rust_adapter.framework_runtime_snapshot = fake_runtime_snapshot  # type: ignore[method-assign]
+
+    snapshot = _tool_call(
+        server=server,
+        request_id=70,
+        name="framework_runtime_snapshot",
+        arguments={},
+    )
+
+    assert seen["repo_root"] == tmp_path
+    assert snapshot["continuity"]["state"] == "active"
+
+
+def test_contract_summary_surfaces_rust_adapter_failures(tmp_path: Path) -> None:
+    _seed_runtime_artifacts(tmp_path, terminal=False)
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
+
+    def fail_contract_summary(*, repo_root: Path) -> dict[str, object]:
+        raise RuntimeError(f"boom for {repo_root.name}")
+
+    server._rust_adapter.framework_contract_summary = fail_contract_summary  # type: ignore[method-assign]
+
+    response = _call(
+        server=server,
+        request_id=71,
+        method="tools/call",
+        params={"name": "framework_contract_summary", "arguments": {}},
+    )
+
+    assert response["result"]["isError"] is True
+    payload = response["result"]["structuredContent"]
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "RUST_CONTRACT_SUMMARY_FAILED"
+    assert "boom for" in payload["error"]["message"]
+
+
 def test_stdio_loop_handles_resource_listing(tmp_path: Path) -> None:
     server = FrameworkMcpServer(repo_root=PROJECT_ROOT, output_dir=tmp_path)
     stdin = io.StringIO(

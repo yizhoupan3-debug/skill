@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import Any, TextIO
 
+from codex_agno_runtime.rust_router import RustRouteAdapter
+
 from scripts.claude_memory_bridge import (
     build_claude_memory_projection,
     build_refresh_workflow_prompt,
@@ -71,10 +73,12 @@ class FrameworkMcpServer:
         server_version: str = "0.1.0",
     ) -> None:
         self._repo_root = (repo_root or get_repo_root()).resolve()
+        self._framework_root = get_repo_root()
         self._workspace = workspace_name_from_root(self._repo_root)
         self._output_dir = (output_dir or bootstrap_artifact_root(self._repo_root)).resolve()
         self._server_name = server_name
         self._server_version = server_version
+        self._rust_adapter = RustRouteAdapter(self._framework_root)
         self._tools = self._build_tool_definitions()
         self._resources = self._build_resource_definitions()
 
@@ -286,76 +290,30 @@ class FrameworkMcpServer:
         }
 
     def _runtime_snapshot(self) -> JSONDict:
-        snapshot = load_runtime_snapshot(self._repo_root)
-        supervisor = snapshot.supervisor_state
-        continuity = classify_runtime_continuity(snapshot)
-        trace_skills = normalize_trace_skills(snapshot.trace_metadata)
-        primary_owner = supervisor.get("primary_owner") or (trace_skills[0] if trace_skills else None)
-        return {
-            "ok": True,
-            "workspace": self._workspace,
-            "artifact_base": str(snapshot.artifact_base),
-            "current_root": str(snapshot.current_root),
-            "mirror_root": str(snapshot.mirror_root),
-            "task_root": str(snapshot.task_root),
-            "active_task_id": snapshot.active_task_id or None,
-            "collected_at": snapshot.collected_at,
-            "session_summary_present": bool(snapshot.session_summary_text.strip()),
-            "next_action_count": len(snapshot.next_actions.get("next_actions", snapshot.next_actions.get("actions", []))),
-            "evidence_count": len(snapshot.evidence_index.get("artifacts", snapshot.evidence_index.get("evidence", []))),
-            "trace_skill_count": len(snapshot.trace_metadata.get("skills", snapshot.trace_metadata.get("matched_skills", []))),
-            "continuity": continuity,
-            "supervisor_state": {
-                "task_id": supervisor.get("task_id"),
-                "task_summary": supervisor.get("task_summary"),
-                "active_phase": supervisor.get("active_phase"),
-                "primary_owner": primary_owner,
-                "verification_status": (
-                    supervisor.get("verification", {}).get("verification_status")
-                    if isinstance(supervisor.get("verification"), dict)
-                    else None
-                ),
-            },
-            "paths": {
-                "session_summary": str(snapshot.current_root / "SESSION_SUMMARY.md"),
-                "next_actions": str(snapshot.current_root / "NEXT_ACTIONS.json"),
-                "evidence_index": str(snapshot.current_root / "EVIDENCE_INDEX.json"),
-                "trace_metadata": str(snapshot.current_root / "TRACE_METADATA.json"),
-                "bridge_mirror_root": str(snapshot.mirror_root),
-                "supervisor_state": str(self._repo_root / ".supervisor_state.json"),
-            },
-        }
+        try:
+            return self._rust_adapter.framework_runtime_snapshot(repo_root=self._repo_root)
+        except RuntimeError as error:
+            raise FrameworkServerError(
+                code="RUST_RUNTIME_SNAPSHOT_FAILED",
+                message=str(error),
+                suggested_next_actions=[
+                    "verify scripts/router-rs builds cleanly",
+                    "inspect active continuity artifacts under artifacts/current",
+                ],
+            ) from error
 
     def _contract_summary(self) -> JSONDict:
-        snapshot = load_runtime_snapshot(self._repo_root)
-        continuity = classify_runtime_continuity(snapshot)
-        contract = supervisor_contract(snapshot.supervisor_state)
-        blocker_source = snapshot.supervisor_state.get("blockers", {})
-        blockers = blocker_source.get("open_blockers") if isinstance(blocker_source, dict) else snapshot.supervisor_state.get("open_blockers")
-        blocker_list = [str(item).strip() for item in blockers if str(item).strip()] if isinstance(blockers, list) else []
-        is_active = continuity["state"] == "active" and continuity["can_resume"]
-        trace_skills = normalize_trace_skills(snapshot.trace_metadata)
-        primary_owner = snapshot.supervisor_state.get("primary_owner") or (trace_skills[0] if trace_skills else None)
-        return {
-            "ok": True,
-            "workspace": self._workspace,
-            "continuity": continuity,
-            "goal": contract.get("goal") if is_active else None,
-            "scope": contract.get("scope", []) if is_active else [],
-            "forbidden_scope": contract.get("forbidden_scope", []) if is_active else [],
-            "acceptance_criteria": contract.get("acceptance_criteria", []) if is_active else [],
-            "evidence_required": contract.get("evidence_required", []) if is_active else [],
-            "active_phase": snapshot.supervisor_state.get("active_phase") if is_active else None,
-            "primary_owner": primary_owner,
-            "next_actions": normalize_next_actions(snapshot.next_actions) if is_active else [],
-            "open_blockers": blocker_list if is_active else [],
-            "trace_skills": trace_skills,
-            "session_summary": parse_session_summary(snapshot.session_summary_text),
-            "evidence_count": len(normalize_evidence_index(snapshot.evidence_index)),
-            "artifacts_root": str(snapshot.current_root),
-            "recent_completed_execution": continuity.get("recent_completed_execution"),
-            "recovery_hints": continuity.get("recovery_hints", []),
-        }
+        try:
+            return self._rust_adapter.framework_contract_summary(repo_root=self._repo_root)
+        except RuntimeError as error:
+            raise FrameworkServerError(
+                code="RUST_CONTRACT_SUMMARY_FAILED",
+                message=str(error),
+                suggested_next_actions=[
+                    "verify scripts/router-rs builds cleanly",
+                    "inspect .supervisor_state.json and artifacts/current for drift",
+                ],
+            ) from error
 
     def _recap_refresh(self, *, max_lines: int) -> JSONDict:
         snapshot = load_runtime_snapshot(

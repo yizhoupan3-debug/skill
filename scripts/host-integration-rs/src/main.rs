@@ -1,5 +1,4 @@
 use clap::{Parser, Subcommand};
-use regex::Regex;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
@@ -540,15 +539,12 @@ fn install_mcp_block(config_path: &Path, marker: &str, block: &str) -> Result<bo
 fn ensure_tui_status_line(config_path: &Path) -> Result<bool, String> {
     let content = read_text_if_exists(config_path)?.unwrap_or_default();
     let status_line = format_status_line();
-    let tui_pattern = Regex::new(r"(?ms)^\[tui\]\n.*?(?=^\[|\z)").map_err(|err| err.to_string())?;
-    if let Some(mat) = tui_pattern.find(&content) {
-        let block = mat.as_str().trim_end_matches('\n');
-        let status_pattern =
-            Regex::new(r"^\s*status_line\s*=.*$").map_err(|err| err.to_string())?;
+    if let Some((start, end)) = find_tui_block_bounds(&content) {
+        let block = content[start..end].trim_end_matches('\n');
         let mut replaced = false;
         let mut updated_lines = Vec::new();
         for line in block.lines() {
-            if status_pattern.is_match(line) {
+            if is_status_line(line) {
                 updated_lines.push(status_line.clone());
                 replaced = true;
             } else {
@@ -559,12 +555,7 @@ fn ensure_tui_status_line(config_path: &Path) -> Result<bool, String> {
             updated_lines.push(status_line);
         }
         let new_block = format!("{}\n", updated_lines.join("\n"));
-        let updated = format!(
-            "{}{}{}",
-            &content[..mat.start()],
-            new_block,
-            &content[mat.end()..]
-        );
+        let updated = format!("{}{}{}", &content[..start], new_block, &content[end..]);
         return write_text_if_changed(config_path, &updated);
     }
 
@@ -576,6 +567,28 @@ fn ensure_tui_status_line(config_path: &Path) -> Result<bool, String> {
     updated.push_str(&format_status_line());
     updated.push('\n');
     write_text_if_changed(config_path, &updated)
+}
+
+fn find_tui_block_bounds(content: &str) -> Option<(usize, usize)> {
+    let mut offset = 0usize;
+    let mut start: Option<usize> = None;
+    for line in content.split_inclusive('\n') {
+        let normalized = line.trim_end_matches('\n');
+        if start.is_none() {
+            if normalized == "[tui]" {
+                start = Some(offset);
+            }
+        } else if normalized.starts_with('[') {
+            return Some((start.unwrap_or(0), offset));
+        }
+        offset += line.len();
+    }
+    start.map(|value| (value, content.len()))
+}
+
+fn is_status_line(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.starts_with("status_line") && trimmed.contains('=')
 }
 
 fn format_status_line() -> String {

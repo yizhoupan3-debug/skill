@@ -24,6 +24,8 @@ class RustRouteAdapter:
     runtime_observability_exporter_schema_version = "runtime-observability-exporter-v1"
     runtime_observability_metric_record_schema_version = "runtime-observability-metric-record-v1"
     runtime_observability_dashboard_schema_version = "runtime-observability-dashboard-v1"
+    framework_runtime_snapshot_schema_version = "router-rs-framework-runtime-snapshot-v1"
+    framework_contract_summary_schema_version = "router-rs-framework-contract-summary-v1"
     route_authority = "rust-route-core"
     compile_authority = "rust-route-compiler"
     runtime_control_plane_authority = "rust-runtime-control-plane"
@@ -32,6 +34,7 @@ class RustRouteAdapter:
     checkpoint_resume_manifest_authority = "rust-runtime-checkpoint-manifest"
     transport_binding_write_authority = "rust-runtime-transport-binding-writer"
     checkpoint_manifest_write_authority = "rust-runtime-checkpoint-manifest-writer"
+    framework_runtime_authority = "rust-framework-runtime-read-model"
 
     def __init__(self, codex_home: Path, *, timeout_seconds: float = 30.0) -> None:
         self.codex_home = codex_home
@@ -254,6 +257,86 @@ class RustRouteAdapter:
         if include_legacy_alias_artifact:
             command.append("--include-legacy-alias-artifact")
         return self._run_json_command(command, failure_label="profile artifact compiler")
+
+    def framework_runtime_snapshot(self, *, repo_root: Path) -> dict[str, Any]:
+        """Build the framework runtime snapshot read-model through router-rs."""
+
+        args = [
+            "--framework-runtime-snapshot-json",
+            "--repo-root",
+            str(repo_root),
+        ]
+        try:
+            payload = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="framework runtime snapshot compiler",
+            )
+        except RuntimeError:
+            payload = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="framework runtime snapshot compiler",
+            )
+        if payload.get("schema_version") != self.framework_runtime_snapshot_schema_version:
+            payload = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="framework runtime snapshot compiler",
+            )
+            if payload.get("schema_version") != self.framework_runtime_snapshot_schema_version:
+                raise RuntimeError(
+                    "Rust framework runtime snapshot compiler returned an unknown schema: "
+                    f"{payload.get('schema_version')!r}"
+                )
+        if payload.get("authority") != self.framework_runtime_authority:
+            raise RuntimeError(
+                "Rust framework runtime snapshot compiler returned an unexpected authority marker: "
+                f"{payload.get('authority')!r}"
+            )
+        snapshot = payload.get("runtime_snapshot")
+        if not isinstance(snapshot, dict):
+            raise RuntimeError(
+                "Rust framework runtime snapshot compiler returned a missing runtime_snapshot payload."
+            )
+        return snapshot
+
+    def framework_contract_summary(self, *, repo_root: Path) -> dict[str, Any]:
+        """Build the framework contract summary read-model through router-rs."""
+
+        args = [
+            "--framework-contract-summary-json",
+            "--repo-root",
+            str(repo_root),
+        ]
+        try:
+            payload = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="framework contract summary compiler",
+            )
+        except RuntimeError:
+            payload = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="framework contract summary compiler",
+            )
+        if payload.get("schema_version") != self.framework_contract_summary_schema_version:
+            payload = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="framework contract summary compiler",
+            )
+            if payload.get("schema_version") != self.framework_contract_summary_schema_version:
+                raise RuntimeError(
+                    "Rust framework contract summary compiler returned an unknown schema: "
+                    f"{payload.get('schema_version')!r}"
+                )
+        if payload.get("authority") != self.framework_runtime_authority:
+            raise RuntimeError(
+                "Rust framework contract summary compiler returned an unexpected authority marker: "
+                f"{payload.get('authority')!r}"
+            )
+        summary = payload.get("contract_summary")
+        if not isinstance(summary, dict):
+            raise RuntimeError(
+                "Rust framework contract summary compiler returned a missing contract_summary payload."
+            )
+        return summary
 
     def runtime_control_plane(self) -> dict[str, Any]:
         """Return the Rust-owned runtime control-plane authority descriptor."""
