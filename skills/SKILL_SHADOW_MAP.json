@@ -195,6 +195,21 @@
         "source_position": 3
       }
     },
+    "autopilot": {
+      "has_shadow": false,
+      "shadowed": [],
+      "shadowed_by": [],
+      "winner": {
+        "path": "skills/autopilot",
+        "routing_gate": "delegation",
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "session_start": "preferred",
+        "slug": "autopilot",
+        "source": "project",
+        "source_position": 3
+      }
+    },
     "autoresearch": {
       "has_shadow": false,
       "shadowed": [],
@@ -461,6 +476,21 @@
         "routing_owner": "owner",
         "session_start": "n/a",
         "slug": "datastore-cache-queue",
+        "source": "project",
+        "source_position": 3
+      }
+    },
+    "deepreview": {
+      "has_shadow": false,
+      "shadowed": [],
+      "shadowed_by": [],
+      "winner": {
+        "path": "skills/deepreview",
+        "routing_gate": "none",
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "session_start": "n/a",
+        "slug": "deepreview",
         "source": "project",
         "source_position": 3
       }

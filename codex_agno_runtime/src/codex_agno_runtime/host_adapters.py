@@ -492,6 +492,11 @@ CODEX_CLI_ADAPTER = HostAdapterSpec(
         "cron_execution",
         "ci_runner",
         "non_interactive_entrypoint",
+        "external_session_supervisor",
+        "rate_limit_auto_resume",
+        "host_resume_entrypoint",
+        "host_tmux_worker_management",
+        "framework_alias_entrypoints",
     ),
     thin_patch_surfaces=("cli_metadata_injection",),
     protocol_hints={
@@ -502,6 +507,9 @@ CODEX_CLI_ADAPTER = HostAdapterSpec(
         "context_files": ("AGENTS.md",),
         "settings_paths": ("~/.codex/config.toml", ".codex/config.toml"),
         "mcp_config_paths": (".codex/config.toml",),
+        "session_supervisor_driver": "codex_driver",
+        "resume_command_examples": ("codex resume --last", "codex resume <session_id>"),
+        "framework_alias_entrypoints": {"autopilot": "$autopilot", "deepreview": "$deepreview"},
     },
     notes="Formal headless Codex entrypoint that consumes the shared framework contract.",
 )
@@ -528,6 +536,11 @@ CLAUDE_CODE_ADAPTER = HostAdapterSpec(
         "hook_policy",
         "hook_browser",
         "checkpoint_restore",
+        "external_session_supervisor",
+        "rate_limit_auto_resume",
+        "host_resume_entrypoint",
+        "host_tmux_worker_management",
+        "framework_alias_entrypoints",
     ),
     thin_patch_surfaces=("cli_metadata_injection", "settings_bridge_projection"),
     protocol_hints={
@@ -685,6 +698,9 @@ CLAUDE_CODE_ADAPTER = HostAdapterSpec(
             "/etc/claude-code/managed-mcp.json",
             "C:/Program Files/ClaudeCode/managed-mcp.json",
         ),
+        "session_supervisor_driver": "claude_driver",
+        "resume_command_examples": ("claude --continue", "claude --resume <session_id>"),
+        "framework_alias_entrypoints": {"autopilot": "/autopilot", "deepreview": "/deepreview"},
     },
     notes=(
         "Claude Code projection over the shared framework truth; keep host-specific "

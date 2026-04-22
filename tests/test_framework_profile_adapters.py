@@ -272,7 +272,7 @@ def test_rust_route_adapter_prefers_release_binary_across_debug_and_release() ->
         assert adapter.health()["resolved_binary"] == str(release_bin)
 
 
-def test_rust_route_adapter_keeps_release_binary_even_when_debug_is_newer() -> None:
+def test_rust_route_adapter_prefers_fresher_debug_binary_when_release_is_stale() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         codex_home = Path(tmpdir)
         router_dir = codex_home / "scripts" / "router-rs"
@@ -293,8 +293,8 @@ def test_rust_route_adapter_keeps_release_binary_even_when_debug_is_newer() -> N
         os.utime(debug_bin, (1_700_000_200, 1_700_000_200))
 
         adapter = RustRouteAdapter(codex_home)
-        assert adapter._binary_command() == [str(release_bin)]
-        assert adapter.health()["resolved_binary"] == str(release_bin)
+        assert adapter._binary_command() == [str(debug_bin)]
+        assert adapter.health()["resolved_binary"] == str(debug_bin)
 
 
 def test_rust_route_adapter_health_reuses_cached_source_mtime() -> None:
@@ -1420,23 +1420,36 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
     assert cli_family["framework_truth"] == "framework_core"
     assert cli_family["shared_adapter"] == "cli_common_adapter"
     assert cli_family["parity_checks"]["artifact_contract"] is True
-    assert cli_family["cli_hosts"]["codex_cli_adapter"]["context_files"] == ["AGENTS.md"]
-    assert cli_family["cli_hosts"]["claude_code_adapter"]["settings_paths"] == [
+    assert cli_discovery["cli_hosts"]["codex_cli_adapter"]["context_files"] == ["AGENTS.md"]
+    assert cli_discovery["cli_hosts"]["codex_cli_adapter"]["session_supervisor_driver"] == (
+        "codex_driver"
+    )
+    assert cli_discovery["cli_hosts"]["codex_cli_adapter"]["framework_alias_entrypoints"] == {
+        "autopilot": "$autopilot",
+        "deepreview": "$deepreview",
+    }
+    assert cli_discovery["cli_hosts"]["codex_cli_adapter"]["supervisor_capabilities"] == {
+        "external_session_supervisor": True,
+        "rate_limit_auto_resume": True,
+        "host_resume_entrypoint": True,
+        "host_tmux_worker_management": True,
+    }
+    assert cli_discovery["cli_hosts"]["claude_code_adapter"]["settings_paths"] == [
         "~/.claude/settings.json",
         ".claude/settings.json",
         ".claude/settings.local.json",
     ]
-    assert cli_family["cli_hosts"]["claude_code_adapter"]["settings_scope_order"] == [
+    assert cli_discovery["cli_hosts"]["claude_code_adapter"]["settings_scope_order"] == [
         "managed",
         "command_line",
         "local",
         "project",
         "user",
     ]
-    assert cli_family["cli_hosts"]["claude_code_adapter"]["config_root_env_var"] == (
+    assert cli_discovery["cli_hosts"]["claude_code_adapter"]["config_root_env_var"] == (
         "CLAUDE_CONFIG_DIR"
     )
-    assert cli_family["cli_hosts"]["claude_code_adapter"]["hook_event_names"] == [
+    assert cli_discovery["cli_hosts"]["claude_code_adapter"]["hook_event_names"] == [
         "PreToolUse",
         "PostToolUse",
         "Notification",
@@ -2157,9 +2170,15 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     assert payload["cli_family_capability_discovery"]["cli_hosts"]["codex_cli_adapter"][
         "supports_cron"
     ] is True
+    assert payload["cli_family_capability_discovery"]["cli_hosts"]["codex_cli_adapter"][
+        "session_supervisor_driver"
+    ] == "codex_driver"
     assert payload["cli_family_capability_discovery"]["cli_hosts"]["claude_code_adapter"][
         "transport"
     ] == "headless-exec"
+    assert payload["cli_family_capability_discovery"]["cli_hosts"]["claude_code_adapter"][
+        "framework_alias_entrypoints"
+    ] == {"autopilot": "/autopilot", "deepreview": "/deepreview"}
     assert payload["cli_family_parity_snapshot"]["all_shared_contract_checks_pass"] is True
     assert payload["codex_dual_entry_parity_snapshot"]["all_shared_contract_checks_pass"] is True
     assert payload["execution_kernel_live_fallback_retirement_status"]["live_primary"][

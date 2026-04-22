@@ -113,6 +113,12 @@ def _build_cli_family_capability_discovery_entry(
     ]
     host_projection = payload["host_projection"]
     execution_surface = payload["execution_surface"]
+    supervisor_capabilities = {
+        "external_session_supervisor": "external_session_supervisor" in available_set,
+        "rate_limit_auto_resume": "rate_limit_auto_resume" in available_set,
+        "host_resume_entrypoint": "host_resume_entrypoint" in available_set,
+        "host_tmux_worker_management": "host_tmux_worker_management" in available_set,
+    }
     return {
         "adapter_id": adapter_spec.adapter_id,
         "host_id": adapter_spec.host_id,
@@ -139,6 +145,14 @@ def _build_cli_family_capability_discovery_entry(
         "hook_inspection_commands": _clone_json_like(host_projection["hook_inspection_commands"]),
         "hook_environment_markers": _clone_json_like(host_projection["hook_environment_markers"]),
         "checkpointing_supported": host_projection["checkpointing_supported"],
+        "supervisor_capabilities": supervisor_capabilities,
+        "session_supervisor_driver": adapter_spec.protocol_hints.get("session_supervisor_driver"),
+        "resume_command_examples": _clone_json_like(
+            adapter_spec.protocol_hints.get("resume_command_examples", ())
+        ),
+        "framework_alias_entrypoints": _clone_json_like(
+            adapter_spec.protocol_hints.get("framework_alias_entrypoints", {})
+        ),
         "compatibility_passes": len(missing_host_capabilities) == 0,
     }
 

@@ -19,6 +19,7 @@
 | `architect-review` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Review software architecture, system design, and major structural code changes w |
 | `assignment-compliance` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Check whether a homework or course-project submission satisfies the stated requi |
 | `auth-implementation` | Active | P2 | L4 | owner | none | project | ✓ 97.3 | Produce server-enforced auth flows with clean separation between authentication, |
+| `autopilot` | Active | P2 | L1 | owner | delegation | project | ✓ 100.0 | Shared execution alias for the repo's native execution lane. It routes into the  |
 | `autoresearch` | Active | P2 | L4 | owner | none | project | ✓ 96.1 | Orchestrate autonomous research through a recoverable loop of hypothesis, experi |
 | `backend-runtime-debugging` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Diagnose backend runtime failures: crashes, tracebacks, OOM, deadlocks, hanging  |
 | `brainstorm-research` | Active | P2 | L3 | owner | none | project | ✓ 95.8 | Expand early research ideas into multiple comparable directions and preserve the |
@@ -39,6 +40,7 @@
 | `css-pro` | Active | P2 | L2 | owner | none | project | ✓ 97.7 | Architect maintainable CSS layout, responsive, animation, and vibrant design-tok |
 | `data-wrangling` | Active | P2 | L2 | owner | none | project | ✓ 96.2 | Clean, transform, validate, and pipeline structured or semi-structured data acro |
 | `datastore-cache-queue` | Active | P2 | L2 | owner | none | project | ✓ 97.3 | Diagnose and fix correctness issues across stores, caches, queues, and ORM-backe |
+| `deepreview` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Shared review alias for the repo's native review lane. It routes into the repo's |
 | `dependency-migration` | Active | P2 | L2 | owner | none | project | ✓ 97.2 | Manage, audit, upgrade, and migrate project dependencies across npm, pip, Cargo, |
 | `design-agent` | Active | P2 | L3 | gate | none | project | ✓ 100.0 | Route named-product design references and brand-plus-motion source grounding bef |
 | `doc` | Active | P1 | L3 | gate | artifact | project | ✓ 94.3 | Read, create, edit, repair, and review `.docx` Word documents when layout and Wo |

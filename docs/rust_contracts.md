@@ -149,6 +149,10 @@ The implemented runtime control-plane surface in this wave is:
 
 - background runs now support explicit `multitask_strategy` semantics
   (`reject` / `interrupt`) instead of only implicit duplicate-session failure
+- runtime now exposes a Rust-owned `session-supervisor` control plane for
+  external Claude / Codex workers, including durable worker records,
+  tmux session identity, normalized `blocked_rate_limit` state, and
+  resume scheduling without any `.omc/**` dependency
 - runtime traces now emit resumable `seq` / `cursor` metadata and expose a
   replay window seam from the JSONL event stream
 - runtime now exposes an in-memory `RuntimeEventBridge` for
@@ -208,6 +212,9 @@ The implemented runtime control-plane surface in this wave is:
   `kernel_metadata_bridge`, so steady-state execution-kernel metadata field
   names and owner markers are projected from Rust instead of being reauthored
   in Python
+- CLI-family capability discovery now also reports supervisor-driver ownership,
+  resume examples, rate-limit auto-resume support, and framework-native
+  `autopilot` / `deepreview` alias entrypoints for Codex and Claude
 - the contract no longer carries a blocker list; compatibility-only metadata
   is isolated to retirement descriptors and does not drive runtime branching
 - compatibility fallback now survives only as a retired contract surface:

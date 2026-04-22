@@ -62,6 +62,7 @@ CORE_CAPABILITIES = (
     "artifact",
     "orchestration",
 )
+FRAMEWORK_NATIVE_ALIAS_SCHEMA_VERSION = "framework-native-aliases-v1"
 
 
 def _clone_json_like(value: Any) -> Any:
@@ -91,6 +92,21 @@ def _merge_nested_mapping(
             continue
         merged[str(key)] = _clone_json_like(value)
     return merged
+
+
+def build_framework_native_aliases(
+    aliases: Mapping[str, Mapping[str, Any]] | None = None,
+) -> Dict[str, Any]:
+    normalized = {
+        "schema_version": FRAMEWORK_NATIVE_ALIAS_SCHEMA_VERSION,
+        "authority": "framework_profile",
+        "aliases": {},
+    }
+    for alias_name, payload in (aliases or {}).items():
+        if not isinstance(payload, Mapping):
+            continue
+        normalized["aliases"][str(alias_name)] = _clone_json_like(payload)
+    return normalized
 
 
 def normalize_framework_memory_mounts(memory_mounts: Sequence[Any]) -> list[Dict[str, Any]]:

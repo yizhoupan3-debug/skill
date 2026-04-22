@@ -136,6 +136,22 @@
       "filesystem_scope": [],
       "network_access": "unspecified"
     },
+    "autopilot": {
+      "allowed_tools": [
+        "shell",
+        "git",
+        "python",
+        "cargo"
+      ],
+      "approval_required_tools": [
+        "destructive shell"
+      ],
+      "artifact_outputs": [],
+      "bridge_behavior": "default",
+      "destructive_risk": "unspecified",
+      "filesystem_scope": [],
+      "network_access": "unspecified"
+    },
     "autoresearch": {
       "allowed_tools": [],
       "approval_required_tools": [],
@@ -318,6 +334,19 @@
     },
     "datastore-cache-queue": {
       "allowed_tools": [],
+      "approval_required_tools": [],
+      "artifact_outputs": [],
+      "bridge_behavior": "default",
+      "destructive_risk": "unspecified",
+      "filesystem_scope": [],
+      "network_access": "unspecified"
+    },
+    "deepreview": {
+      "allowed_tools": [
+        "shell",
+        "git",
+        "python"
+      ],
       "approval_required_tools": [],
       "artifact_outputs": [],
       "bridge_behavior": "default",

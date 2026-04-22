@@ -6,6 +6,10 @@
     "claude_code_adapter",
     "gemini_cli_adapter"
   ],
+  "shared_project_mcp_servers": [
+    "browser-mcp",
+    "framework-mcp"
+  ],
   "workspace_bootstrap_defaults": {
     "skill_bridge": {
       "source_rel": "skills",
@@ -16,6 +20,51 @@
     "memory_bridge": {
       "bridge_dir": ".aionrs-memory-bridge"
     }
+  },
+  "framework_native_aliases": {
+    "autopilot": {
+      "canonical_owner": "execution-controller-coding",
+      "reroute_when_ambiguous": "idea-to-plan",
+      "reroute_when_root_cause_unknown": "systematic-debugging",
+      "execution_owners": [
+        "plan-to-code",
+        "subagent-delegation",
+        "execution-audit-codex"
+      ],
+      "host_entrypoints": {
+        "codex-cli": "$autopilot",
+        "claude-code": "/autopilot"
+      },
+      "omc_dependency": false
+    },
+    "deepreview": {
+      "canonical_owner": "code-review",
+      "review_lanes": [
+        "architect-review",
+        "security-audit",
+        "test-engineering",
+        "execution-audit-codex"
+      ],
+      "host_entrypoints": {
+        "codex-cli": "$deepreview",
+        "claude-code": "/deepreview"
+      },
+      "omc_dependency": false
+    }
+  },
+  "omc_retirement_contract": {
+    "replaced_object": "oh-my-claudecode",
+    "runtime_authority": "rust-session-supervisor",
+    "steady_state_forbidden_roots": [
+      ".omc"
+    ],
+    "replacement_capabilities": [
+      "external_session_supervisor",
+      "rate_limit_auto_resume",
+      "host_resume_entrypoint",
+      "host_tmux_worker_management"
+    ],
+    "omc_is_runtime_dependency": false
   },
   "plugins": [
     {
@@ -177,7 +226,7 @@
       "transport": "headless-exec",
       "required_capabilities": ["runtime", "memory", "artifact", "orchestration"],
       "optional_capabilities": [],
-      "host_capabilities": ["artifact_contract", "memory_mounts", "mcp_servers", "workspace_bootstrap", "batch_execution", "cron_execution", "ci_runner", "non_interactive_entrypoint"],
+      "host_capabilities": ["artifact_contract", "memory_mounts", "mcp_servers", "workspace_bootstrap", "batch_execution", "cron_execution", "ci_runner", "non_interactive_entrypoint", "external_session_supervisor", "rate_limit_auto_resume", "host_resume_entrypoint", "host_tmux_worker_management", "framework_alias_entrypoints"],
       "emits_artifacts": true,
       "supports_memory_mounts": true,
       "supports_orchestration": true,
@@ -191,7 +240,10 @@
         "codexcli_is_controller": false,
         "context_files": ["AGENTS.md"],
         "settings_paths": ["~/.codex/config.toml", ".codex/config.toml"],
-        "mcp_config_paths": [".codex/config.toml"]
+        "mcp_config_paths": [".codex/config.toml"],
+        "session_supervisor_driver": "codex_driver",
+        "resume_command_examples": ["codex resume --last", "codex resume <session_id>"],
+        "framework_alias_entrypoints": {"autopilot": "$autopilot", "deepreview": "$deepreview"}
       },
       "notes": "Formal headless Codex entrypoint that consumes the shared framework contract."
     },
@@ -202,7 +254,7 @@
       "transport": "headless-exec",
       "required_capabilities": ["runtime", "memory", "artifact", "orchestration"],
       "optional_capabilities": [],
-      "host_capabilities": ["artifact_contract", "memory_mounts", "mcp_servers", "workspace_bootstrap", "batch_execution", "ci_runner", "non_interactive_entrypoint", "context_file", "settings_json", "settings_scope_hierarchy", "subagent_registry", "managed_policy", "hook_registry", "hook_policy", "hook_browser", "checkpoint_restore"],
+      "host_capabilities": ["artifact_contract", "memory_mounts", "mcp_servers", "workspace_bootstrap", "batch_execution", "ci_runner", "non_interactive_entrypoint", "context_file", "settings_json", "settings_scope_hierarchy", "subagent_registry", "managed_policy", "hook_registry", "hook_policy", "hook_browser", "checkpoint_restore", "external_session_supervisor", "rate_limit_auto_resume", "host_resume_entrypoint", "host_tmux_worker_management", "framework_alias_entrypoints"],
       "emits_artifacts": true,
       "supports_memory_mounts": true,
       "supports_orchestration": true,
@@ -246,7 +298,10 @@
         "hook_environment_markers": ["CLAUDE_ENV_FILE", "CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT", "CLAUDE_PLUGIN_DATA", "CLAUDE_CODE_REMOTE"],
         "managed_settings_paths": ["/Library/Application Support/ClaudeCode/managed-settings.json", "/etc/claude-code/managed-settings.json", "C:/Program Files/ClaudeCode/managed-settings.json"],
         "managed_mcp_paths": ["/Library/Application Support/ClaudeCode/managed-mcp.json", "/etc/claude-code/managed-mcp.json", "C:/Program Files/ClaudeCode/managed-mcp.json"],
-        "checkpointing_supported": true
+        "checkpointing_supported": true,
+        "session_supervisor_driver": "claude_driver",
+        "resume_command_examples": ["claude --continue", "claude --resume <session_id>"],
+        "framework_alias_entrypoints": {"autopilot": "/autopilot", "deepreview": "/deepreview"}
       },
       "notes": "Headless Claude Code projection that stays host-specific only at the projection layer."
     },

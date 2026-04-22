@@ -17,7 +17,6 @@ configs/codex/sub_accounts.state.json
 .claude/worktrees/
 .opencode/
 .rtk/
-.omc/
 .agents/plugins/marketplace.json
 skill/
 tmp/

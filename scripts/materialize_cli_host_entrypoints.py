@@ -11,7 +11,9 @@ from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "codex_agno_runtime" / "src"))
 
+from codex_agno_runtime.runtime_registry import shared_project_mcp_servers
 from scripts.host_integration_rs import run_host_integration_rs
 
 
@@ -152,20 +154,11 @@ ROOT_CLAUDE_PROXY = """# Claude Code Entry Proxy
 
 This file exists because Claude Code discovers `CLAUDE.md`.
 
-@AGENT.md
-@.codex/memory/CLAUDE_MEMORY.md
+Keep startup lean. Do not add `@...` imports here.
 
-## Claude Project Entry
-
-Use `.claude/` only for Claude host-private files such as:
-
-- `.claude/settings.json`
-- `.claude/agents/`
-- `.claude/commands/`
-- `.claude/hooks/`
-
-Claude-specific hooks may refresh the imported memory projection, but must not
-fork the shared framework policy or memory ownership.
+Treat `.claude/**` as host-shell glue, not repository truth.
+The recovery projection lives at `.codex/memory/CLAUDE_MEMORY.md` for `/refresh`
+or manual resume, not default startup injection.
 
 Generated-first maintenance rule:
 
@@ -190,17 +183,14 @@ and artifact rules still come from `AGENT.md`.
 
 CLAUDE_REFRESH_COMMAND = """---
 description: Build the next-turn execution prompt, copy it to the clipboard, and reply with one fixed sentence.
-allowed-tools: Bash(python3 scripts/claude_memory_bridge.py *)
+allowed-tools: Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *), Bash(*/scripts/router-rs/target/debug/router-rs *)
 ---
 
-If `scripts/claude_memory_bridge.py` exists in the current repository, run:
+If `scripts/router-rs/Cargo.toml` exists in the current repository, run:
 
-`python3 scripts/claude_memory_bridge.py refresh-workflow --json`
+`cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --framework-recap-json`
 
-If the bridge copied the prompt successfully, reply with exactly:
-`下一轮执行 prompt 已准备好，并且已经复制到剪贴板。`
-
-If the bridge did not copy it successfully, copy `workflow_prompt` to the macOS clipboard yourself, then reply with exactly:
+Then copy `recap.workflow_prompt` to the macOS clipboard yourself, and reply with exactly:
 `下一轮执行 prompt 已准备好，并且已经复制到剪贴板。`
 """
 
@@ -225,6 +215,47 @@ Supported actions:
 
 Always relay the command's JSON result and then summarize it briefly in plain Chinese.
 Do not invent batch state that the command did not return.
+"""
+
+CLAUDE_AUTOPILOT_COMMAND = """---
+description: Enter the repo's shared autopilot execution lane.
+---
+
+Treat `/autopilot` as a thin alias for the repository's native execution lane.
+
+Follow this routing:
+
+1. If the task is still ambiguous, first structure it the way `idea-to-plan` would.
+2. If the root cause is still unknown, switch into `systematic-debugging`.
+3. Otherwise take the `execution-controller-coding` posture:
+   - define the minimum success criteria
+   - define the verification path
+   - make the smallest complete change
+   - keep going until the repo has real verification evidence or a real blocker
+
+Use `skills/autopilot/SKILL.md`, `AGENT.md`, and the live continuity artifacts as the truth.
+Keep user-facing wording centered on the repository's own capability, not host quirks or external compatibility history.
+"""
+
+CLAUDE_DEEPREVIEW_COMMAND = """---
+description: Enter the repo's shared deepreview lane.
+---
+
+Treat `/deepreview` as a thin alias for the repository's native review lane.
+
+Follow this routing:
+
+1. Primary owner: `code-review`
+2. Add review lanes as needed:
+   - `architect-review`
+   - `security-audit`
+   - `test-engineering`
+   - `execution-audit-codex`
+3. Lead with findings, rank by severity, and cite concrete file or behavior evidence.
+4. If the user wants fixes too, keep iterating review -> fix -> verify until the bounded scope converges.
+
+Use `skills/deepreview/SKILL.md`, `AGENT.md`, and the live repo state as the truth.
+Keep user-facing wording centered on the repository's own review capability, not host quirks or external compatibility history.
 """
 
 
@@ -255,6 +286,20 @@ Design rules for these subagents:
 - They should not widen scope beyond the surfaces named in their prompt.
 """
 
+CLAUDE_ROUTER_RS_HOOK_RUNNER = """#!/bin/sh
+set -eu
+
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
+
+run_router_rs() {
+  if [ -x "$PROJECT_DIR/scripts/router-rs/target/debug/router-rs" ]; then
+    "$PROJECT_DIR/scripts/router-rs/target/debug/router-rs" "$@"
+    return
+  fi
+  cargo run --quiet --manifest-path "$PROJECT_DIR/scripts/router-rs/Cargo.toml" -- "$@"
+}
+"""
+
 CLAUDE_HOOKS_README = """# Claude Hooks Directory
 
 Claude Code project hooks live here.
@@ -277,7 +322,7 @@ Lifecycle matrix:
 | `SessionEnd` | enabled | `session_end.sh` | `session-end` | project-local memory bundle plus host projection | Consolidates shared memory bundle, then refreshes projection. Never rewrites root continuity artifacts. |
 | `ConfigChange` | enabled | `config_change.sh` | n/a | host-private audit only | Audit project-level generated-surface drift and remind maintainers to regenerate from source. Never auto-repairs or rewrites shared continuity. |
 | `StopFailure` | enabled | `stop_failure.sh` | n/a | host-private alert only | Classify Claude stop failures and point maintainers back to host projection drift or hook inspection. Never rewrites shared continuity. |
-| `InstructionsLoaded` | document-disable | n/a | n/a | none | Redundant with imported `../.codex/memory/CLAUDE_MEMORY.md` and `SessionStart` refresh; no extra repo-specific action is needed. |
+| `InstructionsLoaded` | document-disable | n/a | n/a | none | Keep startup lean; the Claude projection stays on disk for `/refresh` or manual recovery instead of default auto-import. |
 | `PostToolUse` | document-disable | n/a | n/a | none | High-frequency tool hook would require payload-aware hidden side effects, which violates the thin projection goal. |
 | `UserPromptSubmit` | disabled | n/a | n/a | none | Avoid hidden prompt mutation; this repo prefers artifact-driven context. |
 | `Notification` | disabled | n/a | n/a | none | Informational only; not part of projection or continuity refresh. |
@@ -308,75 +353,42 @@ Validation commands:
   Expected: audit-only stderr guidance about regenerating generated Claude host files; exit 0.
 - `printf '{"hook_event_name":"StopFailure","failure_type":"server_error"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/stop_failure.sh`
   Expected: host-private failure classification hint on stderr; exit 0.
-- `python3 scripts/session_lifecycle_hook.py session-start --repo-root "$PWD" --json`
+- `cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-command session-start --repo-root "$PWD"`
   Expected: JSON result with `canonical_command`, `contract`, and `projection`.
-- `python3 scripts/session_lifecycle_hook.py end-session --repo-root "$PWD" --json`
+- `cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-command session-end --repo-root "$PWD"`
   Expected: compatibility alias for `session-end`; same consolidation and projection contract.
+- `printf '{"hook_event_name":"ConfigChange","scope":"project_settings","changed_path":".claude/settings.json"}\n' | cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-audit-command config-change --repo-root "$PWD"`
+  Expected: JSON on stdout plus audit-only stderr guidance; exit 0.
 
 Shared routing policy still comes from `../../AGENT.md`.
 """
 
-CLAUDE_SESSION_START_HOOK = """#!/bin/sh
-set -eu
-
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
-
-python3 "$PROJECT_DIR/scripts/session_lifecycle_hook.py" session-start \
-  --repo-root "$PROJECT_DIR" >/dev/null
+CLAUDE_SESSION_START_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
+run_router_rs --claude-hook-command session-start --repo-root "$PROJECT_DIR" >/dev/null
 """
 
-CLAUDE_STOP_HOOK = """#!/bin/sh
-set -eu
-
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
-
-python3 "$PROJECT_DIR/scripts/session_lifecycle_hook.py" session-stop \
-  --repo-root "$PROJECT_DIR" >/dev/null
+CLAUDE_STOP_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
+run_router_rs --claude-hook-command session-stop --repo-root "$PROJECT_DIR" >/dev/null
 """
 
-CLAUDE_PRE_COMPACT_HOOK = """#!/bin/sh
-set -eu
-
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
-
-python3 "$PROJECT_DIR/scripts/session_lifecycle_hook.py" pre-compact \
-  --repo-root "$PROJECT_DIR" >/dev/null
+CLAUDE_PRE_COMPACT_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
+run_router_rs --claude-hook-command pre-compact --repo-root "$PROJECT_DIR" >/dev/null
 """
 
-CLAUDE_SUBAGENT_STOP_HOOK = """#!/bin/sh
-set -eu
-
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
-
-python3 "$PROJECT_DIR/scripts/session_lifecycle_hook.py" subagent-stop \
-  --repo-root "$PROJECT_DIR" >/dev/null
+CLAUDE_SUBAGENT_STOP_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
+run_router_rs --claude-hook-command subagent-stop --repo-root "$PROJECT_DIR" >/dev/null
 """
 
-CLAUDE_SESSION_END_HOOK = """#!/bin/sh
-set -eu
-
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
-
-python3 "$PROJECT_DIR/scripts/session_lifecycle_hook.py" session-end \
-  --repo-root "$PROJECT_DIR" >/dev/null
+CLAUDE_SESSION_END_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
+run_router_rs --claude-hook-command session-end --repo-root "$PROJECT_DIR" >/dev/null
 """
 
-CLAUDE_CONFIG_CHANGE_HOOK = """#!/bin/sh
-set -eu
-
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
-
-python3 "$PROJECT_DIR/scripts/claude_hook_audit.py" config-change \
-  --repo-root "$PROJECT_DIR"
+CLAUDE_CONFIG_CHANGE_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
+run_router_rs --claude-hook-audit-command config-change --repo-root "$PROJECT_DIR" >/dev/null
 """
 
-CLAUDE_STOP_FAILURE_HOOK = """#!/bin/sh
-set -eu
-
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
-
-python3 "$PROJECT_DIR/scripts/claude_hook_audit.py" stop-failure \
-  --repo-root "$PROJECT_DIR"
+CLAUDE_STOP_FAILURE_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
+run_router_rs --claude-hook-audit-command stop-failure --repo-root "$PROJECT_DIR" >/dev/null
 """
 
 CLAUDE_PROJECT_SETTINGS = {
@@ -385,26 +397,31 @@ CLAUDE_PROJECT_SETTINGS = {
         "allow": [
             "Bash(ls)",
             "Bash(pwd)",
+            "Bash(rg *)",
+            "Bash(cat *)",
+            "Bash(sed -n *)",
             "Bash(git status)",
             "Bash(git diff)",
+            "Bash(git show *)",
+            "Bash(git rev-parse *)",
+            "Bash(git ls-files *)",
             "Bash(python3 scripts/check_skills.py --verify-sync)",
             "Bash(python3 scripts/check_skills.py --verify-codex-link)",
-            "Bash(python3 scripts/session_lifecycle_hook.py *)",
-            "Bash(python3 scripts/claude_memory_bridge.py *)",
+            "Bash(python3 scripts/materialize_cli_host_entrypoints.py)",
+            "Bash(python3 -m pytest *)",
+            "Bash(python3 -m compileall *)",
+            "Bash(cargo test *)",
+            "Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *)",
+            "Bash(*/scripts/router-rs/target/debug/router-rs *)",
             "Bash(python3 scripts/runtime_background_cli.py *)",
-            "Bash(python3 scripts/claude_statusline.py --repo-root *)",
             "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
             "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
             "Bash(bash ./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
         ]
     },
-    "allowedMcpServers": [{"serverName": "browser-mcp"}],
-    "statusLine": {
-        "type": "command",
-        "command": 'python3 "$CLAUDE_PROJECT_DIR"/scripts/claude_statusline.py --repo-root "$CLAUDE_PROJECT_DIR"',
-        "padding": 1,
-        "refreshInterval": 30,
-    },
+    "allowedMcpServers": [
+        {"serverName": server_name} for server_name in shared_project_mcp_servers()
+    ],
     "hooks": {
         "SessionStart": [
             {
@@ -493,6 +510,8 @@ HOST_ENTRYPOINT_TEXT_FILES = {
     ".claude/agents/README.md": CLAUDE_AGENTS_README,
     ".claude/commands/refresh.md": CLAUDE_REFRESH_COMMAND,
     ".claude/commands/background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
+    ".claude/commands/autopilot.md": CLAUDE_AUTOPILOT_COMMAND,
+    ".claude/commands/deepreview.md": CLAUDE_DEEPREVIEW_COMMAND,
     ".claude/hooks/README.md": CLAUDE_HOOKS_README,
     ".claude/hooks/session_start.sh": CLAUDE_SESSION_START_HOOK,
     ".claude/hooks/stop.sh": CLAUDE_STOP_HOOK,
@@ -520,6 +539,8 @@ FULL_SYNC_MANAGED_DIRECTORIES = (
 PARTIAL_SYNC_TEXT_FILES = (
     ".claude/commands/refresh.md",
     ".claude/commands/background_batch.md",
+    ".claude/commands/autopilot.md",
+    ".claude/commands/deepreview.md",
 )
 
 PARTIAL_SYNC_MANAGED_DIRECTORIES = (

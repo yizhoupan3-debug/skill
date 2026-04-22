@@ -1378,6 +1378,29 @@ def test_rust_route_adapter_framework_contract_summary_handles_completed_snapsho
     assert summary["recent_completed_execution"]["task"] == "checklist-series final closeout"
 
 
+def test_rust_route_adapter_framework_recap_builds_projection_and_prompt(
+    tmp_path: Path,
+) -> None:
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    _seed_framework_runtime_artifacts(tmp_path, terminal=False)
+    (tmp_path / ".codex" / "memory").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".codex" / "memory" / "MEMORY.md").write_text(
+        "# 项目长期记忆\n\n## Active Patterns\n\n- AP-1: Externalize task state\n",
+        encoding="utf-8",
+    )
+
+    recap = adapter.framework_recap(repo_root=tmp_path, max_lines=4)
+
+    assert recap["ok"] is True
+    assert recap["continuity_state"] == "active"
+    assert "## Task Snapshot" in recap["projection"]
+    assert "AP-1: Externalize task state" in recap["projection"]
+    assert "默认用中文；先给答案；默认只回一小段。" in recap["projection"]
+    assert "不要扩大任务范围，不要把历史记忆当现状。" in recap["projection"]
+    assert "继续当前仓库的工作。先阅读并使用这些恢复锚点：" in recap["workflow_prompt"]
+    assert "必须先做的下一步：" in recap["workflow_prompt"]
+
+
 def test_rust_route_adapter_framework_runtime_snapshot_prefers_supervisor_owned_continuity(
     tmp_path: Path,
 ) -> None:

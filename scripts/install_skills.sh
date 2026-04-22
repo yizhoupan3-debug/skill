@@ -18,6 +18,7 @@ PLUGIN_NAME="skill-framework-native"
 HOME_PLUGIN_ROOT="$HOME/.codex/plugins/$PLUGIN_NAME"
 HOME_MARKETPLACE_PATH="$HOME/.agents/plugins/marketplace.json"
 HOME_CLAUDE_REFRESH_PATH="$HOME/.claude/commands/refresh.md"
+HOME_CLAUDE_MCP_CONFIG_PATH="$HOME/.claude.json"
 PROJECT_INSTRUCTIONS_PATH="$REPO_ROOT/.codex/model_instructions.md"
 FRAMEWORK_START_MARKER="<!-- FRAMEWORK_DEFAULT_RUNTIME_START -->"
 
@@ -118,6 +119,41 @@ if not any(isinstance(plugin, dict) and plugin.get("name") == plugin_name for pl
 PY
 }
 
+claude_mcp_has_shared_servers() {
+  local config_path="$1"
+  if [ ! -f "$config_path" ]; then
+    return 1
+  fi
+
+  python3 - "$config_path" "$REPO_ROOT" <<'PY' >/dev/null
+import json
+import sys
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+repo_root = str(Path(sys.argv[2]).resolve())
+payload = json.loads(config_path.read_text(encoding="utf-8"))
+servers = payload.get("mcpServers")
+if not isinstance(servers, dict):
+    raise SystemExit(1)
+browser = servers.get("browser-mcp")
+framework = servers.get("framework-mcp")
+if not isinstance(browser, dict) or not isinstance(framework, dict):
+    raise SystemExit(1)
+if browser.get("command") != "bash":
+    raise SystemExit(1)
+if browser.get("cwd") != repo_root:
+    raise SystemExit(1)
+if framework.get("command") != "python3":
+    raise SystemExit(1)
+if framework.get("cwd") != repo_root:
+    raise SystemExit(1)
+env = framework.get("env")
+if not isinstance(env, dict) or env.get("PYTHONPATH") != repo_root:
+    raise SystemExit(1)
+PY
+}
+
 show_codex_status() {
   local config_path="$HOME/.codex/config.toml"
   local skills_path="$HOME/.codex/skills"
@@ -128,6 +164,7 @@ show_codex_status() {
   local plugin_ok="false"
   local marketplace_ok="false"
   local refresh_ok="false"
+  local claude_mcp_ok="false"
   local overlay_ok="false"
 
   if [ -n "${CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR:-}" ]; then
@@ -164,6 +201,9 @@ show_codex_status() {
   if [ -f "$HOME_CLAUDE_REFRESH_PATH" ] && cmp -s "$HOME_CLAUDE_REFRESH_PATH" "$REPO_ROOT/.claude/commands/refresh.md"; then
     refresh_ok="true"
   fi
+  if claude_mcp_has_shared_servers "$HOME_CLAUDE_MCP_CONFIG_PATH"; then
+    claude_mcp_ok="true"
+  fi
   if [ ! -e "$PROJECT_INSTRUCTIONS_PATH" ] || ! grep -q "$FRAMEWORK_START_MARKER" "$PROJECT_INSTRUCTIONS_PATH"; then
     overlay_ok="true"
   fi
@@ -174,10 +214,11 @@ show_codex_status() {
     && [ "$plugin_ok" = "true" ] \
     && [ "$marketplace_ok" = "true" ] \
     && [ "$refresh_ok" = "true" ] \
+    && [ "$claude_mcp_ok" = "true" ] \
     && [ "$overlay_ok" = "true" ]; then
     echo "  ✓ codex → native integration ready"
   else
-    echo "  ⚠ codex → native integration incomplete (config:$config_ok skills:$skills_ok bootstrap:$bootstrap_ok plugin:$plugin_ok marketplace:$marketplace_ok refresh:$refresh_ok overlay:$overlay_ok)"
+    echo "  ⚠ codex → native integration incomplete (config:$config_ok skills:$skills_ok bootstrap:$bootstrap_ok plugin:$plugin_ok marketplace:$marketplace_ok refresh:$refresh_ok claude_mcp:$claude_mcp_ok overlay:$overlay_ok)"
   fi
 }
 

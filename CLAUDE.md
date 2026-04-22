@@ -2,20 +2,11 @@
 
 This file exists because Claude Code discovers `CLAUDE.md`.
 
-@AGENT.md
-@.codex/memory/CLAUDE_MEMORY.md
+Keep startup lean. Do not add `@...` imports here.
 
-## Claude Project Entry
-
-Use `.claude/` only for Claude host-private files such as:
-
-- `.claude/settings.json`
-- `.claude/agents/`
-- `.claude/commands/`
-- `.claude/hooks/`
-
-Claude-specific hooks may refresh the imported memory projection, but must not
-fork the shared framework policy or memory ownership.
+Treat `.claude/**` as host-shell glue, not repository truth.
+The recovery projection lives at `.codex/memory/CLAUDE_MEMORY.md` for `/refresh`
+or manual resume, not default startup injection.
 
 Generated-first maintenance rule:
 

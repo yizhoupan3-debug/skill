@@ -22,6 +22,7 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "context-used",
     "fast-mode",
 ];
+const DEFAULT_SHARED_PROJECT_MCP_SERVERS: [&str; 2] = ["browser-mcp", "framework-mcp"];
 
 #[derive(Deserialize)]
 struct SyncSectionManifest {
@@ -41,6 +42,8 @@ struct SyncManifest {
 #[derive(Debug, Clone, Deserialize)]
 struct RuntimeRegistry {
     schema_version: String,
+    #[serde(default)]
+    shared_project_mcp_servers: Vec<String>,
     #[serde(default)]
     plugins: Vec<RuntimePluginRegistration>,
     #[serde(default)]
@@ -104,6 +107,8 @@ enum Commands {
         #[arg(long)]
         home_claude_refresh_path: PathBuf,
         #[arg(long)]
+        home_claude_mcp_config_path: PathBuf,
+        #[arg(long)]
         project_instructions_path: PathBuf,
         #[arg(long)]
         bootstrap_output_dir: Option<PathBuf>,
@@ -121,6 +126,8 @@ enum Commands {
         skip_home_codex_skills_link: bool,
         #[arg(long)]
         skip_home_claude_refresh: bool,
+        #[arg(long)]
+        skip_home_claude_mcp_sync: bool,
         #[arg(long)]
         skip_default_bootstrap: bool,
     },
@@ -160,6 +167,7 @@ fn main() -> Result<(), String> {
             home_marketplace_path,
             home_codex_skills_path,
             home_claude_refresh_path,
+            home_claude_mcp_config_path,
             project_instructions_path,
             bootstrap_output_dir,
             skip_browser_mcp,
@@ -169,6 +177,7 @@ fn main() -> Result<(), String> {
             skip_personal_marketplace,
             skip_home_codex_skills_link,
             skip_home_claude_refresh,
+            skip_home_claude_mcp_sync,
             skip_default_bootstrap,
         } => install_native_integration(
             &template_root,
@@ -178,6 +187,7 @@ fn main() -> Result<(), String> {
             &home_marketplace_path,
             &home_codex_skills_path,
             &home_claude_refresh_path,
+            &home_claude_mcp_config_path,
             &project_instructions_path,
             bootstrap_output_dir.as_deref(),
             !skip_browser_mcp,
@@ -187,6 +197,7 @@ fn main() -> Result<(), String> {
             !skip_personal_marketplace,
             !skip_home_codex_skills_link,
             !skip_home_claude_refresh,
+            !skip_home_claude_mcp_sync,
             !skip_default_bootstrap,
         )?,
     };
@@ -454,6 +465,17 @@ fn skill_bridge_source_rel(repo_root: &Path) -> Result<String, String> {
         .unwrap_or_else(|| "skills".to_string()))
 }
 
+fn shared_project_mcp_servers(repo_root: &Path) -> Result<Vec<String>, String> {
+    let registry = load_runtime_registry(repo_root)?;
+    if registry.shared_project_mcp_servers.is_empty() {
+        return Ok(DEFAULT_SHARED_PROJECT_MCP_SERVERS
+            .iter()
+            .map(|server| server.to_string())
+            .collect());
+    }
+    Ok(registry.shared_project_mcp_servers)
+}
+
 fn describe_path(report_root: &Path, target_root: &Path, path: &Path) -> String {
     if let Ok(relative) = path.strip_prefix(report_root) {
         return relative.to_string_lossy().into_owned();
@@ -476,6 +498,7 @@ fn install_native_integration(
     home_marketplace_path: &Path,
     home_codex_skills_path: &Path,
     home_claude_refresh_path: &Path,
+    home_claude_mcp_config_path: &Path,
     project_instructions_path: &Path,
     bootstrap_output_dir: Option<&Path>,
     install_browser_mcp: bool,
@@ -485,6 +508,7 @@ fn install_native_integration(
     install_personal_marketplace_entry: bool,
     install_home_codex_skills_link: bool,
     install_home_claude_refresh_command: bool,
+    install_home_claude_mcp_sync: bool,
     install_default_bootstrap: bool,
 ) -> Result<Value, String> {
     let template_root = normalize_path(template_root)?;
@@ -503,6 +527,7 @@ fn install_native_integration(
     let home_marketplace_path = normalize_path(home_marketplace_path)?;
     let home_codex_skills_path = normalize_path(home_codex_skills_path)?;
     let home_claude_refresh_path = normalize_path(home_claude_refresh_path)?;
+    let home_claude_mcp_config_path = normalize_path(home_claude_mcp_config_path)?;
     let bootstrap_output_dir = bootstrap_output_dir
         .map(normalize_path)
         .transpose()?;
@@ -555,6 +580,11 @@ fn install_native_integration(
     } else {
         false
     };
+    let home_claude_mcp_config_changed = if install_home_claude_mcp_sync {
+        ensure_home_claude_mcp_servers(&repo_root, &home_claude_mcp_config_path)?
+    } else {
+        false
+    };
     let framework_overlay_result = if retire_framework_overlay_file {
         retire_overlay(&repo_root.join(project_instructions_path))?
     } else {
@@ -578,6 +608,7 @@ fn install_native_integration(
         "home_marketplace_path": home_marketplace_path.to_string_lossy(),
         "home_codex_skills_path": home_codex_skills_path.to_string_lossy(),
         "home_claude_refresh_path": home_claude_refresh_path.to_string_lossy(),
+        "home_claude_mcp_config_path": home_claude_mcp_config_path.to_string_lossy(),
         "repo_marketplace_path": repo_root.join(".agents/plugins/marketplace.json").to_string_lossy(),
         "created_config": created_config,
         "browser_mcp_changed": browser_changed,
@@ -587,6 +618,7 @@ fn install_native_integration(
         "personal_marketplace_changed": personal_marketplace_changed,
         "home_codex_skills_link_changed": home_codex_skills_link_changed,
         "home_claude_refresh_changed": home_claude_refresh_changed,
+        "home_claude_mcp_config_changed": home_claude_mcp_config_changed,
         "framework_overlay_retirement": framework_overlay_result,
         "default_bootstrap": default_bootstrap,
     }))
@@ -953,6 +985,52 @@ fn ensure_home_claude_refresh_command(
 ) -> Result<bool, String> {
     let content = fs::read_to_string(source_path).map_err(|err| err.to_string())?;
     write_text_if_changed(command_path, &content)
+}
+
+fn ensure_home_claude_mcp_servers(repo_root: &Path, config_path: &Path) -> Result<bool, String> {
+    let mut payload = read_json_map_if_exists(config_path)?.unwrap_or_default();
+    let mcp_value = payload
+        .remove("mcpServers")
+        .unwrap_or_else(|| Value::Object(Map::new()));
+    let mut mcp_servers = match mcp_value {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    };
+
+    for server_name in shared_project_mcp_servers(repo_root)? {
+        mcp_servers.insert(
+            server_name.clone(),
+            managed_home_claude_mcp_server(repo_root, &server_name)?,
+        );
+    }
+
+    payload.insert("mcpServers".to_string(), Value::Object(mcp_servers));
+    write_json_if_changed(config_path, &Value::Object(payload))
+}
+
+fn managed_home_claude_mcp_server(repo_root: &Path, server_name: &str) -> Result<Value, String> {
+    let repo_root_value = repo_root.to_string_lossy().into_owned();
+    match server_name {
+        "browser-mcp" => Ok(json!({
+            "type": "stdio",
+            "command": "bash",
+            "args": ["./tools/browser-mcp/scripts/start_browser_mcp.sh"],
+            "cwd": repo_root_value,
+            "env": {},
+        })),
+        "framework-mcp" => Ok(json!({
+            "type": "stdio",
+            "command": "python3",
+            "args": ["-m", "scripts.framework_mcp"],
+            "cwd": repo_root_value,
+            "env": {
+                "PYTHONPATH": repo_root_value,
+            },
+        })),
+        other => Err(format!(
+            "Unsupported shared project MCP server for Claude global sync: {other}"
+        )),
+    }
 }
 
 fn install_personal_marketplace(

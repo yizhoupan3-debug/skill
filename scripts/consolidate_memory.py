@@ -129,7 +129,7 @@ def _default_runbooks() -> str:
             "- 需要迁移旧 artifact 布局时显式执行：python3 scripts/run_memory_automation.py --workspace <workspace> --apply-artifact-migrations",
             "- 合并稳定记忆：python3 scripts/consolidate_memory.py --workspace <workspace>",
             "- 召回上下文：python3 scripts/retrieve_memory.py --workspace <workspace> --mode stable|active|history|debug --topic <关键词>",
-            "- 生命周期收口：python3 scripts/session_lifecycle_hook.py session-end --repo-root <repo_root>",
+            "- 生命周期收口：cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-command session-end --repo-root <repo_root>",
             "- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。",
             "",
         ]

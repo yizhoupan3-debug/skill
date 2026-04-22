@@ -3,6 +3,9 @@
   "allowedMcpServers": [
     {
       "serverName": "browser-mcp"
+    },
+    {
+      "serverName": "framework-mcp"
     }
   ],
   "hooks": {
@@ -85,23 +88,26 @@
     "allow": [
       "Bash(ls)",
       "Bash(pwd)",
+      "Bash(rg *)",
+      "Bash(cat *)",
+      "Bash(sed -n *)",
       "Bash(git status)",
       "Bash(git diff)",
+      "Bash(git show *)",
+      "Bash(git rev-parse *)",
+      "Bash(git ls-files *)",
       "Bash(python3 scripts/check_skills.py --verify-sync)",
       "Bash(python3 scripts/check_skills.py --verify-codex-link)",
-      "Bash(python3 scripts/session_lifecycle_hook.py *)",
-      "Bash(python3 scripts/claude_memory_bridge.py *)",
+      "Bash(python3 scripts/materialize_cli_host_entrypoints.py)",
+      "Bash(python3 -m pytest *)",
+      "Bash(python3 -m compileall *)",
+      "Bash(cargo test *)",
+      "Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *)",
+      "Bash(*/scripts/router-rs/target/debug/router-rs *)",
       "Bash(python3 scripts/runtime_background_cli.py *)",
-      "Bash(python3 scripts/claude_statusline.py --repo-root *)",
       "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
       "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
       "Bash(bash ./tools/browser-mcp/scripts/start_browser_mcp.sh *)"
     ]
-  },
-  "statusLine": {
-    "command": "python3 \"$CLAUDE_PROJECT_DIR\"/scripts/claude_statusline.py --repo-root \"$CLAUDE_PROJECT_DIR\"",
-    "padding": 1,
-    "refreshInterval": 30,
-    "type": "command"
   }
 }

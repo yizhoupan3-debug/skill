@@ -122,6 +122,7 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     home_config_path = tmp_path / "home" / ".codex" / "config.toml"
     home_codex_skills_path = tmp_path / "home" / ".codex" / "skills"
     home_claude_refresh_path = tmp_path / "home" / ".claude" / "commands" / "refresh.md"
+    home_claude_mcp_config_path = tmp_path / "home" / ".claude.json"
     home_plugin_root = tmp_path / "home" / ".codex" / "plugins" / "skill-framework-native"
     home_marketplace_path = tmp_path / "home" / ".agents" / "plugins" / "marketplace.json"
     bootstrap_output_dir = tmp_path / "bootstrap"
@@ -131,6 +132,7 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
         home_config_path=home_config_path,
         home_codex_skills_path=home_codex_skills_path,
         home_claude_refresh_path=home_claude_refresh_path,
+        home_claude_mcp_config_path=home_claude_mcp_config_path,
         repo_root=repo_root,
         home_plugin_root=home_plugin_root,
         home_marketplace_path=home_marketplace_path,
@@ -141,6 +143,7 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
         home_config_path=home_config_path,
         home_codex_skills_path=home_codex_skills_path,
         home_claude_refresh_path=home_claude_refresh_path,
+        home_claude_mcp_config_path=home_claude_mcp_config_path,
         repo_root=repo_root,
         home_plugin_root=home_plugin_root,
         home_marketplace_path=home_marketplace_path,
@@ -152,6 +155,7 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     instructions_path = repo_root / project_instructions_path
     instructions = instructions_path.read_text(encoding="utf-8") if instructions_path.exists() else ""
     marketplace = json.loads(home_marketplace_path.read_text(encoding="utf-8"))
+    claude_mcp_payload = json.loads(home_claude_mcp_config_path.read_text(encoding="utf-8"))
     assert first["success"] is True
     assert second["success"] is True
     assert content.count("[mcp_servers.browser-mcp]") == 1
@@ -161,6 +165,13 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert home_codex_skills_path.is_symlink()
     assert home_codex_skills_path.resolve() == (repo_root / "skills").resolve()
     assert home_claude_refresh_path.read_text(encoding="utf-8") == CLAUDE_REFRESH_COMMAND
+    assert claude_mcp_payload["mcpServers"]["browser-mcp"]["command"] == "bash"
+    assert claude_mcp_payload["mcpServers"]["browser-mcp"]["cwd"] == str(repo_root.resolve())
+    assert claude_mcp_payload["mcpServers"]["framework-mcp"]["command"] == "python3"
+    assert claude_mcp_payload["mcpServers"]["framework-mcp"]["cwd"] == str(repo_root.resolve())
+    assert claude_mcp_payload["mcpServers"]["framework-mcp"]["env"]["PYTHONPATH"] == str(
+        repo_root.resolve()
+    )
     assert (home_plugin_root / ".codex-plugin" / "plugin.json").is_file()
     assert [plugin["name"] for plugin in marketplace["plugins"]].count("skill-framework-native") == 1
     assert instructions == ""
@@ -175,6 +186,8 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert second["home_codex_skills_link_changed"] is False
     assert first["home_claude_refresh_changed"] is True
     assert second["home_claude_refresh_changed"] is False
+    assert first["home_claude_mcp_config_changed"] is True
+    assert second["home_claude_mcp_config_changed"] is False
 
 
 def test_ensure_default_bootstrap_bundle_is_idempotent(tmp_path: Path) -> None:
@@ -360,6 +373,67 @@ def test_install_native_integration_repairs_stale_framework_block_and_bootstrap(
     assert result["default_bootstrap"]["status"] == "repaired-stale"
     assert f'cwd = "{repo_root.resolve()}"' in content
     assert payload["bootstrap"]["repo_root"] == str(repo_root.resolve())
+
+
+def test_install_native_integration_repairs_home_claude_mcp_config_and_preserves_other_servers(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / ".codex").mkdir(parents=True)
+    (repo_root / ".codex" / "model_instructions.md").write_text("", encoding="utf-8")
+    (repo_root / "skills").mkdir(parents=True)
+    plugin_root = repo_root / "plugins" / "skill-framework-native" / ".codex-plugin"
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "plugin.json").write_text('{"name":"skill-framework-native"}\n', encoding="utf-8")
+
+    home_claude_mcp_config_path = tmp_path / "home" / ".claude.json"
+    home_claude_mcp_config_path.parent.mkdir(parents=True, exist_ok=True)
+    home_claude_mcp_config_path.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "browser-mcp": {
+                        "type": "stdio",
+                        "command": "/stale/browser",
+                    },
+                    "framework-mcp": {
+                        "type": "stdio",
+                        "command": "sh",
+                        "args": ["-lc", "stale"],
+                    },
+                    "custom-server": {
+                        "type": "http",
+                        "url": "https://example.com/mcp",
+                    },
+                }
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    result = install_native_integration(
+        home_config_path=tmp_path / "home" / ".codex" / "config.toml",
+        home_codex_skills_path=tmp_path / "home" / ".codex" / "skills",
+        home_claude_refresh_path=tmp_path / "home" / ".claude" / "commands" / "refresh.md",
+        home_claude_mcp_config_path=home_claude_mcp_config_path,
+        repo_root=repo_root,
+        home_plugin_root=tmp_path / "home" / ".codex" / "plugins" / "skill-framework-native",
+        home_marketplace_path=tmp_path / "home" / ".agents" / "plugins" / "marketplace.json",
+        project_instructions_path=Path(".codex") / "model_instructions.md",
+        install_browser_mcp=False,
+        install_framework_mcp=False,
+    )
+
+    payload = json.loads(home_claude_mcp_config_path.read_text(encoding="utf-8"))
+
+    assert result["home_claude_mcp_config_changed"] is True
+    assert payload["mcpServers"]["custom-server"]["url"] == "https://example.com/mcp"
+    assert payload["mcpServers"]["browser-mcp"]["command"] == "bash"
+    assert payload["mcpServers"]["browser-mcp"]["cwd"] == str(repo_root.resolve())
+    assert payload["mcpServers"]["framework-mcp"]["command"] == "python3"
+    assert payload["mcpServers"]["framework-mcp"]["env"]["PYTHONPATH"] == str(repo_root.resolve())
 
 
 def test_install_native_integration_honors_repo_local_runtime_registry(tmp_path: Path) -> None:

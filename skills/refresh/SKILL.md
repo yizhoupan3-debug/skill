@@ -41,34 +41,27 @@ to the macOS clipboard, and return one fixed confirmation sentence.
 pwd
 ```
 
-2. If `scripts/claude_memory_bridge.py` exists in the current repository, run:
+2. If `scripts/router-rs/Cargo.toml` exists in the current repository, run:
 
 ```bash
-python3 scripts/claude_memory_bridge.py refresh-workflow --json
+cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --framework-recap-json
 ```
 
-3. If the bridge returns a successful clipboard copy, reply with exactly:
+3. Copy `recap.workflow_prompt` from the JSON result to the macOS clipboard with a
+   short `python3` snippet that calls `pbcopy`, then reply with exactly:
 
 ```text
 下一轮执行 prompt 已准备好，并且已经复制到剪贴板。
 ```
 
-4. If the bridge returns `workflow_prompt` but did not copy it successfully,
-   copy `workflow_prompt` to the macOS clipboard yourself with a short `python3`
-   snippet that calls `pbcopy`, then reply with exactly:
-
-```text
-下一轮执行 prompt 已准备好，并且已经复制到剪贴板。
-```
-
-5. If the repository does not contain `scripts/claude_memory_bridge.py`, build a
+4. If the repository does not contain `scripts/router-rs/Cargo.toml`, build a
    manual next-turn execution prompt from the current conversation plus local
    anchors such as `.supervisor_state.json`,
    `artifacts/current/SESSION_SUMMARY.md`,
    `artifacts/current/NEXT_ACTIONS.json`, and
    `artifacts/current/TRACE_METADATA.json` when they exist.
 
-6. The manual prompt should tell the next conversation to resume work
+5. The manual prompt should tell the next conversation to resume work
    immediately and include:
    - current workspace path
    - current objective
@@ -76,7 +69,7 @@ python3 scripts/claude_memory_bridge.py refresh-workflow --json
    - next concrete action
    - the exact execution line `参考prompt设置的串并行分工，直接开始执行！`
 
-7. Copy the manual prompt to the macOS clipboard with a short `python3` snippet
+6. Copy the manual prompt to the macOS clipboard with a short `python3` snippet
    that calls `pbcopy`, then reply with exactly:
 
 ```text

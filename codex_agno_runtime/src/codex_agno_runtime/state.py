@@ -758,14 +758,13 @@ class BackgroundJobStore:
         self._active_sessions = {
             session_id: job_id
             for session_id, job_id in self._active_sessions.items()
-            if job_id in self._jobs and self._jobs[job_id].status in ACTIVE_JOB_STATUSES
+            if job_id not in self._jobs or self._jobs[job_id].status in ACTIVE_JOB_STATUSES
         }
         self._pending_session_takeovers = {
             row.session_id: row.incoming_job_id
             for row in persisted.pending_session_takeovers
-            if row.session_id in self._active_sessions
-            and row.incoming_job_id in self._jobs
-            and self._jobs[row.incoming_job_id].status in ACTIVE_JOB_STATUSES
+            if row.incoming_job_id not in self._jobs
+            or self._jobs[row.incoming_job_id].status in ACTIVE_JOB_STATUSES
         }
 
     def _persist_state(self) -> None:

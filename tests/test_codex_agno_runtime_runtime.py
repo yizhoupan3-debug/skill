@@ -1513,6 +1513,70 @@ def test_background_job_store_persists_pending_takeovers(tmp_path: Path) -> None
     assert recovered.pending_session_takeovers() == 1
 
 
+def test_background_job_store_preserves_takeover_claim_roundtrip_without_replacement_row(
+    tmp_path: Path,
+) -> None:
+    """Reserve/claim should stay durable across reload even before the replacement row is materialized."""
+
+    state_path = tmp_path / "runtime_background_jobs.json"
+    store = BackgroundJobStore(state_path=state_path)
+    store.set_status("job-1", status="queued", session_id="shared-session", timeout_seconds=30)
+
+    reserved = store.arbitrate_session_takeover(
+        session_id="shared-session",
+        incoming_job_id="job-2",
+        operation="reserve",
+    )
+    assert reserved.pending_job_id == "job-2"
+
+    reloaded = BackgroundJobStore(state_path=state_path)
+    store.set_status("job-1", status="interrupted", session_id="shared-session", timeout_seconds=30)
+    reloaded_after_interrupt = BackgroundJobStore(state_path=state_path)
+    claimed = reloaded_after_interrupt.arbitrate_session_takeover(
+        session_id="shared-session",
+        incoming_job_id="job-2",
+        operation="claim",
+    )
+
+    assert reloaded.pending_session_takeovers() == 1
+    assert claimed.outcome == "claimed"
+    assert claimed.active_job_id == "job-2"
+    assert claimed.pending_job_id is None
+
+    claimed_reloaded = BackgroundJobStore(state_path=state_path)
+    assert claimed_reloaded.get_active_job("shared-session") == "job-2"
+
+
+def test_background_job_store_release_roundtrip_keeps_current_owner_without_replacement_row(
+    tmp_path: Path,
+) -> None:
+    """Release should clear only the pending takeover after reload, not the active owner."""
+
+    state_path = tmp_path / "runtime_background_jobs.json"
+    store = BackgroundJobStore(state_path=state_path)
+    store.set_status("job-1", status="queued", session_id="shared-session", timeout_seconds=30)
+    store.arbitrate_session_takeover(
+        session_id="shared-session",
+        incoming_job_id="job-2",
+        operation="reserve",
+    )
+
+    reloaded = BackgroundJobStore(state_path=state_path)
+    released = reloaded.arbitrate_session_takeover(
+        session_id="shared-session",
+        incoming_job_id="job-2",
+        operation="release",
+    )
+
+    assert released.outcome == "released"
+    assert released.active_job_id == "job-1"
+    assert released.pending_job_id is None
+
+    released_reloaded = BackgroundJobStore(state_path=state_path)
+    assert released_reloaded.pending_session_takeovers() == 0
+    assert released_reloaded.get_active_job("shared-session") == "job-1"
+
+
 def test_background_job_store_aggregates_parallel_group_summaries() -> None:
     """Parallel background batches should expose one durable aggregate summary."""
 
