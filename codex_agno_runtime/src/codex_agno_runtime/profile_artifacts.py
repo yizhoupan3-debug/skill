@@ -6,6 +6,11 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from codex_agno_runtime.cli_family_contracts import (
+    build_cli_family_capability_discovery,
+    build_cli_family_parity_snapshot,
+    build_codex_dual_entry_parity_snapshot,
+)
 from codex_agno_runtime.control_plane_contracts import build_control_plane_contract_descriptors
 from codex_agno_runtime.framework_profile import (
     FRAMEWORK_SHARED_CONTRACT_FIELDS,
@@ -25,9 +30,6 @@ from codex_agno_runtime.host_adapters import (
     GENERIC_HOST_ADAPTER,
     SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID,
     adapt_framework_profile,
-    build_cli_family_capability_discovery,
-    build_cli_family_parity_snapshot,
-    build_codex_dual_entry_parity_snapshot,
     compile_claude_code_adapter,
     compile_codex_cli_adapter,
     compile_codex_common_adapter,
@@ -363,6 +365,216 @@ def _extract_shared_contract_surface(
     return projected_surface
 
 
+def _build_python_artifacts(
+    profile: FrameworkProfile,
+    *,
+    host_overrides: Mapping[str, Any] | None = None,
+    include_compatibility_inventory: bool = False,
+) -> dict[str, Any]:
+    artifacts = {
+        "framework_profile": profile.to_dict(),
+        "framework_surface_policy": profile.framework_surface_policy,
+        "cli_common_adapter": compile_cli_common_adapter(
+            profile,
+            host_overrides=host_overrides,
+        ).host_payload,
+        "codex_common_adapter": compile_codex_common_adapter(
+            profile,
+            host_overrides=host_overrides,
+        ).host_payload,
+        "codex_cli_adapter": compile_codex_cli_adapter(
+            profile,
+            host_overrides=host_overrides,
+        ).host_payload,
+        "claude_code_adapter": compile_claude_code_adapter(
+            profile,
+            host_overrides=host_overrides,
+        ).host_payload,
+        "gemini_cli_adapter": compile_gemini_cli_adapter(
+            profile,
+            host_overrides=host_overrides,
+        ).host_payload,
+        "cli_family_capability_discovery": build_cli_family_capability_discovery(
+            profile,
+            host_overrides=host_overrides,
+        ),
+        "codex_desktop_adapter": compile_codex_desktop_adapter(
+            profile,
+            host_overrides=host_overrides,
+        ).host_payload,
+        "cli_family_parity_snapshot": build_cli_family_parity_snapshot(
+            profile,
+            host_overrides=host_overrides,
+        ),
+        "codex_dual_entry_parity_snapshot": build_codex_dual_entry_parity_snapshot(
+            profile,
+            host_overrides=host_overrides,
+        ),
+    }
+    if include_compatibility_inventory:
+        alias_inventory = build_codex_desktop_alias_inventory()
+        artifacts["codex_desktop_alias_inventory"] = alias_inventory
+        artifacts["codex_desktop_alias_retirement_status"] = (
+            build_codex_desktop_alias_retirement_status(
+                alias_inventory_summary=alias_inventory["summary"]
+            )
+        )
+    artifacts.update(build_control_plane_contract_descriptors())
+    return artifacts
+
+
+def _write_default_artifacts(
+    output_dir: Path,
+    python_artifacts: Mapping[str, Any],
+) -> dict[str, str]:
+    default_dir = output_dir / DEFAULT_ARTIFACT_DIRNAME
+    return {
+        "framework_profile": _write_json(
+            default_dir / "framework_profile.json",
+            python_artifacts["framework_profile"],
+        ),
+        "framework_surface_policy": _write_json(
+            default_dir / "framework_surface_policy.json",
+            python_artifacts["framework_surface_policy"],
+        ),
+        "cli_common_adapter": _write_json(
+            default_dir / "cli_common_adapter.json", python_artifacts["cli_common_adapter"]
+        ),
+        "codex_common_adapter": _write_json(
+            default_dir / "codex_common_adapter.json",
+            python_artifacts["codex_common_adapter"],
+        ),
+        "codex_cli_adapter": _write_json(
+            default_dir / "codex_cli_adapter.json",
+            python_artifacts["codex_cli_adapter"],
+        ),
+        "claude_code_adapter": _write_json(
+            default_dir / "claude_code_adapter.json",
+            python_artifacts["claude_code_adapter"],
+        ),
+        "gemini_cli_adapter": _write_json(
+            default_dir / "gemini_cli_adapter.json",
+            python_artifacts["gemini_cli_adapter"],
+        ),
+        "cli_family_capability_discovery": _write_json(
+            default_dir / "cli_family_capability_discovery.json",
+            python_artifacts["cli_family_capability_discovery"],
+        ),
+        "codex_desktop_adapter": _write_json(
+            default_dir / "codex_desktop_adapter.json",
+            python_artifacts["codex_desktop_adapter"],
+        ),
+        "cli_family_parity_snapshot": _write_json(
+            default_dir / "cli_family_parity_snapshot.json",
+            python_artifacts["cli_family_parity_snapshot"],
+        ),
+        "codex_dual_entry_parity_snapshot": _write_json(
+            default_dir / "codex_dual_entry_parity_snapshot.json",
+            python_artifacts["codex_dual_entry_parity_snapshot"],
+        ),
+        "execution_controller_contract": _write_json(
+            default_dir / f"{EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID}.json",
+            python_artifacts["execution_controller_contract"],
+        ),
+        "delegation_contract": _write_json(
+            default_dir / f"{DELEGATION_CONTRACT_ARTIFACT_ID}.json",
+            python_artifacts["delegation_contract"],
+        ),
+        "supervisor_state_contract": _write_json(
+            default_dir / f"{SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID}.json",
+            python_artifacts["supervisor_state_contract"],
+        ),
+        "execution_kernel_live_fallback_retirement_status": _write_json(
+            default_dir / "execution_kernel_live_fallback_retirement_status.json",
+            python_artifacts["execution_kernel_live_fallback_retirement_status"],
+        ),
+        "execution_kernel_live_response_serialization_contract": _write_json(
+            default_dir / "execution_kernel_live_response_serialization_contract.json",
+            python_artifacts["execution_kernel_live_response_serialization_contract"],
+        ),
+    }
+
+
+def _write_rust_artifacts(
+    output_dir: Path,
+    *,
+    profile_path: Path,
+    rust_adapter: RustRouteAdapter,
+    emit_legacy_alias_artifact: bool,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    rust_dir = output_dir / RUST_ARTIFACT_DIRNAME
+    rust_bundle = rust_adapter.compile_profile_bundle(profile_path)
+    rust_codex_artifacts = rust_adapter.compile_codex_profile_artifacts(
+        profile_path,
+        include_legacy_alias_artifact=emit_legacy_alias_artifact,
+    )
+
+    paths = {
+        "rust_profile_bundle": _write_json(
+            rust_dir / "router_rs_profile_bundle.json",
+            rust_bundle,
+        )
+    }
+    for artifact_key, filename in DEFAULT_RUST_CODEX_ARTIFACT_FILENAMES.items():
+        if artifact_key not in rust_codex_artifacts:
+            continue
+        paths[f"rust_{artifact_key}"] = _write_json(
+            rust_dir / filename,
+            rust_codex_artifacts[artifact_key],
+        )
+
+    legacy_artifact_key, legacy_filename = LEGACY_RUST_CODEX_ARTIFACT_FILENAME
+    if legacy_artifact_key in rust_codex_artifacts:
+        paths[f"rust_{legacy_artifact_key}"] = _write_json(
+            rust_dir / legacy_filename,
+            rust_codex_artifacts[legacy_artifact_key],
+        )
+    if emit_legacy_alias_artifact and "codex_desktop_alias_retirement_status" in rust_codex_artifacts:
+        paths["rust_codex_desktop_alias_retirement_status"] = _write_json(
+            rust_dir / "router_rs_codex_desktop_alias_retirement_status.json",
+            rust_codex_artifacts["codex_desktop_alias_retirement_status"],
+        )
+    return rust_codex_artifacts, paths
+
+
+def _emit_rust_python_parity_report(
+    output_dir: Path,
+    *,
+    python_artifacts: Mapping[str, Any],
+    rust_codex_artifacts: Mapping[str, Any],
+) -> dict[str, str]:
+    rust_dir = output_dir / RUST_ARTIFACT_DIRNAME
+    parity_report = build_rust_python_artifact_parity_report(
+        python_artifacts=python_artifacts,
+        rust_artifacts={f"rust_{key}": value for key, value in rust_codex_artifacts.items()},
+    )
+    return {
+        "rust_python_artifact_parity_report": _write_json(
+            rust_dir / RUST_PYTHON_PARITY_REPORT_FILENAME,
+            parity_report,
+        )
+    }
+
+
+def _emit_shared_contract_projection_report(
+    *,
+    profile: FrameworkProfile,
+    host_overrides: Mapping[str, Any] | None = None,
+    adapter_payloads: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    report = build_framework_shared_contract_projection_report(
+        profile,
+        host_overrides=host_overrides,
+        adapter_payloads=adapter_payloads,
+    )
+    if not report["all_shared_contract_projections_match"]:
+        raise ValueError(
+            "framework shared-contract projection drift detected: "
+            f"{report['adapter_projections']}"
+        )
+    return report
+
+
 def build_framework_shared_contract_projection_report(
     profile: FrameworkProfile,
     *,
@@ -507,122 +719,47 @@ def emit_framework_contract_artifacts(
     profile = _profile_with_surface_policy(profile)
     emit_legacy_alias_artifact = include_legacy_alias_artifact is True
     emit_compatibility_inventory = include_compatibility_inventory or emit_legacy_alias_artifact
-    default_dir = output_dir / DEFAULT_ARTIFACT_DIRNAME
     fallback_dir = output_dir / FALLBACK_ARTIFACT_DIRNAME
     continuity_dir = output_dir / CONTINUITY_ARTIFACT_DIRNAME
-    rust_dir = output_dir / RUST_ARTIFACT_DIRNAME
+    python_artifacts = _build_python_artifacts(
+        profile,
+        host_overrides=host_overrides,
+        include_compatibility_inventory=emit_compatibility_inventory,
+    )
 
-    profile_path = default_dir / "framework_profile.json"
-    python_artifacts = {
-        "framework_profile": profile.to_dict(),
-        "framework_surface_policy": profile.framework_surface_policy,
-        "cli_common_adapter": compile_cli_common_adapter(profile, host_overrides=host_overrides).host_payload,
-        "codex_common_adapter": compile_codex_common_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "codex_cli_adapter": compile_codex_cli_adapter(profile, host_overrides=host_overrides).host_payload,
-        "claude_code_adapter": compile_claude_code_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "gemini_cli_adapter": compile_gemini_cli_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "cli_family_capability_discovery": build_cli_family_capability_discovery(
-            profile,
-            host_overrides=host_overrides,
-        ),
-        "codex_desktop_adapter": compile_codex_desktop_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "cli_family_parity_snapshot": build_cli_family_parity_snapshot(
-            profile,
-            host_overrides=host_overrides,
-        ),
-        "codex_dual_entry_parity_snapshot": build_codex_dual_entry_parity_snapshot(
-            profile,
-            host_overrides=host_overrides,
-        ),
-    }
-    if emit_compatibility_inventory:
-        alias_inventory = build_codex_desktop_alias_inventory()
-        python_artifacts["codex_desktop_alias_inventory"] = alias_inventory
-        python_artifacts["codex_desktop_alias_retirement_status"] = (
-            build_codex_desktop_alias_retirement_status(
-                alias_inventory_summary=alias_inventory["summary"]
+    profile_path = output_dir / DEFAULT_ARTIFACT_DIRNAME / "framework_profile.json"
+    paths = _write_default_artifacts(output_dir, python_artifacts)
+
+    if rust_adapter is not None:
+        rust_codex_artifacts, rust_paths = _write_rust_artifacts(
+            output_dir,
+            profile_path=profile_path,
+            rust_adapter=rust_adapter,
+            emit_legacy_alias_artifact=emit_legacy_alias_artifact,
+        )
+        paths.update(rust_paths)
+
+        # Keep Rust contract/adapter layer as source-of-truth when present,
+        # and avoid re-emitting Python duplicate builders for these artifacts.
+        for python_key, rust_key in RUST_PYTHON_PARITY_FIELDS.items():
+            rust_value = rust_codex_artifacts.get(rust_key)
+            if rust_value is not None:
+                python_artifacts[python_key] = rust_value
+
+        paths.update(
+            _emit_rust_python_parity_report(
+                output_dir,
+                python_artifacts=python_artifacts,
+                rust_codex_artifacts=rust_codex_artifacts,
             )
         )
-    python_artifacts.update(build_control_plane_contract_descriptors())
-    shared_contract_report = build_framework_shared_contract_projection_report(
-        profile,
+
+    _emit_shared_contract_projection_report(
+        profile=profile,
         host_overrides=host_overrides,
         adapter_payloads=python_artifacts,
     )
-    if not shared_contract_report["all_shared_contract_projections_match"]:
-        raise ValueError(
-            "framework shared-contract projection drift detected: "
-            f"{shared_contract_report['adapter_projections']}"
-        )
-    paths = {
-        "framework_profile": _write_json(profile_path, python_artifacts["framework_profile"]),
-        "framework_surface_policy": _write_json(
-            default_dir / "framework_surface_policy.json",
-            python_artifacts["framework_surface_policy"],
-        ),
-        "cli_common_adapter": _write_json(default_dir / "cli_common_adapter.json", python_artifacts["cli_common_adapter"]),
-        "codex_common_adapter": _write_json(
-            default_dir / "codex_common_adapter.json",
-            python_artifacts["codex_common_adapter"],
-        ),
-        "codex_cli_adapter": _write_json(default_dir / "codex_cli_adapter.json", python_artifacts["codex_cli_adapter"]),
-        "claude_code_adapter": _write_json(
-            default_dir / "claude_code_adapter.json",
-            python_artifacts["claude_code_adapter"],
-        ),
-        "gemini_cli_adapter": _write_json(
-            default_dir / "gemini_cli_adapter.json",
-            python_artifacts["gemini_cli_adapter"],
-        ),
-        "cli_family_capability_discovery": _write_json(
-            default_dir / "cli_family_capability_discovery.json",
-            python_artifacts["cli_family_capability_discovery"],
-        ),
-        "codex_desktop_adapter": _write_json(
-            default_dir / "codex_desktop_adapter.json",
-            python_artifacts["codex_desktop_adapter"],
-        ),
-        "cli_family_parity_snapshot": _write_json(
-            default_dir / "cli_family_parity_snapshot.json",
-            python_artifacts["cli_family_parity_snapshot"],
-        ),
-        "codex_dual_entry_parity_snapshot": _write_json(
-            default_dir / "codex_dual_entry_parity_snapshot.json",
-            python_artifacts["codex_dual_entry_parity_snapshot"],
-        ),
-        "execution_controller_contract": _write_json(
-            default_dir / f"{EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID}.json",
-            python_artifacts["execution_controller_contract"],
-        ),
-        "delegation_contract": _write_json(
-            default_dir / f"{DELEGATION_CONTRACT_ARTIFACT_ID}.json",
-            python_artifacts["delegation_contract"],
-        ),
-        "supervisor_state_contract": _write_json(
-            default_dir / f"{SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID}.json",
-            python_artifacts["supervisor_state_contract"],
-        ),
-        "execution_kernel_live_fallback_retirement_status": _write_json(
-            default_dir / "execution_kernel_live_fallback_retirement_status.json",
-            python_artifacts["execution_kernel_live_fallback_retirement_status"],
-        ),
-        "execution_kernel_live_response_serialization_contract": _write_json(
-            default_dir / "execution_kernel_live_response_serialization_contract.json",
-            python_artifacts["execution_kernel_live_response_serialization_contract"],
-        ),
-    }
+
     if include_fallback_artifacts:
         python_artifacts["aionrs_companion_adapter"] = compile_aionrs_companion_adapter(
             profile,
@@ -666,43 +803,6 @@ def emit_framework_contract_artifacts(
         paths["codex_desktop_alias_retirement_status"] = _write_json(
             continuity_dir / "codex_desktop_alias_retirement_status.json",
             python_artifacts["codex_desktop_alias_retirement_status"],
-        )
-
-    if rust_adapter is not None:
-        rust_bundle = rust_adapter.compile_profile_bundle(profile_path)
-        rust_codex_artifacts = rust_adapter.compile_codex_profile_artifacts(
-            profile_path,
-            include_legacy_alias_artifact=emit_legacy_alias_artifact,
-        )
-        paths["rust_profile_bundle"] = _write_json(
-            rust_dir / "router_rs_profile_bundle.json",
-            rust_bundle,
-        )
-        for artifact_key, filename in DEFAULT_RUST_CODEX_ARTIFACT_FILENAMES.items():
-            if artifact_key not in rust_codex_artifacts:
-                continue
-            paths[f"rust_{artifact_key}"] = _write_json(
-                rust_dir / filename,
-                rust_codex_artifacts[artifact_key],
-            )
-        legacy_artifact_key, legacy_filename = LEGACY_RUST_CODEX_ARTIFACT_FILENAME
-        if legacy_artifact_key in rust_codex_artifacts:
-            paths[f"rust_{legacy_artifact_key}"] = _write_json(
-                rust_dir / legacy_filename,
-                rust_codex_artifacts[legacy_artifact_key],
-            )
-        if emit_legacy_alias_artifact and "codex_desktop_alias_retirement_status" in rust_codex_artifacts:
-            paths["rust_codex_desktop_alias_retirement_status"] = _write_json(
-                rust_dir / "router_rs_codex_desktop_alias_retirement_status.json",
-                rust_codex_artifacts["codex_desktop_alias_retirement_status"],
-            )
-        rust_parity_report = build_rust_python_artifact_parity_report(
-            python_artifacts=python_artifacts,
-            rust_artifacts={f"rust_{key}": value for key, value in rust_codex_artifacts.items()},
-        )
-        paths["rust_python_artifact_parity_report"] = _write_json(
-            rust_dir / RUST_PYTHON_PARITY_REPORT_FILENAME,
-            rust_parity_report,
         )
     layout_manifest = build_framework_artifact_layout_manifest(
         output_dir=output_dir,
