@@ -79,6 +79,9 @@ def test_framework_memory_recall_respects_artifact_source_dir_and_task_id(tmp_pa
     assert payload["active_task"]["task_id"] == "isolated-task-20260418220000"
     assert payload["continuity"]["task"] == "isolated active task"
     assert payload["retrieval"]["active_task_included"] is True
+    assert payload["continuity"]["paths"]["supervisor_state"] == str(
+        tmp_path / ".supervisor_state.json"
+    )
     assert (
         payload["source_artifacts"]["artifact_lanes"]["bootstrap"]
         == str(isolated_artifacts / "bootstrap" / "<task_id>")
