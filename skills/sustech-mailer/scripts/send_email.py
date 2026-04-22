@@ -30,7 +30,6 @@ from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.utils import encode_rfc2231
 from pathlib import Path
 
 # ── defaults ────────────────────────────────────────────────────────────────
@@ -113,7 +112,7 @@ def _get_credentials() -> tuple[str, str]:
 
 
 def _attach_file(msg: MIMEMultipart, filepath: Path) -> None:
-    """Attach a file to the MIME message with RFC 2231 encoded filename."""
+    """Attach a file to the MIME message with client-safe filename headers."""
     if not filepath.is_file():
         print(f"WARNING: attachment not found, skipping: {filepath}", file=sys.stderr)
         return
@@ -122,13 +121,14 @@ def _attach_file(msg: MIMEMultipart, filepath: Path) -> None:
         part = MIMEBase("application", "octet-stream")
         part.set_payload(f.read())
     encoders.encode_base64(part)
-    # Use RFC 2231 encoding for CJK and non-ASCII filenames
-    encoded_name = encode_rfc2231(filepath.name, charset="utf-8")
-    part.add_header(
-        "Content-Disposition",
-        "attachment",
-        filename=encoded_name,
-    )
+    if filepath.name.isascii():
+        part.add_header("Content-Disposition", "attachment", filename=filepath.name)
+    else:
+        part.add_header(
+            "Content-Disposition",
+            "attachment",
+            filename=("utf-8", "", filepath.name),
+        )
     msg.attach(part)
 
 

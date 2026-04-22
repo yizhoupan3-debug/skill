@@ -1498,6 +1498,21 @@
         "source_position": 3
       }
     },
+    "refresh": {
+      "has_shadow": false,
+      "shadowed": [],
+      "shadowed_by": [],
+      "winner": {
+        "path": "skills/refresh",
+        "routing_gate": "none",
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "session_start": "n/a",
+        "slug": "refresh",
+        "source": "project",
+        "source_position": 3
+      }
+    },
     "release-engineering": {
       "has_shadow": false,
       "shadowed": [],

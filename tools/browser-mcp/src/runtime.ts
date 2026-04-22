@@ -1,9 +1,6 @@
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  chromium,
-  firefox,
-  webkit,
   type Browser,
   type BrowserType,
   type Locator,
@@ -135,7 +132,17 @@ function createFingerprint(
 /**
  * Picks the Playwright browser type for a given engine name.
  */
-function getBrowserType(browserEngine: BrowserRuntimeOptions['browserEngine']): BrowserType {
+let playwrightModulePromise: Promise<typeof import('playwright')> | null = null;
+
+async function loadPlaywrightModule(): Promise<typeof import('playwright')> {
+  playwrightModulePromise ??= import('playwright');
+  return playwrightModulePromise;
+}
+
+async function getBrowserType(
+  browserEngine: BrowserRuntimeOptions['browserEngine'],
+): Promise<BrowserType> {
+  const { chromium, firefox, webkit } = await loadPlaywrightModule();
   switch (browserEngine) {
     case 'firefox':
       return firefox;
@@ -588,7 +595,7 @@ export class BrowserRuntime {
       );
     });
 
-    const browserType = getBrowserType(this.options.browserEngine);
+    const browserType = await getBrowserType(this.options.browserEngine);
     const browser = await browserType.launch({ headless: this.options.headless });
     this.browsers.add(browser);
 
@@ -713,7 +720,7 @@ export class BrowserRuntime {
     const existing = Array.from(this.sessions.values())[0];
     if (existing) return existing;
 
-    const browserType = getBrowserType(this.options.browserEngine);
+    const browserType = await getBrowserType(this.options.browserEngine);
     const browser = await browserType.launch({ headless: this.options.headless });
     this.browsers.add(browser);
 

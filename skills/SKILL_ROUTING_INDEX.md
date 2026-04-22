@@ -5,7 +5,7 @@
 > Prefer `skills/SKILL_ROUTING_RUNTIME.json` for the lean machine-readable route map.
 > Prefer `skills/SKILL_MANIFEST.json` for the fallback / enrichment manifest.
 > Default view shows hot + warm skills only; cold long-tail skills stay in runtime/manifest for explicit routing.
-> Visible here: 121 / 140 skills.
+> Visible here: 122 / 141 skills.
 
 ## 6-rule gate checklist
 1. Extract object / action / constraints / deliverable first.
@@ -102,6 +102,7 @@
 | `motion-design` | L3 | owner | none | warm | Design and implement high-end web animations, micro-interactions, and staggered  |
 | `npm-package-authoring` | L3 | owner | none | warm | Build, refactor, and publish npm packages and JavaScript/TypeScript libraries in |
 | `performance-expert` | L3 | owner | none | warm | Audit and improve web performance with emphasis on Core Web Vitals, asset weight |
+| `refresh` | L3 | owner | none | warm | Build the next-turn execution prompt, copy it to the clipboard, and reply with o |
 | `release-engineering` | L3 | owner | none | warm | Build release pipelines from commit to published artifact. Use for versioning st |
 | `screenshot` | L3 | owner | none | warm | Capture desktop or system screenshots including full screen, a specific app wind |
 | `security-threat-model` | L3 | owner | none | warm | Repository-grounded threat modeling for applications, services, MCP servers, API |

@@ -1171,6 +1171,15 @@
       "filesystem_scope": [],
       "network_access": "unspecified"
     },
+    "refresh": {
+      "allowed_tools": [],
+      "approval_required_tools": [],
+      "artifact_outputs": [],
+      "bridge_behavior": "default",
+      "destructive_risk": "unspecified",
+      "filesystem_scope": [],
+      "network_access": "unspecified"
+    },
     "release-engineering": {
       "allowed_tools": [],
       "approval_required_tools": [],
