@@ -1017,6 +1017,125 @@ def test_runtime_event_attach_rejects_missing_explicit_binding_artifact(tmp_path
         asyncio.run(_run())
 
 
+def test_runtime_event_attach_rejects_mismatched_handoff_trace_stream_against_binding(tmp_path: Path) -> None:
+    """External attach should fail closed when handoff trace stream disagrees with binding adjacency."""
+
+    with _project_supervisor_state():
+        trace_path = tmp_path / "TRACE_METADATA.json"
+        runtime = CodexAgnoRuntime(
+            RuntimeSettings(
+                codex_home=PROJECT_ROOT,
+                data_dir=tmp_path / "runtime-data",
+                trace_output_path=trace_path,
+                live_model_override=False,
+            )
+        )
+
+        async def _run() -> None:
+            response = await runtime.run_task(
+                RunTaskRequest(
+                    task="帮我写一个 Rust CLI 工具",
+                    session_id="handoff-trace-mismatch-session",
+                    user_id="tester",
+                    dry_run=True,
+                )
+            )
+            transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
+            handoff = runtime.describe_runtime_event_handoff(session_id=response.session_id)
+            mismatched_handoff = dict(handoff)
+            wrong_trace_stream_path = str(
+                Path(handoff["trace_stream_path"]).with_name("WRONG_TRACE_EVENTS.jsonl")
+            )
+            mismatched_handoff["trace_stream_path"] = str(
+                wrong_trace_stream_path
+            )
+            resume_manifest_path = Path(handoff["resume_manifest_path"])
+            resume_manifest = json.loads(resume_manifest_path.read_text(encoding="utf-8"))
+            resume_manifest["trace_stream_path"] = wrong_trace_stream_path
+            mismatched_resume_path = resume_manifest_path.with_name(
+                "MISMATCHED_TRACE_STREAM_HANDOFF_RESUME_MANIFEST.json"
+            )
+            mismatched_resume_path.write_text(
+                json.dumps(resume_manifest, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            mismatched_handoff["resume_manifest_path"] = str(mismatched_resume_path)
+            handoff_path = Path(transport["binding_artifact_path"]).with_name("MISMATCHED_TRACE_STREAM_HANDOFF.json")
+            handoff_path.write_text(
+                json.dumps(mismatched_handoff, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            attached_runtime = CodexAgnoRuntime(
+                RuntimeSettings(
+                    codex_home=PROJECT_ROOT,
+                    data_dir=tmp_path / "attached-runtime-data",
+                    trace_output_path=tmp_path / "ATTACHED_TRACE_METADATA.json",
+                    live_model_override=False,
+                )
+            )
+            with pytest.raises(ValueError, match="mismatched binding/handoff trace stream paths"):
+                attached_runtime.attach_runtime_event_transport(
+                    binding_artifact_path=transport["binding_artifact_path"],
+                    handoff_path=str(handoff_path),
+                )
+
+        asyncio.run(_run())
+
+
+def test_runtime_event_attach_rejects_mismatched_resume_trace_stream_against_binding(tmp_path: Path) -> None:
+    """External attach should fail closed when resume trace stream disagrees with binding adjacency."""
+
+    with _project_supervisor_state():
+        trace_path = tmp_path / "TRACE_METADATA.json"
+        runtime = CodexAgnoRuntime(
+            RuntimeSettings(
+                codex_home=PROJECT_ROOT,
+                data_dir=tmp_path / "runtime-data",
+                trace_output_path=trace_path,
+                live_model_override=False,
+            )
+        )
+
+        async def _run() -> None:
+            response = await runtime.run_task(
+                RunTaskRequest(
+                    task="帮我写一个 Rust CLI 工具",
+                    session_id="resume-trace-mismatch-session",
+                    user_id="tester",
+                    dry_run=True,
+                )
+            )
+            transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
+            handoff = runtime.describe_runtime_event_handoff(session_id=response.session_id)
+            resume_manifest_path = Path(handoff["resume_manifest_path"])
+            resume_manifest = json.loads(resume_manifest_path.read_text(encoding="utf-8"))
+            resume_manifest["trace_stream_path"] = str(
+                Path(handoff["trace_stream_path"]).with_name("WRONG_TRACE_EVENTS.jsonl")
+            )
+            mismatched_resume_path = resume_manifest_path.with_name("MISMATCHED_TRACE_STREAM_RESUME_MANIFEST.json")
+            mismatched_resume_path.write_text(
+                json.dumps(resume_manifest, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            attached_runtime = CodexAgnoRuntime(
+                RuntimeSettings(
+                    codex_home=PROJECT_ROOT,
+                    data_dir=tmp_path / "attached-runtime-data",
+                    trace_output_path=tmp_path / "ATTACHED_TRACE_METADATA.json",
+                    live_model_override=False,
+                )
+            )
+            with pytest.raises(ValueError, match="mismatched binding/resume trace stream paths"):
+                attached_runtime.attach_runtime_event_transport(
+                    binding_artifact_path=transport["binding_artifact_path"],
+                    resume_manifest_path=str(mismatched_resume_path),
+                )
+
+        asyncio.run(_run())
+
+
 def test_runtime_event_attach_rejects_descriptor_without_artifact_replay_contract(tmp_path: Path) -> None:
     """Attach descriptors must keep the replay-only contract instead of silently degrading."""
 
