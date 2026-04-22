@@ -12,6 +12,11 @@ from typing import Any
 from codex_agno_runtime.agent_factory import AgentFactory
 from codex_agno_runtime.config import RuntimeSettings
 from codex_agno_runtime.execution_kernel_contracts import (
+    DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS,
+    EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
+    EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
+    EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
+    LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS,
     resolve_execution_kernel_prompt_preview,
 )
 from codex_agno_runtime.prompt_builder import PromptBuilder
@@ -270,14 +275,18 @@ class RouterRsExecutionKernel(ExecutionKernel):
     def _decode_response(self, payload: dict[str, Any]) -> RunTaskResponse:
         usage_payload = payload.get("usage") or {}
         metadata = dict(payload.get("metadata") or {})
-        metadata.setdefault("execution_kernel", self.adapter_kind)
-        metadata.setdefault("execution_kernel_authority", self.authority)
+        live_run = bool(payload["live_run"])
+        self._validate_metadata_contract(
+            metadata=metadata,
+            live_run=live_run,
+            usage_mode=str(usage_payload.get("mode", "live")),
+        )
         return RunTaskResponse(
             session_id=str(payload["session_id"]),
             user_id=str(payload["user_id"]),
             skill=str(payload["skill"]),
             overlay=str(payload["overlay"]) if payload.get("overlay") is not None else None,
-            live_run=bool(payload["live_run"]),
+            live_run=live_run,
             content=str(payload.get("content", "")),
             usage=UsageMetrics(
                 input_tokens=int(usage_payload.get("input_tokens", 0)),
@@ -289,6 +298,65 @@ class RouterRsExecutionKernel(ExecutionKernel):
             model_id=str(payload.get("model_id")) if payload.get("model_id") is not None else None,
             metadata=metadata,
         )
+
+    def _validate_metadata_contract(
+        self,
+        *,
+        metadata: dict[str, Any],
+        live_run: bool,
+        usage_mode: str,
+    ) -> None:
+        required_fields = (
+            *EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
+            *(
+                LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS
+                if live_run
+                else DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS
+            ),
+        )
+        missing = [field for field in required_fields if field not in metadata]
+        if missing:
+            raise RouterRsInfrastructureError(
+                "router-rs execute returned incomplete metadata: "
+                + ", ".join(sorted(missing))
+            )
+        expected_mode = "live" if live_run else "estimated"
+        if usage_mode != expected_mode:
+            raise RouterRsInfrastructureError(
+                "router-rs execute returned an unexpected usage mode: "
+                f"{usage_mode!r} != {expected_mode!r}"
+            )
+        expected_execution_mode = "live" if live_run else "dry_run"
+        expected_pairs = {
+            "execution_kernel": self.adapter_kind,
+            "execution_kernel_authority": self.authority,
+            "execution_kernel_contract_mode": EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
+            "execution_kernel_fallback_policy": EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
+            "execution_kernel_in_process_replacement_complete": True,
+            "execution_kernel_delegate": self.adapter_kind,
+            "execution_kernel_delegate_authority": self.authority,
+            "execution_kernel_delegate_family": "rust-cli",
+            "execution_kernel_delegate_impl": self.adapter_kind,
+            "execution_kernel_live_primary": self.adapter_kind,
+            "execution_kernel_live_primary_authority": self.authority,
+            "execution_kernel_live_fallback_enabled": False,
+            "execution_kernel_live_fallback_mode": "disabled",
+            "execution_mode": expected_execution_mode,
+        }
+        for field, expected in expected_pairs.items():
+            if metadata.get(field) != expected:
+                raise RouterRsInfrastructureError(
+                    "router-rs execute returned an unexpected metadata value: "
+                    f"{field}={metadata.get(field)!r}"
+                )
+        if metadata.get("execution_kernel_live_fallback") is not None:
+            raise RouterRsInfrastructureError(
+                "router-rs execute returned an unexpected live fallback marker."
+            )
+        if metadata.get("execution_kernel_live_fallback_authority") is not None:
+            raise RouterRsInfrastructureError(
+                "router-rs execute returned an unexpected live fallback authority."
+            )
 
 
 class PythonAgnoExecutionKernel(ExecutionKernel):

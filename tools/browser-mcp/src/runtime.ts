@@ -11,7 +11,9 @@ import {
 import { BrowserToolError } from './errors.js';
 import type {
   ActionResult,
+  AttachedRuntimeEvent,
   AttachedRuntimeDiagnostics,
+  AttachedRuntimeEventsResult,
   BrowserRuntimeOptions,
   BrowserSessionView,
   BrowserTabView,
@@ -20,6 +22,7 @@ import type {
   DiagnosticsResult,
   ElementDescriptor,
   FillInput,
+  GetAttachedRuntimeEventsInput,
   GetElementsInput,
   GetNetworkInput,
   GetStateInput,
@@ -59,6 +62,8 @@ const SNAPSHOT_HISTORY_LIMIT = 10;
 const BODY_CAPTURE_LIMIT = 4096; // bytes
 const RUNTIME_VERSION = '0.2.0';
 const RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION = 'runtime-event-attach-descriptor-v1';
+const RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION = 'runtime-event-transport-v1';
+const RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION = 'runtime-event-handoff-v1';
 
 const INTERACTIVE_SELECTOR = [
   'button',
@@ -247,6 +252,8 @@ export class BrowserRuntime {
       maxScreenshots: options?.maxScreenshots ?? 100,
       runtimeAttachDescriptorPath: options?.runtimeAttachDescriptorPath ?? null,
       runtimeAttachDescriptor: options?.runtimeAttachDescriptor ?? null,
+      runtimeBindingArtifactPath: options?.runtimeBindingArtifactPath ?? null,
+      runtimeHandoffPath: options?.runtimeHandoffPath ?? null,
     };
   }
 
@@ -656,6 +663,60 @@ export class BrowserRuntime {
   }
 
   /**
+   * Replays runtime events through the configured Rust attach descriptor.
+   */
+  public async getAttachedRuntimeEvents(
+    input: GetAttachedRuntimeEventsInput = {},
+  ): Promise<AttachedRuntimeEventsResult> {
+    const limit = input.limit ?? 100;
+    if (!Number.isInteger(limit) || limit <= 0) {
+      throw new BrowserToolError(
+        'INVALID_INPUT',
+        'limit must be a positive integer.',
+        true,
+        ['provide a positive integer limit'],
+      );
+    }
+    const replay = await this.resolveAttachedRuntimeReplay();
+    const events = replay.events;
+    let startIndex = 0;
+
+    if (input.afterEventId) {
+      const matchedIndex = events.findIndex((event) => event.event_id === input.afterEventId);
+      if (matchedIndex === -1) {
+        throw new BrowserToolError(
+          'ATTACHED_RUNTIME_CURSOR_NOT_FOUND',
+          `No attached runtime event was found for afterEventId=${input.afterEventId}.`,
+          true,
+          ['call browser_get_attached_runtime_events without afterEventId', 'inspect browser_diagnostics'],
+        );
+      }
+      startIndex = matchedIndex + 1;
+    }
+
+    const window = events.slice(startIndex, startIndex + limit);
+    const nextIndex = startIndex + window.length;
+    const hasMore = nextIndex < events.length;
+    const lastEvent = window.at(-1) ?? null;
+
+    return {
+      ok: true,
+      attachedRuntime: replay.diagnostics,
+      events: window,
+      afterEventId: input.afterEventId ?? null,
+      hasMore,
+      nextCursor:
+        window.length > 0
+          ? {
+              eventId: typeof lastEvent?.event_id === 'string' ? lastEvent.event_id : null,
+              eventIndex: nextIndex - 1,
+            }
+          : null,
+      heartbeat: window.length === 0 && input.heartbeat === true ? { status: 'idle' } : null,
+    };
+  }
+
+  /**
    * Disposes all sessions and browser processes.
    */
   public async shutdown(): Promise<void> {
@@ -700,16 +761,11 @@ export class BrowserRuntime {
   }
 
   private async getAttachedRuntimeDiagnostics(): Promise<AttachedRuntimeDiagnostics> {
-    const descriptorSource = this.options.runtimeAttachDescriptor !== null
-      ? 'inline'
-      : this.options.runtimeAttachDescriptorPath !== null
-        ? 'path'
-        : null;
-    const descriptorPath = this.options.runtimeAttachDescriptorPath;
+    const configuredSource = this.getConfiguredRuntimeAttachSource();
     const base: AttachedRuntimeDiagnostics = {
       status: 'not_configured',
-      descriptorSource,
-      descriptorPath,
+      descriptorSource: configuredSource.source,
+      descriptorPath: configuredSource.path,
       schemaVersion: null,
       attachMode: null,
       artifactBackendFamily: null,
@@ -723,31 +779,105 @@ export class BrowserRuntime {
       warning: null,
     };
 
-    if (descriptorSource === null) {
+    if (configuredSource.source === null) {
       return base;
     }
 
-    let descriptor: RuntimeAttachDescriptor;
     try {
-      descriptor = await this.loadRuntimeAttachDescriptor();
+      return (await this.resolveAttachedRuntimeReplay()).diagnostics;
     } catch (error) {
+      if (error instanceof BrowserToolError) {
+        if (error.code === 'ATTACHED_RUNTIME_NOT_CONFIGURED') {
+          return base;
+        }
+        let hydratedBase = base;
+        try {
+          const descriptor = await this.loadRuntimeAttachDescriptor();
+          hydratedBase = {
+            ...base,
+            schemaVersion: descriptor.schema_version ?? null,
+            attachMode: descriptor.attach_mode ?? null,
+            artifactBackendFamily: descriptor.artifact_backend_family ?? null,
+            recommendedEntrypoint: descriptor.recommended_entrypoint ?? null,
+            traceStreamPath: descriptor.resolved_artifacts?.trace_stream_path ?? null,
+            replaySupported: descriptor.attach_capabilities?.artifact_replay === true,
+          };
+        } catch {
+          // Keep the minimal base payload when descriptor hydration also fails.
+        }
+        return {
+          ...hydratedBase,
+          status:
+            error.code === 'ATTACHED_RUNTIME_UNSUPPORTED_BACKEND'
+              ? 'unsupported_backend'
+              : error.code === 'ATTACHED_RUNTIME_TRACE_UNAVAILABLE'
+                ? 'trace_unavailable'
+                : 'invalid_descriptor',
+          warning: error.message,
+        };
+      }
       return {
         ...base,
         status: 'invalid_descriptor',
         warning: error instanceof Error ? error.message : 'failed to load runtime attach descriptor',
       };
     }
+  }
 
+  private async loadRuntimeAttachDescriptor(): Promise<RuntimeAttachDescriptor> {
+    const configuredSource = this.getConfiguredRuntimeAttachSource();
+    switch (configuredSource.source) {
+      case 'inline':
+        return this.options.runtimeAttachDescriptor!;
+      case 'descriptor_path':
+        return this.readRuntimeAttachDescriptorFile(configuredSource.path!);
+      case 'binding_artifact_path':
+        return this.buildRuntimeAttachDescriptorFromBindingArtifact(configuredSource.path!);
+      case 'handoff_path':
+        return this.buildRuntimeAttachDescriptorFromHandoff(configuredSource.path!);
+      default:
+        throw new Error('runtime attach descriptor is not configured');
+    }
+  }
+
+  private async resolveAttachedRuntimeReplay(): Promise<{
+    diagnostics: AttachedRuntimeDiagnostics;
+    descriptor: RuntimeAttachDescriptor;
+    events: AttachedRuntimeEvent[];
+  }> {
+    const configuredSource = this.getConfiguredRuntimeAttachSource();
+    if (configuredSource.source === null) {
+      throw new BrowserToolError(
+        'ATTACHED_RUNTIME_NOT_CONFIGURED',
+        'No runtime attach descriptor is configured for browser-mcp.',
+        true,
+        [
+          'start browser-mcp with --runtime-attach-descriptor-path',
+          'or --runtime-binding-artifact-path',
+          'or --runtime-handoff-path',
+          'or set BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH',
+        ],
+      );
+    }
+
+    const descriptor = await this.loadRuntimeAttachDescriptor();
     const traceStreamPath = descriptor.resolved_artifacts?.trace_stream_path ?? null;
     const replaySupported = descriptor.attach_capabilities?.artifact_replay === true;
-    const hydrated: AttachedRuntimeDiagnostics = {
-      ...base,
+    const diagnosticsBase: AttachedRuntimeDiagnostics = {
+      status: 'ready',
+      descriptorSource: configuredSource.source,
+      descriptorPath: configuredSource.path,
       schemaVersion: descriptor.schema_version ?? null,
       attachMode: descriptor.attach_mode ?? null,
       artifactBackendFamily: descriptor.artifact_backend_family ?? null,
       recommendedEntrypoint: descriptor.recommended_entrypoint ?? null,
       traceStreamPath,
       replaySupported,
+      eventCount: 0,
+      latestEventId: null,
+      latestEventKind: null,
+      latestEventTimestamp: null,
+      warning: null,
     };
 
     if (
@@ -755,28 +885,30 @@ export class BrowserRuntime {
       descriptor.attach_mode !== 'process_external_artifact_replay' ||
       replaySupported !== true
     ) {
-      return {
-        ...hydrated,
-        status: 'invalid_descriptor',
-        warning:
-          'runtime attach descriptor must be artifact-replay capable and match the Rust-first schema',
-      };
+      throw new BrowserToolError(
+        'ATTACHED_RUNTIME_INVALID_DESCRIPTOR',
+        'runtime attach descriptor must be artifact-replay capable and match the Rust-first schema',
+        true,
+        ['refresh the descriptor from describe_runtime_event_handoff', 'inspect browser_diagnostics'],
+      );
     }
 
     if (descriptor.artifact_backend_family !== 'filesystem') {
-      return {
-        ...hydrated,
-        status: 'unsupported_backend',
-        warning: `browser-mcp attach consumer currently supports filesystem replay only (got ${descriptor.artifact_backend_family})`,
-      };
+      throw new BrowserToolError(
+        'ATTACHED_RUNTIME_UNSUPPORTED_BACKEND',
+        `browser-mcp attach consumer currently supports filesystem replay only (got ${descriptor.artifact_backend_family})`,
+        true,
+        ['use a filesystem-backed attach descriptor for browser-mcp replay', 'inspect browser_diagnostics'],
+      );
     }
 
     if (!traceStreamPath) {
-      return {
-        ...hydrated,
-        status: 'trace_unavailable',
-        warning: 'runtime attach descriptor does not expose a trace_stream_path',
-      };
+      throw new BrowserToolError(
+        'ATTACHED_RUNTIME_TRACE_UNAVAILABLE',
+        'runtime attach descriptor does not expose a trace_stream_path',
+        true,
+        ['refresh the descriptor from describe_runtime_event_handoff'],
+      );
     }
 
     try {
@@ -786,39 +918,178 @@ export class BrowserRuntime {
         .split('\n')
         .map((line) => line.trim())
         .filter((line) => line.length > 0)
-        .map((line) => JSON.parse(line) as Record<string, unknown>);
+        .map((line) => JSON.parse(line) as AttachedRuntimeEvent);
       const latestEvent = events.at(-1);
       return {
-        ...hydrated,
-        status: 'ready',
-        eventCount: events.length,
-        latestEventId: typeof latestEvent?.event_id === 'string' ? latestEvent.event_id : null,
-        latestEventKind: typeof latestEvent?.kind === 'string' ? latestEvent.kind : null,
-        latestEventTimestamp: typeof latestEvent?.ts === 'string' ? latestEvent.ts : null,
+        descriptor,
+        events,
+        diagnostics: {
+          ...diagnosticsBase,
+          eventCount: events.length,
+          latestEventId: typeof latestEvent?.event_id === 'string' ? latestEvent.event_id : null,
+          latestEventKind: typeof latestEvent?.kind === 'string' ? latestEvent.kind : null,
+          latestEventTimestamp: typeof latestEvent?.ts === 'string' ? latestEvent.ts : null,
+        },
       };
     } catch (error) {
-      return {
-        ...hydrated,
-        status: 'trace_unavailable',
-        warning: error instanceof Error ? error.message : 'failed to read runtime trace stream',
-      };
+      throw new BrowserToolError(
+        'ATTACHED_RUNTIME_TRACE_UNAVAILABLE',
+        error instanceof Error ? error.message : 'failed to read runtime trace stream',
+        true,
+        ['inspect browser_diagnostics', 'refresh the attach descriptor or trace artifacts'],
+      );
     }
   }
 
-  private async loadRuntimeAttachDescriptor(): Promise<RuntimeAttachDescriptor> {
+  private getConfiguredRuntimeAttachSource(): {
+    source: AttachedRuntimeDiagnostics['descriptorSource'];
+    path: string | null;
+  } {
     if (this.options.runtimeAttachDescriptor !== null) {
-      return this.options.runtimeAttachDescriptor;
+      return {
+        source: 'inline',
+        path: this.options.runtimeAttachDescriptorPath,
+      };
     }
-    const descriptorPath = this.options.runtimeAttachDescriptorPath;
-    if (!descriptorPath) {
-      throw new Error('runtime attach descriptor is not configured');
+    if (this.options.runtimeAttachDescriptorPath !== null) {
+      return {
+        source: 'descriptor_path',
+        path: this.options.runtimeAttachDescriptorPath,
+      };
     }
+    if (this.options.runtimeBindingArtifactPath !== null) {
+      return {
+        source: 'binding_artifact_path',
+        path: this.options.runtimeBindingArtifactPath,
+      };
+    }
+    if (this.options.runtimeHandoffPath !== null) {
+      return {
+        source: 'handoff_path',
+        path: this.options.runtimeHandoffPath,
+      };
+    }
+    return {
+      source: null,
+      path: null,
+    };
+  }
+
+  private async readRuntimeAttachDescriptorFile(descriptorPath: string): Promise<RuntimeAttachDescriptor> {
     const raw = await readFile(descriptorPath, 'utf8');
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error('runtime attach descriptor must decode to a JSON object');
     }
     return parsed as RuntimeAttachDescriptor;
+  }
+
+  private async buildRuntimeAttachDescriptorFromBindingArtifact(
+    bindingArtifactPath: string,
+  ): Promise<RuntimeAttachDescriptor> {
+    const resolvedBindingArtifactPath = path.resolve(bindingArtifactPath);
+    const raw = await readFile(resolvedBindingArtifactPath, 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed?.schema_version !== RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION) {
+      throw new Error('runtime binding artifact returned an unknown schema');
+    }
+    const bindingBackendFamily = typeof parsed.binding_backend_family === 'string'
+      ? parsed.binding_backend_family
+      : 'filesystem';
+    const effectiveBindingArtifactPath =
+      typeof parsed.binding_artifact_path === 'string'
+        ? parsed.binding_artifact_path
+        : resolvedBindingArtifactPath;
+    const traceStreamPath = await this.inferTraceStreamPathFromBindingArtifact(
+      effectiveBindingArtifactPath,
+    );
+    return {
+      schema_version: RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION,
+      attach_mode: 'process_external_artifact_replay',
+      artifact_backend_family: bindingBackendFamily,
+      attach_capabilities: {
+        artifact_replay: parsed.replay_supported === true,
+        live_remote_stream: false,
+        cleanup_preserves_replay: parsed.cleanup_preserves_replay === true,
+      },
+      recommended_entrypoint:
+        typeof parsed.handoff_method === 'string'
+          ? parsed.handoff_method
+          : 'describe_runtime_event_handoff',
+      resolved_artifacts: {
+        binding_artifact_path: effectiveBindingArtifactPath,
+        handoff_path: null,
+        resume_manifest_path: null,
+        trace_stream_path: traceStreamPath,
+      },
+    };
+  }
+
+  private async buildRuntimeAttachDescriptorFromHandoff(handoffPath: string): Promise<RuntimeAttachDescriptor> {
+    const resolvedHandoffPath = path.resolve(handoffPath);
+    const raw = await readFile(resolvedHandoffPath, 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed?.schema_version !== RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION) {
+      throw new Error('runtime handoff artifact returned an unknown schema');
+    }
+    const transport = this.asRecord(parsed.transport);
+    const attachTarget = this.asRecord(parsed.attach_target);
+    const traceStreamPath = typeof parsed.trace_stream_path === 'string' ? parsed.trace_stream_path : null;
+    const bindingArtifactPath =
+      typeof transport?.binding_artifact_path === 'string' ? transport.binding_artifact_path : null;
+    const artifactBackendFamily =
+      typeof parsed.checkpoint_backend_family === 'string'
+        ? parsed.checkpoint_backend_family
+        : typeof transport?.binding_backend_family === 'string'
+          ? transport.binding_backend_family
+          : 'filesystem';
+    return {
+      schema_version: RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION,
+      attach_mode: 'process_external_artifact_replay',
+      artifact_backend_family: artifactBackendFamily,
+      attach_capabilities: {
+        artifact_replay: true,
+        live_remote_stream: false,
+        cleanup_preserves_replay: parsed.cleanup_preserves_replay !== false,
+      },
+      recommended_entrypoint:
+        typeof attachTarget?.handoff_method === 'string'
+          ? attachTarget.handoff_method
+          : 'describe_runtime_event_handoff',
+      resolved_artifacts: {
+        binding_artifact_path: bindingArtifactPath,
+        handoff_path: resolvedHandoffPath,
+        resume_manifest_path:
+          typeof parsed.resume_manifest_path === 'string' ? parsed.resume_manifest_path : null,
+        trace_stream_path: traceStreamPath,
+      },
+    };
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+    return value as Record<string, unknown>;
+  }
+
+  private async inferTraceStreamPathFromBindingArtifact(
+    bindingArtifactPath: string,
+  ): Promise<string | null> {
+    const resolvedBindingArtifactPath = path.resolve(bindingArtifactPath);
+    const candidatePaths = [
+      path.resolve(path.dirname(path.dirname(resolvedBindingArtifactPath)), 'TRACE_EVENTS.jsonl'),
+      path.resolve(path.dirname(path.dirname(path.dirname(resolvedBindingArtifactPath))), 'TRACE_EVENTS.jsonl'),
+    ];
+    for (const candidatePath of candidatePaths) {
+      try {
+        await stat(candidatePath);
+        return candidatePath;
+      } catch {
+        // Keep searching.
+      }
+    }
+    return null;
   }
 
   private async resolveTab(tabId?: string): Promise<TabRecord> {

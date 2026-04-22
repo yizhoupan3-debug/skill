@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, Field
 
@@ -110,6 +110,7 @@ class RouteExecutionPolicy(BaseModel):
     rollback_active: bool = False
     python_route_required: bool = False
     diagnostic_python_lane: bool = False
+    python_lane_kind: Literal["none", "legacy-primary", "diagnostic-compare-only"] = "none"
     primary_authority: str
     route_result_engine: str
     shadow_engine: str | None = None

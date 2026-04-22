@@ -407,6 +407,28 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
   // -------------------------------------------------------------------------
 
   server.registerTool(
+    'browser_get_attached_runtime_events',
+    {
+      title: 'Get Attached Runtime Events',
+      description:
+        'Replay runtime events through the configured Rust attach descriptor. ' +
+        'Useful for consuming host-facing progress from the Rust-first runtime surface.',
+      inputSchema: z.object({
+        afterEventId: z.string().optional(),
+        limit: z.number().int().positive().max(1000).optional(),
+        heartbeat: z.boolean().optional(),
+      }),
+    },
+    async (input) => {
+      try {
+        return createSuccessResult(await runtime.getAttachedRuntimeEvents(input));
+      } catch (error) {
+        return createErrorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
     'browser_diagnostics',
     {
       title: 'Runtime Diagnostics',

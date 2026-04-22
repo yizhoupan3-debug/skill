@@ -20,7 +20,7 @@ npm run check   # typecheck only
 npm run test    # run vitest integration tests
 ```
 
-## Tools (15 total)
+## Tools (16 total)
 
 | Tool | Description |
 |---|---|
@@ -38,6 +38,7 @@ npm run test    # run vitest integration tests
 | `browser_wait_for` | Wait for text / element / URL / idle |
 | `browser_save_session` | Save cookies + localStorage to disk |
 | `browser_restore_session` | Restore a saved session snapshot |
+| `browser_get_attached_runtime_events` | Replay runtime events via a Rust attach descriptor |
 | `browser_diagnostics` | Runtime health info |
 
 ## Startup options
@@ -47,6 +48,8 @@ npm run test    # run vitest integration tests
 node dist/index.js
 # Flags: --headless true|false  --engine chromium|firefox|webkit  --capture-body
 #        --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
+#        --runtime-binding-artifact-path /abs/path/runtime_event_transports/session__job.json
+#        --runtime-handoff-path /abs/path/ATTACHED_RUNTIME_EVENT_HANDOFF.json
 ```
 
 ### HTTP (Streamable HTTP transport)
@@ -97,3 +100,11 @@ BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH=/abs/path/runtime-attach-descriptor.j
 
 Then `browser_diagnostics` includes an `attachedRuntime` block with descriptor
 status, replay readiness, trace path, and the latest replayable event summary.
+You can also call `browser_get_attached_runtime_events` to consume replayable
+runtime events through that same attach descriptor.
+
+If you do not pass an explicit runtime attach input, the bundled
+`start_browser_mcp.sh` launcher now auto-discovers the newest filesystem-backed
+runtime transport binding artifact under
+`codex_agno_runtime/artifacts/scratch/**/runtime_event_transports/*.json` and
+starts browser-mcp against that replay surface automatically.

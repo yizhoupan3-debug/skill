@@ -31,6 +31,7 @@ from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
     EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
     EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
+    EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
     build_compatibility_fallback_metadata,
     build_execution_kernel_compatibility_agent_instructions,
     build_execution_kernel_compatibility_agent_spec,
@@ -102,6 +103,30 @@ def _request(*, dry_run: bool = False) -> ExecutionKernelRequest:
     )
 
 
+def _steady_state_kernel_metadata(**extra: object) -> dict[str, object]:
+    metadata: dict[str, object] = {
+        "execution_kernel": "router-rs",
+        "execution_kernel_authority": "rust-execution-cli",
+        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY: EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
+        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY: (
+            EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
+        ),
+        "execution_kernel_in_process_replacement_complete": True,
+        "execution_kernel_delegate": "router-rs",
+        "execution_kernel_delegate_authority": "rust-execution-cli",
+        "execution_kernel_delegate_family": "rust-cli",
+        "execution_kernel_delegate_impl": "router-rs",
+        "execution_kernel_live_primary": "router-rs",
+        "execution_kernel_live_primary_authority": "rust-execution-cli",
+        "execution_kernel_live_fallback": None,
+        "execution_kernel_live_fallback_authority": None,
+        "execution_kernel_live_fallback_enabled": False,
+        "execution_kernel_live_fallback_mode": "disabled",
+    }
+    metadata.update(extra)
+    return metadata
+
+
 def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
     settings = SimpleNamespace(
         codex_home=PROJECT_ROOT,
@@ -137,15 +162,15 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
                     },
                     "prompt_preview": payload["prompt_preview"],
                     "model_id": "gpt-5.4",
-                    "metadata": {
-                        "execution_kernel": "router-rs",
-                        "execution_kernel_authority": "rust-execution-cli",
-                        "execution_kernel_delegate_family": "rust-cli",
-                        "execution_kernel_delegate_impl": "router-rs",
-                        "execution_kernel_live_primary": "router-rs",
-                        "execution_kernel_live_primary_authority": "rust-execution-cli",
-                        "status": "completed",
-                    },
+                    "metadata": _steady_state_kernel_metadata(
+                        run_id="run-1",
+                        status="completed",
+                        trace_event_count=payload["trace_event_count"],
+                        trace_output_path=payload["trace_output_path"],
+                        execution_mode="live",
+                        route_engine=payload["route_engine"],
+                        diagnostic_python_lane_active=payload["diagnostic_python_lane_active"],
+                    ),
                 }
             ),
             stderr="",
@@ -163,11 +188,66 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
     assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
     assert response.metadata["execution_kernel_live_primary"] == "router-rs"
     assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-    assert "execution_kernel_live_fallback" not in response.metadata
-    assert "execution_kernel_live_fallback_authority" not in response.metadata
-    assert "execution_kernel_live_fallback_enabled" not in response.metadata
-    assert "execution_kernel_live_fallback_mode" not in response.metadata
+    assert response.metadata["execution_kernel_live_fallback"] is None
+    assert response.metadata["execution_kernel_live_fallback_authority"] is None
+    assert response.metadata["execution_kernel_live_fallback_enabled"] is False
+    assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
     assert response.usage.total_tokens == 34
+
+
+def test_router_rs_execution_kernel_rejects_missing_steady_state_metadata(monkeypatch) -> None:
+    settings = SimpleNamespace(
+        codex_home=PROJECT_ROOT,
+        rust_router_timeout_seconds=5.0,
+        default_output_tokens=512,
+        model_id="gpt-5.4",
+        aggregator_base_url="http://127.0.0.1:20128/v1",
+        aggregator_api_key="sk-test",
+    )
+    kernel = RouterRsExecutionKernel(settings)  # type: ignore[arg-type]
+
+    def fake_run(command, **kwargs):
+        payload = json.loads(command[command.index("--execute-input-json") + 1])
+        broken_metadata = _steady_state_kernel_metadata(
+            run_id="run-1",
+            status="completed",
+            trace_event_count=payload["trace_event_count"],
+            trace_output_path=payload["trace_output_path"],
+            execution_mode="live",
+            route_engine=payload["route_engine"],
+            diagnostic_python_lane_active=payload["diagnostic_python_lane_active"],
+        )
+        broken_metadata.pop("execution_kernel_delegate_authority")
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "execution_schema_version": "router-rs-execute-response-v1",
+                    "authority": "rust-execution-cli",
+                    "session_id": payload["session_id"],
+                    "user_id": payload["user_id"],
+                    "skill": payload["selected_skill"],
+                    "overlay": payload["overlay_skill"],
+                    "live_run": True,
+                    "content": "router-rs content",
+                    "usage": {
+                        "input_tokens": 21,
+                        "output_tokens": 13,
+                        "total_tokens": 34,
+                        "mode": "live",
+                    },
+                    "prompt_preview": "Rust-owned live prompt preview",
+                    "model_id": "gpt-5.4",
+                    "metadata": broken_metadata,
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr("codex_agno_runtime.execution_kernel.subprocess.run", fake_run)
+
+    with pytest.raises(RuntimeError, match="execution_kernel_delegate_authority"):
+        asyncio.run(kernel.execute(_request()))
 
 
 def test_python_kernel_rejects_explicit_live_fallback_requests_after_retirement(
@@ -257,6 +337,9 @@ def test_execution_kernel_contract_helpers_define_compatibility_fallback_metadat
     assert contract_core["current_contract_truth"]["compatibility_fallback_runtime_path"] == (
         "retired"
     )
+    assert contract_core["runtime_response_metadata_fields"]["steady_state_kernel"] == [
+        *EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS
+    ]
     assert contract_core["runtime_response_metadata_fields"]["retired_compatibility_fallback"] == [
         "run_id",
         "status",
@@ -288,6 +371,9 @@ def test_execution_kernel_contract_helpers_define_compatibility_fallback_metadat
         EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
         EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
     ]
+    assert contract_core["current_response_shape_truth"]["live_primary"][
+        "steady_state_metadata_fields"
+    ] == [*EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS]
     assert contract_core["runtime_response_metadata_fields"]["dry_run"] == [
         "reason",
         EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
@@ -503,14 +589,15 @@ def test_python_kernel_omits_python_prompt_preview_on_rust_live_path(monkeypatch
                     },
                     "prompt_preview": "Rust-owned live prompt preview",
                     "model_id": "gpt-5.4",
-                    "metadata": {
-                        "execution_kernel": "router-rs",
-                        "execution_kernel_authority": "rust-execution-cli",
-                        "execution_kernel_delegate_family": "rust-cli",
-                        "execution_kernel_delegate_impl": "router-rs",
-                        "execution_kernel_live_primary": "router-rs",
-                        "execution_kernel_live_primary_authority": "rust-execution-cli",
-                    },
+                    "metadata": _steady_state_kernel_metadata(
+                        run_id="run-1",
+                        status="completed",
+                        trace_event_count=payload["trace_event_count"],
+                        trace_output_path=payload["trace_output_path"],
+                        execution_mode="live",
+                        route_engine=payload["route_engine"],
+                        diagnostic_python_lane_active=payload["diagnostic_python_lane_active"],
+                    ),
                 }
             ),
             stderr="",
@@ -526,10 +613,10 @@ def test_python_kernel_omits_python_prompt_preview_on_rust_live_path(monkeypatch
     assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
     assert response.metadata["execution_kernel_live_primary"] == "router-rs"
     assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-    assert "execution_kernel_live_fallback" not in response.metadata
-    assert "execution_kernel_live_fallback_authority" not in response.metadata
-    assert "execution_kernel_live_fallback_enabled" not in response.metadata
-    assert "execution_kernel_live_fallback_mode" not in response.metadata
+    assert response.metadata["execution_kernel_live_fallback"] is None
+    assert response.metadata["execution_kernel_live_fallback_authority"] is None
+    assert response.metadata["execution_kernel_live_fallback_enabled"] is False
+    assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
 
 
 def test_python_kernel_raises_when_router_rs_infrastructure_fails_and_live_fallback_is_disabled(
@@ -646,16 +733,14 @@ def test_python_kernel_dry_run_still_works_when_live_fallback_is_disabled(monkey
                     },
                     "prompt_preview": payload["prompt_preview"],
                     "model_id": None,
-                    "metadata": {
-                        "reason": "router-rs returned a deterministic dry-run payload.",
-                        "trace_event_count": payload["trace_event_count"],
-                        "trace_output_path": payload["trace_output_path"],
-                        "execution_kernel": "router-rs",
-                        "execution_kernel_authority": "rust-execution-cli",
-                        "execution_mode": "dry_run",
-                        "route_engine": payload["route_engine"],
-                        "diagnostic_python_lane_active": payload["diagnostic_python_lane_active"],
-                    },
+                    "metadata": _steady_state_kernel_metadata(
+                        reason="router-rs returned a deterministic dry-run payload.",
+                        trace_event_count=payload["trace_event_count"],
+                        trace_output_path=payload["trace_output_path"],
+                        execution_mode="dry_run",
+                        route_engine=payload["route_engine"],
+                        diagnostic_python_lane_active=payload["diagnostic_python_lane_active"],
+                    ),
                 }
             ),
             stderr="",

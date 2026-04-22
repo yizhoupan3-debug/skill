@@ -47,6 +47,23 @@ EXECUTION_KERNEL_USAGE_FIELDS = (
     "total_tokens",
     "mode",
 )
+EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS = (
+    "execution_kernel",
+    "execution_kernel_authority",
+    EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
+    EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
+    "execution_kernel_in_process_replacement_complete",
+    "execution_kernel_delegate",
+    "execution_kernel_delegate_authority",
+    "execution_kernel_delegate_family",
+    "execution_kernel_delegate_impl",
+    "execution_kernel_live_primary",
+    "execution_kernel_live_primary_authority",
+    "execution_kernel_live_fallback",
+    "execution_kernel_live_fallback_authority",
+    "execution_kernel_live_fallback_enabled",
+    "execution_kernel_live_fallback_mode",
+)
 RUNTIME_TRACE_METADATA_FIELDS = (
     "trace_event_count",
     "trace_output_path",
@@ -196,6 +213,7 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
         },
         "runtime_response_metadata_fields": {
             "shared": [*RUNTIME_TRACE_METADATA_FIELDS],
+            "steady_state_kernel": [*EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS],
             "live_primary": [*LIVE_PRIMARY_RUNTIME_METADATA_FIELDS],
             "dry_run": [*DRY_RUN_RUNTIME_METADATA_FIELDS],
             "retired_compatibility_fallback": [*COMPATIBILITY_FALLBACK_RUNTIME_METADATA_FIELDS],
@@ -230,7 +248,13 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
                 "content_type": "string",
                 "prompt_preview_source": "rust-owned-live-prompt",
                 "model_id_present": True,
-                "required_metadata_fields": [*LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS],
+                "required_metadata_fields": [
+                    *EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
+                    *LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS,
+                ],
+                "steady_state_metadata_fields": [
+                    *EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS
+                ],
                 "pass_through_metadata_fields": [
                     *LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS
                 ],
@@ -254,7 +278,13 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
                 "content_type": "string",
                 "prompt_preview_source": "rust-owned-dry-run-prompt",
                 "model_id_present": False,
-                "required_metadata_fields": [*DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS],
+                "required_metadata_fields": [
+                    *EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
+                    *DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS,
+                ],
+                "steady_state_metadata_fields": [
+                    *EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS
+                ],
                 "fallback_reason_present": False,
             },
         },

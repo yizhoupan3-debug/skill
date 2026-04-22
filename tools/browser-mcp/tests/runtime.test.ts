@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import { AddressInfo } from 'node:net';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -9,6 +9,105 @@ import { BrowserRuntime } from '../src/runtime.js';
 let server: Server;
 let baseUrl: string;
 let runtime: BrowserRuntime;
+
+async function createAttachedRuntimeFixture(): Promise<{
+  tempRoot: string;
+  traceStreamPath: string;
+  descriptorPath: string;
+  bindingArtifactPath: string;
+  handoffPath: string;
+}> {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), 'browser-mcp-attach-'));
+  const transportDir = path.join(tempRoot, 'data', 'runtime_event_transports');
+  const traceStreamPath = path.join(tempRoot, 'TRACE_EVENTS.jsonl');
+  const descriptorPath = path.join(tempRoot, 'runtime-attach-descriptor.json');
+  const bindingArtifactPath = path.join(transportDir, 'session-1__job-1.json');
+  const handoffPath = path.join(tempRoot, 'ATTACHED_RUNTIME_EVENT_HANDOFF.json');
+
+  await mkdir(transportDir, { recursive: true });
+  await writeFile(
+      traceStreamPath,
+    [
+      JSON.stringify({
+        ts: '2026-04-22T10:00:00.000Z',
+        event_id: 'evt-1',
+        kind: 'job.started',
+      }),
+      JSON.stringify({
+        ts: '2026-04-22T10:00:01.000Z',
+        event_id: 'evt-2',
+        kind: 'job.completed',
+      }),
+    ].join('\n') + '\n',
+      'utf8',
+    );
+  await writeFile(
+    bindingArtifactPath,
+    JSON.stringify(
+      {
+        schema_version: 'runtime-event-transport-v1',
+        session_id: 'session-1',
+        job_id: 'job-1',
+        handoff_method: 'describe_runtime_event_handoff',
+        replay_supported: true,
+        cleanup_preserves_replay: true,
+        binding_backend_family: 'filesystem',
+        binding_artifact_path: bindingArtifactPath,
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
+  await writeFile(
+    handoffPath,
+    JSON.stringify(
+      {
+        schema_version: 'runtime-event-handoff-v1',
+        session_id: 'session-1',
+        job_id: 'job-1',
+        checkpoint_backend_family: 'filesystem',
+        trace_stream_path: traceStreamPath,
+        resume_manifest_path: path.join(tempRoot, 'TRACE_RESUME_MANIFEST.json'),
+        cleanup_preserves_replay: true,
+        attach_target: {
+          handoff_method: 'describe_runtime_event_handoff',
+        },
+        transport: {
+          binding_backend_family: 'filesystem',
+          binding_artifact_path: bindingArtifactPath,
+        },
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
+  await writeFile(
+    descriptorPath,
+    JSON.stringify(
+      {
+        schema_version: 'runtime-event-attach-descriptor-v1',
+        attach_mode: 'process_external_artifact_replay',
+        artifact_backend_family: 'filesystem',
+        attach_capabilities: {
+          artifact_replay: true,
+          live_remote_stream: false,
+          cleanup_preserves_replay: true,
+        },
+        recommended_entrypoint: 'describe_runtime_event_handoff',
+        resolved_artifacts: {
+          trace_stream_path: traceStreamPath,
+        },
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
+
+  return { tempRoot, traceStreamPath, descriptorPath, bindingArtifactPath, handoffPath };
+}
 
 /**
  * Creates the demo HTML page used by tests.
@@ -374,48 +473,7 @@ describe('BrowserRuntime', () => {
   });
 
   it('surfaces attached runtime diagnostics from a persisted attach descriptor', async () => {
-    const tempRoot = await mkdtemp(path.join(tmpdir(), 'browser-mcp-attach-'));
-    const traceStreamPath = path.join(tempRoot, 'TRACE_EVENTS.jsonl');
-    const descriptorPath = path.join(tempRoot, 'runtime-attach-descriptor.json');
-
-    await writeFile(
-      traceStreamPath,
-      [
-        JSON.stringify({
-          ts: '2026-04-22T10:00:00.000Z',
-          event_id: 'evt-1',
-          kind: 'job.started',
-        }),
-        JSON.stringify({
-          ts: '2026-04-22T10:00:01.000Z',
-          event_id: 'evt-2',
-          kind: 'job.completed',
-        }),
-      ].join('\n') + '\n',
-      'utf8',
-    );
-    await writeFile(
-      descriptorPath,
-      JSON.stringify(
-        {
-          schema_version: 'runtime-event-attach-descriptor-v1',
-          attach_mode: 'process_external_artifact_replay',
-          artifact_backend_family: 'filesystem',
-          attach_capabilities: {
-            artifact_replay: true,
-            live_remote_stream: false,
-            cleanup_preserves_replay: true,
-          },
-          recommended_entrypoint: 'describe_runtime_event_handoff',
-          resolved_artifacts: {
-            trace_stream_path: traceStreamPath,
-          },
-        },
-        null,
-        2,
-      ),
-      'utf8',
-    );
+    const { tempRoot, traceStreamPath, descriptorPath } = await createAttachedRuntimeFixture();
 
     const attachedRuntime = new BrowserRuntime({
       headless: true,
@@ -426,12 +484,97 @@ describe('BrowserRuntime', () => {
     try {
       const diagnostics = await attachedRuntime.getDiagnostics();
       expect(diagnostics.attachedRuntime.status).toBe('ready');
-      expect(diagnostics.attachedRuntime.descriptorSource).toBe('path');
+      expect(diagnostics.attachedRuntime.descriptorSource).toBe('descriptor_path');
       expect(diagnostics.attachedRuntime.recommendedEntrypoint).toBe('describe_runtime_event_handoff');
       expect(diagnostics.attachedRuntime.eventCount).toBe(2);
       expect(diagnostics.attachedRuntime.latestEventId).toBe('evt-2');
       expect(diagnostics.attachedRuntime.latestEventKind).toBe('job.completed');
       expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+    } finally {
+      await attachedRuntime.shutdown();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('replays attached runtime events through the configured descriptor', async () => {
+    const { tempRoot, traceStreamPath, descriptorPath } = await createAttachedRuntimeFixture();
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeAttachDescriptorPath: descriptorPath,
+      screenshotDir: path.join(tempRoot, 'screenshots'),
+    });
+
+    try {
+      const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 1 });
+      const firstEvent = replay.events[0]!;
+      expect(replay.attachedRuntime.status).toBe('ready');
+      expect(replay.events).toHaveLength(1);
+      expect(firstEvent.event_id).toBe('evt-1');
+      expect(replay.hasMore).toBe(true);
+      expect(replay.nextCursor?.eventId).toBe('evt-1');
+
+      const resumed = await attachedRuntime.getAttachedRuntimeEvents({
+        afterEventId: 'evt-1',
+        limit: 5,
+      });
+      const resumedEvent = resumed.events[0]!;
+      expect(resumed.events).toHaveLength(1);
+      expect(resumedEvent.event_id).toBe('evt-2');
+      expect(resumed.hasMore).toBe(false);
+
+      const idle = await attachedRuntime.getAttachedRuntimeEvents({
+        afterEventId: 'evt-2',
+        heartbeat: true,
+      });
+      expect(idle.events).toHaveLength(0);
+      expect(idle.heartbeat?.status).toBe('idle');
+      expect(idle.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+    } finally {
+      await attachedRuntime.shutdown();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('hydrates replay from a transport binding artifact path', async () => {
+    const { tempRoot, traceStreamPath, bindingArtifactPath } = await createAttachedRuntimeFixture();
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeBindingArtifactPath: bindingArtifactPath,
+      screenshotDir: path.join(tempRoot, 'screenshots'),
+    });
+
+    try {
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.attachedRuntime.status).toBe('ready');
+      expect(diagnostics.attachedRuntime.descriptorSource).toBe('binding_artifact_path');
+      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+
+      const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
+      expect(replay.events).toHaveLength(2);
+      expect(replay.events[1]!.event_id).toBe('evt-2');
+    } finally {
+      await attachedRuntime.shutdown();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('hydrates replay from a handoff artifact path', async () => {
+    const { tempRoot, traceStreamPath, handoffPath } = await createAttachedRuntimeFixture();
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeHandoffPath: handoffPath,
+      screenshotDir: path.join(tempRoot, 'screenshots'),
+    });
+
+    try {
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.attachedRuntime.status).toBe('ready');
+      expect(diagnostics.attachedRuntime.descriptorSource).toBe('handoff_path');
+      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+
+      const replay = await attachedRuntime.getAttachedRuntimeEvents({ afterEventId: 'evt-1', limit: 5 });
+      expect(replay.events).toHaveLength(1);
+      expect(replay.events[0]!.event_id).toBe('evt-2');
     } finally {
       await attachedRuntime.shutdown();
       await rm(tempRoot, { recursive: true, force: true });
