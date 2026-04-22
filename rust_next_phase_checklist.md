@@ -272,7 +272,7 @@
   host adapter 现在显式区分 framework truth 与 host-private override：任何 host 私有
   字段都必须通过 `host_private` 显式 opt-in；CLI-family / desktop adapter 产物新增
   first-class `bridge_contract` 与 `source_contract`，把 bridge 来源与 adapter 别名关系
- 写成 contract；native install / host integration 也开始从
+  写成 contract；native install / host integration 也开始从
   `configs/framework/RUNTIME_REGISTRY.json` 读取 plugin 与 skill bridge 默认值，而不是
   继续写死路径。
 - `lane4 / Process-External Attach Surface Hardening`
