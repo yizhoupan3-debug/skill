@@ -223,7 +223,10 @@ fn is_active_status(status: &str) -> bool {
 }
 
 fn is_terminal_status(status: &str) -> bool {
-    matches!(status, "completed" | "failed" | "interrupted" | "retry_exhausted")
+    matches!(
+        status,
+        "completed" | "failed" | "interrupted" | "retry_exhausted"
+    )
 }
 
 fn validate_transition(previous_status: Option<&str>, next_status: &str) -> Result<(), String> {
@@ -257,7 +260,11 @@ fn validate_transition(previous_status: Option<&str>, next_status: &str) -> Resu
         Some("interrupt_requested") => matches!(next_status, "interrupt_requested" | "interrupted"),
         Some("retry_scheduled") => matches!(
             next_status,
-            "retry_scheduled" | "retry_claimed" | "interrupt_requested" | "interrupted" | "retry_exhausted"
+            "retry_scheduled"
+                | "retry_claimed"
+                | "interrupt_requested"
+                | "interrupted"
+                | "retry_exhausted"
         ),
         Some("retry_claimed") => matches!(
             next_status,
@@ -314,8 +321,12 @@ fn build_state_control_plane(
     state_path: &Path,
 ) -> Result<Value, String> {
     let normalized_backend = normalized_backend_family(backend_family);
-    let (supports_atomic_replace, supports_compaction, supports_snapshot_delta, supports_remote_event_transport) =
-        backend_capabilities(&normalized_backend)?;
+    let (
+        supports_atomic_replace,
+        supports_compaction,
+        supports_snapshot_delta,
+        supports_remote_event_transport,
+    ) = backend_capabilities(&normalized_backend)?;
     let mut payload = json!({
         "schema_version": BACKGROUND_STATE_CONTROL_PLANE_SCHEMA_VERSION,
         "runtime_control_plane_schema_version": control_plane_descriptor
@@ -351,10 +362,7 @@ fn build_state_control_plane(
             }
         }
     }
-    if payload
-        .get("delegate_kind")
-        .and_then(Value::as_str)
-        == Some("filesystem-state-store")
+    if payload.get("delegate_kind").and_then(Value::as_str) == Some("filesystem-state-store")
         && normalized_backend != "filesystem"
     {
         payload["delegate_kind"] = Value::String(background_delegate_kind(&normalized_backend));
@@ -371,11 +379,7 @@ impl BackgroundRunStatus {
 }
 
 impl BackgroundJobStatusMutation {
-    fn apply(
-        &self,
-        job_id: &str,
-        existing: Option<&BackgroundRunStatus>,
-    ) -> BackgroundRunStatus {
+    fn apply(&self, job_id: &str, existing: Option<&BackgroundRunStatus>) -> BackgroundRunStatus {
         match existing {
             None => BackgroundRunStatus {
                 job_id: job_id.to_string(),
@@ -393,8 +397,12 @@ impl BackgroundJobStatusMutation {
                 created_at: now_iso(),
                 updated_at: now_iso(),
                 attempt: self.attempt.unwrap_or(DEFAULT_BACKGROUND_JOB_ATTEMPT),
-                retry_count: self.retry_count.unwrap_or(DEFAULT_BACKGROUND_JOB_RETRY_COUNT),
-                max_attempts: self.max_attempts.unwrap_or(DEFAULT_BACKGROUND_JOB_MAX_ATTEMPTS),
+                retry_count: self
+                    .retry_count
+                    .unwrap_or(DEFAULT_BACKGROUND_JOB_RETRY_COUNT),
+                max_attempts: self
+                    .max_attempts
+                    .unwrap_or(DEFAULT_BACKGROUND_JOB_MAX_ATTEMPTS),
                 timeout_seconds: self.timeout_seconds,
                 claimed_by: self.claimed_by.clone(),
                 claimed_at: self.claimed_at.clone(),
@@ -429,7 +437,8 @@ impl BackgroundJobStatusMutation {
                     updated.parent_job_id = self.parent_job_id.clone();
                 }
                 if self.multitask_strategy.is_some() {
-                    updated.multitask_strategy = self.multitask_strategy.clone().unwrap_or_default();
+                    updated.multitask_strategy =
+                        self.multitask_strategy.clone().unwrap_or_default();
                 }
                 updated.result = self.result.clone();
                 updated.error = self.error.clone();
@@ -437,10 +446,14 @@ impl BackgroundJobStatusMutation {
                     updated.attempt = self.attempt.unwrap_or(DEFAULT_BACKGROUND_JOB_ATTEMPT);
                 }
                 if self.retry_count.is_some() {
-                    updated.retry_count = self.retry_count.unwrap_or(DEFAULT_BACKGROUND_JOB_RETRY_COUNT);
+                    updated.retry_count = self
+                        .retry_count
+                        .unwrap_or(DEFAULT_BACKGROUND_JOB_RETRY_COUNT);
                 }
                 if self.max_attempts.is_some() {
-                    updated.max_attempts = self.max_attempts.unwrap_or(DEFAULT_BACKGROUND_JOB_MAX_ATTEMPTS);
+                    updated.max_attempts = self
+                        .max_attempts
+                        .unwrap_or(DEFAULT_BACKGROUND_JOB_MAX_ATTEMPTS);
                 }
                 if self.timeout_seconds.is_some() {
                     updated.timeout_seconds = self.timeout_seconds;
@@ -506,7 +519,8 @@ impl BackgroundStateStore {
             &backend_family,
             &state_path,
         )?;
-        let persisted = read_persisted_state(&state_path, &backend_family, sqlite_db_path.as_deref())?;
+        let persisted =
+            read_persisted_state(&state_path, &backend_family, sqlite_db_path.as_deref())?;
         let mut store = Self {
             state_path,
             backend_family: normalized_backend_family(&backend_family),
@@ -608,7 +622,8 @@ impl BackgroundStateStore {
                 })
                 .collect(),
         };
-        let payload = serde_json::to_string_pretty(&persisted).map_err(|err| err.to_string())? + "\n";
+        let payload =
+            serde_json::to_string_pretty(&persisted).map_err(|err| err.to_string())? + "\n";
         write_persisted_state(
             &self.state_path,
             &self.backend_family,
@@ -661,7 +676,11 @@ impl BackgroundStateStore {
         };
         let updated = resolved_mutation.apply(job_id, existing.as_ref());
         self.jobs.insert(job_id.to_string(), updated.clone());
-        self.release_previous_session(job_id, previous_session_id.as_deref(), resolved_session_id.as_deref());
+        self.release_previous_session(
+            job_id,
+            previous_session_id.as_deref(),
+            resolved_session_id.as_deref(),
+        );
         self.finalize_session(job_id, resolved_session_id.as_deref(), &mutation.status);
         self.persist()?;
         Ok(updated)
@@ -703,7 +722,12 @@ impl BackgroundStateStore {
         if Some(previous_session_id) == next_session_id {
             return;
         }
-        if self.active_sessions.get(previous_session_id).map(String::as_str) == Some(job_id) {
+        if self
+            .active_sessions
+            .get(previous_session_id)
+            .map(String::as_str)
+            == Some(job_id)
+        {
             self.active_sessions.remove(previous_session_id);
         }
     }
@@ -739,7 +763,10 @@ impl BackgroundStateStore {
         self.pending_session_takeovers.len()
     }
 
-    fn parallel_group_summary(&self, parallel_group_id: &str) -> Option<BackgroundParallelGroupSummary> {
+    fn parallel_group_summary(
+        &self,
+        parallel_group_id: &str,
+    ) -> Option<BackgroundParallelGroupSummary> {
         let jobs = self
             .jobs
             .values()
@@ -800,10 +827,8 @@ impl BackgroundStateStore {
                     Some(active_job_id) if active_job_id == incoming_job_id => "owned".to_string(),
                     Some(_) => {
                         if previous_pending_job_id.as_deref() != Some(incoming_job_id) {
-                            self.pending_session_takeovers.insert(
-                                session_id.to_string(),
-                                incoming_job_id.to_string(),
-                            );
+                            self.pending_session_takeovers
+                                .insert(session_id.to_string(), incoming_job_id.to_string());
                             changed = true;
                         }
                         "pending".to_string()
@@ -938,7 +963,10 @@ fn build_parallel_group_summary(
     let mut active_job_count = 0usize;
     let mut terminal_job_count = 0usize;
     let mut latest_updated_at: Option<String> = None;
-    let mut job_ids = jobs.iter().map(|job| job.job_id.clone()).collect::<Vec<_>>();
+    let mut job_ids = jobs
+        .iter()
+        .map(|job| job.job_id.clone())
+        .collect::<Vec<_>>();
     job_ids.sort();
     for job in jobs {
         let current = status_counts
@@ -1006,22 +1034,24 @@ fn read_persisted_state(
         }
         "sqlite" | "sqlite3" => {
             let Some(db_path) = sqlite_db_path else {
-                return Err("SQLite background state request is missing sqlite_db_path.".to_string());
+                return Err(
+                    "SQLite background state request is missing sqlite_db_path.".to_string()
+                );
             };
             if !db_path.exists() {
                 return Ok(None);
             }
-            let storage_root = state_path
-                .parent()
-                .ok_or_else(|| "Background state path is missing a parent directory.".to_string())?;
+            let storage_root = state_path.parent().ok_or_else(|| {
+                "Background state path is missing a parent directory.".to_string()
+            })?;
             let stable_key = sqlite_storage_key(storage_root, state_path)?;
-            let legacy_key = state_path.canonicalize().unwrap_or_else(|_| state_path.to_path_buf());
+            let legacy_key = state_path
+                .canonicalize()
+                .unwrap_or_else(|_| state_path.to_path_buf());
             let conn = open_sqlite_connection(db_path)?;
             let row: Option<String> = conn
                 .query_row(
-                    &format!(
-                        "SELECT payload_text FROM {SQLITE_TABLE_NAME} WHERE payload_key = ?1"
-                    ),
+                    &format!("SELECT payload_text FROM {SQLITE_TABLE_NAME} WHERE payload_key = ?1"),
                     params![stable_key],
                     |row| row.get(0),
                 )
@@ -1076,11 +1106,13 @@ fn write_persisted_state(
         }
         "sqlite" | "sqlite3" => {
             let Some(db_path) = sqlite_db_path else {
-                return Err("SQLite background state request is missing sqlite_db_path.".to_string());
+                return Err(
+                    "SQLite background state request is missing sqlite_db_path.".to_string()
+                );
             };
-            let storage_root = state_path
-                .parent()
-                .ok_or_else(|| "Background state path is missing a parent directory.".to_string())?;
+            let storage_root = state_path.parent().ok_or_else(|| {
+                "Background state path is missing a parent directory.".to_string()
+            })?;
             let payload_key = sqlite_storage_key(storage_root, state_path)?;
             let conn = open_sqlite_connection(db_path)?;
             conn.execute(
@@ -1111,15 +1143,13 @@ fn sqlite_storage_key(storage_root: &Path, state_path: &Path) -> Result<String, 
     } else {
         state_path.to_path_buf()
     };
-    let relative = resolved_state
-        .strip_prefix(&resolved_root)
-        .map_err(|_| {
-            format!(
-                "SQLite background state path {} must stay under storage root {}",
-                resolved_state.display(),
-                resolved_root.display()
-            )
-        })?;
+    let relative = resolved_state.strip_prefix(&resolved_root).map_err(|_| {
+        format!(
+            "SQLite background state path {} must stay under storage root {}",
+            resolved_state.display(),
+            resolved_root.display()
+        )
+    })?;
     Ok(relative.to_string_lossy().replace('\\', "/"))
 }
 
@@ -1170,10 +1200,9 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
                 .job_id
                 .as_deref()
                 .ok_or_else(|| "Background state apply_mutation is missing job_id.".to_string())?;
-            let mutation = request
-                .mutation
-                .as_ref()
-                .ok_or_else(|| "Background state apply_mutation is missing mutation.".to_string())?;
+            let mutation = request.mutation.as_ref().ok_or_else(|| {
+                "Background state apply_mutation is missing mutation.".to_string()
+            })?;
             let job = store.apply_mutation(job_id, mutation)?;
             response["job"] = serde_json::to_value(job).map_err(|err| err.to_string())?;
             response["state"] = store.snapshot_payload();
@@ -1191,10 +1220,9 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
                 .unwrap_or(Value::Null);
         }
         "get_active_job" => {
-            let session_id = request
-                .session_id
-                .as_deref()
-                .ok_or_else(|| "Background state get_active_job is missing session_id.".to_string())?;
+            let session_id = request.session_id.as_deref().ok_or_else(|| {
+                "Background state get_active_job is missing session_id.".to_string()
+            })?;
             response["active_job_id"] = store
                 .active_job(session_id)
                 .map(Value::String)
@@ -1205,10 +1233,9 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
                 .session_id
                 .as_deref()
                 .ok_or_else(|| "Background state arbitration is missing session_id.".to_string())?;
-            let incoming_job_id = request
-                .incoming_job_id
-                .as_deref()
-                .ok_or_else(|| "Background state arbitration is missing incoming_job_id.".to_string())?;
+            let incoming_job_id = request.incoming_job_id.as_deref().ok_or_else(|| {
+                "Background state arbitration is missing incoming_job_id.".to_string()
+            })?;
             let takeover = store.arbitrate_session_takeover(
                 &request.operation,
                 session_id,
@@ -1223,10 +1250,9 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
                 .session_id
                 .as_deref()
                 .ok_or_else(|| "Background state arbitration is missing session_id.".to_string())?;
-            let incoming_job_id = request
-                .incoming_job_id
-                .as_deref()
-                .ok_or_else(|| "Background state arbitration is missing incoming_job_id.".to_string())?;
+            let incoming_job_id = request.incoming_job_id.as_deref().ok_or_else(|| {
+                "Background state arbitration is missing incoming_job_id.".to_string()
+            })?;
             let takeover = store.arbitrate_session_takeover(
                 &request.operation,
                 session_id,
@@ -1237,10 +1263,9 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
             response["health"] = store.health_payload();
         }
         "parallel_group_summary" => {
-            let parallel_group_id = request
-                .parallel_group_id
-                .as_deref()
-                .ok_or_else(|| "Background state parallel_group_summary is missing parallel_group_id.".to_string())?;
+            let parallel_group_id = request.parallel_group_id.as_deref().ok_or_else(|| {
+                "Background state parallel_group_summary is missing parallel_group_id.".to_string()
+            })?;
             response["parallel_group_summary"] = store
                 .parallel_group_summary(parallel_group_id)
                 .map(|summary| serde_json::to_value(summary).map_err(|err| err.to_string()))
@@ -1249,7 +1274,8 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
         }
         "parallel_group_summaries" => {
             response["parallel_group_summaries"] =
-                serde_json::to_value(store.parallel_group_summaries()).map_err(|err| err.to_string())?;
+                serde_json::to_value(store.parallel_group_summaries())
+                    .map_err(|err| err.to_string())?;
         }
         "health" => {}
         other => {

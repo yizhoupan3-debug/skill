@@ -71,17 +71,23 @@ class PromptBuilder:
         """
         self._loader = loader
 
-    def build_prompt(self, routing_result: RoutingResult) -> str:
+    def build_prompt(
+        self,
+        routing_result: RoutingResult,
+        *,
+        prompt_preview: str | None = None,
+    ) -> str:
         """Build the injected prompt for the selected route.
 
         Parameters:
             routing_result: The routing decision.
+            prompt_preview: Optional explicit Rust-owned preview text.
 
         Returns:
             str: The injected prompt text.
         """
-        if routing_result.prompt_preview:
-            return routing_result.prompt_preview
+        if prompt_preview:
+            return prompt_preview
 
         selected = routing_result.selected_skill
         if not selected.body_loaded and self._loader is not None:

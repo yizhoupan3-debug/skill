@@ -2932,7 +2932,9 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         "local_runtime_health".to_string(),
         Value::Array(vec![
             Value::String("runtime_control_plane.services.execution.kernel_contract".to_string()),
-            Value::String("ExecutionEnvironmentService.health().kernel_live_backend_impl".to_string()),
+            Value::String(
+                "ExecutionEnvironmentService.health().kernel_live_backend_impl".to_string(),
+            ),
         ]),
     );
     retirement_exit_observation_sources.insert(
@@ -3703,7 +3705,10 @@ fn collect_files(root: &Path) -> Vec<PathBuf> {
     entries.sort();
     for path in entries {
         if path.is_dir() {
-            let directory_name = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
+            let directory_name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
             if matches!(directory_name, "target" | "__pycache__" | ".pytest_cache") {
                 continue;
             }

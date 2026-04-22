@@ -179,6 +179,18 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
         == "router-rs"
     )
     assert (
+        router_service.control_plane_descriptor["services"]["execution"]["kernel_metadata_bridge"][
+            "defaults"
+        ]["live_primary_model_id_source"]
+        == "aggregator-response.model"
+    )
+    assert (
+        router_service.control_plane_descriptor["services"]["execution"]["kernel_metadata_bridge"][
+            "metadata_keys"
+        ]["prompt_preview_owner"]
+        == "execution_kernel_prompt_preview_owner"
+    )
+    assert (
         router_service.health()["rust_adapter"]["route_policy_schema_version"]
         == "router-rs-route-policy-v1"
     )

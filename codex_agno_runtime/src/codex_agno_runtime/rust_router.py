@@ -19,6 +19,7 @@ from codex_agno_runtime.schemas import (
     RouteDecisionSnapshot,
     RouteDiagnosticReport,
     RouteExecutionPolicy,
+    SearchMatchesContract,
     SearchMatchResult,
 )
 
@@ -558,6 +559,7 @@ def run_framework_contract_artifacts_cli(
 class RustRouteAdapter:
     """Call the repository Rust route engine for final route decisions."""
 
+    search_schema_version = "router-rs-search-results-v1"
     route_decision_schema_version = "router-rs-route-decision-v1"
     execution_schema_version = "router-rs-execute-response-v1"
     route_policy_schema_version = "router-rs-route-policy-v1"
@@ -687,13 +689,13 @@ class RustRouteAdapter:
             )
         return RouteDecisionContract.model_validate(payload)
 
-    def _search_skill_transport_rows(
+    def search_skill_matches_contract(
         self,
         *,
         query: str,
         limit: int,
-    ) -> list[dict[str, Any]]:
-        """Return raw Rust search rows at the transport boundary."""
+    ) -> SearchMatchesContract:
+        """Return one typed Rust-backed search contract."""
 
         command = self.query_cli_command(query=query, limit=limit, json_output=True)
         resolved: Any = self._run_hot_json_command(
@@ -707,23 +709,38 @@ class RustRouteAdapter:
             command,
             failure_label="search engine",
         )
-        rows = resolved if isinstance(resolved, list) else resolved.get("rows")
-        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
-            raise RuntimeError(f"Rust search engine returned an unexpected rows payload: {rows!r}")
-        return [dict(row) for row in rows]
-
-    def search_skill_rows(
-        self,
-        *,
-        query: str,
-        limit: int,
-    ) -> list[dict[str, Any]]:
-        """Compatibility shim that serializes typed matches back to Rust JSON rows."""
-
-        return [
-            match.to_transport_row()
-            for match in self.search_skill_matches(query=query, limit=limit)
-        ]
+        if isinstance(resolved, list):
+            resolved = {
+                "search_schema_version": self.search_schema_version,
+                "authority": self.route_authority,
+                "query": query,
+                "matches": resolved,
+            }
+        if not isinstance(resolved, Mapping):
+            raise RuntimeError(
+                f"Rust search engine returned an unexpected payload: {resolved!r}"
+            )
+        payload = dict(resolved)
+        payload.setdefault("search_schema_version", self.search_schema_version)
+        payload.setdefault("authority", self.route_authority)
+        payload.setdefault("query", query)
+        contract = SearchMatchesContract.model_validate(payload)
+        if contract.search_schema_version != self.search_schema_version:
+            raise RuntimeError(
+                "Rust search engine returned an unknown schema: "
+                f"{contract.search_schema_version!r}"
+            )
+        if contract.authority != self.route_authority:
+            raise RuntimeError(
+                "Rust search engine returned an unexpected authority marker: "
+                f"{contract.authority!r}"
+            )
+        if contract.query != query:
+            raise RuntimeError(
+                "Rust search engine returned an unexpected query echo: "
+                f"{contract.query!r}"
+            )
+        return contract
 
     def search_skill_matches(
         self,
@@ -731,19 +748,9 @@ class RustRouteAdapter:
         query: str,
         limit: int,
     ) -> list[SearchMatchResult]:
-        """Return Rust-backed search rows as shared typed match results."""
+        """Return Rust-backed search matches as shared typed results."""
 
-        return self.search_skill_matches_from_rows(
-            self._search_skill_transport_rows(query=query, limit=limit)
-        )
-
-    def search_skill_matches_from_rows(
-        self,
-        rows: list[Mapping[str, Any]],
-    ) -> list[SearchMatchResult]:
-        """Project raw Rust search rows into shared typed match results."""
-
-        return [SearchMatchResult.from_transport_row(row) for row in rows]
+        return self.search_skill_matches_contract(query=query, limit=limit).matches
 
     def render_search_matches_text(
         self,
@@ -777,11 +784,8 @@ class RustRouteAdapter:
     ) -> str:
         """Render search JSON only at the CLI transport boundary."""
 
-        return json.dumps(
-            [match.to_transport_row() for match in self.search_skill_matches(query=query, limit=limit)],
-            indent=2,
-            ensure_ascii=False,
-        )
+        contract = self.search_skill_matches_contract(query=query, limit=limit)
+        return json.dumps(contract.to_transport_rows(), indent=2, ensure_ascii=False)
 
     def route_contract_json_text(
         self,
@@ -1360,9 +1364,7 @@ class RustRouteAdapter:
             "--background-state-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        resolved = self._run_hot_json_command(
-            "background_state",
-            payload,
+        resolved = self._run_json_command(
             [*self._binary_command(), *args],
             failure_label="background state compiler",
         )

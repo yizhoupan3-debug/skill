@@ -95,6 +95,42 @@ class SearchMatchResult(BaseModel):
         }
 
 
+class SearchMatchesContract(BaseModel):
+    """Stable Rust-owned search envelope consumed by Python route helpers."""
+
+    search_schema_version: str
+    authority: str
+    query: str
+    matches: list[SearchMatchResult] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_legacy_rows_field(cls, value: Any) -> Any:
+        if isinstance(value, Mapping) and "matches" not in value and "rows" in value:
+            payload = dict(value)
+            payload["matches"] = payload.get("rows")
+            return payload
+        return value
+
+    @field_validator("matches", mode="before")
+    @classmethod
+    def _coerce_transport_rows(cls, value: Any) -> Any:
+        if not isinstance(value, list):
+            return value
+        resolved: list[Any] = []
+        for item in value:
+            if isinstance(item, Mapping) and "record" not in item and "slug" in item:
+                resolved.append(SearchMatchResult.from_transport_row(item))
+            else:
+                resolved.append(item)
+        return resolved
+
+    def to_transport_rows(self) -> list[dict[str, Any]]:
+        """Project typed search matches back to the CLI transport row shape."""
+
+        return [match.to_transport_row() for match in self.matches]
+
+
 class RoutingResult(BaseModel):
     """Final routing decision."""
 
@@ -106,7 +142,6 @@ class RoutingResult(BaseModel):
     layer: str
     reasons: list[str] = Field(default_factory=list)
     route_snapshot: "RouteDecisionSnapshot | None" = None
-    prompt_preview: str | None = None
     route_engine: str = "rust"
     diagnostic_route_mode: Literal["none", "shadow", "verify"] = "none"
     route_diagnostic_report: "RouteDiagnosticReport | None" = None

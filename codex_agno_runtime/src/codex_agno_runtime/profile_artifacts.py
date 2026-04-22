@@ -11,6 +11,12 @@ from codex_agno_runtime.framework_profile import (
     FrameworkProfile,
     merge_profile_overrides,
 )
+from codex_agno_runtime.compatibility import (
+    build_codex_desktop_alias_retirement_status,
+    build_upgrade_compatibility_matrix,
+    compile_aionrs_companion_adapter,
+    compile_aionui_host_adapter,
+)
 from codex_agno_runtime.host_adapters import (
     DELEGATION_CONTRACT_ARTIFACT_ID,
     EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID,
@@ -19,12 +25,8 @@ from codex_agno_runtime.host_adapters import (
     adapt_framework_profile,
     build_control_plane_contract_descriptors,
     build_cli_family_capability_discovery,
-    build_codex_desktop_alias_retirement_status,
     build_cli_family_parity_snapshot,
     build_codex_dual_entry_parity_snapshot,
-    build_upgrade_compatibility_matrix,
-    compile_aionrs_companion_adapter,
-    compile_aionui_host_adapter,
     compile_claude_code_adapter,
     compile_codex_cli_adapter,
     compile_codex_common_adapter,
@@ -479,7 +481,6 @@ def emit_framework_contract_artifacts(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     profile = _profile_with_surface_policy(profile)
-    alias_inventory = build_codex_desktop_alias_inventory()
     emit_legacy_alias_artifact = include_legacy_alias_artifact is True
     emit_compatibility_inventory = include_compatibility_inventory or emit_legacy_alias_artifact
     default_dir = output_dir / DEFAULT_ARTIFACT_DIRNAME
@@ -521,11 +522,15 @@ def emit_framework_contract_artifacts(
             profile,
             host_overrides=host_overrides,
         ),
-        "codex_desktop_alias_inventory": alias_inventory,
-        "codex_desktop_alias_retirement_status": build_codex_desktop_alias_retirement_status(
-            alias_inventory_summary=alias_inventory["summary"]
-        ),
     }
+    if emit_compatibility_inventory:
+        alias_inventory = build_codex_desktop_alias_inventory()
+        python_artifacts["codex_desktop_alias_inventory"] = alias_inventory
+        python_artifacts["codex_desktop_alias_retirement_status"] = (
+            build_codex_desktop_alias_retirement_status(
+                alias_inventory_summary=alias_inventory["summary"]
+            )
+        )
     python_artifacts.update(build_control_plane_contract_descriptors())
     shared_contract_report = build_framework_shared_contract_projection_report(
         profile,

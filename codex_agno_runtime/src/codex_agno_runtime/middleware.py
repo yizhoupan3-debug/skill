@@ -254,6 +254,13 @@ def _python_prompt_required(ctx: MiddlewareContext) -> bool:
     return True
 
 
+def _routing_prompt_preview(ctx: MiddlewareContext) -> str | None:
+    preview = ctx.metadata.get("routing_prompt_preview")
+    if preview is None:
+        return None
+    return str(preview)
+
+
 def _resolve_projection_prompt(
     ctx: MiddlewareContext,
     *,
@@ -263,8 +270,9 @@ def _resolve_projection_prompt(
 
     if ctx.prompt:
         return ctx.prompt, "middleware-context"
-    if ctx.routing_result.prompt_preview:
-        return ctx.routing_result.prompt_preview, "routing-result-preview"
+    preview = _routing_prompt_preview(ctx)
+    if preview:
+        return preview, "routing-metadata-preview"
     if prompt_builder is None:
         return "", "missing-prompt-source"
     return prompt_builder.build_prompt(ctx.routing_result), "python-compatibility-builder"
@@ -337,9 +345,10 @@ class ContextCompressionMiddleware(Middleware):
         """
         if not _python_prompt_required(ctx):
             return ctx
-        if not ctx.prompt and ctx.routing_result.prompt_preview:
-            ctx.prompt = ctx.routing_result.prompt_preview
-            ctx.metadata.setdefault("python_prompt_source", "routing-result-preview")
+        preview = _routing_prompt_preview(ctx)
+        if not ctx.prompt and preview:
+            ctx.prompt = preview
+            ctx.metadata.setdefault("python_prompt_source", "routing-metadata-preview")
         from codex_agno_runtime.context import ContextEngineer
 
         estimated = _estimate_tokens(ctx.prompt)
@@ -383,9 +392,10 @@ class MemoryMiddleware(Middleware):
         """
         if not _python_prompt_required(ctx):
             return ctx
-        if not ctx.prompt and ctx.routing_result.prompt_preview:
-            ctx.prompt = ctx.routing_result.prompt_preview
-            ctx.metadata.setdefault("python_prompt_source", "routing-result-preview")
+        preview = _routing_prompt_preview(ctx)
+        if not ctx.prompt and preview:
+            ctx.prompt = preview
+            ctx.metadata.setdefault("python_prompt_source", "routing-metadata-preview")
         facts = self._store.load_facts(ctx.user_id)
         if facts:
             ctx.memory_facts = facts
@@ -484,9 +494,10 @@ class SubagentLimitMiddleware(Middleware):
         ctx.metadata["subagent_timeout_seconds"] = self._timeout
 
         if _python_prompt_required(ctx):
-            if not ctx.prompt and ctx.routing_result.prompt_preview:
-                ctx.prompt = ctx.routing_result.prompt_preview
-                ctx.metadata.setdefault("python_prompt_source", "routing-result-preview")
+            preview = _routing_prompt_preview(ctx)
+            if not ctx.prompt and preview:
+                ctx.prompt = preview
+                ctx.metadata.setdefault("python_prompt_source", "routing-metadata-preview")
             ctx.prompt += (
                 f"\n\n[Sub-Agent Limits] Hard limit: {self._max_concurrent} concurrent sub-agents. "
                 f"Timeout: {self._timeout}s per sub-agent. "

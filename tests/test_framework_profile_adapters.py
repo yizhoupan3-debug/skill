@@ -63,6 +63,7 @@ from codex_agno_runtime.host_adapters import (
     compile_aionrs_companion_adapter,
     compile_aionui_host_adapter,
     compile_claude_code_adapter,
+    adapt_framework_profile,
     compile_codex_cli_adapter,
     compile_codex_common_adapter,
     compile_codex_desktop_adapter,
@@ -383,7 +384,10 @@ def test_rust_route_adapter_reuses_stdio_process_for_hot_commands(
                     "authority": adapter.runtime_control_plane_authority,
                 },
                 "search_skills": {
-                    "rows": [
+                    "search_schema_version": adapter.search_schema_version,
+                    "authority": adapter.route_authority,
+                    "query": "迭代 优化",
+                    "matches": [
                         {
                             "slug": "iterative-optimizer",
                             "layer": "L2",
@@ -394,7 +398,7 @@ def test_rust_route_adapter_reuses_stdio_process_for_hot_commands(
                             "matched_terms": 2,
                             "total_terms": 2,
                         }
-                    ]
+                    ],
                 },
                 "execute": {
                     "execution_schema_version": adapter.execution_schema_version,
@@ -490,7 +494,7 @@ def test_rust_route_adapter_reuses_stdio_process_for_hot_commands(
     )
 
     control_plane = adapter.runtime_control_plane()
-    search_rows = adapter.search_skill_rows(query="迭代 优化", limit=2)
+    search_contract = adapter.search_skill_matches_contract(query="迭代 优化", limit=2)
     execute = adapter.execute(
         {
             "schema_version": "router-rs-execute-request-v1",
@@ -517,7 +521,7 @@ def test_rust_route_adapter_reuses_stdio_process_for_hot_commands(
     inspect = adapter.trace_stream_inspect({"path": "/tmp/TRACE_EVENTS.jsonl"})
 
     assert control_plane["authority"] == adapter.runtime_control_plane_authority
-    assert search_rows[0]["slug"] == "iterative-optimizer"
+    assert search_contract.matches[0].record.name == "iterative-optimizer"
     assert execute["execution_schema_version"] == adapter.execution_schema_version
     assert transport["stream_id"] == "stream::session-1"
     assert inspect["authority"] == adapter.trace_stream_io_authority
@@ -824,6 +828,39 @@ def test_cli_common_shared_contract_keeps_framework_truth_under_host_overrides()
     assert desktop["runtime_surface"]["workspace_bootstrap"] == canonical_shared_contract[
         "workspace_bootstrap"
     ]
+
+
+def test_adapted_host_payload_reuses_framework_shared_contract_surface() -> None:
+    profile = build_framework_profile(
+        profile_id="adapted-host-shared-contract",
+        display_name="Adapted Host Shared Contract",
+        session_policy={"mode": "bounded", "approval_mode": "manual", "history_policy": "append-only"},
+        tool_policy={"shell": "allow"},
+        approval_policy={"mode": "manual"},
+        loadout_policy={"default": "framework"},
+        framework_surface_policy={"default_surface": {"default_loadouts": ["framework"]}},
+        artifact_contract={"layout": "stable-v1"},
+        memory_mounts=(
+            {"mount_id": "project", "source": ".codex/memory"},
+            "user",
+        ),
+        mcp_servers=({"server_id": "local-memory", "transport": "stdio"},),
+        workspace_bootstrap={"skill_bridge": {"project_dir": ".codex/skills"}},
+    )
+
+    adapted = adapt_framework_profile(profile, CODEX_DESKTOP_ADAPTER).host_payload
+    canonical_shared_contract = profile.shared_contract_surface()
+
+    assert adapted["artifact_contract"] == canonical_shared_contract["artifact_contract"]
+    assert adapted["tool_policy"] == canonical_shared_contract["tool_policy"]
+    assert adapted["approval_policy"] == canonical_shared_contract["approval_policy"]
+    assert adapted["loadout_policy"] == canonical_shared_contract["loadout_policy"]
+    assert adapted["framework_surface_policy"] == canonical_shared_contract[
+        "framework_surface_policy"
+    ]
+    assert adapted["memory_mounts"] == canonical_shared_contract["memory_mounts"]
+    assert adapted["mcp_servers"] == canonical_shared_contract["mcp_servers"]
+    assert adapted["workspace_bootstrap"] == canonical_shared_contract["workspace_bootstrap"]
 
 
 def test_framework_profile_rejects_host_specific_metadata_in_framework_truth() -> None:
@@ -1794,12 +1831,28 @@ def test_router_rs_profile_json_matches_outer_framework_contract() -> None:
         )
 
     payload = json.loads(proc.stdout)
+    canonical_shared_contract = profile.shared_contract_surface()
     assert payload["profile_id"] == "rust-profile"
+    assert payload["workspace_bootstrap"] == canonical_shared_contract["workspace_bootstrap"]
+    assert payload["memory_mounts"] == canonical_shared_contract["memory_mounts"]
+    assert payload["mcp_servers"] == canonical_shared_contract["mcp_servers"]
     assert payload["companion_projection"]["presetRules"][0]["id"] == "outer-owned"
     assert payload["companion_projection"]["enabledSkills"][1]["skill_id"] == "memory-bridge"
     assert payload["companion_projection"]["fallbackSemantics"]["fallback_adapter"] == "codex_desktop_adapter"
     assert payload["cli_common_adapter"]["controller_boundary"]["shared_adapter"] == "cli_common_adapter"
+    assert payload["cli_common_adapter"]["shared_contract"]["workspace_bootstrap"] == (
+        canonical_shared_contract["workspace_bootstrap"]
+    )
+    assert payload["cli_common_adapter"]["shared_contract"]["session_contract"] == (
+        canonical_shared_contract["session_contract"]
+    )
     assert payload["codex_common_adapter"]["metadata"]["adapter_alias_of"] == "cli_common_adapter"
+    assert payload["codex_desktop_adapter"]["common_contract"]["workspace_bootstrap"] == (
+        canonical_shared_contract["workspace_bootstrap"]
+    )
+    assert payload["codex_cli_adapter"]["runtime_surface"]["workspace_bootstrap"] == (
+        canonical_shared_contract["workspace_bootstrap"]
+    )
     assert payload["claude_code_adapter"]["host_projection"]["context_files"] == [
         "CLAUDE.md",
         "CLAUDE.local.md",

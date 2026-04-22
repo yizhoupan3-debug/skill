@@ -121,6 +121,7 @@ interface RouterRsStdioResponse<T> {
 interface LoadedRuntimeAttachDescriptor {
   descriptor: RuntimeAttachDescriptor;
   inputArtifactKind: RuntimeAttachArtifactKind | null;
+  attachedPayload: Record<string, unknown> | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1029,7 +1030,10 @@ export class BrowserRuntime {
             configuredSource,
             descriptor: loaded.descriptor,
             inputArtifactKind: loaded.inputArtifactKind,
-            traceStreamPath: loaded.descriptor.resolved_artifacts?.trace_stream_path ?? null,
+            traceStreamPath:
+              this.traceStreamPathFromAttachedPayload(loaded.attachedPayload) ??
+              loaded.descriptor.resolved_artifacts?.trace_stream_path ??
+              null,
           });
         } catch {
           // Keep the minimal base payload when descriptor hydration also fails.
@@ -1108,6 +1112,14 @@ export class BrowserRuntime {
     };
   }
 
+  private traceStreamPathFromAttachedPayload(
+    attachedPayload: Record<string, unknown> | null,
+  ): string | null {
+    return typeof attachedPayload?.trace_stream_path === 'string'
+      ? attachedPayload.trace_stream_path
+      : null;
+  }
+
   private async loadRuntimeAttachDescriptor(): Promise<LoadedRuntimeAttachDescriptor> {
     const configuredSource = this.getConfiguredRuntimeAttachSource();
     switch (configuredSource.source) {
@@ -1152,16 +1164,18 @@ export class BrowserRuntime {
     const loaded = await this.loadRuntimeAttachDescriptor();
     const descriptor = loaded.descriptor;
     const replaySupported = descriptor.attach_capabilities?.artifact_replay === true;
-    let traceStreamPath: string | null;
-    try {
-      traceStreamPath = await this.resolveAttachedRuntimeTraceStreamPath(descriptor);
-    } catch (error) {
-      throw new BrowserToolError(
-        'ATTACHED_RUNTIME_INVALID_DESCRIPTOR',
-        error instanceof Error ? error.message : 'failed to resolve runtime attach descriptor artifacts',
-        true,
-        ['refresh the descriptor from describe_runtime_event_handoff', 'inspect browser_diagnostics'],
-      );
+    let traceStreamPath = this.traceStreamPathFromAttachedPayload(loaded.attachedPayload);
+    if (!traceStreamPath) {
+      try {
+        traceStreamPath = await this.resolveAttachedRuntimeTraceStreamPath(descriptor);
+      } catch (error) {
+        throw new BrowserToolError(
+          'ATTACHED_RUNTIME_INVALID_DESCRIPTOR',
+          error instanceof Error ? error.message : 'failed to resolve runtime attach descriptor artifacts',
+          true,
+          ['refresh the descriptor from describe_runtime_event_handoff', 'inspect browser_diagnostics'],
+        );
+      }
     }
     const diagnosticsBase = this.projectAttachedRuntimeDiagnostics({
       configuredSource,
@@ -1367,6 +1381,7 @@ export class BrowserRuntime {
       return {
         descriptor: parsed as unknown as RuntimeAttachDescriptor,
         inputArtifactKind: 'attach_descriptor',
+        attachedPayload: null,
       };
     }
     if (schemaVersion === RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION) {
@@ -1398,6 +1413,7 @@ export class BrowserRuntime {
       return {
         descriptor,
         inputArtifactKind: 'attach_descriptor',
+        attachedPayload: null,
       };
     }
   }
@@ -1605,6 +1621,7 @@ export class BrowserRuntime {
     return {
       descriptor: descriptor as unknown as RuntimeAttachDescriptor,
       inputArtifactKind,
+      attachedPayload: attached,
     };
   }
 

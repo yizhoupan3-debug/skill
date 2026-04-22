@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 use std::fs;
@@ -15,6 +15,7 @@ const CONFIG_SCHEMA_HEADER: &str =
 const FRAMEWORK_START_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_START -->";
 const FRAMEWORK_END_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_END -->";
 const PLUGIN_NAME: &str = "skill-framework-native";
+const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
 const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "model-with-reasoning",
     "git-branch",
@@ -22,46 +23,20 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "fast-mode",
 ];
 
-const FULL_SYNC_TEXT_FILES: [&str; 15] = [
-    "AGENT.md",
-    "AGENTS.md",
-    "CLAUDE.md",
-    "GEMINI.md",
-    ".claude/agents/README.md",
-    ".claude/commands/refresh.md",
-    ".claude/commands/background_batch.md",
-    ".claude/hooks/README.md",
-    ".claude/hooks/session_start.sh",
-    ".claude/hooks/stop.sh",
-    ".claude/hooks/pre_compact.sh",
-    ".claude/hooks/subagent_stop.sh",
-    ".claude/hooks/session_end.sh",
-    ".claude/hooks/config_change.sh",
-    ".claude/hooks/stop_failure.sh",
-];
+#[derive(Deserialize)]
+struct SyncSectionManifest {
+    text_files: Vec<String>,
+    json_files: Vec<String>,
+    managed_directories: Vec<String>,
+    #[serde(default)]
+    retired_paths: Vec<String>,
+}
 
-const FULL_SYNC_JSON_FILES: [&str; 2] = [".claude/settings.json", ".gemini/settings.json"];
-const FULL_SYNC_MANAGED_DIRS: [&str; 6] = [
-    ".claude",
-    ".claude/agents",
-    ".claude/commands",
-    ".claude/hooks",
-    ".gemini",
-    ".codex",
-];
-const PARTIAL_SYNC_TEXT_FILES: [&str; 2] = [
-    ".claude/commands/refresh.md",
-    ".claude/commands/background_batch.md",
-];
-const PARTIAL_SYNC_MANAGED_DIRS: [&str; 2] = [".claude", ".claude/commands"];
-const RETIRED_PATHS: [&str; 6] = [
-    ".claude/CLAUDE.md",
-    ".codex/model_instructions.md",
-    ".mcp.json",
-    "configs/codex/AGENTS.md",
-    "configs/claude/CLAUDE.md",
-    "configs/gemini/GEMINI.md",
-];
+#[derive(Deserialize)]
+struct SyncManifest {
+    full_sync: SyncSectionManifest,
+    partial_sync: SyncSectionManifest,
+}
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -196,6 +171,7 @@ fn sync_host_entrypoints(
 ) -> Result<SyncReport, String> {
     let root = normalize_path(repo_root)?;
     let template = normalize_path(template_root)?;
+    let sync_manifest = load_sync_manifest(&template)?;
     let (matched_worktrees, skipped_worktrees) = discover_matching_worktrees(&root);
     let mut report = SyncReport {
         skipped_worktrees,
@@ -205,7 +181,12 @@ fn sync_host_entrypoints(
     targets.extend(matched_worktrees);
 
     for target_root in targets {
-        let single = sync_single_root(&template, &target_root, &root, apply, target_root == root)?;
+        let section = if target_root == root {
+            &sync_manifest.full_sync
+        } else {
+            &sync_manifest.partial_sync
+        };
+        let single = sync_single_root(&template, &target_root, &root, apply, section)?;
         report.written.extend(single.written);
         report.unchanged.extend(single.unchanged);
         report.created_dirs.extend(single.created_dirs);
@@ -229,15 +210,10 @@ fn sync_single_root(
     target_root: &Path,
     report_root: &Path,
     apply: bool,
-    full_sync: bool,
+    section: &SyncSectionManifest,
 ) -> Result<SingleSyncReport, String> {
     let mut report = SingleSyncReport::default();
-    let managed_dirs = if full_sync {
-        FULL_SYNC_MANAGED_DIRS.as_slice()
-    } else {
-        PARTIAL_SYNC_MANAGED_DIRS.as_slice()
-    };
-    for relative in managed_dirs {
+    for relative in &section.managed_directories {
         let directory = target_root.join(relative);
         if !directory.exists() {
             if apply {
@@ -249,12 +225,7 @@ fn sync_single_root(
         }
     }
 
-    let text_files = if full_sync {
-        FULL_SYNC_TEXT_FILES.as_slice()
-    } else {
-        PARTIAL_SYNC_TEXT_FILES.as_slice()
-    };
-    for relative in text_files {
+    for relative in &section.text_files {
         sync_template_file(
             &template_root.join(relative),
             &target_root.join(relative),
@@ -265,32 +236,48 @@ fn sync_single_root(
         )?;
     }
 
-    if full_sync {
-        for relative in FULL_SYNC_JSON_FILES {
-            sync_template_file(
-                &template_root.join(relative),
-                &target_root.join(relative),
-                report_root,
-                target_root,
-                apply,
-                &mut report,
-            )?;
+    for relative in &section.json_files {
+        sync_template_file(
+            &template_root.join(relative),
+            &target_root.join(relative),
+            report_root,
+            target_root,
+            apply,
+            &mut report,
+        )?;
+    }
+    for relative in &section.retired_paths {
+        let path = target_root.join(relative);
+        let exists = path.exists() || symlink_exists(&path);
+        if exists && apply {
+            remove_path(&path).map_err(|err| err.to_string())?;
         }
-        for relative in RETIRED_PATHS {
-            let path = target_root.join(relative);
-            let exists = path.exists() || symlink_exists(&path);
-            if exists && apply {
-                remove_path(&path).map_err(|err| err.to_string())?;
-            }
-            if exists {
-                report
-                    .written
-                    .push(describe_path(report_root, target_root, &path));
-            }
+        if exists {
+            report
+                .written
+                .push(describe_path(report_root, target_root, &path));
         }
     }
 
     Ok(report)
+}
+
+fn load_sync_manifest(template_root: &Path) -> Result<SyncManifest, String> {
+    let manifest_path = template_root.join(HOST_ENTRYPOINT_SYNC_MANIFEST_PATH);
+    let payload = fs::read_to_string(&manifest_path).map_err(|err| {
+        format!(
+            "failed to read host-entrypoint sync manifest {}: {}",
+            manifest_path.to_string_lossy(),
+            err
+        )
+    })?;
+    serde_json::from_str(&payload).map_err(|err| {
+        format!(
+            "failed to parse host-entrypoint sync manifest {}: {}",
+            manifest_path.to_string_lossy(),
+            err
+        )
+    })
 }
 
 fn sync_template_file(
