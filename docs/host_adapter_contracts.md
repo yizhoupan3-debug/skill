@@ -22,7 +22,8 @@
 `aionrs` / `AionUI` 相关 adapter 仍可保留，但只作为 upstream-facing
 legacy migration debt；它们不是未来主线、不是控制器候选，也不是双入口
 叙事的中心。
-`build_upgrade_compatibility_matrix(...)` 也只允许停留在 secondary
+`codex_agno_runtime.compatibility.build_upgrade_compatibility_matrix(...)`
+也只允许停留在 secondary
 compatibility inventory / smoke 角色，不能替代 `cli_family_parity_snapshot`
 或 `codex_dual_entry_parity_snapshot` 成为主回归基线。
 默认 Python artifact emission 不再携带
@@ -243,7 +244,7 @@ continuity lane 里保留。
 - `build_codex_desktop_alias_retirement_status(...)`
 - `build_execution_kernel_live_fallback_retirement_status(...)`
 - `build_execution_kernel_live_response_serialization_contract(...)`
-- `build_upgrade_compatibility_matrix(...)`
+- `codex_agno_runtime.compatibility.build_upgrade_compatibility_matrix(...)`
 - `emit_framework_contract_artifacts(...)`: emits the core bridge / contract artifact set under `default/`; fallback host artifacts (`aionrs_companion_adapter`, `aionui_host_adapter`, `generic_host_adapter`) go to `fallback/`, legacy alias inventory / retirement status go to `continuity/`, and Rust companion outputs go to `rust/`, all behind explicit opt-in lanes where applicable.
 - `router-rs --profile-json --framework-profile <path>` for Rust-side profile compilation
 - thin projection / validation helpers used by the adapter contract and tests
@@ -258,8 +259,10 @@ compatibility-only bridge，而不是下一阶段的命名中心。
 当前 artifact lane 默认不再产出 alias inventory / retirement status；这两项
 只在显式 continuity opt-in 时保留，用来证明 alias 仍然只是迁移桥，而不
 是新的 desktop 真源。
-`build_upgrade_compatibility_matrix(...)` 也只提供 compatibility inventory /
-smoke evidence，不承担 canonical parity truth。
+`codex_agno_runtime.compatibility.build_upgrade_compatibility_matrix(...)`
+也只提供 compatibility inventory / smoke evidence，不承担 canonical parity truth。
+默认 artifact emission 也不再写出这份 secondary inventory；如需这类兼容清单，
+必须显式开启 compatibility inventory lane。
 当前默认 artifact emission 已不再把 `codex_desktop_host_adapter` 作为一等
 输出；如需兼容 continuity lane，必须显式 opt-in legacy alias artifact。
 同样，legacy compiler 入口不再作为根包 `codex_agno_runtime` 的 public

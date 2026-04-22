@@ -57,8 +57,8 @@ following are true:
 - `build_cli_family_parity_snapshot(...)`: CLI-family shared-contract parity is emitted as the canonical CLI regression artifact.
 - `codex_desktop_alias_inventory.json`: current repo-side alias references are inventoried only on explicit continuity runs.
 - `codex_desktop_alias_retirement_status.json`: alias retirement gates are externalized as a contract only on the explicit continuity lane.
-- `build_upgrade_compatibility_matrix(...)`: the upgrade lane is anchored in the outer-framework contract, not host internals.
-- `emit_framework_contract_artifacts(...)`: Python can now emit concrete bridge/contract artifacts for profile + default host adapters + matrix + dual-entry parity snapshot + the first-class control-plane contract artifacts `execution_controller_contract`, `delegation_contract`, and `supervisor_state_contract`; default outputs land under `default/`, fallback host artifacts under `fallback/`, and legacy alias inventory/status under `continuity/`.
+- `codex_agno_runtime.compatibility.build_upgrade_compatibility_matrix(...)`: the upgrade lane is anchored in the outer-framework contract, not host internals.
+- `emit_framework_contract_artifacts(...)`: Python can now emit concrete bridge/contract artifacts for profile + default host adapters + dual-entry parity snapshot + the first-class control-plane contract artifacts `execution_controller_contract`, `delegation_contract`, and `supervisor_state_contract`; default outputs land under `default/`, fallback host artifacts under `fallback/`, legacy alias inventory/status under `continuity/`, and `upgrade_compatibility_matrix` itself is now an explicit compatibility-inventory output.
 - default Python artifact emission is parity-first: `codex_desktop_host_adapter` is now
   legacy opt-in output and its inventory/status artifacts stay behind explicit continuity opt-in.
 - default Rust `--profile-artifacts-json` is now parity-first too: `codex_desktop_alias_retirement_status`
