@@ -16,7 +16,6 @@ from .config import RuntimeSettings
 from .framework_profile import FrameworkProfile
 from .host_adapters import (
     build_cli_family_capability_discovery,
-    build_codex_desktop_alias_retirement_status,
     build_codex_dual_entry_parity_snapshot,
     build_delegation_contract,
     build_execution_controller_contract,
@@ -24,7 +23,6 @@ from .host_adapters import (
     build_execution_kernel_live_response_serialization_contract,
     build_supervisor_state_contract,
     compile_codex_cli_adapter,
-    compile_codex_common_adapter,
     compile_codex_desktop_adapter,
 )
 from .profile_artifacts import emit_framework_contract_artifacts
@@ -34,11 +32,9 @@ __all__ = [
     "CodexAgnoRuntime",
     "RuntimeSettings",
     "FrameworkProfile",
-    "compile_codex_common_adapter",
     "compile_codex_desktop_adapter",
     "compile_codex_cli_adapter",
     "build_cli_family_capability_discovery",
-    "build_codex_desktop_alias_retirement_status",
     "build_codex_dual_entry_parity_snapshot",
     "build_execution_controller_contract",
     "build_delegation_contract",

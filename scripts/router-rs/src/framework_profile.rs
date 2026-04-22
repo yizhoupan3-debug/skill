@@ -3169,6 +3169,7 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
 
 fn build_execution_kernel_live_response_serialization_contract() -> Map<String, Value> {
     let steady_state_kernel_fields = vec![
+        Value::String("execution_kernel_metadata_schema_version".to_string()),
         Value::String("execution_kernel".to_string()),
         Value::String("execution_kernel_authority".to_string()),
         Value::String("execution_kernel_contract_mode".to_string()),
@@ -3184,11 +3185,14 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         Value::String("execution_kernel_live_fallback_authority".to_string()),
         Value::String("execution_kernel_live_fallback_enabled".to_string()),
         Value::String("execution_kernel_live_fallback_mode".to_string()),
+        Value::String("execution_kernel_response_shape".to_string()),
+        Value::String("execution_kernel_prompt_preview_owner".to_string()),
     ];
     let mut live_primary_required_metadata_fields = steady_state_kernel_fields.clone();
     live_primary_required_metadata_fields.extend(vec![
         Value::String("run_id".to_string()),
         Value::String("status".to_string()),
+        Value::String("execution_kernel_model_id_source".to_string()),
         Value::String("trace_event_count".to_string()),
         Value::String("trace_output_path".to_string()),
     ]);
@@ -3247,6 +3251,7 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
             Value::String("execution_mode".to_string()),
             Value::String("route_engine".to_string()),
             Value::String("diagnostic_route_mode".to_string()),
+            Value::String("execution_kernel_model_id_source".to_string()),
         ]),
     );
     runtime_response_metadata_fields.insert(
@@ -3279,8 +3284,16 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         Value::String("RunTaskResponse".to_string()),
     );
     current_contract_truth.insert(
+        "execution_request_schema_version".to_string(),
+        Value::String("router-rs-execute-request-v1".to_string()),
+    );
+    current_contract_truth.insert(
         "live_primary_schema_version".to_string(),
         Value::String("router-rs-execute-response-v1".to_string()),
+    );
+    current_contract_truth.insert(
+        "steady_state_metadata_schema_version".to_string(),
+        Value::String("router-rs-execution-kernel-metadata-v1".to_string()),
     );
     current_contract_truth.insert(
         "live_primary_prompt_preview_owner".to_string(),

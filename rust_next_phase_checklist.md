@@ -19,12 +19,16 @@
   - `RustRouteAdapter` 已暴露 `route_contract / route_policy_contract / route_report_contract / route_snapshot_contract`。
   - fixture/live parity 回归也已经优先走 typed contract；unknown skill 会 fail-closed，而不是让 Python 默默兜底。
   - `tests/test_routing_parity.py`、`tests/test_codex_agno_runtime_services.py`、`tests/test_execution_kernel_router_rs_contract.py` 已覆盖这条收口。
-- **Lane 3 / Observability Activation** 已基本具备 concrete contract 面：
+- **Lane 3 / Observability Activation** 已完成当前目标收口：
   - `codex_agno_runtime.observability` 已提供 exporter descriptor / metric record / dashboard schema / health snapshot。
   - `docs/runtime_observability_contract.md` 与 `tests/test_runtime_observability_contracts.py` 已把 vocabulary、exporter、metric、dashboard 对齐锁住。
+  - `scripts/router-rs/src/main.rs` 的 observability exporter / dashboard / metric record contract 也已和 Python thin projection 对齐，并有 targeted `cargo test` 覆盖。
 - **Lane 4 / Host Consumer Adoption** 已完成当前 phase 收口：
   - `tools/browser-mcp/src/runtime.ts` 已围绕 Rust attach descriptor / handoff / binding artifact 做 replay-capable attach 消费，不再只是旧三路径手搓逻辑。
   - 更广 host family adoption 也已核查并统一到同一条 Rust-first outward surface：默认 contract 输出只保留 default host peer set，`aionrs_companion_adapter` / `aionui_host_adapter` / `generic_host_adapter` 改为显式 fallback lane，`codex_desktop_host_adapter` 与 alias 产物继续只留在 continuity lane。
+- **Lane 5 / Integrator / Regenerate** 已完成本轮集成收口：
+  - framework/profile artifact emitter 已统一输出 `default/`、`fallback/`、`continuity/`、`rust/` 四类物理落点，并带 layout manifest。
+  - `scripts/sync_skills.py`、`scripts/skill-compiler-rs`、`tests/test_framework_contract_artifacts.py` 已证明当前 generated artifacts / docs / registry contract 可以一起刷新并保持通过。
 
 ### 仍未收口的内容
 
@@ -32,8 +36,6 @@
   - route diagnostic 的 typed contract 已收薄，但 execution kernel 的其余 metadata / naming bridge 还没完全压成 Rust canonical producer。
   - `scripts/route.py` 这类兼容 shim 还存在，虽然 steady-state runtime 已不靠它，但旁路 helper 仍需继续 typed-first 化。
 - **Lane 2 / Native Install / Bootstrap** 还没有实质推进；默认安装/初始化入口是否天然落在当前 Rust-first contract 上，仍需要专门收口。
-- **Lane 5 / Integrator / Regenerate** 现在还不该启动：
-  - 只有当前 1/2/3/4 真正稳定后，才适合统一刷新 generated artifacts / docs / manifests / verification evidence。
 
 ---
 
@@ -133,8 +135,8 @@
 
 ### 当前状态
 
-- observability contract、health snapshot、以及 Rust-owned schema 已经存在。
-- 但仍偏 contract-ready，不够像真正“可消费的 exporter / metric / dashboard lane”。
+- observability contract、health snapshot、exporter descriptor、metric record、dashboard schema 已经形成一套可消费输出。
+- 当前 lane 的实现目标已经收口；后续若继续推进，重点不再是补 observability vocabulary，而是服务于更大的 phase 集成或 host consumer 扩展。
 
 ### 目标
 
@@ -209,11 +211,12 @@
 
 ### 当前状态
 
-- 前 4 项完成前，不应该提前动全局生成物，以免把多个 lane 的未稳定状态混进同一轮 artifacts。
+- 本轮已经对当前稳定 surfaces 做完一轮 integrator/regenerate 收口：generated artifacts、docs、registry 和 targeted verification 已刷新并可落盘验证。
+- 更大范围的 phase 切换仍然要等 lane 1 / 2 继续稳定后再做，但这不影响本轮 lane 5 的 bounded closeout。
 
 ### 目标
 
-只在前 4 项都稳定后，统一做 docs / generated artifacts / registry / manifests / targeted verification 的收口。
+对当前已经稳定的 Rust-first surfaces 做统一的 docs / generated artifacts / registry / manifests / targeted verification 收口，并为后续更大 phase 切换保留一致的 layout / verification 基线。
 
 ### 独占写入范围
 
@@ -236,9 +239,9 @@
 
 ### 验收标准
 
-- 前 4 条 lane 都已经满足各自验收标准
-- generated outputs 与 docs 同步刷新
-- 总体验证通过，适合进入下一次更大范围的 phase 切换
+- 当前要集成的稳定 surfaces 已完成 generated outputs 与 docs 同步刷新
+- skill routing / framework profile / Rust artifact emission 的 targeted verification 通过
+- layout manifest 与默认 `default/ fallback/ continuity/ rust` 落点一致，可作为下一次更大 phase 切换的集成基线
 
 ---
 
