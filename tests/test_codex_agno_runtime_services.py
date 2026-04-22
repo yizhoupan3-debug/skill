@@ -529,6 +529,7 @@ def test_execution_environment_service_routes_through_kernel_adapter(tmp_path: P
         background_job_timeout_seconds=30.0,
         control_plane_descriptor=router_service.control_plane_descriptor,
     )
+    assert execution_service._rust_adapter is not None
     routing_result = router_service.route(
         task="帮我写一个 Rust CLI 工具",
         session_id="kernel-service-session",
@@ -967,7 +968,7 @@ def test_execution_environment_service_live_mode_omits_python_prompt_preview(tmp
             },
         )
 
-    execution_service.kernel.execute = fake_execute  # type: ignore[method-assign]
+    execution_service._execute_request_via_rust_adapter = fake_execute  # type: ignore[method-assign]
 
     async def _run() -> None:
         response = await execution_service.execute(
@@ -1101,18 +1102,25 @@ def test_execution_service_prefers_rust_live_metadata_when_present(tmp_path: Pat
         prompt="legacy-python-prompt",
     )
 
-    async def fake_execute(request):
-        return RunTaskResponse(
-            session_id=request.session_id,
-            user_id=request.user_id,
-            skill=request.routing_result.selected_skill.name,
-            overlay=request.routing_result.overlay_skill.name if request.routing_result.overlay_skill else None,
-            live_run=True,
-            content="live result",
-            prompt_preview=None,
-            model_id="gpt-5.4",
-            usage=UsageMetrics(input_tokens=8, output_tokens=5, total_tokens=13, mode="live"),
-            metadata={
+    def fake_execute(payload):
+        return {
+            "execution_schema_version": "router-rs-execute-response-v1",
+            "authority": "rust-execution-cli",
+            "session_id": payload["session_id"],
+            "user_id": payload["user_id"],
+            "skill": payload["selected_skill"],
+            "overlay": payload["overlay_skill"],
+            "live_run": True,
+            "content": "live result",
+            "prompt_preview": None,
+            "model_id": "gpt-5.4",
+            "usage": {
+                "input_tokens": 8,
+                "output_tokens": 5,
+                "total_tokens": 13,
+                "mode": "live",
+            },
+            "metadata": {
                 "execution_kernel": "rust-execution-kernel-slice",
                 "execution_kernel_authority": "rust-execution-kernel-authority",
                 "execution_kernel_delegate": "router-rs",
@@ -1128,10 +1136,19 @@ def test_execution_service_prefers_rust_live_metadata_when_present(tmp_path: Pat
                 "execution_kernel_live_fallback_authority": None,
                 "execution_kernel_live_fallback_enabled": False,
                 "execution_kernel_live_fallback_mode": "disabled",
+                "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
+                "execution_kernel_response_shape": "live_primary",
+                "execution_kernel_prompt_preview_owner": "rust-execution-cli",
+                "execution_mode": "live",
+                "execution_kernel_model_id_source": "aggregator-response.model",
+                "trace_event_count": payload["trace_event_count"],
+                "trace_output_path": payload["trace_output_path"],
+                "run_id": "run-1",
+                "status": "completed",
             },
-        )
+        }
 
-    execution_service.kernel._delegate.execute = fake_execute  # type: ignore[method-assign]
+    execution_service._rust_adapter.execute = fake_execute  # type: ignore[method-assign]
 
     async def _run() -> None:
         response = await execution_service.execute(
@@ -1187,20 +1204,32 @@ def test_execution_service_rejects_legacy_live_metadata_shape(tmp_path: Path) ->
         prompt="legacy-python-prompt",
     )
 
-    async def fake_execute(request):
-        return RunTaskResponse(
-            session_id=request.session_id,
-            user_id=request.user_id,
-            skill=request.routing_result.selected_skill.name,
-            overlay=request.routing_result.overlay_skill.name if request.routing_result.overlay_skill else None,
-            live_run=True,
-            content="legacy live result",
-            prompt_preview=None,
-            model_id="gpt-5.4",
-            usage=UsageMetrics(input_tokens=8, output_tokens=5, total_tokens=13, mode="live"),
-            metadata={
+    def fake_execute(payload):
+        return {
+            "execution_schema_version": "router-rs-execute-response-v1",
+            "authority": "rust-execution-cli",
+            "session_id": payload["session_id"],
+            "user_id": payload["user_id"],
+            "skill": payload["selected_skill"],
+            "overlay": payload["overlay_skill"],
+            "live_run": True,
+            "content": "legacy live result",
+            "prompt_preview": None,
+            "model_id": "gpt-5.4",
+            "usage": {
+                "input_tokens": 8,
+                "output_tokens": 5,
+                "total_tokens": 13,
+                "mode": "live",
+            },
+            "metadata": {
                 "execution_kernel": "router-rs",
                 "execution_kernel_authority": "rust-execution-cli",
+                "execution_kernel_delegate": "router-rs",
+                "execution_kernel_delegate_authority": "rust-execution-cli",
+                "execution_kernel_contract_mode": "rust-live-primary",
+                "execution_kernel_fallback_policy": "infrastructure-only-explicit",
+                "execution_kernel_in_process_replacement_complete": True,
                 "execution_kernel_delegate_family": "rust-direct-live",
                 "execution_kernel_delegate_impl": "router-rs-http",
                 "execution_kernel_live_primary": "router-rs-live-primary",
@@ -1209,15 +1238,24 @@ def test_execution_service_rejects_legacy_live_metadata_shape(tmp_path: Path) ->
                 "execution_kernel_live_fallback_authority": None,
                 "execution_kernel_live_fallback_enabled": False,
                 "execution_kernel_live_fallback_mode": "disabled",
+                "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
+                "execution_kernel_response_shape": "live_primary",
+                "execution_kernel_prompt_preview_owner": "rust-execution-cli",
+                "execution_mode": "live",
+                "execution_kernel_model_id_source": "aggregator-response.model",
+                "trace_event_count": payload["trace_event_count"],
+                "trace_output_path": payload["trace_output_path"],
+                "run_id": "run-legacy",
+                "status": "completed",
             },
-        )
+        }
 
-    execution_service.kernel._delegate.execute = fake_execute  # type: ignore[method-assign]
+    execution_service._rust_adapter.execute = fake_execute  # type: ignore[method-assign]
 
     async def _run() -> None:
         with pytest.raises(
             RouterRsInfrastructureError,
-            match="non-canonical execution-kernel metadata shape",
+            match="execution_kernel='router-rs'",
         ):
             await execution_service.execute(
                 ctx=ctx,
@@ -1259,18 +1297,25 @@ def test_execution_service_live_path_uses_router_rs_before_python_fallback(tmp_p
         routing_result=routing_result,
         prompt="legacy-python-prompt",
     )
-    async def fake_execute(request):
-        return RunTaskResponse(
-            session_id=request.session_id,
-            user_id=request.user_id,
-            skill=request.routing_result.selected_skill.name,
-            overlay=request.routing_result.overlay_skill.name if request.routing_result.overlay_skill else None,
-            live_run=True,
-            content="rust live result",
-            prompt_preview=None,
-            model_id="gpt-5.4",
-            usage=UsageMetrics(input_tokens=8, output_tokens=5, total_tokens=13, mode="live"),
-            metadata={
+    def fake_execute(payload):
+        return {
+            "execution_schema_version": "router-rs-execute-response-v1",
+            "authority": "rust-execution-cli",
+            "session_id": payload["session_id"],
+            "user_id": payload["user_id"],
+            "skill": payload["selected_skill"],
+            "overlay": payload["overlay_skill"],
+            "live_run": True,
+            "content": "rust live result",
+            "prompt_preview": None,
+            "model_id": "gpt-5.4",
+            "usage": {
+                "input_tokens": 8,
+                "output_tokens": 5,
+                "total_tokens": 13,
+                "mode": "live",
+            },
+            "metadata": {
                 "execution_kernel": "rust-execution-kernel-slice",
                 "execution_kernel_authority": "rust-execution-kernel-authority",
                 "execution_kernel_delegate": "router-rs",
@@ -1286,10 +1331,19 @@ def test_execution_service_live_path_uses_router_rs_before_python_fallback(tmp_p
                 "execution_kernel_live_fallback_authority": None,
                 "execution_kernel_live_fallback_enabled": False,
                 "execution_kernel_live_fallback_mode": "disabled",
+                "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
+                "execution_kernel_response_shape": "live_primary",
+                "execution_kernel_prompt_preview_owner": "rust-execution-cli",
+                "execution_mode": "live",
+                "execution_kernel_model_id_source": "aggregator-response.model",
+                "trace_event_count": payload["trace_event_count"],
+                "trace_output_path": payload["trace_output_path"],
+                "run_id": "run-2",
+                "status": "completed",
             },
-        )
+        }
 
-    execution_service.kernel._delegate.execute = fake_execute  # type: ignore[method-assign]
+    execution_service._rust_adapter.execute = fake_execute  # type: ignore[method-assign]
 
     async def _run() -> None:
         response = await execution_service.execute(
@@ -1340,10 +1394,10 @@ def test_execution_service_live_path_propagates_router_rs_infrastructure_errors(
         routing_result=routing_result,
         prompt="legacy-python-prompt",
     )
-    async def failing_execute(_request):
-        raise RouterRsInfrastructureError("router-rs missing")
+    def failing_execute(_payload):
+        raise RuntimeError("router-rs missing")
 
-    execution_service.kernel._delegate.execute = failing_execute  # type: ignore[method-assign]
+    execution_service._rust_adapter.execute = failing_execute  # type: ignore[method-assign]
 
     async def _run() -> None:
         with pytest.raises(RouterRsInfrastructureError, match="router-rs missing"):

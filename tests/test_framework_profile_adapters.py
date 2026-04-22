@@ -159,6 +159,31 @@ def test_rust_route_adapter_prefers_release_binary_across_debug_and_release() ->
         assert adapter.health()["resolved_binary"] == str(release_bin)
 
 
+def test_rust_route_adapter_prefers_fresher_debug_binary_over_stale_release() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        codex_home = Path(tmpdir)
+        router_dir = codex_home / "scripts" / "router-rs"
+        source_dir = router_dir / "src"
+        debug_bin = router_dir / "target" / "debug" / "router-rs"
+        release_bin = router_dir / "target" / "release" / "router-rs"
+        source_dir.mkdir(parents=True)
+        debug_bin.parent.mkdir(parents=True)
+        release_bin.parent.mkdir(parents=True)
+        (router_dir / "Cargo.toml").write_text("[package]\nname='router-rs'\nversion='0.1.0'\n", encoding="utf-8")
+        (source_dir / "main.rs").write_text("fn main() {}\n", encoding="utf-8")
+        debug_bin.write_text("debug", encoding="utf-8")
+        release_bin.write_text("release", encoding="utf-8")
+
+        os.utime(router_dir / "Cargo.toml", (1_700_000_050, 1_700_000_050))
+        os.utime(source_dir / "main.rs", (1_700_000_100, 1_700_000_100))
+        os.utime(release_bin, (1_700_000_000, 1_700_000_000))
+        os.utime(debug_bin, (1_700_000_200, 1_700_000_200))
+
+        adapter = RustRouteAdapter(codex_home)
+        assert adapter._binary_command() == [str(debug_bin)]
+        assert adapter.health()["resolved_binary"] == str(debug_bin)
+
+
 def test_rust_route_adapter_requires_prebuilt_binary_when_none_exists() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         codex_home = Path(tmpdir)
@@ -354,6 +379,130 @@ def test_rust_route_adapter_reuses_stdio_process_for_hot_commands(
         "execute",
         "describe_transport",
         "trace_stream_inspect",
+    ]
+    rust_router_module._close_router_stdio_clients()
+
+
+def test_rust_route_adapter_restarts_stdio_client_without_cli_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_home = tmp_path
+    router_dir = codex_home / "scripts" / "router-rs"
+    source_dir = router_dir / "src"
+    release_bin = router_dir / "target" / "release" / "router-rs"
+    source_dir.mkdir(parents=True)
+    release_bin.parent.mkdir(parents=True)
+    (router_dir / "Cargo.toml").write_text("[package]\nname='router-rs'\nversion='0.1.0'\n", encoding="utf-8")
+    (source_dir / "main.rs").write_text("fn main() {}\n", encoding="utf-8")
+    release_bin.write_text("release", encoding="utf-8")
+
+    rust_router_module._close_router_stdio_clients()
+    adapter = RustRouteAdapter(codex_home)
+
+    class _BrokenStdout:
+        def readline(self) -> str:
+            return ""
+
+        def close(self) -> None:
+            return None
+
+    class _HealthyStdout:
+        def __init__(self) -> None:
+            self._lines: list[str] = []
+
+        def push(self, line: str) -> None:
+            self._lines.append(line)
+
+        def readline(self) -> str:
+            if not self._lines:
+                return ""
+            return self._lines.pop(0)
+
+        def close(self) -> None:
+            return None
+
+    class _BrokenStdin:
+        def write(self, data: str) -> int:
+            return len(data)
+
+        def flush(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    class _HealthyStdin:
+        def __init__(self, owner: "_ResilientFakePopen") -> None:
+            self._owner = owner
+
+        def write(self, data: str) -> int:
+            request = json.loads(data)
+            self._owner.requests.append(request)
+            self._owner.stdout.push(
+                json.dumps(
+                    {
+                        "id": request["id"],
+                        "ok": True,
+                        "payload": {
+                            "schema_version": adapter.runtime_control_plane_schema_version,
+                            "authority": adapter.runtime_control_plane_authority,
+                        },
+                    }
+                )
+                + "\n"
+            )
+            return len(data)
+
+        def flush(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    class _ResilientFakePopen:
+        launched_commands: list[list[str]] = []
+        launch_count = 0
+
+        def __init__(self, command: list[str], **_: object) -> None:
+            type(self).launch_count += 1
+            self.command = list(command)
+            self.requests: list[dict[str, object]] = []
+            self.stderr = io.StringIO("")
+            if type(self).launch_count == 1:
+                self.returncode = 17
+                self.stdout = _BrokenStdout()
+                self.stdin = _BrokenStdin()
+                self.stderr = io.StringIO("router stdio first process died")
+            else:
+                self.returncode = None
+                self.stdout = _HealthyStdout()
+                self.stdin = _HealthyStdin(self)
+            type(self).launched_commands.append(self.command)
+
+        def poll(self) -> int | None:
+            return self.returncode
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+        def wait(self, timeout: float | None = None) -> int:
+            self.returncode = 0
+            return 0
+
+    monkeypatch.setattr(rust_router_module.subprocess, "Popen", _ResilientFakePopen)
+    monkeypatch.setattr(rust_router_module.select, "select", lambda read, write, exc, timeout: (read, [], []))
+    monkeypatch.setattr(
+        rust_router_module.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("CLI fallback should stay unused")),
+    )
+
+    control_plane = adapter.runtime_control_plane()
+
+    assert control_plane["authority"] == adapter.runtime_control_plane_authority
+    assert _ResilientFakePopen.launched_commands == [
+        [str(release_bin), "--stdio-json"],
+        [str(release_bin), "--stdio-json"],
     ]
     rust_router_module._close_router_stdio_clients()
 
@@ -1340,7 +1489,7 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert status["retirement_exit_contract"]["removal_owner"] == "runtime-integrator"
     assert status["retirement_exit_contract"]["observation_sources"]["local_runtime_health"] == [
         "ExecutionEnvironmentService.describe_kernel_contract()",
-        "RouterRsExecutionKernel.health().kernel_live_backend_impl",
+        "ExecutionEnvironmentService.health().kernel_live_backend_impl",
     ]
     assert status["public_runtime_contract_fields"] == [
         "execution_kernel",

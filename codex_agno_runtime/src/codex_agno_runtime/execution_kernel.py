@@ -115,26 +115,6 @@ class ExecutionKernelRequest:
     sandbox_runtime_probe: SandboxRuntimeProbe | None = None
 
 
-class ExecutionKernel:
-    """Base execution-kernel adapter contract."""
-
-    adapter_kind = "unknown"
-    authority = "unknown"
-
-    async def execute(self, request: ExecutionKernelRequest) -> RunTaskResponse:
-        """Run one execution request through the active kernel."""
-
-        raise NotImplementedError
-
-    def health(self) -> dict[str, Any]:
-        """Describe the active kernel adapter."""
-
-        return {
-            "kernel_adapter_kind": self.adapter_kind,
-            "kernel_authority": self.authority,
-        }
-
-
 class RouterRsExecutionError(RuntimeError):
     """Base error raised when router-rs execution cannot complete."""
 
@@ -143,98 +123,154 @@ class RouterRsInfrastructureError(RouterRsExecutionError):
     """Router-rs failed before a valid execution result could be produced."""
 
 
-class RouterRsExecutionKernel(ExecutionKernel):
-    """Rust-owned execution slice invoked out-of-process through router-rs."""
+def build_router_rs_execution_request_payload(
+    request: ExecutionKernelRequest,
+    *,
+    settings: RuntimeSettings,
+) -> dict[str, Any]:
+    """Serialize one execution request into the Rust router-rs request payload."""
 
-    adapter_kind = EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL
-    authority = EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY
-    bridge_kind = EXECUTION_KERNEL_BRIDGE_KIND
-    bridge_authority = EXECUTION_KERNEL_BRIDGE_AUTHORITY
-    execution_schema_version = RustRouteAdapter.execution_schema_version
+    routing_result = request.routing_result
+    return {
+        "schema_version": EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION,
+        "task": request.task,
+        "session_id": request.session_id,
+        "user_id": request.user_id,
+        "selected_skill": routing_result.selected_skill.name,
+        "overlay_skill": routing_result.overlay_skill.name if routing_result.overlay_skill else None,
+        "layer": routing_result.layer,
+        "route_engine": routing_result.route_engine,
+        "diagnostic_route_mode": routing_result.diagnostic_route_mode,
+        "reasons": [str(reason) for reason in routing_result.reasons],
+        "prompt_preview": request.prompt_preview if request.dry_run else None,
+        "dry_run": request.dry_run,
+        "trace_event_count": request.trace_event_count,
+        "trace_output_path": request.trace_output_path,
+        "default_output_tokens": settings.default_output_tokens,
+        "model_id": settings.model_id,
+        "aggregator_base_url": settings.aggregator_base_url,
+        "aggregator_api_key": settings.aggregator_api_key,
+    }
 
-    def __init__(
-        self,
-        settings: RuntimeSettings,
-        *,
-        rust_adapter: RustRouteAdapter | None = None,
-    ) -> None:
-        self.settings = settings
-        self._rust_adapter = rust_adapter or RustRouteAdapter(
-            self.settings.codex_home,
-            timeout_seconds=self.settings.rust_router_timeout_seconds,
-        )
 
-    async def execute(self, request: ExecutionKernelRequest) -> RunTaskResponse:
-        payload = self._build_payload(request)
-        response_payload = await asyncio.to_thread(self._run_execute_command, payload)
-        return self._decode_response(response_payload)
+def decode_router_rs_execution_payload(payload: dict[str, Any]) -> RunTaskResponse:
+    """Decode one router-rs execution payload through the shared bridge contract."""
 
-    def preview_prompt(self, request: ExecutionKernelRequest) -> str | None:
-        """Synchronously ask router-rs for the dry-run prompt preview."""
+    return decode_router_rs_execution_response(
+        payload,
+        execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
+        execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
+        execution_kernel_delegate=EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
+        execution_kernel_delegate_authority=EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
+        execution_kernel_delegate_family=EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
+        execution_kernel_delegate_impl=EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
+    )
 
-        if not request.dry_run:
-            raise ValueError("preview_prompt requires a dry-run execution request")
-        payload = self._build_payload(request)
-        response_payload = self._run_execute_command(payload)
-        return self._decode_response(response_payload).prompt_preview
 
-    def health(self) -> dict[str, Any]:
-        payload = super().health()
-        adapter_health = self._rust_adapter.health()
-        payload.update(
-            {
-                "kernel_replace_ready": False,
-                "kernel_live_backend_family": "rust-cli",
-                "kernel_live_backend_impl": "router-rs",
-                "kernel_mode_support": ["dry_run", "live"],
-                "execution_schema_version": self.execution_schema_version,
-                "resolved_binary": adapter_health.get("resolved_binary"),
-            }
-        )
-        return payload
+def run_router_rs_execution_payload(
+    payload: dict[str, Any],
+    *,
+    rust_adapter: RustRouteAdapter,
+) -> dict[str, Any]:
+    """Run one serialized execution payload through the shared Rust adapter."""
 
-    def _build_payload(self, request: ExecutionKernelRequest) -> dict[str, Any]:
-        routing_result = request.routing_result
-        return {
-            "schema_version": EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION,
-            "task": request.task,
-            "session_id": request.session_id,
-            "user_id": request.user_id,
-            "selected_skill": routing_result.selected_skill.name,
-            "overlay_skill": routing_result.overlay_skill.name if routing_result.overlay_skill else None,
-            "layer": routing_result.layer,
-            "route_engine": routing_result.route_engine,
-            "diagnostic_route_mode": routing_result.diagnostic_route_mode,
-            "reasons": [str(reason) for reason in routing_result.reasons],
-            "prompt_preview": request.prompt_preview if request.dry_run else None,
-            "dry_run": request.dry_run,
-            "trace_event_count": request.trace_event_count,
-            "trace_output_path": request.trace_output_path,
-            "default_output_tokens": self.settings.default_output_tokens,
-            "model_id": self.settings.model_id,
-            "aggregator_base_url": self.settings.aggregator_base_url,
-            "aggregator_api_key": self.settings.aggregator_api_key,
-        }
+    try:
+        return rust_adapter.execute(payload)
+    except RuntimeError as exc:
+        message = str(exc)
+        if message.startswith("router-rs execute failed:"):
+            raise RouterRsExecutionError(message) from exc
+        raise RouterRsInfrastructureError(message) from exc
 
-    def _run_execute_command(self, payload: dict[str, Any]) -> dict[str, Any]:
-        try:
-            return self._rust_adapter.execute(payload)
-        except RuntimeError as exc:
-            message = str(exc)
-            if message.startswith("router-rs execute failed:"):
-                raise RouterRsExecutionError(message) from exc
-            raise RouterRsInfrastructureError(message) from exc
 
-    def _decode_response(self, payload: dict[str, Any]) -> RunTaskResponse:
-        try:
-            return decode_router_rs_execution_response(
-                payload,
-                execution_kernel=self.bridge_kind,
-                execution_kernel_authority=self.bridge_authority,
-                execution_kernel_delegate=self.adapter_kind,
-                execution_kernel_delegate_authority=self.authority,
-                execution_kernel_delegate_family=EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
-                execution_kernel_delegate_impl=EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
-            )
-        except RuntimeError as exc:
-            raise RouterRsInfrastructureError(str(exc)) from exc
+async def execute_router_rs_request(
+    request: ExecutionKernelRequest,
+    *,
+    settings: RuntimeSettings,
+    rust_adapter: RustRouteAdapter,
+) -> RunTaskResponse:
+    """Execute one normalized request through router-rs and decode the result."""
+
+    payload = build_router_rs_execution_request_payload(request, settings=settings)
+    response_payload = await asyncio.to_thread(
+        run_router_rs_execution_payload,
+        payload,
+        rust_adapter=rust_adapter,
+    )
+    try:
+        return decode_router_rs_execution_payload(response_payload)
+    except RuntimeError as exc:
+        raise RouterRsInfrastructureError(str(exc)) from exc
+
+
+def preview_router_rs_request_prompt(
+    request: ExecutionKernelRequest,
+    *,
+    settings: RuntimeSettings,
+    rust_adapter: RustRouteAdapter,
+) -> str | None:
+    """Synchronously resolve the Rust-owned dry-run prompt preview for one request."""
+
+    if not request.dry_run:
+        raise ValueError("preview_prompt requires a dry-run execution request")
+    payload = build_router_rs_execution_request_payload(request, settings=settings)
+    response_payload = run_router_rs_execution_payload(payload, rust_adapter=rust_adapter)
+    try:
+        return decode_router_rs_execution_payload(response_payload).prompt_preview
+    except RuntimeError as exc:
+        raise RouterRsInfrastructureError(str(exc)) from exc
+
+
+def build_router_rs_execution_kernel_health(
+    rust_adapter: RustRouteAdapter,
+) -> dict[str, Any]:
+    """Return the shared Rust-owned kernel health descriptor."""
+
+    adapter_health = rust_adapter.health()
+    return {
+        "kernel_adapter_kind": EXECUTION_KERNEL_BRIDGE_KIND,
+        "kernel_authority": EXECUTION_KERNEL_BRIDGE_AUTHORITY,
+        "kernel_owner_family": "rust",
+        "kernel_owner_impl": "execution-kernel-slice",
+        "kernel_contract_mode": "rust-live-primary",
+        "kernel_replace_ready": True,
+        "kernel_in_process_replacement_complete": True,
+        "kernel_live_backend_family": "rust-cli",
+        "kernel_live_backend_impl": "router-rs",
+        "kernel_live_delegate_kind": EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
+        "kernel_live_delegate_authority": EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
+        "kernel_live_delegate_family": EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
+        "kernel_live_delegate_impl": EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
+        "kernel_live_delegate_mode": "rust-primary",
+        "kernel_live_fallback_kind": None,
+        "kernel_live_fallback_authority": None,
+        "kernel_live_fallback_family": None,
+        "kernel_live_fallback_impl": None,
+        "kernel_live_fallback_enabled": False,
+        "kernel_live_fallback_mode": "disabled",
+        "kernel_mode_support": ["dry_run", "live"],
+        "execution_schema_version": RustRouteAdapter.execution_schema_version,
+        "resolved_binary": adapter_health.get("resolved_binary"),
+    }
+
+
+def build_router_rs_execution_kernel_contract_descriptor(*, rust_adapter: RustRouteAdapter) -> dict[str, Any]:
+    """Return the shared execution-kernel contract descriptor for runtime surfaces."""
+
+    health = build_router_rs_execution_kernel_health(rust_adapter)
+    return {
+        "execution_kernel": health["kernel_adapter_kind"],
+        "execution_kernel_authority": health["kernel_authority"],
+        "execution_kernel_contract_mode": health["kernel_contract_mode"],
+        "execution_kernel_in_process_replacement_complete": health["kernel_in_process_replacement_complete"],
+        "execution_kernel_delegate": health["kernel_live_delegate_kind"],
+        "execution_kernel_delegate_authority": health["kernel_live_delegate_authority"],
+        "execution_kernel_delegate_family": health["kernel_live_delegate_family"],
+        "execution_kernel_delegate_impl": health["kernel_live_delegate_impl"],
+        "execution_kernel_live_primary": health["kernel_live_delegate_kind"],
+        "execution_kernel_live_primary_authority": health["kernel_live_delegate_authority"],
+        "execution_kernel_live_fallback": health["kernel_live_fallback_kind"],
+        "execution_kernel_live_fallback_authority": health["kernel_live_fallback_authority"],
+        "execution_kernel_live_fallback_enabled": health["kernel_live_fallback_enabled"],
+        "execution_kernel_live_fallback_mode": health["kernel_live_fallback_mode"],
+    }

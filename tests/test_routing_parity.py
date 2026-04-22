@@ -18,6 +18,8 @@ RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
+import scripts.route as route_module
+
 from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import (
     RouteDecisionContract,
@@ -28,11 +30,7 @@ from codex_agno_runtime.schemas import (
 from scripts.route import (
     build_rust_router_command,
     route_decision_contract,
-    route_decision_json,
     run_rust_route_contract,
-    run_rust_route_json,
-    run_rust_router_json,
-    search_skills_json,
 )
 
 
@@ -72,15 +70,15 @@ def test_build_rust_router_command_emits_explicit_false_route_flags() -> None:
     assert "--first-turn=false" in command
 
 
-def test_run_rust_route_json_respects_false_overlay_and_first_turn_flags() -> None:
-    decision = run_rust_route_json(
+def test_run_rust_route_contract_respects_false_overlay_and_first_turn_flags() -> None:
+    decision = run_rust_route_contract(
         "这个仓库的修复你直接 gsd，推进到底，别停，主线程保持简短并给我验证证据",
         session_id="route-cli-regression",
         allow_overlay=False,
         first_turn=False,
         runtime_path=PROJECT_ROOT / "tests" / "_routing_missing_runtime.json",
         manifest_path=PROJECT_ROOT / "tests" / "routing_route_fixtures.json",
-    )
+    ).model_dump(mode="json")
 
     assert decision["selected_skill"] == "execution-controller-coding"
     assert decision["overlay_skill"] is None
@@ -103,7 +101,7 @@ def test_run_rust_route_contract_exposes_typed_decision() -> None:
     assert decision.route_snapshot.selected_skill == decision.selected_skill
 
 
-def test_run_rust_route_json_exports_transport_payload_from_typed_contract(
+def test_run_rust_route_contract_exports_transport_payload_from_typed_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     contract = RouteDecisionContract.model_validate(
@@ -131,12 +129,47 @@ def test_run_rust_route_json_exports_transport_payload_from_typed_contract(
         }
     )
 
-    monkeypatch.setattr("scripts.route.run_rust_route_contract", lambda *args, **kwargs: contract)
+    monkeypatch.setattr(route_module, "run_rust_route_contract", lambda *args, **kwargs: contract)
 
-    assert run_rust_route_json("typed first") == contract.to_transport_payload()
+    assert route_module.run_rust_route_contract("typed first").model_dump(mode="json") == contract.model_dump(mode="json")
 
 
-def test_route_decision_json_exports_transport_payload_from_typed_contract(
+def test_run_rust_route_contract_uses_rust_route_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+    contract = RouteDecisionContract.model_validate(
+        {
+            "decision_schema_version": "router-rs-route-decision-v1",
+            "authority": "rust-route-core",
+            "compile_authority": "rust-route-compiler",
+            "task": "adapter backed route",
+            "session_id": "adapter-backed-session",
+            "selected_skill": "execution-controller-coding",
+            "overlay_skill": None,
+            "layer": "L2",
+            "score": 42.0,
+            "reasons": ["adapter route"],
+            "route_snapshot": {
+                "engine": "rust",
+                "selected_skill": "execution-controller-coding",
+                "overlay_skill": None,
+                "layer": "L2",
+                "score": 42.0,
+                "score_bucket": "40-49",
+                "reasons": ["adapter route"],
+                "reasons_class": "adapter route",
+            },
+        }
+    )
+
+    class _FakeAdapter:
+        def route_contract(self, **kwargs):
+            return contract
+
+    monkeypatch.setattr(route_module, "_resolve_route_adapter", lambda **kwargs: _FakeAdapter())
+
+    assert route_module.run_rust_route_contract("adapter backed route") == contract
+
+
+def test_route_decision_contract_exports_transport_payload_from_typed_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     contract = RouteDecisionContract.model_validate(
@@ -164,9 +197,9 @@ def test_route_decision_json_exports_transport_payload_from_typed_contract(
         }
     )
 
-    monkeypatch.setattr("scripts.route.route_decision_contract", lambda *args, **kwargs: contract)
+    monkeypatch.setattr(route_module, "route_decision_contract", lambda *args, **kwargs: contract)
 
-    assert route_decision_json("route cli typed first") == contract.to_transport_payload()
+    assert route_module.route_decision_contract("route cli typed first").model_dump(mode="json") == contract.model_dump(mode="json")
 
 
 def _seed_framework_runtime_artifacts(repo_root: Path, *, terminal: bool) -> None:
@@ -599,9 +632,13 @@ REAL_TASK_REPLAY_QUERIES = [
     ],
 )
 def test_rust_router_json_matches_python_search_json(query: str, limit: int) -> None:
-    """Verify the Rust router and Python bridge produce the same JSON payload."""
+    """Verify raw Rust search JSON and hydrated Python match rows stay aligned."""
 
-    assert run_rust_router_json(query, limit=limit) == search_skills_json(query, limit=limit)
+    payload = route_module._run_rust_search_payload(query, limit=limit)
+    hydrated = route_module.search_skills(query, limit=limit)
+
+    assert [str(row["slug"]) for row in payload] == [match.record.name for match in hydrated]
+    assert [float(row["score"]) for row in payload] == [match.score for match in hydrated]
 
 
 @pytest.mark.parametrize(
@@ -616,14 +653,14 @@ def test_rust_route_json_matches_python_route_decision(case: dict[str, object]) 
     allow_overlay = bool(case.get("allow_overlay", True))
     first_turn = bool(case.get("first_turn", True))
 
-    python_decision = route_decision_json(
+    python_decision = route_decision_contract(
         query,
         session_id="fixture-session",
         allow_overlay=allow_overlay,
         first_turn=first_turn,
         runtime_path=MISSING_RUNTIME_PATH,
         manifest_path=ROUTE_FIXTURE_PATH,
-    )
+    ).model_dump(mode="json")
     rust_contract = _fixture_route_adapter().route_contract(
         query=query,
         session_id="fixture-session",
@@ -644,12 +681,12 @@ def test_rust_route_json_matches_python_route_decision(case: dict[str, object]) 
 def test_real_task_replay_queries_match_shadow_diff_fields(query: str) -> None:
     """Real-task replay queries should keep the stable shadow diff vocabulary aligned."""
 
-    python_decision = route_decision_json(
+    python_decision = route_decision_contract(
         query,
         session_id="shadow-replay-session",
         allow_overlay=True,
         first_turn=True,
-    )
+    ).model_dump(mode="json")
     rust_decision = _live_route_adapter().route_contract(
         query=query,
         session_id="shadow-replay-session",
@@ -691,12 +728,12 @@ def test_live_route_expectations_hold_for_framework_and_openai_queries(
 ) -> None:
     """Framework-review and OpenAI-doc queries should keep stable live routing."""
 
-    python_decision = route_decision_json(
+    python_decision = route_decision_contract(
         query,
         session_id="live-expectation-session",
         allow_overlay=True,
         first_turn=True,
-    )
+    ).model_dump(mode="json")
     rust_decision = _live_route_adapter().route_contract(
         query=query,
         session_id="live-expectation-session",
@@ -781,45 +818,6 @@ def test_rust_route_adapter_route_contract_returns_typed_rust_owned_contract() -
     assert contract.route_snapshot.selected_skill == contract.selected_skill
     assert contract.route_snapshot.overlay_skill == contract.overlay_skill
     assert contract.route_snapshot.layer == contract.layer
-
-
-def test_rust_route_adapter_route_exports_transport_payload_from_typed_contract(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    adapter = RustRouteAdapter(PROJECT_ROOT)
-    contract = RouteDecisionContract.model_validate(
-        {
-            "decision_schema_version": adapter.route_decision_schema_version,
-            "authority": adapter.route_authority,
-            "compile_authority": adapter.compile_authority,
-            "task": "adapter compatibility export",
-            "session_id": "adapter-compat-session",
-            "selected_skill": "execution-controller-coding",
-            "overlay_skill": None,
-            "layer": "L2",
-            "score": 41.0,
-            "reasons": ["Trigger phrase matched: gsd."],
-            "route_snapshot": {
-                "engine": "rust",
-                "selected_skill": "execution-controller-coding",
-                "overlay_skill": None,
-                "layer": "L2",
-                "score": 41.0,
-                "score_bucket": "40-49",
-                "reasons": ["Trigger phrase matched: gsd."],
-                "reasons_class": "trigger phrase matched: gsd.",
-            },
-        }
-    )
-
-    monkeypatch.setattr(adapter, "route_contract", lambda **_: contract)
-
-    assert adapter.route(
-        query="adapter compatibility export",
-        session_id="adapter-compat-session",
-        allow_overlay=True,
-        first_turn=True,
-    ) == contract.to_transport_payload()
 
 
 def test_route_decision_contract_rejects_snapshot_drift() -> None:
@@ -950,12 +948,12 @@ def test_route_report_contract_accepts_snapshot_dict_for_compatibility_callers()
     """Compatibility callers can still pass a dict while the adapter validates into the typed contract."""
 
     adapter = RustRouteAdapter(PROJECT_ROOT)
-    baseline = route_decision_json(
+    baseline = route_decision_contract(
         "帮我写一个 Rust CLI 工具",
         session_id="route-report-compat-session",
         allow_overlay=True,
         first_turn=True,
-    )["route_snapshot"]
+    ).model_dump(mode="json")["route_snapshot"]
 
     report = adapter.route_report_contract(
         mode="shadow",

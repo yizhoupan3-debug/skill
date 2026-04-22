@@ -8,7 +8,6 @@ import json
 import os
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,9 +18,10 @@ if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
 from codex_agno_runtime.rust_router import (
+    RustRouteAdapter,
     resolve_router_binary_candidate,
 )
-from codex_agno_runtime.schemas import RouteDecisionContract
+from codex_agno_runtime.schemas import RouteDecisionContract, SearchMatchResult, SkillMetadata
 
 
 def get_git_root() -> Path:
@@ -48,31 +48,7 @@ MANIFEST_PATH = ROOT / "skills" / "SKILL_MANIFEST.json"
 ROUTER_RS_DIR = ROOT / "scripts" / "router-rs"
 ROUTER_RS_RELEASE_BIN = ROUTER_RS_DIR / "target" / "release" / "router-rs"
 ROUTER_RS_DEBUG_BIN = ROUTER_RS_DIR / "target" / "debug" / "router-rs"
-
-
-@dataclass
-class SkillRecord:
-    """Represent one searchable and routable skill row."""
-
-    slug: str
-    layer: str
-    gate: str
-    owner: str
-    summary: str
-    trigger_hints: list[str]
-    health: float
-    priority: str = "P2"
-    session_start: str = "n/a"
-
-
-@dataclass
-class MatchResult:
-    """Represent one ranked route match."""
-
-    record: SkillRecord
-    score: float
-    matched_terms: int
-    total_terms: int
+_ROUTE_ADAPTERS: dict[tuple[str, str], RustRouteAdapter] = {}
 
 
 def _load_manifest_route_meta(path: Path) -> dict[str, tuple[str, str]]:
@@ -104,7 +80,7 @@ def _load_manifest_route_meta(path: Path) -> dict[str, tuple[str, str]]:
     return meta
 
 
-def _load_records_from_index(index_path: Path, summary_key: str) -> list[SkillRecord]:
+def _load_records_from_index(index_path: Path, summary_key: str) -> list[SkillMetadata]:
     """Load searchable skill rows from a keyed routing index."""
 
     payload = json.loads(index_path.read_text(encoding="utf-8"))
@@ -142,7 +118,7 @@ def _load_records_from_index(index_path: Path, summary_key: str) -> list[SkillRe
         idx_session_start if idx_session_start is not None else 0,
     )
 
-    records: list[SkillRecord] = []
+    records: list[SkillMetadata] = []
     for row in rows:
         if not isinstance(row, list) or len(row) <= max_index:
             continue
@@ -151,15 +127,15 @@ def _load_records_from_index(index_path: Path, summary_key: str) -> list[SkillRe
             str(row[idx_session_start]) if idx_session_start is not None and len(row) > idx_session_start else "n/a"
         )
         records.append(
-            SkillRecord(
-                slug=str(row[idx_slug]),
-                layer=str(row[idx_layer]),
-                gate=str(row[idx_gate]),
-                owner=str(row[idx_owner]),
-                summary=str(row[idx_summary]),
+            SkillMetadata(
+                name=str(row[idx_slug]),
+                description=str(row[idx_summary]),
+                routing_layer=str(row[idx_layer]),
+                routing_gate=str(row[idx_gate]),
+                routing_owner=str(row[idx_owner]),
                 trigger_hints=_normalize_trigger_hints(row[idx_trigger_hints]),
                 health=float(row[idx_health]),
-                priority=priority or "P2",
+                routing_priority=priority or "P2",
                 session_start=session_start or "n/a",
             )
         )
@@ -179,22 +155,33 @@ def _normalize_trigger_hints(value: object) -> list[str]:
     return [raw]
 
 
-def load_records(
+def _resolve_index_targets(
     runtime_path: Path | None = None,
     manifest_path: Path | None = None,
-) -> list[SkillRecord]:
+) -> tuple[Path, Path]:
+    """Resolve the effective runtime/manifest targets for route/search helpers."""
+
+    return (
+        runtime_path if runtime_path is not None else RUNTIME_PATH,
+        manifest_path if manifest_path is not None else MANIFEST_PATH,
+    )
+
+
+def _load_search_records(
+    runtime_path: Path | None = None,
+    manifest_path: Path | None = None,
+) -> list[SkillMetadata]:
     """Load searchable skill records from the runtime or manifest index."""
 
-    runtime_target = runtime_path if runtime_path is not None else RUNTIME_PATH
-    manifest_target = manifest_path if manifest_path is not None else MANIFEST_PATH
+    runtime_target, manifest_target = _resolve_index_targets(runtime_path, manifest_path)
 
     if runtime_target.exists():
         records = _load_records_from_index(runtime_target, summary_key="summary")
         if manifest_target.exists():
             route_meta = _load_manifest_route_meta(manifest_target)
             for record in records:
-                if record.slug in route_meta:
-                    record.priority, record.session_start = route_meta[record.slug]
+                if record.name in route_meta:
+                    record.routing_priority, record.session_start = route_meta[record.name]
         return records
     if manifest_target.exists():
         return _load_records_from_index(manifest_target, summary_key="description")
@@ -202,26 +189,32 @@ def load_records(
     raise RuntimeError(f"No routing index found at {runtime_target} or {manifest_target}.")
 
 
+def _load_search_record_map(
+    runtime_path: Path | None = None,
+    manifest_path: Path | None = None,
+) -> dict[str, SkillMetadata]:
+    """Load searchable skill rows keyed by slug for payload hydration."""
+
+    return {
+        record.name: record
+        for record in _load_search_records(runtime_path=runtime_path, manifest_path=manifest_path)
+    }
+
+
 def _hydrate_match_results(
     payload: list[dict[str, object]],
     *,
-    runtime_path: Path | None,
-    manifest_path: Path | None,
-) -> list[MatchResult]:
+    records_by_slug: dict[str, SkillMetadata],
+) -> list[SearchMatchResult]:
     """Convert Rust JSON payloads back into Python `MatchResult` rows."""
-
-    records = {
-        record.slug: record
-        for record in load_records(runtime_path=runtime_path, manifest_path=manifest_path)
-    }
-    hydrated: list[MatchResult] = []
+    hydrated: list[SearchMatchResult] = []
     for row in payload:
         slug = str(row["slug"])
-        record = records.get(slug)
+        record = records_by_slug.get(slug)
         if record is None:
             continue
         hydrated.append(
-            MatchResult(
+            SearchMatchResult(
                 record=record,
                 score=float(row["score"]),
                 matched_terms=int(row["matched_terms"]),
@@ -235,6 +228,24 @@ def resolve_router_binary() -> Path | None:
     """Return the compiled Rust router when available."""
 
     return resolve_router_binary_candidate(ROUTER_RS_RELEASE_BIN, ROUTER_RS_DEBUG_BIN)
+
+
+def _resolve_route_adapter(
+    *,
+    runtime_path: Path | None,
+    manifest_path: Path | None,
+) -> RustRouteAdapter:
+    runtime_target, manifest_target = _resolve_index_targets(runtime_path, manifest_path)
+    key = (str(runtime_target.resolve()), str(manifest_target.resolve()))
+    adapter = _ROUTE_ADAPTERS.get(key)
+    if adapter is None:
+        adapter = RustRouteAdapter(
+            ROOT,
+            runtime_path=runtime_target,
+            manifest_path=manifest_target,
+        )
+        _ROUTE_ADAPTERS[key] = adapter
+    return adapter
 
 
 def build_rust_router_command(
@@ -288,14 +299,14 @@ def _run_rust_json_command(args: list[str], *, failure_label: str) -> dict[str, 
     return json.loads(proc.stdout)
 
 
-def run_rust_router_json(
+def _run_rust_search_payload(
     query: str,
     limit: int = 5,
     *,
     runtime_path: Path | None = RUNTIME_PATH,
     manifest_path: Path | None = MANIFEST_PATH,
 ) -> list[dict[str, object]]:
-    """Run Rust search output without execv side effects."""
+    """Return raw Rust search payload rows for local hydration/CLI rendering."""
 
     args = build_rust_router_command(
         query=query,
@@ -306,55 +317,6 @@ def run_rust_router_json(
     )
     payload = _run_rust_json_command(args, failure_label=f"Rust router failed for {query!r}")
     return list(payload)
-
-
-def run_rust_route_json(
-    query: str,
-    *,
-    session_id: str = "route-cli",
-    allow_overlay: bool = True,
-    first_turn: bool = True,
-    limit: int = 5,
-    runtime_path: Path | None = RUNTIME_PATH,
-    manifest_path: Path | None = MANIFEST_PATH,
-) -> dict[str, object]:
-    """Return the compatibility transport payload from the typed route contract."""
-
-    return run_rust_route_contract(
-        query,
-        session_id=session_id,
-        allow_overlay=allow_overlay,
-        first_turn=first_turn,
-        limit=limit,
-        runtime_path=runtime_path,
-        manifest_path=manifest_path,
-    ).to_transport_payload()
-
-
-def _run_rust_route_transport(
-    query: str,
-    *,
-    session_id: str = "route-cli",
-    allow_overlay: bool = True,
-    first_turn: bool = True,
-    limit: int = 5,
-    runtime_path: Path | None = RUNTIME_PATH,
-    manifest_path: Path | None = MANIFEST_PATH,
-) -> dict[str, object]:
-    """Run the raw Rust route transport and keep JSON handling at the subprocess boundary."""
-
-    args = build_rust_router_command(
-        query=query,
-        limit=limit,
-        runtime_path=runtime_path,
-        manifest_path=manifest_path,
-        route_json=True,
-        session_id=session_id,
-        allow_overlay=allow_overlay,
-        first_turn=first_turn,
-    )
-    payload = _run_rust_json_command(args, failure_label=f"Rust route decision failed for {query!r}")
-    return dict(payload)
 
 
 def run_rust_route_contract(
@@ -368,17 +330,12 @@ def run_rust_route_contract(
     manifest_path: Path | None = MANIFEST_PATH,
 ) -> RouteDecisionContract:
     """Return the Rust route decision as a typed contract."""
-
-    return RouteDecisionContract.model_validate(
-        _run_rust_route_transport(
-            query,
-            session_id=session_id,
-            allow_overlay=allow_overlay,
-            first_turn=first_turn,
-            limit=limit,
-            runtime_path=runtime_path,
-            manifest_path=manifest_path,
-        )
+    adapter = _resolve_route_adapter(runtime_path=runtime_path, manifest_path=manifest_path)
+    return adapter.route_contract(
+        query=query,
+        session_id=session_id,
+        allow_overlay=allow_overlay,
+        first_turn=first_turn,
     )
 
 
@@ -388,58 +345,23 @@ def search_skills(
     *,
     runtime_path: Path | None = None,
     manifest_path: Path | None = None,
-) -> list[MatchResult]:
+) -> list[SearchMatchResult]:
     """Search skills through the Rust router and hydrate Python match rows."""
 
-    payload = run_rust_router_json(
+    runtime_target, manifest_target = _resolve_index_targets(runtime_path, manifest_path)
+    payload = _run_rust_search_payload(
         query,
         limit=limit,
-        runtime_path=runtime_path if runtime_path is not None else RUNTIME_PATH,
-        manifest_path=manifest_path if manifest_path is not None else MANIFEST_PATH,
+        runtime_path=runtime_target,
+        manifest_path=manifest_target,
     )
     return _hydrate_match_results(
         payload,
-        runtime_path=runtime_path,
-        manifest_path=manifest_path,
+        records_by_slug=_load_search_record_map(
+            runtime_path=runtime_target,
+            manifest_path=manifest_target,
+        ),
     )
-
-
-def search_skills_json(
-    query: str,
-    limit: int = 5,
-    *,
-    runtime_path: Path | None = None,
-    manifest_path: Path | None = None,
-) -> list[dict[str, object]]:
-    """Return the Rust search JSON shape directly."""
-
-    return run_rust_router_json(
-        query,
-        limit=limit,
-        runtime_path=runtime_path if runtime_path is not None else RUNTIME_PATH,
-        manifest_path=manifest_path if manifest_path is not None else MANIFEST_PATH,
-    )
-
-
-def route_decision_json(
-    query: str,
-    *,
-    session_id: str = "route-cli",
-    allow_overlay: bool = True,
-    first_turn: bool = True,
-    runtime_path: Path | None = None,
-    manifest_path: Path | None = None,
-) -> dict[str, object]:
-    """Return the compatibility transport payload exported from the typed route contract."""
-
-    return route_decision_contract(
-        query,
-        session_id=session_id,
-        allow_overlay=allow_overlay,
-        first_turn=first_turn,
-        runtime_path=runtime_path if runtime_path is not None else RUNTIME_PATH,
-        manifest_path=manifest_path if manifest_path is not None else MANIFEST_PATH,
-    ).to_transport_payload()
 
 
 def route_decision_contract(
@@ -451,7 +373,7 @@ def route_decision_contract(
     runtime_path: Path | None = None,
     manifest_path: Path | None = None,
 ) -> RouteDecisionContract:
-    """Return the Rust route decision in typed shim form."""
+    """Return the Rust route decision in typed form."""
 
     return run_rust_route_contract(
         query,
@@ -544,11 +466,16 @@ def main() -> None:
             allow_overlay=args.allow_overlay,
             first_turn=args.first_turn,
         )
-        print(json.dumps(decision.to_transport_payload(), indent=2, ensure_ascii=False))
+        print(json.dumps(decision.model_dump(mode="json"), indent=2, ensure_ascii=False))
         return
 
-    matches = search_skills(args.query, limit=args.limit)
-    payload = search_skills_json(args.query, limit=args.limit)
+    runtime_target, manifest_target = _resolve_index_targets()
+    payload = _run_rust_search_payload(
+        args.query,
+        limit=args.limit,
+        runtime_path=runtime_target,
+        manifest_path=manifest_target,
+    )
 
     if args.json:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -558,6 +485,14 @@ def main() -> None:
         print(f"No skills found matching: {args.query}")
         return
 
+    matches = _hydrate_match_results(
+        payload,
+        records_by_slug=_load_search_record_map(
+            runtime_path=runtime_target,
+            manifest_path=manifest_target,
+        ),
+    )
+
     print(f"Found {len(payload)} matches for '{args.query}':\n")
     print(f"{'Skill':<30} | {'Layer':<5} | {'Gate':<10} | {'Score':<6} | {'Description'}")
     print("-" * 120)
@@ -566,8 +501,8 @@ def main() -> None:
         if len(description) > 60:
             description = description[:57] + "..."
         print(
-            f"{hydrated.record.slug:<30} | {hydrated.record.layer:<5} | "
-            f"{hydrated.record.gate:<10} | {row['score']:<6} | {description}"
+            f"{hydrated.record.name:<30} | {hydrated.record.routing_layer:<5} | "
+            f"{hydrated.record.routing_gate:<10} | {row['score']:<6} | {description}"
         )
 
 

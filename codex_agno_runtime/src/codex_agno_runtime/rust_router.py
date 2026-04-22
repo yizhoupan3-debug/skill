@@ -19,12 +19,15 @@ from codex_agno_runtime.schemas import (
 
 
 def resolve_router_binary_candidate(*candidates: Path) -> Path | None:
-    """Return the first existing router-rs binary in caller preference order."""
+    """Return the freshest existing router-rs binary, preserving caller order on ties."""
 
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
-    return None
+    existing = [candidate for candidate in candidates if candidate.is_file()]
+    if not existing:
+        return None
+    return max(
+        enumerate(existing),
+        key=lambda item: (item[1].stat().st_mtime, -item[0]),
+    )[1]
 
 
 class _RouterStdioClient:
@@ -220,23 +223,6 @@ class RustRouteAdapter:
         self.debug_bin = self.router_dir / "target" / "debug" / "router-rs"
         self._cached_runtime_binary: Path | None | object = _ROUTER_BINARY_CACHE_UNSET
 
-    def route(
-        self,
-        *,
-        query: str,
-        session_id: str,
-        allow_overlay: bool,
-        first_turn: bool,
-    ) -> dict[str, Any]:
-        """Return one compatibility transport payload derived from the typed route contract."""
-
-        return self.route_contract(
-            query=query,
-            session_id=session_id,
-            allow_overlay=allow_overlay,
-            first_turn=first_turn,
-        ).to_transport_payload()
-
     def execute(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Run one Rust-owned execution request through router-rs."""
 
@@ -264,15 +250,10 @@ class RustRouteAdapter:
                 raise RuntimeError("router-rs execute timed out before returning a response") from exc
             raise
         if resolved.get("execution_schema_version") != self.execution_schema_version:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="execution kernel",
+            raise RuntimeError(
+                "router-rs execute returned an unknown schema: "
+                f"{resolved.get('execution_schema_version')!r}"
             )
-            if resolved.get("execution_schema_version") != self.execution_schema_version:
-                raise RuntimeError(
-                    "router-rs execute returned an unknown schema: "
-                    f"{resolved.get('execution_schema_version')!r}"
-                )
         if resolved.get("authority") != self.execution_authority:
             raise RuntimeError(
                 "router-rs execute returned an unexpected authority marker: "
@@ -305,15 +286,10 @@ class RustRouteAdapter:
             failure_label="route engine",
         )
         if payload.get("decision_schema_version") != self.route_decision_schema_version:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="route engine",
+            raise RuntimeError(
+                "Rust route engine returned an unknown decision schema: "
+                f"{payload.get('decision_schema_version')!r}"
             )
-            if payload.get("decision_schema_version") != self.route_decision_schema_version:
-                raise RuntimeError(
-                    "Rust route engine returned an unknown decision schema: "
-                    f"{payload.get('decision_schema_version')!r}"
-                )
         if payload.get("authority") != self.route_authority:
             raise RuntimeError(
                 "Rust route engine returned an unexpected authority marker: "
@@ -336,21 +312,6 @@ class RustRouteAdapter:
             command,
             failure_label="profile compiler",
         )
-
-    def route_report(
-        self,
-        *,
-        mode: str,
-        rust_route_snapshot: dict[str, Any] | None = None,
-        route_decision_contract: RouteDecisionContract | Mapping[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Build the stable Rust-owned route diagnostic report."""
-
-        return self.route_report_contract(
-            mode=mode,
-            rust_route_snapshot=rust_route_snapshot,
-            route_decision_contract=route_decision_contract,
-        ).model_dump(mode="json")
 
     def route_report_contract(
         self,
@@ -398,36 +359,25 @@ class RustRouteAdapter:
             )
         else:
             serialized_route_decision = None
-        try:
-            payload = self._run_hot_json_command(
-                "route_report",
-                {
-                    "mode": mode,
-                    "rust_route_snapshot": (
-                        rust_route_snapshot.model_dump(mode="json")
-                        if isinstance(rust_route_snapshot, RouteDecisionSnapshot)
-                        else rust_route_snapshot
-                    ),
-                    "route_decision": serialized_route_decision,
-                },
-                [*self._binary_command(), *args],
-                failure_label="route report engine",
-            )
-        except RuntimeError:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="route report engine",
-            )
+        payload = self._run_hot_json_command(
+            "route_report",
+            {
+                "mode": mode,
+                "rust_route_snapshot": (
+                    rust_route_snapshot.model_dump(mode="json")
+                    if isinstance(rust_route_snapshot, RouteDecisionSnapshot)
+                    else rust_route_snapshot
+                ),
+                "route_decision": serialized_route_decision,
+            },
+            [*self._binary_command(), *args],
+            failure_label="route report engine",
+        )
         if payload.get("report_schema_version") != self.route_report_schema_version:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="route report engine",
+            raise RuntimeError(
+                "Rust route report engine returned an unknown schema: "
+                f"{payload.get('report_schema_version')!r}"
             )
-            if payload.get("report_schema_version") != self.route_report_schema_version:
-                raise RuntimeError(
-                    "Rust route report engine returned an unknown schema: "
-                    f"{payload.get('report_schema_version')!r}"
-                )
         if payload.get("authority") != self.route_authority:
             raise RuntimeError(
                 "Rust route report engine returned an unexpected authority marker: "
@@ -456,28 +406,17 @@ class RustRouteAdapter:
             "--route-mode",
             mode,
         ]
-        try:
-            payload = self._run_hot_json_command(
-                "route_policy",
-                {"mode": mode},
-                [*self._binary_command(), *args],
-                failure_label="route policy engine",
-            )
-        except RuntimeError:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="route policy engine",
-            )
+        payload = self._run_hot_json_command(
+            "route_policy",
+            {"mode": mode},
+            [*self._binary_command(), *args],
+            failure_label="route policy engine",
+        )
         if payload.get("policy_schema_version") != self.route_policy_schema_version:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="route policy engine",
+            raise RuntimeError(
+                "Rust route policy engine returned an unknown schema: "
+                f"{payload.get('policy_schema_version')!r}"
             )
-            if payload.get("policy_schema_version") != self.route_policy_schema_version:
-                raise RuntimeError(
-                    "Rust route policy engine returned an unknown schema: "
-                    f"{payload.get('policy_schema_version')!r}"
-                )
         if payload.get("authority") != self.route_authority:
             raise RuntimeError(
                 "Rust route policy engine returned an unexpected authority marker: "
@@ -533,35 +472,24 @@ class RustRouteAdapter:
                 ensure_ascii=False,
             ),
         ]
-        try:
-            payload = self._run_hot_json_command(
-                "route_snapshot",
-                {
-                    "engine": engine,
-                    "selected_skill": selected_skill,
-                    "overlay_skill": overlay_skill,
-                    "layer": layer,
-                    "score": score,
-                    "reasons": reasons,
-                },
-                [*self._binary_command(), *args],
-                failure_label="route snapshot engine",
-            )
-        except RuntimeError:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="route snapshot engine",
-            )
+        payload = self._run_hot_json_command(
+            "route_snapshot",
+            {
+                "engine": engine,
+                "selected_skill": selected_skill,
+                "overlay_skill": overlay_skill,
+                "layer": layer,
+                "score": score,
+                "reasons": reasons,
+            },
+            [*self._binary_command(), *args],
+            failure_label="route snapshot engine",
+        )
         if payload.get("snapshot_schema_version") != self.route_snapshot_schema_version:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="route snapshot engine",
+            raise RuntimeError(
+                "Rust route snapshot engine returned an unknown schema: "
+                f"{payload.get('snapshot_schema_version')!r}"
             )
-            if payload.get("snapshot_schema_version") != self.route_snapshot_schema_version:
-                raise RuntimeError(
-                    "Rust route snapshot engine returned an unknown schema: "
-                    f"{payload.get('snapshot_schema_version')!r}"
-                )
         if payload.get("authority") != self.route_authority:
             raise RuntimeError(
                 "Rust route snapshot engine returned an unexpected authority marker: "
@@ -606,28 +534,17 @@ class RustRouteAdapter:
             "--repo-root",
             str(repo_root),
         ]
-        try:
-            payload = self._run_hot_json_command(
-                "framework_runtime_snapshot",
-                {"repo_root": str(repo_root)},
-                [*self._binary_command(), *args],
-                failure_label="framework runtime snapshot compiler",
-            )
-        except RuntimeError:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="framework runtime snapshot compiler",
-            )
+        payload = self._run_hot_json_command(
+            "framework_runtime_snapshot",
+            {"repo_root": str(repo_root)},
+            [*self._binary_command(), *args],
+            failure_label="framework runtime snapshot compiler",
+        )
         if payload.get("schema_version") != self.framework_runtime_snapshot_schema_version:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="framework runtime snapshot compiler",
+            raise RuntimeError(
+                "Rust framework runtime snapshot compiler returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
             )
-            if payload.get("schema_version") != self.framework_runtime_snapshot_schema_version:
-                raise RuntimeError(
-                    "Rust framework runtime snapshot compiler returned an unknown schema: "
-                    f"{payload.get('schema_version')!r}"
-                )
         if payload.get("authority") != self.framework_runtime_authority:
             raise RuntimeError(
                 "Rust framework runtime snapshot compiler returned an unexpected authority marker: "
@@ -648,28 +565,17 @@ class RustRouteAdapter:
             "--repo-root",
             str(repo_root),
         ]
-        try:
-            payload = self._run_hot_json_command(
-                "framework_contract_summary",
-                {"repo_root": str(repo_root)},
-                [*self._binary_command(), *args],
-                failure_label="framework contract summary compiler",
-            )
-        except RuntimeError:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="framework contract summary compiler",
-            )
+        payload = self._run_hot_json_command(
+            "framework_contract_summary",
+            {"repo_root": str(repo_root)},
+            [*self._binary_command(), *args],
+            failure_label="framework contract summary compiler",
+        )
         if payload.get("schema_version") != self.framework_contract_summary_schema_version:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="framework contract summary compiler",
+            raise RuntimeError(
+                "Rust framework contract summary compiler returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
             )
-            if payload.get("schema_version") != self.framework_contract_summary_schema_version:
-                raise RuntimeError(
-                    "Rust framework contract summary compiler returned an unknown schema: "
-                    f"{payload.get('schema_version')!r}"
-                )
         if payload.get("authority") != self.framework_runtime_authority:
             raise RuntimeError(
                 "Rust framework contract summary compiler returned an unexpected authority marker: "
@@ -686,28 +592,17 @@ class RustRouteAdapter:
         """Return the Rust-owned runtime control-plane authority descriptor."""
 
         args = ["--runtime-control-plane-json"]
-        try:
-            payload = self._run_hot_json_command(
-                "runtime_control_plane",
-                {},
-                [*self._binary_command(), *args],
-                failure_label="runtime control-plane compiler",
-            )
-        except RuntimeError:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="runtime control-plane compiler",
-            )
+        payload = self._run_hot_json_command(
+            "runtime_control_plane",
+            {},
+            [*self._binary_command(), *args],
+            failure_label="runtime control-plane compiler",
+        )
         if payload.get("schema_version") != self.runtime_control_plane_schema_version:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="runtime control-plane compiler",
+            raise RuntimeError(
+                "Rust runtime control-plane compiler returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
             )
-            if payload.get("schema_version") != self.runtime_control_plane_schema_version:
-                raise RuntimeError(
-                    "Rust runtime control-plane compiler returned an unknown schema: "
-                    f"{payload.get('schema_version')!r}"
-                )
         if payload.get("authority") != self.runtime_control_plane_authority:
             raise RuntimeError(
                 "Rust runtime control-plane compiler returned an unexpected authority marker: "
@@ -719,28 +614,17 @@ class RustRouteAdapter:
         """Return the Rust-owned runtime observability exporter descriptor."""
 
         args = ["--runtime-observability-exporter-json"]
-        try:
-            payload = self._run_hot_json_command(
-                "runtime_observability_exporter_descriptor",
-                {},
-                [*self._binary_command(), *args],
-                failure_label="runtime observability exporter compiler",
-            )
-        except RuntimeError:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="runtime observability exporter compiler",
-            )
+        payload = self._run_hot_json_command(
+            "runtime_observability_exporter_descriptor",
+            {},
+            [*self._binary_command(), *args],
+            failure_label="runtime observability exporter compiler",
+        )
         if payload.get("schema_version") != self.runtime_observability_exporter_schema_version:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="runtime observability exporter compiler",
+            raise RuntimeError(
+                "Rust runtime observability exporter compiler returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
             )
-            if payload.get("schema_version") != self.runtime_observability_exporter_schema_version:
-                raise RuntimeError(
-                    "Rust runtime observability exporter compiler returned an unknown schema: "
-                    f"{payload.get('schema_version')!r}"
-                )
         if payload.get("exporter_authority") != self.runtime_control_plane_authority:
             raise RuntimeError(
                 "Rust runtime observability exporter compiler returned an unexpected authority marker: "
@@ -752,56 +636,34 @@ class RustRouteAdapter:
         """Return the Rust-owned machine-readable runtime metric catalog."""
 
         args = ["--runtime-observability-metric-catalog-json"]
-        try:
-            payload = self._run_hot_json_command(
-                "runtime_observability_metric_catalog",
-                {},
-                [*self._binary_command(), *args],
-                failure_label="runtime observability metric catalog compiler",
-            )
-        except RuntimeError:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="runtime observability metric catalog compiler",
-            )
+        payload = self._run_hot_json_command(
+            "runtime_observability_metric_catalog",
+            {},
+            [*self._binary_command(), *args],
+            failure_label="runtime observability metric catalog compiler",
+        )
         if payload.get("schema_version") != self.runtime_observability_metric_catalog_schema_version:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="runtime observability metric catalog compiler",
+            raise RuntimeError(
+                "Rust runtime observability metric catalog compiler returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
             )
-            if payload.get("schema_version") != self.runtime_observability_metric_catalog_schema_version:
-                raise RuntimeError(
-                    "Rust runtime observability metric catalog compiler returned an unknown schema: "
-                    f"{payload.get('schema_version')!r}"
-                )
         return payload
 
     def runtime_observability_dashboard_schema(self) -> dict[str, Any]:
         """Return the Rust-owned runtime observability dashboard schema."""
 
         args = ["--runtime-observability-dashboard-json"]
-        try:
-            payload = self._run_hot_json_command(
-                "runtime_observability_dashboard_schema",
-                {},
-                [*self._binary_command(), *args],
-                failure_label="runtime observability dashboard compiler",
-            )
-        except RuntimeError:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="runtime observability dashboard compiler",
-            )
+        payload = self._run_hot_json_command(
+            "runtime_observability_dashboard_schema",
+            {},
+            [*self._binary_command(), *args],
+            failure_label="runtime observability dashboard compiler",
+        )
         if payload.get("schema_version") != self.runtime_observability_dashboard_schema_version:
-            payload = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="runtime observability dashboard compiler",
+            raise RuntimeError(
+                "Rust runtime observability dashboard compiler returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
             )
-            if payload.get("schema_version") != self.runtime_observability_dashboard_schema_version:
-                raise RuntimeError(
-                    "Rust runtime observability dashboard compiler returned an unknown schema: "
-                    f"{payload.get('schema_version')!r}"
-                )
         return payload
 
     def runtime_metric_record(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -812,28 +674,17 @@ class RustRouteAdapter:
             "--runtime-metric-record-input-json",
             json.dumps(payload, ensure_ascii=False, allow_nan=False),
         ]
-        try:
-            resolved = self._run_hot_json_command(
-                "runtime_metric_record",
-                payload,
-                [*self._binary_command(), *args],
-                failure_label="runtime metric record compiler",
-            )
-        except RuntimeError:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="runtime metric record compiler",
-            )
+        resolved = self._run_hot_json_command(
+            "runtime_metric_record",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="runtime metric record compiler",
+        )
         if resolved.get("schema_version") != self.runtime_observability_metric_record_schema_version:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="runtime metric record compiler",
+            raise RuntimeError(
+                "Rust runtime metric record compiler returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
             )
-            if resolved.get("schema_version") != self.runtime_observability_metric_record_schema_version:
-                raise RuntimeError(
-                    "Rust runtime metric record compiler returned an unknown schema: "
-                    f"{resolved.get('schema_version')!r}"
-                )
         ownership = resolved.get("ownership")
         if not isinstance(ownership, dict) or ownership.get("exporter_authority") != self.runtime_control_plane_authority:
             raise RuntimeError(
@@ -850,28 +701,17 @@ class RustRouteAdapter:
             "--background-control-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        try:
-            resolved = self._run_hot_json_command(
-                "background_control",
-                payload,
-                [*self._binary_command(), *args],
-                failure_label="background control compiler",
-            )
-        except RuntimeError:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="background control compiler",
-            )
+        resolved = self._run_hot_json_command(
+            "background_control",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="background control compiler",
+        )
         if resolved.get("schema_version") != self.background_control_schema_version:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="background control compiler",
+            raise RuntimeError(
+                "Rust background control compiler returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
             )
-            if resolved.get("schema_version") != self.background_control_schema_version:
-                raise RuntimeError(
-                    "Rust background control compiler returned an unknown schema: "
-                    f"{resolved.get('schema_version')!r}"
-                )
         if resolved.get("authority") != self.background_control_authority:
             raise RuntimeError(
                 "Rust background control compiler returned an unexpected authority marker: "
@@ -885,28 +725,17 @@ class RustRouteAdapter:
             "--describe-transport-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        try:
-            resolved = self._run_hot_json_command(
-                "describe_transport",
-                payload,
-                [*self._binary_command(), *args],
-                failure_label="trace transport descriptor compiler",
-            )
-        except RuntimeError:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="trace transport descriptor compiler",
-            )
+        resolved = self._run_hot_json_command(
+            "describe_transport",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="trace transport descriptor compiler",
+        )
         if resolved.get("schema_version") != self.trace_descriptor_schema_version:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="trace transport descriptor compiler",
+            raise RuntimeError(
+                "Rust trace transport descriptor compiler returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
             )
-            if resolved.get("schema_version") != self.trace_descriptor_schema_version:
-                raise RuntimeError(
-                    "Rust trace transport descriptor compiler returned an unknown schema: "
-                    f"{resolved.get('schema_version')!r}"
-                )
         if resolved.get("authority") != self.trace_descriptor_authority:
             raise RuntimeError(
                 "Rust trace transport descriptor compiler returned an unexpected authority marker: "
@@ -923,28 +752,17 @@ class RustRouteAdapter:
             "--describe-handoff-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        try:
-            resolved = self._run_hot_json_command(
-                "describe_handoff",
-                payload,
-                [*self._binary_command(), *args],
-                failure_label="trace handoff descriptor compiler",
-            )
-        except RuntimeError:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="trace handoff descriptor compiler",
-            )
+        resolved = self._run_hot_json_command(
+            "describe_handoff",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="trace handoff descriptor compiler",
+        )
         if resolved.get("schema_version") != self.trace_descriptor_schema_version:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="trace handoff descriptor compiler",
+            raise RuntimeError(
+                "Rust trace handoff descriptor compiler returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
             )
-            if resolved.get("schema_version") != self.trace_descriptor_schema_version:
-                raise RuntimeError(
-                    "Rust trace handoff descriptor compiler returned an unknown schema: "
-                    f"{resolved.get('schema_version')!r}"
-                )
         if resolved.get("authority") != self.trace_descriptor_authority:
             raise RuntimeError(
                 "Rust trace handoff descriptor compiler returned an unexpected authority marker: "
@@ -961,28 +779,17 @@ class RustRouteAdapter:
             "--checkpoint-resume-manifest-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        try:
-            resolved = self._run_hot_json_command(
-                "checkpoint_resume_manifest",
-                payload,
-                [*self._binary_command(), *args],
-                failure_label="checkpoint resume manifest compiler",
-            )
-        except RuntimeError:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="checkpoint resume manifest compiler",
-            )
+        resolved = self._run_hot_json_command(
+            "checkpoint_resume_manifest",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="checkpoint resume manifest compiler",
+        )
         if resolved.get("schema_version") != self.checkpoint_resume_manifest_schema_version:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="checkpoint resume manifest compiler",
+            raise RuntimeError(
+                "Rust checkpoint resume manifest compiler returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
             )
-            if resolved.get("schema_version") != self.checkpoint_resume_manifest_schema_version:
-                raise RuntimeError(
-                    "Rust checkpoint resume manifest compiler returned an unknown schema: "
-                    f"{resolved.get('schema_version')!r}"
-                )
         if resolved.get("authority") != self.checkpoint_resume_manifest_authority:
             raise RuntimeError(
                 "Rust checkpoint resume manifest compiler returned an unexpected authority marker: "
@@ -1001,28 +808,17 @@ class RustRouteAdapter:
             "--write-transport-binding-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        try:
-            resolved = self._run_hot_json_command(
-                "write_transport_binding",
-                payload,
-                [*self._binary_command(), *args],
-                failure_label="transport binding writer",
-            )
-        except RuntimeError:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="transport binding writer",
-            )
+        resolved = self._run_hot_json_command(
+            "write_transport_binding",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="transport binding writer",
+        )
         if resolved.get("schema_version") != self.transport_binding_write_schema_version:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="transport binding writer",
+            raise RuntimeError(
+                "Rust transport binding writer returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
             )
-            if resolved.get("schema_version") != self.transport_binding_write_schema_version:
-                raise RuntimeError(
-                    "Rust transport binding writer returned an unknown schema: "
-                    f"{resolved.get('schema_version')!r}"
-                )
         if resolved.get("authority") != self.transport_binding_write_authority:
             raise RuntimeError(
                 "Rust transport binding writer returned an unexpected authority marker: "
@@ -1042,28 +838,17 @@ class RustRouteAdapter:
             "--write-checkpoint-resume-manifest-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        try:
-            resolved = self._run_hot_json_command(
-                "write_checkpoint_resume_manifest",
-                payload,
-                [*self._binary_command(), *args],
-                failure_label="checkpoint resume manifest writer",
-            )
-        except RuntimeError:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="checkpoint resume manifest writer",
-            )
+        resolved = self._run_hot_json_command(
+            "write_checkpoint_resume_manifest",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="checkpoint resume manifest writer",
+        )
         if resolved.get("schema_version") != self.checkpoint_manifest_write_schema_version:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="checkpoint resume manifest writer",
+            raise RuntimeError(
+                "Rust checkpoint resume manifest writer returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
             )
-            if resolved.get("schema_version") != self.checkpoint_manifest_write_schema_version:
-                raise RuntimeError(
-                    "Rust checkpoint resume manifest writer returned an unknown schema: "
-                    f"{resolved.get('schema_version')!r}"
-                )
         if resolved.get("authority") != self.checkpoint_manifest_write_authority:
             raise RuntimeError(
                 "Rust checkpoint resume manifest writer returned an unexpected authority marker: "
@@ -1090,21 +875,16 @@ class RustRouteAdapter:
                 [*self._binary_command(), *args],
                 failure_label="attached runtime event transport",
             )
-        except RuntimeError:
-            resolved = self._run_json_command(
-                [*self._binary_command(), *args],
-                failure_label="attached runtime event transport",
-            )
+        except RuntimeError as exc:
+            message = str(exc)
+            if not message.startswith("Rust attached runtime event transport failed: "):
+                raise RuntimeError(f"Rust attached runtime event transport failed: {message}") from exc
+            raise
         if resolved.get("attach_mode") != "process_external_artifact_replay":
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="attached runtime event transport",
+            raise RuntimeError(
+                "Rust attached runtime event transport returned an unknown attach mode: "
+                f"{resolved.get('attach_mode')!r}"
             )
-            if resolved.get("attach_mode") != "process_external_artifact_replay":
-                raise RuntimeError(
-                    "Rust attached runtime event transport returned an unknown attach mode: "
-                    f"{resolved.get('attach_mode')!r}"
-                )
         if resolved.get("authority") != self.attached_runtime_event_transport_authority:
             raise RuntimeError(
                 "Rust attached runtime event transport returned an unexpected authority marker: "
@@ -1118,28 +898,17 @@ class RustRouteAdapter:
             "--subscribe-attached-runtime-events-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        try:
-            resolved = self._run_hot_json_command(
-                "subscribe_attached_runtime_events",
-                payload,
-                [*self._binary_command(), *args],
-                failure_label="attached runtime event replay",
-            )
-        except RuntimeError:
-            resolved = self._run_json_command(
-                [*self._binary_command(), *args],
-                failure_label="attached runtime event replay",
-            )
+        resolved = self._run_hot_json_command(
+            "subscribe_attached_runtime_events",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="attached runtime event replay",
+        )
         if resolved.get("schema_version") != "runtime-event-bridge-v1":
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="attached runtime event replay",
+            raise RuntimeError(
+                "Rust attached runtime event replay returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
             )
-            if resolved.get("schema_version") != "runtime-event-bridge-v1":
-                raise RuntimeError(
-                    "Rust attached runtime event replay returned an unknown schema: "
-                    f"{resolved.get('schema_version')!r}"
-                )
         return resolved
 
     def cleanup_attached_runtime_event_transport(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1148,28 +917,17 @@ class RustRouteAdapter:
             "--cleanup-attached-runtime-event-transport-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        try:
-            resolved = self._run_hot_json_command(
-                "cleanup_attached_runtime_event_transport",
-                payload,
-                [*self._binary_command(), *args],
-                failure_label="attached runtime event cleanup",
-            )
-        except RuntimeError:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="attached runtime event cleanup",
-            )
+        resolved = self._run_hot_json_command(
+            "cleanup_attached_runtime_event_transport",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="attached runtime event cleanup",
+        )
         if resolved.get("cleanup_method") != "cleanup_attached_runtime_event_transport":
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="attached runtime event cleanup",
+            raise RuntimeError(
+                "Rust attached runtime event cleanup returned an unknown cleanup method: "
+                f"{resolved.get('cleanup_method')!r}"
             )
-            if resolved.get("cleanup_method") != "cleanup_attached_runtime_event_transport":
-                raise RuntimeError(
-                    "Rust attached runtime event cleanup returned an unknown cleanup method: "
-                    f"{resolved.get('cleanup_method')!r}"
-                )
         if resolved.get("authority") != self.attached_runtime_event_transport_authority:
             raise RuntimeError(
                 "Rust attached runtime event cleanup returned an unexpected authority marker: "
@@ -1183,28 +941,17 @@ class RustRouteAdapter:
             "--trace-stream-replay-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        try:
-            resolved = self._run_hot_json_command(
-                "trace_stream_replay",
-                payload,
-                [*self._binary_command(), *args],
-                failure_label="trace stream replay",
-            )
-        except RuntimeError:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="trace stream replay",
-            )
+        resolved = self._run_hot_json_command(
+            "trace_stream_replay",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="trace stream replay",
+        )
         if resolved.get("schema_version") != self.trace_stream_replay_schema_version:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="trace stream replay",
+            raise RuntimeError(
+                "Rust trace stream replay returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
             )
-            if resolved.get("schema_version") != self.trace_stream_replay_schema_version:
-                raise RuntimeError(
-                    "Rust trace stream replay returned an unknown schema: "
-                    f"{resolved.get('schema_version')!r}"
-                )
         if resolved.get("authority") != self.trace_stream_io_authority:
             raise RuntimeError(
                 "Rust trace stream replay returned an unexpected authority marker: "
@@ -1218,28 +965,17 @@ class RustRouteAdapter:
             "--trace-stream-inspect-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        try:
-            resolved = self._run_hot_json_command(
-                "trace_stream_inspect",
-                payload,
-                [*self._binary_command(), *args],
-                failure_label="trace stream inspect",
-            )
-        except RuntimeError:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="trace stream inspect",
-            )
+        resolved = self._run_hot_json_command(
+            "trace_stream_inspect",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="trace stream inspect",
+        )
         if resolved.get("schema_version") != self.trace_stream_inspect_schema_version:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="trace stream inspect",
+            raise RuntimeError(
+                "Rust trace stream inspect returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
             )
-            if resolved.get("schema_version") != self.trace_stream_inspect_schema_version:
-                raise RuntimeError(
-                    "Rust trace stream inspect returned an unknown schema: "
-                    f"{resolved.get('schema_version')!r}"
-                )
         if resolved.get("authority") != self.trace_stream_io_authority:
             raise RuntimeError(
                 "Rust trace stream inspect returned an unexpected authority marker: "
@@ -1253,28 +989,17 @@ class RustRouteAdapter:
             "--write-trace-compaction-delta-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        try:
-            resolved = self._run_hot_json_command(
-                "write_trace_compaction_delta",
-                payload,
-                [*self._binary_command(), *args],
-                failure_label="trace compaction delta writer",
-            )
-        except RuntimeError:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="trace compaction delta writer",
-            )
+        resolved = self._run_hot_json_command(
+            "write_trace_compaction_delta",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="trace compaction delta writer",
+        )
         if resolved.get("schema_version") != self.trace_compaction_delta_write_schema_version:
-            resolved = self._run_json_command(
-                [*self._cargo_command(), *args],
-                failure_label="trace compaction delta writer",
+            raise RuntimeError(
+                "Rust trace compaction delta writer returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
             )
-            if resolved.get("schema_version") != self.trace_compaction_delta_write_schema_version:
-                raise RuntimeError(
-                    "Rust trace compaction delta writer returned an unknown schema: "
-                    f"{resolved.get('schema_version')!r}"
-                )
         if resolved.get("authority") != self.trace_stream_io_authority:
             raise RuntimeError(
                 "Rust trace compaction delta writer returned an unexpected authority marker: "
@@ -1420,11 +1145,12 @@ class RustRouteAdapter:
         try:
             return self._stdio_client().request(operation, payload)
         except RuntimeError:
-            return self._run_json_command(command, failure_label=failure_label)
+            self._reset_stdio_client()
+            return self._stdio_client().request(operation, payload)
 
     def _stdio_client(self) -> _RouterStdioClient:
         command = self._stdio_command()
-        key = (*command, str(self.codex_home))
+        key = self._stdio_client_key(command)
         with _STDIO_CLIENTS_LOCK:
             client = _STDIO_CLIENTS.get(key)
             if client is None:
@@ -1435,6 +1161,16 @@ class RustRouteAdapter:
                 )
                 _STDIO_CLIENTS[key] = client
             return client
+
+    def _reset_stdio_client(self) -> None:
+        key = self._stdio_client_key(self._stdio_command())
+        with _STDIO_CLIENTS_LOCK:
+            client = _STDIO_CLIENTS.pop(key, None)
+        if client is not None:
+            client.close()
+
+    def _stdio_client_key(self, command: list[str]) -> tuple[str, ...]:
+        return (*command, str(self.codex_home))
 
     def _uses_default_json_runner(self) -> bool:
         return getattr(self._run_json_command, "__func__", None) is RustRouteAdapter._run_json_command

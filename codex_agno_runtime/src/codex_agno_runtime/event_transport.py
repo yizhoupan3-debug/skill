@@ -41,6 +41,7 @@ def _unwrap_rust_attach_error(exc: RuntimeError) -> ValueError | None:
     if detail.startswith('Error: "') and detail.endswith('"'):
         detail = detail[len('Error: "') : -1]
     detail = detail.replace('\\"', "'")
+    detail = detail.replace('"', "'")
     return ValueError(detail)
 
 

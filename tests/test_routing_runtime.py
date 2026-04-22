@@ -119,7 +119,7 @@ def test_search_skills_matches_multilingual_iterative_query() -> None:
     results = search_skills("自迭代 10轮 优化 验证", limit=3)
 
     assert results
-    assert results[0].record.slug == "iterative-optimizer"
+    assert results[0].record.name == "iterative-optimizer"
 
 
 def test_search_skills_matches_memory_and_native_debug_queries() -> None:
@@ -133,6 +133,6 @@ def test_search_skills_matches_memory_and_native_debug_queries() -> None:
     native_results = search_skills("Mac 桌面 app 原生 调试 wkwebview ipc", limit=3)
 
     assert memory_results
-    assert memory_results[0].record.slug == "agent-memory"
+    assert memory_results[0].record.name == "agent-memory"
     assert native_results
-    assert native_results[0].record.slug == "native-app-debugging"
+    assert native_results[0].record.name == "native-app-debugging"

@@ -331,7 +331,7 @@ def test_background_runtime_sandbox_events_keep_background_job_id(tmp_path: Path
             },
         )
 
-    runtime.execution_service.kernel.execute = fake_kernel_execute  # type: ignore[method-assign]
+    runtime.execution_service._execute_request_via_rust_adapter = fake_kernel_execute  # type: ignore[method-assign]
 
     async def _run() -> None:
         status = await runtime.enqueue_background_run(

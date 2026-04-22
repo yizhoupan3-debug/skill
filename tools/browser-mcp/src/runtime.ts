@@ -1,7 +1,6 @@
-import { execFile as execFileCallback } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import {
   type Browser,
@@ -74,7 +73,6 @@ const ROUTER_RS_TRACE_IO_AUTHORITY = 'rust-runtime-trace-io';
 const ROUTER_RS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'scripts', 'router-rs');
 const ROUTER_RS_RELEASE_BIN = path.join(ROUTER_RS_DIR, 'target', 'release', 'router-rs');
 const ROUTER_RS_DEBUG_BIN = path.join(ROUTER_RS_DIR, 'target', 'debug', 'router-rs');
-const execFile = promisify(execFileCallback);
 
 const INTERACTIVE_SELECTOR = [
   'button',
@@ -109,6 +107,13 @@ interface RouterRsTraceStreamReplayResult extends RouterRsTraceStreamSummary {
       }
     | null;
   events: AttachedRuntimeEvent[];
+}
+
+interface RouterRsStdioResponse<T> {
+  id?: number;
+  ok?: boolean;
+  payload?: T;
+  error?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,6 +151,147 @@ function truncateText(text: string, maxChars: number): string {
 }
 
 let resolvedRouterRsCommand: { command: string; args: string[] } | null = null;
+let routerRsStdioClient: RouterRsStdioClient | null = null;
+
+process.once('exit', () => {
+  routerRsStdioClient?.close();
+});
+
+class RouterRsStdioClient {
+  private process: ChildProcessWithoutNullStreams | null = null;
+  private nextRequestId = 1;
+  private queue: Promise<void> = Promise.resolve();
+  private stdoutBuffer = '';
+  private stderrBuffer = '';
+  private pendingLine:
+    | {
+        resolve: (line: string) => void;
+        reject: (error: Error) => void;
+      }
+    | null = null;
+
+  constructor(private readonly command: string) {}
+
+  async request<T>(operation: string, payload: object): Promise<T> {
+    const run = async (): Promise<T> => {
+      const proc = this.ensureProcess();
+      const requestId = this.nextRequestId;
+      this.nextRequestId += 1;
+      proc.stdin.write(
+        `${JSON.stringify({ id: requestId, op: operation, payload }, null, 0)}\n`,
+        'utf8',
+      );
+      const line = await this.readLine();
+      let response: RouterRsStdioResponse<T>;
+      try {
+        response = JSON.parse(line) as RouterRsStdioResponse<T>;
+      } catch (error) {
+        throw new Error(
+          error instanceof Error ? error.message : 'router-rs stdio returned invalid JSON',
+        );
+      }
+      if (response.id !== requestId) {
+        throw new Error(`router-rs stdio returned mismatched response id: ${response.id ?? 'null'}`);
+      }
+      if (!response.ok) {
+        throw new Error(response.error ?? 'router-rs stdio request failed');
+      }
+      return response.payload as T;
+    };
+
+    const result = this.queue.then(run, run);
+    this.queue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  close(): void {
+    this.process?.kill();
+    this.process = null;
+  }
+
+  private ensureProcess(): ChildProcessWithoutNullStreams {
+    if (this.process && this.process.exitCode === null && !this.process.killed) {
+      return this.process;
+    }
+    const proc = spawn(this.command, ['--stdio-json'], {
+      stdio: 'pipe',
+    });
+    proc.stdout.setEncoding('utf8');
+    proc.stderr.setEncoding('utf8');
+    proc.stdout.on('data', (chunk: string) => this.handleStdoutChunk(chunk));
+    proc.stderr.on('data', (chunk: string) => {
+      this.stderrBuffer += chunk;
+    });
+    proc.once('error', (error) => {
+      this.handleProcessFailure(
+        error instanceof Error ? error : new Error('router-rs stdio failed to launch'),
+      );
+    });
+    proc.once('exit', (code, signal) => {
+      this.handleProcessFailure(
+        new Error(
+          this.stderrBuffer.trim() ||
+            `router-rs stdio exited unexpectedly (code=${code ?? 'null'} signal=${signal ?? 'null'})`,
+        ),
+      );
+    });
+    this.stdoutBuffer = '';
+    this.stderrBuffer = '';
+    this.process = proc;
+    return proc;
+  }
+
+  private handleStdoutChunk(chunk: string): void {
+    this.stdoutBuffer += chunk;
+    this.flushPendingLine();
+  }
+
+  private readLine(): Promise<string> {
+    const immediate = this.shiftBufferedLine();
+    if (immediate !== null) {
+      return Promise.resolve(immediate);
+    }
+    return new Promise<string>((resolve, reject) => {
+      this.pendingLine = { resolve, reject };
+    });
+  }
+
+  private flushPendingLine(): void {
+    if (!this.pendingLine) {
+      return;
+    }
+    const line = this.shiftBufferedLine();
+    if (line === null) {
+      return;
+    }
+    const pending = this.pendingLine;
+    this.pendingLine = null;
+    pending.resolve(line);
+  }
+
+  private shiftBufferedLine(): string | null {
+    const newlineIndex = this.stdoutBuffer.indexOf('\n');
+    if (newlineIndex < 0) {
+      return null;
+    }
+    const line = this.stdoutBuffer.slice(0, newlineIndex).trim();
+    this.stdoutBuffer = this.stdoutBuffer.slice(newlineIndex + 1);
+    return line;
+  }
+
+  private handleProcessFailure(error: Error): void {
+    this.process = null;
+    if (!this.pendingLine) {
+      return;
+    }
+    const pending = this.pendingLine;
+    this.pendingLine = null;
+    pending.reject(error);
+  }
+}
 
 async function resolveRouterRsCommand(): Promise<{ command: string; args: string[] }> {
   if (resolvedRouterRsCommand) {
@@ -168,26 +314,14 @@ async function resolveRouterRsCommand(): Promise<{ command: string; args: string
   );
 }
 
-async function runRouterRsJson<T>(modeFlag: string, inputFlag: string, payload: object): Promise<T> {
+async function runRouterRsJson<T>(operation: string, payload: object): Promise<T> {
   const command = await resolveRouterRsCommand();
   try {
-    const { stdout } = await execFile(
-      command.command,
-      [...command.args, modeFlag, inputFlag, JSON.stringify(payload)],
-      { maxBuffer: 20 * 1024 * 1024 },
-    );
-    return JSON.parse(stdout) as T;
+    routerRsStdioClient ??= new RouterRsStdioClient(command.command);
+    return await routerRsStdioClient.request<T>(operation, payload);
   } catch (error) {
-    const stderr =
-      error && typeof error === 'object' && 'stderr' in error && typeof error.stderr === 'string'
-        ? error.stderr.trim()
-        : '';
     const message =
-      stderr.length > 0
-        ? stderr
-        : error instanceof Error
-          ? error.message
-          : 'router-rs trace command failed';
+      error instanceof Error ? error.message : 'router-rs trace command failed';
     throw new Error(message);
   }
 }
@@ -1018,8 +1152,7 @@ export class BrowserRuntime {
   private async inspectAttachedRuntimeTrace(traceStreamPath: string): Promise<RouterRsTraceStreamSummary> {
     try {
       const summary = await runRouterRsJson<RouterRsTraceStreamSummary>(
-        '--trace-stream-inspect-json',
-        '--trace-stream-inspect-input-json',
+        'trace_stream_inspect',
         { path: traceStreamPath },
       );
       if (
@@ -1046,8 +1179,7 @@ export class BrowserRuntime {
   ): Promise<RouterRsTraceStreamReplayResult> {
     try {
       const replay = await runRouterRsJson<RouterRsTraceStreamReplayResult>(
-        '--trace-stream-replay-json',
-        '--trace-stream-replay-input-json',
+        'trace_stream_replay',
         {
           path: traceStreamPath,
           after_event_id: afterEventId,
@@ -1427,8 +1559,7 @@ export class BrowserRuntime {
     resume_manifest_path?: string | null;
   }): Promise<RuntimeAttachDescriptor> {
     const attached = await runRouterRsJson<Record<string, unknown>>(
-      '--attach-runtime-event-transport-json',
-      '--attach-runtime-event-transport-input-json',
+      'attach_runtime_event_transport',
       {
         attach_descriptor: input.attach_descriptor ?? null,
         binding_artifact_path: input.binding_artifact_path ?? null,
