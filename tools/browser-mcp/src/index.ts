@@ -20,6 +20,7 @@ const { values: args } = parseArgs({
     'runtime-attach-descriptor-path': { type: 'string' },
     'runtime-binding-artifact-path': { type: 'string' },
     'runtime-handoff-path': { type: 'string' },
+    'runtime-resume-manifest-path': { type: 'string' },
   },
   strict: false,
 });
@@ -45,11 +46,16 @@ const runtimeHandoffPath =
   typeof args['runtime-handoff-path'] === 'string'
     ? String(args['runtime-handoff-path'])
     : process.env.BROWSER_MCP_RUNTIME_HANDOFF_PATH ?? null;
+const runtimeResumeManifestPath =
+  typeof args['runtime-resume-manifest-path'] === 'string'
+    ? String(args['runtime-resume-manifest-path'])
+    : process.env.BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH ?? null;
 const runtimeAttachSource =
   runtimeAttachDescriptorPath ??
   runtimeAttachArtifactPath ??
   runtimeBindingArtifactPath ??
   runtimeHandoffPath ??
+  runtimeResumeManifestPath ??
   'off';
 
 // ---------------------------------------------------------------------------
@@ -68,6 +74,7 @@ async function main(): Promise<void> {
     runtimeAttachDescriptorPath,
     runtimeBindingArtifactPath,
     runtimeHandoffPath,
+    runtimeResumeManifestPath,
   });
 
   const server = createBrowserMcpServer(runtime);

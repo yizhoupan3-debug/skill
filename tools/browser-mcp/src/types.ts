@@ -157,6 +157,8 @@ export interface BrowserRuntimeOptions {
   runtimeBindingArtifactPath: string | null;
   /** Optional path to a persisted runtime handoff artifact. */
   runtimeHandoffPath: string | null;
+  /** Optional path to a persisted runtime resume manifest. */
+  runtimeResumeManifestPath: string | null;
 }
 
 /** Captures the common tab identity returned to the agent. */
@@ -335,6 +337,7 @@ export interface AttachedRuntimeEvent {
 export interface AttachedRuntimeEventsResult {
   ok: true;
   attachedRuntime: AttachedRuntimeDiagnostics;
+  replayContext: AttachedRuntimeReplayContext;
   events: AttachedRuntimeEvent[];
   afterEventId: string | null;
   hasMore: boolean;
@@ -347,18 +350,42 @@ export interface AttachedRuntimeEventsResult {
   } | null;
 }
 
+/** Concrete persisted artifact kind accepted by the Rust attach bridge. */
+export type RuntimeAttachArtifactKind =
+  | 'attach_descriptor'
+  | 'binding_artifact'
+  | 'handoff'
+  | 'resume_manifest';
+
 /** Stable attach descriptor emitted by the Rust-first runtime replay bridge. */
 export interface RuntimeAttachDescriptor {
   schema_version: string;
   attach_mode: string;
   artifact_backend_family: string;
+  source_transport_method?: string;
+  source_handoff_method?: string;
+  attach_method?: string;
+  subscribe_method?: string;
+  cleanup_method?: string;
+  resume_mode?: string;
   attach_capabilities?: {
     artifact_replay?: boolean;
     live_remote_stream?: boolean;
     cleanup_preserves_replay?: boolean;
   };
   recommended_entrypoint?: string;
+  requested_artifacts?: {
+    binding_artifact_path?: string | null;
+    handoff_path?: string | null;
+    resume_manifest_path?: string | null;
+  };
   resolved_artifacts?: {
+    binding_artifact_path?: string | null;
+    handoff_path?: string | null;
+    resume_manifest_path?: string | null;
+    trace_stream_path?: string | null;
+  };
+  resolution?: {
     binding_artifact_path?: string | null;
     handoff_path?: string | null;
     resume_manifest_path?: string | null;
@@ -380,17 +407,42 @@ export interface AttachedRuntimeDiagnostics {
     | 'attach_artifact_path'
     | 'binding_artifact_path'
     | 'handoff_path'
+    | 'resume_manifest_path'
     | null;
   descriptorPath: string | null;
+  inputArtifactKind: RuntimeAttachArtifactKind | null;
   schemaVersion: string | null;
   attachMode: string | null;
   artifactBackendFamily: string | null;
   recommendedEntrypoint: string | null;
+  sourceTransportMethod: string | null;
+  sourceHandoffMethod: string | null;
   traceStreamPath: string | null;
+  bindingArtifactSource: string | null;
+  handoffSource: string | null;
+  resumeManifestSource: string | null;
+  traceStreamSource: string | null;
   replaySupported: boolean;
   eventCount: number;
   latestEventId: string | null;
   latestEventKind: string | null;
   latestEventTimestamp: string | null;
   warning: string | null;
+}
+
+/** Compact replay provenance mirrored into event-consumption results. */
+export interface AttachedRuntimeReplayContext {
+  descriptorSource: AttachedRuntimeDiagnostics['descriptorSource'];
+  descriptorPath: string | null;
+  inputArtifactKind: RuntimeAttachArtifactKind | null;
+  attachMode: string | null;
+  artifactBackendFamily: string | null;
+  recommendedEntrypoint: string | null;
+  sourceTransportMethod: string | null;
+  sourceHandoffMethod: string | null;
+  traceStreamPath: string | null;
+  bindingArtifactSource: string | null;
+  handoffSource: string | null;
+  resumeManifestSource: string | null;
+  traceStreamSource: string | null;
 }

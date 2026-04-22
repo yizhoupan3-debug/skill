@@ -18,6 +18,7 @@ if str(RUNTIME_SRC) not in sys.path:
 
 from codex_agno_runtime.execution_kernel import (
     ExecutionKernelRequest,
+    build_router_rs_execution_request_payload,
     execute_router_rs_request,
     preview_router_rs_request_prompt,
 )
@@ -71,7 +72,6 @@ def _request(*, dry_run: bool = False) -> ExecutionKernelRequest:
         session_id="kernel-contract-session",
         user_id="tester",
         routing_result=_routing_result(),
-        prompt_preview="Keep execution Rust-first.",
         dry_run=dry_run,
         trace_event_count=9,
         trace_output_path="/tmp/TRACE_METADATA.json",
@@ -222,6 +222,18 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
         == LIVE_PRIMARY_MODEL_ID_SOURCE
     )
     assert response.usage.total_tokens == 34
+
+
+def test_router_rs_execution_request_ignores_python_prompt_preview_even_for_dry_run() -> None:
+    settings = _settings()
+
+    payload = build_router_rs_execution_request_payload(
+        _request(dry_run=True),
+        settings=settings,
+    )
+
+    assert payload["dry_run"] is True
+    assert payload["prompt_preview"] is None
 
 
 def test_preview_router_rs_request_prompt_uses_dry_run_contract(monkeypatch) -> None:

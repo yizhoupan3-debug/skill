@@ -1142,41 +1142,6 @@ def compile_codex_desktop_adapter(
     )
 
 
-def compile_codex_desktop_host_adapter(
-    profile: FrameworkProfile,
-    *,
-    host_overrides: Mapping[str, Any] | None = None,
-) -> AdaptedHostProfile:
-    canonical = compile_codex_desktop_adapter(profile, host_overrides=host_overrides)
-    payload = _clone_json_like(canonical.host_payload)
-    payload["metadata"]["adapter_id"] = CODEX_DESKTOP_HOST_ADAPTER.adapter_id
-    payload["metadata"]["adapter_alias_of"] = CODEX_DESKTOP_ADAPTER.adapter_id
-    payload["metadata"]["canonical_adapter_id"] = CODEX_DESKTOP_ADAPTER.adapter_id
-    payload["metadata"]["legacy_surface"] = True
-    payload["entrypoint_contract"]["canonical_adapter_id"] = CODEX_DESKTOP_ADAPTER.adapter_id
-    payload["entrypoint_contract"]["legacy_adapter_id"] = CODEX_DESKTOP_HOST_ADAPTER.adapter_id
-    payload["fallback_semantics"]["legacy_adapter_id"] = CODEX_DESKTOP_HOST_ADAPTER.adapter_id
-    payload["legacy_boundary"] = {
-        "adapter_lifecycle": "legacy-compatibility",
-        "exposure_lane": "compatibility-only-explicit",
-        "default_host_peer_set": list(DEFAULT_HOST_PEER_SET),
-        "default_host_peer_set_member": False,
-        "may_become_framework_truth": False,
-        "may_become_default_host_peer": False,
-        "removal_readiness": "blocked-on-continuity-consumer-retirement",
-        "migration_guardrails": [
-            "keep_alias_mirror_only_to_codex_desktop_adapter",
-            "do_not_add_new_host_semantics_to_legacy_alias",
-            "require_explicit_compatibility_lane_opt_in",
-        ],
-    }
-    return AdaptedHostProfile(
-        framework_profile=canonical.framework_profile,
-        adapter=CODEX_DESKTOP_HOST_ADAPTER,
-        host_payload=payload,
-    )
-
-
 def compile_codex_cli_adapter(
     profile: FrameworkProfile,
     *,

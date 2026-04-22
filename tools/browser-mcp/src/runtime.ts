@@ -16,6 +16,7 @@ import type {
   AttachedRuntimeEvent,
   AttachedRuntimeDiagnostics,
   AttachedRuntimeEventsResult,
+  AttachedRuntimeReplayContext,
   BrowserRuntimeOptions,
   BrowserSessionView,
   BrowserTabView,
@@ -39,6 +40,7 @@ import type {
   PressInput,
   RestoreSessionInput,
   RestoreSessionResult,
+  RuntimeAttachArtifactKind,
   RuntimeAttachDescriptor,
   SaveSessionInput,
   SaveSessionResult,
@@ -114,6 +116,11 @@ interface RouterRsStdioResponse<T> {
   ok?: boolean;
   payload?: T;
   error?: string;
+}
+
+interface LoadedRuntimeAttachDescriptor {
+  descriptor: RuntimeAttachDescriptor;
+  inputArtifactKind: RuntimeAttachArtifactKind | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -470,6 +477,7 @@ export class BrowserRuntime {
       runtimeAttachDescriptor: options?.runtimeAttachDescriptor ?? null,
       runtimeBindingArtifactPath: options?.runtimeBindingArtifactPath ?? null,
       runtimeHandoffPath: options?.runtimeHandoffPath ?? null,
+      runtimeResumeManifestPath: options?.runtimeResumeManifestPath ?? null,
     };
   }
 
@@ -910,6 +918,7 @@ export class BrowserRuntime {
         latestEventKind: replay.latest_event_kind ?? null,
         latestEventTimestamp: replay.latest_event_timestamp ?? null,
       },
+      replayContext: this.projectAttachedRuntimeReplayContext(resolved.diagnosticsBase),
       events: replay.events,
       afterEventId: input.afterEventId ?? null,
       hasMore: replay.has_more,
@@ -974,11 +983,18 @@ export class BrowserRuntime {
       status: 'not_configured',
       descriptorSource: configuredSource.source,
       descriptorPath: configuredSource.path,
+      inputArtifactKind: null,
       schemaVersion: null,
       attachMode: null,
       artifactBackendFamily: null,
       recommendedEntrypoint: null,
+      sourceTransportMethod: null,
+      sourceHandoffMethod: null,
       traceStreamPath: null,
+      bindingArtifactSource: null,
+      handoffSource: null,
+      resumeManifestSource: null,
+      traceStreamSource: null,
       replaySupported: false,
       eventCount: 0,
       latestEventId: null,
@@ -1008,16 +1024,13 @@ export class BrowserRuntime {
         }
         let hydratedBase = base;
         try {
-          const descriptor = await this.loadRuntimeAttachDescriptor();
-          hydratedBase = {
-            ...base,
-            schemaVersion: descriptor.schema_version ?? null,
-            attachMode: descriptor.attach_mode ?? null,
-            artifactBackendFamily: descriptor.artifact_backend_family ?? null,
-            recommendedEntrypoint: descriptor.recommended_entrypoint ?? null,
-            traceStreamPath: descriptor.resolved_artifacts?.trace_stream_path ?? null,
-            replaySupported: descriptor.attach_capabilities?.artifact_replay === true,
-          };
+          const loaded = await this.loadRuntimeAttachDescriptor();
+          hydratedBase = this.projectAttachedRuntimeDiagnostics({
+            configuredSource,
+            descriptor: loaded.descriptor,
+            inputArtifactKind: loaded.inputArtifactKind,
+            traceStreamPath: loaded.descriptor.resolved_artifacts?.trace_stream_path ?? null,
+          });
         } catch {
           // Keep the minimal base payload when descriptor hydration also fails.
         }
@@ -1040,11 +1053,69 @@ export class BrowserRuntime {
     }
   }
 
-  private async loadRuntimeAttachDescriptor(): Promise<RuntimeAttachDescriptor> {
+  private projectAttachedRuntimeDiagnostics(input: {
+    configuredSource: {
+      source: AttachedRuntimeDiagnostics['descriptorSource'];
+      path: string | null;
+    };
+    descriptor: RuntimeAttachDescriptor;
+    inputArtifactKind: RuntimeAttachArtifactKind | null;
+    traceStreamPath: string | null;
+  }): AttachedRuntimeDiagnostics {
+    const resolution = input.descriptor.resolution ?? {};
+    return {
+      status: 'ready',
+      descriptorSource: input.configuredSource.source,
+      descriptorPath: input.configuredSource.path,
+      inputArtifactKind: input.inputArtifactKind,
+      schemaVersion: input.descriptor.schema_version ?? null,
+      attachMode: input.descriptor.attach_mode ?? null,
+      artifactBackendFamily: input.descriptor.artifact_backend_family ?? null,
+      recommendedEntrypoint: input.descriptor.recommended_entrypoint ?? null,
+      sourceTransportMethod: input.descriptor.source_transport_method ?? null,
+      sourceHandoffMethod: input.descriptor.source_handoff_method ?? null,
+      traceStreamPath: input.traceStreamPath,
+      bindingArtifactSource: resolution.binding_artifact_path ?? null,
+      handoffSource: resolution.handoff_path ?? null,
+      resumeManifestSource: resolution.resume_manifest_path ?? null,
+      traceStreamSource: resolution.trace_stream_path ?? null,
+      replaySupported: input.descriptor.attach_capabilities?.artifact_replay === true,
+      eventCount: 0,
+      latestEventId: null,
+      latestEventKind: null,
+      latestEventTimestamp: null,
+      warning: null,
+    };
+  }
+
+  private projectAttachedRuntimeReplayContext(
+    diagnostics: AttachedRuntimeDiagnostics,
+  ): AttachedRuntimeReplayContext {
+    return {
+      descriptorSource: diagnostics.descriptorSource,
+      descriptorPath: diagnostics.descriptorPath,
+      inputArtifactKind: diagnostics.inputArtifactKind,
+      attachMode: diagnostics.attachMode,
+      artifactBackendFamily: diagnostics.artifactBackendFamily,
+      recommendedEntrypoint: diagnostics.recommendedEntrypoint,
+      sourceTransportMethod: diagnostics.sourceTransportMethod,
+      sourceHandoffMethod: diagnostics.sourceHandoffMethod,
+      traceStreamPath: diagnostics.traceStreamPath,
+      bindingArtifactSource: diagnostics.bindingArtifactSource,
+      handoffSource: diagnostics.handoffSource,
+      resumeManifestSource: diagnostics.resumeManifestSource,
+      traceStreamSource: diagnostics.traceStreamSource,
+    };
+  }
+
+  private async loadRuntimeAttachDescriptor(): Promise<LoadedRuntimeAttachDescriptor> {
     const configuredSource = this.getConfiguredRuntimeAttachSource();
     switch (configuredSource.source) {
       case 'inline':
-        return this.options.runtimeAttachDescriptor!;
+        return {
+          descriptor: this.options.runtimeAttachDescriptor!,
+          inputArtifactKind: 'attach_descriptor',
+        };
       case 'descriptor_path':
         return this.readRuntimeAttachDescriptorFile(configuredSource.path!);
       case 'attach_artifact_path':
@@ -1053,6 +1124,8 @@ export class BrowserRuntime {
         return this.buildRuntimeAttachDescriptorFromBindingArtifact(configuredSource.path!);
       case 'handoff_path':
         return this.buildRuntimeAttachDescriptorFromHandoff(configuredSource.path!);
+      case 'resume_manifest_path':
+        return this.buildRuntimeAttachDescriptorFromResumeManifest(configuredSource.path!);
       default:
         throw new Error('runtime attach descriptor is not configured');
     }
@@ -1073,12 +1146,14 @@ export class BrowserRuntime {
           'start browser-mcp with --runtime-attach-descriptor-path',
           'or --runtime-binding-artifact-path',
           'or --runtime-handoff-path',
+          'or --runtime-resume-manifest-path',
           'or set BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH',
         ],
       );
     }
 
-    const descriptor = await this.loadRuntimeAttachDescriptor();
+    const loaded = await this.loadRuntimeAttachDescriptor();
+    const descriptor = loaded.descriptor;
     const replaySupported = descriptor.attach_capabilities?.artifact_replay === true;
     let traceStreamPath: string | null;
     try {
@@ -1091,22 +1166,12 @@ export class BrowserRuntime {
         ['refresh the descriptor from describe_runtime_event_handoff', 'inspect browser_diagnostics'],
       );
     }
-    const diagnosticsBase: AttachedRuntimeDiagnostics = {
-      status: 'ready',
-      descriptorSource: configuredSource.source,
-      descriptorPath: configuredSource.path,
-      schemaVersion: descriptor.schema_version ?? null,
-      attachMode: descriptor.attach_mode ?? null,
-      artifactBackendFamily: descriptor.artifact_backend_family ?? null,
-      recommendedEntrypoint: descriptor.recommended_entrypoint ?? null,
+    const diagnosticsBase = this.projectAttachedRuntimeDiagnostics({
+      configuredSource,
+      descriptor,
+      inputArtifactKind: loaded.inputArtifactKind,
       traceStreamPath,
-      replaySupported,
-      eventCount: 0,
-      latestEventId: null,
-      latestEventKind: null,
-      latestEventTimestamp: null,
-      warning: null,
-    };
+    });
 
     if (
       descriptor.schema_version !== RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION ||
@@ -1245,24 +1310,33 @@ export class BrowserRuntime {
         path: this.options.runtimeHandoffPath,
       };
     }
+    if (this.options.runtimeResumeManifestPath !== null) {
+      return {
+        source: 'resume_manifest_path',
+        path: this.options.runtimeResumeManifestPath,
+      };
+    }
     return {
       source: null,
       path: null,
     };
   }
 
-  private async readRuntimeAttachDescriptorFile(descriptorPath: string): Promise<RuntimeAttachDescriptor> {
+  private async readRuntimeAttachDescriptorFile(descriptorPath: string): Promise<LoadedRuntimeAttachDescriptor> {
     const raw = await readFile(descriptorPath, 'utf8');
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error('runtime attach descriptor must decode to a JSON object');
     }
-    return parsed as RuntimeAttachDescriptor;
+    return {
+      descriptor: parsed as RuntimeAttachDescriptor,
+      inputArtifactKind: 'attach_descriptor',
+    };
   }
 
   private async buildRuntimeAttachDescriptorFromArtifactPath(
     artifactPath: string,
-  ): Promise<RuntimeAttachDescriptor> {
+  ): Promise<LoadedRuntimeAttachDescriptor> {
     const artifactLocator = artifactPath;
     const resolvedArtifactPath = path.resolve(artifactPath);
     let raw: string;
@@ -1284,13 +1358,22 @@ export class BrowserRuntime {
       if (hydratedFromHandoff) {
         return hydratedFromHandoff;
       }
+      const hydratedFromResumeManifest = await this.tryHydrateRuntimeAttachDescriptorViaRust({
+        resume_manifest_path: artifactLocator,
+      });
+      if (hydratedFromResumeManifest) {
+        return hydratedFromResumeManifest;
+      }
       throw error;
     }
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const schemaVersion =
       typeof parsed?.schema_version === 'string' ? parsed.schema_version : null;
     if (schemaVersion === RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION) {
-      return parsed as unknown as RuntimeAttachDescriptor;
+      return {
+        descriptor: parsed as unknown as RuntimeAttachDescriptor,
+        inputArtifactKind: 'attach_descriptor',
+      };
     }
     if (schemaVersion === RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION) {
       return this.hydrateRuntimeAttachDescriptorViaRust({
@@ -1302,12 +1385,17 @@ export class BrowserRuntime {
         handoff_path: resolvedArtifactPath,
       });
     }
+    if (schemaVersion === TRACE_RESUME_MANIFEST_SCHEMA_VERSION) {
+      return this.hydrateRuntimeAttachDescriptorViaRust({
+        resume_manifest_path: resolvedArtifactPath,
+      });
+    }
     throw new Error('runtime attach artifact returned an unknown schema');
   }
 
   private async buildRuntimeAttachDescriptorFromBindingArtifact(
     bindingArtifactPath: string,
-  ): Promise<RuntimeAttachDescriptor> {
+  ): Promise<LoadedRuntimeAttachDescriptor> {
     const resolvedBindingArtifactPath = await this.normalizeRuntimeAttachLocator(bindingArtifactPath);
     return this.hydrateRuntimeAttachDescriptorViaRust({
       binding_artifact_path: resolvedBindingArtifactPath,
@@ -1316,10 +1404,19 @@ export class BrowserRuntime {
 
   private async buildRuntimeAttachDescriptorFromHandoff(
     handoffPath: string,
-  ): Promise<RuntimeAttachDescriptor> {
+  ): Promise<LoadedRuntimeAttachDescriptor> {
     const resolvedHandoffPath = await this.normalizeRuntimeAttachLocator(handoffPath);
     return this.hydrateRuntimeAttachDescriptorViaRust({
       handoff_path: resolvedHandoffPath,
+    });
+  }
+
+  private async buildRuntimeAttachDescriptorFromResumeManifest(
+    resumeManifestPath: string,
+  ): Promise<LoadedRuntimeAttachDescriptor> {
+    const resolvedResumeManifestPath = await this.normalizeRuntimeAttachLocator(resumeManifestPath);
+    return this.hydrateRuntimeAttachDescriptorViaRust({
+      resume_manifest_path: resolvedResumeManifestPath,
     });
   }
 
@@ -1472,7 +1569,7 @@ export class BrowserRuntime {
     binding_artifact_path?: string | null;
     handoff_path?: string | null;
     resume_manifest_path?: string | null;
-  }): Promise<RuntimeAttachDescriptor> {
+  }): Promise<LoadedRuntimeAttachDescriptor> {
     const attached = await runRouterRsJson<Record<string, unknown>>(
       'attach_runtime_event_transport',
       {
@@ -1486,13 +1583,27 @@ export class BrowserRuntime {
     if (!descriptor) {
       throw new Error('runtime attach transport payload is missing attach_descriptor');
     }
-    return descriptor as unknown as RuntimeAttachDescriptor;
+    let inputArtifactKind: RuntimeAttachArtifactKind | null = null;
+    if (input.attach_descriptor) {
+      inputArtifactKind = 'attach_descriptor';
+    } else if (input.binding_artifact_path) {
+      inputArtifactKind = 'binding_artifact';
+    } else if (input.handoff_path) {
+      inputArtifactKind = 'handoff';
+    } else if (input.resume_manifest_path) {
+      inputArtifactKind = 'resume_manifest';
+    }
+    return {
+      descriptor: descriptor as unknown as RuntimeAttachDescriptor,
+      inputArtifactKind,
+    };
   }
 
   private async tryHydrateRuntimeAttachDescriptorViaRust(input: {
     binding_artifact_path?: string | null;
     handoff_path?: string | null;
-  }): Promise<RuntimeAttachDescriptor | null> {
+    resume_manifest_path?: string | null;
+  }): Promise<LoadedRuntimeAttachDescriptor | null> {
     try {
       return await this.hydrateRuntimeAttachDescriptorViaRust(input);
     } catch {

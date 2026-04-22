@@ -234,7 +234,6 @@ continuity lane 里保留。
 - `codex_agno_runtime.compatibility.compile_aionrs_companion_adapter(...)`
 - `codex_agno_runtime.compatibility.compile_aionui_host_adapter(...)`
 - `compile_codex_desktop_adapter(...)`
-- `codex_agno_runtime.compatibility.compile_codex_desktop_host_adapter(...)`
 - `compile_codex_cli_adapter(...)`
 - `compile_claude_code_adapter(...)`
 - `compile_gemini_cli_adapter(...)`
@@ -268,9 +267,11 @@ compatibility-only bridge，而不是下一阶段的命名中心。
 同样，legacy / compatibility compiler 入口不再作为根包 `codex_agno_runtime`
 的 public export；兼容消费者必须显式改走
 `codex_agno_runtime.compatibility.compile_codex_common_adapter(...)`、
-`codex_agno_runtime.compatibility.compile_codex_desktop_host_adapter(...)`、
 `codex_agno_runtime.compatibility.build_codex_desktop_alias_retirement_status(...)`
 等显式 compatibility surface。
+其中 `codex_desktop_host_adapter` 的 Python 直编译入口已移除；如需产出 legacy
+alias artifact，必须走显式 continuity opt-in 的 artifact lane，由 Rust 兼容面
+负责写出。
 默认 lookup / registry helper 也已与该收口方向对齐：不显式开启
 compatibility lane 时，`codex_desktop_host_adapter` 不再作为 peer adapter
 出现在 runtime helper surface。

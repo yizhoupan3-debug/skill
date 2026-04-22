@@ -11,8 +11,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 START_SCRIPT = PROJECT_ROOT / "tools" / "browser-mcp" / "scripts" / "start_browser_mcp.sh"
 RESOLVER_SCRIPT = (
-    PROJECT_ROOT / "tools" / "browser-mcp" / "scripts" / "resolve_runtime_attach_artifact.py"
+    PROJECT_ROOT / "tools" / "browser-mcp" / "scripts" / "resolve_runtime_attach_artifact.mjs"
 )
+REAL_NODE_BIN = shutil.which("node")
+assert REAL_NODE_BIN is not None
 SOURCE_FILES = [
     "index.ts",
     "runtime.ts",
@@ -38,9 +40,9 @@ def _copy_launcher_scripts(repo_root: Path) -> Path:
     script_root = repo_root / "tools" / "browser-mcp" / "scripts"
     script_root.mkdir(parents=True, exist_ok=True)
     shutil.copy2(START_SCRIPT, script_root / "start_browser_mcp.sh")
-    shutil.copy2(RESOLVER_SCRIPT, script_root / "resolve_runtime_attach_artifact.py")
+    shutil.copy2(RESOLVER_SCRIPT, script_root / "resolve_runtime_attach_artifact.mjs")
     (script_root / "start_browser_mcp.sh").chmod(0o755)
-    (script_root / "resolve_runtime_attach_artifact.py").chmod(0o755)
+    (script_root / "resolve_runtime_attach_artifact.mjs").chmod(0o755)
     return script_root
 
 
@@ -82,6 +84,10 @@ def _install_fake_node(bin_dir: Path, output_path: Path) -> None:
         "\n".join(
             [
                 "#!/bin/sh",
+                "SCRIPT_NAME=${1##*/}",
+                "if [ \"$#\" -gt 0 ] && [ \"$SCRIPT_NAME\" = \"resolve_runtime_attach_artifact.mjs\" ]; then",
+                "  exec \"$REAL_NODE_BIN\" \"$@\"",
+                "fi",
                 "python3 - \"$@\" <<'PY'",
                 "import json, os, sys",
                 "from pathlib import Path",
@@ -143,6 +149,7 @@ def _run_launcher(repo_root: Path, *, env: dict[str, str], extra_args: list[str]
     launcher_env["PATH"] = f"{bin_dir}:{launcher_env.get('PATH', '')}"
     launcher_env["FAKE_NODE_OUTPUT"] = str(output_path)
     launcher_env["FAKE_NPM_OUTPUT"] = str(npm_output_path)
+    launcher_env["REAL_NODE_BIN"] = REAL_NODE_BIN
 
     subprocess.run(
         [str(repo_root / "tools" / "browser-mcp" / "scripts" / "start_browser_mcp.sh"), *(extra_args or [])],
@@ -220,6 +227,7 @@ def test_launcher_prefers_highest_priority_attach_env_across_full_precedence_lad
             "BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH": "/explicit/attach-artifact.json",
             "BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH": "/compat/binding.json",
             "BROWSER_MCP_RUNTIME_HANDOFF_PATH": "/compat/handoff.json",
+            "BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH": "/compat/resume.json",
         },
     )
 
@@ -266,7 +274,40 @@ def test_launcher_auto_discovers_sqlite_backed_attach_artifact(tmp_path: Path) -
     assert result["argv"] == [
         "dist/index.js",
         "--runtime-attach-artifact-path",
-        "/logical/sqlite/runtime_event_transports/session__job.json",
+        "runtime-data/TRACE_RESUME_MANIFEST.json",
+    ]
+
+
+def test_launcher_auto_discovers_filesystem_resume_manifest_as_canonical_attach_artifact(
+    tmp_path: Path,
+) -> None:
+    repo_root = _prepare_repo(tmp_path)
+    manifest_path = (
+        repo_root
+        / "codex_agno_runtime"
+        / "artifacts"
+        / "scratch"
+        / "run-a"
+        / "TRACE_RESUME_MANIFEST.json"
+    )
+    _write_text(
+        manifest_path,
+        json.dumps(
+            {
+                "schema_version": "runtime-resume-manifest-v1",
+                "event_transport_path": "/auto/discovered/runtime_event_transports/session__job.json",
+                "updated_at": "2026-04-23T00:10:00+00:00",
+            }
+        )
+        + "\n",
+    )
+
+    result = _run_launcher(repo_root, env={})
+
+    assert result["argv"] == [
+        "dist/index.js",
+        "--runtime-attach-artifact-path",
+        str(manifest_path.resolve()),
     ]
 
 
@@ -299,6 +340,7 @@ def test_launcher_prefers_descriptor_env_over_all_lower_priority_attach_envs(tmp
             "BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH": "/explicit/attach-artifact.json",
             "BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH": "/compat/binding.json",
             "BROWSER_MCP_RUNTIME_HANDOFF_PATH": "/compat/handoff.json",
+            "BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH": "/compat/resume.json",
         },
     )
 
@@ -352,6 +394,25 @@ def test_launcher_passes_through_handoff_env_when_it_is_the_only_attach_input(tm
         "dist/index.js",
         "--runtime-handoff-path",
         "/compat/handoff.json",
+    ]
+
+
+def test_launcher_passes_through_resume_manifest_env_when_it_is_the_only_attach_input(
+    tmp_path: Path,
+) -> None:
+    repo_root = _prepare_repo(tmp_path)
+
+    result = _run_launcher(
+        repo_root,
+        env={
+            "BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH": "/compat/resume.json",
+        },
+    )
+
+    assert result["argv"] == [
+        "dist/index.js",
+        "--runtime-resume-manifest-path",
+        "/compat/resume.json",
     ]
 
 

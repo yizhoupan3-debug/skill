@@ -47,10 +47,11 @@ npm run test    # run vitest integration tests
 ```bash
 node dist/index.js
 # Flags: --headless true|false  --engine chromium|firefox|webkit  --capture-body
-#        --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json|.../ATTACHED_RUNTIME_EVENT_HANDOFF.json|.../runtime_event_transports/session__job.json
+#        --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json|.../ATTACHED_RUNTIME_EVENT_HANDOFF.json|.../TRACE_RESUME_MANIFEST.json|.../runtime_event_transports/session__job.json
 #        --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
 #        --runtime-binding-artifact-path /abs/path/runtime_event_transports/session__job.json
 #        --runtime-handoff-path /abs/path/ATTACHED_RUNTIME_EVENT_HANDOFF.json
+#        --runtime-resume-manifest-path /abs/path/TRACE_RESUME_MANIFEST.json
 ```
 
 ### HTTP (Streamable HTTP transport)
@@ -101,17 +102,23 @@ BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH=/abs/path/runtime-attach-descriptor.jso
 
 `--runtime-attach-artifact-path` is the preferred Rust-first entrypoint. The
 older `--runtime-binding-artifact-path` and `--runtime-handoff-path` flags are
-still accepted as compatibility aliases.
+still accepted as compatibility aliases, and `TRACE_RESUME_MANIFEST.json` can
+also flow through the same canonical attach-artifact flag when recovery is the
+only persisted entrypoint you have.
 
 Then `browser_diagnostics` includes an `attachedRuntime` block with descriptor
-status, replay readiness, trace path, and the latest replayable event summary.
-You can also call `browser_get_attached_runtime_events` to consume replayable
-runtime events through that same attach descriptor.
+status, replay readiness, trace path, the concrete input artifact kind
+(`attach_descriptor` / `binding_artifact` / `handoff` / `resume_manifest`),
+resolution-source hints for binding/handoff/resume/trace paths, and the latest
+replayable event summary. You can also call
+`browser_get_attached_runtime_events` to consume replayable runtime events
+through that same attach descriptor.
 
 If you do not pass an explicit runtime attach input, the bundled
 `start_browser_mcp.sh` launcher now auto-discovers the newest replay-capable
-runtime attach input under `codex_agno_runtime/artifacts/scratch/`. It prefers
-checkpoint resume manifests when available, falls back to transport binding
-artifacts, and also resolves sqlite-backed logical attach paths by reading
+runtime attach input under `codex_agno_runtime/artifacts/scratch/`. It now
+keeps checkpoint resume manifests as canonical attach artifacts when they are
+the freshest recovery anchor, falls back to transport binding artifacts when
+needed, and also resolves sqlite-backed logical attach paths by reading
 `runtime_checkpoint_store.sqlite3` when the binding JSON does not exist as a
 local file.

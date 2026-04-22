@@ -104,7 +104,6 @@ class ExecutionKernelRequest:
     user_id: str
     routing_result: RoutingResult
     job_id: str | None = None
-    prompt_preview: str | None = None
     dry_run: bool = False
     trace_event_count: int = 0
     trace_output_path: str | None = None
@@ -141,7 +140,8 @@ def build_router_rs_execution_request_payload(
         "route_engine": routing_result.route_engine,
         "diagnostic_route_mode": routing_result.diagnostic_route_mode,
         "reasons": [str(reason) for reason in routing_result.reasons],
-        "prompt_preview": request.prompt_preview if request.dry_run else None,
+        # Prompt construction is Rust-owned on both steady-state paths.
+        "prompt_preview": None,
         "dry_run": request.dry_run,
         "trace_event_count": request.trace_event_count,
         "trace_output_path": request.trace_output_path,

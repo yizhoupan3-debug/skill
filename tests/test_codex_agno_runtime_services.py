@@ -457,7 +457,6 @@ def test_execution_service_routes_sandbox_transitions_through_rust_control(
         user_id="tester",
         routing_result=routing_result,
         dry_run=True,
-        prompt_preview="sandbox-rust-control",
     )
     seen: list[dict[str, Any]] = []
 
@@ -492,7 +491,7 @@ def test_execution_service_routes_sandbox_transitions_through_rust_control(
             ),
             live_run=False,
             content="ok",
-            prompt_preview=current_request.prompt_preview,
+            prompt_preview="Rust-owned dry-run prompt",
             usage=UsageMetrics(input_tokens=2, output_tokens=1, total_tokens=3, mode="dry_run"),
             metadata={
                 "execution_kernel": "rust-execution-kernel-slice",
@@ -768,7 +767,8 @@ def test_execution_environment_service_routes_through_kernel_adapter(tmp_path: P
         )
         assert isinstance(response, RunTaskResponse)
         assert response.live_run is False
-        assert response.prompt_preview == "kernel-prompt"
+        assert response.prompt_preview
+        assert response.prompt_preview != "kernel-prompt"
         assert response.metadata["execution_kernel"] == "rust-execution-kernel-slice"
         assert response.metadata["execution_kernel_authority"] == "rust-execution-kernel-authority"
         assert response.metadata["execution_kernel_contract_mode"] == "rust-live-primary"
@@ -866,7 +866,6 @@ def test_execution_service_schedules_async_sandbox_cleanup(tmp_path: Path) -> No
         user_id="tester",
         routing_result=routing_result,
         dry_run=True,
-        prompt_preview="sandbox-success",
     )
 
     async def fake_execute(current_request: ExecutionKernelRequest) -> RunTaskResponse:
@@ -881,7 +880,7 @@ def test_execution_service_schedules_async_sandbox_cleanup(tmp_path: Path) -> No
             ),
             live_run=False,
             content="ok",
-            prompt_preview=current_request.prompt_preview,
+            prompt_preview="Rust-owned dry-run prompt",
             usage=UsageMetrics(input_tokens=4, output_tokens=2, total_tokens=6, mode="dry_run"),
             metadata={
                 "execution_kernel": "rust-execution-kernel-slice",
@@ -947,7 +946,6 @@ def test_execution_service_rejects_high_risk_without_dedicated_profile(tmp_path:
         user_id="tester",
         routing_result=routing_result,
         dry_run=True,
-        prompt_preview="sandbox-policy",
         sandbox_policy=SandboxExecutionPolicy(
             profile="shared-high-risk",
             capability_categories=("high_risk",),
@@ -1005,7 +1003,6 @@ def test_execution_service_enforces_budget_at_admission_and_runtime(tmp_path: Pa
         user_id="tester",
         routing_result=routing_result,
         dry_run=True,
-        prompt_preview="budget-admission",
         sandbox_budget=SandboxResourceBudget(cpu=1.0, memory=1, wall_clock=0.0, output_size=1),
     )
     runtime_request = ExecutionKernelRequest(
@@ -1014,7 +1011,6 @@ def test_execution_service_enforces_budget_at_admission_and_runtime(tmp_path: Pa
         user_id="tester",
         routing_result=routing_result,
         dry_run=True,
-        prompt_preview="budget-runtime",
         sandbox_budget=SandboxResourceBudget(cpu=1.0, memory=128, wall_clock=1.0, output_size=4),
         sandbox_runtime_probe=SandboxRuntimeProbe(cpu=0.1, memory=32, wall_clock=0.1, output_size=12),
     )
@@ -1027,7 +1023,7 @@ def test_execution_service_enforces_budget_at_admission_and_runtime(tmp_path: Pa
             overlay=None,
             live_run=False,
             content="ok",
-            prompt_preview=current_request.prompt_preview,
+            prompt_preview="Rust-owned dry-run prompt",
             usage=UsageMetrics(input_tokens=4, output_tokens=2, total_tokens=6, mode="dry_run"),
             metadata={
                 "execution_kernel": "rust-execution-kernel-slice",
@@ -1081,7 +1077,6 @@ def test_execution_service_failure_isolation_keeps_other_sandboxes_healthy(tmp_p
         user_id="tester",
         routing_result=routing_result,
         dry_run=True,
-        prompt_preview="sandbox-isolation-failed",
         sandbox_policy=SandboxExecutionPolicy(
             profile="shared-high-risk",
             capability_categories=("high_risk",),
@@ -1095,7 +1090,6 @@ def test_execution_service_failure_isolation_keeps_other_sandboxes_healthy(tmp_p
         user_id="tester",
         routing_result=routing_result,
         dry_run=True,
-        prompt_preview="sandbox-isolation-healthy",
         sandbox_policy=SandboxExecutionPolicy(
             profile="workspace-low-risk",
             capability_categories=("read_only", "workspace_mutating"),
@@ -1112,7 +1106,7 @@ def test_execution_service_failure_isolation_keeps_other_sandboxes_healthy(tmp_p
             overlay=None,
             live_run=False,
             content="healthy",
-            prompt_preview=current_request.prompt_preview,
+            prompt_preview="Rust-owned dry-run prompt",
             usage=UsageMetrics(input_tokens=3, output_tokens=2, total_tokens=5, mode="dry_run"),
             metadata={
                 "execution_kernel": "rust-execution-kernel-slice",
@@ -1168,7 +1162,7 @@ def test_execution_environment_service_live_mode_omits_python_prompt_preview(tmp
     seen: dict[str, object] = {}
 
     async def fake_execute(request):
-        seen["prompt_preview"] = request.prompt_preview
+        seen["has_prompt_preview_field"] = hasattr(request, "prompt_preview")
         seen["dry_run"] = request.dry_run
         return RunTaskResponse(
             session_id=request.session_id,
@@ -1196,7 +1190,7 @@ def test_execution_environment_service_live_mode_omits_python_prompt_preview(tmp
             trace_output_path="/tmp/TRACE_METADATA.json",
         )
         assert seen["dry_run"] is False
-        assert seen["prompt_preview"] is None
+        assert seen["has_prompt_preview_field"] is False
         assert response.live_run is True
         assert response.prompt_preview is None
         assert response.model_id == "gpt-5.4"
@@ -1274,6 +1268,48 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
         routing_result=routing_result,
         prompt="kernel-prompt",
     )
+    seen: dict[str, object] = {}
+
+    async def fake_execute(request):
+        seen["dry_run"] = request.dry_run
+        seen["has_prompt_preview_field"] = hasattr(request, "prompt_preview")
+        return RunTaskResponse(
+            session_id=request.session_id,
+            user_id=request.user_id,
+            skill=request.routing_result.selected_skill.name,
+            overlay=request.routing_result.overlay_skill.name if request.routing_result.overlay_skill else None,
+            live_run=False,
+            content="dry-run result",
+            prompt_preview="Rust-owned dry-run prompt",
+            model_id=None,
+            usage=UsageMetrics(input_tokens=5, output_tokens=3, total_tokens=8, mode="estimated"),
+            metadata={
+                "execution_kernel": "rust-execution-kernel-slice",
+                "execution_kernel_authority": "rust-execution-kernel-authority",
+                "execution_kernel_contract_mode": "rust-live-primary",
+                "execution_kernel_fallback_policy": "infrastructure-only-explicit",
+                "execution_kernel_in_process_replacement_complete": True,
+                "execution_kernel_delegate": "router-rs",
+                "execution_kernel_delegate_authority": "rust-execution-cli",
+                "execution_kernel_delegate_family": "rust-cli",
+                "execution_kernel_delegate_impl": "router-rs",
+                "execution_kernel_live_primary": "router-rs",
+                "execution_kernel_live_primary_authority": "rust-execution-cli",
+                "execution_kernel_live_fallback": None,
+                "execution_kernel_live_fallback_authority": None,
+                "execution_kernel_live_fallback_enabled": False,
+                "execution_kernel_live_fallback_mode": "disabled",
+                "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
+                "execution_kernel_response_shape": "dry_run",
+                "execution_kernel_prompt_preview_owner": "rust-execution-cli",
+                "execution_mode": "dry_run",
+                "reason": "router-rs returned a deterministic dry-run payload.",
+                "trace_event_count": 7,
+                "trace_output_path": "/tmp/TRACE_METADATA.json",
+            },
+        )
+
+    execution_service._execute_request_via_rust_adapter = fake_execute  # type: ignore[method-assign]
 
     async def _run() -> None:
         response = await execution_service.execute(
@@ -1282,6 +1318,8 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
             trace_event_count=7,
             trace_output_path="/tmp/TRACE_METADATA.json",
         )
+        assert seen["dry_run"] is True
+        assert seen["has_prompt_preview_field"] is False
         assert isinstance(response, RunTaskResponse)
         assert response.live_run is False
         assert response.metadata["execution_kernel"] == "rust-execution-kernel-slice"

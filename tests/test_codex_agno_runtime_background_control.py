@@ -336,7 +336,7 @@ def test_background_runtime_sandbox_events_keep_background_job_id(tmp_path: Path
             overlay=request.routing_result.overlay_skill.name if request.routing_result.overlay_skill else None,
             live_run=False,
             content="background-ok",
-            prompt_preview=request.prompt_preview,
+            prompt_preview="Rust-owned dry-run prompt",
             usage=UsageMetrics(input_tokens=3, output_tokens=2, total_tokens=5, mode="dry_run"),
             metadata={
                 "execution_kernel": "rust-execution-kernel-slice",
@@ -360,7 +360,6 @@ def test_background_runtime_sandbox_events_keep_background_job_id(tmp_path: Path
                 job_id=request.job_id,
                 user_id=user_id,
                 routing_result=routing_result,
-                prompt_preview="background prompt",
                 dry_run=True,
             ),
             executor=fake_kernel_execute,

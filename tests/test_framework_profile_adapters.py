@@ -29,7 +29,6 @@ from codex_agno_runtime.framework_profile import (
     merge_profile_overrides,
     resolve_host_capability_requirements,
 )
-from codex_agno_runtime.compatibility import compile_codex_desktop_host_adapter
 from codex_agno_runtime.execution_kernel_contracts import (
     COMPATIBILITY_FALLBACK_RUNTIME_METADATA_FIELDS,
     EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
@@ -989,7 +988,6 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     common = compile_codex_common_adapter(profile)
     aionui = compile_aionui_host_adapter(profile)
     desktop = compile_codex_desktop_adapter(profile)
-    legacy_alias = compile_codex_desktop_host_adapter(profile)
     cli = compile_codex_cli_adapter(profile)
     claude = compile_claude_code_adapter(profile)
     gemini = compile_gemini_cli_adapter(profile)
@@ -1054,13 +1052,6 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     assert desktop.host_payload["entrypoint_contract"]["entrypoint_kind"] == "interactive"
     assert desktop.host_payload["entrypoint_contract"]["shared_adapter"] == "cli_common_adapter"
     assert desktop.adapter.protocol_hints["works_without_aionrs"] is True
-
-    assert legacy_alias.adapter == CODEX_DESKTOP_HOST_ADAPTER
-    assert legacy_alias.host_payload["metadata"]["adapter_alias_of"] == "codex_desktop_adapter"
-    assert legacy_alias.host_payload["entrypoint_contract"]["canonical_adapter_id"] == "codex_desktop_adapter"
-    assert legacy_alias.host_payload["legacy_boundary"]["exposure_lane"] == "compatibility-only-explicit"
-    assert legacy_alias.host_payload["legacy_boundary"]["default_host_peer_set_member"] is False
-    assert legacy_alias.host_payload["runtime_surface"] == desktop.host_payload["runtime_surface"]
 
     assert cli.adapter == CODEX_CLI_ADAPTER
     assert cli.host_payload["runtime_surface"]["artifact_contract"] == {"layout": "stable-v1"}
@@ -1570,6 +1561,7 @@ def test_legacy_codex_desktop_alias_compiler_stays_on_explicit_compatibility_sur
     assert not hasattr(root_package, "build_upgrade_compatibility_matrix")
     assert not hasattr(root_package, "compile_codex_common_adapter")
     assert not hasattr(root_package, "build_codex_desktop_alias_retirement_status")
+    assert not hasattr(compatibility_surface, "compile_codex_desktop_host_adapter")
     assert compatibility_surface.compile_aionrs_companion_adapter is compile_aionrs_companion_adapter
     assert compatibility_surface.compile_aionui_host_adapter is compile_aionui_host_adapter
     assert compatibility_surface.build_upgrade_compatibility_matrix is build_upgrade_compatibility_matrix
@@ -1578,7 +1570,6 @@ def test_legacy_codex_desktop_alias_compiler_stays_on_explicit_compatibility_sur
         compatibility_surface.build_codex_desktop_alias_retirement_status
         is build_codex_desktop_alias_retirement_status
     )
-    assert compatibility_surface.compile_codex_desktop_host_adapter is compile_codex_desktop_host_adapter
 
 
 def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> None:

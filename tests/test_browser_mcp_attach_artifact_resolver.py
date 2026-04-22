@@ -1,23 +1,17 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import sqlite3
 import subprocess
-import sys
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-MODULE_PATH = (
-    PROJECT_ROOT / "tools" / "browser-mcp" / "scripts" / "resolve_runtime_attach_artifact.py"
+RESOLVER_SCRIPT = (
+    PROJECT_ROOT / "tools" / "browser-mcp" / "scripts" / "resolve_runtime_attach_artifact.mjs"
 )
-SPEC = importlib.util.spec_from_file_location("resolve_runtime_attach_artifact", MODULE_PATH)
-assert SPEC is not None and SPEC.loader is not None
-MODULE = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = MODULE
-SPEC.loader.exec_module(MODULE)
+NODE_BIN = os.environ.get("NODE_BIN") or "node"
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -28,8 +22,8 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
 def _run_resolver_cli(search_root: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
-            sys.executable,
-            str(MODULE_PATH),
+            NODE_BIN,
+            str(RESOLVER_SCRIPT),
             "--search-root",
             str(search_root),
         ],
@@ -61,10 +55,9 @@ def test_resolver_prefers_newest_resume_manifest_event_transport_path(tmp_path: 
         },
     )
 
-    assert (
-        MODULE.resolve_runtime_attach_artifact(search_root)
-        == "/tmp/runtime_event_transports/newer.json"
-    )
+    completed = _run_resolver_cli(search_root)
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == str(newer_manifest.resolve())
 
 
 def test_resolver_falls_back_to_manifest_file_recency_when_updated_at_is_invalid(tmp_path: Path) -> None:
@@ -91,10 +84,9 @@ def test_resolver_falls_back_to_manifest_file_recency_when_updated_at_is_invalid
     os.utime(older_manifest, (1_700_000_000, 1_700_000_000))
     os.utime(newer_manifest, (1_700_000_100, 1_700_000_100))
 
-    assert (
-        MODULE.resolve_runtime_attach_artifact(search_root)
-        == "/tmp/runtime_event_transports/newer.json"
-    )
+    completed = _run_resolver_cli(search_root)
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == str(newer_manifest.resolve())
 
 
 def test_resolver_reads_sqlite_resume_manifest_payloads(tmp_path: Path) -> None:
@@ -120,10 +112,9 @@ def test_resolver_reads_sqlite_resume_manifest_payloads(tmp_path: Path) -> None:
     connection.commit()
     connection.close()
 
-    assert (
-        MODULE.resolve_runtime_attach_artifact(search_root)
-        == "/logical/sqlite/runtime_event_transports/session__job.json"
-    )
+    completed = _run_resolver_cli(search_root)
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == "runtime-data/TRACE_RESUME_MANIFEST.json"
 
 
 def test_resolver_falls_back_to_sqlite_payload_key_for_binding_candidates(tmp_path: Path) -> None:
@@ -150,10 +141,9 @@ def test_resolver_falls_back_to_sqlite_payload_key_for_binding_candidates(tmp_pa
     connection.commit()
     connection.close()
 
-    assert (
-        MODULE.resolve_runtime_attach_artifact(search_root)
-        == "runtime-data/runtime_event_transports/sqlite-session.json"
-    )
+    completed = _run_resolver_cli(search_root)
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == "runtime-data/runtime_event_transports/sqlite-session.json"
 
 
 def test_resolver_falls_back_to_binding_artifact_when_manifest_is_missing(tmp_path: Path) -> None:
@@ -168,7 +158,9 @@ def test_resolver_falls_back_to_binding_artifact_when_manifest_is_missing(tmp_pa
         },
     )
 
-    assert MODULE.resolve_runtime_attach_artifact(search_root) == str(binding_path)
+    completed = _run_resolver_cli(search_root)
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == str(binding_path)
 
 
 def test_resolver_prefers_manifest_candidates_over_binding_candidates_when_manifest_has_timestamp(
@@ -196,10 +188,9 @@ def test_resolver_prefers_manifest_candidates_over_binding_candidates_when_manif
     )
     os.utime(binding_path, (1_800_000_000, 1_800_000_000))
 
-    assert (
-        MODULE.resolve_runtime_attach_artifact(search_root)
-        == "/tmp/runtime_event_transports/from-manifest.json"
-    )
+    completed = _run_resolver_cli(search_root)
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == str(manifest_path.resolve())
 
 
 def test_resolver_ignores_invalid_payloads_and_keeps_valid_binding_fallback(tmp_path: Path) -> None:
@@ -225,7 +216,9 @@ def test_resolver_ignores_invalid_payloads_and_keeps_valid_binding_fallback(tmp_
         },
     )
 
-    assert MODULE.resolve_runtime_attach_artifact(search_root) == str(binding_path)
+    completed = _run_resolver_cli(search_root)
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == str(binding_path)
 
 
 def test_resolver_reads_sqlite_binding_payload_without_explicit_binding_path(tmp_path: Path) -> None:
@@ -252,36 +245,18 @@ def test_resolver_reads_sqlite_binding_payload_without_explicit_binding_path(tmp
     connection.commit()
     connection.close()
 
-    assert (
-        MODULE.resolve_runtime_attach_artifact(search_root)
-        == "runtime-data/runtime_event_transports/session__job.json"
-    )
-
-
-def test_resolver_ignores_invalid_payloads_and_uses_valid_fallback_candidate(tmp_path: Path) -> None:
-    search_root = tmp_path / "scratch"
-    invalid_manifest = search_root / "broken" / "TRACE_RESUME_MANIFEST.json"
-    valid_binding = search_root / "good" / "data" / "runtime_event_transports" / "session__job.json"
-
-    invalid_manifest.parent.mkdir(parents=True, exist_ok=True)
-    invalid_manifest.write_text("{not-json}\n", encoding="utf-8")
-    _write_json(
-        valid_binding,
-        {
-            "schema_version": "runtime-event-transport-v1",
-            "binding_artifact_path": str(valid_binding),
-            "binding_backend_family": "filesystem",
-        },
-    )
-
-    assert MODULE.resolve_runtime_attach_artifact(search_root) == str(valid_binding)
+    completed = _run_resolver_cli(search_root)
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == "runtime-data/runtime_event_transports/session__job.json"
 
 
 def test_resolver_returns_none_when_no_attach_candidates_exist(tmp_path: Path) -> None:
     search_root = tmp_path / "scratch"
     search_root.mkdir(parents=True, exist_ok=True)
 
-    assert MODULE.resolve_runtime_attach_artifact(search_root) is None
+    completed = _run_resolver_cli(search_root)
+    assert completed.returncode == 1
+    assert completed.stdout == ""
 
 
 def test_resolver_ignores_sqlite_query_failures_and_uses_filesystem_fallback(tmp_path: Path) -> None:
@@ -300,7 +275,9 @@ def test_resolver_ignores_sqlite_query_failures_and_uses_filesystem_fallback(tmp
         },
     )
 
-    assert MODULE.resolve_runtime_attach_artifact(search_root) == str(binding_path)
+    completed = _run_resolver_cli(search_root)
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == str(binding_path)
 
 
 def test_resolver_cli_prints_resolved_attach_path_on_success(tmp_path: Path) -> None:
