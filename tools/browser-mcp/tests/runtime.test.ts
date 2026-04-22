@@ -1,5 +1,8 @@
 import { createServer, type Server } from 'node:http';
 import { AddressInfo } from 'node:net';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { BrowserRuntime } from '../src/runtime.js';
 
@@ -368,5 +371,99 @@ describe('BrowserRuntime', () => {
     await expect(runtime.getState({ include: ['diff'], sinceRevision: initialRevision })).rejects.toMatchObject({
       code: 'STALE_STATE_REVISION',
     });
+  });
+
+  it('surfaces attached runtime diagnostics from a persisted attach descriptor', async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), 'browser-mcp-attach-'));
+    const traceStreamPath = path.join(tempRoot, 'TRACE_EVENTS.jsonl');
+    const descriptorPath = path.join(tempRoot, 'runtime-attach-descriptor.json');
+
+    await writeFile(
+      traceStreamPath,
+      [
+        JSON.stringify({
+          ts: '2026-04-22T10:00:00.000Z',
+          event_id: 'evt-1',
+          kind: 'job.started',
+        }),
+        JSON.stringify({
+          ts: '2026-04-22T10:00:01.000Z',
+          event_id: 'evt-2',
+          kind: 'job.completed',
+        }),
+      ].join('\n') + '\n',
+      'utf8',
+    );
+    await writeFile(
+      descriptorPath,
+      JSON.stringify(
+        {
+          schema_version: 'runtime-event-attach-descriptor-v1',
+          attach_mode: 'process_external_artifact_replay',
+          artifact_backend_family: 'filesystem',
+          attach_capabilities: {
+            artifact_replay: true,
+            live_remote_stream: false,
+            cleanup_preserves_replay: true,
+          },
+          recommended_entrypoint: 'describe_runtime_event_handoff',
+          resolved_artifacts: {
+            trace_stream_path: traceStreamPath,
+          },
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeAttachDescriptorPath: descriptorPath,
+      screenshotDir: path.join(tempRoot, 'screenshots'),
+    });
+
+    try {
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.attachedRuntime.status).toBe('ready');
+      expect(diagnostics.attachedRuntime.descriptorSource).toBe('path');
+      expect(diagnostics.attachedRuntime.recommendedEntrypoint).toBe('describe_runtime_event_handoff');
+      expect(diagnostics.attachedRuntime.eventCount).toBe(2);
+      expect(diagnostics.attachedRuntime.latestEventId).toBe('evt-2');
+      expect(diagnostics.attachedRuntime.latestEventKind).toBe('job.completed');
+      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+    } finally {
+      await attachedRuntime.shutdown();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed in diagnostics when the attach descriptor backend is unsupported', async () => {
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeAttachDescriptor: {
+        schema_version: 'runtime-event-attach-descriptor-v1',
+        attach_mode: 'process_external_artifact_replay',
+        artifact_backend_family: 'sqlite',
+        attach_capabilities: {
+          artifact_replay: true,
+          live_remote_stream: false,
+          cleanup_preserves_replay: true,
+        },
+        recommended_entrypoint: 'describe_runtime_event_handoff',
+        resolved_artifacts: {
+          trace_stream_path: '/logical/sqlite/TRACE_EVENTS.jsonl',
+        },
+      },
+    });
+
+    try {
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.attachedRuntime.status).toBe('unsupported_backend');
+      expect(diagnostics.attachedRuntime.replaySupported).toBe(true);
+      expect(diagnostics.attachedRuntime.warning).toContain('filesystem replay only');
+    } finally {
+      await attachedRuntime.shutdown();
+    }
   });
 });
