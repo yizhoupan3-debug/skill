@@ -27,12 +27,9 @@ elif [ -n "${BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH:-}" ]; then
 elif [ -n "${BROWSER_MCP_RUNTIME_HANDOFF_PATH:-}" ]; then
   NODE_ARGS+=(--runtime-handoff-path "$BROWSER_MCP_RUNTIME_HANDOFF_PATH")
 else
-  typeset -a AUTO_BINDING_CANDIDATES
-  AUTO_BINDING_CANDIDATES=(
-    "$REPO_ROOT"/codex_agno_runtime/artifacts/scratch/**/runtime_event_transports/*.json(N.Om[1])
-  )
-  if [ ${#AUTO_BINDING_CANDIDATES[@]} -gt 0 ]; then
-    NODE_ARGS+=(--runtime-attach-artifact-path "$AUTO_BINDING_CANDIDATES[1]")
+  AUTO_ATTACH_ARTIFACT=$(python3 "$SCRIPT_DIR/resolve_runtime_attach_artifact.py" 2>/dev/null || true)
+  if [ -n "$AUTO_ATTACH_ARTIFACT" ]; then
+    NODE_ARGS+=(--runtime-attach-artifact-path "$AUTO_ATTACH_ARTIFACT")
   fi
 fi
 

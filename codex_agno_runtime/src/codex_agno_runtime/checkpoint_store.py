@@ -505,6 +505,7 @@ class FilesystemRuntimeCheckpointer:
         background_state_path: Path | None = None,
         storage_backend: RuntimeStorageBackend | None = None,
         control_plane_descriptor: Mapping[str, Any] | None = None,
+        rust_adapter: RustRouteAdapter | None = None,
     ) -> None:
         self.data_dir = data_dir
         self.storage_backend = storage_backend or select_runtime_storage_backend(storage_root=data_dir)
@@ -522,7 +523,7 @@ class FilesystemRuntimeCheckpointer:
             paths=self._paths,
             capabilities=self.storage_backend.capabilities(),
         )
-        self._rust_adapter = RustRouteAdapter(_runtime_settings().codex_home)
+        self._rust_adapter = rust_adapter or RustRouteAdapter(_runtime_settings().codex_home)
 
     def describe_paths(self) -> RuntimeCheckpointPaths:
         """Return the shared path descriptor."""
@@ -553,6 +554,7 @@ class FilesystemRuntimeCheckpointer:
             event_bridge=event_bridge,
             storage_backend=self.storage_backend,
             control_plane_descriptor=self._control_plane.trace_service,
+            rust_adapter=self._rust_adapter,
         )
 
     def resolve_transport_manifest(

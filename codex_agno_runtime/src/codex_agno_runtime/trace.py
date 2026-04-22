@@ -847,6 +847,7 @@ class RuntimeTraceRecorder:
         event_stream_path: Path | None = None,
         storage_backend: "RuntimeStorageBackend | None" = None,
         control_plane_descriptor: Mapping[str, Any] | None = None,
+        rust_adapter: RustRouteAdapter | None = None,
     ) -> None:
         self.output_path = output_path
         self.event_schema_version = event_schema_version
@@ -855,7 +856,7 @@ class RuntimeTraceRecorder:
         self.event_sink = event_sink
         self.event_bridge = event_bridge
         self.storage_backend = storage_backend
-        self._rust_adapter = RustRouteAdapter(default_codex_home())
+        self._rust_adapter = rust_adapter or RustRouteAdapter(default_codex_home())
         self._control_plane = _build_trace_control_plane_descriptor(
             control_plane_descriptor=control_plane_descriptor,
             event_stream_path=event_stream_path,

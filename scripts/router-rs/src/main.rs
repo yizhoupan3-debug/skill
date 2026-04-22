@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use clap::{ArgAction, Parser};
 use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -45,6 +47,8 @@ const EXECUTION_PROMPT_PREVIEW_OWNER: &str = "rust-execution-cli";
 const EXECUTION_MODEL_ID_SOURCE: &str = "aggregator-response.model";
 const RUNTIME_CONTROL_PLANE_SCHEMA_VERSION: &str = "router-rs-runtime-control-plane-v1";
 const RUNTIME_CONTROL_PLANE_AUTHORITY: &str = "rust-runtime-control-plane";
+const SANDBOX_CONTROL_SCHEMA_VERSION: &str = "router-rs-sandbox-control-v1";
+const SANDBOX_CONTROL_AUTHORITY: &str = "rust-sandbox-control";
 const BACKGROUND_CONTROL_SCHEMA_VERSION: &str = "router-rs-background-control-v1";
 const BACKGROUND_CONTROL_AUTHORITY: &str = "rust-background-control";
 const TRACE_DESCRIPTOR_SCHEMA_VERSION: &str = "router-rs-trace-descriptor-v1";
@@ -121,6 +125,8 @@ struct Cli {
     #[arg(long)]
     runtime_control_plane_json: bool,
     #[arg(long)]
+    sandbox_control_json: bool,
+    #[arg(long)]
     background_control_json: bool,
     #[arg(long)]
     describe_transport_json: bool,
@@ -174,6 +180,8 @@ struct Cli {
     route_snapshot_input_json: Option<String>,
     #[arg(long)]
     execute_input_json: Option<String>,
+    #[arg(long)]
+    sandbox_control_input_json: Option<String>,
     #[arg(long)]
     background_control_input_json: Option<String>,
     #[arg(long)]
@@ -379,6 +387,28 @@ struct BackgroundControlRequestPayload {
     backoff_base_seconds: Option<f64>,
     backoff_multiplier: Option<f64>,
     max_backoff_seconds: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SandboxControlRequestPayload {
+    schema_version: String,
+    operation: String,
+    current_state: Option<String>,
+    next_state: Option<String>,
+    cleanup_failed: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SandboxControlResponsePayload {
+    schema_version: String,
+    authority: String,
+    operation: String,
+    current_state: Option<String>,
+    next_state: Option<String>,
+    allowed: bool,
+    resolved_state: Option<String>,
+    reason: String,
+    error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -599,6 +629,7 @@ fn main() -> Result<(), String> {
         args.route_snapshot_json,
         args.execute_json,
         args.runtime_control_plane_json,
+        args.sandbox_control_json,
         args.background_control_json,
         args.describe_transport_json,
         args.describe_handoff_json,
@@ -627,13 +658,31 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --background-control-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --route-report-json, --profile-json, and --profile-artifacts-json"
+            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --route-report-json, --profile-json, and --profile-artifacts-json"
                 .to_string(),
         );
     }
 
     if args.stdio_json {
         return run_stdio_json_loop();
+    }
+
+    if args.sandbox_control_json {
+        let payload = serde_json::from_str::<SandboxControlRequestPayload>(
+            args.sandbox_control_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--sandbox-control-input-json is required with --sandbox-control-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse sandbox control input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_sandbox_control_response(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
     }
 
     if args.background_control_json {
@@ -1151,6 +1200,7 @@ fn handle_stdio_json_line(line: &str) -> StdioJsonResponsePayload {
 fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String> {
     match op {
         "route" => dispatch_stdio_route(payload),
+        "search_skills" => dispatch_stdio_search_skills(payload),
         "execute" => {
             let request = serde_json::from_value::<ExecuteRequestPayload>(payload)
                 .map_err(|err| format!("parse execute input failed: {err}"))?;
@@ -1165,6 +1215,12 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
             dispatch_stdio_compile_codex_profile_artifacts(payload)
         }
         "runtime_control_plane" => Ok(build_runtime_control_plane_payload()),
+        "sandbox_control" => {
+            let request = serde_json::from_value::<SandboxControlRequestPayload>(payload)
+                .map_err(|err| format!("parse sandbox control input failed: {err}"))?;
+            serde_json::to_value(build_sandbox_control_response(request)?)
+                .map_err(|err| format!("serialize sandbox control output failed: {err}"))
+        }
         "runtime_observability_exporter_descriptor" => {
             serde_json::to_value(build_runtime_observability_exporter_descriptor()).map_err(|err| {
                 format!("serialize runtime observability exporter output failed: {err}")
@@ -1246,6 +1302,21 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
         first_turn,
     )?)
     .map_err(|err| format!("serialize route output failed: {err}"))
+}
+
+fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, String> {
+    let query = required_non_empty_string(&payload, "query", "stdio search_skills")?;
+    let limit = payload
+        .get("limit")
+        .and_then(Value::as_u64)
+        .map(|value| value as usize)
+        .unwrap_or(5);
+    let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
+    let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
+    let records = load_records(runtime_path.as_deref(), manifest_path.as_deref())?;
+    Ok(json!({
+        "rows": search_skills(&records, &query, limit),
+    }))
 }
 
 fn dispatch_stdio_route_report(payload: Value) -> Result<Value, String> {
@@ -2271,6 +2342,89 @@ fn build_background_control_response(
                 effect_plan,
             })
         }
+        "claim" => {
+            let current_status = payload
+                .current_status
+                .unwrap_or_else(|| "queued".to_string());
+            if matches!(current_status.as_str(), "interrupt_requested" | "interrupted") {
+                let mut effect_plan = background_effect_plan("finalize_interrupted");
+                effect_plan.finalize_immediately = Some(true);
+                effect_plan.terminal_status = Some("interrupted".to_string());
+                effect_plan.resolved_status = Some("interrupted".to_string());
+                return Ok(BackgroundControlResponsePayload {
+                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                    operation: payload.operation,
+                    normalized_multitask_strategy: None,
+                    supported_multitask_strategies,
+                    strategy_supported: true,
+                    accepted: None,
+                    requires_takeover: None,
+                    error: None,
+                    should_retry: None,
+                    next_retry_count: None,
+                    backoff_seconds: None,
+                    terminal_status: Some("interrupted".to_string()),
+                    resolved_status: Some("interrupted".to_string()),
+                    finalize_immediately: Some(true),
+                    cancel_running_task: Some(false),
+                    reason: "claim-suppressed-interrupted".to_string(),
+                    effect_plan,
+                });
+            }
+            if matches!(
+                current_status.as_str(),
+                "completed" | "failed" | "retry_exhausted"
+            ) {
+                let mut effect_plan = background_effect_plan("finalize_terminal");
+                effect_plan.finalize_immediately = Some(true);
+                effect_plan.terminal_status = Some(current_status.clone());
+                effect_plan.resolved_status = Some(current_status.clone());
+                return Ok(BackgroundControlResponsePayload {
+                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                    operation: payload.operation,
+                    normalized_multitask_strategy: None,
+                    supported_multitask_strategies,
+                    strategy_supported: true,
+                    accepted: None,
+                    requires_takeover: None,
+                    error: None,
+                    should_retry: None,
+                    next_retry_count: None,
+                    backoff_seconds: None,
+                    terminal_status: Some(current_status.clone()),
+                    resolved_status: Some(current_status),
+                    finalize_immediately: Some(true),
+                    cancel_running_task: Some(false),
+                    reason: "claim-suppressed-terminal".to_string(),
+                    effect_plan,
+                });
+            }
+            let mut effect_plan = background_effect_plan("claim_execution");
+            effect_plan.finalize_immediately = Some(false);
+            effect_plan.resolved_status = Some("running".to_string());
+            Ok(BackgroundControlResponsePayload {
+                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+                operation: payload.operation,
+                normalized_multitask_strategy: None,
+                supported_multitask_strategies,
+                strategy_supported: true,
+                accepted: None,
+                requires_takeover: None,
+                error: None,
+                should_retry: None,
+                next_retry_count: None,
+                backoff_seconds: None,
+                terminal_status: None,
+                resolved_status: Some("running".to_string()),
+                finalize_immediately: Some(false),
+                cancel_running_task: Some(false),
+                reason: "claim-running".to_string(),
+                effect_plan,
+            })
+        }
         "complete" => {
             let mut effect_plan = background_effect_plan("finalize_completed");
             effect_plan.finalize_immediately = Some(true);
@@ -2509,6 +2663,90 @@ fn build_background_control_response(
             })
         }
         other => Err(format!("unsupported background control operation: {other}")),
+    }
+}
+
+fn build_sandbox_control_response(
+    payload: SandboxControlRequestPayload,
+) -> Result<SandboxControlResponsePayload, String> {
+    match payload.operation.as_str() {
+        "transition" => {
+            let current_state = payload
+                .current_state
+                .clone()
+                .ok_or_else(|| "sandbox control transition requires current_state".to_string())?;
+            let next_state = payload
+                .next_state
+                .clone()
+                .ok_or_else(|| "sandbox control transition requires next_state".to_string())?;
+            let allowed = matches!(
+                (current_state.as_str(), next_state.as_str()),
+                ("created", "warm")
+                    | ("warm", "busy")
+                    | ("busy", "draining")
+                    | ("draining", "recycled")
+                    | ("draining", "failed")
+                    | ("warm", "failed")
+                    | ("busy", "failed")
+                    | ("recycled", "warm")
+            );
+            Ok(SandboxControlResponsePayload {
+                schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
+                authority: SANDBOX_CONTROL_AUTHORITY.to_string(),
+                operation: payload.operation,
+                current_state: Some(current_state.clone()),
+                next_state: Some(next_state.clone()),
+                allowed,
+                resolved_state: Some(next_state.clone()),
+                reason: if allowed {
+                    "transition-accepted".to_string()
+                } else {
+                    "invalid-transition".to_string()
+                },
+                error: if allowed {
+                    None
+                } else {
+                    Some(format!(
+                        "invalid sandbox transition: {:?} -> {:?}",
+                        current_state, next_state
+                    ))
+                },
+            })
+        }
+        "cleanup" => {
+            let current_state = payload
+                .current_state
+                .clone()
+                .unwrap_or_else(|| "draining".to_string());
+            let cleanup_failed = payload.cleanup_failed.unwrap_or(false);
+            let resolved_state = if cleanup_failed { "failed" } else { "recycled" };
+            let allowed = matches!(current_state.as_str(), "draining");
+            Ok(SandboxControlResponsePayload {
+                schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
+                authority: SANDBOX_CONTROL_AUTHORITY.to_string(),
+                operation: payload.operation,
+                current_state: Some(current_state.clone()),
+                next_state: Some(resolved_state.to_string()),
+                allowed,
+                resolved_state: Some(resolved_state.to_string()),
+                reason: if !allowed {
+                    "cleanup-invalid-state".to_string()
+                } else if cleanup_failed {
+                    "cleanup-failed".to_string()
+                } else {
+                    "cleanup-completed".to_string()
+                },
+                error: if allowed {
+                    None
+                } else {
+                    Some(format!(
+                        "invalid sandbox cleanup state: {:?} -> {:?}",
+                        current_state, resolved_state
+                    ))
+                },
+            })
+        }
+        other => Err(format!("unsupported sandbox control operation: {other}")),
     }
 }
 
@@ -4087,6 +4325,183 @@ fn cleanup_attached_runtime_event_transport(payload: Value) -> Result<Value, Str
 }
 
 fn build_runtime_control_plane_payload() -> Value {
+    let services = serde_json::json!({
+        "router": {
+            "authority": ROUTE_AUTHORITY,
+            "role": "route-selection",
+            "projection": "rust-owned-live-route",
+            "delegate_kind": "rust-route-core",
+        },
+        "skill_loader": {
+            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+            "role": "skill-registry-projection",
+            "projection": "python-thin-projection",
+            "delegate_kind": "rust-runtime-control-plane",
+        },
+        "prompt_builder": {
+            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+            "role": "prompt-contract-projection",
+            "projection": "python-thin-projection",
+            "delegate_kind": "rust-execution-cli",
+        },
+        "middleware": {
+            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+            "role": "middleware-policy-projection",
+            "projection": "python-thin-projection",
+            "delegate_kind": "rust-runtime-control-plane",
+        },
+        "state": {
+            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+            "role": "durable-background-state",
+            "projection": "python-thin-projection",
+            "delegate_kind": "filesystem-state-store",
+        },
+        "trace": {
+            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+            "role": "trace-and-handoff",
+            "projection": "python-thin-projection",
+            "delegate_kind": "filesystem-trace-store",
+        },
+        "memory": {
+            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+            "role": "memory-lifecycle",
+            "projection": "python-thin-projection",
+            "delegate_kind": "fact-memory-store",
+        },
+        "checkpoint": {
+            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+            "role": "checkpoint-artifact-projection",
+            "projection": "python-thin-projection",
+            "delegate_kind": "filesystem-checkpointer",
+        },
+        "execution": {
+            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+            "role": "execution-kernel-control",
+            "projection": "python-thin-projection",
+            "delegate_kind": "rust-execution-kernel-slice",
+            "kernel_contract": {
+                "execution_kernel": "rust-execution-kernel-slice",
+                "execution_kernel_authority": "rust-execution-kernel-authority",
+                "execution_kernel_contract_mode": "rust-live-primary",
+                "execution_kernel_in_process_replacement_complete": true,
+                "execution_kernel_delegate": "router-rs",
+                "execution_kernel_delegate_authority": "rust-execution-cli",
+                "execution_kernel_delegate_family": "rust-cli",
+                "execution_kernel_delegate_impl": "router-rs",
+                "execution_kernel_live_primary": "router-rs",
+                "execution_kernel_live_primary_authority": "rust-execution-cli",
+                "execution_kernel_live_fallback": Value::Null,
+                "execution_kernel_live_fallback_authority": Value::Null,
+                "execution_kernel_live_fallback_enabled": false,
+                "execution_kernel_live_fallback_mode": "disabled",
+            },
+            "kernel_adapter_kind": "rust-execution-kernel-slice",
+            "kernel_authority": "rust-execution-kernel-authority",
+            "kernel_owner_family": "rust",
+            "kernel_owner_impl": "execution-kernel-slice",
+            "kernel_contract_mode": "rust-live-primary",
+            "kernel_replace_ready": true,
+            "kernel_in_process_replacement_complete": true,
+            "kernel_live_backend_family": "rust-cli",
+            "kernel_live_backend_impl": "router-rs",
+            "kernel_live_delegate_kind": "router-rs",
+            "kernel_live_delegate_authority": "rust-execution-cli",
+            "kernel_live_delegate_family": "rust-cli",
+            "kernel_live_delegate_impl": "router-rs",
+            "kernel_live_delegate_mode": "rust-primary",
+            "kernel_live_fallback_kind": Value::Null,
+            "kernel_live_fallback_authority": Value::Null,
+            "kernel_live_fallback_family": Value::Null,
+            "kernel_live_fallback_impl": Value::Null,
+            "kernel_live_fallback_enabled": false,
+            "kernel_live_fallback_mode": "disabled",
+            "kernel_mode_support": ["dry_run", "live"],
+            "execution_schema_version": EXECUTION_SCHEMA_VERSION,
+            "sandbox_lifecycle_contract": {
+                "schema_version": "runtime-sandbox-lifecycle-v1",
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "role": "sandbox-lifecycle-control",
+                "projection": "python-thin-projection",
+                "delegate_kind": "rust-runtime-control-plane",
+                "lifecycle_states": [
+                    "created",
+                    "warm",
+                    "busy",
+                    "draining",
+                    "recycled",
+                    "failed"
+                ],
+                "allowed_transitions": [
+                    ["busy", "draining"],
+                    ["busy", "failed"],
+                    ["created", "warm"],
+                    ["draining", "failed"],
+                    ["draining", "recycled"],
+                    ["recycled", "warm"],
+                    ["warm", "busy"],
+                    ["warm", "failed"]
+                ],
+                "capability_categories": [
+                    "read_only",
+                    "workspace_mutating",
+                    "networked",
+                    "high_risk"
+                ],
+                "cleanup_mode": "async-drain-and-recycle",
+                "event_log_artifact": "runtime_sandbox_events.jsonl",
+                "control_operations": ["transition", "cleanup"],
+                "runtime_probe_dimensions": ["cpu", "memory", "wall_clock", "output_size"],
+            },
+        },
+        "agent_factory": {
+            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+            "role": "retired-compatibility-agent-contract-handle",
+            "projection": "python-retired-request-surface",
+            "delegate_kind": "execution-kernel-compatibility-agent-v1",
+        },
+        "background": {
+            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+            "role": "background-orchestration",
+            "projection": "python-thin-projection",
+            "delegate_kind": "rust-background-control-policy",
+            "orchestration_contract": {
+                "schema_version": "runtime-background-orchestration-v1",
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "role": "background-orchestration-control",
+                "projection": "python-thin-projection",
+                "delegate_kind": "rust-background-control-policy",
+                "policy_schema_version": BACKGROUND_CONTROL_SCHEMA_VERSION,
+                "queue_model": "bounded-async-host",
+                "session_takeover_model": "state-store-lease-arbitration",
+                "state_artifact": "runtime_background_jobs.json",
+                "active_statuses": [
+                    "queued",
+                    "running",
+                    "interrupt_requested",
+                    "retry_scheduled"
+                ],
+                "terminal_statuses": [
+                    "completed",
+                    "failed",
+                    "interrupted",
+                    "retry_exhausted"
+                ],
+                "policy_operations": [
+                    "enqueue",
+                    "claim",
+                    "interrupt",
+                    "retry",
+                    "completion-race",
+                    "session-release"
+                ],
+            },
+        },
+    });
+    let rust_owned_service_count = services
+        .as_object()
+        .map(|service_map| service_map.len())
+        .unwrap_or(0);
+
     serde_json::json!({
         "schema_version": RUNTIME_CONTROL_PLANE_SCHEMA_VERSION,
         "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
@@ -4101,74 +4516,25 @@ fn build_runtime_control_plane_payload() -> Value {
             "steady_state_python_allowed": false,
             "hot_path_projection_mode": "descriptor-driven",
         },
-        "services": {
-            "router": {
-                "authority": ROUTE_AUTHORITY,
-                "role": "route-selection",
-                "projection": "rust-owned-live-route",
-                "delegate_kind": "rust-route-core",
-            },
-            "skill_loader": {
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "role": "skill-registry-projection",
-                "projection": "python-thin-projection",
-                "delegate_kind": "rust-runtime-control-plane",
-            },
-            "prompt_builder": {
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "role": "prompt-contract-projection",
-                "projection": "python-thin-projection",
-                "delegate_kind": "rust-execution-cli",
-            },
-            "middleware": {
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "role": "middleware-policy-projection",
-                "projection": "python-thin-projection",
-                "delegate_kind": "rust-runtime-control-plane",
-            },
-            "state": {
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "role": "durable-background-state",
-                "projection": "python-thin-projection",
-                "delegate_kind": "filesystem-state-store",
-            },
-            "trace": {
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "role": "trace-and-handoff",
-                "projection": "python-thin-projection",
-                "delegate_kind": "filesystem-trace-store",
-            },
-            "memory": {
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "role": "memory-lifecycle",
-                "projection": "python-thin-projection",
-                "delegate_kind": "fact-memory-store",
-            },
-            "checkpoint": {
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "role": "checkpoint-artifact-projection",
-                "projection": "python-thin-projection",
-                "delegate_kind": "filesystem-checkpointer",
-            },
-            "execution": {
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "role": "execution-kernel-control",
-                "projection": "python-thin-projection",
-                "delegate_kind": "rust-execution-kernel-slice",
-            },
-            "agent_factory": {
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "role": "retired-compatibility-agent-contract-handle",
-                "projection": "python-retired-request-surface",
-                "delegate_kind": "execution-kernel-compatibility-agent-v1",
-            },
-            "background": {
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "role": "background-orchestration",
-                "projection": "python-thin-projection",
-                "delegate_kind": "rust-background-control-policy",
-            },
+        "runtime_host": {
+            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+            "role": "runtime-orchestration",
+            "projection": "python-thin-projection",
+            "delegate_kind": "rust-runtime-control-plane",
+            "startup_order": ["router", "state", "trace", "memory", "execution", "background"],
+            "shutdown_order": ["background", "execution", "memory", "trace", "state", "router"],
+            "health_sections": [
+                "router",
+                "state",
+                "trace",
+                "memory",
+                "execution_environment",
+                "background",
+                "checkpoint"
+            ],
+            "rust_owned_service_count": rust_owned_service_count,
         },
+        "services": services,
     })
 }
 
@@ -5846,8 +6212,52 @@ mod tests {
             Value::String("compatibility-host".to_string())
         );
         assert_eq!(
+            payload["runtime_host"]["role"],
+            Value::String("runtime-orchestration".to_string())
+        );
+        assert_eq!(
+            payload["runtime_host"]["startup_order"][0],
+            Value::String("router".to_string())
+        );
+        assert_eq!(
+            payload["runtime_host"]["shutdown_order"][0],
+            Value::String("background".to_string())
+        );
+        assert_eq!(
             payload["services"]["execution"]["delegate_kind"],
             Value::String("rust-execution-kernel-slice".to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_live_backend_impl"],
+            Value::String("router-rs".to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_contract"]["execution_kernel_delegate_impl"],
+            Value::String("router-rs".to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_contract"]["execution_kernel_live_fallback_enabled"],
+            Value::Bool(false)
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_live_delegate_authority"],
+            Value::String("rust-execution-cli".to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_live_fallback_enabled"],
+            Value::Bool(false)
+        );
+        assert_eq!(
+            payload["services"]["execution"]["sandbox_lifecycle_contract"]["schema_version"],
+            Value::String("runtime-sandbox-lifecycle-v1".to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["sandbox_lifecycle_contract"]["cleanup_mode"],
+            Value::String("async-drain-and-recycle".to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["sandbox_lifecycle_contract"]["control_operations"][1],
+            Value::String("cleanup".to_string())
         );
         assert_eq!(
             payload["services"]["checkpoint"]["delegate_kind"],
@@ -5860,6 +6270,10 @@ mod tests {
         assert_eq!(
             payload["services"]["background"]["delegate_kind"],
             Value::String("rust-background-control-policy".to_string())
+        );
+        assert_eq!(
+            payload["services"]["background"]["orchestration_contract"]["policy_schema_version"],
+            Value::String(BACKGROUND_CONTROL_SCHEMA_VERSION.to_string())
         );
     }
 
@@ -5992,6 +6406,64 @@ mod tests {
             err,
             "runtime metric record requires non-negative integer field attempt"
         );
+    }
+
+    #[test]
+    fn sandbox_control_accepts_known_edges_and_rejects_invalid_edges() {
+        let accepted = build_sandbox_control_response(SandboxControlRequestPayload {
+            schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "transition".to_string(),
+            current_state: Some("warm".to_string()),
+            next_state: Some("busy".to_string()),
+            cleanup_failed: None,
+        })
+        .expect("accepted transition");
+        assert_eq!(accepted.authority, SANDBOX_CONTROL_AUTHORITY);
+        assert!(accepted.allowed);
+        assert_eq!(accepted.reason, "transition-accepted");
+        assert_eq!(accepted.resolved_state.as_deref(), Some("busy"));
+
+        let rejected = build_sandbox_control_response(SandboxControlRequestPayload {
+            schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "transition".to_string(),
+            current_state: Some("busy".to_string()),
+            next_state: Some("warm".to_string()),
+            cleanup_failed: None,
+        })
+        .expect("rejected transition");
+        assert!(!rejected.allowed);
+        assert_eq!(rejected.reason, "invalid-transition");
+        assert_eq!(
+            rejected.error.as_deref(),
+            Some("invalid sandbox transition: \"busy\" -> \"warm\"")
+        );
+    }
+
+    #[test]
+    fn sandbox_control_cleanup_resolves_recycled_and_failed_targets() {
+        let recycled = build_sandbox_control_response(SandboxControlRequestPayload {
+            schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "cleanup".to_string(),
+            current_state: Some("draining".to_string()),
+            next_state: None,
+            cleanup_failed: Some(false),
+        })
+        .expect("cleanup recycled response");
+        assert!(recycled.allowed);
+        assert_eq!(recycled.reason, "cleanup-completed");
+        assert_eq!(recycled.resolved_state.as_deref(), Some("recycled"));
+
+        let failed = build_sandbox_control_response(SandboxControlRequestPayload {
+            schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "cleanup".to_string(),
+            current_state: Some("draining".to_string()),
+            next_state: None,
+            cleanup_failed: Some(true),
+        })
+        .expect("cleanup failed response");
+        assert!(failed.allowed);
+        assert_eq!(failed.reason, "cleanup-failed");
+        assert_eq!(failed.resolved_state.as_deref(), Some("failed"));
     }
 
     #[test]
@@ -6144,6 +6616,51 @@ mod tests {
             Some("interrupt_requested")
         );
         assert_eq!(running.effect_plan.next_step, "request_interrupt");
+    }
+
+    #[test]
+    fn background_control_claim_resolves_running_and_suppressed_paths() {
+        let queued = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "claim".to_string(),
+            multitask_strategy: None,
+            current_status: Some("queued".to_string()),
+            task_active: Some(false),
+            task_done: Some(false),
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+        })
+        .expect("queued claim response");
+        assert_eq!(queued.resolved_status.as_deref(), Some("running"));
+        assert_eq!(queued.reason, "claim-running");
+        assert_eq!(queued.effect_plan.next_step, "claim_execution");
+
+        let interrupted = build_background_control_response(BackgroundControlRequestPayload {
+            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "claim".to_string(),
+            multitask_strategy: None,
+            current_status: Some("interrupt_requested".to_string()),
+            task_active: Some(false),
+            task_done: Some(false),
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+        })
+        .expect("interrupt claim response");
+        assert_eq!(interrupted.terminal_status.as_deref(), Some("interrupted"));
+        assert_eq!(interrupted.reason, "claim-suppressed-interrupted");
+        assert_eq!(interrupted.effect_plan.next_step, "finalize_interrupted");
     }
 
     #[test]

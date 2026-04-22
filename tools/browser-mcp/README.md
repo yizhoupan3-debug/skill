@@ -109,7 +109,9 @@ You can also call `browser_get_attached_runtime_events` to consume replayable
 runtime events through that same attach descriptor.
 
 If you do not pass an explicit runtime attach input, the bundled
-`start_browser_mcp.sh` launcher now auto-discovers the newest filesystem-backed
-runtime transport binding artifact under
-`codex_agno_runtime/artifacts/scratch/**/runtime_event_transports/*.json` and
-starts browser-mcp against that replay surface automatically.
+`start_browser_mcp.sh` launcher now auto-discovers the newest replay-capable
+runtime attach input under `codex_agno_runtime/artifacts/scratch/`. It prefers
+checkpoint resume manifests when available, falls back to transport binding
+artifacts, and also resolves sqlite-backed logical attach paths by reading
+`runtime_checkpoint_store.sqlite3` when the binding JSON does not exist as a
+local file.

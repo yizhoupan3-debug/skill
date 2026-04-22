@@ -128,6 +128,8 @@ def test_runtime_shares_one_rust_adapter_across_route_and_execute(tmp_path: Path
 
     assert runtime.router_service._rust_adapter is runtime.rust_adapter
     assert runtime.execution_service._rust_adapter is runtime.rust_adapter
+    assert runtime.checkpointer._rust_adapter is runtime.rust_adapter
+    assert runtime.trace_service.recorder._rust_adapter is runtime.rust_adapter
 
 
 def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> None:
@@ -143,9 +145,31 @@ def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> 
         )
         runtime = CodexAgnoRuntime(settings)
         health = runtime.health()
+        assert health["runtime_host"]["role"] == "runtime-orchestration"
+        assert health["runtime_host"]["startup_order"] == [
+            "router",
+            "state",
+            "trace",
+            "memory",
+            "execution",
+            "background",
+        ]
+        assert health["runtime_host"]["shutdown_order"] == [
+            "background",
+            "execution",
+            "memory",
+            "trace",
+            "state",
+            "router",
+        ]
         assert health["rustification"]["python_host_role"] == "thin-projection"
         assert health["rustification"]["rustification_status"]["runtime_primary_owner"] == "rust-control-plane"
         assert health["rustification"]["rust_owned_service_count"] >= 8
+        assert health["execution_environment"]["sandbox"]["contract"]["authority"] == "rust-runtime-control-plane"
+        assert (
+            health["execution_environment"]["sandbox"]["contract"]["cleanup_mode"]
+            == "async-drain-and-recycle"
+        )
         assert health["trace"]["observability"]["ownership_lane"] == "rust-contract-lane"
         assert health["trace"]["observability"]["dashboard_schema_version"] == (
             "runtime-observability-dashboard-v1"
@@ -1819,6 +1843,13 @@ def test_runtime_background_batch_persists_parallel_group_resume_summary(tmp_pat
         health = runtime.background_service.health()
         assert health["parallel_group_count"] == 1
         assert health["active_parallel_group_count"] == 0
+        assert health["orchestration_contract"]["policy_schema_version"] == "router-rs-background-control-v1"
+        assert health["orchestration_contract"]["terminal_statuses"] == [
+            "completed",
+            "failed",
+            "interrupted",
+            "retry_exhausted",
+        ]
 
         resume_manifest = json.loads(trace_path.with_name("TRACE_RESUME_MANIFEST.json").read_text(encoding="utf-8"))
         assert resume_manifest["parallel_group"]["parallel_group_id"] == "pgroup-contract"

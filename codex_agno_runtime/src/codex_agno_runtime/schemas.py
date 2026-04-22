@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, Field, model_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
 
 def _now_iso() -> str:
@@ -79,6 +79,13 @@ class RoutingResult(BaseModel):
     route_engine: str = "rust"
     diagnostic_route_mode: Literal["none", "shadow", "verify"] = "none"
     route_diagnostic_report: "RouteDiagnosticReport | None" = None
+
+    @field_validator("route_snapshot", "route_diagnostic_report", mode="before")
+    @classmethod
+    def _coerce_foreign_pydantic_models(cls, value: Any) -> Any:
+        if value is not None and hasattr(value, "model_dump"):
+            return value.model_dump(mode="json")
+        return value
 
     @model_validator(mode="after")
     def _validate_diagnostic_route_contract(self) -> "RoutingResult":

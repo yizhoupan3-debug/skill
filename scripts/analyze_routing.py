@@ -135,6 +135,19 @@ def load_trigger_index_skills() -> set[str]:
     Returns:
         Set of skill names found in the routing index.
     """
+    runtime_file = ROOT / "skills" / "SKILL_ROUTING_RUNTIME.json"
+    if runtime_file.is_file():
+        payload = json.loads(runtime_file.read_text(encoding="utf-8"))
+        rows = payload.get("skills")
+        keys = payload.get("keys")
+        if isinstance(rows, list) and isinstance(keys, list) and "slug" in keys:
+            slug_index = keys.index("slug")
+            return {
+                str(row[slug_index])
+                for row in rows
+                if isinstance(row, list) and len(row) > slug_index and str(row[slug_index]).strip()
+            }
+
     index_file = ROOT / "skills" / "SKILL_ROUTING_INDEX.md"
     if not index_file.is_file():
         return set()

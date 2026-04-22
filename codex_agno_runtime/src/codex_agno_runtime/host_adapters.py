@@ -1654,7 +1654,7 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
             "remove_when": [],
             "observation_sources": {
                 "local_runtime_health": [
-                    "ExecutionEnvironmentService.describe_kernel_contract()",
+                    "runtime_control_plane.services.execution.kernel_contract",
                     "ExecutionEnvironmentService.health().kernel_live_backend_impl",
                 ],
                 "local_contract_artifacts": [

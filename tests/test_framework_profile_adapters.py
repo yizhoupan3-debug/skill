@@ -184,6 +184,26 @@ def test_rust_route_adapter_prefers_fresher_debug_binary_over_stale_release() ->
         assert adapter.health()["resolved_binary"] == str(debug_bin)
 
 
+def test_rust_route_adapter_health_reuses_cached_source_mtime() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        codex_home = Path(tmpdir)
+        router_dir = codex_home / "scripts" / "router-rs"
+        source_dir = router_dir / "src"
+        debug_bin = router_dir / "target" / "debug" / "router-rs"
+        source_dir.mkdir(parents=True)
+        debug_bin.parent.mkdir(parents=True)
+        (router_dir / "Cargo.toml").write_text("[package]\nname='router-rs'\nversion='0.1.0'\n", encoding="utf-8")
+        (source_dir / "main.rs").write_text("fn main() {}\n", encoding="utf-8")
+        debug_bin.write_text("debug", encoding="utf-8")
+
+        adapter = RustRouteAdapter(codex_home)
+        first = adapter.health()
+        adapter._latest_source_mtime = lambda: (_ for _ in ()).throw(AssertionError("source scan should stay cached"))
+        second = adapter.health()
+
+        assert first["latest_source_mtime"] == second["latest_source_mtime"]
+
+
 def test_rust_route_adapter_requires_prebuilt_binary_when_none_exists() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         codex_home = Path(tmpdir)
@@ -249,6 +269,20 @@ def test_rust_route_adapter_reuses_stdio_process_for_hot_commands(
                 "runtime_control_plane": {
                     "schema_version": adapter.runtime_control_plane_schema_version,
                     "authority": adapter.runtime_control_plane_authority,
+                },
+                "search_skills": {
+                    "rows": [
+                        {
+                            "slug": "iterative-optimizer",
+                            "layer": "L2",
+                            "owner": "codex",
+                            "gate": "none",
+                            "description": "Iterative optimization loop",
+                            "score": 9.5,
+                            "matched_terms": 2,
+                            "total_terms": 2,
+                        }
+                    ]
                 },
                 "execute": {
                     "execution_schema_version": adapter.execution_schema_version,
@@ -344,6 +378,7 @@ def test_rust_route_adapter_reuses_stdio_process_for_hot_commands(
     )
 
     control_plane = adapter.runtime_control_plane()
+    search_rows = adapter.search_skill_rows(query="迭代 优化", limit=2)
     execute = adapter.execute(
         {
             "schema_version": "router-rs-execute-request-v1",
@@ -370,12 +405,14 @@ def test_rust_route_adapter_reuses_stdio_process_for_hot_commands(
     inspect = adapter.trace_stream_inspect({"path": "/tmp/TRACE_EVENTS.jsonl"})
 
     assert control_plane["authority"] == adapter.runtime_control_plane_authority
+    assert search_rows[0]["slug"] == "iterative-optimizer"
     assert execute["execution_schema_version"] == adapter.execution_schema_version
     assert transport["stream_id"] == "stream::session-1"
     assert inspect["authority"] == adapter.trace_stream_io_authority
     assert _FakePopen.launched_commands == [[str(release_bin), "--stdio-json"]]
     assert [request["op"] for request in _FakePopen.instances[0].requests] == [
         "runtime_control_plane",
+        "search_skills",
         "execute",
         "describe_transport",
         "trace_stream_inspect",
@@ -1488,7 +1525,7 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert status["retirement_exit_contract"]["current_decision"] == "completed"
     assert status["retirement_exit_contract"]["removal_owner"] == "runtime-integrator"
     assert status["retirement_exit_contract"]["observation_sources"]["local_runtime_health"] == [
-        "ExecutionEnvironmentService.describe_kernel_contract()",
+        "runtime_control_plane.services.execution.kernel_contract",
         "ExecutionEnvironmentService.health().kernel_live_backend_impl",
     ]
     assert status["public_runtime_contract_fields"] == [
