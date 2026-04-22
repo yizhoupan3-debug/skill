@@ -273,9 +273,9 @@ One additional Rust-authority slice is now implemented in this wave:
   toward Rust without reopening a Python live authority path
 - close the native install/bootstrap lane so a fresh machine lands on the
   current Rust-first default without post-install manual switching
-- expand host consumer adoption beyond the already-landed browser-mcp attach
-  descriptor path, so other host-facing readers do not drift into private
-  attach semantics
+- keep lane-4 closure intact: browser-mcp stays on the Rust attach descriptor
+  contract, while fallback / continuity host consumers remain explicit opt-in
+  lanes instead of drifting back into the default outward surface
 - hold integrator/regenerate work until lanes 1/2/3/4 are genuinely stable,
   then refresh generated artifacts and docs together instead of mixing partial
   states into the global outputs
