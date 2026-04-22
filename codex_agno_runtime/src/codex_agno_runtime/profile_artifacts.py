@@ -575,6 +575,75 @@ def _emit_shared_contract_projection_report(
     return report
 
 
+def _write_fallback_artifacts(
+    output_dir: Path,
+    *,
+    profile: FrameworkProfile,
+    host_overrides: Mapping[str, Any] | None = None,
+) -> dict[str, str]:
+    fallback_dir = output_dir / FALLBACK_ARTIFACT_DIRNAME
+    artifacts = {
+        "aionrs_companion_adapter": compile_aionrs_companion_adapter(
+            profile,
+            host_overrides=host_overrides,
+        ).host_payload,
+        "aionui_host_adapter": compile_aionui_host_adapter(
+            profile,
+            host_overrides=host_overrides,
+        ).host_payload,
+        "generic_host_adapter": adapt_framework_profile(
+            profile,
+            GENERIC_HOST_ADAPTER,
+            host_overrides=host_overrides,
+        ).host_payload,
+    }
+    return {
+        "aionrs_companion_adapter": _write_json(
+            fallback_dir / "aionrs_companion_adapter.json",
+            artifacts["aionrs_companion_adapter"],
+        ),
+        "aionui_host_adapter": _write_json(
+            fallback_dir / "aionui_host_adapter.json",
+            artifacts["aionui_host_adapter"],
+        ),
+        "generic_host_adapter": _write_json(
+            fallback_dir / "generic_host_adapter.json",
+            artifacts["generic_host_adapter"],
+        ),
+    }
+
+
+def _write_continuity_artifacts(
+    output_dir: Path,
+    *,
+    profile: FrameworkProfile,
+    emit_compatibility_inventory: bool,
+    emit_legacy_alias_artifact: bool,
+    python_artifacts: Mapping[str, Any],
+) -> dict[str, str]:
+    continuity_dir = output_dir / CONTINUITY_ARTIFACT_DIRNAME
+    paths: dict[str, str] = {}
+    if emit_compatibility_inventory:
+        compatibility_matrix = build_upgrade_compatibility_matrix(
+            profile,
+            include_legacy_aliases=emit_legacy_alias_artifact,
+        )
+        paths["upgrade_compatibility_matrix"] = _write_json(
+            continuity_dir / "upgrade_compatibility_matrix.json",
+            compatibility_matrix,
+        )
+    if emit_legacy_alias_artifact:
+        paths["codex_desktop_alias_inventory"] = _write_json(
+            continuity_dir / "codex_desktop_alias_inventory.json",
+            python_artifacts["codex_desktop_alias_inventory"],
+        )
+        paths["codex_desktop_alias_retirement_status"] = _write_json(
+            continuity_dir / "codex_desktop_alias_retirement_status.json",
+            python_artifacts["codex_desktop_alias_retirement_status"],
+        )
+    return paths
+
+
 def build_framework_shared_contract_projection_report(
     profile: FrameworkProfile,
     *,
@@ -719,8 +788,6 @@ def emit_framework_contract_artifacts(
     profile = _profile_with_surface_policy(profile)
     emit_legacy_alias_artifact = include_legacy_alias_artifact is True
     emit_compatibility_inventory = include_compatibility_inventory or emit_legacy_alias_artifact
-    fallback_dir = output_dir / FALLBACK_ARTIFACT_DIRNAME
-    continuity_dir = output_dir / CONTINUITY_ARTIFACT_DIRNAME
     python_artifacts = _build_python_artifacts(
         profile,
         host_overrides=host_overrides,
@@ -761,49 +828,16 @@ def emit_framework_contract_artifacts(
     )
 
     if include_fallback_artifacts:
-        python_artifacts["aionrs_companion_adapter"] = compile_aionrs_companion_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload
-        python_artifacts["aionui_host_adapter"] = compile_aionui_host_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload
-        python_artifacts["generic_host_adapter"] = adapt_framework_profile(
-            profile,
-            GENERIC_HOST_ADAPTER,
-            host_overrides=host_overrides,
-        ).host_payload
-        paths["aionrs_companion_adapter"] = _write_json(
-            fallback_dir / "aionrs_companion_adapter.json",
-            python_artifacts["aionrs_companion_adapter"],
+        paths.update(_write_fallback_artifacts(output_dir, profile=profile, host_overrides=host_overrides))
+    paths.update(
+        _write_continuity_artifacts(
+            output_dir,
+            profile=profile,
+            emit_compatibility_inventory=emit_compatibility_inventory,
+            emit_legacy_alias_artifact=emit_legacy_alias_artifact,
+            python_artifacts=python_artifacts,
         )
-        paths["aionui_host_adapter"] = _write_json(
-            fallback_dir / "aionui_host_adapter.json",
-            python_artifacts["aionui_host_adapter"],
-        )
-        paths["generic_host_adapter"] = _write_json(
-            fallback_dir / "generic_host_adapter.json",
-            python_artifacts["generic_host_adapter"],
-        )
-    if emit_compatibility_inventory:
-        python_artifacts["upgrade_compatibility_matrix"] = build_upgrade_compatibility_matrix(
-            profile,
-            include_legacy_aliases=emit_legacy_alias_artifact,
-        )
-        paths["upgrade_compatibility_matrix"] = _write_json(
-            continuity_dir / "upgrade_compatibility_matrix.json",
-            python_artifacts["upgrade_compatibility_matrix"],
-        )
-    if emit_legacy_alias_artifact:
-        paths["codex_desktop_alias_inventory"] = _write_json(
-            continuity_dir / "codex_desktop_alias_inventory.json",
-            python_artifacts["codex_desktop_alias_inventory"],
-        )
-        paths["codex_desktop_alias_retirement_status"] = _write_json(
-            continuity_dir / "codex_desktop_alias_retirement_status.json",
-            python_artifacts["codex_desktop_alias_retirement_status"],
-        )
+    )
     layout_manifest = build_framework_artifact_layout_manifest(
         output_dir=output_dir,
         paths=paths,
