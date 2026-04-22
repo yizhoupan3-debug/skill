@@ -1112,10 +1112,7 @@ export class BrowserRuntime {
     const configuredSource = this.getConfiguredRuntimeAttachSource();
     switch (configuredSource.source) {
       case 'inline':
-        return {
-          descriptor: this.options.runtimeAttachDescriptor!,
-          inputArtifactKind: 'attach_descriptor',
-        };
+        return this.canonicalizeAttachDescriptorIfPossible(this.options.runtimeAttachDescriptor!);
       case 'descriptor_path':
         return this.readRuntimeAttachDescriptorFile(configuredSource.path!);
       case 'attach_artifact_path':
@@ -1328,10 +1325,7 @@ export class BrowserRuntime {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error('runtime attach descriptor must decode to a JSON object');
     }
-    return {
-      descriptor: parsed as RuntimeAttachDescriptor,
-      inputArtifactKind: 'attach_descriptor',
-    };
+    return this.canonicalizeAttachDescriptorIfPossible(parsed as RuntimeAttachDescriptor);
   }
 
   private async buildRuntimeAttachDescriptorFromArtifactPath(
@@ -1391,6 +1385,21 @@ export class BrowserRuntime {
       });
     }
     throw new Error('runtime attach artifact returned an unknown schema');
+  }
+
+  private async canonicalizeAttachDescriptorIfPossible(
+    descriptor: RuntimeAttachDescriptor,
+  ): Promise<LoadedRuntimeAttachDescriptor> {
+    try {
+      return await this.hydrateRuntimeAttachDescriptorViaRust({
+        attach_descriptor: descriptor,
+      });
+    } catch {
+      return {
+        descriptor,
+        inputArtifactKind: 'attach_descriptor',
+      };
+    }
   }
 
   private async buildRuntimeAttachDescriptorFromBindingArtifact(
