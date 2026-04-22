@@ -73,6 +73,7 @@ struct FrameworkRuntimeView {
     trace_metadata: Value,
     supervisor_state: Map<String, Value>,
     routing_runtime_version: u64,
+    repo_root: PathBuf,
     artifact_base: PathBuf,
     current_root: PathBuf,
     mirror_root: PathBuf,
@@ -981,6 +982,7 @@ fn load_framework_runtime_view(
         trace_metadata: read_json_if_exists(&read_task_or_mirror(TRACE_METADATA_FILENAME)),
         supervisor_state,
         routing_runtime_version: load_routing_runtime_version(repo_root),
+        repo_root: repo_root.to_path_buf(),
         artifact_base,
         current_root: preferred_root,
         mirror_root,
@@ -1278,7 +1280,7 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
             "trace_metadata": snapshot.current_root.join(TRACE_METADATA_FILENAME).display().to_string(),
             "task_root": snapshot.task_root.display().to_string(),
             "bridge_mirror_root": snapshot.mirror_root.display().to_string(),
-            "supervisor_state": snapshot.artifact_base.parent().unwrap_or(&snapshot.artifact_base).join(SUPERVISOR_STATE_FILENAME).display().to_string(),
+            "supervisor_state": snapshot.repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
         }
     })
 }
