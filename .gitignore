@@ -13,10 +13,13 @@ TRACE_METADATA.json
 configs/codex/sub_accounts.state.json
 .pytest_cache/
 .codebuddy/
+.serena/
 .claude/worktrees/
 .opencode/
 .rtk/
 .omc/
+.agents/plugins/marketplace.json
+skill/
 tmp/
 output/
 .aionrs/sessions/
@@ -40,6 +43,7 @@ memory/CLAUDE_MEMORY.md
 memory/archive/
 memory/state.json
 skills/.evolution_journal.jsonl
+skills/SKILL_ROUTING_ROOT.md
 skills/dist/*.skill
 rust_tools/target/
 scripts/**/target/
@@ -49,6 +53,8 @@ tools/**/dist/
 tools/**/output/
 product-name-*.js
 tmp_index-*.js
+bootstrap.js
+main-*.js
 my_ccs.css
 opencode.jsonc
 .codex/*
