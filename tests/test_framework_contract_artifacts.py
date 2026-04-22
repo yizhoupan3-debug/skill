@@ -54,7 +54,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "gemini_cli_adapter",
         "cli_family_capability_discovery",
         "codex_desktop_adapter",
-        "upgrade_compatibility_matrix",
         "cli_family_parity_snapshot",
         "codex_dual_entry_parity_snapshot",
         "execution_controller_contract",
@@ -240,16 +239,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert parity["controller_boundary"]["single_source_of_truth"] is True
     assert parity["parity_checks"]["artifact_contract"] is True
     assert parity["all_shared_contract_checks_pass"] is True
-
-    matrix = json.loads(Path(paths["upgrade_compatibility_matrix"]).read_text(encoding="utf-8"))
-    assert matrix["cli_common_adapter"]["compatible"] is True
-    assert matrix["codex_desktop_adapter"]["compatible"] is True
-    assert matrix["codex_cli_adapter"]["compatible"] is True
-    assert matrix["claude_code_adapter"]["compatible"] is True
-    assert matrix["gemini_cli_adapter"]["compatible"] is True
-    assert "aionrs_companion_adapter" not in matrix
-    assert "aionui_host_adapter" not in matrix
-    assert "codex_desktop_host_adapter" not in matrix
 
     execution_controller = json.loads(
         Path(paths["execution_controller_contract"]).read_text(encoding="utf-8")
@@ -634,6 +623,7 @@ def test_emit_framework_contract_artifacts_requires_explicit_opt_in_for_continui
     assert "codex_desktop_host_adapter" not in paths
     assert "codex_desktop_alias_inventory" not in paths
     assert "codex_desktop_alias_retirement_status" not in paths
+    assert "upgrade_compatibility_matrix" not in paths
     assert "aionrs_companion_adapter" not in paths
     assert "aionui_host_adapter" not in paths
     assert "generic_host_adapter" not in paths
@@ -687,6 +677,35 @@ def test_emit_framework_contract_artifacts_can_opt_in_fallback_host_outputs(
     assert generic["metadata"]["adapter_id"] == "generic_host_adapter"
     assert generic["metadata"]["host_id"] == "generic"
     assert generic["capabilities"]["host"] == ["local_runtime", "artifact_contract", "memory_mounts"]
+
+
+def test_emit_framework_contract_artifacts_can_opt_in_compatibility_inventory(
+    tmp_path: Path,
+) -> None:
+    profile = build_framework_profile(
+        profile_id="artifact-profile-compatibility-inventory",
+        display_name="Artifact Profile Compatibility Inventory",
+        rules_bundle={"rules": [{"id": "outer-owned"}]},
+        skill_bundle={"skills": ["router"]},
+        session_policy={"mode": "bounded"},
+    )
+
+    paths = emit_framework_contract_artifacts(
+        tmp_path,
+        profile=profile,
+        include_compatibility_inventory=True,
+    )
+
+    matrix = json.loads(Path(paths["upgrade_compatibility_matrix"]).read_text(encoding="utf-8"))
+    assert Path(paths["upgrade_compatibility_matrix"]).parent.name == "continuity"
+    assert matrix["cli_common_adapter"]["compatible"] is True
+    assert matrix["codex_desktop_adapter"]["compatible"] is True
+    assert matrix["codex_cli_adapter"]["compatible"] is True
+    assert matrix["claude_code_adapter"]["compatible"] is True
+    assert matrix["gemini_cli_adapter"]["compatible"] is True
+    assert "aionrs_companion_adapter" not in matrix
+    assert "aionui_host_adapter" not in matrix
+    assert "codex_desktop_host_adapter" not in matrix
 
 
 def test_framework_shared_contract_projection_report_keeps_hosts_on_one_outer_truth() -> None:

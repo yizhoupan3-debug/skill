@@ -471,6 +471,7 @@ def emit_framework_contract_artifacts(
     host_overrides: Mapping[str, Any] | None = None,
     rust_adapter: RustRouteAdapter | None = None,
     include_fallback_artifacts: bool = False,
+    include_compatibility_inventory: bool = False,
     include_legacy_alias_artifact: bool | None = None,
 ) -> dict[str, str]:
     """Write concrete framework-profile and adapter artifacts for bridge consumers."""
@@ -479,6 +480,7 @@ def emit_framework_contract_artifacts(
     profile = _profile_with_surface_policy(profile)
     alias_inventory = build_codex_desktop_alias_inventory()
     emit_legacy_alias_artifact = include_legacy_alias_artifact is True
+    emit_compatibility_inventory = include_compatibility_inventory or emit_legacy_alias_artifact
     default_dir = output_dir / DEFAULT_ARTIFACT_DIRNAME
     fallback_dir = output_dir / FALLBACK_ARTIFACT_DIRNAME
     continuity_dir = output_dir / CONTINUITY_ARTIFACT_DIRNAME
@@ -510,10 +512,6 @@ def emit_framework_contract_artifacts(
             profile,
             host_overrides=host_overrides,
         ).host_payload,
-        "upgrade_compatibility_matrix": build_upgrade_compatibility_matrix(
-            profile,
-            include_legacy_aliases=emit_legacy_alias_artifact,
-        ),
         "cli_family_parity_snapshot": build_cli_family_parity_snapshot(
             profile,
             host_overrides=host_overrides,
@@ -565,10 +563,6 @@ def emit_framework_contract_artifacts(
         "codex_desktop_adapter": _write_json(
             default_dir / "codex_desktop_adapter.json",
             python_artifacts["codex_desktop_adapter"],
-        ),
-        "upgrade_compatibility_matrix": _write_json(
-            default_dir / "upgrade_compatibility_matrix.json",
-            python_artifacts["upgrade_compatibility_matrix"],
         ),
         "cli_family_parity_snapshot": _write_json(
             default_dir / "cli_family_parity_snapshot.json",
@@ -624,6 +618,15 @@ def emit_framework_contract_artifacts(
         paths["generic_host_adapter"] = _write_json(
             fallback_dir / "generic_host_adapter.json",
             python_artifacts["generic_host_adapter"],
+        )
+    if emit_compatibility_inventory:
+        python_artifacts["upgrade_compatibility_matrix"] = build_upgrade_compatibility_matrix(
+            profile,
+            include_legacy_aliases=emit_legacy_alias_artifact,
+        )
+        paths["upgrade_compatibility_matrix"] = _write_json(
+            continuity_dir / "upgrade_compatibility_matrix.json",
+            python_artifacts["upgrade_compatibility_matrix"],
         )
     if emit_legacy_alias_artifact:
         paths["codex_desktop_host_adapter"] = _write_json(
