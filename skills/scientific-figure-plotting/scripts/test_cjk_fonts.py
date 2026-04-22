@@ -45,7 +45,7 @@ def test_font_detection():
         print(f"  CJK font detected: {font}")
     else:
         print("  FAIL: No CJK font detected! Chinese text will show as tofu.")
-    return font
+    assert font
 
 
 def test_sanitize_function():
@@ -64,7 +64,7 @@ def test_sanitize_function():
         if result != expected:
             all_pass = False
         print(f"  sanitize({inp!r}) = {result!r}  {status}")
-    return all_pass
+    assert all_pass
 
 
 def test_chinese_line_plot():
@@ -87,7 +87,7 @@ def test_chinese_line_plot():
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"  Saved: {out}")
-    return out
+    assert out.is_file()
 
 
 def test_chinese_bar_chart():
@@ -116,7 +116,7 @@ def test_chinese_bar_chart():
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"  Saved: {out}")
-    return out
+    assert out.is_file()
 
 
 def test_patch_figure():
@@ -141,7 +141,8 @@ def test_patch_figure():
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"  Saved: {out}")
-    return out
+    assert n >= 1
+    assert out.is_file()
 
 
 def test_chinese_scatter():
@@ -166,7 +167,7 @@ def test_chinese_scatter():
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"  Saved: {out}")
-    return out
+    assert out.is_file()
 
 
 def test_english_default():
@@ -187,7 +188,7 @@ def test_english_default():
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"  Saved: {out}")
-    return out
+    assert out.is_file()
 
 
 def main():
