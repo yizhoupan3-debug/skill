@@ -251,6 +251,7 @@ export class BrowserRuntime {
       captureBody: options?.captureBody ?? false,
       maxScreenshots: options?.maxScreenshots ?? 100,
       runtimeAttachDescriptorPath: options?.runtimeAttachDescriptorPath ?? null,
+      runtimeAttachArtifactPath: options?.runtimeAttachArtifactPath ?? null,
       runtimeAttachDescriptor: options?.runtimeAttachDescriptor ?? null,
       runtimeBindingArtifactPath: options?.runtimeBindingArtifactPath ?? null,
       runtimeHandoffPath: options?.runtimeHandoffPath ?? null,
@@ -831,6 +832,8 @@ export class BrowserRuntime {
         return this.options.runtimeAttachDescriptor!;
       case 'descriptor_path':
         return this.readRuntimeAttachDescriptorFile(configuredSource.path!);
+      case 'attach_artifact_path':
+        return this.buildRuntimeAttachDescriptorFromArtifactPath(configuredSource.path!);
       case 'binding_artifact_path':
         return this.buildRuntimeAttachDescriptorFromBindingArtifact(configuredSource.path!);
       case 'handoff_path':
@@ -957,6 +960,12 @@ export class BrowserRuntime {
         path: this.options.runtimeAttachDescriptorPath,
       };
     }
+    if (this.options.runtimeAttachArtifactPath !== null) {
+      return {
+        source: 'attach_artifact_path',
+        path: this.options.runtimeAttachArtifactPath,
+      };
+    }
     if (this.options.runtimeBindingArtifactPath !== null) {
       return {
         source: 'binding_artifact_path',
@@ -984,12 +993,34 @@ export class BrowserRuntime {
     return parsed as RuntimeAttachDescriptor;
   }
 
+  private async buildRuntimeAttachDescriptorFromArtifactPath(
+    artifactPath: string,
+  ): Promise<RuntimeAttachDescriptor> {
+    const resolvedArtifactPath = path.resolve(artifactPath);
+    const raw = await readFile(resolvedArtifactPath, 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const schemaVersion =
+      typeof parsed?.schema_version === 'string' ? parsed.schema_version : null;
+    if (schemaVersion === RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION) {
+      return parsed as unknown as RuntimeAttachDescriptor;
+    }
+    if (schemaVersion === RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION) {
+      return this.buildRuntimeAttachDescriptorFromBindingArtifact(resolvedArtifactPath, parsed);
+    }
+    if (schemaVersion === RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION) {
+      return this.buildRuntimeAttachDescriptorFromHandoff(resolvedArtifactPath, parsed);
+    }
+    throw new Error('runtime attach artifact returned an unknown schema');
+  }
+
   private async buildRuntimeAttachDescriptorFromBindingArtifact(
     bindingArtifactPath: string,
+    parsedBindingArtifact?: Record<string, unknown>,
   ): Promise<RuntimeAttachDescriptor> {
     const resolvedBindingArtifactPath = path.resolve(bindingArtifactPath);
-    const raw = await readFile(resolvedBindingArtifactPath, 'utf8');
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed =
+      parsedBindingArtifact ??
+      (JSON.parse(await readFile(resolvedBindingArtifactPath, 'utf8')) as Record<string, unknown>);
     if (parsed?.schema_version !== RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION) {
       throw new Error('runtime binding artifact returned an unknown schema');
     }
@@ -1025,10 +1056,13 @@ export class BrowserRuntime {
     };
   }
 
-  private async buildRuntimeAttachDescriptorFromHandoff(handoffPath: string): Promise<RuntimeAttachDescriptor> {
+  private async buildRuntimeAttachDescriptorFromHandoff(
+    handoffPath: string,
+    parsedHandoff?: Record<string, unknown>,
+  ): Promise<RuntimeAttachDescriptor> {
     const resolvedHandoffPath = path.resolve(handoffPath);
-    const raw = await readFile(resolvedHandoffPath, 'utf8');
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed =
+      parsedHandoff ?? (JSON.parse(await readFile(resolvedHandoffPath, 'utf8')) as Record<string, unknown>);
     if (parsed?.schema_version !== RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION) {
       throw new Error('runtime handoff artifact returned an unknown schema');
     }

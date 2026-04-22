@@ -316,3 +316,37 @@ trigger_hints: []
         "trigger_hints must be a non-empty list of strings" in error
         for error in report.errors
     )
+
+
+def test_validate_skill_document_rejects_legacy_trigger_phrases(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "legacy-trigger-phrases"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: legacy-trigger-phrases
+description: Legacy trigger field
+routing_layer: L1
+routing_owner: owner
+routing_gate: none
+session_start: n/a
+trigger_hints:
+  - canonical trigger
+trigger_phrases:
+  - legacy trigger
+---
+## When to use
+- test
+""",
+        encoding="utf-8",
+    )
+
+    document, error_report = _read_skill_document("legacy-trigger-phrases", skill_dir)
+    assert document is not None
+    assert error_report is None
+
+    report = validate_skill_document(document)
+
+    assert any(
+        "trigger_phrases is no longer supported; use trigger_hints" in error
+        for error in report.errors
+    )

@@ -26,6 +26,7 @@ from build_skill_shadow_map import (
     collect_skill_entries,
     load_source_manifest,
 )
+from build_skill_tiers import build_skill_tiers
 from materialize_cli_host_entrypoints import sync_repo_host_entrypoints
 
 
@@ -61,6 +62,7 @@ SOURCE_MANIFEST_PATH = SKILLS_ROOT / "SKILL_SOURCE_MANIFEST.json"
 SHADOW_MAP_PATH = SKILLS_ROOT / "SKILL_SHADOW_MAP.json"
 LOADOUTS_PATH = SKILLS_ROOT / "SKILL_LOADOUTS.json"
 APPROVAL_POLICY_PATH = SKILLS_ROOT / "SKILL_APPROVAL_POLICY.json"
+TIERS_PATH = SKILLS_ROOT / "SKILL_TIERS.json"
 HOOKS_PATH = ROOT / ".githooks"
 REQUIRED_ROUTING_FIELDS = ("routing_layer", "routing_owner", "routing_gate", "session_start")
 
@@ -594,6 +596,11 @@ def write_generated_files(
         approval_policy=approval_policy,
         health_manifest=health_manifest,
     )
+    tiers = build_skill_tiers(
+        manifest,
+        health_manifest=health_manifest,
+        loadouts=DEFAULT_LOADOUTS,
+    )
     targets = {
         REGISTRY_PATH: registry,
         MANIFEST_PATH: json.dumps(manifest, ensure_ascii=False, separators=(",", ":")),
@@ -604,6 +611,7 @@ def write_generated_files(
         LOADOUTS_PATH: json.dumps(DEFAULT_LOADOUTS, ensure_ascii=False, indent=2) + "\n",
         APPROVAL_POLICY_PATH: json.dumps(approval_policy, ensure_ascii=False, indent=2) + "\n",
         HEALTH_MANIFEST_PATH: json.dumps(health_manifest, ensure_ascii=False, indent=2) + "\n",
+        TIERS_PATH: json.dumps(tiers, ensure_ascii=False, indent=2) + "\n",
     }
 
     changed: list[str] = []

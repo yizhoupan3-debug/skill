@@ -14,7 +14,7 @@ class RustRouteAdapter:
     route_decision_schema_version = "router-rs-route-decision-v1"
     route_policy_schema_version = "router-rs-route-policy-v1"
     route_snapshot_schema_version = "router-rs-route-snapshot-v1"
-    route_report_schema_version = "router-rs-route-report-v1"
+    route_report_schema_version = "router-rs-route-report-v2"
     runtime_control_plane_schema_version = "router-rs-runtime-control-plane-v1"
     background_control_schema_version = "router-rs-background-control-v1"
     trace_descriptor_schema_version = "router-rs-trace-descriptor-v1"
@@ -90,26 +90,17 @@ class RustRouteAdapter:
         self,
         *,
         mode: str,
-        python_route_snapshot: dict[str, Any],
         rust_route_snapshot: dict[str, Any],
-        rollback_active: bool,
     ) -> dict[str, Any]:
-        """Build the stable route diff report through the Rust routing core.
-
-        The report is for compare-only diagnostic lanes, not live authority rollback.
-        """
+        """Build the stable Rust-owned route diagnostic report."""
 
         args = [
             "--route-report-json",
             "--route-mode",
             mode,
-            "--python-route-snapshot-json",
-            json.dumps(python_route_snapshot, ensure_ascii=False),
             "--rust-route-snapshot-json",
             json.dumps(rust_route_snapshot, ensure_ascii=False),
         ]
-        if rollback_active:
-            args.append("--rollback-active")
         try:
             payload = self._run_json_command(
                 [*self._binary_command(), *args],
@@ -141,21 +132,14 @@ class RustRouteAdapter:
         self,
         *,
         mode: str,
-        rollback_to_python: bool,
     ) -> dict[str, Any]:
-        """Resolve route-mode policy through the Rust routing core.
-
-        The returned policy keeps Python in the explicit legacy lane or compare-only
-        diagnostic lanes; it does not change live Rust authority for shadow/verify/rollback.
-        """
+        """Resolve Rust-only route-mode policy through the Rust routing core."""
 
         args = [
             "--route-policy-json",
             "--route-mode",
             mode,
         ]
-        if rollback_to_python:
-            args.append("--rollback-active")
         try:
             payload = self._run_json_command(
                 [*self._binary_command(), *args],

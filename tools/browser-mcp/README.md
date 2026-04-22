@@ -47,6 +47,7 @@ npm run test    # run vitest integration tests
 ```bash
 node dist/index.js
 # Flags: --headless true|false  --engine chromium|firefox|webkit  --capture-body
+#        --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json|.../ATTACHED_RUNTIME_EVENT_HANDOFF.json|.../runtime_event_transports/session__job.json
 #        --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
 #        --runtime-binding-artifact-path /abs/path/runtime_event_transports/session__job.json
 #        --runtime-handoff-path /abs/path/ATTACHED_RUNTIME_EVENT_HANDOFF.json
@@ -93,10 +94,14 @@ If you already have a Rust-first runtime attach descriptor, browser-mcp can
 consume it directly for self-inspection:
 
 ```bash
-node dist/index.js --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
+node dist/index.js --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
 # or
-BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH=/abs/path/runtime-attach-descriptor.json node dist/index.js
+BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH=/abs/path/runtime-attach-descriptor.json node dist/index.js
 ```
+
+`--runtime-attach-artifact-path` is the preferred Rust-first entrypoint. The
+older `--runtime-binding-artifact-path` and `--runtime-handoff-path` flags are
+still accepted as compatibility aliases.
 
 Then `browser_diagnostics` includes an `attachedRuntime` block with descriptor
 status, replay readiness, trace path, and the latest replayable event summary.

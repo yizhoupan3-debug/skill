@@ -73,7 +73,7 @@ LIVE_PRIMARY_RUNTIME_METADATA_FIELDS = (
     "status",
     "execution_mode",
     "route_engine",
-    "diagnostic_python_lane_active",
+    "diagnostic_route_mode",
 )
 LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS = (
     "run_id",
@@ -83,7 +83,7 @@ LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS = (
 LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS = (
     "execution_mode",
     "route_engine",
-    "diagnostic_python_lane_active",
+    "diagnostic_route_mode",
 )
 DRY_RUN_RUNTIME_METADATA_FIELDS = (
     "reason",
@@ -232,7 +232,7 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
                 COMPATIBILITY_FALLBACK_MODEL_ID_SOURCE
             ),
             "compatibility_fallback_runtime_path": EXECUTION_KERNEL_RETIRED_COMPATIBILITY_FALLBACK_MODE,
-            "compatibility_fallback_request_behavior": "explicit-request-rejected",
+            "compatibility_fallback_request_behavior": "surface-removed",
             "retired_compatibility_fallback_policy": EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
             "retired_compatibility_agent_contract_version": (
                 EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION
@@ -261,7 +261,7 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
             },
             "retired_compatibility_fallback": {
                 "runtime_path_available": False,
-                "request_behavior": "explicit-request-rejected",
+                "request_behavior": "surface-removed",
                 "legacy_live_run": True,
                 "legacy_usage_mode": "live",
                 "legacy_content_type": "string",
@@ -391,7 +391,7 @@ def build_execution_kernel_dry_run_response(
         overlay=overlay,
         live_run=False,
         content=content,
-        usage=usage,
+        usage=usage.model_dump(mode="json"),
         prompt_preview=prompt_preview,
         model_id=None,
         metadata=build_execution_kernel_runtime_metadata(
@@ -434,7 +434,7 @@ def build_execution_kernel_compatibility_live_response(
         overlay=overlay,
         live_run=True,
         content=content,
-        usage=usage,
+        usage=usage.model_dump(mode="json"),
         prompt_preview=prompt_preview,
         model_id=model_id,
         metadata=build_execution_kernel_runtime_metadata(

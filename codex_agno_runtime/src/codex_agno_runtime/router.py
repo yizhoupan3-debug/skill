@@ -145,6 +145,21 @@ def _router_service_descriptor(control_plane_descriptor: Mapping[str, Any] | Non
     return dict(router)
 
 
+def _build_scored_skill(skill: SkillMetadata, *, score: float, reasons: list[str]) -> ScoredSkill:
+    """Build one scored skill without depending on class identity across import lanes."""
+
+    skill_payload = skill.model_dump(mode="python") if hasattr(skill, "model_dump") else skill
+    return ScoredSkill(skill=skill_payload, score=score, reasons=reasons)
+
+
+def _skill_payload(skill: SkillMetadata | None) -> dict[str, Any] | None:
+    """Return one routing-result-safe skill payload across import lanes."""
+
+    if skill is None:
+        return None
+    return skill.model_dump(mode="python") if hasattr(skill, "model_dump") else skill
+
+
 class SkillRouter:
     """Select the best matching skill using Codex routing semantics."""
 
@@ -162,11 +177,13 @@ class SkillRouter:
         """Describe the Python router as a Rust-control-plane projection."""
 
         projection = str(self._service_descriptor.get("projection", "")).strip()
+        materialization = str(self._service_descriptor.get("python_projection_materialization", "")).strip()
         return {
             "authority": self._service_descriptor.get("authority"),
             "role": self._service_descriptor.get("role"),
             "projection": projection or "python-local-router",
             "delegate_kind": self._service_descriptor.get("delegate_kind"),
+            "python_projection_materialization": materialization or "in-process",
             "compatibility_only": projection.startswith("python-"),
         }
 
@@ -186,7 +203,7 @@ class SkillRouter:
             return RoutingResult(
                 task=task,
                 session_id=session_id,
-                selected_skill=fallback_skill,
+                selected_skill=_skill_payload(fallback_skill),
                 score=0,
                 layer=fallback_skill.routing_layer,
                 reasons=reasons,
@@ -205,8 +222,8 @@ class SkillRouter:
         return RoutingResult(
             task=task,
             session_id=session_id,
-            selected_skill=selected.skill,
-            overlay_skill=overlay,
+            selected_skill=_skill_payload(selected.skill),
+            overlay_skill=_skill_payload(overlay),
             score=selected.score,
             layer=selected.skill.routing_layer,
             reasons=reasons,
@@ -334,13 +351,13 @@ class SkillRouter:
 
         if skill.name == "idea-to-plan" and any(marker in normalized_task for marker in settled_strategy_markers):
             return ScoredSkill(
-                skill=skill,
+                skill=skill.model_dump(mode="python"),
                 score=0.0,
                 reasons=["Suppressed: task says the strategy is already fixed and only needs execution decomposition."],
             )
         if skill.name == "checklist-writting" and any(marker in normalized_task for marker in strategic_planning_markers):
-            return ScoredSkill(
-                skill=skill,
+            return _build_scored_skill(
+                skill,
                 score=0.0,
                 reasons=["Suppressed: task still needs strategic planning rather than execution checklist writing."],
             )
@@ -349,14 +366,14 @@ class SkillRouter:
             and ("skill" in normalized_task or "skill.md" in normalized_task)
             and any(marker in normalized_task for marker in ("路由", "触发", "routing", "router", "route"))
         ):
-            return ScoredSkill(
-                skill=skill,
+            return _build_scored_skill(
+                skill,
                 score=0.0,
                 reasons=["Suppressed: meta-routing repair request should not be treated as a generic runtime-debugging gate."],
             )
 
         if skill.name.startswith("skill-") and not any(hint in normalized_task for hint in ROUTING_META_HINTS):
-            return ScoredSkill(skill=skill, score=0.0, reasons=[])
+            return _build_scored_skill(skill, score=0.0, reasons=[])
 
         if _contains_phrase(task_token_list, skill.name):
             score += 100
@@ -457,7 +474,7 @@ class SkillRouter:
             )
             if not any(marker in normalized_task for marker in visual_evidence_markers):
                 return ScoredSkill(
-                    skill=skill,
+                    skill=skill.model_dump(mode="python"),
                     score=0.0,
                     reasons=["Suppressed: visual-review requires visible evidence, not a generic review token."],
                 )
@@ -476,8 +493,7 @@ class SkillRouter:
                 score = max(0, score - penalty)
                 reasons.append(f"Do-not-use penalty applied: {', '.join(sorted(negative_hits)[:5])}.")
 
-
-        return ScoredSkill(skill=skill, score=score, reasons=reasons)
+        return _build_scored_skill(skill, score=score, reasons=reasons)
 
     def _layer_threshold(self, layer_name: str) -> float:
         """Return the minimum confidence threshold for a routing layer.

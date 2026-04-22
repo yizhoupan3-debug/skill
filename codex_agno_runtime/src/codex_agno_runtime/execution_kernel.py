@@ -217,7 +217,7 @@ class RouterRsExecutionKernel(ExecutionKernel):
             "overlay_skill": routing_result.overlay_skill.name if routing_result.overlay_skill else None,
             "layer": routing_result.layer,
             "route_engine": routing_result.route_engine,
-            "diagnostic_python_lane_active": routing_result.diagnostic_python_lane_active,
+            "diagnostic_route_mode": routing_result.diagnostic_route_mode,
             "reasons": [str(reason) for reason in routing_result.reasons],
             "prompt_preview": request.prompt_preview if request.dry_run else None,
             "dry_run": request.dry_run,
@@ -365,10 +365,6 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
     adapter_kind = "python-agno"
     authority = "python-agno-kernel-adapter"
 
-    @staticmethod
-    def _compatibility_fallback_requested(settings: RuntimeSettings) -> bool:
-        return bool(getattr(settings, "rust_execute_fallback_to_python", False))
-
     def _live_fallback_enabled(self) -> bool:
         return False
 
@@ -395,13 +391,8 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
         self._rust_live_kernel = RouterRsExecutionKernel(settings)
 
     def _retired_fallback_error(self, *, phase: str, error: Exception | str) -> RuntimeError:
-        if self._compatibility_fallback_requested(self.settings):
-            return RuntimeError(
-                f"router-rs {phase} failed and the requested Python compatibility fallback "
-                f"is rejected after retirement: {error}"
-            )
         return RuntimeError(
-            f"router-rs {phase} failed after Python compatibility fallback retirement: {error}"
+            f"router-rs {phase} failed after Python compatibility fallback removal: {error}"
         )
 
     async def execute(self, request: ExecutionKernelRequest) -> RunTaskResponse:
@@ -460,7 +451,6 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
 
     def health(self) -> dict[str, Any]:
         payload = super().health()
-        compatibility_request_rejected = self._compatibility_fallback_requested(self.settings)
         payload.update(
             {
                 "kernel_replace_ready": True,
@@ -479,11 +469,7 @@ class PythonAgnoExecutionKernel(ExecutionKernel):
                 "kernel_live_delegate_mode": "rust-primary-only",
                 "kernel_live_fallback_mode": self._live_fallback_mode(),
                 "kernel_live_fallback_retired": True,
-                "kernel_live_fallback_request_status": (
-                    "explicit-request-rejected"
-                    if compatibility_request_rejected
-                    else "not-supported"
-                ),
+                "kernel_live_fallback_request_status": "removed",
             }
         )
         return payload

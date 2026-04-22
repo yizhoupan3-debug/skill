@@ -56,6 +56,16 @@ def test_normalize_next_actions_accepts_next_actions_and_actions() -> None:
         {"schema_version": "next-actions-v2", "next_actions": ["a", "b"]}
     ) == ["a", "b"]
     assert normalize_next_actions({"actions": ["legacy"]}) == ["legacy"]
+    assert normalize_next_actions(
+        {
+            "next_actions": [
+                {
+                    "title": "ship the real follow-up",
+                    "status": "pending",
+                }
+            ]
+        }
+    ) == ["ship the real follow-up"]
 
 
 def test_normalize_evidence_index_accepts_artifacts_and_evidence() -> None:
@@ -249,6 +259,39 @@ def test_classify_runtime_continuity_detects_inconsistent_task_identity(tmp_path
     assert any("disagrees with trace task" in reason for reason in continuity["inconsistency_reasons"])
 
 
+def test_classify_runtime_continuity_prefers_supervisor_actions_and_route_when_sidecars_are_stale(
+    tmp_path: Path,
+) -> None:
+    snapshot = _snapshot(
+        tmp_path,
+        session_summary="- task: bootstrap repair\n- phase: implementation\n- status: in_progress\n",
+        next_actions={"next_actions": ["stale task action"]},
+        trace_metadata={
+            "task": "bootstrap repair",
+            "matched_skills": ["legacy-skill"],
+            "verification_status": "completed",
+            "routing_runtime_version": 0,
+        },
+        supervisor_state={
+            "task_summary": "bootstrap repair",
+            "active_phase": "implementation",
+            "verification": {"verification_status": "in_progress"},
+            "continuity": {"story_state": "active", "resume_allowed": True},
+            "next_actions": ["repair current continuity"],
+            "controller": {
+                "primary_owner": "execution-controller-coding",
+                "gate": "subagent-delegation",
+            },
+        },
+    )
+
+    continuity = classify_runtime_continuity(snapshot)
+
+    assert continuity["state"] == "active"
+    assert continuity["next_actions"] == ["repair current continuity"]
+    assert continuity["route"] == ["subagent-delegation", "execution-controller-coding"]
+
+
 def test_load_runtime_snapshot_can_skip_contract_snapshot_scan(tmp_path: Path) -> None:
     contracts_root = tmp_path / "artifacts" / "contracts"
     contracts_root.mkdir(parents=True, exist_ok=True)
@@ -283,6 +326,31 @@ def test_load_runtime_snapshot_prefers_task_scoped_current_root(tmp_path: Path) 
     assert snapshot.task_root == task_root
     assert snapshot.session_summary_text == "- task: task scoped\n"
 
+
+def test_load_runtime_snapshot_uses_active_task_pointer_when_supervisor_task_id_is_missing(
+    tmp_path: Path,
+) -> None:
+    task_id = "pointer-task-20260418210000"
+    task_root = tmp_path / "artifacts" / "current" / task_id
+    task_root.mkdir(parents=True, exist_ok=True)
+    (task_root / "SESSION_SUMMARY.md").write_text("- task: pointer task\n", encoding="utf-8")
+    (task_root / "NEXT_ACTIONS.json").write_text('{"next_actions":["task root"]}\n', encoding="utf-8")
+    (task_root / "EVIDENCE_INDEX.json").write_text('{"artifacts":[]}\n', encoding="utf-8")
+    (task_root / "TRACE_METADATA.json").write_text('{"matched_skills":["skill-developer-codex"]}\n', encoding="utf-8")
+    (tmp_path / "artifacts" / "current" / "active_task.json").write_text(
+        '{"task_id":"pointer-task-20260418210000","task":"pointer task"}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / ".supervisor_state.json").write_text(
+        '{"task_summary":"pointer task","active_phase":"implementation"}\n',
+        encoding="utf-8",
+    )
+
+    snapshot = load_runtime_snapshot(tmp_path, repair=False, include_contract_snapshots=False)
+
+    assert snapshot.active_task_id == task_id
+    assert snapshot.current_root == task_root
+    assert snapshot.session_summary_text == "- task: pointer task\n"
 
 
 def test_load_runtime_snapshot_uses_repaired_supervisor_state_after_continuity_fix(
@@ -412,3 +480,64 @@ def test_repair_runtime_continuity_artifacts_backfills_missing_scoped_json_from_
     assert task_trace["decision"]["owner"] == "agent-memory"
     assert mirror_trace["matched_skills"] == ["subagent-delegation", "agent-memory"]
     assert "existing summary" in (tmp_path / "SESSION_SUMMARY.md").read_text(encoding="utf-8").lower()
+
+
+def test_repair_runtime_continuity_artifacts_rewrites_stale_task_json_surfaces(
+    tmp_path: Path,
+) -> None:
+    task_id = "continuity-repair-20260422"
+    task_root = tmp_path / "artifacts" / "current" / task_id
+    task_root.mkdir(parents=True, exist_ok=True)
+    (task_root / "SESSION_SUMMARY.md").write_text(
+        (
+            "# SESSION_SUMMARY\n\n"
+            "- task: continuity repair\n"
+            "- phase: implementation\n"
+            "- status: in_progress\n\n"
+            "## Summary\n"
+            "Keep this summary, but do not trust the stale JSON sidecars.\n"
+        ),
+        encoding="utf-8",
+    )
+    (task_root / "NEXT_ACTIONS.json").write_text(
+        json.dumps({"next_actions": ["old action"]}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (task_root / "TRACE_METADATA.json").write_text(
+        json.dumps(
+            {
+                "task": "legacy other task",
+                "matched_skills": ["legacy-skill"],
+                "verification_status": "completed",
+                "routing_runtime_version": 0,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".supervisor_state.json").write_text(
+        (
+            '{"task_id":"continuity-repair-20260422","task_summary":"continuity repair",'
+            '"active_phase":"implementation","verification":{"verification_status":"in_progress"},'
+            '"continuity":{"story_state":"active","resume_allowed":true},'
+            '"next_actions":["new action","verify carry-over"],'
+            '"controller":{"primary_owner":"execution-controller-coding","gate":"subagent-delegation"}}\n'
+        ),
+        encoding="utf-8",
+    )
+
+    repair_runtime_continuity_artifacts(tmp_path)
+
+    task_next_actions = json.loads((task_root / "NEXT_ACTIONS.json").read_text(encoding="utf-8"))
+    task_trace = json.loads((task_root / "TRACE_METADATA.json").read_text(encoding="utf-8"))
+    root_trace = json.loads((tmp_path / "TRACE_METADATA.json").read_text(encoding="utf-8"))
+
+    assert task_next_actions["next_actions"] == ["new action", "verify carry-over"]
+    assert task_trace["task"] == "continuity repair"
+    assert task_trace["verification_status"] == "in_progress"
+    assert task_trace["matched_skills"] == ["subagent-delegation", "execution-controller-coding"]
+    assert task_trace["routing_runtime_version"] > 0
+    assert root_trace["task"] == "continuity repair"
+    assert root_trace["matched_skills"] == ["subagent-delegation", "execution-controller-coding"]

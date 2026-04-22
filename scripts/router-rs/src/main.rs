@@ -25,7 +25,7 @@ use framework_runtime::{
 const ROUTE_DECISION_SCHEMA_VERSION: &str = "router-rs-route-decision-v1";
 const ROUTE_POLICY_SCHEMA_VERSION: &str = "router-rs-route-policy-v1";
 const ROUTE_SNAPSHOT_SCHEMA_VERSION: &str = "router-rs-route-snapshot-v1";
-const ROUTE_REPORT_SCHEMA_VERSION: &str = "router-rs-route-report-v1";
+const ROUTE_REPORT_SCHEMA_VERSION: &str = "router-rs-route-report-v2";
 const ROUTE_AUTHORITY: &str = "rust-route-core";
 const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
 const EXECUTION_SCHEMA_VERSION: &str = "router-rs-execute-response-v1";
@@ -133,10 +133,6 @@ struct Cli {
     include_legacy_alias_artifact: bool,
     #[arg(long)]
     route_mode: Option<String>,
-    #[arg(long, default_value_t = false)]
-    rollback_active: bool,
-    #[arg(long)]
-    python_route_snapshot_json: Option<String>,
     #[arg(long)]
     rust_route_snapshot_json: Option<String>,
     #[arg(long)]
@@ -222,17 +218,10 @@ struct RouteDiffReportPayload {
     authority: String,
     mode: String,
     primary_engine: String,
-    shadow_engine: Option<String>,
-    mismatch: bool,
-    mismatch_fields: Vec<String>,
-    selected_skill_match: bool,
-    overlay_skill_match: bool,
-    layer_match: bool,
-    score_bucket_match: bool,
-    reasons_class_match: bool,
-    rollback_active: bool,
-    python: RouteDecisionSnapshotPayload,
-    rust: RouteDecisionSnapshotPayload,
+    evidence_kind: String,
+    strict_verification: bool,
+    verification_passed: bool,
+    route_snapshot: RouteDecisionSnapshotPayload,
 }
 
 #[derive(Debug, Serialize)]
@@ -255,15 +244,11 @@ struct RouteExecutionPolicyPayload {
     policy_schema_version: String,
     authority: String,
     mode: String,
-    rollback_active: bool,
-    python_route_required: bool,
-    diagnostic_python_lane: bool,
-    python_lane_kind: String,
+    diagnostic_route_mode: String,
     primary_authority: String,
     route_result_engine: String,
-    shadow_engine: Option<String>,
-    diff_report_required: bool,
-    verify_parity_required: bool,
+    diagnostic_report_required: bool,
+    strict_verification_required: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -293,8 +278,7 @@ struct ExecuteRequestPayload {
     overlay_skill: Option<String>,
     layer: String,
     route_engine: Option<String>,
-    #[serde(alias = "rollback_to_python")]
-    diagnostic_python_lane_active: Option<bool>,
+    diagnostic_route_mode: Option<String>,
     reasons: Vec<String>,
     prompt_preview: Option<String>,
     dry_run: bool,
@@ -709,20 +693,13 @@ fn main() -> Result<(), String> {
             .route_mode
             .as_deref()
             .ok_or_else(|| "--route-mode is required with --route-report-json".to_string())?;
-        let python_snapshot = serde_json::from_str::<RouteDecisionSnapshotPayload>(
-            args.python_route_snapshot_json.as_deref().ok_or_else(|| {
-                "--python-route-snapshot-json is required with --route-report-json".to_string()
-            })?,
-        )
-        .map_err(|err| format!("parse python route snapshot failed: {err}"))?;
         let rust_snapshot = serde_json::from_str::<RouteDecisionSnapshotPayload>(
             args.rust_route_snapshot_json.as_deref().ok_or_else(|| {
                 "--rust-route-snapshot-json is required with --route-report-json".to_string()
             })?,
         )
         .map_err(|err| format!("parse rust route snapshot failed: {err}"))?;
-        let report =
-            build_route_diff_report(mode, python_snapshot, rust_snapshot, args.rollback_active);
+        let report = build_route_diff_report(mode, rust_snapshot)?;
         println!(
             "{}",
             serde_json::to_string(&report)
@@ -736,7 +713,7 @@ fn main() -> Result<(), String> {
             .route_mode
             .as_deref()
             .ok_or_else(|| "--route-mode is required with --route-policy-json".to_string())?;
-        let policy = build_route_policy(mode, args.rollback_active)?;
+        let policy = build_route_policy(mode)?;
         println!(
             "{}",
             serde_json::to_string(&policy)
@@ -1504,57 +1481,29 @@ fn build_route_snapshot(
 
 fn build_route_diff_report(
     mode: &str,
-    python_snapshot: RouteDecisionSnapshotPayload,
     rust_snapshot: RouteDecisionSnapshotPayload,
-    rollback_active: bool,
-) -> RouteDiffReportPayload {
-    let mut mismatch_fields = Vec::new();
-    let selected_skill_match = python_snapshot.selected_skill == rust_snapshot.selected_skill;
-    let overlay_skill_match = python_snapshot.overlay_skill == rust_snapshot.overlay_skill;
-    let layer_match = python_snapshot.layer == rust_snapshot.layer;
-    let score_bucket_match = python_snapshot.score_bucket == rust_snapshot.score_bucket;
-    let reasons_class_match = python_snapshot.reasons_class == rust_snapshot.reasons_class;
-    if !selected_skill_match {
-        mismatch_fields.push("selected_skill".to_string());
-    }
-    if !overlay_skill_match {
-        mismatch_fields.push("overlay_skill".to_string());
-    }
-    if !layer_match {
-        mismatch_fields.push("layer".to_string());
-    }
-    if !score_bucket_match {
-        mismatch_fields.push("score_bucket".to_string());
-    }
-    if !reasons_class_match {
-        mismatch_fields.push("reasons_class".to_string());
-    }
+) -> Result<RouteDiffReportPayload, String> {
+    let normalized_mode = mode.trim().to_ascii_lowercase();
+    let strict_verification = match normalized_mode.as_str() {
+        "shadow" => false,
+        "verify" => true,
+        _ => {
+            return Err(format!(
+                "unsupported route mode for --route-report-json: {mode}"
+            ))
+        }
+    };
 
-    RouteDiffReportPayload {
+    Ok(RouteDiffReportPayload {
         report_schema_version: ROUTE_REPORT_SCHEMA_VERSION.to_string(),
         authority: ROUTE_AUTHORITY.to_string(),
-        mode: mode.to_string(),
-        primary_engine: if mode == "python" {
-            "python".to_string()
-        } else {
-            "rust".to_string()
-        },
-        shadow_engine: Some(if mode == "python" {
-            "rust".to_string()
-        } else {
-            "python".to_string()
-        }),
-        mismatch: !mismatch_fields.is_empty(),
-        mismatch_fields,
-        selected_skill_match,
-        overlay_skill_match,
-        layer_match,
-        score_bucket_match,
-        reasons_class_match,
-        rollback_active,
-        python: python_snapshot,
-        rust: rust_snapshot,
-    }
+        mode: normalized_mode,
+        primary_engine: "rust".to_string(),
+        evidence_kind: "rust-owned-snapshot".to_string(),
+        strict_verification,
+        verification_passed: true,
+        route_snapshot: rust_snapshot,
+    })
 }
 
 fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponsePayload, String> {
@@ -1991,31 +1940,28 @@ fn build_background_control_response(
 
 fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     let mut lines = vec![
-        "You are the Codex runtime executing through the Rust kernel slice.".to_string(),
-        format!("Active owner skill: {}", payload.selected_skill),
-        format!("Routing layer: {}", payload.layer),
+        "Help with the user's request directly. The route is already chosen, so stay on it.".to_string(),
+        format!("Primary focus: {}", payload.selected_skill),
     ];
     if let Some(overlay) = payload
         .overlay_skill
         .as_ref()
         .filter(|value| !value.trim().is_empty())
     {
-        lines.push(format!("Active overlay skill: {overlay}"));
+        lines.push(format!("Extra guidance: {overlay}"));
     }
-    if let Some(route_engine) = payload
-        .route_engine
-        .as_ref()
-        .filter(|value| !value.trim().is_empty())
-    {
-        lines.push(format!("Route engine: {route_engine}"));
-    }
-    if let Some(diagnostic_python_lane_active) = payload.diagnostic_python_lane_active {
-        lines.push(format!(
-            "Diagnostic python lane active: {diagnostic_python_lane_active}"
-        ));
-    }
+    lines.push("How to reply:".to_string());
+    lines.push("- Lead with the answer or result.".to_string());
+    lines.push("- Use plain Chinese unless the user asks otherwise.".to_string());
+    lines.push("- Be brief, clear, and friendly.".to_string());
+    lines.push("- Keep the default reply to one short paragraph unless a list is truly needed.".to_string());
+    lines.push("- Avoid internal runtime or routing jargon unless the user asks.".to_string());
+    lines.push(
+        "- If a technical term is necessary, explain it in simple words the first time."
+            .to_string(),
+    );
     if !payload.reasons.is_empty() {
-        lines.push("Routing reasons:".to_string());
+        lines.push("Task cues:".to_string());
         for reason in &payload.reasons {
             let reason = reason.trim();
             if !reason.is_empty() {
@@ -2024,13 +1970,10 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
         }
     }
     if payload.selected_skill == "idea-to-plan" {
-        lines.push("Repo-local planning delta: converge the strategy into outline.md, decision_log.md, assumptions.md, open_questions.md, plan_rubric.md, and code_list.md.".to_string());
-        lines.push("Use checklist-writting instead when the route is already fixed and only execution decomposition remains.".to_string());
+        lines.push("Planning output: converge the strategy into outline.md, decision_log.md, assumptions.md, open_questions.md, plan_rubric.md, and code_list.md.".to_string());
+        lines.push("Switch to checklist-writting only after the direction is fixed and the remaining work is execution breakdown.".to_string());
     }
-    lines.push(
-        "Respond as the selected skill and keep the execution aligned with the routed contract."
-            .to_string(),
-    );
+    lines.push("Use the selected skill to solve the user's actual task.".to_string());
     lines.join("\n")
 }
 
@@ -2126,8 +2069,8 @@ fn build_dry_run_execute_response(
     );
     metadata.insert("route_engine".to_string(), json!(payload.route_engine));
     metadata.insert(
-        "diagnostic_python_lane_active".to_string(),
-        json!(payload.diagnostic_python_lane_active),
+        "diagnostic_route_mode".to_string(),
+        json!(payload.diagnostic_route_mode),
     );
     ExecuteResponsePayload {
         execution_schema_version: EXECUTION_SCHEMA_VERSION.to_string(),
@@ -2264,8 +2207,8 @@ fn build_live_execute_response(
     );
     metadata.insert("route_engine".to_string(), json!(payload.route_engine));
     metadata.insert(
-        "diagnostic_python_lane_active".to_string(),
-        json!(payload.diagnostic_python_lane_active),
+        "diagnostic_route_mode".to_string(),
+        json!(payload.diagnostic_route_mode),
     );
     ExecuteResponsePayload {
         execution_schema_version: EXECUTION_SCHEMA_VERSION.to_string(),
@@ -2674,8 +2617,8 @@ fn build_runtime_control_plane_payload() -> Value {
             "router": {
                 "authority": ROUTE_AUTHORITY,
                 "role": "route-selection",
-                "projection": "python-thin-projection",
-                "delegate_kind": "rust-route-adapter",
+                "projection": "rust-owned-live-route",
+                "delegate_kind": "rust-route-core",
             },
             "skill_loader": {
                 "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
@@ -3045,54 +2988,28 @@ fn gsd_execution_markers() -> [&'static str; 6] {
     ]
 }
 
-fn build_route_policy(
-    mode: &str,
-    rollback_requested: bool,
-) -> Result<RouteExecutionPolicyPayload, String> {
+fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, String> {
     let normalized_mode = mode.trim().to_ascii_lowercase();
-    let rollback_active = rollback_requested && normalized_mode == "rust";
     let base = RouteExecutionPolicyPayload {
         policy_schema_version: ROUTE_POLICY_SCHEMA_VERSION.to_string(),
         authority: ROUTE_AUTHORITY.to_string(),
         mode: normalized_mode.clone(),
-        rollback_active,
-        python_route_required: false,
-        diagnostic_python_lane: false,
-        python_lane_kind: "none".to_string(),
+        diagnostic_route_mode: "none".to_string(),
         primary_authority: "rust".to_string(),
         route_result_engine: "rust".to_string(),
-        shadow_engine: None,
-        diff_report_required: false,
-        verify_parity_required: false,
+        diagnostic_report_required: false,
+        strict_verification_required: false,
     };
     let policy = match normalized_mode.as_str() {
-        "python" => RouteExecutionPolicyPayload {
-            python_route_required: true,
-            python_lane_kind: "legacy-primary".to_string(),
-            primary_authority: "python".to_string(),
-            route_result_engine: "python".to_string(),
-            ..base
-        },
         "shadow" => RouteExecutionPolicyPayload {
-            diagnostic_python_lane: true,
-            python_lane_kind: "diagnostic-compare-only".to_string(),
-            shadow_engine: Some("python".to_string()),
-            diff_report_required: true,
+            diagnostic_route_mode: "shadow".to_string(),
+            diagnostic_report_required: true,
             ..base
         },
         "verify" => RouteExecutionPolicyPayload {
-            diagnostic_python_lane: true,
-            python_lane_kind: "diagnostic-compare-only".to_string(),
-            shadow_engine: Some("python".to_string()),
-            diff_report_required: true,
-            verify_parity_required: true,
-            ..base
-        },
-        "rust" if rollback_active => RouteExecutionPolicyPayload {
-            diagnostic_python_lane: true,
-            python_lane_kind: "diagnostic-compare-only".to_string(),
-            shadow_engine: Some("python".to_string()),
-            diff_report_required: true,
+            diagnostic_route_mode: "verify".to_string(),
+            diagnostic_report_required: true,
+            strict_verification_required: true,
             ..base
         },
         "rust" => base,
@@ -3102,16 +3019,14 @@ fn build_route_policy(
             ))
         }
     };
-    if (policy.diff_report_required || policy.verify_parity_required)
-        && !policy.diagnostic_python_lane
-    {
+    if policy.diagnostic_report_required && policy.diagnostic_route_mode == "none" {
         return Err(
-            "route policy declared diff/verify requirements outside the diagnostic lane"
+            "route policy declared diagnostics outside the diagnostic route mode"
                 .to_string(),
         );
     }
-    if policy.verify_parity_required && !policy.diff_report_required {
-        return Err("route policy declared verify requirements without diff reporting".to_string());
+    if policy.strict_verification_required && !policy.diagnostic_report_required {
+        return Err("route policy declared strict verification without diagnostic reporting".to_string());
     }
     Ok(policy)
 }
@@ -3578,7 +3493,7 @@ mod tests {
             overlay_skill: Some("rust-pro".to_string()),
             layer: "L2".to_string(),
             route_engine: Some("rust".to_string()),
-            diagnostic_python_lane_active: Some(false),
+            diagnostic_route_mode: Some("none".to_string()),
             reasons: vec!["Trigger phrase matched: 直接做代码.".to_string()],
             prompt_preview: Some("Keep the kernel Rust-first.".to_string()),
             dry_run: true,
@@ -3660,14 +3575,6 @@ mod tests {
 
     #[test]
     fn route_diff_report_matches_shadow_compare_contract() {
-        let python_snapshot = build_route_snapshot(
-            "python",
-            "plan-to-code",
-            Some("anti-laziness"),
-            "L2",
-            37.0,
-            &["Trigger phrase matched: 直接做代码.".to_string()],
-        );
         let rust_snapshot = build_route_snapshot(
             "rust",
             "plan-to-code",
@@ -3677,74 +3584,40 @@ mod tests {
             &["Trigger phrase matched: 直接做代码.".to_string()],
         );
 
-        let report = build_route_diff_report("shadow", python_snapshot, rust_snapshot, false);
+        let report = build_route_diff_report("shadow", rust_snapshot).expect("shadow report");
 
         assert_eq!(report.report_schema_version, ROUTE_REPORT_SCHEMA_VERSION);
         assert_eq!(report.authority, ROUTE_AUTHORITY);
         assert_eq!(report.mode, "shadow");
         assert_eq!(report.primary_engine, "rust");
-        assert_eq!(report.shadow_engine.as_deref(), Some("python"));
-        assert!(report.selected_skill_match);
-        assert!(report.overlay_skill_match);
-        assert!(report.layer_match);
-        assert!(report.score_bucket_match);
-        assert!(report.reasons_class_match);
-        assert!(!report.mismatch);
-        assert!(report.mismatch_fields.is_empty());
+        assert_eq!(report.evidence_kind, "rust-owned-snapshot");
+        assert!(!report.strict_verification);
+        assert!(report.verification_passed);
+        assert_eq!(report.route_snapshot.engine, "rust");
     }
 
     #[test]
     fn route_policy_matches_mode_matrix() {
-        let python = build_route_policy("python", false).expect("python policy");
-        assert!(python.python_route_required);
-        assert!(!python.diagnostic_python_lane);
-        assert_eq!(python.python_lane_kind, "legacy-primary");
-        assert_eq!(python.primary_authority, "python");
-        assert_eq!(python.route_result_engine, "python");
-        assert!(python.shadow_engine.is_none());
-        assert!(!python.diff_report_required);
-        assert!(!python.verify_parity_required);
-
-        let shadow = build_route_policy("shadow", false).expect("shadow policy");
-        assert!(!shadow.python_route_required);
-        assert!(shadow.diagnostic_python_lane);
-        assert_eq!(shadow.python_lane_kind, "diagnostic-compare-only");
+        let shadow = build_route_policy("shadow").expect("shadow policy");
+        assert_eq!(shadow.diagnostic_route_mode, "shadow");
         assert_eq!(shadow.primary_authority, "rust");
         assert_eq!(shadow.route_result_engine, "rust");
-        assert_eq!(shadow.shadow_engine.as_deref(), Some("python"));
-        assert!(shadow.diff_report_required);
-        assert!(!shadow.verify_parity_required);
+        assert!(shadow.diagnostic_report_required);
+        assert!(!shadow.strict_verification_required);
 
-        let verify = build_route_policy("verify", false).expect("verify policy");
-        assert!(!verify.python_route_required);
-        assert!(verify.diagnostic_python_lane);
-        assert_eq!(verify.python_lane_kind, "diagnostic-compare-only");
+        let verify = build_route_policy("verify").expect("verify policy");
+        assert_eq!(verify.diagnostic_route_mode, "verify");
         assert_eq!(verify.primary_authority, "rust");
         assert_eq!(verify.route_result_engine, "rust");
-        assert_eq!(verify.shadow_engine.as_deref(), Some("python"));
-        assert!(verify.diff_report_required);
-        assert!(verify.verify_parity_required);
+        assert!(verify.diagnostic_report_required);
+        assert!(verify.strict_verification_required);
 
-        let rust = build_route_policy("rust", false).expect("rust policy");
-        assert!(!rust.python_route_required);
-        assert!(!rust.diagnostic_python_lane);
-        assert_eq!(rust.python_lane_kind, "none");
+        let rust = build_route_policy("rust").expect("rust policy");
+        assert_eq!(rust.diagnostic_route_mode, "none");
         assert_eq!(rust.primary_authority, "rust");
         assert_eq!(rust.route_result_engine, "rust");
-        assert!(rust.shadow_engine.is_none());
-        assert!(!rust.diff_report_required);
-        assert!(!rust.rollback_active);
-
-        let rollback = build_route_policy("rust", true).expect("rollback policy");
-        assert!(!rollback.python_route_required);
-        assert!(rollback.diagnostic_python_lane);
-        assert_eq!(rollback.python_lane_kind, "diagnostic-compare-only");
-        assert_eq!(rollback.primary_authority, "rust");
-        assert_eq!(rollback.route_result_engine, "rust");
-        assert_eq!(rollback.shadow_engine.as_deref(), Some("python"));
-        assert!(rollback.diff_report_required);
-        assert!(rollback.rollback_active);
-        assert!(!rollback.verify_parity_required);
+        assert!(!rust.diagnostic_report_required);
+        assert!(!rust.strict_verification_required);
     }
 
     #[test]
@@ -4276,8 +4149,8 @@ mod tests {
             EXECUTION_AUTHORITY
         );
         assert_eq!(
-            response.metadata["diagnostic_python_lane_active"],
-            Value::Bool(false)
+            response.metadata["diagnostic_route_mode"],
+            Value::String("none".to_string())
         );
     }
 
@@ -4289,12 +4162,12 @@ mod tests {
 
         let prompt = build_live_execute_prompt(&payload);
 
-        assert!(prompt.contains("Rust kernel slice"));
-        assert!(prompt.contains("Active owner skill: plan-to-code"));
-        assert!(prompt.contains("Active overlay skill: rust-pro"));
-        assert!(prompt.contains("Routing layer: L2"));
-        assert!(prompt.contains("Route engine: rust"));
-        assert!(prompt.contains("Diagnostic python lane active: false"));
+        assert!(prompt.contains("Help with the user's request directly."));
+        assert!(prompt.contains("Primary focus: plan-to-code"));
+        assert!(prompt.contains("Extra guidance: rust-pro"));
+        assert!(prompt.contains("How to reply:"));
+        assert!(prompt.contains("Lead with the answer or result."));
+        assert!(prompt.contains("Be brief, clear, and friendly"));
         assert!(prompt.contains("Trigger phrase matched: 直接做代码."));
     }
 
@@ -4310,7 +4183,7 @@ mod tests {
 
         let prompt = build_live_execute_prompt(&payload);
 
-        assert!(prompt.contains("Repo-local planning delta"));
+        assert!(prompt.contains("Planning output:"));
         assert!(prompt.contains("outline.md"));
         assert!(prompt.contains("decision_log.md"));
         assert!(prompt.contains("code_list.md"));

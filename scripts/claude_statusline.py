@@ -6,7 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.memory_support import classify_runtime_continuity, load_runtime_snapshot
 
 
 def _read_text(path: Path) -> str:
@@ -102,33 +108,22 @@ def _count_next_actions(next_actions: dict) -> int:
     return sum(1 for item in items if isinstance(item, str) and item.strip())
 
 
-def _count_open_blockers(supervisor_state: dict) -> int:
-    blockers = supervisor_state.get("blockers", {}).get("open_blockers", [])
-    if not isinstance(blockers, list):
-        return 0
-    return len(blockers)
-
-
 def _short_text(value: str, limit: int) -> str:
     text = " ".join(value.split())
     return text if len(text) <= limit else f"{text[: limit - 3]}..."
 
 
-def _decision_hint(supervisor_state: dict, next_actions: dict, *, git_state: str, status: str) -> str:
-    blockers = supervisor_state.get("blockers", {}).get("open_blockers", [])
-    if isinstance(blockers, list):
-        for blocker in blockers:
-            if isinstance(blocker, str) and blocker.strip():
-                return f"blocked={_short_text(blocker, 36)}"
+def _decision_hint(blockers: list[str], next_actions: list[str], *, git_state: str, status: str) -> str:
+    for blocker in blockers:
+        if isinstance(blocker, str) and blocker.strip():
+            return f"blocked={_short_text(blocker, 36)}"
 
     if status != "completed":
         return "next=run verification"
 
-    items = next_actions.get("next_actions")
-    if isinstance(items, list):
-        for item in items:
-            if isinstance(item, str) and item.strip():
-                return f"next={_short_text(item, 36)}"
+    for item in next_actions:
+        if isinstance(item, str) and item.strip():
+            return f"next={_short_text(item, 36)}"
 
     if git_state == "dirty":
         return "next=review local changes"
@@ -137,36 +132,61 @@ def _decision_hint(supervisor_state: dict, next_actions: dict, *, git_state: str
 
 def render_statusline(repo_root: Path) -> str:
     runtime_roots = _task_scoped_runtime_roots(repo_root)
-    session_summary = _parse_summary(
-        _first_runtime_text(
-            [root / "SESSION_SUMMARY.md" for root in runtime_roots]
-            + [repo_root / "SESSION_SUMMARY.md"]
-        )
+    snapshot = load_runtime_snapshot(
+        repo_root,
+        repair=False,
+        include_contract_snapshots=False,
     )
-    trace_metadata = _first_runtime_json(
-        [root / "TRACE_METADATA.json" for root in runtime_roots]
-        + [repo_root / "TRACE_METADATA.json"]
-    )
-    supervisor_state = _read_json(repo_root / ".supervisor_state.json")
-    next_actions = _first_runtime_json(
-        [root / "NEXT_ACTIONS.json" for root in runtime_roots]
-        + [repo_root / "NEXT_ACTIONS.json"]
+    continuity = classify_runtime_continuity(snapshot)
+    supervisor_state = snapshot.supervisor_state if isinstance(snapshot.supervisor_state, dict) else {}
+
+    fallback_summary = _parse_summary(_read_text(repo_root / "SESSION_SUMMARY.md"))
+    fallback_trace = _read_json(repo_root / "TRACE_METADATA.json")
+    fallback_next_actions = _read_json(repo_root / "NEXT_ACTIONS.json")
+    use_root_fallback = not runtime_roots and (
+        bool(fallback_summary) or bool(fallback_trace) or bool(fallback_next_actions)
     )
 
-    task = session_summary.get("task") or trace_metadata.get("task") or supervisor_state.get("task_summary") or "none"
-    phase = session_summary.get("phase") or supervisor_state.get("active_phase") or "idle"
-    status = (
-        session_summary.get("status")
-        or trace_metadata.get("verification_status")
-        or supervisor_state.get("verification", {}).get("verification_status")
-        or "unknown"
-    )
-    route = _short_route(trace_metadata.get("matched_skills") or [])
+    task = str(continuity.get("task") or supervisor_state.get("task_summary") or "none")
+    phase = str(continuity.get("phase") or supervisor_state.get("active_phase") or "idle")
+    status = str(continuity.get("status") or "unknown")
+    route = _short_route(continuity.get("route") or [])
     git_state, branch = _git_state(repo_root)
-    blockers = _count_open_blockers(supervisor_state)
-    next_count = _count_next_actions(next_actions)
+    blockers_list = [
+        str(item).strip()
+        for item in continuity.get("blockers", [])
+        if str(item).strip()
+    ]
+    next_actions_list = [
+        str(item).strip()
+        for item in continuity.get("next_actions", [])
+        if str(item).strip()
+    ]
+    blockers = len(blockers_list)
+    next_count = len(next_actions_list)
+    if use_root_fallback:
+        task = str(
+            fallback_summary.get("task")
+            or fallback_trace.get("task")
+            or supervisor_state.get("task_summary")
+            or "none"
+        )
+        phase = str(fallback_summary.get("phase") or supervisor_state.get("active_phase") or "idle")
+        status = str(
+            fallback_summary.get("status")
+            or fallback_trace.get("verification_status")
+            or supervisor_state.get("verification", {}).get("verification_status")
+            or "unknown"
+        )
+        route = _short_route(fallback_trace.get("matched_skills") or [])
+        next_actions_list = [
+            str(item).strip()
+            for item in fallback_next_actions.get("next_actions", [])
+            if str(item).strip()
+        ]
+        next_count = len(next_actions_list)
     short_task = _short_text(task, 24)
-    hint = _decision_hint(supervisor_state, next_actions, git_state=git_state, status=status)
+    hint = _decision_hint(blockers_list, next_actions_list, git_state=git_state, status=status)
     return (
         f"{branch} | {hint} | {phase}/{status} | "
         f"task={short_task} | route={route} | nexts={next_count} | blockers={blockers} | git={git_state}"

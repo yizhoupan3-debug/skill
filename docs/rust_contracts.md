@@ -207,8 +207,8 @@ The implemented runtime control-plane surface in this wave is:
 - the contract no longer carries a blocker list; compatibility-only metadata
   is isolated to retirement descriptors and does not drive runtime branching
 - compatibility fallback now survives only as a retired contract surface:
-  explicit `rust_execute_fallback_to_python` requests are rejected, and normal
-  live/dry-run execution no longer re-enter the Python kernel path
+  the old `rust_execute_fallback_to_python` request surface has been removed,
+  and normal live/dry-run execution no longer re-enter the Python kernel path
 - compatibility-fallback metadata is tracked only as retired legacy fields, not
   as a runnable steady-state capability on the live kernel
 - interrupt-style background replacements now use a reserved session takeover
@@ -309,9 +309,9 @@ Required fields:
 - `score: float`
 - `reasons: string[]`
 - `prompt_preview: string | null`
-- `route_engine: python | rust`
-- `diagnostic_python_lane_active: boolean`
-- `shadow_route_report: route diff report | null`
+- `route_engine: rust`
+- `diagnostic_route_mode: none | shadow | verify`
+- `route_diagnostic_report: route diagnostic report | null`
 
 Invariants:
 
@@ -323,19 +323,19 @@ Invariants:
 
 Rust migration note:
 
-- Rust owns scoring, route picking, route-mode / rollback policy, and
-  canonical route snapshot shaping through versioned route and snapshot
+- Rust owns scoring, route picking, route-mode policy, and canonical route
+  snapshot shaping through versioned route, snapshot, and diagnostic-report
   contracts
 - Python may continue hydrating full skill bodies and prompt previews
-- `rollback_to_python` remains accepted only as a legacy input alias while the
-  canonical emitted field is `diagnostic_python_lane_active`
+- Python no longer owns a primary route-result lane, rollback lane, or parity
+  diff vocabulary in the runtime contract
 
 ## Contract 1A: Route Policy
 
 Purpose:
 
-- define the stable route-mode policy shared by `RouterService`, health
-  reporting, and rollback/shadow/verify selection
+- define the stable Rust-only route-mode policy shared by `RouterService`,
+  health reporting, and shadow/verify selection
 
 Compatibility targets:
 
@@ -345,84 +345,58 @@ Compatibility targets:
 
 Required fields:
 
-- `mode: python | verify | shadow | rust`
-- `rollback_active: boolean`
-- `python_route_required: boolean`
-- `python_lane_kind: none | legacy-primary | diagnostic-compare-only`
-- `primary_authority: python | rust`
-- `route_result_engine: python | rust`
-- `shadow_engine: python | rust | null`
-- `diff_report_required: boolean`
-- `verify_parity_required: boolean`
+- `mode: verify | shadow | rust`
+- `diagnostic_route_mode: none | shadow | verify`
+- `primary_authority: rust`
+- `route_result_engine: rust`
+- `diagnostic_report_required: boolean`
+- `strict_verification_required: boolean`
 
 Invariants:
 
-- `rollback_active` may only be true when `mode=rust`
-- `python_route_required=true` means Python route execution is required for the
-  current lane; it does not make Python the live runtime kernel
-- `python_lane_kind=legacy-primary` is the only mode where Python is the route
-  result authority; `diagnostic-compare-only` marks shadow / verify / rollback
-  evidence lanes and must not become the live route-result engine
-- `python_lane_kind` and the legacy booleans must stay aligned:
-  `legacy-primary => python_route_required=true, diagnostic_python_lane=false`,
-  `diagnostic-compare-only => python_route_required=false, diagnostic_python_lane=true`,
-  `none => both false`
-- `primary_authority` and `route_result_engine` must match the engine whose
-  route result is returned to the Python runtime
-- `shadow_engine` names the comparison lane only; it may be null for pure
-  single-engine execution
-- verify mode must require both a diff report and parity enforcement
+- `primary_authority` and `route_result_engine` must stay `rust`
+- `mode=rust` must set `diagnostic_route_mode=none`
+- `mode=shadow` must require a diagnostic report and disable strict verification
+- `mode=verify` must require a diagnostic report and enable strict verification
 
-## Contract 1B: Route Diff Report
+## Contract 1B: Route Diagnostic Report
 
 Purpose:
 
-- define the stable shadow / verify / rollback vocabulary shared by runtime
-  traces, response metadata, and future soak dashboards
+- define the stable Rust-owned diagnostic vocabulary shared by runtime traces,
+  response metadata, and future soak dashboards
 
 Compatibility targets:
 
 - `RouterService.route()`
-- `PrepareSessionResponse.shadow_route_report`
-- `RoutingResult.shadow_route_report`
+- `PrepareSessionResponse.route_diagnostic_report`
+- `RoutingResult.route_diagnostic_report`
 - `route.selected` trace payload
 
 Required fields:
 
-- `mode: python | verify | shadow | rust`
-- `primary_engine: python | rust`
-- `shadow_engine: python | rust | null`
-- `mismatch: boolean`
-- `mismatch_fields: string[]`
-- `selected_skill_match: boolean`
-- `overlay_skill_match: boolean`
-- `layer_match: boolean`
-- `score_bucket_match: boolean`
-- `reasons_class_match: boolean`
-- `rollback_active: boolean`
-- `python.selected_skill: string`
-- `python.overlay_skill: string | null`
-- `python.layer: string`
-- `python.score_bucket: string`
-- `python.reasons_class: string`
-- `rust.selected_skill: string`
-- `rust.overlay_skill: string | null`
-- `rust.layer: string`
-- `rust.score_bucket: string`
-- `rust.reasons_class: string`
+- `mode: verify | shadow`
+- `primary_engine: rust`
+- `evidence_kind: rust-owned-snapshot`
+- `strict_verification: boolean`
+- `verification_passed: boolean`
+- `route_snapshot.engine: rust`
+- `route_snapshot.selected_skill: string`
+- `route_snapshot.overlay_skill: string | null`
+- `route_snapshot.layer: string`
+- `route_snapshot.score_bucket: string`
+- `route_snapshot.reasons_class: string`
 
 Invariants:
 
-- `selected_skill / overlay_skill / layer` are the critical parity gates for
-  verify-mode acceptance
-- `score_bucket` and `reasons_class` are soak-observability fields and may
-  drift without blocking runtime execution
-- shadow mode executes only the primary engine result while always preserving
-  the full diff payload
-- rollback mode may return the Python route while Rust policy still records
-  Rust shadow evidence
-- no new shadow artifact name may be introduced for this payload; it lives in
-  canonical trace / response metadata only
+- `primary_engine` must stay `rust`
+- `evidence_kind` must stay `rust-owned-snapshot`
+- `mode=shadow` must set `strict_verification=false`
+- `mode=verify` must set `strict_verification=true`
+- `verification_passed` reports whether the Rust-only verification contract
+  stayed aligned with the emitted live route
+- no parallel `shadow_route_report` artifact name remains supported; the
+  payload lives in canonical trace / response metadata only
 
 ## Contract 2: Middleware Context
 

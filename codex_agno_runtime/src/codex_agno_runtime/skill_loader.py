@@ -304,9 +304,7 @@ class SkillLoader:
                 session_start=str(metadata.get("session_start", "n/a")).strip() or "n/a",
                 framework_roles=_normalize_list(metadata.get("framework_roles")),
                 tags=_normalize_list(metadata.get("tags")),
-                trigger_hints=_normalize_trigger_hints(
-                    metadata.get("trigger_hints", metadata.get("trigger_phrases"))
-                ),
+                trigger_hints=_normalize_trigger_hints(metadata.get("trigger_hints")),
                 metadata=metadata,
                 health=float(metadata.get("health", 100.0) or 100.0),
                 body=body if load_bodies else "",
@@ -352,9 +350,7 @@ class SkillLoader:
         if not skill.short_description:
             skill.short_description = str(metadata.get("short_description", "")).strip() or skill.description
         if not skill.trigger_hints:
-            skill.trigger_hints = _normalize_trigger_hints(
-                metadata.get("trigger_hints", metadata.get("trigger_phrases"))
-            )
+            skill.trigger_hints = _normalize_trigger_hints(metadata.get("trigger_hints"))
         merged_metadata = dict(skill.metadata)
         merged_metadata.update(metadata)
         skill.metadata = merged_metadata

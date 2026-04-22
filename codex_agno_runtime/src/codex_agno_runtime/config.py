@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import AliasChoices, BaseModel, Field
 
@@ -130,25 +130,13 @@ class RuntimeSettings(BaseSettings):
         validation_alias=AliasChoices("CODEX_AGNO_PROGRESSIVE_SKILL_LOADING"),
     )
 
-    route_engine_mode: str = Field(
+    route_engine_mode: Literal["rust", "shadow", "verify"] = Field(
         default="rust",
         validation_alias=AliasChoices("CODEX_AGNO_ROUTE_ENGINE_MODE"),
-    )
-    rust_route_rollback_to_python: bool = Field(
-        default=False,
-        validation_alias=AliasChoices("CODEX_AGNO_RUST_ROUTE_ROLLBACK_TO_PYTHON"),
     )
     rust_router_timeout_seconds: float = Field(
         default=5.0,
         validation_alias=AliasChoices("CODEX_AGNO_RUST_ROUTER_TIMEOUT_SECONDS"),
-    )
-    rust_execute_fallback_to_python: bool = Field(
-        default=False,
-        validation_alias=AliasChoices("CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON"),
-        description=(
-            "Retired explicit-request surface only. When enabled, the runtime still "
-            "rejects the old Python fallback path instead of reopening it."
-        ),
     )
 
     trace_output_path: Optional[Path] = Field(

@@ -150,9 +150,11 @@ Implement the task directly.
 
     prompt = PromptBuilder().build_prompt(routing_result)
 
-    assert "Python compatibility projection for a Rust-routed Codex runtime" in prompt
-    assert "Active owner skill: plan-to-code" in prompt
-    assert "Key instructions:" in prompt
+    assert "Help with the user's request directly." in prompt
+    assert "Primary focus: plan-to-code" in prompt
+    assert "How to reply:" in prompt
+    assert "Key rules:" in prompt
+    assert "Lead with the answer or result." in prompt
 
 
 def test_prompt_builder_uses_skill_body_without_extra_idea_to_plan_contract() -> None:
@@ -245,6 +247,7 @@ def test_skill_router_reports_thin_projection_under_rust_control_plane() -> None
                     "role": "route-selection",
                     "projection": "python-thin-projection",
                     "delegate_kind": "rust-route-adapter",
+                    "python_projection_materialization": "compatibility-subprocess",
                 }
             },
         },
@@ -255,6 +258,9 @@ def test_skill_router_reports_thin_projection_under_rust_control_plane() -> None
     assert result.route_engine == "python"
     assert any("thin compatibility projection" in reason for reason in result.reasons)
     assert router.projection_descriptor()["compatibility_only"] is True
+    assert router.projection_descriptor()["python_projection_materialization"] == (
+        "compatibility-subprocess"
+    )
 
 
 def test_skill_router_overlay_skill_cannot_be_selected_as_primary_owner() -> None:

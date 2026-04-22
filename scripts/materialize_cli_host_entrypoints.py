@@ -25,11 +25,22 @@ framework policy instead of forking per-host routing or memory rules.
 ## Default Behavior
 
 - Reply in Chinese unless the user asks for another language.
-- Keep answers direct and concise.
+- Keep answers direct, concise, and easy to scan.
 - Execute safe read/search/test/build commands directly when the runtime allows.
 - Default to a get-shit-done posture for clear local tasks: auto-continue safe,
   reversible work, keep ownership local, and verify before handoff.
 - Ask before destructive actions, external publishing, or account-impacting work.
+
+## Communication Style
+
+- Lead with the answer or result, not status reports, greetings, or self-talk.
+- Use plain Chinese and everyday words by default.
+- Avoid internal runtime, routing, framework, or tool jargon unless the user
+  explicitly asks for it.
+- If a technical term is necessary, explain it in simple words the first time.
+- Keep the default reply to one short paragraph; use lists only when the content
+  is genuinely list-shaped.
+- Keep the tone calm, friendly, and practical.
 
 ## Output Compaction
 
@@ -241,6 +252,29 @@ If the bridge did not copy it successfully, copy `workflow_prompt` to the macOS 
 `下一轮执行 prompt 已准备好，并且已经复制到剪贴板。`
 """
 
+CLAUDE_BACKGROUND_BATCH_COMMAND = """---
+description: Run the repo's durable background parallel-batch CLI and answer from its JSON result.
+allowed-tools: Bash(python3 scripts/runtime_background_cli.py *)
+---
+
+Use `python3 scripts/runtime_background_cli.py` as the only host-level entrypoint
+for this repository's durable background batch control.
+
+Supported actions:
+
+- Enqueue and wait:
+  `python3 scripts/runtime_background_cli.py enqueue-batch --input-file <path>`
+  or
+  `python3 scripts/runtime_background_cli.py enqueue-batch --input-json '<json>'`
+- Read one group:
+  `python3 scripts/runtime_background_cli.py group-summary --parallel-group-id <id>`
+- List all groups:
+  `python3 scripts/runtime_background_cli.py list-groups`
+
+Always relay the command's JSON result and then summarize it briefly in plain Chinese.
+Do not invent batch state that the command did not return.
+"""
+
 
 CLAUDE_AGENTS_README = """# Claude Agents Directory
 
@@ -405,6 +439,7 @@ CLAUDE_PROJECT_SETTINGS = {
             "Bash(python3 scripts/check_skills.py --verify-codex-link)",
             "Bash(python3 scripts/session_lifecycle_hook.py *)",
             "Bash(python3 scripts/claude_memory_bridge.py *)",
+            "Bash(python3 scripts/runtime_background_cli.py *)",
             "Bash(python3 scripts/claude_statusline.py --repo-root *)",
             "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
             "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
@@ -495,31 +530,6 @@ CLAUDE_PROJECT_SETTINGS = {
         ],
     },
 }
-
-
-def run_host_integration_rs(*args: str) -> dict[str, Any]:
-    repo_root = Path(__file__).resolve().parents[1]
-    manifest_path = repo_root / "scripts" / "host-integration-rs" / "Cargo.toml"
-    crate_root = manifest_path.parent
-    binary_path = crate_root / "target" / "debug" / "host-integration-rs"
-    latest_source_mtime = manifest_path.stat().st_mtime
-    for path in (crate_root / "src").rglob("*.rs"):
-        latest_source_mtime = max(latest_source_mtime, path.stat().st_mtime)
-    if not binary_path.exists() or binary_path.stat().st_mtime < latest_source_mtime:
-        subprocess.run(
-            ["cargo", "build", "--manifest-path", str(manifest_path)],
-            cwd=repo_root,
-            check=True,
-        )
-    completed = subprocess.run(
-        [str(binary_path), *args],
-        cwd=repo_root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return json.loads(completed.stdout)
-
 
 def _write_text(path: Path, content: str) -> bool:
     existing = path.read_text(encoding="utf-8") if path.is_file() else None
@@ -620,6 +630,7 @@ def _sync_single_root(
             target_root / ".claude" / "CLAUDE.md": CLAUDE_LOCAL_PROXY,
             target_root / ".claude" / "agents" / "README.md": CLAUDE_AGENTS_README,
             target_root / ".claude" / "commands" / "refresh.md": CLAUDE_REFRESH_COMMAND,
+            target_root / ".claude" / "commands" / "background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
             target_root / ".claude" / "hooks" / "README.md": CLAUDE_HOOKS_README,
             target_root / ".claude" / "hooks" / "session_start.sh": CLAUDE_SESSION_START_HOOK,
             target_root / ".claude" / "hooks" / "stop.sh": CLAUDE_STOP_HOOK,
@@ -654,6 +665,7 @@ def _sync_single_root(
     else:
         text_files = {
             target_root / ".claude" / "commands" / "refresh.md": CLAUDE_REFRESH_COMMAND,
+            target_root / ".claude" / "commands" / "background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
         }
         json_files = {}
         retired_paths = []
@@ -717,6 +729,7 @@ def sync_repo_host_entrypoints(
             ".claude/CLAUDE.md": CLAUDE_LOCAL_PROXY,
             ".claude/agents/README.md": CLAUDE_AGENTS_README,
             ".claude/commands/refresh.md": CLAUDE_REFRESH_COMMAND,
+            ".claude/commands/background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
             ".claude/hooks/README.md": CLAUDE_HOOKS_README,
             ".claude/hooks/session_start.sh": CLAUDE_SESSION_START_HOOK,
             ".claude/hooks/stop.sh": CLAUDE_STOP_HOOK,

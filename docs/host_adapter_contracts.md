@@ -273,11 +273,9 @@ compatibility lane 时，`codex_desktop_host_adapter` 不再作为 peer adapter
 `execution_kernel_delegate_impl`，但 compatibility-only 的
 `execution_kernel_fallback_reason` 仍只停留在 fallback response metadata /
 retirement artifact，不进入 framework truth。
-`rust_execute_fallback_to_python` 当前也只允许作为 retired explicit-request
-surface 存在：它的职责是让旧调用方得到确定性的拒绝与审计证据，而不是重新打开
-Python live fallback。当前 host/runtime contract 还把它标记为
-`pending-removal`：只有外部 caller 停止 probing 的证据补齐后，才允许连同设置
-字段、env var、rejection shim 和 artifact 暴露一起删除。
+`rust_execute_fallback_to_python` 这条 retired explicit-request surface 已经移除。
+现在 host/runtime contract 只保留 retirement artifact 说明这条旧请求面曾经存在，
+但 steady-state config、env 和 runtime health 都不再把它当作可探测开关。
 现在还会额外产出
 `execution_kernel_live_response_serialization_contract`，把 live primary /
 compatibility fallback / dry-run 三种 response shape 的字段与 metadata invariant

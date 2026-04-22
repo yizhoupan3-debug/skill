@@ -20,6 +20,8 @@ NODE_ARGS=()
 
 if [ -n "${BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH:-}" ]; then
   NODE_ARGS+=(--runtime-attach-descriptor-path "$BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH")
+elif [ -n "${BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH:-}" ]; then
+  NODE_ARGS+=(--runtime-attach-artifact-path "$BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH")
 elif [ -n "${BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH:-}" ]; then
   NODE_ARGS+=(--runtime-binding-artifact-path "$BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH")
 elif [ -n "${BROWSER_MCP_RUNTIME_HANDOFF_PATH:-}" ]; then
@@ -30,7 +32,7 @@ else
     "$REPO_ROOT"/codex_agno_runtime/artifacts/scratch/**/runtime_event_transports/*.json(N.Om[1])
   )
   if [ ${#AUTO_BINDING_CANDIDATES[@]} -gt 0 ]; then
-    NODE_ARGS+=(--runtime-binding-artifact-path "$AUTO_BINDING_CANDIDATES[1]")
+    NODE_ARGS+=(--runtime-attach-artifact-path "$AUTO_BINDING_CANDIDATES[1]")
   fi
 fi
 

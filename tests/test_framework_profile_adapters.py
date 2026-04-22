@@ -970,18 +970,17 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert status["live_primary"]["contract_mode"] == "rust-live-primary"
     assert status["compatibility_fallback"]["runtime_path_available"] is False
     assert status["compatibility_fallback"]["retired_mode"] == "retired"
-    assert status["compatibility_fallback"]["request_behavior"] == "explicit-request-rejected"
-    assert status["control_surfaces"]["env_var"] == "CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON"
+    assert status["compatibility_fallback"]["request_behavior"] == "surface-removed"
+    assert status["control_surfaces"]["former_env_var"] == "CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON"
     assert status["control_surfaces"]["accepted_after_retirement"] is False
-    assert status["control_surfaces"]["request_behavior"] == "explicit-request-rejected"
-    assert status["control_surfaces"]["surface_role"] == "retired-explicit-request-surface"
-    assert status["retirement_exit_contract"]["surface_status"] == "pending-removal"
-    assert status["retirement_exit_contract"]["current_decision"] == "keep-temporarily"
-    assert status["retirement_exit_contract"]["removal_owner"] == (
-        "runtime-integrator-with-host-confirmation"
-    )
+    assert status["control_surfaces"]["request_behavior"] == "surface-removed"
+    assert status["control_surfaces"]["surface_role"] == "removed-retired-request-surface"
+    assert status["retirement_exit_contract"]["surface_status"] == "removed"
+    assert status["retirement_exit_contract"]["current_decision"] == "completed"
+    assert status["retirement_exit_contract"]["removal_owner"] == "runtime-integrator"
     assert status["retirement_exit_contract"]["observation_sources"]["local_runtime_health"] == [
-        "PythonAgnoExecutionKernel.health().kernel_live_fallback_request_status"
+        "PythonAgnoExecutionKernel.health().kernel_live_fallback_request_status",
+        "PythonAgnoExecutionKernel.health().kernel_live_fallback_mode",
     ]
     assert status["public_runtime_contract_fields"] == [
         "execution_kernel",
@@ -1003,13 +1002,8 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert status["current_contract_truth"]["dry_run_delegate_kind"] == "router-rs"
     assert status["current_contract_truth"]["live_fallback_runtime_path_available"] is False
     assert status["current_contract_truth"]["live_fallback_mode"] == "retired"
-    assert status["current_contract_truth"]["live_fallback_request_behavior"] == (
-        "explicit-request-rejected"
-    )
-    assert (
-        status["current_contract_truth"]["live_fallback_request_surface"]
-        == "retired-explicit-request-only"
-    )
+    assert status["current_contract_truth"]["live_fallback_request_behavior"] == "surface-removed"
+    assert status["current_contract_truth"]["live_fallback_request_surface"] == "removed"
     assert status["current_contract_truth"]["live_prompt_preview_passthrough_disabled"] is True
     assert status["current_response_metadata_truth"]["live_delegate_family"] == "rust-cli"
     assert status["current_response_metadata_truth"]["dry_run_delegate_family"] == "rust-cli"
@@ -1270,7 +1264,7 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     ] == "retired"
     assert payload["execution_kernel_live_fallback_retirement_status"]["current_contract_truth"][
         "live_fallback_request_behavior"
-    ] == "explicit-request-rejected"
+    ] == "surface-removed"
     assert payload["execution_kernel_live_fallback_retirement_status"][
         "public_runtime_response_metadata_fields"
     ] == [

@@ -90,6 +90,32 @@ def test_skill_loader_supports_lazy_body_hydration() -> None:
     assert "Runtime-policy adaptation" in target.body
 
 
+def test_skill_loader_ignores_legacy_trigger_phrases_frontmatter(tmp_path: Path) -> None:
+    """Verify the loader only accepts canonical trigger_hints."""
+
+    skills_root = tmp_path / "skills"
+    skill_dir = skills_root / "legacy-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: legacy-skill
+description: Legacy trigger field only
+trigger_phrases:
+  - 旧字段
+---
+## When to use
+- test
+""",
+        encoding="utf-8",
+    )
+
+    loader = SkillLoader(skills_root)
+    [skill] = loader.load(refresh=True, load_bodies=False)
+
+    assert skill.name == "legacy-skill"
+    assert skill.trigger_hints == []
+
+
 def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> None:
     """Verify the runtime remains usable when the Python-backed kernel delegate is unavailable."""
 
@@ -450,7 +476,6 @@ def test_runtime_dry_run_keeps_working_when_live_fallback_is_disabled(tmp_path: 
             data_dir=tmp_path / "runtime-data",
             trace_output_path=trace_path,
             live_model_override=False,
-            rust_execute_fallback_to_python=False,
         )
     )
 
@@ -1569,17 +1594,9 @@ def test_runtime_background_batch_persists_parallel_group_resume_summary(tmp_pat
     asyncio.run(_run())
 
 
-def test_prepare_session_rust_route_mode_matches_python_mode(tmp_path: Path) -> None:
-    """The runtime should expose Rust route picking behind an explicit mode flag."""
+def test_prepare_session_rust_mode_returns_rust_only_contract(tmp_path: Path) -> None:
+    """The runtime should expose the Rust-only baseline contract in rust mode."""
 
-    python_runtime = CodexAgnoRuntime(
-        RuntimeSettings(
-            codex_home=PROJECT_ROOT,
-            data_dir=tmp_path / "python-runtime-data",
-            live_model_override=False,
-            route_engine_mode="python",
-        )
-    )
     rust_runtime = CodexAgnoRuntime(
         RuntimeSettings(
             codex_home=PROJECT_ROOT,
@@ -1594,21 +1611,17 @@ def test_prepare_session_rust_route_mode_matches_python_mode(tmp_path: Path) -> 
         session_id="rust-runtime-route-session",
         user_id="tester",
     )
-    python_prepared = python_runtime.prepare_session(request=request)
     rust_prepared = rust_runtime.prepare_session(request=request)
 
-    assert python_prepared.route_engine == "python"
-    assert python_prepared.python_lane_kind == "legacy-primary"
-    assert python_prepared.diagnostic_python_lane_active is False
-    assert rust_prepared.skill == python_prepared.skill
-    assert rust_prepared.overlay == python_prepared.overlay
-    assert rust_prepared.layer == python_prepared.layer
     assert rust_prepared.route_engine == "rust"
-    assert rust_prepared.python_lane_kind == "none"
+    assert rust_prepared.diagnostic_route_mode == "none"
+    assert rust_prepared.route_diagnostic_report is None
+    assert rust_prepared.skill
+    assert rust_prepared.layer
 
 
 def test_prepare_session_shadow_mode_returns_soak_report(tmp_path: Path) -> None:
-    """Shadow mode should keep Rust as the live route while returning a stable parity report."""
+    """Shadow mode should keep Rust as the live route while returning a Rust-only diagnostic report."""
 
     runtime = CodexAgnoRuntime(
         RuntimeSettings(
@@ -1628,20 +1641,20 @@ def test_prepare_session_shadow_mode_returns_soak_report(tmp_path: Path) -> None
     )
 
     assert prepared.route_engine == "rust"
-    assert prepared.diagnostic_python_lane_active is True
-    assert prepared.shadow_route_report is not None
-    assert prepared.shadow_route_report.report_schema_version == "router-rs-route-report-v1"
-    assert prepared.shadow_route_report.authority == "rust-route-core"
-    assert prepared.shadow_route_report.mode == "shadow"
-    assert prepared.shadow_route_report.selected_skill_match is True
-    assert prepared.shadow_route_report.overlay_skill_match is True
-    assert prepared.shadow_route_report.layer_match is True
-    assert prepared.shadow_route_report.primary_engine == "rust"
-    assert prepared.shadow_route_report.shadow_engine == "python"
+    assert prepared.diagnostic_route_mode == "shadow"
+    assert prepared.route_diagnostic_report is not None
+    assert prepared.route_diagnostic_report.report_schema_version == "router-rs-route-report-v2"
+    assert prepared.route_diagnostic_report.authority == "rust-route-core"
+    assert prepared.route_diagnostic_report.mode == "shadow"
+    assert prepared.route_diagnostic_report.primary_engine == "rust"
+    assert prepared.route_diagnostic_report.evidence_kind == "rust-owned-snapshot"
+    assert prepared.route_diagnostic_report.strict_verification is False
+    assert prepared.route_diagnostic_report.verification_passed is True
+    assert prepared.route_diagnostic_report.route_snapshot.selected_skill == prepared.skill
 
 
-def test_runtime_metadata_includes_shadow_route_report(tmp_path: Path) -> None:
-    """Run-task metadata should surface shadow soak evidence for real-task replay queries."""
+def test_runtime_metadata_includes_route_diagnostic_report(tmp_path: Path) -> None:
+    """Run-task metadata should surface Rust-only diagnostic evidence for shadow mode."""
 
     trace_path = tmp_path / "TRACE_METADATA.json"
     runtime = CodexAgnoRuntime(
@@ -1664,22 +1677,22 @@ def test_runtime_metadata_includes_shadow_route_report(tmp_path: Path) -> None:
         )
         assert response.metadata["route_engine_mode"] == "shadow"
         assert response.metadata["route_engine"] == "rust"
-        assert response.metadata["diagnostic_python_lane_active"] is True
-        report = response.metadata["shadow_route_report"]
+        assert response.metadata["diagnostic_route_mode"] == "shadow"
+        report = response.metadata["route_diagnostic_report"]
         assert report is not None
-        assert report["report_schema_version"] == "router-rs-route-report-v1"
+        assert report["report_schema_version"] == "router-rs-route-report-v2"
         assert report["authority"] == "rust-route-core"
-        assert report["selected_skill_match"] is True
-        assert report["overlay_skill_match"] is True
-        assert report["layer_match"] is True
         assert report["primary_engine"] == "rust"
-        assert report["shadow_engine"] == "python"
+        assert report["evidence_kind"] == "rust-owned-snapshot"
+        assert report["strict_verification"] is False
+        assert report["verification_passed"] is True
 
     asyncio.run(_run())
 
     data = json.loads(trace_path.read_text(encoding="utf-8"))
     route_event = next(event for event in data["events"] if event["kind"] == "route.selected")
     assert route_event["payload"]["route_engine_mode"] == "shadow"
-    assert route_event["payload"]["shadow_route_report"]["report_schema_version"] == "router-rs-route-report-v1"
-    assert route_event["payload"]["shadow_route_report"]["authority"] == "rust-route-core"
-    assert route_event["payload"]["shadow_route_report"]["selected_skill_match"] is True
+    assert route_event["payload"]["diagnostic_route_mode"] == "shadow"
+    assert route_event["payload"]["route_diagnostic_report"]["report_schema_version"] == "router-rs-route-report-v2"
+    assert route_event["payload"]["route_diagnostic_report"]["authority"] == "rust-route-core"
+    assert route_event["payload"]["route_diagnostic_report"]["verification_passed"] is True

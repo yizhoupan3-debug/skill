@@ -39,7 +39,22 @@ def test_default_loadouts_include_required_phase2_sets() -> None:
     """
 
     loadouts = DEFAULT_LOADOUTS["loadouts"]
-    assert {"research_loadout", "implementation_loadout", "audit_loadout", "framework_loadout", "ops_loadout"} <= set(loadouts)
+    assert {
+        "default_surface_loadout",
+        "research_loadout",
+        "implementation_loadout",
+        "audit_loadout",
+        "framework_loadout",
+        "ops_loadout",
+    } <= set(loadouts)
+
+
+def test_default_surface_loadout_stays_lean_and_overlay_safe() -> None:
+    loadout = DEFAULT_LOADOUTS["loadouts"]["default_surface_loadout"]
+
+    assert loadout["overlays"] == ["anti-laziness"]
+    assert "iterative-optimizer" in loadout["exclude"]
+    assert len(loadout["owners"]) <= 8
 
 
 def test_validate_loadouts_rejects_role_overlap_between_buckets() -> None:

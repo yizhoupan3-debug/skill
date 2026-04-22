@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from scripts.claude_hook_audit import run_config_change, run_stop_failure
 from scripts.claude_statusline import render_statusline
 from scripts.materialize_cli_host_entrypoints import (
+    CLAUDE_BACKGROUND_BATCH_COMMAND,
     CLAUDE_REFRESH_COMMAND,
     materialize_repo_host_entrypoints,
     sync_repo_host_entrypoints,
@@ -104,10 +105,12 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     agent_policy = (tmp_path / "AGENT.md").read_text(encoding="utf-8")
     assert "Shared Agent Policy" in agent_policy
     assert "RTK.md" in agent_policy
+    assert "## Communication Style" in agent_policy
     assert "## Task Closeout" in agent_policy
     assert "changed-file inventories" in agent_policy
     assert "what now works or what" in agent_policy
     assert "effect was achieved" in agent_policy
+    assert "Avoid internal runtime, routing, framework, or tool jargon" in agent_policy
     assert "AGENT.md" in (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     assert not (tmp_path / ".codex" / "model_instructions.md").exists()
     assert not (tmp_path / ".mcp.json").exists()
@@ -131,6 +134,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         "Bash(python3 scripts/check_skills.py --verify-codex-link)",
         "Bash(python3 scripts/session_lifecycle_hook.py *)",
         "Bash(python3 scripts/claude_memory_bridge.py *)",
+        "Bash(python3 scripts/runtime_background_cli.py *)",
         "Bash(python3 scripts/claude_statusline.py --repo-root *)",
         "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
         "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
@@ -155,8 +159,13 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert json.loads((tmp_path / ".gemini" / "settings.json").read_text(encoding="utf-8")) == {}
     assert (tmp_path / ".claude" / "agents" / "README.md").is_file()
     assert (tmp_path / ".claude" / "commands" / "refresh.md").is_file()
+    assert (tmp_path / ".claude" / "commands" / "background_batch.md").is_file()
     refresh_command = (tmp_path / ".claude" / "commands" / "refresh.md").read_text(encoding="utf-8")
+    background_batch_command = (
+        tmp_path / ".claude" / "commands" / "background_batch.md"
+    ).read_text(encoding="utf-8")
     assert refresh_command == CLAUDE_REFRESH_COMMAND
+    assert background_batch_command == CLAUDE_BACKGROUND_BATCH_COMMAND
     assert "claude_memory_bridge.py refresh-workflow --json" in refresh_command
     assert "one fixed sentence" in refresh_command
     assert "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。" in refresh_command
@@ -164,6 +173,11 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "clear" not in refresh_command.lower()
     assert "CLAUDE_PROJECT_DIR" not in refresh_command
     assert "allowed-tools: Bash(python3 scripts/claude_memory_bridge.py *)" in refresh_command
+    assert "runtime_background_cli.py" in background_batch_command
+    assert "enqueue-batch" in background_batch_command
+    assert "group-summary" in background_batch_command
+    assert "list-groups" in background_batch_command
+    assert "allowed-tools: Bash(python3 scripts/runtime_background_cli.py *)" in background_batch_command
     assert (tmp_path / ".claude" / "hooks" / "README.md").is_file()
     hooks_readme = (tmp_path / ".claude" / "hooks" / "README.md").read_text(encoding="utf-8")
     assert "Generated-first maintenance" in hooks_readme
@@ -219,9 +233,13 @@ def test_materialize_repo_host_entrypoints_syncs_matching_worktrees(tmp_path: Pa
 
     assert str(peer_worktree.resolve()) in result["synced_worktrees"]
     assert (peer_worktree / ".claude" / "commands" / "refresh.md").is_file()
+    assert (peer_worktree / ".claude" / "commands" / "background_batch.md").is_file()
     assert (
         peer_worktree / ".claude" / "commands" / "refresh.md"
     ).read_text(encoding="utf-8") == CLAUDE_REFRESH_COMMAND
+    assert (
+        peer_worktree / ".claude" / "commands" / "background_batch.md"
+    ).read_text(encoding="utf-8") == CLAUDE_BACKGROUND_BATCH_COMMAND
 
 
 def test_write_generated_files_includes_shared_cli_entrypoints_when_repo_is_dirty(tmp_path: Path) -> None:
@@ -235,6 +253,7 @@ def test_write_generated_files_includes_shared_cli_entrypoints_when_repo_is_dirt
         root / ".claude" / "settings.json",
         root / ".claude" / "agents" / "README.md",
         root / ".claude" / "commands" / "refresh.md",
+        root / ".claude" / "commands" / "background_batch.md",
         root / ".claude" / "hooks" / "README.md",
         root / ".claude" / "hooks" / "session_start.sh",
         root / ".claude" / "hooks" / "stop.sh",
@@ -409,6 +428,57 @@ def test_claude_statusline_prefers_task_scoped_runtime_over_stale_root_mirrors(t
     assert "integration/in_progress" in statusline
     assert "route=execution-controller-coding+1" in statusline
     assert "Stale root task" not in statusline
+
+
+def test_claude_statusline_prefers_supervisor_owned_actions_over_stale_sidecars(tmp_path: Path) -> None:
+    task_root = tmp_path / "artifacts" / "current" / "fresh-task-20260419013000"
+    _write_json(
+        tmp_path / "artifacts" / "current" / "active_task.json",
+        {"task_id": "fresh-task-20260419013000", "task": "Fresh current task"},
+    )
+    _write_text(
+        task_root / "SESSION_SUMMARY.md",
+        "\n".join([
+            "# SESSION_SUMMARY",
+            "",
+            "- task: Fresh current task",
+            "- phase: verification",
+            "- status: completed",
+        ])
+        + "\n",
+    )
+    _write_json(task_root / "NEXT_ACTIONS.json", {"next_actions": ["stale sidecar action"]})
+    _write_json(task_root / "EVIDENCE_INDEX.json", {"artifacts": []})
+    _write_json(
+        task_root / "TRACE_METADATA.json",
+        {
+            "task": "Fresh current task",
+            "matched_skills": ["legacy-skill"],
+            "verification_status": "completed",
+            "routing_runtime_version": 0,
+        },
+    )
+    _write_json(
+        tmp_path / ".supervisor_state.json",
+        {
+            "task_id": "fresh-task-20260419013000",
+            "task_summary": "Fresh current task",
+            "active_phase": "verification",
+            "verification": {"verification_status": "completed"},
+            "continuity": {"story_state": "completed", "resume_allowed": False},
+            "next_actions": ["Ship the real follow-up"],
+            "controller": {
+                "primary_owner": "execution-controller-coding",
+                "gate": "subagent-delegation",
+            },
+        },
+    )
+
+    statusline = render_statusline(tmp_path)
+
+    assert "next=Ship the real follow-up" in statusline
+    assert "route=subagent-delegation+1" in statusline
+    assert "legacy-skill" not in statusline
 
 
 def test_claude_hook_audit_reports_generated_surface_drift(tmp_path: Path, capsys) -> None:

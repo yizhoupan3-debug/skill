@@ -16,6 +16,7 @@ const { values: args } = parseArgs({
     headless: { type: 'string', default: 'true' },
     engine: { type: 'string', default: 'chromium' },
     'capture-body': { type: 'boolean', default: false },
+    'runtime-attach-artifact-path': { type: 'string' },
     'runtime-attach-descriptor-path': { type: 'string' },
     'runtime-binding-artifact-path': { type: 'string' },
     'runtime-handoff-path': { type: 'string' },
@@ -28,6 +29,10 @@ const port = parseInt(String(args['port'] ?? '3721'), 10);
 const headless = String(args['headless'] ?? 'true') !== 'false';
 const engine = String(args['engine'] ?? 'chromium') as 'chromium' | 'firefox' | 'webkit';
 const captureBody = Boolean(args['capture-body']);
+const runtimeAttachArtifactPath =
+  typeof args['runtime-attach-artifact-path'] === 'string'
+    ? String(args['runtime-attach-artifact-path'])
+    : process.env.BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH ?? null;
 const runtimeAttachDescriptorPath =
   typeof args['runtime-attach-descriptor-path'] === 'string'
     ? String(args['runtime-attach-descriptor-path'])
@@ -41,7 +46,11 @@ const runtimeHandoffPath =
     ? String(args['runtime-handoff-path'])
     : process.env.BROWSER_MCP_RUNTIME_HANDOFF_PATH ?? null;
 const runtimeAttachSource =
-  runtimeAttachDescriptorPath ?? runtimeBindingArtifactPath ?? runtimeHandoffPath ?? 'off';
+  runtimeAttachDescriptorPath ??
+  runtimeAttachArtifactPath ??
+  runtimeBindingArtifactPath ??
+  runtimeHandoffPath ??
+  'off';
 
 // ---------------------------------------------------------------------------
 // Server startup
@@ -55,6 +64,7 @@ async function main(): Promise<void> {
     headless,
     browserEngine: engine,
     captureBody,
+    runtimeAttachArtifactPath,
     runtimeAttachDescriptorPath,
     runtimeBindingArtifactPath,
     runtimeHandoffPath,

@@ -1,0 +1,75 @@
+{
+  "schema_version": "prompt-style-eval-cases-v1",
+  "style_contract": {
+    "required_policy_markers": [
+      "Lead with the answer or result",
+      "Use plain Chinese and everyday words by default",
+      "Avoid internal runtime, routing, framework, or tool jargon",
+      "If a technical term is necessary, explain it in simple words the first time",
+      "Keep the default reply to one short paragraph"
+    ],
+    "required_prompt_markers": [
+      "Help with the user's request directly.",
+      "How to reply:",
+      "Lead with the answer or result.",
+      "Use plain Chinese unless the user asks otherwise.",
+      "Be brief, clear, and friendly.",
+      "Keep the default reply to one short paragraph unless a list is truly needed.",
+      "Avoid internal runtime or routing jargon unless the user asks.",
+      "If a technical term is necessary, explain it in simple words the first time."
+    ],
+    "forbidden_prompt_markers": [
+      "Active owner skill:",
+      "Active overlay skill:",
+      "Routing layer:",
+      "Route engine:",
+      "control plane",
+      "compatibility projection",
+      "Singleton running on Agno"
+    ]
+  },
+  "cases": [
+    {
+      "id": "fix-and-status",
+      "task": "帮我修一下这个报错，然后用人话告诉我现在能不能跑。",
+      "selected_skill": "plan-to-code",
+      "selected_description": "Implement a concrete fix and verify it works.",
+      "overlay_skill": "anti-laziness",
+      "overlay_description": "Push through and verify the real outcome.",
+      "layer": "L2",
+      "route_engine": "rust",
+      "reasons": [
+        "User wants a direct fix, not a long process recap.",
+        "User explicitly asked for a plain-language status update."
+      ]
+    },
+    {
+      "id": "beginner-explanation",
+      "task": "我不懂这些术语，直接解释这个链路在干嘛。",
+      "selected_skill": "idea-to-plan",
+      "selected_description": "Turn ambiguous asks into a simple explanation and plan.",
+      "overlay_skill": "humanizer",
+      "overlay_description": "Keep wording natural and easy to understand.",
+      "layer": "L-1",
+      "route_engine": "rust",
+      "reasons": [
+        "User asked for an explanation in everyday language.",
+        "Any necessary technical term should be explained on first use."
+      ]
+    },
+    {
+      "id": "short-closeout",
+      "task": "只告诉我现在达成了什么效果，还差什么。",
+      "selected_skill": "checklist-writting",
+      "selected_description": "Produce a concise, user-facing closeout.",
+      "overlay_skill": "none",
+      "overlay_description": "",
+      "layer": "L1",
+      "route_engine": "rust",
+      "reasons": [
+        "User only wants the result and next gap.",
+        "Default reply should stay short unless structure is necessary."
+      ]
+    }
+  ]
+}
