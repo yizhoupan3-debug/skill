@@ -23,7 +23,6 @@ from .host_adapters import (
     build_execution_kernel_live_fallback_retirement_status,
     build_execution_kernel_live_response_serialization_contract,
     build_supervisor_state_contract,
-    build_upgrade_compatibility_matrix,
     compile_codex_cli_adapter,
     compile_codex_common_adapter,
     compile_codex_desktop_adapter,
@@ -46,6 +45,5 @@ __all__ = [
     "build_execution_kernel_live_fallback_retirement_status",
     "build_execution_kernel_live_response_serialization_contract",
     "build_supervisor_state_contract",
-    "build_upgrade_compatibility_matrix",
     "emit_framework_contract_artifacts",
 ]
