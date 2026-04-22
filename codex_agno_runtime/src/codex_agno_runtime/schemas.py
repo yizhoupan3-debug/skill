@@ -183,6 +183,7 @@ class FrameworkSharedContractSurface(BaseModel):
     tool_policy: dict[str, Any] = Field(default_factory=dict)
     approval_policy: dict[str, Any] = Field(default_factory=dict)
     loadout_policy: dict[str, Any] = Field(default_factory=dict)
+    framework_surface_policy: dict[str, Any] = Field(default_factory=dict)
     workspace_bootstrap: dict[str, Any] = Field(default_factory=dict)
     session_contract: FrameworkSessionContract = Field(default_factory=FrameworkSessionContract)
 

@@ -110,7 +110,7 @@ continuity lane 里保留。
 - invariant: `framework_truth = framework_core`
 - role: Claude Code 的薄投影，不复制 framework core
 - protocol hints:
-  `CLAUDE.md` / `.claude/CLAUDE.md` / `CLAUDE.local.md` /
+  `CLAUDE.md` / `CLAUDE.local.md` /
   `~/.claude/settings.json` / `.claude/settings.json` /
   `.claude/settings.local.json` / `~/.claude.json`
 - Claude-specific host projection 还会显式暴露：
@@ -327,7 +327,7 @@ compatibility fallback / dry-run 三种 response shape 的字段与 metadata inv
 repo 内真实存在：
 
 - `AGENTS.md` for Codex
-- `CLAUDE.md` and `.claude/CLAUDE.md` for Claude Code
+- `CLAUDE.md` for Claude Code
 - `GEMINI.md` for Gemini CLI
 
 这些文件都应是对共享 `AGENT.md` 的薄代理。宿主私有目录如 `.claude/hooks/`、

@@ -21,6 +21,9 @@ class RustRouteAdapter:
     checkpoint_resume_manifest_schema_version = "router-rs-checkpoint-resume-manifest-v1"
     transport_binding_write_schema_version = "router-rs-transport-binding-write-v1"
     checkpoint_manifest_write_schema_version = "router-rs-checkpoint-manifest-write-v1"
+    trace_stream_replay_schema_version = "router-rs-trace-stream-replay-v1"
+    trace_stream_inspect_schema_version = "router-rs-trace-stream-inspect-v1"
+    trace_compaction_delta_write_schema_version = "router-rs-trace-compaction-delta-write-v1"
     runtime_observability_exporter_schema_version = "runtime-observability-exporter-v1"
     runtime_observability_metric_record_schema_version = "runtime-observability-metric-record-v1"
     runtime_observability_dashboard_schema_version = "runtime-observability-dashboard-v1"
@@ -34,6 +37,7 @@ class RustRouteAdapter:
     checkpoint_resume_manifest_authority = "rust-runtime-checkpoint-manifest"
     transport_binding_write_authority = "rust-runtime-transport-binding-writer"
     checkpoint_manifest_write_authority = "rust-runtime-checkpoint-manifest-writer"
+    trace_stream_io_authority = "rust-runtime-trace-io"
     framework_runtime_authority = "rust-framework-runtime-read-model"
 
     def __init__(self, codex_home: Path, *, timeout_seconds: float = 30.0) -> None:
@@ -669,6 +673,111 @@ class RustRouteAdapter:
             raise RuntimeError("Rust checkpoint resume manifest writer returned invalid bytes_written.")
         return resolved
 
+    def trace_stream_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--trace-stream-replay-json",
+            "--trace-stream-replay-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        try:
+            resolved = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="trace stream replay",
+            )
+        except RuntimeError:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="trace stream replay",
+            )
+        if resolved.get("schema_version") != self.trace_stream_replay_schema_version:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="trace stream replay",
+            )
+            if resolved.get("schema_version") != self.trace_stream_replay_schema_version:
+                raise RuntimeError(
+                    "Rust trace stream replay returned an unknown schema: "
+                    f"{resolved.get('schema_version')!r}"
+                )
+        if resolved.get("authority") != self.trace_stream_io_authority:
+            raise RuntimeError(
+                "Rust trace stream replay returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        return resolved
+
+    def trace_stream_inspect(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--trace-stream-inspect-json",
+            "--trace-stream-inspect-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        try:
+            resolved = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="trace stream inspect",
+            )
+        except RuntimeError:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="trace stream inspect",
+            )
+        if resolved.get("schema_version") != self.trace_stream_inspect_schema_version:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="trace stream inspect",
+            )
+            if resolved.get("schema_version") != self.trace_stream_inspect_schema_version:
+                raise RuntimeError(
+                    "Rust trace stream inspect returned an unknown schema: "
+                    f"{resolved.get('schema_version')!r}"
+                )
+        if resolved.get("authority") != self.trace_stream_io_authority:
+            raise RuntimeError(
+                "Rust trace stream inspect returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        return resolved
+
+    def write_trace_compaction_delta(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--write-trace-compaction-delta-json",
+            "--write-trace-compaction-delta-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        try:
+            resolved = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="trace compaction delta writer",
+            )
+        except RuntimeError:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="trace compaction delta writer",
+            )
+        if resolved.get("schema_version") != self.trace_compaction_delta_write_schema_version:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="trace compaction delta writer",
+            )
+            if resolved.get("schema_version") != self.trace_compaction_delta_write_schema_version:
+                raise RuntimeError(
+                    "Rust trace compaction delta writer returned an unknown schema: "
+                    f"{resolved.get('schema_version')!r}"
+                )
+        if resolved.get("authority") != self.trace_stream_io_authority:
+            raise RuntimeError(
+                "Rust trace compaction delta writer returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        path = resolved.get("path")
+        bytes_written = resolved.get("bytes_written")
+        if not isinstance(path, str) or not path:
+            raise RuntimeError("Rust trace compaction delta writer returned a missing path.")
+        if not isinstance(bytes_written, int) or bytes_written < 0:
+            raise RuntimeError("Rust trace compaction delta writer returned invalid bytes_written.")
+        return resolved
+
     def health(self) -> dict[str, Any]:
         """Describe Rust route-adapter availability."""
 
@@ -692,6 +801,9 @@ class RustRouteAdapter:
             "checkpoint_resume_manifest_schema_version": self.checkpoint_resume_manifest_schema_version,
             "transport_binding_write_schema_version": self.transport_binding_write_schema_version,
             "checkpoint_manifest_write_schema_version": self.checkpoint_manifest_write_schema_version,
+            "trace_stream_replay_schema_version": self.trace_stream_replay_schema_version,
+            "trace_stream_inspect_schema_version": self.trace_stream_inspect_schema_version,
+            "trace_compaction_delta_write_schema_version": self.trace_compaction_delta_write_schema_version,
             "runtime_observability_exporter_schema_version": self.runtime_observability_exporter_schema_version,
             "runtime_observability_metric_record_schema_version": self.runtime_observability_metric_record_schema_version,
             "runtime_observability_dashboard_schema_version": self.runtime_observability_dashboard_schema_version,
@@ -699,6 +811,7 @@ class RustRouteAdapter:
             "checkpoint_resume_manifest_authority": self.checkpoint_resume_manifest_authority,
             "transport_binding_write_authority": self.transport_binding_write_authority,
             "checkpoint_manifest_write_authority": self.checkpoint_manifest_write_authority,
+            "trace_stream_io_authority": self.trace_stream_io_authority,
         }
 
     def _binary_command(self) -> list[str]:

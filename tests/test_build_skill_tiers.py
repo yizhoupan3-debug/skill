@@ -34,10 +34,13 @@ def test_generated_skill_tiers_classify_representative_live_skills() -> None:
     skills = payload["skills"]
 
     assert skills["openai-docs"]["tier"] == "core"
+    assert skills["openai-docs"]["surface"]["activation_mode"] == "default"
     assert skills["execution-controller-coding"]["tier"] == "core"
     assert skills["subagent-delegation"]["tier"] == "core"
     assert skills["plan-to-code"]["tier"] == "optional"
+    assert skills["plan-to-code"]["surface"]["activation_mode"] == "default"
     assert skills["github-investigator"]["tier"] == "experimental"
+    assert skills["github-investigator"]["surface"]["activation_mode"] == "explicit_opt_in"
     assert skills["iterative-optimizer"]["tier"] == "experimental"
 
 
@@ -94,7 +97,9 @@ def test_build_skill_tiers_ignores_exclude_memberships_for_core() -> None:
     payload = build_skill_tiers(manifest, health_manifest, loadouts)
 
     assert payload["skills"]["excluded-skill"]["tier"] == "optional"
+    assert payload["skills"]["excluded-skill"]["surface"]["activation_mode"] == "explicit_opt_in"
     assert payload["skills"]["gate-skill"]["tier"] == "core"
+    assert payload["skills"]["gate-skill"]["surface"]["activation_mode"] == "default"
 
 
 def test_build_skill_tiers_marks_unused_low_health_rerouted_skill_as_deprecated() -> None:
@@ -140,7 +145,9 @@ def test_build_skill_tiers_marks_unused_low_health_rerouted_skill_as_deprecated(
     payload = build_skill_tiers(manifest, health_manifest, loadouts)
 
     assert payload["skills"]["retire-me"]["tier"] == "deprecated"
+    assert payload["skills"]["retire-me"]["surface"]["activation_mode"] == "disabled"
     assert payload["skills"]["healthy-skill"]["tier"] == "optional"
+    assert payload["skills"]["healthy-skill"]["surface"]["activation_mode"] == "explicit_opt_in"
 
 
 def test_validate_skill_tiers_rejects_missing_coverage() -> None:

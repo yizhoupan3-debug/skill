@@ -397,6 +397,8 @@ class CodexAgnoRuntime:
                 "skill": routing_result.selected_skill.name,
                 "overlay": routing_result.overlay_skill.name if routing_result.overlay_skill else None,
                 "layer": routing_result.layer,
+                "routing_gate": routing_result.selected_skill.routing_gate,
+                "routing_owner": routing_result.selected_skill.routing_owner,
                 "reasons": routing_result.reasons,
                 "route_engine": routing_result.route_engine,
                 "route_engine_mode": self.settings.route_engine_mode,
@@ -563,6 +565,10 @@ class CodexAgnoRuntime:
                     **self.background_service._background_trace_context(status),
                 },
             )
+            self.background_service.flush_background_admission_failure_trace_metadata(
+                request=request,
+                status=status,
+            )
             return status
 
         if requires_takeover:
@@ -604,6 +610,10 @@ class CodexAgnoRuntime:
                         "lane_id": request.lane_id,
                         "parent_job_id": request.parent_job_id,
                     },
+                )
+                self.background_service.flush_background_admission_failure_trace_metadata(
+                    request=request,
+                    status=status,
                 )
                 return status
             if active_job_id is not None:
@@ -738,6 +748,10 @@ class CodexAgnoRuntime:
                     "error": status.error,
                     **self.background_service._background_trace_context(status),
                 },
+            )
+            self.background_service.flush_background_admission_failure_trace_metadata(
+                request=request,
+                status=status,
             )
             return status
 
@@ -974,6 +988,9 @@ class CodexAgnoRuntime:
                 "route_engine_mode": self.settings.route_engine_mode,
                 "route_engine": routing_result.route_engine,
                 "diagnostic_route_mode": routing_result.diagnostic_route_mode,
+                "routing_layer": routing_result.layer,
+                "routing_gate": routing_result.selected_skill.routing_gate,
+                "routing_owner": routing_result.selected_skill.routing_owner,
                 "route_diagnostic_report": (
                     routing_result.route_diagnostic_report.model_dump(mode="json")
                     if routing_result.route_diagnostic_report is not None

@@ -38,6 +38,7 @@ COMMON_PARITY_FIELDS = (
     "tool_policy",
     "approval_policy",
     "loadout_policy",
+    "framework_surface_policy",
     "workspace_bootstrap",
     "session_contract",
     "execution_controller_contract",
@@ -405,6 +406,7 @@ CLI_COMMON_ADAPTER = HostAdapterSpec(
         "tool_policy",
         "approval_policy",
         "loadout_policy",
+        "framework_surface_policy",
         "workspace_bootstrap",
         "session_contract",
     ),
@@ -547,7 +549,7 @@ CLAUDE_CODE_ADAPTER = HostAdapterSpec(
         "state_source": "framework_profile",
         "works_without_aionrs": True,
         "config_root_env_var": "CLAUDE_CONFIG_DIR",
-        "context_files": ("CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"),
+        "context_files": ("CLAUDE.md", "CLAUDE.local.md"),
         "settings_paths": (
             "~/.claude/settings.json",
             ".claude/settings.json",
@@ -576,7 +578,6 @@ CLAUDE_CODE_ADAPTER = HostAdapterSpec(
                 "locations": (
                     ".claude/settings.json",
                     "CLAUDE.md",
-                    ".claude/CLAUDE.md",
                     ".claude/agents/",
                 ),
                 "shared_with_team": True,
@@ -827,6 +828,7 @@ def adapt_framework_profile(
         "tool_policy": dict(_clone_json_like(profile.tool_policy)),
         "approval_policy": dict(_clone_json_like(profile.approval_policy)),
         "loadout_policy": dict(_clone_json_like(profile.loadout_policy)),
+        "framework_surface_policy": dict(_clone_json_like(profile.framework_surface_policy)),
         "artifact_contract": dict(_clone_json_like(profile.artifact_contract)),
         "model_policy": dict(_clone_json_like(profile.model_policy)),
         "memory_mounts": _normalize_memory_mounts(profile.memory_mounts),
@@ -969,6 +971,7 @@ def _build_codex_shared_contract(payload: Mapping[str, Any]) -> Dict[str, Any]:
         "tool_policy": _clone_json_like(payload["tool_policy"]),
         "approval_policy": _clone_json_like(payload["approval_policy"]),
         "loadout_policy": _clone_json_like(payload["loadout_policy"]),
+        "framework_surface_policy": _clone_json_like(payload["framework_surface_policy"]),
         "workspace_bootstrap": _clone_json_like(payload["workspace_bootstrap"]),
         "session_contract": _compile_session_mode(payload["framework_profile"]),
         "execution_controller_contract": build_execution_controller_contract(),
@@ -1686,8 +1689,8 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
             "remove_when": [],
             "observation_sources": {
                 "local_runtime_health": [
-                    "PythonAgnoExecutionKernel.health().kernel_live_fallback_request_status",
-                    "PythonAgnoExecutionKernel.health().kernel_live_fallback_mode",
+                    "ExecutionEnvironmentService.describe_kernel_contract()",
+                    "RouterRsExecutionKernel.health().kernel_live_backend_impl",
                 ],
                 "local_contract_artifacts": [
                     "execution_kernel_live_fallback_retirement_status.control_surfaces",

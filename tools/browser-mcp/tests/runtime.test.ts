@@ -26,12 +26,15 @@ async function createAttachedRuntimeFixture(): Promise<{
 
   await mkdir(transportDir, { recursive: true });
   await writeFile(
-      traceStreamPath,
+    traceStreamPath,
     [
       JSON.stringify({
-        ts: '2026-04-22T10:00:00.000Z',
-        event_id: 'evt-1',
-        kind: 'job.started',
+        sink_schema_version: 'runtime-trace-sink-v2',
+        event: {
+          ts: '2026-04-22T10:00:00.000Z',
+          event_id: 'evt-1',
+          kind: 'job.started',
+        },
       }),
       JSON.stringify({
         ts: '2026-04-22T10:00:01.000Z',

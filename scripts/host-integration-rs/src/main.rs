@@ -22,12 +22,11 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "fast-mode",
 ];
 
-const FULL_SYNC_TEXT_FILES: [&str; 19] = [
+const FULL_SYNC_TEXT_FILES: [&str; 15] = [
     "AGENT.md",
     "AGENTS.md",
     "CLAUDE.md",
     "GEMINI.md",
-    ".claude/CLAUDE.md",
     ".claude/agents/README.md",
     ".claude/commands/refresh.md",
     ".claude/commands/background_batch.md",
@@ -39,21 +38,15 @@ const FULL_SYNC_TEXT_FILES: [&str; 19] = [
     ".claude/hooks/session_end.sh",
     ".claude/hooks/config_change.sh",
     ".claude/hooks/stop_failure.sh",
-    "configs/codex/AGENTS.md",
-    "configs/claude/CLAUDE.md",
-    "configs/gemini/GEMINI.md",
 ];
 
 const FULL_SYNC_JSON_FILES: [&str; 2] = [".claude/settings.json", ".gemini/settings.json"];
-const FULL_SYNC_MANAGED_DIRS: [&str; 9] = [
+const FULL_SYNC_MANAGED_DIRS: [&str; 6] = [
     ".claude",
     ".claude/agents",
     ".claude/commands",
     ".claude/hooks",
     ".gemini",
-    "configs/claude",
-    "configs/gemini",
-    "configs/codex",
     ".codex",
 ];
 const PARTIAL_SYNC_TEXT_FILES: [&str; 2] = [
@@ -61,7 +54,14 @@ const PARTIAL_SYNC_TEXT_FILES: [&str; 2] = [
     ".claude/commands/background_batch.md",
 ];
 const PARTIAL_SYNC_MANAGED_DIRS: [&str; 2] = [".claude", ".claude/commands"];
-const RETIRED_PATHS: [&str; 2] = [".codex/model_instructions.md", ".mcp.json"];
+const RETIRED_PATHS: [&str; 6] = [
+    ".claude/CLAUDE.md",
+    ".codex/model_instructions.md",
+    ".mcp.json",
+    "configs/codex/AGENTS.md",
+    "configs/claude/CLAUDE.md",
+    "configs/gemini/GEMINI.md",
+];
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -274,12 +274,11 @@ fn sync_single_root(
             if exists && apply {
                 remove_path(&path).map_err(|err| err.to_string())?;
             }
-            let bucket = if exists {
-                &mut report.written
-            } else {
-                &mut report.unchanged
-            };
-            bucket.push(describe_path(report_root, target_root, &path));
+            if exists {
+                report
+                    .written
+                    .push(describe_path(report_root, target_root, &path));
+            }
         }
     }
 

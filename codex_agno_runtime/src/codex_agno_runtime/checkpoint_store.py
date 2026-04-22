@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import sqlite3
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Protocol
+from typing import Any, Callable, Iterable, Iterator, Mapping, Protocol
 
 from pydantic import BaseModel
 
@@ -185,8 +185,14 @@ class RuntimeStorageBackend(Protocol):
     def read_text(self, path: Path) -> str:
         """Read one persisted UTF-8 payload."""
 
+    def iter_text_lines(self, path: Path) -> Iterator[str]:
+        """Stream persisted UTF-8 payload line-by-line."""
+
     def write_text(self, path: Path, payload: str) -> None:
         """Persist one UTF-8 payload atomically when supported."""
+
+    def append_text(self, path: Path, payload: str) -> None:
+        """Append UTF-8 payload text without re-reading the full object."""
 
 
 class FilesystemRuntimeStorageBackend:
@@ -207,11 +213,20 @@ class FilesystemRuntimeStorageBackend:
     def read_text(self, path: Path) -> str:
         return path.read_text(encoding="utf-8")
 
+    def iter_text_lines(self, path: Path) -> Iterator[str]:
+        with path.open(encoding="utf-8") as handle:
+            yield from handle
+
     def write_text(self, path: Path, payload: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = path.with_suffix(f"{path.suffix}.tmp")
         tmp_path.write_text(payload, encoding="utf-8")
         tmp_path.replace(path)
+
+    def append_text(self, path: Path, payload: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(payload)
 
 
 class InMemoryRuntimeStorageBackend:
@@ -235,8 +250,15 @@ class InMemoryRuntimeStorageBackend:
     def read_text(self, path: Path) -> str:
         return self._payloads[self._key(path)]
 
+    def iter_text_lines(self, path: Path) -> Iterator[str]:
+        yield from self.read_text(path).splitlines(keepends=True)
+
     def write_text(self, path: Path, payload: str) -> None:
         self._payloads[self._key(path)] = payload
+
+    def append_text(self, path: Path, payload: str) -> None:
+        key = self._key(path)
+        self._payloads[key] = self._payloads.get(key, "") + payload
 
     @staticmethod
     def _key(path: Path) -> str:
@@ -288,6 +310,9 @@ class SQLiteRuntimeStorageBackend:
                     return row[0]
         raise KeyError(f"No payload stored for path {path!s}")
 
+    def iter_text_lines(self, path: Path) -> Iterator[str]:
+        yield from self.read_text(path).splitlines(keepends=True)
+
     def write_text(self, path: Path, payload: str) -> None:
         with self._connect() as conn:
             conn.execute(
@@ -295,6 +320,19 @@ class SQLiteRuntimeStorageBackend:
                 INSERT INTO {self._TABLE_NAME} (payload_key, payload_text)
                 VALUES (?, ?)
                 ON CONFLICT(payload_key) DO UPDATE SET payload_text = excluded.payload_text
+                """,
+                (self._stable_key(path), payload),
+            )
+            conn.commit()
+
+    def append_text(self, path: Path, payload: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                f"""
+                INSERT INTO {self._TABLE_NAME} (payload_key, payload_text)
+                VALUES (?, ?)
+                ON CONFLICT(payload_key) DO UPDATE
+                SET payload_text = {self._TABLE_NAME}.payload_text || excluded.payload_text
                 """,
                 (self._stable_key(path), payload),
             )

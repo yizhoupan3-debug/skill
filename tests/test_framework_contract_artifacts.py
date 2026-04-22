@@ -45,6 +45,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
 
     expected_keys = {
         "framework_profile",
+        "framework_surface_policy",
         "cli_common_adapter",
         "codex_common_adapter",
         "codex_cli_adapter",
@@ -87,7 +88,18 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert "rust_codex_desktop_host_adapter" not in paths
 
     cli_common = json.loads(Path(paths["cli_common_adapter"]).read_text(encoding="utf-8"))
+    surface_policy = json.loads(Path(paths["framework_surface_policy"]).read_text(encoding="utf-8"))
+    assert surface_policy["kernel"]["canonical_axes"] == [
+        "routing",
+        "memory",
+        "continuity",
+        "host_projection",
+    ]
+    assert surface_policy["default_surface"]["default_loadouts"] == ["default_surface_loadout"]
     assert cli_common["controller_boundary"]["shared_adapter"] == "cli_common_adapter"
+    assert cli_common["shared_contract"]["framework_surface_policy"]["default_surface"][
+        "default_loadouts"
+    ] == ["default_surface_loadout"]
     assert cli_common["shared_contract"]["execution_controller_contract"]["status_contract"] == (
         "execution_controller_contract_v1"
     )
@@ -127,7 +139,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     claude = json.loads(Path(paths["claude_code_adapter"]).read_text(encoding="utf-8"))
     assert claude["host_projection"]["context_files"] == [
         "CLAUDE.md",
-        ".claude/CLAUDE.md",
         "CLAUDE.local.md",
     ]
     assert claude["host_projection"]["settings_scope_order"] == [
@@ -360,7 +371,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert rust_bundle["codex_cli_adapter"]["execution_surface"]["supports_cron"] is True
     assert rust_bundle["claude_code_adapter"]["host_projection"]["context_files"] == [
         "CLAUDE.md",
-        ".claude/CLAUDE.md",
         "CLAUDE.local.md",
     ]
     assert rust_bundle["claude_code_adapter"]["execution_surface"]["supports_cron"] is False
@@ -460,7 +470,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     rust_claude = json.loads(Path(paths["rust_claude_code_adapter"]).read_text(encoding="utf-8"))
     assert rust_claude["host_projection"]["context_files"] == [
         "CLAUDE.md",
-        ".claude/CLAUDE.md",
         "CLAUDE.local.md",
     ]
     assert rust_claude["host_projection"]["hook_inspection_commands"] == ["/hooks"]

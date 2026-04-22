@@ -19,20 +19,37 @@ HEALTH_MANIFEST_PATH = SKILLS_ROOT / "SKILL_HEALTH_MANIFEST.json"
 OVERLAY_ONLY_SKILLS = {"iterative-optimizer", "execution-audit-codex", "i18n-l10n", "humanizer"}
 
 DEFAULT_LOADOUTS = {
-    "version": 1,
+    "version": 2,
+    "schema_version": "skill-loadouts-v2",
+    "activation_policy": {
+        "default_loadouts": ["default_surface_loadout"],
+        "explicit_opt_in_loadouts": [
+            "research_loadout",
+            "implementation_loadout",
+            "audit_loadout",
+            "framework_loadout",
+            "ops_loadout",
+        ],
+        "experimental_tiers": "explicit_opt_in",
+        "deprecated_tiers": "disabled",
+        "compatibility_surfaces": "explicit_opt_in",
+    },
     "loadouts": {
         "default_surface_loadout": {
+            "activation": "default",
+            "surface_class": "default",
             "owners": [
-                "information-retrieval",
                 "plan-to-code",
                 "python-pro",
                 "typescript-pro",
-                "documentation-engineering",
                 "git-workflow",
                 "shell-cli",
             ],
             "overlays": ["anti-laziness"],
             "exclude": [
+                "academic-search",
+                "autoresearch",
+                "github-investigator",
                 "brainstorm-research",
                 "copywriting",
                 "iterative-optimizer",
@@ -40,33 +57,43 @@ DEFAULT_LOADOUTS = {
                 "seo-web",
                 "sustech-mailer",
             ],
-            "purpose": "Lean day-to-day default surface for evidence-first repo work; specialist lanes stay opt-in.",
+            "purpose": "Single default day-to-day surface for implementation-first repo work; research, audit, and compatibility lanes stay explicit.",
         },
         "research_loadout": {
+            "activation": "explicit",
+            "surface_class": "specialist",
             "owners": ["information-retrieval", "github-investigator", "academic-search"],
             "overlays": ["anti-laziness"],
             "exclude": ["plan-to-code", "react"],
             "purpose": "Bounded research, repo investigation, and evidence gathering.",
         },
         "implementation_loadout": {
+            "activation": "explicit",
+            "surface_class": "specialist",
             "owners": ["plan-to-code", "typescript-pro", "python-pro", "react", "test-engineering"],
             "overlays": ["frontend-code-quality"],
             "exclude": ["academic-search"],
             "purpose": "Concrete implementation and refactor execution with test support.",
         },
         "audit_loadout": {
+            "activation": "explicit",
+            "surface_class": "specialist",
             "owners": [],
             "overlays": ["execution-audit-codex", "code-review", "security-audit", "anti-laziness"],
             "exclude": ["brainstorm-research"],
             "purpose": "Strict sign-off, audit, verification, and issue surfacing.",
         },
         "framework_loadout": {
+            "activation": "explicit",
+            "surface_class": "specialist",
             "owners": ["skill-developer-codex", "execution-controller-coding", "idea-to-plan", "checklist-normalizer"],
             "overlays": ["execution-audit-codex"],
             "exclude": ["seo-web"],
             "purpose": "Framework design, routing policy, orchestrator evolution, and execution-shape normalization work.",
         },
         "ops_loadout": {
+            "activation": "explicit",
+            "surface_class": "specialist",
             "owners": ["git-workflow", "linux-server-ops", "observability"],
             "overlays": ["execution-audit-codex"],
             "exclude": ["paper-writing"],
@@ -163,7 +190,27 @@ def validate_loadouts(
     health_skills = set((health_manifest or {}).get("skills", {}).keys()) if health_manifest else known
     missing: list[str] = []
     conflicts: list[str] = []
+    activation_policy = payload.get("activation_policy", {})
+    default_loadouts = list(activation_policy.get("default_loadouts", []))
+    explicit_opt_in_loadouts = list(activation_policy.get("explicit_opt_in_loadouts", []))
+    if len(default_loadouts) != 1:
+        conflicts.append("activation_policy:default_loadouts:expected-exactly-one")
+    unknown_activation_refs = sorted(
+        set(default_loadouts + explicit_opt_in_loadouts) - set(payload.get("loadouts", {}).keys())
+    )
+    if unknown_activation_refs:
+        conflicts.append(
+            "activation_policy:unknown-loadout:"
+            + ",".join(unknown_activation_refs)
+        )
+    allowed_activation_values = {"default", "explicit"}
+    default_marked: list[str] = []
     for name, config in payload.get("loadouts", {}).items():
+        activation = str(config.get("activation", "explicit"))
+        if activation not in allowed_activation_values:
+            conflicts.append(f"{name}:activation:invalid:{activation}")
+        if activation == "default":
+            default_marked.append(name)
         owners = list(config.get("owners", []))
         overlays = list(config.get("overlays", []))
         excluded = list(config.get("exclude", []))
@@ -200,6 +247,11 @@ def validate_loadouts(
         for skill in overlays:
             if skill in owner_only:
                 conflicts.append(f"{name}:overlays:{skill}:owner-only")
+    if sorted(default_marked) != sorted(default_loadouts):
+        conflicts.append(
+            "activation_policy:default-mismatch:"
+            + ",".join(sorted(set(default_marked) ^ set(default_loadouts)))
+        )
     if missing:
         raise SystemExit(f"Unknown skills referenced by loadouts: {', '.join(missing)}")
     if conflicts:

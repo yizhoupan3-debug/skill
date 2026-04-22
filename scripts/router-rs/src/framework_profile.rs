@@ -5,26 +5,28 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const REQUIRED_CORE_CAPABILITIES: [&str; 4] = ["runtime", "memory", "artifact", "orchestration"];
-const COMMON_PARITY_FIELDS: [&str; 11] = [
+const COMMON_PARITY_FIELDS: [&str; 12] = [
     "artifact_contract",
     "memory_mounts",
     "mcp_servers",
     "tool_policy",
     "approval_policy",
     "loadout_policy",
+    "framework_surface_policy",
     "workspace_bootstrap",
     "session_contract",
     "execution_controller_contract",
     "delegation_contract",
     "supervisor_state_contract",
 ];
-const CODEX_COMMON_HOST_CAPABILITIES: [&str; 8] = [
+const CODEX_COMMON_HOST_CAPABILITIES: [&str; 9] = [
     "artifact_contract",
     "memory_mounts",
     "mcp_servers",
     "tool_policy",
     "approval_policy",
     "loadout_policy",
+    "framework_surface_policy",
     "workspace_bootstrap",
     "session_contract",
 ];
@@ -75,13 +77,14 @@ const GEMINI_CLI_HOST_CAPABILITIES: [&str; 9] = [
     "context_file",
     "settings_json",
 ];
-const CLI_FAMILY_HOST_CAPABILITIES: [&str; 8] = [
+const CLI_FAMILY_HOST_CAPABILITIES: [&str; 9] = [
     "artifact_contract",
     "memory_mounts",
     "mcp_servers",
     "tool_policy",
     "approval_policy",
     "loadout_policy",
+    "framework_surface_policy",
     "workspace_bootstrap",
     "session_contract",
 ];
@@ -153,6 +156,8 @@ pub struct FrameworkProfileContract {
     #[serde(default)]
     pub loadout_policy: Map<String, Value>,
     #[serde(default)]
+    pub framework_surface_policy: Map<String, Value>,
+    #[serde(default)]
     pub artifact_contract: Map<String, Value>,
     #[serde(default)]
     pub model_policy: Map<String, Value>,
@@ -182,6 +187,7 @@ pub struct ProfileBundle {
     pub tool_policy: Map<String, Value>,
     pub approval_policy: Map<String, Value>,
     pub loadout_policy: Map<String, Value>,
+    pub framework_surface_policy: Map<String, Value>,
     pub artifact_contract: Map<String, Value>,
     pub model_policy: Map<String, Value>,
     pub memory_mounts: Vec<Value>,
@@ -406,6 +412,7 @@ pub fn build_profile_bundle_with_legacy_alias(
         tool_policy: profile.tool_policy.clone(),
         approval_policy: profile.approval_policy.clone(),
         loadout_policy: profile.loadout_policy.clone(),
+        framework_surface_policy: profile.framework_surface_policy.clone(),
         artifact_contract: profile.artifact_contract.clone(),
         model_policy: profile.model_policy.clone(),
         memory_mounts: normalized_memory_mounts.clone(),
@@ -864,6 +871,10 @@ fn build_codex_shared_contract(
         Value::Object(profile.loadout_policy.clone()),
     );
     shared_contract.insert(
+        "framework_surface_policy".to_string(),
+        Value::Object(profile.framework_surface_policy.clone()),
+    );
+    shared_contract.insert(
         "workspace_bootstrap".to_string(),
         Value::Object(workspace_bootstrap.clone()),
     );
@@ -1040,6 +1051,10 @@ fn build_codex_adapter_base(
     payload.insert(
         "loadout_policy".to_string(),
         Value::Object(profile.loadout_policy.clone()),
+    );
+    payload.insert(
+        "framework_surface_policy".to_string(),
+        Value::Object(profile.framework_surface_policy.clone()),
     );
     payload.insert(
         "artifact_contract".to_string(),
@@ -1353,7 +1368,6 @@ fn build_claude_host_projection() -> Map<String, Value> {
         "context_files".to_string(),
         Value::Array(vec![
             Value::String("CLAUDE.md".to_string()),
-            Value::String(".claude/CLAUDE.md".to_string()),
             Value::String("CLAUDE.local.md".to_string()),
         ]),
     );
@@ -1404,7 +1418,6 @@ fn build_claude_host_projection() -> Map<String, Value> {
                 "locations": [
                     ".claude/settings.json",
                     "CLAUDE.md",
-                    ".claude/CLAUDE.md",
                     ".claude/agents/"
                 ],
                 "shared_with_team": true
@@ -2862,21 +2875,13 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         "removal_owner".to_string(),
         Value::String("runtime-integrator".to_string()),
     );
-    retirement_exit_contract.insert(
-        "remove_when".to_string(),
-        Value::Array(vec![]),
-    );
+    retirement_exit_contract.insert("remove_when".to_string(), Value::Array(vec![]));
     let mut retirement_exit_observation_sources = Map::new();
     retirement_exit_observation_sources.insert(
         "local_runtime_health".to_string(),
         Value::Array(vec![
-            Value::String(
-                "PythonAgnoExecutionKernel.health().kernel_live_fallback_request_status"
-                    .to_string(),
-            ),
-            Value::String(
-                "PythonAgnoExecutionKernel.health().kernel_live_fallback_mode".to_string(),
-            ),
+            Value::String("ExecutionEnvironmentService.describe_kernel_contract()".to_string()),
+            Value::String("RouterRsExecutionKernel.health().kernel_live_backend_impl".to_string()),
         ]),
     );
     retirement_exit_observation_sources.insert(
@@ -3758,6 +3763,10 @@ mod tests {
             "tool_policy": {"shell": "allow"},
             "approval_policy": {"mode": "manual"},
             "loadout_policy": {"default": "portable"},
+            "framework_surface_policy": {
+                "kernel": {"canonical_axes": ["routing", "memory", "continuity", "host_projection"]},
+                "default_surface": {"default_loadouts": ["default_surface_loadout"]}
+            },
             "artifact_contract": {"layout": "stable-v1"},
             "model_policy": {"provider": "openai", "model": "gpt-5"},
             "memory_mounts": ["project"],
@@ -3795,7 +3804,7 @@ mod tests {
         );
         assert_eq!(
             bundle.claude_code_adapter["host_projection"]["context_files"],
-            json!(["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"])
+            json!(["CLAUDE.md", "CLAUDE.local.md"])
         );
         assert_eq!(
             bundle.gemini_cli_adapter["host_projection"]["structured_output_modes"],
@@ -3984,6 +3993,11 @@ mod tests {
             json!({"layout": "stable-v1"})
         );
         assert_eq!(
+            bundle.cli_common_adapter["shared_contract"]["framework_surface_policy"]
+                ["default_surface"]["default_loadouts"],
+            json!(["default_surface_loadout"])
+        );
+        assert_eq!(
             bundle.codex_dual_entry_parity_snapshot["controller_boundary"]
                 ["single_source_of_truth"],
             Value::Bool(true)
@@ -4043,7 +4057,7 @@ mod tests {
         );
         assert_eq!(
             artifacts["claude_code_adapter"]["host_projection"]["context_files"],
-            json!(["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"])
+            json!(["CLAUDE.md", "CLAUDE.local.md"])
         );
         assert_eq!(
             artifacts["gemini_cli_adapter"]["host_projection"]["structured_output_modes"],

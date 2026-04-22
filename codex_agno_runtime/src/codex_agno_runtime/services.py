@@ -1072,9 +1072,7 @@ class TraceService:
     ) -> RuntimeEventStreamChunk:
         """Return one event-bridge delivery window for a subscriber."""
 
-        # Cleanup drops the in-memory cache only; replayable stream state reseeds it on demand.
-        self.event_bridge.seed(self.recorder.stream_events(session_id=session_id, job_id=job_id))
-        return self.event_bridge.subscribe(
+        return self.recorder.subscribe_chunk(
             session_id=session_id,
             job_id=job_id,
             after_event_id=after_event_id,
@@ -1525,6 +1523,7 @@ class BackgroundRuntimeHost:
         self._job_semaphore: asyncio.Semaphore = asyncio.Semaphore(self._max_background_jobs)
         self.background_jobs: dict[str, BackgroundRunStatus] = self.state_service.snapshot()
         self._background_tasks: dict[str, asyncio.Task[None]] = {}
+        self.background_requests: dict[str, BackgroundRunRequest] = {}
 
     @property
     def jobs_lock(self) -> asyncio.Lock:
@@ -1610,6 +1609,7 @@ class BackgroundRuntimeHost:
     ) -> None:
         """Create the steady-state background runner task for one admitted job."""
 
+        self.background_requests[job_id] = request
         task = asyncio.create_task(self._run_background_job(job_id, request, run_task=run_task))
         self._background_tasks[job_id] = task
 
@@ -1710,6 +1710,93 @@ class BackgroundRuntimeHost:
         if summary is None:
             return None
         return summary.model_dump(mode="json")
+
+    def _flush_background_trace_metadata(
+        self,
+        *,
+        request: BackgroundRunRequest,
+        result: RunTaskResponse,
+        status: BackgroundRunStatus,
+    ) -> None:
+        """Project one completed background result into the canonical trace metadata artifact."""
+
+        matched_skills = [result.skill]
+        if result.overlay:
+            matched_skills.append(result.overlay)
+        self._trace.flush_metadata(
+            task=request.task,
+            matched_skills=matched_skills,
+            owner=result.skill,
+            gate=str(result.metadata.get("routing_gate") or "none"),
+            overlay=result.overlay,
+            artifact_paths=self._artifact_paths_provider(),
+            verification_status="completed" if result.live_run else "dry_run",
+            session_id=result.session_id,
+            job_id=status.job_id,
+            parallel_group=self._parallel_group_summary_payload(
+                parallel_group_id=status.parallel_group_id
+            ),
+            supervisor_projection=self._supervisor_projection_provider(),
+        )
+
+    def _flush_background_terminal_trace_metadata(
+        self,
+        *,
+        request: BackgroundRunRequest,
+        status: BackgroundRunStatus,
+        verification_status: str,
+    ) -> None:
+        """Flush top-level trace metadata for one terminal background state without a result payload."""
+
+        route_payload = self._trace.latest_route_selection(session_id=request.session_id or status.job_id)
+        if route_payload is None:
+            return
+        matched_skills = [str(route_payload.get("skill") or "unknown")]
+        overlay = route_payload.get("overlay")
+        if isinstance(overlay, str) and overlay:
+            matched_skills.append(overlay)
+        self._trace.flush_metadata(
+            task=request.task,
+            matched_skills=matched_skills,
+            owner=str(route_payload.get("routing_owner") or matched_skills[0]),
+            gate=str(route_payload.get("routing_gate") or "none"),
+            overlay=str(overlay) if isinstance(overlay, str) and overlay else None,
+            artifact_paths=self._artifact_paths_provider(),
+            verification_status=verification_status,
+            session_id=request.session_id,
+            job_id=status.job_id,
+            parallel_group=self._parallel_group_summary_payload(
+                parallel_group_id=status.parallel_group_id
+            ),
+            supervisor_projection=self._supervisor_projection_provider(),
+        )
+
+    def flush_background_admission_failure_trace_metadata(
+        self,
+        *,
+        request: BackgroundRunRequest,
+        status: BackgroundRunStatus,
+    ) -> None:
+        """Project grouped pre-execution failures into top-level trace metadata."""
+
+        if status.parallel_group_id is None:
+            return
+        control_plane_owner = "background-runtime-host"
+        self._trace.flush_metadata(
+            task=request.task,
+            matched_skills=[control_plane_owner],
+            owner=control_plane_owner,
+            gate="none",
+            overlay=None,
+            artifact_paths=self._artifact_paths_provider(),
+            verification_status="failed",
+            session_id=request.session_id,
+            job_id=status.job_id,
+            parallel_group=self._parallel_group_summary_payload(
+                parallel_group_id=status.parallel_group_id
+            ),
+            supervisor_projection=self._supervisor_projection_provider(),
+        )
 
     def _background_policy(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._background_control_provider()(
@@ -1893,6 +1980,11 @@ class BackgroundRuntimeHost:
                             ),
                         },
                     )
+                    self._flush_background_trace_metadata(
+                        request=request,
+                        result=result,
+                        status=completed,
+                    )
                     self._checkpoint_background_resume_manifest(
                         session_id=result.session_id,
                         job_id=job_id,
@@ -1912,6 +2004,7 @@ class BackgroundRuntimeHost:
         finally:
             if self._background_tasks.get(job_id) is current_task:
                 self._background_tasks.pop(job_id, None)
+            self.background_requests.pop(job_id, None)
 
     async def _schedule_retry_or_finalize(self, job_id: str, *, session_id: str, error: str) -> bool:
         """Record failure, then either schedule deterministic retry or finalize."""
@@ -1967,6 +2060,13 @@ class BackgroundRuntimeHost:
                                 "error": error,
                                 **self._background_trace_context(finalized),
                             },
+                        )
+                    request = self.background_requests.get(job_id)
+                    if request is not None:
+                        self._flush_background_terminal_trace_metadata(
+                            request=request,
+                            status=finalized,
+                            verification_status=terminal_status,
                         )
                     self._checkpoint_background_resume_manifest(
                         session_id=session_id,
@@ -2119,6 +2219,13 @@ class BackgroundRuntimeHost:
                 **self._background_trace_context(interrupted),
             },
         )
+        request = self.background_requests.get(job_id)
+        if request is not None:
+            self._flush_background_terminal_trace_metadata(
+                request=request,
+                status=interrupted,
+                verification_status="interrupted",
+            )
         self._checkpoint_background_resume_manifest(
             session_id=session_id,
             job_id=job_id,

@@ -20,6 +20,7 @@ except ImportError:
     check_skills = None
 
 from build_skill_approval_policy import build_policy
+from build_framework_surface_policy import build_framework_surface_policy
 from build_skill_loadouts import DEFAULT_LOADOUTS, validate_loadouts
 from build_skill_shadow_map import (
     build_shadow_map,
@@ -63,6 +64,7 @@ SHADOW_MAP_PATH = SKILLS_ROOT / "SKILL_SHADOW_MAP.json"
 LOADOUTS_PATH = SKILLS_ROOT / "SKILL_LOADOUTS.json"
 APPROVAL_POLICY_PATH = SKILLS_ROOT / "SKILL_APPROVAL_POLICY.json"
 TIERS_PATH = SKILLS_ROOT / "SKILL_TIERS.json"
+FRAMEWORK_SURFACE_POLICY_PATH = ROOT / "configs" / "framework" / "FRAMEWORK_SURFACE_POLICY.json"
 HOOKS_PATH = ROOT / ".githooks"
 REQUIRED_ROUTING_FIELDS = ("routing_layer", "routing_owner", "routing_gate", "session_start")
 
@@ -601,6 +603,7 @@ def write_generated_files(
         health_manifest=health_manifest,
         loadouts=DEFAULT_LOADOUTS,
     )
+    framework_surface_policy = build_framework_surface_policy(DEFAULT_LOADOUTS, tiers)
     targets = {
         REGISTRY_PATH: registry,
         MANIFEST_PATH: json.dumps(manifest, ensure_ascii=False, separators=(",", ":")),
@@ -612,10 +615,13 @@ def write_generated_files(
         APPROVAL_POLICY_PATH: json.dumps(approval_policy, ensure_ascii=False, indent=2) + "\n",
         HEALTH_MANIFEST_PATH: json.dumps(health_manifest, ensure_ascii=False, indent=2) + "\n",
         TIERS_PATH: json.dumps(tiers, ensure_ascii=False, indent=2) + "\n",
+        FRAMEWORK_SURFACE_POLICY_PATH: json.dumps(framework_surface_policy, ensure_ascii=False, indent=2)
+        + "\n",
     }
 
     changed: list[str] = []
     for path, content in targets.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
         current = path.read_text(encoding="utf-8") if path.exists() else None
         if current != content:
             changed.append(repo_relative(path))

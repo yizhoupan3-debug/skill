@@ -18,7 +18,6 @@ Read these first when relevant:
 
 - `/Users/joe/Documents/skill/AGENT.md`
 - `/Users/joe/Documents/skill/CLAUDE.md`
-- `/Users/joe/Documents/skill/.claude/CLAUDE.md`
 - `/Users/joe/Documents/skill/.claude/settings.json`
 Operating rules:
 
