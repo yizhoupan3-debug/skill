@@ -1628,7 +1628,6 @@ class ExecutionEnvironmentService:
                 job_id=ctx.job_id,
                 user_id=ctx.user_id,
                 routing_result=ctx.routing_result,
-                prompt_preview=(ctx.prompt or None) if dry_run else None,
                 dry_run=dry_run,
                 trace_event_count=trace_event_count,
                 trace_output_path=trace_output_path,

@@ -26,8 +26,10 @@ elif [ -n "${BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH:-}" ]; then
   NODE_ARGS+=(--runtime-binding-artifact-path "$BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH")
 elif [ -n "${BROWSER_MCP_RUNTIME_HANDOFF_PATH:-}" ]; then
   NODE_ARGS+=(--runtime-handoff-path "$BROWSER_MCP_RUNTIME_HANDOFF_PATH")
+elif [ -n "${BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH:-}" ]; then
+  NODE_ARGS+=(--runtime-resume-manifest-path "$BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH")
 else
-  AUTO_ATTACH_ARTIFACT=$(python3 "$SCRIPT_DIR/resolve_runtime_attach_artifact.py" 2>/dev/null || true)
+  AUTO_ATTACH_ARTIFACT=$(node "$SCRIPT_DIR/resolve_runtime_attach_artifact.mjs" 2>/dev/null || true)
   if [ -n "$AUTO_ATTACH_ARTIFACT" ]; then
     NODE_ARGS+=(--runtime-attach-artifact-path "$AUTO_ATTACH_ARTIFACT")
   fi

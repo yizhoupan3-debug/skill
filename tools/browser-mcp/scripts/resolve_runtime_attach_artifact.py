@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve the newest replay-capable browser-mcp attach artifact."""
+"""Compatibility resolver for the newest browser-mcp attach artifact."""
 
 from __future__ import annotations
 
@@ -20,8 +20,6 @@ DEFAULT_SEARCH_ROOT = (
 
 @dataclass(frozen=True)
 class AttachCandidate:
-    """One resolved attach artifact candidate."""
-
     attach_path: str
     source_kind: str
     source_path: str
@@ -52,16 +50,17 @@ def _json_object(raw: str) -> dict[str, object] | None:
 def _manifest_candidate(
     payload: dict[str, object],
     *,
+    attach_path: str,
     source_path: str,
     recency_hint: int,
 ) -> AttachCandidate | None:
     if payload.get("schema_version") != TRACE_RESUME_MANIFEST_SCHEMA_VERSION:
         return None
-    attach_path = payload.get("event_transport_path")
-    if not isinstance(attach_path, str) or not attach_path.strip():
+    event_transport_path = payload.get("event_transport_path")
+    if not isinstance(event_transport_path, str) or not event_transport_path.strip():
         return None
     return AttachCandidate(
-        attach_path=attach_path.strip(),
+        attach_path=attach_path,
         source_kind="resume_manifest",
         source_path=source_path,
         updated_at_epoch=_parse_iso_epoch(payload.get("updated_at")),
@@ -101,6 +100,7 @@ def _iter_filesystem_candidates(search_root: Path) -> Iterable[AttachCandidate]:
             continue
         candidate = _manifest_candidate(
             payload,
+            attach_path=str(manifest_path.resolve()),
             source_path=str(manifest_path.resolve()),
             recency_hint=manifest_path.stat().st_mtime_ns,
         )
@@ -144,16 +144,19 @@ def _iter_sqlite_candidates(search_root: Path) -> Iterable[AttachCandidate]:
             connection.close()
             continue
         connection.close()
+        db_mtime_ns = int(db_path.stat().st_mtime_ns)
         for rowid, payload_key, payload_text in rows:
             if not isinstance(payload_text, str):
                 continue
             payload = _json_object(payload_text)
             if payload is None:
                 continue
-            source_path = f"{db_path.resolve()}::{payload_key}"
-            recency_hint = int(db_path.stat().st_mtime_ns) + int(rowid)
+            payload_key_string = payload_key if isinstance(payload_key, str) else ""
+            source_path = f"{db_path.resolve()}::{payload_key_string}"
+            recency_hint = db_mtime_ns + int(rowid)
             candidate = _manifest_candidate(
                 payload,
+                attach_path=payload_key_string or source_path,
                 source_path=source_path,
                 recency_hint=recency_hint,
             )
@@ -163,7 +166,7 @@ def _iter_sqlite_candidates(search_root: Path) -> Iterable[AttachCandidate]:
             candidate = _binding_candidate(
                 payload,
                 source_path=source_path,
-                fallback_attach_path=payload_key if isinstance(payload_key, str) else None,
+                fallback_attach_path=payload_key_string or None,
                 recency_hint=recency_hint,
             )
             if candidate is not None:
@@ -171,8 +174,6 @@ def _iter_sqlite_candidates(search_root: Path) -> Iterable[AttachCandidate]:
 
 
 def resolve_runtime_attach_artifact(search_root: Path) -> str | None:
-    """Return the newest attach artifact path across filesystem and sqlite surfaces."""
-
     candidates = list(_iter_filesystem_candidates(search_root))
     candidates.extend(_iter_sqlite_candidates(search_root))
     if not candidates:

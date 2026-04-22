@@ -59,13 +59,13 @@ following are true:
 - `codex_desktop_alias_retirement_status.json`: alias retirement gates are externalized as a contract only on the explicit continuity lane.
 - `codex_agno_runtime.compatibility.build_upgrade_compatibility_matrix(...)`: the upgrade lane is anchored in the outer-framework contract, not host internals.
 - `emit_framework_contract_artifacts(...)`: Python can now emit concrete bridge/contract artifacts for profile + default host adapters + dual-entry parity snapshot + the first-class control-plane contract artifacts `execution_controller_contract`, `delegation_contract`, and `supervisor_state_contract`; default outputs land under `default/`, fallback host artifacts under `fallback/`, legacy alias inventory/status under `continuity/`, and `upgrade_compatibility_matrix` itself is now an explicit compatibility-inventory output.
-- default Python artifact emission is parity-first: `codex_desktop_host_adapter` is now
-  legacy opt-in output and its inventory/status artifacts stay behind explicit continuity opt-in.
+- default Python artifact emission is parity-first: `codex_desktop_host_adapter` no longer has a
+  direct Python-emitted artifact, and its inventory/status artifacts stay behind explicit continuity opt-in.
 - default Rust `--profile-artifacts-json` is now parity-first too: `codex_desktop_alias_retirement_status`
   stays behind explicit continuity opt-in together with the legacy alias artifact.
 - default regression authority is parity-first: this matrix stays secondary
   inventory / smoke evidence and does not replace parity snapshots.
-- default package export is parity-first: `compile_codex_desktop_host_adapter(...)`
-  no longer lives on `codex_agno_runtime` root and is only exposed from
-  `codex_agno_runtime.compatibility`.
+- default package export is parity-first: Python no longer exposes
+  `compile_codex_desktop_host_adapter(...)`; the remaining compatibility surface stays limited to
+  explicit inventory / retirement helpers.
 - `router-rs --profile-json`: Rust lane validates and compiles the framework profile without touching `aionrs` or `AionUI`.

@@ -362,13 +362,13 @@ class CodexAgnoRuntime:
         self.skills = self.router_service.skills
         self.router = None
 
-    def _prepare_session(
+    def _route_session(
         self,
         request: PrepareSessionRequest,
         *,
         include_prompt_preview: bool,
-    ) -> PrepareSessionResponse:
-        """Route a task and optionally build a session prompt preview."""
+    ) -> tuple[str, str, RoutingResult]:
+        """Resolve one routed session without projecting through prepare-session response types."""
 
         session_id = build_session_id(
             request.project_id,
@@ -391,7 +391,6 @@ class CodexAgnoRuntime:
                     job_id=None,
                     user_id=user_id,
                     routing_result=routing_result,
-                    prompt_preview=None,
                     dry_run=True,
                 ),
                 settings=self.settings,
@@ -433,6 +432,20 @@ class CodexAgnoRuntime:
                 ),
             },
         )
+        return session_id, user_id, routing_result
+
+    def _prepare_session(
+        self,
+        request: PrepareSessionRequest,
+        *,
+        include_prompt_preview: bool,
+    ) -> PrepareSessionResponse:
+        """Route a task and optionally build a session prompt preview."""
+
+        session_id, user_id, routing_result = self._route_session(
+            request,
+            include_prompt_preview=include_prompt_preview,
+        )
         return PrepareSessionResponse(
             session_id=session_id,
             user_id=user_id,
@@ -448,15 +461,21 @@ class CodexAgnoRuntime:
         )
 
     def prepare_session(self, request: PrepareSessionRequest) -> PrepareSessionResponse:
-        """Route a task and build a session preview."""
+        """Route a task without precomputing a dry-run preview."""
 
-        return self._prepare_session(request, include_prompt_preview=True)
+        return self._prepare_session(request, include_prompt_preview=False)
+
+    def prepare_session_preview(self, request: PrepareSessionRequest) -> str | None:
+        """Resolve one explicit Rust-owned dry-run preview for callers that need it."""
+
+        _, _, routing_result = self._route_session(request, include_prompt_preview=True)
+        return routing_result.prompt_preview
 
     async def run_task(self, request: RunTaskRequest) -> RunTaskResponse:
         """Run a routed task through the middleware chain."""
 
         execution_is_dry_run = self.execution_service.resolve_dry_run(request_dry_run=request.dry_run)
-        prepared = self._prepare_session(
+        session_id, user_id, routing_result = self._route_session(
             PrepareSessionRequest(
                 task=request.task,
                 project_id=request.project_id,
@@ -464,20 +483,19 @@ class CodexAgnoRuntime:
                 user_id=request.user_id,
                 allow_overlay=request.allow_overlay,
             ),
-            include_prompt_preview=execution_is_dry_run,
+            include_prompt_preview=False,
         )
-        routing_result = self._to_routing_result(request.task, prepared)
         kernel_contract = _runtime_execution_kernel_contract(
             self.execution_service._service_descriptor,
             dry_run=execution_is_dry_run,
         )
         self._trace.record(
-            session_id=prepared.session_id,
+            session_id=session_id,
             job_id=request.job_id,
             kind="run.started",
             stage="execution",
             payload={
-                "skill": prepared.skill,
+                "skill": routing_result.selected_skill.name,
                 "live_run": not execution_is_dry_run,
                 **project_execution_kernel_payload(
                     self.execution_service._service_descriptor,
@@ -489,11 +507,11 @@ class CodexAgnoRuntime:
 
         ctx = MiddlewareContext(
             task=request.task,
-            session_id=prepared.session_id,
+            session_id=session_id,
             job_id=request.job_id,
-            user_id=prepared.user_id,
+            user_id=user_id,
             routing_result=routing_result,
-            prompt=prepared.prompt_preview or "",
+            prompt="",
             execution_kernel=kernel_contract.get("execution_kernel"),
             execution_kernel_authority=kernel_contract.get("execution_kernel_authority"),
             execution_kernel_delegate=kernel_contract.get("execution_kernel_delegate"),
@@ -516,7 +534,7 @@ class CodexAgnoRuntime:
             result = await self._middleware_chain.execute(ctx, _core_agent_fn)
         except Exception as error:
             self._trace.record(
-                session_id=prepared.session_id,
+                session_id=session_id,
                 job_id=request.job_id,
                 kind="run.failed",
                 stage="execution",
@@ -525,7 +543,7 @@ class CodexAgnoRuntime:
             raise
 
         self._trace.record(
-            session_id=prepared.session_id,
+            session_id=session_id,
             job_id=request.job_id,
             kind="run.completed",
             stage="execution",
@@ -674,29 +692,6 @@ class CodexAgnoRuntime:
                     else None
                 ),
             }
-        )
-
-    def _to_routing_result(self, task: str, prepared: PrepareSessionResponse) -> RoutingResult:
-        """Convert a prepared session payload back into a routing result."""
-
-        selected = next(skill for skill in self.skills if skill.name == prepared.skill)
-        overlay = next((skill for skill in self.skills if skill.name == prepared.overlay), None)
-        return RoutingResult(
-            task=task,
-            session_id=prepared.session_id,
-            selected_skill=selected,
-            overlay_skill=overlay,
-            score=0,
-            layer=prepared.layer,
-            reasons=prepared.reasons,
-            prompt_preview=prepared.prompt_preview,
-            route_engine=prepared.route_engine,
-            diagnostic_route_mode=prepared.diagnostic_route_mode,
-            route_diagnostic_report=(
-                prepared.route_diagnostic_report.model_dump(mode="json")
-                if prepared.route_diagnostic_report is not None
-                else None
-            ),
         )
 
     def _maybe_flush_trace(self, result: RunTaskResponse, routing_result: RoutingResult) -> None:

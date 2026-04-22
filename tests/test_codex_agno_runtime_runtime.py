@@ -398,7 +398,7 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
             overlay=ctx.routing_result.overlay_skill.name if ctx.routing_result.overlay_skill else None,
             live_run=False,
             content="delegated",
-            prompt_preview=ctx.prompt,
+            prompt_preview="Rust-owned dry-run prompt",
             metadata={
                 "execution_kernel": "fake-kernel",
                 "execution_kernel_authority": "test-adapter",
@@ -420,9 +420,10 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
         assert response.content == "delegated"
         assert seen["dry_run"] is True
         assert isinstance(seen["prompt"], str)
-        assert seen["prompt"]
+        assert seen["prompt"] == ""
         assert seen["trace_event_count"] >= 4
         assert seen["trace_output_path"] == str(trace_path)
+        assert response.prompt_preview == "Rust-owned dry-run prompt"
         assert response.metadata["execution_kernel"] == "fake-kernel"
         assert response.metadata["execution_kernel_authority"] == "test-adapter"
         assert response.metadata["execution_kernel_delegate"] == "router-rs"
@@ -1928,6 +1929,7 @@ def test_prepare_session_rust_mode_returns_rust_only_contract(tmp_path: Path) ->
     assert rust_prepared.route_diagnostic_report is None
     assert rust_prepared.skill
     assert rust_prepared.layer
+    assert rust_prepared.prompt_preview is None
 
 
 def test_prepare_session_shadow_mode_returns_soak_report(tmp_path: Path) -> None:
@@ -1962,6 +1964,31 @@ def test_prepare_session_shadow_mode_returns_soak_report(tmp_path: Path) -> None
     assert prepared.route_diagnostic_report.verification_passed is True
     assert prepared.route_diagnostic_report.contract_mismatch_fields == []
     assert prepared.route_diagnostic_report.route_snapshot.selected_skill == prepared.skill
+    assert prepared.prompt_preview is None
+
+
+def test_prepare_session_preview_returns_rust_owned_prompt_text(tmp_path: Path) -> None:
+    """Preview callers should use the explicit preview API instead of prepare_session."""
+
+    runtime = CodexAgnoRuntime(
+        RuntimeSettings(
+            codex_home=PROJECT_ROOT,
+            data_dir=tmp_path / "preview-runtime-data",
+            live_model_override=False,
+            route_engine_mode="rust",
+        )
+    )
+
+    preview = runtime.prepare_session_preview(
+        PrepareSessionRequest(
+            task="帮我写一个 Rust CLI 工具",
+            session_id="preview-runtime-route-session",
+            user_id="tester",
+        )
+    )
+
+    assert isinstance(preview, str)
+    assert preview
 
 
 def test_runtime_metadata_includes_route_diagnostic_report(tmp_path: Path) -> None:

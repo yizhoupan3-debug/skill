@@ -29,7 +29,6 @@ from codex_agno_runtime.host_adapters import (
     compile_codex_cli_adapter,
     compile_codex_common_adapter,
     compile_codex_desktop_adapter,
-    compile_codex_desktop_host_adapter,
     compile_cli_common_adapter,
     compile_gemini_cli_adapter,
 )
@@ -631,10 +630,6 @@ def emit_framework_contract_artifacts(
             python_artifacts["upgrade_compatibility_matrix"],
         )
     if emit_legacy_alias_artifact:
-        paths["codex_desktop_host_adapter"] = _write_json(
-            continuity_dir / "codex_desktop_host_adapter.json",
-            compile_codex_desktop_host_adapter(profile, host_overrides=host_overrides).host_payload,
-        )
         paths["codex_desktop_alias_inventory"] = _write_json(
             continuity_dir / "codex_desktop_alias_inventory.json",
             python_artifacts["codex_desktop_alias_inventory"],

@@ -784,9 +784,7 @@ def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
         include_legacy_alias_artifact=True,
     )
 
-    alias_payload = json.loads(Path(paths["codex_desktop_host_adapter"]).read_text(encoding="utf-8"))
-    assert Path(paths["codex_desktop_host_adapter"]).parent.name == "continuity"
-    assert alias_payload["metadata"]["adapter_alias_of"] == "codex_desktop_adapter"
+    assert "codex_desktop_host_adapter" not in paths
     alias_inventory = json.loads(
         Path(paths["codex_desktop_alias_inventory"]).read_text(encoding="utf-8")
     )
