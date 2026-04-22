@@ -476,7 +476,7 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
         "inconsistency_reasons": inconsistency_reasons,
         "recovery_hints": recovery_hints,
         "continuity": {
-            "story_state": if story_state.is_empty() { None::<String> } else { Some(story_state) },
+            "story_state": nonempty_string(Some(&Value::String(story_state))),
             "resume_allowed": value_bool_or_none(continuity.get("resume_allowed")),
             "last_updated_at": nonempty_string(continuity.get("last_updated_at")),
             "active_lease_expires_at": nonempty_string(continuity.get("active_lease_expires_at")),

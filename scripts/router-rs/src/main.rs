@@ -13,13 +13,13 @@ use strsim::jaro_winkler;
 mod framework_profile;
 mod framework_runtime;
 
-use framework_runtime::{
-    build_framework_contract_summary_envelope, build_framework_runtime_snapshot_envelope,
-    resolve_repo_root_arg,
-};
 use framework_profile::{
     build_codex_artifact_bundle, build_profile_bundle, build_profile_bundle_with_legacy_alias,
     load_framework_profile,
+};
+use framework_runtime::{
+    build_framework_contract_summary_envelope, build_framework_runtime_snapshot_envelope,
+    resolve_repo_root_arg,
 };
 
 const ROUTE_DECISION_SCHEMA_VERSION: &str = "router-rs-route-decision-v1";
