@@ -6,9 +6,11 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from codex_agno_runtime.control_plane_contracts import build_control_plane_contract_descriptors
 from codex_agno_runtime.framework_profile import (
     FRAMEWORK_SHARED_CONTRACT_FIELDS,
     FrameworkProfile,
+    extract_framework_workspace_bridges,
     merge_profile_overrides,
 )
 from codex_agno_runtime.compatibility import (
@@ -23,7 +25,6 @@ from codex_agno_runtime.host_adapters import (
     GENERIC_HOST_ADAPTER,
     SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID,
     adapt_framework_profile,
-    build_control_plane_contract_descriptors,
     build_cli_family_capability_discovery,
     build_cli_family_parity_snapshot,
     build_codex_dual_entry_parity_snapshot,
@@ -372,6 +373,9 @@ def build_framework_shared_contract_projection_report(
         profile.shared_contract_payload()
     ).model_dump(mode="python")
     canonical_surface = canonical_payload["shared_contract"]
+    canonical_bridge_contract = extract_framework_workspace_bridges(
+        canonical_surface["workspace_bootstrap"]
+    )
 
     compiled_payloads = (
         dict(adapter_payloads)
@@ -405,21 +409,33 @@ def build_framework_shared_contract_projection_report(
     )
 
     adapter_projection_map = (
-        ("cli_common_adapter", "shared_contract", None),
-        ("codex_common_adapter", "shared_contract", None),
-        ("codex_desktop_adapter", "common_contract", "runtime_surface"),
-        ("codex_cli_adapter", "common_contract", "runtime_surface"),
-        ("claude_code_adapter", "common_contract", "runtime_surface"),
-        ("gemini_cli_adapter", "common_contract", "runtime_surface"),
+        ("cli_common_adapter", "shared_contract", None, "bridge_contract"),
+        ("codex_common_adapter", "shared_contract", None, "bridge_contract"),
+        ("codex_desktop_adapter", "common_contract", "runtime_surface", None),
+        ("codex_cli_adapter", "common_contract", "runtime_surface", None),
+        ("claude_code_adapter", "common_contract", "runtime_surface", None),
+        ("gemini_cli_adapter", "common_contract", "runtime_surface", None),
     )
     projections: list[dict[str, Any]] = []
     all_match = True
+    all_bridge_match = True
 
-    for adapter_id, projection_field, runtime_surface_field in adapter_projection_map:
+    for adapter_id, projection_field, runtime_surface_field, bridge_contract_field in adapter_projection_map:
         payload = compiled_payloads[adapter_id]
         projected_contract = _extract_shared_contract_surface(payload, projection_field)
         shared_mismatch_fields = _collect_diff_paths(canonical_surface, projected_contract)
         shared_match = not shared_mismatch_fields
+        bridge_contract = None
+        bridge_contract_mismatch_fields: list[str] = []
+        bridge_contract_match: bool | None = None
+        if bridge_contract_field:
+            source = payload.get(bridge_contract_field, {})
+            bridge_contract = _clone_payload(source) if isinstance(source, Mapping) else {}
+            bridge_contract_mismatch_fields = _collect_diff_paths(
+                canonical_bridge_contract,
+                bridge_contract,
+            )
+            bridge_contract_match = not bridge_contract_mismatch_fields
         runtime_surface = None
         runtime_surface_mismatch_fields: list[str] = []
         runtime_surface_match: bool | None = None
@@ -430,6 +446,9 @@ def build_framework_shared_contract_projection_report(
         all_match = all_match and shared_match and (
             runtime_surface_match if runtime_surface_match is not None else True
         )
+        all_bridge_match = all_bridge_match and (
+            bridge_contract_match if bridge_contract_match is not None else True
+        )
         projections.append(
             {
                 "adapter_id": adapter_id,
@@ -439,6 +458,9 @@ def build_framework_shared_contract_projection_report(
                 "projected_contract": FrameworkSharedContractSurface.model_validate(
                     projected_contract
                 ).model_dump(mode="python"),
+                "bridge_contract_match": bridge_contract_match,
+                "bridge_contract_mismatch_fields": bridge_contract_mismatch_fields,
+                "bridge_contract": bridge_contract,
                 "runtime_surface_match": runtime_surface_match,
                 "runtime_surface_mismatch_fields": runtime_surface_mismatch_fields,
                 "runtime_surface": (
@@ -460,8 +482,10 @@ def build_framework_shared_contract_projection_report(
             "shared_contract_schema_version": canonical_payload["schema_version"],
             "projection_fields": list(FRAMEWORK_SHARED_CONTRACT_FIELDS),
             "canonical_shared_contract": canonical_surface,
+            "canonical_bridge_contract": canonical_bridge_contract,
             "adapter_projections": projections,
             "all_shared_contract_projections_match": all_match,
+            "all_bridge_contract_projections_match": all_bridge_match,
         }
     )
     return report.model_dump(mode="python")

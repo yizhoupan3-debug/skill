@@ -204,6 +204,10 @@ The implemented runtime control-plane surface in this wave is:
   execution-kernel contract descriptor, so callers can read delegate
   family/impl directly from the shared contract lane without reopening a live
   Python fallback branch
+- the runtime control plane now also emits an explicit
+  `kernel_metadata_bridge`, so steady-state execution-kernel metadata field
+  names and owner markers are projected from Rust instead of being reauthored
+  in Python
 - the contract no longer carries a blocker list; compatibility-only metadata
   is isolated to retirement descriptors and does not drive runtime branching
 - compatibility fallback now survives only as a retired contract surface:
