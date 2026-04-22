@@ -243,3 +243,31 @@ def test_stable_recall_does_not_fallback_on_partial_sqlite_token_match(tmp_path:
     )
 
     assert result["items"] == []
+
+
+def test_memory_store_search_requires_strong_query_match(tmp_path: Path) -> None:
+    store = MemoryStore.for_workspace(tmp_path.name, resolved_dir=tmp_path / ".codex" / "memory")
+    store.upsert_memory_item(
+        MemoryItem(
+            item_id="runtime-contract",
+            category="decision",
+            source="sqlite",
+            summary="runtime contract only",
+            notes="tracks execution guarantees only",
+            keywords=["runtime", "contract"],
+        )
+    )
+    store.upsert_memory_item(
+        MemoryItem(
+            item_id="runtime-observability",
+            category="decision",
+            source="sqlite",
+            summary="runtime observability contract",
+            notes="tracks runtime observability guarantees",
+            keywords=["runtime", "observability"],
+        )
+    )
+
+    results = store.search_memory_items("runtime observability")
+
+    assert [item["item_id"] for item in results] == ["runtime-observability"]

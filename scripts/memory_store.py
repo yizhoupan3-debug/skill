@@ -151,6 +151,18 @@ def _memory_item_rank(item: Mapping[str, Any], query: str) -> tuple[float, str]:
     return score, searchable
 
 
+def _query_strong_match(query: str, searchable: str) -> bool:
+    tokens = _tokenize(query)
+    if not tokens:
+        return True
+    token_hits = sum(token in searchable for token in tokens)
+    if token_hits == 0:
+        return False
+    exact_phrase = " ".join(tokens) in searchable
+    required_hits = len(tokens) if len(tokens) <= 2 else 2
+    return exact_phrase or token_hits >= required_hits
+
+
 class MemoryStore:
     """Workspace-scoped SQLite store for structured memory."""
 
@@ -387,7 +399,7 @@ class MemoryStore:
         ranked = []
         for item in items:
             score, blob = _memory_item_rank(item, query)
-            if query and all(token not in blob for token in _tokenize(query)):
+            if query and not _query_strong_match(query, blob):
                 continue
             ranked.append((score, item))
         ranked.sort(key=lambda pair: pair[0], reverse=True)
