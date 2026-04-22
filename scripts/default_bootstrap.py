@@ -87,7 +87,7 @@ def run_default_bootstrap(
     mirror_bootstrap_path = resolve_bootstrap_path(output_dir)
     payload = {
         "skills-export": runtime,
-        "memory-bootstrap": memory,
+        "memory-bootstrap": memory.get("prompt_payload", memory),
         "evolution-proposals": _compact_evolution_proposals(proposals),
         "bootstrap": {
             "query": query,

@@ -2,11 +2,10 @@
 name: ppt-markdown
 description: |
   Build slide decks from Markdown using Slidev or Marp.
-  Use when the user wants fast Markdown-authored slides with live preview and
-  export to HTML, PDF, or PPTX, e.g. “用 Markdown 做个 slides”, “Slidev
-  presentation”, or “Marp slides”. Prefer this over HTML or Beamer when
-  source-first editing and rapid iteration matter more than native `.pptx`
-  editability or LaTeX source.
+  Use for explicit Markdown slide workflows such as Slidev, Marp, or
+  “用 Markdown 做个 slides”, especially when live preview and text-first
+  authoring matter more than native `.pptx` editability. Let `$slides` absorb
+  generic PPT intake first.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
@@ -55,9 +54,11 @@ source of truth.
 - When the user values Git-friendly, text-based presentation source
 - When rapid iteration and live preview matter more than PowerPoint editability
 - When the user explicitly names Slidev, Marp, or "Markdown slides"
+- When the user explicitly chooses Markdown as the authoring surface after slide-format intake
 
 ## Do not use
 
+- Do not use for generic PPT / presentation requests with no source-format decision yet; check `$slides` first
 - Do not use when the user needs a native editable `.pptx`; use `$ppt-pptx`
 - Do not use when the user wants full HTML/CSS layout control with browser-matched PDF export; use `$ppt-html-export`
 - Do not use when the user wants LaTeX Beamer source plus compiled PDF; use `$ppt-beamer`

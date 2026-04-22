@@ -6,21 +6,22 @@ Use this reference when building a PowerPoint deck from scratch, refactoring an 
 
 Use this quick split before touching files:
 
-- New deck from outline / notes / YAML / structured content -> use `ppt-pptx`
+- Generic PPT ask or existing deck artifact with workflow still unclear -> start at `slides`
+- New deck from outline / notes / YAML / structured content where `deck.js` should be the source of truth -> use `ppt-pptx`
 - Existing deck needs substantial redesign, new visual system, or source-of-truth rebuild -> use `ppt-pptx`
-- Existing `.pptx` needs in-place text edits, table/chart tweaks, inspection, batch patches, or Office-wide automation -> use `officecli`
+- Existing `.pptx` needs in-place text edits, table/chart tweaks, inspection, or batch patches while the file stays the source of truth -> use `slides`
 
 Practical rule:
 
 - If the desired source of truth is `deck.js`, stay in `ppt-pptx`
-- If the desired source of truth remains the `.pptx` file itself, start with `officecli`
+- If the desired source of truth remains the `.pptx` file itself, start with `slides`
 
 Fast examples:
 
 - "按这份提纲出一版董事会汇报" -> `ppt-pptx`
 - "把这份旧 deck 全部重做成统一视觉" -> `ppt-pptx`
-- "把第 3 页标题和图表数字改掉" -> `officecli`
-- "检查这个现成 PPT 有没有溢出和布局问题" -> `officecli`
+- "把第 3 页标题和图表数字改掉" -> `slides`
+- "检查这个现成 PPT 有没有溢出和布局问题" -> `slides`
 
 ## Project Shape
 
@@ -64,7 +65,7 @@ When the input is an existing `.pptx`, choose one of two modes:
 
 1. In-place edit mode
    - Best for copy fixes, slide reordering, shape/table/chart property changes, and repeated patch operations.
-   - Start with `officecli`, because the file itself stays the editable source of truth.
+   - Start with `slides`, because the file itself stays the editable source of truth.
 2. Rebuild mode
    - Best for major redesign, consistent visual system, repeated generation, or a deck that should become reproducible from code.
    - Extract structure/assets if helpful, then rebuild in PptxGenJS and keep `deck.js` as the source of truth.

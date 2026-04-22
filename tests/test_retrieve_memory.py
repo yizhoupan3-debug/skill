@@ -8,6 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.consolidate_memory import persist_memory_bundle
 from scripts.memory_store import MemoryItem, MemoryStore
 from scripts.memory_support import build_memory_state, load_runtime_snapshot
 from scripts.retrieve_memory import render_context
@@ -203,3 +204,42 @@ def test_debug_mode_exposes_sqlite_sections(tmp_path: Path) -> None:
     )
 
     assert any(item["path"] == "sqlite/memory_items.md" for item in result["items"])
+
+
+def test_stable_recall_does_not_fallback_on_partial_sqlite_token_match(tmp_path: Path) -> None:
+    _seed_runtime(tmp_path)
+    memory_root = tmp_path / ".codex" / "memory"
+    memory_root.mkdir(parents=True, exist_ok=True)
+    document = "\n".join(
+        [
+            "# 项目长期记忆",
+            "",
+            "## 稳定决策",
+            "",
+            "### 执行编排",
+            "",
+            "- runtime contract only",
+            "",
+        ]
+    )
+    _write_text(memory_root / "MEMORY.md", document + "\n")
+    persist_memory_bundle(
+        tmp_path.name,
+        {
+            "MEMORY.md": document + "\n",
+            "preferences.md": "# preferences\n",
+            "decisions.md": "# decisions\n",
+            "lessons.md": "# lessons\n",
+            "runbooks.md": "# runbooks\n",
+        },
+        resolved_dir=memory_root,
+    )
+
+    result = render_context(
+        workspace=tmp_path.name,
+        topic="runtime observability",
+        repo_root=tmp_path,
+        mode="stable",
+    )
+
+    assert result["items"] == []

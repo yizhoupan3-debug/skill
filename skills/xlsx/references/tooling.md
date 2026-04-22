@@ -3,6 +3,10 @@
 Use this reference when you need to choose the right toolchain or explain why a
 certain spreadsheet operation is risky.
 
+This reference belongs to the explicit `$xlsx` compatibility lane. It does not
+override the default `$spreadsheets` artifact-tool path for generic workbook
+intake.
+
 ## Engine choice
 
 ### `openpyxl`
@@ -13,7 +17,8 @@ Best for:
 - sheet order, visibility, freeze panes, filters
 - tables, named ranges, data validation, conditional formatting
 
-Prefer this when the workbook artifact itself matters.
+Prefer this when the workbook artifact itself matters and the task has already
+been routed into the explicit Python/tooling lane.
 
 ### `pandas`
 

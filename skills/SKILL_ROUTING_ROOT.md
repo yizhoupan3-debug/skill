@@ -16,7 +16,7 @@
 | `subagent-delegation` | — | delegation | Decide whether a complex task should be split across Codex subagents, then |
 | `systematic-debugging` | L0 | evidence | Diagnose bugs, failing tests, flaky behavior, build failures, and unexpected out |
 | `visual-review` | — | evidence | Review screenshots, rendered pages, charts, and UI artifacts with |
-| `xlsx` | — | artifact | Read, create, edit, repair, and review Excel `.xlsx` workbooks when formulas, |
+| `spreadsheets` | — | artifact | Create, edit, analyze, and review workbook-native spreadsheet artifacts when formulas, |
 
 ## Meta & Process Skills (L0, L1)
 | Skill | Layer | Gate | Description |
