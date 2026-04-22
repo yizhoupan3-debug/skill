@@ -17,6 +17,7 @@ DEFAULT_BOOTSTRAP_PATH="$REPO_ROOT/artifacts/bootstrap/framework_default_bootstr
 PLUGIN_NAME="skill-framework-native"
 HOME_PLUGIN_ROOT="$HOME/.codex/plugins/$PLUGIN_NAME"
 HOME_MARKETPLACE_PATH="$HOME/.agents/plugins/marketplace.json"
+HOME_CLAUDE_SKILLS_PATH="$HOME/.claude/skills"
 HOME_CLAUDE_REFRESH_PATH="$HOME/.claude/commands/refresh.md"
 HOME_CLAUDE_MCP_CONFIG_PATH="$HOME/.claude.json"
 PROJECT_INSTRUCTIONS_PATH="$REPO_ROOT/.codex/model_instructions.md"
@@ -138,7 +139,8 @@ if not isinstance(servers, dict):
     raise SystemExit(1)
 browser = servers.get("browser-mcp")
 framework = servers.get("framework-mcp")
-if not isinstance(browser, dict) or not isinstance(framework, dict):
+openai_docs = servers.get("openaiDeveloperDocs")
+if not isinstance(browser, dict) or not isinstance(framework, dict) or not isinstance(openai_docs, dict):
     raise SystemExit(1)
 if browser.get("command") != "bash":
     raise SystemExit(1)
@@ -151,18 +153,35 @@ if framework.get("cwd") != repo_root:
 env = framework.get("env")
 if not isinstance(env, dict) or env.get("PYTHONPATH") != repo_root:
     raise SystemExit(1)
+if openai_docs.get("type") != "http":
+    raise SystemExit(1)
+if openai_docs.get("url") != "https://developers.openai.com/mcp":
+    raise SystemExit(1)
 PY
+}
+
+skills_link_matches_repo() {
+  local target_path="$1"
+
+  if [ ! -L "$target_path" ]; then
+    return 1
+  fi
+
+  local current_target resolved_target resolved_source
+  current_target="$(readlink "$target_path")"
+  resolved_target="$(cd "$(dirname "$target_path")" && cd "$(dirname "$current_target")" && pwd)/$(basename "$current_target")"
+  resolved_source="$(cd "$SKILLS_ROOT" && pwd)"
+  [ "$resolved_target" = "$resolved_source" ]
 }
 
 show_codex_status() {
   local config_path="$HOME/.codex/config.toml"
-  local skills_path="$HOME/.codex/skills"
   local bootstrap_path="$DEFAULT_BOOTSTRAP_PATH"
   local config_ok="false"
-  local skills_ok="false"
   local bootstrap_ok="false"
   local plugin_ok="false"
   local marketplace_ok="false"
+  local claude_skills_ok="false"
   local refresh_ok="false"
   local claude_mcp_ok="false"
   local overlay_ok="false"
@@ -177,17 +196,13 @@ show_codex_status() {
   if [ -f "$config_path" ] \
     && grep -q '\[mcp_servers.browser-mcp\]' "$config_path" \
     && grep -q '\[mcp_servers.framework-mcp\]' "$config_path" \
+    && grep -q '\[mcp_servers.openaiDeveloperDocs\]' "$config_path" \
     && grep -q '^\[tui\]' "$config_path" \
     && grep -Eq '^[[:space:]]*status_line[[:space:]]*=' "$config_path"; then
     config_ok="true"
   fi
-  if [ -L "$skills_path" ]; then
-    local resolved_target resolved_source
-    resolved_target="$(cd "$(dirname "$skills_path")" && cd "$(dirname "$(readlink "$skills_path")")" && pwd)/$(basename "$(readlink "$skills_path")")"
-    resolved_source="$(cd "$SKILLS_ROOT" && pwd)"
-    if [ "$resolved_target" = "$resolved_source" ]; then
-      skills_ok="true"
-    fi
+  if skills_link_matches_repo "$HOME_CLAUDE_SKILLS_PATH"; then
+    claude_skills_ok="true"
   fi
   if bootstrap_payload_matches_contract "$bootstrap_path"; then
     bootstrap_ok="true"
@@ -209,16 +224,16 @@ show_codex_status() {
   fi
 
   if [ "$config_ok" = "true" ] \
-    && [ "$skills_ok" = "true" ] \
     && [ "$bootstrap_ok" = "true" ] \
     && [ "$plugin_ok" = "true" ] \
     && [ "$marketplace_ok" = "true" ] \
+    && [ "$claude_skills_ok" = "true" ] \
     && [ "$refresh_ok" = "true" ] \
     && [ "$claude_mcp_ok" = "true" ] \
     && [ "$overlay_ok" = "true" ]; then
     echo "  ✓ codex → native integration ready"
   else
-    echo "  ⚠ codex → native integration incomplete (config:$config_ok skills:$skills_ok bootstrap:$bootstrap_ok plugin:$plugin_ok marketplace:$marketplace_ok refresh:$refresh_ok claude_mcp:$claude_mcp_ok overlay:$overlay_ok)"
+    echo "  ⚠ codex → native integration incomplete (config:$config_ok bootstrap:$bootstrap_ok plugin:$plugin_ok marketplace:$marketplace_ok claude_skills:$claude_skills_ok refresh:$refresh_ok claude_mcp:$claude_mcp_ok overlay:$overlay_ok)"
   fi
 }
 

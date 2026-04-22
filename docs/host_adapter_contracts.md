@@ -227,9 +227,12 @@ continuity lane 里保留。
   - `rate_limit_auto_resume`
   - `host_resume_entrypoint`
   - `host_tmux_worker_management`
-- `autopilot` / `deepreview` 只保留为 framework-native alias：
+- `autopilot` / `deepinterview` 只保留为 framework-native alias：
   - canonical owner 在 framework
   - Claude / Codex 只暴露不同入口，不得分叉语义
+  - 两者都必须承接原版 OMC 的核心能力，但实现标准必须更强
+  - `autopilot` 额外强制：根因未知先定位、必须有验证证据、必须保留恢复续跑能力、必须推进到有界范围收敛
+  - `deepinterview` 额外强制：根因未知先定位、findings 必须按严重度输出、必须给出验证证据、需要时进入 fix -> verify 收敛循环
 - `cli_family_capability_discovery` 现在必须能直接回答：
   - 哪些 host 有 shared supervisor 能力
   - 哪些 host 有 resume 入口
@@ -258,7 +261,7 @@ continuity lane 里保留。
 - `build_cli_family_capability_discovery(...)`
 - `build_cli_family_parity_snapshot(...)`
 - `build_codex_dual_entry_parity_snapshot(...)`
-- framework-native alias registry for `autopilot` / `deepreview`
+- framework-native alias registry for `autopilot` / `deepinterview`
 - OMC retirement contract in `RUNTIME_REGISTRY.json`
 - CLI-family capability discovery now exposes:
   - `supervisor_capabilities`

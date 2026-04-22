@@ -73,6 +73,7 @@ from codex_agno_runtime.host_adapters import (
 )
 from codex_agno_runtime.rust_router import RustRouteAdapter
 import codex_agno_runtime.rust_router as rust_router_module
+from codex_agno_runtime.runtime_registry import framework_native_aliases
 from codex_agno_runtime.trace import (
     TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
     TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
@@ -202,7 +203,7 @@ def test_run_framework_contract_artifacts_cli_reuses_shared_route_adapter_for_ru
     assert captured["include_legacy_alias_artifact"] is True
 
 
-def test_rust_route_adapter_uses_debug_binary_even_when_sources_are_newer() -> None:
+def test_rust_route_adapter_rejects_stale_binary_when_sources_are_newer() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         codex_home = Path(tmpdir)
         router_dir = codex_home / "scripts" / "router-rs"
@@ -219,10 +220,37 @@ def test_rust_route_adapter_uses_debug_binary_even_when_sources_are_newer() -> N
 
         adapter = RustRouteAdapter(codex_home)
 
-        assert adapter._binary_command() == [str(debug_bin)]
+        with pytest.raises(RuntimeError, match="prebuilt binary is stale"):
+            adapter._binary_command()
         health = adapter.health()
         assert health["resolved_binary"] == str(debug_bin)
         assert health["source_newer_than_resolved_binary"] is True
+
+
+def test_rust_route_adapter_stdio_client_key_changes_after_binary_rebuild() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        codex_home = Path(tmpdir)
+        router_dir = codex_home / "scripts" / "router-rs"
+        source_dir = router_dir / "src"
+        release_bin = router_dir / "target" / "release" / "router-rs"
+        source_dir.mkdir(parents=True)
+        release_bin.parent.mkdir(parents=True)
+        (router_dir / "Cargo.toml").write_text("[package]\nname='router-rs'\nversion='0.1.0'\n", encoding="utf-8")
+        (source_dir / "main.rs").write_text("fn main() {}\n", encoding="utf-8")
+        release_bin.write_text("release", encoding="utf-8")
+
+        os.utime(router_dir / "Cargo.toml", (1_700_000_050, 1_700_000_050))
+        os.utime(source_dir / "main.rs", (1_700_000_000, 1_700_000_000))
+        os.utime(release_bin, (1_700_000_100, 1_700_000_100))
+
+        adapter = RustRouteAdapter(codex_home)
+        first_key = adapter._stdio_client_key(adapter._stdio_command())
+
+        os.utime(release_bin, (1_700_000_200, 1_700_000_200))
+
+        second_key = adapter._stdio_client_key(adapter._stdio_command())
+
+        assert first_key != second_key
 
 
 def test_rust_route_adapter_uses_fresh_debug_binary_when_release_missing() -> None:
@@ -1425,8 +1453,8 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
         "codex_driver"
     )
     assert cli_discovery["cli_hosts"]["codex_cli_adapter"]["framework_alias_entrypoints"] == {
-        "autopilot": "$autopilot",
-        "deepreview": "$deepreview",
+        alias_name: alias_payload["host_entrypoints"]["codex-cli"]
+        for alias_name, alias_payload in framework_native_aliases().items()
     }
     assert cli_discovery["cli_hosts"]["codex_cli_adapter"]["supervisor_capabilities"] == {
         "external_session_supervisor": True,
@@ -2178,7 +2206,10 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     ] == "headless-exec"
     assert payload["cli_family_capability_discovery"]["cli_hosts"]["claude_code_adapter"][
         "framework_alias_entrypoints"
-    ] == {"autopilot": "/autopilot", "deepreview": "/deepreview"}
+    ] == {
+        alias_name: alias_payload["host_entrypoints"]["claude-code"]
+        for alias_name, alias_payload in framework_native_aliases().items()
+    }
     assert payload["cli_family_parity_snapshot"]["all_shared_contract_checks_pass"] is True
     assert payload["codex_dual_entry_parity_snapshot"]["all_shared_contract_checks_pass"] is True
     assert payload["execution_kernel_live_fallback_retirement_status"]["live_primary"][

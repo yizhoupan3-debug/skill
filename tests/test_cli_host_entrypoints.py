@@ -10,12 +10,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from codex_agno_runtime.rust_router import RustRouteAdapter
+from codex_agno_runtime.runtime_registry import framework_native_aliases
 from scripts.claude_hook_audit import run_config_change, run_stop_failure
 from scripts.claude_statusline import render_statusline
 from scripts.materialize_cli_host_entrypoints import (
     CLAUDE_AUTOPILOT_COMMAND,
     CLAUDE_BACKGROUND_BATCH_COMMAND,
-    CLAUDE_DEEPREVIEW_COMMAND,
+    CLAUDE_DEEPINTERVIEW_COMMAND,
     CLAUDE_REFRESH_COMMAND,
     materialize_repo_host_entrypoints,
     sync_repo_host_entrypoints,
@@ -94,6 +96,7 @@ def _init_git_repo(repo_root: Path) -> None:
 def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxies(
     tmp_path: Path,
 ) -> None:
+    aliases = framework_native_aliases()
     result = materialize_repo_host_entrypoints(tmp_path)
 
     assert "AGENT.md" in result["written"]
@@ -142,13 +145,11 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         "Bash(git rev-parse *)",
         "Bash(git ls-files *)",
         "Bash(python3 scripts/check_skills.py --verify-sync)",
-        "Bash(python3 scripts/check_skills.py --verify-codex-link)",
         "Bash(python3 scripts/materialize_cli_host_entrypoints.py)",
         "Bash(python3 -m pytest *)",
         "Bash(python3 -m compileall *)",
         "Bash(cargo test *)",
         "Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *)",
-        "Bash(*/scripts/router-rs/target/debug/router-rs *)",
         "Bash(python3 scripts/runtime_background_cli.py *)",
         "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
         "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
@@ -157,23 +158,25 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert settings["allowedMcpServers"] == [
         {"serverName": "browser-mcp"},
         {"serverName": "framework-mcp"},
+        {"serverName": "openaiDeveloperDocs"},
     ]
     assert "statusLine" not in settings
     assert set(settings["hooks"]) == {
-        "SessionStart",
-        "Stop",
-        "PreCompact",
-        "SubagentStop",
         "SessionEnd",
         "ConfigChange",
         "StopFailure",
     }
+    assert settings["hooks"]["ConfigChange"][0]["matcher"] == "project_settings"
+    assert settings["hooks"]["StopFailure"][0]["matcher"] == (
+        "invalid_request|server_error|max_output_tokens|rate_limit|authentication_failed|billing_error|unknown"
+    )
     assert json.loads((tmp_path / ".gemini" / "settings.json").read_text(encoding="utf-8")) == {}
     assert (tmp_path / ".claude" / "agents" / "README.md").is_file()
     assert (tmp_path / ".claude" / "commands" / "refresh.md").is_file()
     assert (tmp_path / ".claude" / "commands" / "background_batch.md").is_file()
     assert (tmp_path / ".claude" / "commands" / "autopilot.md").is_file()
-    assert (tmp_path / ".claude" / "commands" / "deepreview.md").is_file()
+    assert (tmp_path / ".claude" / "commands" / "deepinterview.md").is_file()
+    assert not (tmp_path / ".claude" / "commands" / "deepreview.md").exists()
     refresh_command = (tmp_path / ".claude" / "commands" / "refresh.md").read_text(encoding="utf-8")
     background_batch_command = (
         tmp_path / ".claude" / "commands" / "background_batch.md"
@@ -181,36 +184,50 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     autopilot_command = (
         tmp_path / ".claude" / "commands" / "autopilot.md"
     ).read_text(encoding="utf-8")
-    deepreview_command = (
-        tmp_path / ".claude" / "commands" / "deepreview.md"
+    deepinterview_command = (
+        tmp_path / ".claude" / "commands" / "deepinterview.md"
     ).read_text(encoding="utf-8")
     assert refresh_command == CLAUDE_REFRESH_COMMAND
     assert background_batch_command == CLAUDE_BACKGROUND_BATCH_COMMAND
     assert autopilot_command == CLAUDE_AUTOPILOT_COMMAND
-    assert deepreview_command == CLAUDE_DEEPREVIEW_COMMAND
-    assert "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --framework-recap-json" in refresh_command
-    assert "one fixed sentence" in refresh_command
+    assert deepinterview_command == CLAUDE_DEEPINTERVIEW_COMMAND
+    assert "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --framework-refresh-json" in refresh_command
+    assert "reply with exactly" in refresh_command
     assert "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。" in refresh_command
     assert "summary" not in refresh_command.lower()
     assert "clear" not in refresh_command.lower()
     assert "CLAUDE_PROJECT_DIR" not in refresh_command
-    assert (
-        "allowed-tools: Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *), "
-        "Bash(*/scripts/router-rs/target/debug/router-rs *)"
-    ) in refresh_command
+    assert "allowed-tools: Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *)" in refresh_command
+    assert "copy `recap.workflow_prompt`" not in refresh_command
     assert "runtime_background_cli.py" in background_batch_command
     assert "enqueue-batch" in background_batch_command
     assert "group-summary" in background_batch_command
     assert "list-groups" in background_batch_command
     assert "allowed-tools: Bash(python3 scripts/runtime_background_cli.py *)" in background_batch_command
     assert "thin alias" in autopilot_command
-    assert "execution-controller-coding" in autopilot_command
-    assert "idea-to-plan" in autopilot_command
-    assert "/autopilot" in autopilot_command
-    assert "thin alias" in deepreview_command
-    assert "code-review" in deepreview_command
-    assert "architect-review" in deepreview_command
-    assert "/deepreview" in deepreview_command
+    assert aliases["autopilot"]["canonical_owner"] in autopilot_command
+    assert aliases["autopilot"]["reroute_when_ambiguous"] in autopilot_command
+    assert aliases["autopilot"]["reroute_when_root_cause_unknown"] in autopilot_command
+    assert aliases["autopilot"]["host_entrypoints"]["claude-code"] in autopilot_command
+    assert "original OMC core capability" in autopilot_command
+    assert aliases["autopilot"]["upstream_source"]["tag"] in autopilot_command
+    assert aliases["autopilot"]["upstream_source"]["official_skill_path"] in autopilot_command
+    for phase in aliases["autopilot"]["official_workflow"]["phases"]:
+        assert phase in autopilot_command
+    for requirement in aliases["autopilot"]["implementation_bar"]:
+        assert requirement in autopilot_command
+    assert "thin alias" in deepinterview_command
+    assert aliases["deepinterview"]["canonical_owner"] in deepinterview_command
+    assert aliases["deepinterview"]["host_entrypoints"]["claude-code"] in deepinterview_command
+    assert "original OMC core capability" in deepinterview_command
+    assert aliases["deepinterview"]["upstream_source"]["tag"] in deepinterview_command
+    assert aliases["deepinterview"]["upstream_source"]["official_skill_path"] in deepinterview_command
+    for rule in aliases["deepinterview"]["official_workflow"]["loop_rules"]:
+        assert rule in deepinterview_command
+    for requirement in aliases["deepinterview"]["implementation_bar"]:
+        assert requirement in deepinterview_command
+    for lane in aliases["deepinterview"]["review_lanes"]:
+        assert lane in deepinterview_command
     assert (tmp_path / ".claude" / "hooks" / "README.md").is_file()
     hooks_readme = (tmp_path / ".claude" / "hooks" / "README.md").read_text(encoding="utf-8")
     assert "Generated-first maintenance" in hooks_readme
@@ -218,6 +235,10 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     for marker in (
         "`StopFailure` | enabled",
         "`ConfigChange` | enabled",
+        "`SessionStart` | disabled",
+        "`Stop` | disabled",
+        "`PreCompact` | disabled",
+        "`SubagentStop` | disabled",
         "audit-only stderr guidance",
         "host-private failure classification hint",
         "`InstructionsLoaded` | document-disable",
@@ -359,9 +380,9 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     ):
         payload = None
         if script_name == "config_change.sh":
-            payload = '{"hook_event_name":"ConfigChange","scope":"project_settings","changed_path":".claude/settings.json"}\n'
+            payload = '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}\n'
         elif script_name == "stop_failure.sh":
-            payload = '{"hook_event_name":"StopFailure","failure_type":"server_error"}\n'
+            payload = '{"hook_event_name":"StopFailure","error":"server_error"}\n'
         subprocess.run(
             ["sh", str(tmp_path / ".claude" / "hooks" / script_name)],
             cwd=tmp_path,
@@ -382,6 +403,32 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert (tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md").is_file()
     assert (tmp_path / ".codex" / "memory" / "state.json").is_file()
     assert not (tmp_path / ".codex" / "memory" / "MEMORY_AUTO.md").exists()
+
+
+def test_session_end_projection_matches_framework_recap_and_includes_preferences(tmp_path: Path) -> None:
+    materialize_repo_host_entrypoints(tmp_path)
+    (tmp_path / "scripts").symlink_to(PROJECT_ROOT / "scripts", target_is_directory=True)
+    _seed_runtime_artifacts(tmp_path)
+    _seed_shared_memory(tmp_path)
+    _write_text(
+        tmp_path / ".codex" / "memory" / "preferences.md",
+        "# preferences\n\n## 处理偏好\n\n- Prefer direct answers\n",
+    )
+
+    env = os.environ.copy()
+    env["CLAUDE_PROJECT_DIR"] = str(tmp_path)
+    subprocess.run(
+        ["sh", str(tmp_path / ".claude" / "hooks" / "session_end.sh")],
+        cwd=tmp_path,
+        check=True,
+        env=env,
+    )
+
+    projection = (tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md").read_text(encoding="utf-8")
+    recap = RustRouteAdapter(PROJECT_ROOT).framework_recap(repo_root=tmp_path)
+
+    assert projection == recap["projection"]
+    assert "Prefer direct answers" in projection
 
 
 def test_claude_statusline_renders_runtime_summary(tmp_path: Path) -> None:
@@ -537,8 +584,8 @@ def test_claude_hook_audit_reports_generated_surface_drift(tmp_path: Path, capsy
     result = run_config_change(
         tmp_path,
         {
-            "scope": "project_settings",
-            "changed_path": str(tmp_path / ".claude" / "settings.json"),
+            "source": "project_settings",
+            "file_path": str(tmp_path / ".claude" / "settings.json"),
         },
     )
 
@@ -552,7 +599,7 @@ def test_claude_hook_audit_reports_stop_failure_without_mutation(tmp_path: Path,
     result = run_stop_failure(
         tmp_path,
         {
-            "failure_type": "server_error",
+            "error": "server_error",
             "context": "host projection",
         },
     )

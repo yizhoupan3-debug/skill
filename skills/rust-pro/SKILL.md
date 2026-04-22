@@ -91,8 +91,10 @@ If the task shifts to adjacent skill territory, route to:
    - constraints: Rust edition, target platform, async runtime, MSRV
    - deliverable: code change, design, review guidance, or migration plan
 2. Check Rust edition and MSRV before using nightly-only features.
-3. Run `cargo check` and `cargo clippy` after modifications.
-4. Verify with `cargo test` on affected code.
+3. For repo-local Rust helper binaries launched from Python or shell bridges, compare the built artifact against `Cargo.toml`, `Cargo.lock`, and `src/**/*.rs` before execution.
+4. If sources are newer than the binary, fail closed and require a rebuild instead of logging a warning or silently running stale code.
+5. Run `cargo check` and `cargo clippy` after modifications.
+6. Verify with `cargo test` on affected code.
 
 ## Core workflow
 
@@ -176,6 +178,7 @@ Recommended structure:
 - Prefer `&str` over `String` in function parameters when ownership isn't needed.
 - **Superior Quality Audit**: For production Rust binaries, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
 - Do not clone to satisfy the borrow checker without exploring alternatives first.
+- Do not run repo-local prebuilt Rust binaries when the source tree is newer than the artifact; rebuild first and restart any long-lived bridge/client that keys off that binary.
 
 ## Trigger examples
 

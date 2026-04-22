@@ -156,6 +156,7 @@ def test_bootstrap_refresh_materializes_payload_in_requested_output_dir(tmp_path
 def test_memory_recall_and_resource_read_return_repo_backed_content(tmp_path: Path) -> None:
     _seed_runtime_artifacts(tmp_path, terminal=False)
     _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
+    _write_text(tmp_path / ".codex" / "memory" / "preferences.md", "# preferences\n\n- prefer concise closeouts\n")
     _write_text(tmp_path / "memory" / "MEMORY.md", "# 项目长期记忆\n")
     _seed_memory_state(tmp_path)
     server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
@@ -177,6 +178,7 @@ def test_memory_recall_and_resource_read_return_repo_backed_content(tmp_path: Pa
     assert recall["retrieval"]["active_task_included"] is True
     assert "source_artifacts" in recall
     assert "项目长期记忆" in resource["result"]["contents"][0]["text"]
+    assert "prefer concise closeouts" in resource["result"]["contents"][0]["text"]
 
 
 def test_memory_project_resource_reads_logical_codex_memory_root(tmp_path: Path) -> None:
@@ -191,6 +193,26 @@ def test_memory_project_resource_reads_logical_codex_memory_root(tmp_path: Path)
     )
 
     assert "逻辑长期记忆" in resource["result"]["contents"][0]["text"]
+
+
+def test_memory_project_resource_bundles_stable_memory_documents(tmp_path: Path) -> None:
+    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
+    _write_text(tmp_path / ".codex" / "memory" / "preferences.md", "# preferences\n\n- prefer direct answers\n")
+    _write_text(tmp_path / ".codex" / "memory" / "decisions.md", "# decisions\n\n- stable-first memory\n")
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
+
+    resource = _call(
+        server=server,
+        request_id=53,
+        method="resources/read",
+        params={"uri": "framework://memory/project"},
+    )
+
+    text = resource["result"]["contents"][0]["text"]
+    assert text.startswith("# Project Memory Bundle")
+    assert "## preferences.md" in text
+    assert "prefer direct answers" in text
+    assert "stable-first memory" in text
 
 
 def test_memory_project_resource_does_not_fallback_to_physical_memory_dir(tmp_path: Path) -> None:
@@ -240,6 +262,44 @@ def test_memory_recall_ignores_unrelated_active_task_continuity(tmp_path: Path) 
     assert recall["continuity"]["state"] == "query-mismatch"
     assert recall["continuity_decision"]["ignored_root_continuity"] is True
     assert recall["continuity"]["current_execution"] is None
+
+
+def test_memory_recall_uses_rust_adapter(tmp_path: Path) -> None:
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
+    seen: list[tuple[Path, str, int, str]] = []
+
+    def fake_framework_memory_recall(
+        *, repo_root: Path, query: str = "", top: int = 8, mode: str = "stable"
+    ) -> dict[str, object]:
+        seen.append((repo_root, query, top, mode))
+        return {
+            "ok": True,
+            "workspace": tmp_path.name,
+            "memory_root": str(tmp_path / ".codex" / "memory"),
+            "retrieval": {
+                "mode": mode,
+                "active_task_included": False,
+                "items": [],
+                "context": "",
+            },
+            "continuity": {"state": "query-mismatch", "current_execution": None},
+            "continuity_decision": {"ignored_root_continuity": True},
+            "source_artifacts": {},
+        }
+
+    server._rust_adapter.framework_memory_recall = fake_framework_memory_recall  # type: ignore[method-assign]
+
+    recall = _tool_call(
+        server=server,
+        request_id=42,
+        name="framework_memory_recall",
+        arguments={"query": "unrelated", "top": 5, "mode": "active"},
+    )
+
+    assert seen == [(tmp_path, "unrelated", 5, "active")]
+    assert recall["ok"] is True
+    assert recall["retrieval"]["mode"] == "active"
+    assert recall["continuity"]["state"] == "query-mismatch"
 
 
 def test_skill_search_and_runtime_snapshot_are_actionable(tmp_path: Path) -> None:
@@ -293,6 +353,7 @@ def test_contract_summary_and_artifact_index_are_compact_and_actionable(tmp_path
 def test_recap_tool_and_resource_expose_claude_style_resume_context(tmp_path: Path) -> None:
     _seed_runtime_artifacts(tmp_path, terminal=False)
     _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n\n## Active Patterns\n\n- AP-1: Externalize task state\n")
+    _write_text(tmp_path / ".codex" / "memory" / "preferences.md", "# preferences\n\n## 处理偏好\n\n- Prefer direct answers\n")
     server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
 
     recap = _tool_call(
@@ -313,10 +374,29 @@ def test_recap_tool_and_resource_expose_claude_style_resume_context(tmp_path: Pa
     assert recap["task"] == "active bootstrap repair"
     assert "## Task Snapshot" in recap["projection"]
     assert "active bootstrap repair" in recap["projection"]
+    assert "Prefer direct answers" in recap["projection"]
     assert "继续当前仓库的工作。先阅读并使用这些恢复锚点：" in recap["workflow_prompt"]
     assert "必须先做的下一步：" in recap["workflow_prompt"]
     assert "active bootstrap repair" in resource["result"]["contents"][0]["text"]
     assert "## Task Snapshot" in resource["result"]["contents"][0]["text"]
+
+
+def test_recap_projection_hides_completed_task_identity(tmp_path: Path) -> None:
+    _seed_runtime_artifacts(tmp_path, terminal=True)
+    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n\n## Active Patterns\n\n- AP-1: Stable only\n")
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
+
+    recap = _tool_call(
+        server=server,
+        request_id=65,
+        name="framework_recap_refresh",
+        arguments={"max_lines": 4},
+    )
+
+    assert recap["continuity_state"] == "completed"
+    assert "recent:" not in recap["projection"]
+    assert "checklist-series final closeout" not in recap["projection"]
+    assert "no resumable active task" in recap["projection"]
 
 
 def test_recap_refresh_uses_rust_adapter(tmp_path: Path) -> None:
@@ -335,6 +415,7 @@ def test_recap_refresh_uses_rust_adapter(tmp_path: Path) -> None:
             "status": "in_progress",
             "max_lines": max_lines,
             "projection": "## Task Snapshot\n\n- current: active bootstrap repair / implementation / in_progress",
+            "project_memory_bundle": "# Project Memory Bundle\n\n## MEMORY.md\n\n# 项目长期记忆",
             "workflow_prompt": "继续当前仓库的工作。先阅读并使用这些恢复锚点：",
             "projection_path": str(tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md"),
         }
@@ -353,11 +434,19 @@ def test_recap_refresh_uses_rust_adapter(tmp_path: Path) -> None:
         method="resources/read",
         params={"uri": "framework://memory/claude-recap"},
     )
+    project_memory = _call(
+        server=server,
+        request_id=65,
+        method="resources/read",
+        params={"uri": "framework://memory/project"},
+    )
 
     assert seen[0] == (tmp_path, 4)
     assert seen[1] == (tmp_path, 6)
+    assert seen[2] == (tmp_path, 6)
     assert recap["projection"].startswith("## Task Snapshot")
     assert resource["result"]["contents"][0]["text"].startswith("## Task Snapshot")
+    assert project_memory["result"]["contents"][0]["text"].startswith("# Project Memory Bundle")
 
 
 def test_runtime_snapshot_falls_back_to_trace_skill_for_primary_owner(tmp_path: Path) -> None:

@@ -128,10 +128,26 @@ def repo_relative(path: Path) -> str:
         return str(path)
 
 
+def _skill_compiler_source_mtime() -> float:
+    """Return the newest source mtime for the Rust skill compiler crate."""
+
+    candidates = [
+        SKILL_COMPILER_RS_DIR / "Cargo.toml",
+        SKILL_COMPILER_RS_DIR / "Cargo.lock",
+        *SKILL_COMPILER_RS_DIR.joinpath("src").rglob("*.rs"),
+    ]
+    mtimes = [path.stat().st_mtime for path in candidates if path.is_file()]
+    return max(mtimes, default=0.0)
+
+
 def resolve_skill_compiler_binary() -> Path | None:
     """Return the compiled Rust skill compiler when available."""
 
-    return SKILL_COMPILER_RS_RELEASE_BIN if SKILL_COMPILER_RS_RELEASE_BIN.is_file() else None
+    if not SKILL_COMPILER_RS_RELEASE_BIN.is_file():
+        return None
+    if SKILL_COMPILER_RS_RELEASE_BIN.stat().st_mtime < _skill_compiler_source_mtime():
+        return None
+    return SKILL_COMPILER_RS_RELEASE_BIN
 
 
 def load_compiled_skill_artifacts() -> dict[str, Any] | None:

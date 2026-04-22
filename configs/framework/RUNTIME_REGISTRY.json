@@ -8,7 +8,8 @@
   ],
   "shared_project_mcp_servers": [
     "browser-mcp",
-    "framework-mcp"
+    "framework-mcp",
+    "openaiDeveloperDocs"
   ],
   "workspace_bootstrap_defaults": {
     "skill_bridge": {
@@ -26,6 +27,38 @@
       "canonical_owner": "execution-controller-coding",
       "reroute_when_ambiguous": "idea-to-plan",
       "reroute_when_root_cause_unknown": "systematic-debugging",
+      "upstream_source": {
+        "repo": "https://github.com/Yeachan-Heo/oh-my-claudecode",
+        "tag": "v4.13.2",
+        "commit": "0ac52cdaa093d6c41763e47055e995adaa4f8987",
+        "official_skill_path": "skills/autopilot/SKILL.md"
+      },
+      "omc_lineage": {
+        "source": "oh-my-claudecode",
+        "inherits_core_capabilities": true,
+        "implementation_mode": "match-and-exceed"
+      },
+      "official_workflow": {
+        "phases": [
+          "expansion",
+          "planning",
+          "execution",
+          "qa",
+          "validation",
+          "cleanup"
+        ]
+      },
+      "implementation_bar": [
+        "root-cause-first-when-unknown",
+        "verification-evidence-required",
+        "resume-and-recovery-required",
+        "converge-until-bounded-scope-clean"
+      ],
+      "local_adaptations": [
+        "replace .omc state files with rust-session-supervisor plus continuity artifacts",
+        "replace .omc specs and plans with artifacts/current task-local bootstrap outputs",
+        "keep deepinterview handoff as the first-class clarification gate for vague requests"
+      ],
       "execution_owners": [
         "plan-to-code",
         "subagent-delegation",
@@ -37,8 +70,38 @@
       },
       "omc_dependency": false
     },
-    "deepreview": {
+    "deepinterview": {
       "canonical_owner": "code-review",
+      "upstream_source": {
+        "repo": "https://github.com/Yeachan-Heo/oh-my-claudecode",
+        "tag": "v4.13.2",
+        "commit": "0ac52cdaa093d6c41763e47055e995adaa4f8987",
+        "official_skill_path": "skills/deep-interview/SKILL.md"
+      },
+      "omc_lineage": {
+        "source": "oh-my-claudecode",
+        "inherits_core_capabilities": true,
+        "implementation_mode": "match-and-exceed"
+      },
+      "official_workflow": {
+        "loop_rules": [
+          "one-question-at-a-time",
+          "target-weakest-clarity-dimension",
+          "score-ambiguity-after-each-answer",
+          "handoff-to-execution-only-below-threshold"
+        ]
+      },
+      "implementation_bar": [
+        "root-cause-first-when-unknown",
+        "findings-first-with-severity-order",
+        "verification-evidence-required",
+        "fix-verify-loop-until-bounded-scope-clean"
+      ],
+      "local_adaptations": [
+        "reuse official deep-interview questioning model but store progress in continuity artifacts instead of .omc state",
+        "use live repo evidence first for brownfield clarification before asking the user",
+        "handoff into local autopilot and rust-session-supervisor instead of OMC slash pipeline"
+      ],
       "review_lanes": [
         "architect-review",
         "security-audit",
@@ -46,8 +109,8 @@
         "execution-audit-codex"
       ],
       "host_entrypoints": {
-        "codex-cli": "$deepreview",
-        "claude-code": "/deepreview"
+        "codex-cli": "$deepinterview",
+        "claude-code": "/deepinterview"
       },
       "omc_dependency": false
     }
@@ -64,6 +127,26 @@
       "host_resume_entrypoint",
       "host_tmux_worker_management"
     ],
+    "framework_native_alias_guarantees": {
+      "autopilot": {
+        "inherits_omc_core_capabilities": true,
+        "implementation_bar": [
+          "root-cause-first-when-unknown",
+          "verification-evidence-required",
+          "resume-and-recovery-required",
+          "converge-until-bounded-scope-clean"
+        ]
+      },
+      "deepinterview": {
+        "inherits_omc_core_capabilities": true,
+        "implementation_bar": [
+          "root-cause-first-when-unknown",
+          "findings-first-with-severity-order",
+          "verification-evidence-required",
+          "fix-verify-loop-until-bounded-scope-clean"
+        ]
+      }
+    },
     "omc_is_runtime_dependency": false
   },
   "plugins": [
@@ -243,7 +326,7 @@
         "mcp_config_paths": [".codex/config.toml"],
         "session_supervisor_driver": "codex_driver",
         "resume_command_examples": ["codex resume --last", "codex resume <session_id>"],
-        "framework_alias_entrypoints": {"autopilot": "$autopilot", "deepreview": "$deepreview"}
+        "framework_alias_entrypoints": {"autopilot": "$autopilot", "deepinterview": "$deepinterview"}
       },
       "notes": "Formal headless Codex entrypoint that consumes the shared framework contract."
     },
@@ -301,7 +384,7 @@
         "checkpointing_supported": true,
         "session_supervisor_driver": "claude_driver",
         "resume_command_examples": ["claude --continue", "claude --resume <session_id>"],
-        "framework_alias_entrypoints": {"autopilot": "/autopilot", "deepreview": "/deepreview"}
+        "framework_alias_entrypoints": {"autopilot": "/autopilot", "deepinterview": "/deepinterview"}
       },
       "notes": "Headless Claude Code projection that stays host-specific only at the projection layer."
     },

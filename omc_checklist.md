@@ -8,16 +8,19 @@
 > 同时必须完成：
 >
 > - **彻底删除 OMC 残留**
-> - **保留 `autopilot` 与 `deepreview` 的用户心智**
->   - Claude: `/autopilot` `/deepreview`
->   - Codex: `$autopilot` `$deepreview`
+> - **保留 `autopilot` 与 `deepinterview` 的用户心智**
+>   - Claude: `/autopilot` `/deepinterview`
+>   - Codex: `$autopilot` `$deepinterview`
+> - **并明确写死：它们承接原版 OMC 的核心能力，但本仓版本必须做得更强**
+>   - `autopilot`：更强的根因定位、验证证据、恢复续跑、收敛闭环
+>   - `deepinterview`：更强的根因定位、分级 findings、证据化核查、fix -> verify 收敛
 > - **Rust-first**
 > - **与当前 framework / runtime / host adapter 深度接入**
 
 ## 当前状态快照
 
 - **项目内 shared truth 基本已经 OMC-free**
-  - 当前仓库扫描未命中 project-scoped `omc` / `oh-my-claude*` / `autopilot` / `deepreview` 文本面。
+  - 当前仓库扫描未命中 project-scoped `omc` / `oh-my-claude*` / `autopilot` / `deepinterview` 文本面。
   - 项目 `CLAUDE.md` 已是 shared framework proxy，不再以 OMC 为真源。
   - `.claude/settings.json` / `.claude/hooks/*` / `.claude/commands/*` 当前已由 `scripts/materialize_cli_host_entrypoints.py` 管理。
 
@@ -74,7 +77,7 @@
 - **当前缺口不是底层 runtime，而是缺一个 shared supervisor capability**
   - 还没有 framework-native 的 **tmux 外部会话管理**
   - 还没有 framework-native 的 **限流后自动续跑**
-  - 还没有 project-native 的 `autopilot` / `deepreview` 命名能力面
+  - 还没有 project-native 的 `autopilot` / `deepinterview` 命名能力面
 
 ---
 
@@ -116,10 +119,10 @@
 - **user-facing alias surfaces**
   - Claude:
     - `/autopilot`
-    - `/deepreview`
+    - `/deepinterview`
   - Codex:
     - `$autopilot`
-    - `$deepreview`
+    - `$deepinterview`
   - 这些 alias 只是 shared capability 的薄入口，不允许各宿主分叉语义
 
 ### 3. 数据落点
@@ -152,7 +155,7 @@
 | 2 | Rust session-supervisor control plane | 新增共享 session supervisor 状态机与 durable store | `scripts/router-rs/src/background_state.rs`, `scripts/router-rs/src/framework_runtime.rs`, `scripts/router-rs/src/main.rs`, 必要时新增 `scripts/router-rs/src/session_supervisor.rs`, 对应 Rust tests |
 | 3 | tmux 外部会话管理与 host drivers | 落地 Codex/Claude 外部 worker session 生命周期 | `scripts/router-rs/src/main.rs`, 新增或更新 host-driver Rust 模块，必要时新增 `scripts/runtime_supervisor_cli.py` 作为 thin wrapper，`tests/test_codex_agno_runtime_runtime.py`，background/session tests |
 | 4 | 限流后自动续跑 | 落地 host-neutral wait/resume daemon 与 rate-limit classifier | `scripts/router-rs/src/main.rs`, 必要时新增 `scripts/router-rs/src/rate_limit_wait.rs`, `codex_agno_runtime/src/codex_agno_runtime/event_transport.py` 仅限薄投影适配，相关 runtime/control-plane tests |
-| 5 | `autopilot` / `deepreview` 保留但去 OMC 依赖 | 以 shared framework truth 重建两个能力面，并分别投影到 Claude `/` 和 Codex `$` | `skills/autopilot/SKILL.md`, `skills/deepreview/SKILL.md`, `skills/SKILL_MANIFEST.json`, `scripts/materialize_cli_host_entrypoints.py`, `.claude/commands/autopilot.md`, `.claude/commands/deepreview.md`, skill / host-entrypoint tests |
+| 5 | `autopilot` / `deepinterview` 保留但去 OMC 依赖 | 以 shared framework truth 重建两个能力面，并分别投影到 Claude `/` 和 Codex `$` | `skills/autopilot/SKILL.md`, `skills/deepinterview/SKILL.md`, `skills/SKILL_MANIFEST.json`, `scripts/materialize_cli_host_entrypoints.py`, `.claude/commands/autopilot.md`, `.claude/commands/deepinterview.md`, skill / host-entrypoint tests |
 | 6 | 宿主 cutover 与 OMC 残留清除 | 完成 Claude / Codex host 切换与 OMC 全面卸载 | `/Users/joe/.claude/CLAUDE.md`, `/Users/joe/.claude/settings.json`, `/Users/joe/.claude.json`, `/Users/joe/.claude/plugins/**`, `/Users/joe/.claude/.omc/**`, `/Users/joe/.claude/hud/omc-hud.mjs`, `/Users/joe/.npm-global/bin/{omc,omc-cli,oh-my-claudecode}`, `/Users/joe/.npm-global/lib/node_modules/oh-my-claude-sisyphus`, repo `.omc/`, `.gitignore`（仅当最终确认不再需要忽略 `.omc/`） |
 
 ---
@@ -175,7 +178,7 @@
   - `rate_limit_auto_resume`
   - `host_resume_entrypoint`
   - `host_tmux_worker_management`
-- `autopilot` / `deepreview` 是 shared capability alias，不是 OMC 兼容层
+- `autopilot` / `deepinterview` 是 shared capability alias，不是 OMC 兼容层
 
 ### 独占写入范围
 
@@ -205,7 +208,7 @@
   - 哪些 host 支持 resume
   - 哪些 host 支持 rate-limit auto-resume
 - contract 中明确声明 `.omc/**` 不是新的 runtime truth
-- `autopilot` / `deepreview` 的 canonical owner 是 framework，而不是宿主插件
+- `autopilot` / `deepinterview` 的 canonical owner 是 framework，而不是宿主插件
 
 ---
 
@@ -363,11 +366,11 @@
 
 ---
 
-## 5. `autopilot` / `deepreview` 保留但去 OMC 依赖
+## 5. `autopilot` / `deepinterview` 保留但去 OMC 依赖
 
 ### 当前状态
 
-- 当前 repo 还没有 project-native 的 `autopilot` / `deepreview`
+- 当前 repo 还没有 project-native 的 `autopilot` / `deepinterview`
 - 但已有可组合的 skill 底座：
   - `execution-controller-coding`
   - `idea-to-plan`
@@ -386,34 +389,34 @@
 - `autopilot`
   - 不是 OMC 的 prompt 复制品
   - 是对你现有 execution-controller / planning / debugging / verification 体系的统一入口
-- `deepreview`
+- `deepinterview`
   - 不是 OMC reviewer prompt 复制品
   - 是对你现有 review / architecture / security / test / convergence 流程的统一入口
 
 ### 独占写入范围
 
 - `skills/autopilot/SKILL.md`
-- `skills/deepreview/SKILL.md`
+- `skills/deepinterview/SKILL.md`
 - `skills/SKILL_MANIFEST.json`
 - `scripts/materialize_cli_host_entrypoints.py`
 - `.claude/commands/autopilot.md`
-- `.claude/commands/deepreview.md`
+- `.claude/commands/deepinterview.md`
 - skill / host-entrypoint tests
 
 ### 禁止越界
 
 - 不拷贝 OMC 的 agent catalog / magic keywords / tier-0 workflow 叙事
-- 不在 Claude 和 Codex 上分叉 `autopilot` / `deepreview` 语义
+- 不在 Claude 和 Codex 上分叉 `autopilot` / `deepinterview` 语义
 - 不把这两个 alias 做成宿主插件专属行为
 
 ### 交付物
 
 - Codex:
   - `$autopilot`
-  - `$deepreview`
+  - `$deepinterview`
 - Claude:
   - `/autopilot`
-  - `/deepreview`
+  - `/deepinterview`
 - 统一的 shared capability definition
 
 ### 推荐语义
@@ -428,7 +431,7 @@
     - `subagent-delegation`
     - `execution-audit-codex`
 
-- `deepreview`
+- `deepinterview`
   - 主 owner：`code-review`
   - 叠加 review lanes：
     - `architect-review`
@@ -438,8 +441,8 @@
 
 ### 验收标准
 
-- Claude `/autopilot` `/deepreview` 可用
-- Codex `$autopilot` `$deepreview` 可用
+- Claude `/autopilot` `/deepinterview` 可用
+- Codex `$autopilot` `$deepinterview` 可用
 - 两端只是不同入口，不是不同逻辑
 - 用户断开 OMC 后仍保留原先对这两个名字的使用习惯
 
@@ -513,7 +516,7 @@
 3. **Task 4**
    - 加 rate-limit auto-resume
 4. **Task 5**
-   - 把 `autopilot` / `deepreview` 做成 shared alias
+   - 把 `autopilot` / `deepinterview` 做成 shared alias
 5. **Task 6**
    - 彻底切换宿主并删除 OMC 残留
 
@@ -528,7 +531,7 @@
 1. Claude 与 Codex 都能使用新的 shared supervisor capability
 2. tmux 外部 worker 管理可用
 3. 限流后自动续跑可用
-4. `/autopilot` `/deepreview` 与 `$autopilot` `$deepreview` 可用
+4. `/autopilot` `/deepinterview` 与 `$autopilot` `$deepinterview` 可用
 5. OMC 不再作为：
    - 全局 prompt 注入源
    - 插件依赖

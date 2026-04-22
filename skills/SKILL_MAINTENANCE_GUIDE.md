@@ -2,7 +2,7 @@
 
 ## 单一事实来源
 
-- `skills/` 是唯一可写的 skill 源目录。`~/.codex/skills` 必须只是指向它的符号链接。
+- `skills/` 是唯一可写的 skill 源目录。默认维护、校验、生成都直接围绕仓库本身进行，不再把 `~/.codex/skills` 当成主路径前提。
 - system skill 放 `skills/.system/`。不要同时保留两份 live source。
 
 ## 新增 Skill 最小清单
@@ -16,10 +16,11 @@
    这一步会统一刷新 `SKILL_ROUTING_RUNTIME.json`、`SKILL_ROUTING_INDEX.md` 等生成路由产物；不要手改这些生成文件。
 4. 运行验证：
    ```bash
-   python3 scripts/check_skills.py --verify-codex-link
-   python3 scripts/check_skills.py --include-system --verify-codex-link
+   python3 scripts/check_skills.py --verify-sync
+   python3 scripts/check_skills.py --include-system --verify-sync
    ```
    本地人工执行这些高输出命令时，可按 [`RTK.md`](/Users/joe/Documents/skill/RTK.md) 改用 `rtk ...` 包装形式。
+   如果你在排查历史兼容安装，可再额外执行 `--verify-codex-link` 做 legacy link 审计。
 5. 提交后 CI 自动验证（`.github/workflows/skill-ci.yml`）
 
 ## 改 Skill 必查

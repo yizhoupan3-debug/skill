@@ -1229,11 +1229,32 @@ def classify_runtime_continuity(snapshot: RuntimeSnapshot) -> dict[str, Any]:
     task = summary_task or trace_task or supervisor_task
     summary_phase = _text(summary.get("phase"))
     supervisor_phase = _text(supervisor.get("active_phase"))
-    phase = summary_phase or supervisor_phase
     verification_status = _text(verification.get("verification_status"))
     summary_status = _text(summary.get("status"))
     story_state = _text(continuity.get("story_state"))
-    status = summary_status or verification_status or story_state
+    summary_terminal = _is_terminal(summary_phase, TERMINAL_PHASES) or _is_terminal(
+        summary_status, TERMINAL_VERIFICATION_STATUSES
+    )
+    supervisor_terminal = (
+        _is_terminal(supervisor_phase, TERMINAL_PHASES)
+        or _is_terminal(verification_status, TERMINAL_VERIFICATION_STATUSES)
+        or _is_terminal(story_state, TERMINAL_STORY_STATES)
+    )
+    supervisor_terminal_overrides_summary = supervisor_terminal and not summary_terminal and (
+        not summary_task
+        or not supervisor_task
+        or _looks_same_identity(summary_task, supervisor_task)
+    )
+    phase = (
+        (supervisor_phase or summary_phase)
+        if supervisor_terminal_overrides_summary
+        else (summary_phase or supervisor_phase)
+    )
+    status = (
+        verification_status or story_state or summary_status
+        if supervisor_terminal_overrides_summary
+        else summary_status or verification_status or story_state
+    )
     next_actions = _authoritative_next_actions(
         snapshot_payload=snapshot.next_actions,
         supervisor_state=supervisor,
@@ -1263,14 +1284,6 @@ def classify_runtime_continuity(snapshot: RuntimeSnapshot) -> dict[str, Any]:
         for item in contract.get("evidence_required", [])
         if str(item).strip()
     ]
-    summary_terminal = _is_terminal(summary_phase, TERMINAL_PHASES) or _is_terminal(
-        summary_status, TERMINAL_VERIFICATION_STATUSES
-    )
-    supervisor_terminal = (
-        _is_terminal(supervisor_phase, TERMINAL_PHASES)
-        or _is_terminal(verification_status, TERMINAL_VERIFICATION_STATUSES)
-        or _is_terminal(story_state, TERMINAL_STORY_STATES)
-    )
     terminal_reasons = stable_line_items(
         [
             f"summary phase is terminal: {summary_phase}" if _is_terminal(summary_phase, TERMINAL_PHASES) else "",
@@ -1302,7 +1315,10 @@ def classify_runtime_continuity(snapshot: RuntimeSnapshot) -> dict[str, Any]:
             ),
             (
                 "supervisor marks the task terminal while the session summary still looks active"
-                if supervisor_terminal and not summary_terminal and (summary_phase or summary_status)
+                if supervisor_terminal
+                and not summary_terminal
+                and (summary_phase or summary_status)
+                and not supervisor_terminal_overrides_summary
                 else ""
             ),
             (

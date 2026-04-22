@@ -168,11 +168,18 @@ fn lifecycle_contract(command: &str) -> Value {
         "session-end" => json!({
             "writes": [
                 "project-local shared memory bundle",
-                "project-local Claude memory projection"
+                "project-local Claude memory projection",
+                "terminal-session continuity repair when resume_allowed is stale"
             ],
-            "forbidden_writes": SHARED_CONTINUITY_PATHS,
+            "forbidden_writes": [
+                "SESSION_SUMMARY.md",
+                "NEXT_ACTIONS.json",
+                "EVIDENCE_INDEX.json",
+                "TRACE_METADATA.json"
+            ],
+            "conditional_writes": [".supervisor_state.json"],
             "consolidates_shared_memory": true,
-            "summary": "Consolidate the project-local memory bundle, then refresh the imported Claude projection."
+            "summary": "Consolidate the project-local memory bundle, refresh the imported Claude projection, and only repair terminal resume state when needed."
         }),
         _ => Value::Null,
     }
@@ -545,7 +552,8 @@ fn build_runtime_source_hash(
 
 fn run_config_change(repo_root: &Path, payload: &Value) -> Result<Value, String> {
     let scope = payload
-        .get("scope")
+        .get("source")
+        .or_else(|| payload.get("scope"))
         .or_else(|| payload.get("matcher"))
         .and_then(Value::as_str)
         .unwrap_or("unknown");
@@ -592,7 +600,8 @@ fn run_config_change(repo_root: &Path, payload: &Value) -> Result<Value, String>
 
 fn run_stop_failure(_repo_root: &Path, payload: &Value) -> Result<Value, String> {
     let failure_type = payload
-        .get("failure_type")
+        .get("error")
+        .or_else(|| payload.get("failure_type"))
         .or_else(|| payload.get("matcher"))
         .and_then(Value::as_str)
         .unwrap_or("unknown");
@@ -629,8 +638,8 @@ fn read_stdin_payload() -> Result<Value, String> {
 fn iter_candidate_paths(payload: &Value) -> Vec<String> {
     let mut candidates = Vec::new();
     for key in [
-        "changed_path",
         "file_path",
+        "changed_path",
         "path",
         "config_path",
         "target_path",
@@ -1196,13 +1205,17 @@ mod tests {
     fn config_change_audit_detects_generated_surfaces() {
         let repo_root = temp_repo_root("audit");
         let payload = json!({
-            "scope": "project_settings",
-            "changed_path": ".claude/settings.json"
+            "source": "project_settings",
+            "file_path": ".claude/settings.json"
         });
         let result = run_config_change(&repo_root, &payload).expect("audit ok");
         assert_eq!(
             result["command"],
             Value::String("config-change".to_string())
+        );
+        assert_eq!(
+            result["scope"],
+            Value::String("project_settings".to_string())
         );
         assert!(result["notices"]
             .as_array()
@@ -1213,5 +1226,18 @@ mod tests {
                 .unwrap_or("")
                 .contains("generated Claude host surfaces")));
         fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn stop_failure_audit_prefers_official_error_field() {
+        let payload = json!({
+            "error": "rate_limit",
+            "error_details": "too many requests"
+        });
+        let result = run_stop_failure(Path::new("."), &payload).expect("audit ok");
+        assert_eq!(
+            result["failure_type"],
+            Value::String("rate_limit".to_string())
+        );
     }
 }

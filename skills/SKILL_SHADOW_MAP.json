@@ -360,6 +360,21 @@
         "source_position": 3
       }
     },
+    "claude-api": {
+      "has_shadow": false,
+      "shadowed": [],
+      "shadowed_by": [],
+      "winner": {
+        "path": "skills/claude-api",
+        "routing_gate": "source",
+        "routing_layer": "L1",
+        "routing_owner": "gate",
+        "session_start": "required",
+        "slug": "claude-api",
+        "source": "project",
+        "source_position": 3
+      }
+    },
     "cloudflare-deploy": {
       "has_shadow": false,
       "shadowed": [],
@@ -480,17 +495,17 @@
         "source_position": 3
       }
     },
-    "deepreview": {
+    "deepinterview": {
       "has_shadow": false,
       "shadowed": [],
       "shadowed_by": [],
       "winner": {
-        "path": "skills/deepreview",
+        "path": "skills/deepinterview",
         "routing_gate": "none",
         "routing_layer": "L1",
         "routing_owner": "owner",
         "session_start": "n/a",
-        "slug": "deepreview",
+        "slug": "deepinterview",
         "source": "project",
         "source_position": 3
       }
@@ -1229,18 +1244,31 @@
       }
     },
     "openai-docs": {
-      "has_shadow": false,
-      "shadowed": [],
-      "shadowed_by": [],
+      "has_shadow": true,
+      "shadowed": [
+        {
+          "path": "skills/.system/openai-docs",
+          "routing_gate": "source",
+          "routing_layer": "L1",
+          "routing_owner": "gate",
+          "session_start": "required",
+          "slug": "openai-docs",
+          "source": "system",
+          "source_position": 0
+        }
+      ],
+      "shadowed_by": [
+        "skills/openai-docs"
+      ],
       "winner": {
-        "path": "skills/.system/openai-docs",
+        "path": "skills/openai-docs",
         "routing_gate": "source",
         "routing_layer": "L1",
         "routing_owner": "gate",
         "session_start": "required",
         "slug": "openai-docs",
-        "source": "system",
-        "source_position": 0
+        "source": "project",
+        "source_position": 3
       }
     },
     "paper-length-tuner": {

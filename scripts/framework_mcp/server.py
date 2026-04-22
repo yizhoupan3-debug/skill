@@ -10,7 +10,7 @@ from typing import Any, TextIO
 from codex_agno_runtime.rust_router import RustRouteAdapter
 
 from scripts.default_bootstrap import resolve_bootstrap_path, run_default_bootstrap
-from scripts.framework_bridge import build_framework_memory_bootstrap, export_framework_skills
+from scripts.framework_bridge import export_framework_skills
 from scripts.memory_support import (
     bootstrap_artifact_root,
     get_repo_root,
@@ -19,7 +19,6 @@ from scripts.memory_support import (
     normalize_next_actions,
     normalize_trace_skills,
     parse_session_summary,
-    resolve_effective_memory_dir,
     supervisor_contract,
     workspace_name_from_root,
 )
@@ -240,14 +239,22 @@ class FrameworkMcpServer:
         }
 
     def _memory_recall(self, *, query: str, top: int, mode: str) -> JSONDict:
-        payload = build_framework_memory_bootstrap(
-            workspace=self._workspace,
-            query=query,
-            source_root=self._repo_root,
-            top=top,
-            mode=mode,
-        )
-        return {"ok": True, **payload}
+        try:
+            return self._rust_adapter.framework_memory_recall(
+                repo_root=self._repo_root,
+                query=query,
+                top=top,
+                mode=mode,
+            )
+        except RuntimeError as error:
+            raise FrameworkServerError(
+                code="RUST_FRAMEWORK_MEMORY_RECALL_FAILED",
+                message=str(error),
+                suggested_next_actions=[
+                    "verify scripts/router-rs builds cleanly",
+                    "inspect .supervisor_state.json, artifacts/current, and .codex/memory for drift",
+                ],
+            ) from error
 
     def _skill_search(self, *, query: str, limit: int) -> JSONDict:
         exported = export_framework_skills()
@@ -438,8 +445,24 @@ class FrameworkMcpServer:
 
     def _read_resource(self, *, uri: str) -> dict[str, Any]:
         if uri == "framework://memory/project":
-            path = resolve_effective_memory_dir(repo_root=self._repo_root) / "MEMORY.md"
-            text = self._read_text_file(path=path, missing_message="Project memory file not found.")
+            try:
+                recap = self._rust_adapter.framework_recap(repo_root=self._repo_root)
+            except RuntimeError as error:
+                raise FrameworkServerError(
+                    code="RUST_FRAMEWORK_RECAP_FAILED",
+                    message=str(error),
+                    suggested_next_actions=[
+                        "verify scripts/router-rs builds cleanly",
+                        "inspect .supervisor_state.json and artifacts/current for drift",
+                    ],
+                ) from error
+            text = str(recap.get("project_memory_bundle", "")).strip()
+            if not text:
+                raise FrameworkServerError(
+                    code="MISSING_RESOURCE",
+                    message="Project memory file not found.",
+                    suggested_next_actions=["refresh the bootstrap bundle", "verify the repository artifacts exist"],
+                )
             return {"uri": uri, "mimeType": "text/markdown", "text": text}
         if uri == "framework://memory/claude-recap":
             try:

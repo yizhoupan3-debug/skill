@@ -1563,7 +1563,7 @@ fn build_codex_host_projection() -> Map<String, Value> {
     );
     projection.insert(
         "framework_alias_entrypoints".to_string(),
-        json!({"autopilot": "$autopilot", "deepreview": "$deepreview"}),
+        json!({"autopilot": "$autopilot", "deepinterview": "$deepinterview"}),
     );
     projection
 }
@@ -1789,7 +1789,7 @@ fn build_claude_host_projection() -> Map<String, Value> {
     );
     projection.insert(
         "framework_alias_entrypoints".to_string(),
-        json!({"autopilot": "/autopilot", "deepreview": "/deepreview"}),
+        json!({"autopilot": "/autopilot", "deepinterview": "/deepinterview"}),
     );
     projection
 }

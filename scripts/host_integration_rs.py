@@ -13,10 +13,25 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CRATE_ROOT = PROJECT_ROOT / "scripts" / "host-integration-rs"
 MANIFEST_PATH = CRATE_ROOT / "Cargo.toml"
+LOCK_PATH = CRATE_ROOT / "Cargo.lock"
 RELEASE_BINARY_PATH = CRATE_ROOT / "target" / "release" / "host-integration-rs"
+
+
+def _latest_source_mtime() -> float:
+    candidates = [
+        MANIFEST_PATH,
+        LOCK_PATH,
+        *CRATE_ROOT.joinpath("src").rglob("*.rs"),
+    ]
+    return max((path.stat().st_mtime for path in candidates if path.is_file()), default=0.0)
+
 
 def _ensure_binary() -> Path:
     if RELEASE_BINARY_PATH.is_file():
+        if RELEASE_BINARY_PATH.stat().st_mtime < _latest_source_mtime():
+            raise RuntimeError(
+                "host-integration-rs prebuilt release binary is stale; rebuild scripts/host-integration-rs before invoking the Python bridge."
+            )
         return RELEASE_BINARY_PATH
     raise RuntimeError(
         "host-integration-rs requires a prebuilt release binary; build scripts/host-integration-rs before invoking the Python bridge."

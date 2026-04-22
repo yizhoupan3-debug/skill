@@ -214,7 +214,11 @@ The implemented runtime control-plane surface in this wave is:
   in Python
 - CLI-family capability discovery now also reports supervisor-driver ownership,
   resume examples, rate-limit auto-resume support, and framework-native
-  `autopilot` / `deepreview` alias entrypoints for Codex and Claude
+  `autopilot` / `deepinterview` alias entrypoints for Codex and Claude
+- OMC retirement contract now also freezes that `autopilot` and
+  `deepinterview` inherit the original OMC core capability bar while this repo
+  enforces a stricter implementation bar for root-cause discovery, verification
+  evidence, recovery, and bounded convergence
 - the contract no longer carries a blocker list; compatibility-only metadata
   is isolated to retirement descriptors and does not drive runtime branching
 - compatibility fallback now survives only as a retired contract surface:

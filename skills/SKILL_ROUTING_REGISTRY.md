@@ -2,7 +2,6 @@
 
 | Skill | Status | P | Layer | Owner | Gate | Source | Health | Description |
 |---|---|---|---|---|---|---|---|---|
-| `openai-docs` | Active | P1 | L1 | gate | source | system | ✓ 100.0 | Use OpenAI docs MCP tools for current OpenAI API, model, Apps SDK, Codex, and do |
 | `plugin-creator` | Active | P2 | L1 | owner | none | system | ✓ 100.0 | Create a local Codex plugin scaffold with `.codex-plugin/plugin.json` and option |
 | `skill-creator` | Active | P2 | L1 | owner | none | system | ✓ 96.4 | Create or update a Codex skill package with clear routing metadata, scope, and s |
 | `skill-installer` | Active | P2 | L1 | owner | none | system | ✓ 97.0 | Install Codex skills from curated sources or GitHub into `$CODEX_HOME/skills`. |
@@ -19,7 +18,7 @@
 | `architect-review` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Review software architecture, system design, and major structural code changes w |
 | `assignment-compliance` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Check whether a homework or course-project submission satisfies the stated requi |
 | `auth-implementation` | Active | P2 | L4 | owner | none | project | ✓ 97.3 | Produce server-enforced auth flows with clean separation between authentication, |
-| `autopilot` | Active | P2 | L1 | owner | delegation | project | ✓ 100.0 | Shared execution alias for the repo's native execution lane. It routes into the  |
+| `autopilot` | Active | P2 | L1 | owner | delegation | project | ✓ 100.0 | Official OMC autopilot workflow, localized onto this repo's native execution lan |
 | `autoresearch` | Active | P2 | L4 | owner | none | project | ✓ 96.1 | Orchestrate autonomous research through a recoverable loop of hypothesis, experi |
 | `backend-runtime-debugging` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Diagnose backend runtime failures: crashes, tracebacks, OOM, deadlocks, hanging  |
 | `brainstorm-research` | Active | P2 | L3 | owner | none | project | ✓ 95.8 | Expand early research ideas into multiple comparable directions and preserve the |
@@ -30,6 +29,7 @@
 | `checklist-writting` | Active | P1 | L1 | owner | none | project | ✓ 100.0 | Write a versioned execution-ready checklist once the strategy is fixed. |
 | `chrome-extension-dev` | Active | P2 | L4 | owner | none | project | ✓ 97.0 | Produce Chrome extensions for Manifest V3: Service Workers, minimal permissions, |
 | `citation-management` | Active | P2 | L1 | owner | none | project | ✓ 98.3 | Verify, normalize, de-duplicate, complete, and format academic citations and ref |
+| `claude-api` | Active | P1 | L1 | gate | source | project | ✓ 100.0 | Use official Claude docs first for Claude API and Claude Code |
 | `cloudflare-deploy` | Active | P2 | L3 | owner | none | project | ✓ 98.7 | Deploy, publish, migrate, and operate applications on Cloudflare using Workers,  |
 | `code-acceleration` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Speed up code with measured rewrites, batching, caching, and parallel execution |
 | `code-review` | Active | P2 | L2 | overlay | none | project | ✓ 94.7 | Review code with structured findings and optional quality scoring. Use when the  |
@@ -40,7 +40,7 @@
 | `css-pro` | Active | P2 | L2 | owner | none | project | ✓ 97.7 | Architect maintainable CSS layout, responsive, animation, and vibrant design-tok |
 | `data-wrangling` | Active | P2 | L2 | owner | none | project | ✓ 96.2 | Clean, transform, validate, and pipeline structured or semi-structured data acro |
 | `datastore-cache-queue` | Active | P2 | L2 | owner | none | project | ✓ 97.3 | Diagnose and fix correctness issues across stores, caches, queues, and ORM-backe |
-| `deepreview` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Shared review alias for the repo's native review lane. It routes into the repo's |
+| `deepinterview` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Official OMC deep-interview workflow, localized onto this repo's evidence-first  |
 | `dependency-migration` | Active | P2 | L2 | owner | none | project | ✓ 97.2 | Manage, audit, upgrade, and migrate project dependencies across npm, pip, Cargo, |
 | `design-agent` | Active | P2 | L3 | gate | none | project | ✓ 100.0 | Route named-product design references and brand-plus-motion source grounding bef |
 | `doc` | Active | P1 | L3 | gate | artifact | project | ✓ 94.3 | Read, create, edit, repair, and review `.docx` Word documents when layout and Wo |
@@ -89,6 +89,7 @@
 | `node-backend` | Active | P2 | L4 | owner | none | project | ✓ 97.3 | Produce well-layered Node.js backend services with thin handlers, boundary valid |
 | `npm-package-authoring` | Active | P2 | L3 | owner | none | project | ✓ 97.7 | Build, refactor, and publish npm packages and JavaScript/TypeScript libraries in |
 | `observability` | Active | P2 | L2 | owner | none | project | ✓ 94.6 | Make production systems observable through logs, metrics, traces, dashboards, an |
+| `openai-docs` | Active | P1 | L1 | gate | source | project | ✓ 100.0 | Use official OpenAI docs first for current OpenAI guidance |
 | `paper-length-tuner` | Active | P2 | L4 | owner | none | project | ✓ 97.8 | Diagnose paper length vs target page/word budget and produce a section-level exp |
 | `paper-logic` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Audit a paper's scientific defensibility under peer review: claims-vs- evidence  |
 | `paper-notation-audit` | Active | P2 | L4 | owner | none | project | ✓ 97.1 | Audit and enforce notation consistency across an academic paper: abbreviations,  |
@@ -108,7 +109,7 @@
 | `python-pro` | Active | P1 | L4 | owner | none | project | ✓ 98.5 | Deliver production-grade Python 3.12+ code with clean async boundaries, strict t |
 | `react` | Active | P1 | L4 | owner | none | project | ✓ 98.0 | Deliver React 19+ components with correct hook dependencies, optimal Server Comp |
 | `refactoring` | Active | P2 | L1 | owner | none | project | ✓ 97.2 | Plan and execute systematic code refactoring without changing behavior. Use when |
-| `refresh` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Build the next-turn execution prompt, copy it to the clipboard, and reply with o |
+| `refresh` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Use the Rust refresh command to generate and copy the next-turn execution prompt |
 | `release-engineering` | Active | P2 | L3 | owner | none | project | ✓ 97.3 | Build release pipelines from commit to published artifact. Use for versioning st |
 | `research-engineer` | Active | P2 | L4 | owner | none | project | ✓ 96.6 | Provide rigorous technical critique, algorithm analysis, formal reasoning, compl |
 | `rust-pro` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Deliver ownership-correct Rust code that compiles without unnecessary clones, ma |

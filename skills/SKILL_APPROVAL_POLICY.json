@@ -262,6 +262,23 @@
       "filesystem_scope": [],
       "network_access": "unspecified"
     },
+    "claude-api": {
+      "allowed_tools": [
+        "browser"
+      ],
+      "approval_required_tools": [
+        "web search fallback"
+      ],
+      "artifact_outputs": [
+        "EVIDENCE_INDEX.json"
+      ],
+      "bridge_behavior": "default",
+      "destructive_risk": "unspecified",
+      "filesystem_scope": [
+        "repo"
+      ],
+      "network_access": "conditional"
+    },
     "cloudflare-deploy": {
       "allowed_tools": [],
       "approval_required_tools": [],
@@ -341,7 +358,7 @@
       "filesystem_scope": [],
       "network_access": "unspecified"
     },
-    "deepreview": {
+    "deepinterview": {
       "allowed_tools": [
         "shell",
         "git",

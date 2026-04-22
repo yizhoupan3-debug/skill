@@ -11,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from scripts.consolidate_memory import archive_legacy_memory_bundle, persist_memory_bundle
 from scripts.default_bootstrap import run_default_bootstrap
 from scripts.memory_store import MemoryItem, MemoryStore
+import scripts.framework_bridge as framework_bridge
 from scripts.framework_bridge import build_framework_memory_bootstrap
 from scripts.memory_support import build_memory_state, load_runtime_snapshot
 from scripts.run_memory_automation import (
@@ -55,7 +56,10 @@ def _seed_runtime(repo_root: Path, artifact_base: Path, *, task_id: str, task: s
     )
 
 
-def test_build_framework_memory_bootstrap_respects_artifact_source_dir(tmp_path: Path) -> None:
+def test_build_framework_memory_bootstrap_respects_artifact_source_dir(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     repo_artifacts = tmp_path / "artifacts"
     isolated_artifacts = tmp_path / "isolated-artifacts"
     _seed_runtime(tmp_path, repo_artifacts, task_id="repo-task-20260418210000", task="repo default task")
@@ -63,6 +67,13 @@ def test_build_framework_memory_bootstrap_respects_artifact_source_dir(tmp_path:
     _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
     snapshot = load_runtime_snapshot(tmp_path, artifact_root=isolated_artifacts)
     _write_json(tmp_path / ".codex" / "memory" / "state.json", build_memory_state(snapshot))
+    rust_calls: list[str] = []
+
+    def fake_adapter() -> object:
+        rust_calls.append("used")
+        raise AssertionError("artifact_source_dir path should stay on the Python bootstrap fallback")
+
+    monkeypatch.setattr(framework_bridge, "_framework_rust_adapter", fake_adapter)
 
     payload = build_framework_memory_bootstrap(
         workspace=tmp_path.name,
@@ -75,6 +86,74 @@ def test_build_framework_memory_bootstrap_respects_artifact_source_dir(tmp_path:
     assert payload["active_task"]["task_id"] == "isolated-task-20260418220000"
     assert payload["continuity"]["task"] == "isolated active task"
     assert payload["retrieval"]["active_task_included"] is True
+    assert rust_calls == []
+
+
+def test_build_framework_memory_bootstrap_uses_rust_authority_on_default_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _seed_runtime(
+        tmp_path,
+        tmp_path / "artifacts",
+        task_id="bootstrap-task-20260418220000",
+        task="bootstrap task",
+    )
+    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
+    recorded: dict[str, object] = {}
+    rust_payload = {
+        "workspace": tmp_path.name,
+        "memory_root": str(tmp_path / ".codex" / "memory"),
+        "retrieval": {"items": [], "active_task_included": True},
+        "continuity": {"state": "active", "task": "bootstrap task"},
+        "active_task": {"task_id": "bootstrap-task-20260418220000", "task": "bootstrap task"},
+        "continuity_decision": {
+            "query": "bootstrap task",
+            "query_matches_active_task": True,
+            "ignored_root_continuity": False,
+            "task_id": "bootstrap-task-20260418220000",
+            "source_task": "bootstrap task",
+            "mode": "active",
+            "focused_task_id": "bootstrap-task-20260418220000",
+        },
+        "prompt_payload": {"workspace": tmp_path.name},
+    }
+
+    class FakeRustAdapter:
+        def framework_memory_recall(
+            self,
+            *,
+            repo_root: Path,
+            query: str = "",
+            top: int = 8,
+            mode: str = "stable",
+        ) -> dict[str, object]:
+            recorded.update(
+                {
+                    "repo_root": repo_root,
+                    "query": query,
+                    "top": top,
+                    "mode": mode,
+                }
+            )
+            return rust_payload
+
+    monkeypatch.setattr(framework_bridge, "_framework_rust_adapter", lambda: FakeRustAdapter())
+
+    payload = build_framework_memory_bootstrap(
+        workspace=tmp_path.name,
+        query="bootstrap task",
+        source_root=tmp_path,
+        mode="active",
+    )
+
+    assert payload is rust_payload
+    assert recorded == {
+        "repo_root": tmp_path.resolve(),
+        "query": "bootstrap task",
+        "top": 8,
+        "mode": "active",
+    }
 
 
 def test_build_framework_memory_bootstrap_does_not_reuse_completed_task_identity(tmp_path: Path) -> None:

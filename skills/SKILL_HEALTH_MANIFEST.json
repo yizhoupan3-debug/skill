@@ -1,18 +1,11 @@
 {
   "ts": "2026-04-15T10:46:46.102903+00:00",
   "summary": {
-    "total_skills": 145,
+    "total_skills": 146,
     "critical_skills": 0,
-    "avg_health": 96.4
+    "avg_health": 96.5
   },
   "skills": {
-    "openai-docs": {
-      "dynamic_score": 100.0,
-      "static_score": 100.0,
-      "usage_30d": 0,
-      "reroutes_30d": 0,
-      "health_status": "Healthy"
-    },
     "plugin-creator": {
       "dynamic_score": 100.0,
       "static_score": 100.0,
@@ -202,6 +195,13 @@
       "reroutes_30d": 0,
       "health_status": "Healthy"
     },
+    "claude-api": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
     "cloudflare-deploy": {
       "dynamic_score": 98.7,
       "static_score": 96.8,
@@ -272,7 +272,7 @@
       "reroutes_30d": 0,
       "health_status": "Healthy"
     },
-    "deepreview": {
+    "deepinterview": {
       "dynamic_score": 100.0,
       "static_score": 100.0,
       "usage_30d": 0,
@@ -611,6 +611,13 @@
     "observability": {
       "dynamic_score": 94.6,
       "static_score": 86.5,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "openai-docs": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
       "usage_30d": 0,
       "reroutes_30d": 0,
       "health_status": "Healthy"

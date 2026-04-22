@@ -906,7 +906,7 @@ def main() -> int:
     parser.add_argument(
         "--verify-codex-link",
         action="store_true",
-        help="Verify ~/.codex/skills resolves to the same realpath as --skills-root.",
+        help="Legacy audit only: verify ~/.codex/skills resolves to the same realpath as --skills-root.",
     )
     parser.add_argument(
         "--codex-link",

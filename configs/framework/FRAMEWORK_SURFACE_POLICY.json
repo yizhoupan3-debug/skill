@@ -48,13 +48,13 @@
     "tier_catalog_path": "skills/SKILL_TIERS.json",
     "loadout_catalog_path": "skills/SKILL_LOADOUTS.json",
     "tier_counts": {
-      "core": 19,
+      "core": 20,
       "optional": 124,
       "experimental": 2,
       "deprecated": 0
     },
     "activation_counts": {
-      "default": 25,
+      "default": 26,
       "explicit_opt_in": 120,
       "disabled": 0
     }

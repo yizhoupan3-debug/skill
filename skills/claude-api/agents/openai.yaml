@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude API"
+  short_description: "Reference official Claude API, Claude Code, and release notes"
+  default_prompt: "Use official Anthropic and Claude docs first, then answer with concise current guidance."
