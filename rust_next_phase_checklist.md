@@ -22,8 +22,9 @@
 - **Lane 3 / Observability Activation** 已基本具备 concrete contract 面：
   - `codex_agno_runtime.observability` 已提供 exporter descriptor / metric record / dashboard schema / health snapshot。
   - `docs/runtime_observability_contract.md` 与 `tests/test_runtime_observability_contracts.py` 已把 vocabulary、exporter、metric、dashboard 对齐锁住。
-- **Lane 4 / Host Consumer Adoption** 已有 browser-mcp 基线落地：
+- **Lane 4 / Host Consumer Adoption** 已完成当前 phase 收口：
   - `tools/browser-mcp/src/runtime.ts` 已围绕 Rust attach descriptor / handoff / binding artifact 做 replay-capable attach 消费，不再只是旧三路径手搓逻辑。
+  - 更广 host family adoption 也已核查并统一到同一条 Rust-first outward surface：默认 contract 输出只保留 default host peer set，`aionrs_companion_adapter` / `aionui_host_adapter` / `generic_host_adapter` 改为显式 fallback lane，`codex_desktop_host_adapter` 与 alias 产物继续只留在 continuity lane。
 
 ### 仍未收口的内容
 
@@ -31,8 +32,6 @@
   - route diagnostic 的 typed contract 已收薄，但 execution kernel 的其余 metadata / naming bridge 还没完全压成 Rust canonical producer。
   - `scripts/route.py` 这类兼容 shim 还存在，虽然 steady-state runtime 已不靠它，但旁路 helper 仍需继续 typed-first 化。
 - **Lane 2 / Native Install / Bootstrap** 还没有实质推进；默认安装/初始化入口是否天然落在当前 Rust-first contract 上，仍需要专门收口。
-- **Lane 4** 还没有完成“更广 host family adoption”：
-  - browser-mcp 已经吃上 attach descriptor，但其他 host-facing consumer 是否全部切到同一 Rust-first surface，仍要继续核查和统一。
 - **Lane 5 / Integrator / Regenerate** 现在还不该启动：
   - 只有当前 1/2/3/4 真正稳定后，才适合统一刷新 generated artifacts / docs / manifests / verification evidence。
 
@@ -173,11 +172,11 @@
 ### 当前状态
 
 - 上一阶段已经把 process-external attach bridge 做成更稳定的 artifact replay seam，并引入 attach descriptor。
-- 但 host/runtime consumer 还没有全面转向消费这套新 surface。
+- browser-mcp 已经消费这套 Rust attach / replay surface，其余 host-facing consumer 也已完成边界核查：默认 outward surface 只保留 canonical host peers，fallback / continuity consumer 改为显式 opt-in。
 
 ### 目标
 
-让 host-facing consumer 真正吃上新的 Rust-first attach / replay / health surface，不再手搓旧的三路径拼接逻辑。
+让 host-facing consumer 真正吃上新的 Rust-first attach / replay / health surface，不再手搓旧的三路径拼接逻辑，同时把 fallback / continuity consumer 明确隔离到非默认 lane。
 
 ### 独占写入范围
 
@@ -194,12 +193,14 @@
 
 - host consumer adoption patch
 - attach descriptor consumption path
+- host-family default/fallback/continuity boundary
 - host-facing targeted verification
 
 ### 验收标准
 
 - consumer 直接使用 attach descriptor，而不是继续手拼 `binding/handoff/resume`
 - host-facing调用链与当前 artifact replay contract 对齐
+- default host peer set 不再混入 fallback / continuity consumer
 - adoption regression 通过
 
 ---

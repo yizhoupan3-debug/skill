@@ -914,8 +914,10 @@ def test_legacy_codex_desktop_alias_compiler_stays_on_explicit_compatibility_sur
     assert not hasattr(root_package, "compile_codex_desktop_host_adapter")
     assert not hasattr(root_package, "compile_aionrs_companion_adapter")
     assert not hasattr(root_package, "compile_aionui_host_adapter")
+    assert not hasattr(root_package, "build_upgrade_compatibility_matrix")
     assert compatibility_surface.compile_aionrs_companion_adapter is compile_aionrs_companion_adapter
     assert compatibility_surface.compile_aionui_host_adapter is compile_aionui_host_adapter
+    assert compatibility_surface.build_upgrade_compatibility_matrix is build_upgrade_compatibility_matrix
     assert compatibility_surface.compile_codex_desktop_host_adapter is compile_codex_desktop_host_adapter
 
 

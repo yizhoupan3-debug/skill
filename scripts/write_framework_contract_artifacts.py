@@ -35,6 +35,11 @@ def main() -> int:
         help="Also write fallback/compatibility host artifacts such as aionrs_companion_adapter, aionui_host_adapter, and generic_host_adapter.",
     )
     parser.add_argument(
+        "--include-compatibility-inventory",
+        action="store_true",
+        help="Also write the secondary compatibility inventory artifact upgrade_compatibility_matrix.",
+    )
+    parser.add_argument(
         "--include-legacy-alias-artifact",
         action="store_true",
         help="Force legacy codex_desktop_host_adapter artifacts to be written alongside the parity-first defaults.",
@@ -50,6 +55,7 @@ def main() -> int:
         profile=profile,
         rust_adapter=rust_adapter,
         include_fallback_artifacts=args.include_fallback_artifacts,
+        include_compatibility_inventory=args.include_compatibility_inventory,
         include_legacy_alias_artifact=args.include_legacy_alias_artifact,
     )
     print(json.dumps(paths, ensure_ascii=False, indent=2))
