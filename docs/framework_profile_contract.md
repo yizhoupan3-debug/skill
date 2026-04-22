@@ -108,8 +108,9 @@ runtime kernel 语义。
 `cli_common_adapter` / `cli_family_parity_snapshot` /
 `codex_dual_entry_parity_snapshot` / contract / parity artifacts；
 `aionrs_companion_adapter`、`aionui_host_adapter`、`generic_host_adapter`
-以及 `codex_desktop_host_adapter` 都要显式 opt-in，才会作为 fallback /
-compatibility lane 被写出，不再占据默认 peer 输出面。
+、`codex_desktop_host_adapter`、以及 `upgrade_compatibility_matrix`
+都要显式 opt-in，才会作为 fallback / compatibility lane 被写出，不再占据
+默认 peer 输出面。
 同时生成物的物理落点也分开：
 默认 contract 写到 `default/`，fallback lane 写到 `fallback/`，continuity lane
 写到 `continuity/`，Rust companion artifacts 写到 `rust/`；根目录只保留

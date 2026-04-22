@@ -770,6 +770,7 @@ def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
         tmp_path,
         profile=profile,
         rust_adapter=RustRouteAdapter(PROJECT_ROOT, timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS),
+        include_compatibility_inventory=True,
         include_legacy_alias_artifact=True,
     )
 
@@ -807,6 +808,7 @@ def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
         "host_projection"
     ]["settings_paths"] == ["~/.gemini/settings.json"]
     matrix = json.loads(Path(paths["upgrade_compatibility_matrix"]).read_text(encoding="utf-8"))
+    assert Path(paths["upgrade_compatibility_matrix"]).parent.name == "continuity"
     assert matrix["codex_desktop_host_adapter"]["compatible"] is True
 
     rust_alias_payload = json.loads(

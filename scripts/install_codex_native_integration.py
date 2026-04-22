@@ -16,9 +16,16 @@ if __package__ in {None, ""}:
 
 from scripts.install_browser_mcp_codex import install_server as install_browser_server
 from scripts.install_codex_framework_default import retire_overlay as retire_framework_overlay
+from scripts.default_bootstrap import resolve_bootstrap_path, run_default_bootstrap
 from scripts.materialize_cli_host_entrypoints import CLAUDE_REFRESH_COMMAND
 from scripts.host_integration_rs import run_host_integration_rs
-from scripts.memory_support import get_repo_root, read_json_if_exists, write_json_if_changed, write_text_if_changed
+from scripts.memory_support import (
+    bootstrap_artifact_root,
+    get_repo_root,
+    read_json_if_exists,
+    write_json_if_changed,
+    write_text_if_changed,
+)
 
 HOME_CONFIG_PATH = Path.home() / ".codex" / "config.toml"
 HOME_PLUGIN_ROOT = Path.home() / ".codex" / "plugins" / "skill-framework-native"
@@ -35,6 +42,42 @@ DEFAULT_TUI_STATUS_ITEMS = (
     "context-used",
     "fast-mode",
 )
+
+
+def ensure_default_bootstrap_bundle(
+    repo_root: Path,
+    *,
+    output_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Ensure the canonical default bootstrap bundle exists for this repository."""
+
+    resolved_repo_root = repo_root.resolve()
+    resolved_output_dir = (output_dir or bootstrap_artifact_root(resolved_repo_root)).resolve()
+    resolved_output_dir.mkdir(parents=True, exist_ok=True)
+    mirror_bootstrap_path = resolve_bootstrap_path(resolved_output_dir)
+    if mirror_bootstrap_path.is_file():
+        return {
+            "success": True,
+            "changed": False,
+            "status": "already-present",
+            "output_dir": str(resolved_output_dir),
+            "bootstrap_path": str(mirror_bootstrap_path),
+            "mirror_bootstrap_path": str(mirror_bootstrap_path),
+        }
+
+    result = run_default_bootstrap(repo_root=resolved_repo_root, output_dir=resolved_output_dir)
+    return {
+        "success": True,
+        "changed": True,
+        "status": "materialized",
+        "output_dir": result["paths"]["output_dir"],
+        "task_output_dir": result["paths"]["task_output_dir"],
+        "bootstrap_path": result["bootstrap_path"],
+        "mirror_bootstrap_path": result["paths"]["mirror_bootstrap_path"],
+        "task_id": result["payload"]["bootstrap"]["task_id"],
+        "memory_items": result["memory_items"],
+        "proposal_count": result["proposal_count"],
+    }
 
 def ensure_config_file(config_path: Path) -> bool:
     """Ensure the target Codex config file exists with a schema header."""
@@ -270,6 +313,8 @@ def install_native_integration(
     install_personal_marketplace_entry: bool = True,
     install_home_codex_skills_link: bool = True,
     install_home_claude_refresh_command: bool = True,
+    install_default_bootstrap: bool = True,
+    bootstrap_output_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Install the repo's Codex-native integration surfaces."""
 
@@ -282,6 +327,7 @@ def install_native_integration(
     home_codex_skills_link_changed = False
     home_claude_refresh_changed = False
     framework_overlay_result: dict[str, Any] | None = None
+    default_bootstrap_result: dict[str, Any] | None = None
     if install_browser_mcp:
         browser_changed = install_browser_server(config_path=home_config_path, repo_root=resolved_repo_root)
     if install_framework_mcp:
@@ -305,6 +351,11 @@ def install_native_integration(
         framework_overlay_result = retire_framework_overlay(
             (resolved_repo_root / project_instructions_path).resolve()
         )
+    if install_default_bootstrap:
+        default_bootstrap_result = ensure_default_bootstrap_bundle(
+            resolved_repo_root,
+            output_dir=bootstrap_output_dir,
+        )
     return {
         "success": True,
         "repo_root": str(resolved_repo_root),
@@ -323,6 +374,7 @@ def install_native_integration(
         "home_codex_skills_link_changed": home_codex_skills_link_changed,
         "home_claude_refresh_changed": home_claude_refresh_changed,
         "framework_overlay_retirement": framework_overlay_result,
+        "default_bootstrap": default_bootstrap_result,
     }
 
 
@@ -342,6 +394,8 @@ def install_native_integration(
     install_personal_marketplace_entry: bool = True,
     install_home_codex_skills_link: bool = True,
     install_home_claude_refresh_command: bool = True,
+    install_default_bootstrap: bool = True,
+    bootstrap_output_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Rust-owned installer wrapper kept behind the legacy Python API."""
 
@@ -365,6 +419,8 @@ def install_native_integration(
         "--project-instructions-path",
         str(project_instructions_path),
     ]
+    if bootstrap_output_dir is not None:
+        command.extend(["--bootstrap-output-dir", str(bootstrap_output_dir)])
     if not install_browser_mcp:
         command.append("--skip-browser-mcp")
     if not install_framework_mcp:
@@ -379,6 +435,8 @@ def install_native_integration(
         command.append("--skip-home-codex-skills-link")
     if not install_home_claude_refresh_command:
         command.append("--skip-home-claude-refresh")
+    if not install_default_bootstrap:
+        command.append("--skip-default-bootstrap")
     return run_host_integration_rs(*command)
 
 
@@ -390,6 +448,7 @@ def main() -> int:
     parser.add_argument("--home-codex-skills-path", type=Path, default=HOME_CODEX_SKILLS_PATH)
     parser.add_argument("--home-claude-refresh-path", type=Path, default=HOME_CLAUDE_REFRESH_PATH)
     parser.add_argument("--project-instructions-path", type=Path, default=PROJECT_INSTRUCTIONS_PATH)
+    parser.add_argument("--bootstrap-output-dir", type=Path, default=None)
     parser.add_argument("--repo-root", type=Path, default=None)
     parser.add_argument("--skip-browser-mcp", action="store_true")
     parser.add_argument("--skip-framework-mcp", action="store_true")
@@ -398,6 +457,7 @@ def main() -> int:
     parser.add_argument("--skip-personal-marketplace", action="store_true")
     parser.add_argument("--skip-home-codex-skills-link", action="store_true")
     parser.add_argument("--skip-home-claude-refresh", action="store_true")
+    parser.add_argument("--skip-default-bootstrap", action="store_true")
     parser.add_argument("--json", action="store_true", dest="json_output")
     args = parser.parse_args()
     payload = install_native_integration(
@@ -415,6 +475,8 @@ def main() -> int:
         install_personal_marketplace_entry=not args.skip_personal_marketplace,
         install_home_codex_skills_link=not args.skip_home_codex_skills_link,
         install_home_claude_refresh_command=not args.skip_home_claude_refresh,
+        install_default_bootstrap=not args.skip_default_bootstrap,
+        bootstrap_output_dir=args.bootstrap_output_dir,
     )
     if args.json_output:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
