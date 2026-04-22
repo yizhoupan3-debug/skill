@@ -340,7 +340,11 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
             &summary_status,
             TERMINAL_VERIFICATION_STATUSES,
         ),
-        terminal_reason("supervisor phase is terminal", &supervisor_phase, TERMINAL_PHASES),
+        terminal_reason(
+            "supervisor phase is terminal",
+            &supervisor_phase,
+            TERMINAL_PHASES,
+        ),
         terminal_reason(
             "verification status is terminal",
             &verification_status,
@@ -357,7 +361,9 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
             && !trace_task.is_empty()
             && !looks_same_identity(&summary_task, &trace_task)
         {
-            format!("session summary task '{summary_task}' disagrees with trace task '{trace_task}'")
+            format!(
+                "session summary task '{summary_task}' disagrees with trace task '{trace_task}'"
+            )
         } else {
             String::new()
         },
@@ -365,7 +371,8 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
             && !supervisor_terminal
             && (!supervisor_phase.is_empty() || !verification_status.is_empty())
         {
-            "session summary marks the task terminal while supervisor still looks active".to_string()
+            "session summary marks the task terminal while supervisor still looks active"
+                .to_string()
         } else {
             String::new()
         },
@@ -373,7 +380,8 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
             && !summary_terminal
             && (!summary_phase.is_empty() || !summary_status.is_empty())
         {
-            "supervisor marks the task terminal while the session summary still looks active".to_string()
+            "supervisor marks the task terminal while the session summary still looks active"
+                .to_string()
         } else {
             String::new()
         },
@@ -423,7 +431,10 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
             && (is_terminal(&story_state, STALE_STORY_STATES)
                 || value_bool_or_none(continuity.get("resume_allowed")) == Some(false))
         {
-            format!("state reason: {}", value_text(continuity.get("state_reason")))
+            format!(
+                "state reason: {}",
+                value_text(continuity.get("state_reason"))
+            )
         } else {
             String::new()
         },
@@ -602,7 +613,8 @@ fn value_string_list(value: Option<&Value>) -> Vec<String> {
     value
         .and_then(Value::as_array)
         .map(|items| {
-            items.iter()
+            items
+                .iter()
                 .map(|item| value_text(Some(item)))
                 .filter(|item| !item.is_empty())
                 .collect()
@@ -673,7 +685,9 @@ fn normalize_next_actions(payload: &Value) -> Vec<String> {
     {
         payload.get("next_actions")
     } else {
-        payload.get("next_actions").or_else(|| payload.get("actions"))
+        payload
+            .get("next_actions")
+            .or_else(|| payload.get("actions"))
     };
     actions
         .and_then(Value::as_array)
@@ -692,7 +706,9 @@ fn normalize_trace_skills(payload: &Value) -> Vec<String> {
     {
         payload.get("matched_skills")
     } else {
-        payload.get("matched_skills").or_else(|| payload.get("skills"))
+        payload
+            .get("matched_skills")
+            .or_else(|| payload.get("skills"))
     };
     skills
         .and_then(Value::as_array)
@@ -775,7 +791,10 @@ fn trace_payload_identity_matches(
     if !payload_status.is_empty() && payload_status != status {
         return false;
     }
-    if let Some(version) = payload.get("routing_runtime_version").and_then(Value::as_u64) {
+    if let Some(version) = payload
+        .get("routing_runtime_version")
+        .and_then(Value::as_u64)
+    {
         if version != current_routing_runtime_version {
             return false;
         }
@@ -790,12 +809,8 @@ fn authoritative_route(
     status: &str,
     current_routing_runtime_version: u64,
 ) -> Vec<String> {
-    if trace_payload_identity_matches(
-        trace_payload,
-        task,
-        status,
-        current_routing_runtime_version,
-    ) {
+    if trace_payload_identity_matches(trace_payload, task, status, current_routing_runtime_version)
+    {
         let route = normalize_trace_skills(trace_payload);
         if !route.is_empty() {
             return route;
@@ -951,7 +966,9 @@ fn terminal_reason(prefix: &str, value: &str, terminal_values: &[&str]) -> Strin
 
 fn is_terminal(value: &str, terminal_values: &[&str]) -> bool {
     let lowered = value.trim().to_ascii_lowercase();
-    terminal_values.iter().any(|candidate| lowered == *candidate)
+    terminal_values
+        .iter()
+        .any(|candidate| lowered == *candidate)
 }
 
 fn looks_same_identity(left: &str, right: &str) -> bool {
@@ -960,5 +977,7 @@ fn looks_same_identity(left: &str, right: &str) -> bool {
     if left_token.is_empty() || right_token.is_empty() {
         return true;
     }
-    left_token == right_token || left_token.contains(&right_token) || right_token.contains(&left_token)
+    left_token == right_token
+        || left_token.contains(&right_token)
+        || right_token.contains(&left_token)
 }

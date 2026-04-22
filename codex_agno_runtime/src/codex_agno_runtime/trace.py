@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Mapping, Protocol
 
 from pydantic import BaseModel, Field
+from codex_agno_runtime.paths import default_codex_home
 from codex_agno_runtime.rust_router import RustRouteAdapter
 
 if TYPE_CHECKING:
@@ -50,8 +51,10 @@ _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR = {
     "exporter_authority": "rust-runtime-control-plane",
 }
 _DEFAULT_TRACE_SCOPE_FIELDS = ("session_id", "job_id")
-_DEFAULT_CODEX_HOME = Path(__file__).resolve().parents[3]
-_DEFAULT_ROUTING_RUNTIME_PATH = Path(__file__).resolve().parents[3] / "skills" / "SKILL_ROUTING_RUNTIME.json"
+
+
+def _default_routing_runtime_path() -> Path:
+    return default_codex_home() / "skills" / "SKILL_ROUTING_RUNTIME.json"
 
 
 def _now_iso() -> str:
@@ -60,13 +63,14 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _load_routing_runtime_version(runtime_path: Path = _DEFAULT_ROUTING_RUNTIME_PATH) -> int:
+def _load_routing_runtime_version(runtime_path: Path | None = None) -> int:
     """Load the current routing runtime version for emitted trace metadata."""
 
-    if not runtime_path.is_file():
+    resolved_runtime_path = runtime_path or _default_routing_runtime_path()
+    if not resolved_runtime_path.is_file():
         return 1
     try:
-        payload = json.loads(runtime_path.read_text(encoding="utf-8"))
+        payload = json.loads(resolved_runtime_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return 1
     value = payload.get("version")
@@ -851,7 +855,7 @@ class RuntimeTraceRecorder:
         self.event_sink = event_sink
         self.event_bridge = event_bridge
         self.storage_backend = storage_backend
-        self._rust_adapter = RustRouteAdapter(_DEFAULT_CODEX_HOME)
+        self._rust_adapter = RustRouteAdapter(default_codex_home())
         self._control_plane = _build_trace_control_plane_descriptor(
             control_plane_descriptor=control_plane_descriptor,
             event_stream_path=event_stream_path,
@@ -1109,32 +1113,7 @@ class RuntimeTraceRecorder:
             payload["after_event_id"] = after_event_id
         if limit is not None:
             payload["limit"] = limit
-
-        capabilities = self._storage_capabilities()
-        if capabilities is None or capabilities.backend_family == "filesystem" or self.storage_backend is None:
-            yield payload
-            return
-
-        with tempfile.TemporaryDirectory(prefix="runtime-trace-io-") as temp_dir:
-            temp_root = Path(temp_dir)
-            if manifest_path is not None:
-                payload["compaction_manifest_path"] = str(
-                    self._stage_compaction_manifest(
-                        session_id=session_id,
-                        job_id=job_id,
-                        manifest_path=manifest_path,
-                        temp_root=temp_root,
-                    )
-                )
-                payload["path"] = None
-            elif trace_stream_path is not None:
-                payload["path"] = str(
-                    self._stage_trace_stream(
-                        trace_stream_path=trace_stream_path,
-                        temp_root=temp_root,
-                    )
-                )
-            yield payload
+        yield payload
 
     @staticmethod
     def _cursor_from_payload(payload: Mapping[str, Any] | None) -> TraceReplayCursor | None:

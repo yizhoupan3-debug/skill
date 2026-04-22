@@ -217,58 +217,6 @@ def build_execution_kernel_runtime_metadata(
     return metadata
 
 
-def build_execution_kernel_bridge_metadata_projection(
-    metadata: Mapping[str, Any] | None,
-    *,
-    delegate_kind: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
-    delegate_authority: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
-    delegate_family: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
-    delegate_impl: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
-) -> dict[str, Any]:
-    """Project legacy delegate-first metadata onto the steady-state bridge shape."""
-
-    normalized = dict(metadata or {})
-    legacy_kind = normalized.get("execution_kernel")
-    legacy_authority = normalized.get("execution_kernel_authority")
-    normalized["execution_kernel"] = EXECUTION_KERNEL_BRIDGE_KIND
-    normalized["execution_kernel_authority"] = EXECUTION_KERNEL_BRIDGE_AUTHORITY
-    normalized.setdefault(
-        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
-        EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
-    )
-    normalized.setdefault(
-        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
-        EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
-    )
-    normalized.setdefault("execution_kernel_in_process_replacement_complete", True)
-    normalized.setdefault("execution_kernel_delegate", legacy_kind or delegate_kind)
-    normalized.setdefault(
-        "execution_kernel_delegate_authority",
-        legacy_authority or delegate_authority,
-    )
-    normalized.setdefault("execution_kernel_delegate_family", delegate_family)
-    normalized.setdefault("execution_kernel_delegate_impl", delegate_impl)
-    normalized.setdefault(
-        "execution_kernel_live_primary",
-        normalized.get("execution_kernel_primary")
-        or normalized.get("execution_kernel_delegate")
-        or legacy_kind
-        or delegate_kind,
-    )
-    normalized.setdefault(
-        "execution_kernel_live_primary_authority",
-        normalized.get("execution_kernel_primary_authority")
-        or normalized.get("execution_kernel_delegate_authority")
-        or legacy_authority
-        or delegate_authority,
-    )
-    normalized.setdefault("execution_kernel_live_fallback", None)
-    normalized.setdefault("execution_kernel_live_fallback_authority", None)
-    normalized.setdefault("execution_kernel_live_fallback_enabled", False)
-    normalized.setdefault("execution_kernel_live_fallback_mode", "disabled")
-    return normalized
-
-
 def build_execution_kernel_live_response_serialization_contract_core() -> dict[str, Any]:
     """Return the shared execution-kernel response serialization contract core."""
 
@@ -466,18 +414,6 @@ def validate_router_rs_execution_metadata(
         if live_run
         else DRY_RUN_PROMPT_PREVIEW_OWNER
     )
-    legacy_top_level = (
-        normalized.get("execution_kernel") == execution_kernel_delegate
-        and normalized.get("execution_kernel_authority") == execution_kernel_delegate_authority
-    )
-    if legacy_top_level:
-        normalized = build_execution_kernel_bridge_metadata_projection(
-            normalized,
-            delegate_kind=execution_kernel_delegate,
-            delegate_authority=execution_kernel_delegate_authority,
-            delegate_family=execution_kernel_delegate_family,
-            delegate_impl=execution_kernel_delegate_impl,
-        )
     expected_pairs = {
         EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY: (
             EXECUTION_KERNEL_METADATA_SCHEMA_VERSION

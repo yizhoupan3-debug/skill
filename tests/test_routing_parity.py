@@ -888,18 +888,19 @@ def test_route_report_contract_exposes_schema_and_rust_owned_snapshot_evidence()
     """The Rust diagnostic report should expose the Rust-only evidence contract."""
 
     adapter = RustRouteAdapter(PROJECT_ROOT)
+    decision = route_decision_contract(
+        "帮我写一个 Rust CLI 工具",
+        session_id="route-report-contract-session",
+        allow_overlay=True,
+        first_turn=True,
+    )
     baseline = RouteDecisionSnapshot.model_validate(
-        route_decision_json(
-            "帮我写一个 Rust CLI 工具",
-            session_id="route-report-contract-session",
-            allow_overlay=True,
-            first_turn=True,
-        )["route_snapshot"]
+        decision.route_snapshot.model_dump(mode="json")
     )
 
     report = adapter.route_report_contract(
         mode="shadow",
-        rust_route_snapshot=baseline,
+        route_decision_contract=decision,
     )
 
     assert isinstance(report, RouteDiagnosticReport)
@@ -910,6 +911,8 @@ def test_route_report_contract_exposes_schema_and_rust_owned_snapshot_evidence()
     assert report.evidence_kind == "rust-owned-snapshot"
     assert report.strict_verification is False
     assert report.verification_passed is True
+    assert report.verified_contract_fields == ["engine", "selected_skill", "layer", "overlay_skill"]
+    assert report.contract_mismatch_fields == []
     assert report.route_snapshot == baseline
 
 
@@ -917,18 +920,19 @@ def test_route_report_verify_mode_requires_strict_verification() -> None:
     """Verify mode should mark the diagnostic report as strict Rust verification."""
 
     adapter = RustRouteAdapter(PROJECT_ROOT)
+    decision = route_decision_contract(
+        "帮我写一个 Rust CLI 工具",
+        session_id="route-report-verify-session",
+        allow_overlay=True,
+        first_turn=True,
+    )
     baseline = RouteDecisionSnapshot.model_validate(
-        route_decision_json(
-            "帮我写一个 Rust CLI 工具",
-            session_id="route-report-verify-session",
-            allow_overlay=True,
-            first_turn=True,
-        )["route_snapshot"]
+        decision.route_snapshot.model_dump(mode="json")
     )
 
     report = adapter.route_report_contract(
         mode="verify",
-        rust_route_snapshot=baseline,
+        route_decision_contract=decision,
     )
 
     assert isinstance(report, RouteDiagnosticReport)
@@ -939,6 +943,7 @@ def test_route_report_verify_mode_requires_strict_verification() -> None:
     assert report.evidence_kind == "rust-owned-snapshot"
     assert report.strict_verification is True
     assert report.verification_passed is True
+    assert report.contract_mismatch_fields == []
 
 
 def test_route_report_contract_accepts_snapshot_dict_for_compatibility_callers() -> None:
@@ -959,7 +964,64 @@ def test_route_report_contract_accepts_snapshot_dict_for_compatibility_callers()
 
     assert isinstance(report, RouteDiagnosticReport)
     assert report.mode == "shadow"
+    assert report.verified_contract_fields == []
+    assert report.contract_mismatch_fields == []
     assert report.route_snapshot.selected_skill == baseline["selected_skill"]
+
+
+def test_route_report_contract_marks_mismatched_contract_fields() -> None:
+    """Rust route diagnostics should carry contract mismatches instead of relying on Python-side comparisons."""
+
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    decision = route_decision_contract(
+        "帮我写一个 Rust CLI 工具",
+        session_id="route-report-mismatch-session",
+        allow_overlay=True,
+        first_turn=True,
+    ).model_dump(mode="json")
+    decision["selected_skill"] = "wrong-skill"
+
+    report = adapter.route_report_contract(
+        mode="verify",
+        route_decision_contract=decision,
+    )
+
+    assert report.strict_verification is True
+    assert report.verification_passed is False
+    assert "selected_skill" in report.contract_mismatch_fields
+
+
+def test_route_report_contract_can_derive_snapshot_from_typed_decision() -> None:
+    """Primary callers should be able to hand Rust the typed decision without duplicating snapshot JSON."""
+
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    decision = route_decision_contract(
+        "帮我写一个 Rust CLI 工具",
+        session_id="route-report-decision-only-session",
+        allow_overlay=True,
+        first_turn=True,
+    )
+
+    report = adapter.route_report_contract(
+        mode="shadow",
+        route_decision_contract=decision,
+    )
+
+    assert report.mode == "shadow"
+    assert report.verification_passed is True
+    assert report.route_snapshot == decision.route_snapshot
+
+
+def test_route_report_contract_requires_snapshot_or_decision() -> None:
+    """The compatibility shim should fail closed when callers omit both report inputs."""
+
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+
+    with pytest.raises(
+        ValueError,
+        match="route_report_contract requires rust_route_snapshot or route_decision_contract",
+    ):
+        adapter.route_report_contract(mode="shadow")
 
 
 def test_rust_route_adapter_framework_runtime_snapshot_reads_workspace_artifacts(

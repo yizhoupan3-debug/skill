@@ -13,7 +13,7 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CRATE_ROOT = PROJECT_ROOT / "scripts" / "host-integration-rs"
 MANIFEST_PATH = CRATE_ROOT / "Cargo.toml"
-BINARY_PATH = CRATE_ROOT / "target" / "debug" / "host-integration-rs"
+RELEASE_BINARY_PATH = CRATE_ROOT / "target" / "release" / "host-integration-rs"
 
 
 def _rust_sources() -> list[Path]:
@@ -32,15 +32,15 @@ def _binary_is_fresh(binary_path: Path) -> bool:
 
 
 def _ensure_binary() -> Path:
-    if _binary_is_fresh(BINARY_PATH):
-        return BINARY_PATH
+    if _binary_is_fresh(RELEASE_BINARY_PATH):
+        return RELEASE_BINARY_PATH
     subprocess.run(
-        ["cargo", "build", "--quiet", "--manifest-path", str(MANIFEST_PATH)],
+        ["cargo", "build", "--release", "--quiet", "--manifest-path", str(MANIFEST_PATH)],
         cwd=PROJECT_ROOT,
         check=True,
         text=True,
     )
-    return BINARY_PATH
+    return RELEASE_BINARY_PATH
 
 
 def run_host_integration_rs(*args: str) -> dict[str, Any]:

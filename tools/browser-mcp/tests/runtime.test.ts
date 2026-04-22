@@ -1,14 +1,17 @@
+import { execFile as execFileCallback } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import { AddressInfo } from 'node:net';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { BrowserRuntime } from '../src/runtime.js';
 
 let server: Server;
 let baseUrl: string;
 let runtime: BrowserRuntime;
+const execFile = promisify(execFileCallback);
 
 async function createAttachedRuntimeFixture(): Promise<{
   tempRoot: string;
@@ -144,6 +147,172 @@ async function createAttachedRuntimeFixture(): Promise<{
     tempRoot,
     traceStreamPath,
     alternateTraceStreamPath,
+    descriptorPath,
+    bindingArtifactPath,
+    handoffPath,
+    resumeManifestPath,
+  };
+}
+
+async function createAttachedRuntimeSqliteFixture(): Promise<{
+  tempRoot: string;
+  traceStreamPath: string;
+  descriptorPath: string;
+  bindingArtifactPath: string;
+  handoffPath: string;
+  resumeManifestPath: string;
+}> {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), 'browser-mcp-attach-sqlite-'));
+  const runtimeRoot = path.join(tempRoot, 'runtime-data');
+  const transportDir = path.join(runtimeRoot, 'runtime_event_transports');
+  const traceStreamPath = path.join(runtimeRoot, 'TRACE_EVENTS.jsonl');
+  const descriptorPath = path.join(tempRoot, 'runtime-attach-descriptor.json');
+  const bindingArtifactPath = path.join(transportDir, 'session-sqlite__job-sqlite.json');
+  const handoffPath = path.join(runtimeRoot, 'ATTACHED_RUNTIME_EVENT_HANDOFF.json');
+  const resumeManifestPath = path.join(runtimeRoot, 'TRACE_RESUME_MANIFEST.json');
+  const dbPath = path.join(runtimeRoot, 'runtime_checkpoint_store.sqlite3');
+
+  await mkdir(transportDir, { recursive: true });
+  await execFile(
+    'python3',
+    [
+      '-c',
+      `
+import json, sqlite3, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+db_path = Path(sys.argv[2])
+binding_artifact_path = Path(sys.argv[3])
+handoff_path = Path(sys.argv[4])
+resume_manifest_path = Path(sys.argv[5])
+trace_stream_path = Path(sys.argv[6])
+
+conn = sqlite3.connect(db_path)
+conn.execute("CREATE TABLE IF NOT EXISTS runtime_storage_payloads (payload_key TEXT PRIMARY KEY, payload_text TEXT NOT NULL)")
+
+def write_payload(target: Path, payload: str) -> None:
+    relative_key = target.relative_to(root).as_posix()
+    absolute_key = str(target)
+    conn.execute(
+        "INSERT OR REPLACE INTO runtime_storage_payloads (payload_key, payload_text) VALUES (?, ?)",
+        (relative_key, payload),
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO runtime_storage_payloads (payload_key, payload_text) VALUES (?, ?)",
+        (absolute_key, payload),
+    )
+
+trace_payload = "\\n".join([
+    json.dumps({
+        "sink_schema_version": "runtime-trace-sink-v2",
+        "event": {
+            "ts": "2026-04-23T00:00:00.000Z",
+            "event_id": "evt-sqlite-1",
+            "kind": "job.started",
+            "session_id": "session-sqlite",
+            "job_id": "job-sqlite",
+            "seq": 1,
+            "generation": 0,
+            "cursor": "g0:s1:evt-sqlite-1",
+        },
+    }),
+    json.dumps({
+        "ts": "2026-04-23T00:00:01.000Z",
+        "event_id": "evt-sqlite-2",
+        "kind": "job.completed",
+        "session_id": "session-sqlite",
+        "job_id": "job-sqlite",
+        "seq": 2,
+        "generation": 0,
+        "cursor": "g0:s2:evt-sqlite-2",
+    }),
+]) + "\\n"
+
+binding_payload = json.dumps({
+    "schema_version": "runtime-event-transport-v1",
+    "session_id": "session-sqlite",
+    "job_id": "job-sqlite",
+    "handoff_method": "describe_runtime_event_handoff",
+    "replay_supported": True,
+    "cleanup_preserves_replay": True,
+    "binding_backend_family": "sqlite",
+    "binding_artifact_path": str(binding_artifact_path),
+}, indent=2) + "\\n"
+
+resume_payload = json.dumps({
+    "schema_version": "runtime-resume-manifest-v1",
+    "session_id": "session-sqlite",
+    "job_id": "job-sqlite",
+    "status": "completed",
+    "trace_stream_path": str(trace_stream_path),
+    "event_transport_path": str(binding_artifact_path),
+    "artifact_paths": [str(binding_artifact_path), str(trace_stream_path)],
+    "updated_at": "2026-04-23T00:00:01.000Z",
+}, indent=2) + "\\n"
+
+handoff_payload = json.dumps({
+    "schema_version": "runtime-event-handoff-v1",
+    "session_id": "session-sqlite",
+    "job_id": "job-sqlite",
+    "checkpoint_backend_family": "sqlite",
+    "trace_stream_path": str(trace_stream_path),
+    "resume_manifest_path": str(resume_manifest_path),
+    "cleanup_preserves_replay": True,
+    "attach_target": {
+        "handoff_method": "describe_runtime_event_handoff",
+    },
+    "transport": {
+        "binding_backend_family": "sqlite",
+        "binding_artifact_path": str(binding_artifact_path),
+    },
+}, indent=2) + "\\n"
+
+write_payload(trace_stream_path, trace_payload)
+write_payload(binding_artifact_path, binding_payload)
+write_payload(resume_manifest_path, resume_payload)
+write_payload(handoff_path, handoff_payload)
+conn.commit()
+conn.close()
+      `,
+      runtimeRoot,
+      dbPath,
+      bindingArtifactPath,
+      handoffPath,
+      resumeManifestPath,
+      traceStreamPath,
+    ],
+  );
+
+  await writeFile(
+    descriptorPath,
+    JSON.stringify(
+      {
+        schema_version: 'runtime-event-attach-descriptor-v1',
+        attach_mode: 'process_external_artifact_replay',
+        artifact_backend_family: 'sqlite',
+        attach_capabilities: {
+          artifact_replay: true,
+          live_remote_stream: false,
+          cleanup_preserves_replay: true,
+        },
+        recommended_entrypoint: 'describe_runtime_event_handoff',
+        resolved_artifacts: {
+          binding_artifact_path: bindingArtifactPath,
+          handoff_path: handoffPath,
+          resume_manifest_path: resumeManifestPath,
+          trace_stream_path: traceStreamPath,
+        },
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
+
+  return {
+    tempRoot,
+    traceStreamPath,
     descriptorPath,
     bindingArtifactPath,
     handoffPath,
@@ -536,7 +705,7 @@ describe('BrowserRuntime', () => {
       await attachedRuntime.shutdown();
       await rm(tempRoot, { recursive: true, force: true });
     }
-  });
+  }, 15000);
 
   it('accepts the canonical attach artifact path for a persisted descriptor', async () => {
     const { tempRoot, traceStreamPath, descriptorPath } = await createAttachedRuntimeFixture();
@@ -556,7 +725,7 @@ describe('BrowserRuntime', () => {
       await attachedRuntime.shutdown();
       await rm(tempRoot, { recursive: true, force: true });
     }
-  });
+  }, 15000);
 
   it('replays attached runtime events through the configured descriptor', async () => {
     const { tempRoot, traceStreamPath, descriptorPath } = await createAttachedRuntimeFixture();
@@ -595,7 +764,7 @@ describe('BrowserRuntime', () => {
       await attachedRuntime.shutdown();
       await rm(tempRoot, { recursive: true, force: true });
     }
-  });
+  }, 15000);
 
   it('hydrates replay from a transport binding artifact path', async () => {
     const { tempRoot, traceStreamPath, bindingArtifactPath } = await createAttachedRuntimeFixture();
@@ -618,7 +787,7 @@ describe('BrowserRuntime', () => {
       await attachedRuntime.shutdown();
       await rm(tempRoot, { recursive: true, force: true });
     }
-  });
+  }, 15000);
 
   it('hydrates replay from a handoff artifact path', async () => {
     const { tempRoot, traceStreamPath, handoffPath } = await createAttachedRuntimeFixture();
@@ -641,7 +810,7 @@ describe('BrowserRuntime', () => {
       await attachedRuntime.shutdown();
       await rm(tempRoot, { recursive: true, force: true });
     }
-  });
+  }, 15000);
 
   it('hydrates replay from a handoff artifact path after handoff cleanup leaves only the resume manifest trace', async () => {
     const { tempRoot, traceStreamPath, handoffPath, resumeManifestPath } = await createAttachedRuntimeFixture();
@@ -687,7 +856,7 @@ describe('BrowserRuntime', () => {
       await attachedRuntime.shutdown();
       await rm(tempRoot, { recursive: true, force: true });
     }
-  });
+  }, 15000);
 
   it('auto-detects handoff artifacts through the canonical attach artifact path', async () => {
     const { tempRoot, traceStreamPath, handoffPath } = await createAttachedRuntimeFixture();
@@ -710,7 +879,7 @@ describe('BrowserRuntime', () => {
       await attachedRuntime.shutdown();
       await rm(tempRoot, { recursive: true, force: true });
     }
-  });
+  }, 15000);
 
   it('fails closed when descriptor and resume manifest disagree on the trace stream path', async () => {
     const {
@@ -789,7 +958,7 @@ describe('BrowserRuntime', () => {
       runtimeAttachDescriptor: {
         schema_version: 'runtime-event-attach-descriptor-v1',
         attach_mode: 'process_external_artifact_replay',
-        artifact_backend_family: 'sqlite',
+        artifact_backend_family: 'memory',
         attach_capabilities: {
           artifact_replay: true,
           live_remote_stream: false,
@@ -797,7 +966,7 @@ describe('BrowserRuntime', () => {
         },
         recommended_entrypoint: 'describe_runtime_event_handoff',
         resolved_artifacts: {
-          trace_stream_path: '/logical/sqlite/TRACE_EVENTS.jsonl',
+          trace_stream_path: '/logical/memory/TRACE_EVENTS.jsonl',
         },
       },
     });
@@ -806,9 +975,59 @@ describe('BrowserRuntime', () => {
       const diagnostics = await attachedRuntime.getDiagnostics();
       expect(diagnostics.attachedRuntime.status).toBe('unsupported_backend');
       expect(diagnostics.attachedRuntime.replaySupported).toBe(true);
-      expect(diagnostics.attachedRuntime.warning).toContain('filesystem replay only');
+      expect(diagnostics.attachedRuntime.warning).toContain('filesystem/sqlite replay only');
     } finally {
       await attachedRuntime.shutdown();
     }
   });
+
+  it('supports attached runtime diagnostics and replay from a sqlite attach descriptor', async () => {
+    const { tempRoot, descriptorPath, traceStreamPath } = await createAttachedRuntimeSqliteFixture();
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeAttachDescriptorPath: descriptorPath,
+      screenshotDir: path.join(tempRoot, 'screenshots'),
+    });
+
+    try {
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.attachedRuntime.status).toBe('ready');
+      expect(diagnostics.attachedRuntime.artifactBackendFamily).toBe('sqlite');
+      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+      expect(diagnostics.attachedRuntime.eventCount).toBe(2);
+      expect(diagnostics.attachedRuntime.latestEventId).toBe('evt-sqlite-2');
+
+      const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
+      expect(replay.events).toHaveLength(2);
+      expect(replay.events[0]!.event_id).toBe('evt-sqlite-1');
+      expect(replay.events[1]!.event_id).toBe('evt-sqlite-2');
+    } finally {
+      await attachedRuntime.shutdown();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  }, 15000);
+
+  it('hydrates replay from a sqlite binding artifact path', async () => {
+    const { tempRoot, bindingArtifactPath, traceStreamPath } = await createAttachedRuntimeSqliteFixture();
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeBindingArtifactPath: bindingArtifactPath,
+      screenshotDir: path.join(tempRoot, 'screenshots'),
+    });
+
+    try {
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.attachedRuntime.status).toBe('ready');
+      expect(diagnostics.attachedRuntime.descriptorSource).toBe('binding_artifact_path');
+      expect(diagnostics.attachedRuntime.artifactBackendFamily).toBe('sqlite');
+      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+
+      const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
+      expect(replay.events).toHaveLength(2);
+      expect(replay.events[1]!.event_id).toBe('evt-sqlite-2');
+    } finally {
+      await attachedRuntime.shutdown();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  }, 15000);
 });

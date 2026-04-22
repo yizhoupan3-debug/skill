@@ -36,6 +36,11 @@ artifacts/memory_automation/current/
 artifacts/tmp-*/
 uploads/
 codex_agno_runtime/tmp-data-test/
+codex_agno_runtime/data/runtime_background_jobs.json
+codex_agno_runtime/data/runtime_checkpoint_store.sqlite3
+codex_agno_runtime/data/runtime_checkpoint_store.sqlite3-*
+codex_agno_runtime/data/runtime_event_transports/
+codex_agno_runtime/data/runtime_sandbox_events.jsonl
 memory/*.db
 memory/*.sqlite3
 memory/.*.sqlite3

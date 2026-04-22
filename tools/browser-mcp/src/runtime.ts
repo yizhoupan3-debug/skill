@@ -74,8 +74,8 @@ const ROUTER_RS_TRACE_IO_AUTHORITY = 'rust-runtime-trace-io';
 const ROUTER_RS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'scripts', 'router-rs');
 const ROUTER_RS_MANIFEST_PATH = path.join(ROUTER_RS_DIR, 'Cargo.toml');
 const ROUTER_RS_SOURCE_DIR = path.join(ROUTER_RS_DIR, 'src');
-const ROUTER_RS_DEBUG_BIN = path.join(ROUTER_RS_DIR, 'target', 'debug', 'router-rs');
 const ROUTER_RS_RELEASE_BIN = path.join(ROUTER_RS_DIR, 'target', 'release', 'router-rs');
+const ROUTER_RS_DEBUG_BIN = path.join(ROUTER_RS_DIR, 'target', 'debug', 'router-rs');
 const execFile = promisify(execFileCallback);
 
 const INTERACTIVE_SELECTOR = [
@@ -172,7 +172,12 @@ async function newestRouterRsSourceMtimeMs(target: string): Promise<number> {
   return newest;
 }
 
+let resolvedRouterRsCommand: { command: string; args: string[] } | null = null;
+
 async function resolveRouterRsCommand(): Promise<{ command: string; args: string[] }> {
+  if (resolvedRouterRsCommand) {
+    return resolvedRouterRsCommand;
+  }
   let newestSourceMtime = 0;
   try {
     newestSourceMtime = Math.max(
@@ -183,21 +188,21 @@ async function resolveRouterRsCommand(): Promise<{ command: string; args: string
     newestSourceMtime = 0;
   }
 
-  for (const candidate of [ROUTER_RS_DEBUG_BIN, ROUTER_RS_RELEASE_BIN]) {
+  for (const candidatePath of [ROUTER_RS_RELEASE_BIN, ROUTER_RS_DEBUG_BIN]) {
     try {
-      const candidateStat = await stat(candidate);
+      const candidateStat = await stat(candidatePath);
       if (candidateStat.isFile() && candidateStat.mtimeMs >= newestSourceMtime) {
-        return { command: candidate, args: [] };
+        resolvedRouterRsCommand = { command: candidatePath, args: [] };
+        return resolvedRouterRsCommand;
       }
     } catch {
-      // Fall back to cargo when no fresh binary is available.
+      // Keep searching for a fresh prebuilt binary.
     }
   }
 
-  return {
-    command: 'cargo',
-    args: ['run', '--quiet', '--manifest-path', ROUTER_RS_MANIFEST_PATH, '--'],
-  };
+  throw new Error(
+    'browser-mcp requires a fresh prebuilt router-rs binary; build scripts/router-rs before using attached runtime replay.',
+  );
 }
 
 async function runRouterRsJson<T>(modeFlag: string, inputFlag: string, payload: object): Promise<T> {
@@ -1019,12 +1024,15 @@ export class BrowserRuntime {
       );
     }
 
-    if (descriptor.artifact_backend_family !== 'filesystem') {
+    if (
+      descriptor.artifact_backend_family !== 'filesystem' &&
+      descriptor.artifact_backend_family !== 'sqlite'
+    ) {
       throw new BrowserToolError(
         'ATTACHED_RUNTIME_UNSUPPORTED_BACKEND',
-        `browser-mcp attach consumer currently supports filesystem replay only (got ${descriptor.artifact_backend_family})`,
+        `browser-mcp attach consumer currently supports filesystem/sqlite replay only (got ${descriptor.artifact_backend_family})`,
         true,
-        ['use a filesystem-backed attach descriptor for browser-mcp replay', 'inspect browser_diagnostics'],
+        ['use a filesystem- or sqlite-backed attach descriptor for browser-mcp replay', 'inspect browser_diagnostics'],
       );
     }
 
@@ -1034,17 +1042,6 @@ export class BrowserRuntime {
         'runtime attach descriptor does not resolve a trace_stream_path from descriptor, handoff, resume manifest, or binding artifacts',
         true,
         ['refresh the descriptor from describe_runtime_event_handoff'],
-      );
-    }
-
-    try {
-      await stat(traceStreamPath);
-    } catch (error) {
-      throw new BrowserToolError(
-        'ATTACHED_RUNTIME_TRACE_UNAVAILABLE',
-        error instanceof Error ? error.message : 'failed to read runtime trace stream',
-        true,
-        ['inspect browser_diagnostics', 'refresh the attach descriptor or trace artifacts'],
       );
     }
 
@@ -1172,7 +1169,27 @@ export class BrowserRuntime {
     artifactPath: string,
   ): Promise<RuntimeAttachDescriptor> {
     const resolvedArtifactPath = path.resolve(artifactPath);
-    const raw = await readFile(resolvedArtifactPath, 'utf8');
+    let raw: string;
+    try {
+      raw = await readFile(resolvedArtifactPath, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+      const hydratedFromBinding = await this.tryHydrateRuntimeAttachDescriptorViaRust({
+        binding_artifact_path: resolvedArtifactPath,
+      });
+      if (hydratedFromBinding) {
+        return hydratedFromBinding;
+      }
+      const hydratedFromHandoff = await this.tryHydrateRuntimeAttachDescriptorViaRust({
+        handoff_path: resolvedArtifactPath,
+      });
+      if (hydratedFromHandoff) {
+        return hydratedFromHandoff;
+      }
+      throw error;
+    }
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const schemaVersion =
       typeof parsed?.schema_version === 'string' ? parsed.schema_version : null;
@@ -1195,7 +1212,15 @@ export class BrowserRuntime {
     const resolvedBindingArtifactPath = path.resolve(bindingArtifactPath);
     const parsed =
       parsedBindingArtifact ??
-      (JSON.parse(await readFile(resolvedBindingArtifactPath, 'utf8')) as Record<string, unknown>);
+      (await this.readRuntimeAttachArtifactRecordOrHydrate(
+        resolvedBindingArtifactPath,
+        'binding_artifact_path',
+      ));
+    if (!parsed) {
+      return this.hydrateRuntimeAttachDescriptorViaRust({
+        binding_artifact_path: resolvedBindingArtifactPath,
+      });
+    }
     if (parsed?.schema_version !== RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION) {
       throw new Error('runtime binding artifact returned an unknown schema');
     }
@@ -1237,7 +1262,16 @@ export class BrowserRuntime {
   ): Promise<RuntimeAttachDescriptor> {
     const resolvedHandoffPath = path.resolve(handoffPath);
     const parsed =
-      parsedHandoff ?? (JSON.parse(await readFile(resolvedHandoffPath, 'utf8')) as Record<string, unknown>);
+      parsedHandoff ??
+      (await this.readRuntimeAttachArtifactRecordOrHydrate(
+        resolvedHandoffPath,
+        'handoff_path',
+      ));
+    if (!parsed) {
+      return this.hydrateRuntimeAttachDescriptorViaRust({
+        handoff_path: resolvedHandoffPath,
+      });
+    }
     if (parsed?.schema_version !== RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION) {
       throw new Error('runtime handoff artifact returned an unknown schema');
     }
@@ -1407,6 +1441,54 @@ export class BrowserRuntime {
       throw new Error(`${artifactLabel} must decode to a JSON object`);
     }
     return parsed as Record<string, unknown>;
+  }
+
+  private async readRuntimeAttachArtifactRecordOrHydrate(
+    artifactPath: string,
+    fieldName: 'binding_artifact_path' | 'handoff_path',
+  ): Promise<Record<string, unknown> | null> {
+    try {
+      return JSON.parse(await readFile(artifactPath, 'utf8')) as Record<string, unknown>;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+      return null;
+    }
+  }
+
+  private async hydrateRuntimeAttachDescriptorViaRust(input: {
+    attach_descriptor?: RuntimeAttachDescriptor | null;
+    binding_artifact_path?: string | null;
+    handoff_path?: string | null;
+    resume_manifest_path?: string | null;
+  }): Promise<RuntimeAttachDescriptor> {
+    const attached = await runRouterRsJson<Record<string, unknown>>(
+      '--attach-runtime-event-transport-json',
+      '--attach-runtime-event-transport-input-json',
+      {
+        attach_descriptor: input.attach_descriptor ?? null,
+        binding_artifact_path: input.binding_artifact_path ?? null,
+        handoff_path: input.handoff_path ?? null,
+        resume_manifest_path: input.resume_manifest_path ?? null,
+      },
+    );
+    const descriptor = this.asRecord(attached.attach_descriptor);
+    if (!descriptor) {
+      throw new Error('runtime attach transport payload is missing attach_descriptor');
+    }
+    return descriptor as unknown as RuntimeAttachDescriptor;
+  }
+
+  private async tryHydrateRuntimeAttachDescriptorViaRust(input: {
+    binding_artifact_path?: string | null;
+    handoff_path?: string | null;
+  }): Promise<RuntimeAttachDescriptor | null> {
+    try {
+      return await this.hydrateRuntimeAttachDescriptorViaRust(input);
+    } catch {
+      return null;
+    }
   }
 
   private asRecord(value: unknown): Record<string, unknown> | null {

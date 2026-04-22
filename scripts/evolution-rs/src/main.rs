@@ -270,7 +270,7 @@ fn audit_journal(path: PathBuf, days: i64, json: bool, manifest_path: Option<Pat
                             }
 
                             for e in filtered.iter().filter(|e| e.init == "none" || e.init == "general") {
-                                let score = calculate_jaccard(&e.task, triggers);
+                                let score = calculate_jaccard(&e.task, &triggers);
                                 if score > 0.25 {
                                      repair_suggestions.push(format!("Near-miss: Task '{}' likely belongs to `{}`, but trigger missed (Jaccard={:.2})", e.task, name, score));
                                      let task_lower = e.task.to_lowercase();
