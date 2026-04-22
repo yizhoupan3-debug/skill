@@ -112,7 +112,9 @@ status, replay readiness, trace path, the concrete input artifact kind
 resolution-source hints for binding/handoff/resume/trace paths, and the latest
 replayable event summary. You can also call
 `browser_get_attached_runtime_events` to consume replayable runtime events
-through that same attach descriptor.
+through that same attach descriptor; replay results now include a lighter
+`replayContext` mirror so consumers can read attach provenance without
+re-parsing the full diagnostics block.
 
 If you do not pass an explicit runtime attach input, the bundled
 `start_browser_mcp.sh` launcher now auto-discovers the newest replay-capable
