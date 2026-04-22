@@ -182,7 +182,7 @@
     {
       "id": "frontend-design-screenshot-review-reroute-case",
       "category": "gate-vs-owner-conflict",
-      "task": "基于这组 screenshot 做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。",
+      "task": "基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。",
       "focus_skill": "visual-review",
       "expected_owner": "visual-review",
       "expected_overlay": null,

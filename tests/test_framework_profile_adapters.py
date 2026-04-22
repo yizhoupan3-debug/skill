@@ -18,6 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
+import codex_agno_runtime.profile_artifacts as profile_artifacts_module
 from codex_agno_runtime.framework_profile import (
     CORE_CAPABILITIES,
     FRAMEWORK_SHARED_CONTRACT_FIELDS,
@@ -87,6 +88,118 @@ ROUTER_RS_RELEASE_BIN = PROJECT_ROOT / "scripts" / "router-rs" / "target" / "rel
 
 def _router_rs_command() -> list[str]:
     return RustRouteAdapter(PROJECT_ROOT)._binary_command()
+
+
+def test_run_framework_contract_artifacts_cli_emits_default_lane_without_rust_bundle(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    profile = build_framework_profile(
+        profile_id="cli-artifact-profile",
+        display_name="CLI Artifact Profile",
+        rules_bundle={"rules": [{"id": "outer-owned"}]},
+        skill_bundle={"skills": ["router", "memory-bridge"]},
+        session_policy={"mode": "bounded", "approval_mode": "manual"},
+        artifact_contract={"layout": "stable-v1"},
+        model_policy={"provider": "openai", "model": "gpt-5"},
+        memory_mounts=("project",),
+        mcp_servers=("local-memory",),
+    )
+    profile_path = tmp_path / "framework_profile.json"
+    output_dir = tmp_path / "artifacts"
+    profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False), encoding="utf-8")
+
+    exit_code = rust_router_module.run_framework_contract_artifacts_cli(
+        codex_home=PROJECT_ROOT,
+        argv=[
+            "--framework-profile",
+            str(profile_path),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert "framework_profile" in payload
+    assert "cli_common_adapter" in payload
+    assert "codex_dual_entry_parity_snapshot" in payload
+    assert "rust_profile_bundle" not in payload
+    assert Path(payload["framework_profile"]).is_file()
+    assert Path(payload["cli_common_adapter"]).parent.name == "default"
+
+
+def test_run_framework_contract_artifacts_cli_reuses_shared_route_adapter_for_rust_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    profile = build_framework_profile(
+        profile_id="cli-artifact-profile-rust",
+        display_name="CLI Artifact Profile Rust",
+        rules_bundle={"rules": [{"id": "outer-owned"}]},
+        skill_bundle={"skills": ["router"]},
+        session_policy={"mode": "bounded"},
+        artifact_contract={"layout": "stable-v1"},
+        memory_mounts=("project",),
+        mcp_servers=("local-memory",),
+    )
+    profile_path = tmp_path / "framework_profile.json"
+    output_dir = tmp_path / "artifacts"
+    profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False), encoding="utf-8")
+
+    fake_adapter = object()
+    captured: dict[str, object] = {}
+
+    def _fake_route_adapter(**kwargs: object) -> object:
+        captured["codex_home"] = kwargs["codex_home"]
+        return fake_adapter
+
+    def _fake_emit(
+        output_dir_arg: Path,
+        *,
+        profile: FrameworkProfile,
+        rust_adapter: object | None,
+        include_fallback_artifacts: bool,
+        include_compatibility_inventory: bool,
+        include_legacy_alias_artifact: bool,
+    ) -> dict[str, str]:
+        captured["profile_id"] = profile.profile_id
+        captured["rust_adapter"] = rust_adapter
+        captured["include_fallback_artifacts"] = include_fallback_artifacts
+        captured["include_compatibility_inventory"] = include_compatibility_inventory
+        captured["include_legacy_alias_artifact"] = include_legacy_alias_artifact
+        marker_path = output_dir_arg / "marker.json"
+        marker_path.parent.mkdir(parents=True, exist_ok=True)
+        marker_path.write_text("{}", encoding="utf-8")
+        return {"marker": str(marker_path)}
+
+    monkeypatch.setattr(rust_router_module, "route_adapter", _fake_route_adapter)
+    monkeypatch.setattr(profile_artifacts_module, "emit_framework_contract_artifacts", _fake_emit)
+
+    exit_code = rust_router_module.run_framework_contract_artifacts_cli(
+        codex_home=PROJECT_ROOT,
+        argv=[
+            "--framework-profile",
+            str(profile_path),
+            "--output-dir",
+            str(output_dir),
+            "--include-rust-bundle",
+            "--include-fallback-artifacts",
+            "--include-compatibility-inventory",
+            "--include-legacy-alias-artifact",
+        ],
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"marker": str(output_dir / "marker.json")}
+    assert captured["codex_home"] == PROJECT_ROOT
+    assert captured["profile_id"] == "cli-artifact-profile-rust"
+    assert captured["rust_adapter"] is fake_adapter
+    assert captured["include_fallback_artifacts"] is True
+    assert captured["include_compatibility_inventory"] is True
+    assert captured["include_legacy_alias_artifact"] is True
 
 
 def test_rust_route_adapter_uses_debug_binary_even_when_sources_are_newer() -> None:
@@ -724,6 +837,20 @@ def test_framework_profile_rejects_host_specific_metadata_in_framework_truth() -
     except ValueError as exc:
         assert "host-neutral" in str(exc)
         assert "transport" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_framework_profile_rejects_host_projection_metadata_in_framework_truth() -> None:
+    try:
+        build_framework_profile(
+            profile_id="bad-hook-metadata",
+            display_name="Bad Hook Metadata",
+            metadata={"hook_event_names": ["PreToolUse"]},
+        )
+    except ValueError as exc:
+        assert "host-neutral" in str(exc)
+        assert "hook_event_names" in str(exc)
     else:
         raise AssertionError("expected ValueError")
 

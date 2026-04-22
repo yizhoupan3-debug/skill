@@ -1850,6 +1850,25 @@ def test_runtime_background_batch_persists_parallel_group_resume_summary(tmp_pat
             "interrupted",
             "retry_exhausted",
         ]
+        assert health["orchestration_contract"]["active_statuses"] == [
+            "queued",
+            "running",
+            "interrupt_requested",
+            "retry_scheduled",
+            "retry_claimed",
+        ]
+        assert health["orchestration_contract"]["policy_operations"] == [
+            "batch-plan",
+            "enqueue",
+            "claim",
+            "interrupt",
+            "interrupt-finalize",
+            "retry",
+            "retry-claim",
+            "complete",
+            "completion-race",
+            "session-release",
+        ]
 
         resume_manifest = json.loads(trace_path.with_name("TRACE_RESUME_MANIFEST.json").read_text(encoding="utf-8"))
         assert resume_manifest["parallel_group"]["parallel_group_id"] == "pgroup-contract"

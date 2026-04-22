@@ -1263,6 +1263,7 @@ export class BrowserRuntime {
   private async buildRuntimeAttachDescriptorFromArtifactPath(
     artifactPath: string,
   ): Promise<RuntimeAttachDescriptor> {
+    const artifactLocator = artifactPath;
     const resolvedArtifactPath = path.resolve(artifactPath);
     let raw: string;
     try {
@@ -1272,13 +1273,13 @@ export class BrowserRuntime {
         throw error;
       }
       const hydratedFromBinding = await this.tryHydrateRuntimeAttachDescriptorViaRust({
-        binding_artifact_path: resolvedArtifactPath,
+        binding_artifact_path: artifactLocator,
       });
       if (hydratedFromBinding) {
         return hydratedFromBinding;
       }
       const hydratedFromHandoff = await this.tryHydrateRuntimeAttachDescriptorViaRust({
-        handoff_path: resolvedArtifactPath,
+        handoff_path: artifactLocator,
       });
       if (hydratedFromHandoff) {
         return hydratedFromHandoff;
@@ -1292,116 +1293,34 @@ export class BrowserRuntime {
       return parsed as unknown as RuntimeAttachDescriptor;
     }
     if (schemaVersion === RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION) {
-      return this.buildRuntimeAttachDescriptorFromBindingArtifact(resolvedArtifactPath, parsed);
+      return this.hydrateRuntimeAttachDescriptorViaRust({
+        binding_artifact_path: resolvedArtifactPath,
+      });
     }
     if (schemaVersion === RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION) {
-      return this.buildRuntimeAttachDescriptorFromHandoff(resolvedArtifactPath, parsed);
+      return this.hydrateRuntimeAttachDescriptorViaRust({
+        handoff_path: resolvedArtifactPath,
+      });
     }
     throw new Error('runtime attach artifact returned an unknown schema');
   }
 
   private async buildRuntimeAttachDescriptorFromBindingArtifact(
     bindingArtifactPath: string,
-    parsedBindingArtifact?: Record<string, unknown>,
   ): Promise<RuntimeAttachDescriptor> {
-    const resolvedBindingArtifactPath = path.resolve(bindingArtifactPath);
-    const parsed =
-      parsedBindingArtifact ??
-      (await this.readRuntimeAttachArtifactRecordOrHydrate(
-        resolvedBindingArtifactPath,
-        'binding_artifact_path',
-      ));
-    if (!parsed) {
-      return this.hydrateRuntimeAttachDescriptorViaRust({
-        binding_artifact_path: resolvedBindingArtifactPath,
-      });
-    }
-    if (parsed?.schema_version !== RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION) {
-      throw new Error('runtime binding artifact returned an unknown schema');
-    }
-    const bindingBackendFamily = typeof parsed.binding_backend_family === 'string'
-      ? parsed.binding_backend_family
-      : 'filesystem';
-    const effectiveBindingArtifactPath =
-      typeof parsed.binding_artifact_path === 'string'
-        ? parsed.binding_artifact_path
-        : resolvedBindingArtifactPath;
-    const traceStreamPath = await this.inferTraceStreamPathFromBindingArtifact(
-      effectiveBindingArtifactPath,
-    );
-    return {
-      schema_version: RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION,
-      attach_mode: 'process_external_artifact_replay',
-      artifact_backend_family: bindingBackendFamily,
-      attach_capabilities: {
-        artifact_replay: parsed.replay_supported === true,
-        live_remote_stream: false,
-        cleanup_preserves_replay: parsed.cleanup_preserves_replay === true,
-      },
-      recommended_entrypoint:
-        typeof parsed.handoff_method === 'string'
-          ? parsed.handoff_method
-          : 'describe_runtime_event_handoff',
-      resolved_artifacts: {
-        binding_artifact_path: effectiveBindingArtifactPath,
-        handoff_path: null,
-        resume_manifest_path: null,
-        trace_stream_path: traceStreamPath,
-      },
-    };
+    const resolvedBindingArtifactPath = await this.normalizeRuntimeAttachLocator(bindingArtifactPath);
+    return this.hydrateRuntimeAttachDescriptorViaRust({
+      binding_artifact_path: resolvedBindingArtifactPath,
+    });
   }
 
   private async buildRuntimeAttachDescriptorFromHandoff(
     handoffPath: string,
-    parsedHandoff?: Record<string, unknown>,
   ): Promise<RuntimeAttachDescriptor> {
-    const resolvedHandoffPath = path.resolve(handoffPath);
-    const parsed =
-      parsedHandoff ??
-      (await this.readRuntimeAttachArtifactRecordOrHydrate(
-        resolvedHandoffPath,
-        'handoff_path',
-      ));
-    if (!parsed) {
-      return this.hydrateRuntimeAttachDescriptorViaRust({
-        handoff_path: resolvedHandoffPath,
-      });
-    }
-    if (parsed?.schema_version !== RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION) {
-      throw new Error('runtime handoff artifact returned an unknown schema');
-    }
-    const transport = this.asRecord(parsed.transport);
-    const attachTarget = this.asRecord(parsed.attach_target);
-    const traceStreamPath = typeof parsed.trace_stream_path === 'string' ? parsed.trace_stream_path : null;
-    const bindingArtifactPath =
-      typeof transport?.binding_artifact_path === 'string' ? transport.binding_artifact_path : null;
-    const artifactBackendFamily =
-      typeof parsed.checkpoint_backend_family === 'string'
-        ? parsed.checkpoint_backend_family
-        : typeof transport?.binding_backend_family === 'string'
-          ? transport.binding_backend_family
-          : 'filesystem';
-    return {
-      schema_version: RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION,
-      attach_mode: 'process_external_artifact_replay',
-      artifact_backend_family: artifactBackendFamily,
-      attach_capabilities: {
-        artifact_replay: true,
-        live_remote_stream: false,
-        cleanup_preserves_replay: parsed.cleanup_preserves_replay !== false,
-      },
-      recommended_entrypoint:
-        typeof attachTarget?.handoff_method === 'string'
-          ? attachTarget.handoff_method
-          : 'describe_runtime_event_handoff',
-      resolved_artifacts: {
-        binding_artifact_path: bindingArtifactPath,
-        handoff_path: resolvedHandoffPath,
-        resume_manifest_path:
-          typeof parsed.resume_manifest_path === 'string' ? parsed.resume_manifest_path : null,
-        trace_stream_path: traceStreamPath,
-      },
-    };
+    const resolvedHandoffPath = await this.normalizeRuntimeAttachLocator(handoffPath);
+    return this.hydrateRuntimeAttachDescriptorViaRust({
+      handoff_path: resolvedHandoffPath,
+    });
   }
 
   private async resolveAttachedRuntimeTraceStreamPath(
@@ -1538,17 +1457,13 @@ export class BrowserRuntime {
     return parsed as Record<string, unknown>;
   }
 
-  private async readRuntimeAttachArtifactRecordOrHydrate(
-    artifactPath: string,
-    fieldName: 'binding_artifact_path' | 'handoff_path',
-  ): Promise<Record<string, unknown> | null> {
+  private async normalizeRuntimeAttachLocator(locator: string): Promise<string> {
+    const resolvedLocator = path.resolve(locator);
     try {
-      return JSON.parse(await readFile(artifactPath, 'utf8')) as Record<string, unknown>;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw error;
-      }
-      return null;
+      await stat(resolvedLocator);
+      return resolvedLocator;
+    } catch {
+      return locator;
     }
   }
 

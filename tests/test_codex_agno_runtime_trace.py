@@ -1295,6 +1295,50 @@ def test_external_runtime_transport_bridge_subscribe_prefers_rust_trace_io_on_sq
     assert [event.kind for event in resumed.events] == ["job.completed"]
 
 
+def test_external_runtime_transport_bridge_cleanup_uses_canonical_attach_descriptor_contract(
+    tmp_path: Path,
+) -> None:
+    """Cleanup should round-trip through the Rust attach contract, not a Python-only shim."""
+
+    stream = tmp_path / "TRACE_EVENTS.jsonl"
+    recorder = RuntimeTraceRecorder(event_stream_path=stream)
+    recorder.record(
+        session_id="session-cleanup",
+        job_id="job-cleanup",
+        kind="job.started",
+        stage="background",
+    )
+
+    handoff_path = tmp_path / "ATTACHED_RUNTIME_EVENT_HANDOFF.json"
+    binding_path = tmp_path / "runtime_event_transports" / "session-cleanup__job-cleanup.json"
+    binding_path.parent.mkdir(parents=True, exist_ok=True)
+    handoff = RuntimeEventHandoff(
+        stream_id="stream::session-cleanup",
+        session_id="session-cleanup",
+        job_id="job-cleanup",
+        checkpoint_backend_family="filesystem",
+        trace_stream_path=str(stream),
+        transport=RuntimeEventTransport(
+            stream_id="stream::session-cleanup",
+            session_id="session-cleanup",
+            job_id="job-cleanup",
+            binding_backend_family="filesystem",
+            binding_artifact_path=str(binding_path),
+        ),
+    )
+    handoff_path.write_text(handoff.model_dump_json(indent=2) + "\n", encoding="utf-8")
+
+    bridge = ExternalRuntimeEventTransportBridge.attach(handoff_path=str(handoff_path))
+    cleanup = bridge.cleanup()
+
+    assert cleanup["authority"] == bridge._adapter.attached_runtime_event_transport_authority
+    assert cleanup["cleanup_method"] == "cleanup_attached_runtime_event_transport"
+    assert cleanup["cleanup_semantics"] == "no_persisted_state"
+    assert cleanup["cleanup_preserves_replay"] is True
+    assert cleanup["binding_artifact_path"] == bridge.describe().get("binding_artifact_path")
+    assert cleanup["trace_stream_path"] == bridge.describe().get("trace_stream_path")
+
+
 def test_external_runtime_transport_bridge_rejects_missing_trace_stream_on_binding_only_attach(
     tmp_path: Path,
 ) -> None:

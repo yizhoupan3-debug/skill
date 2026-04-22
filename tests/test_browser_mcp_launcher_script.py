@@ -321,6 +321,40 @@ def test_launcher_falls_back_to_plain_start_when_no_attach_input_exists(tmp_path
     ]
 
 
+def test_launcher_passes_through_binding_env_when_higher_priority_inputs_are_absent(tmp_path: Path) -> None:
+    repo_root = _prepare_repo(tmp_path)
+
+    result = _run_launcher(
+        repo_root,
+        env={
+            "BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH": "/compat/binding.json",
+        },
+    )
+
+    assert result["argv"] == [
+        "dist/index.js",
+        "--runtime-binding-artifact-path",
+        "/compat/binding.json",
+    ]
+
+
+def test_launcher_passes_through_handoff_env_when_it_is_the_only_attach_input(tmp_path: Path) -> None:
+    repo_root = _prepare_repo(tmp_path)
+
+    result = _run_launcher(
+        repo_root,
+        env={
+            "BROWSER_MCP_RUNTIME_HANDOFF_PATH": "/compat/handoff.json",
+        },
+    )
+
+    assert result["argv"] == [
+        "dist/index.js",
+        "--runtime-handoff-path",
+        "/compat/handoff.json",
+    ]
+
+
 def test_launcher_runs_npm_install_when_node_modules_is_missing(tmp_path: Path) -> None:
     repo_root = _prepare_repo_state(tmp_path, include_node_modules=False)
 

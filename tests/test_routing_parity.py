@@ -135,6 +135,54 @@ def test_search_skills_uses_route_adapter_hot_path(monkeypatch: pytest.MonkeyPat
     assert results[0].score == 9.5
 
 
+def test_search_match_result_round_trips_transport_row() -> None:
+    row = {
+        "slug": "iterative-optimizer",
+        "description": "Iterative optimization loop",
+        "layer": "L2",
+        "gate": "none",
+        "owner": "codex",
+        "score": 9.5,
+        "matched_terms": 2,
+        "total_terms": 2,
+    }
+
+    match = SearchMatchResult.from_transport_row(row)
+
+    assert match.record.name == "iterative-optimizer"
+    assert match.record.routing_layer == "L2"
+    assert match.to_transport_row() == row
+
+
+def test_search_skill_rows_json_text_exports_transport_payload_from_typed_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    typed_matches = [
+        SearchMatchResult(
+            record=SkillMetadata(
+                name="iterative-optimizer",
+                description="Iterative optimization loop",
+                routing_layer="L2",
+                routing_gate="none",
+                routing_owner="codex",
+            ),
+            score=9.5,
+            matched_terms=2,
+            total_terms=2,
+        )
+    ]
+    adapter = RustRouteAdapter(
+        PROJECT_ROOT,
+        runtime_path=MISSING_RUNTIME_PATH,
+        manifest_path=ROUTE_FIXTURE_PATH,
+    )
+    monkeypatch.setattr(adapter, "search_skill_matches", lambda **kwargs: typed_matches)
+
+    payload = json.loads(adapter.search_skill_rows_json_text(query="typed first", limit=1))
+
+    assert payload == [typed_matches[0].to_transport_row()]
+
+
 def test_route_decision_contract_stays_typed_first_transport_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -666,7 +714,7 @@ REAL_TASK_REPLAY_QUERIES = [
     ],
 )
 def test_rust_router_json_matches_python_search_json(query: str, limit: int) -> None:
-    """Verify raw Rust search JSON and hydrated Python match rows stay aligned."""
+    """Verify the compatibility JSON boundary is derived from the typed Python match contract."""
 
     payload = route_adapter(
         codex_home=PROJECT_ROOT,
@@ -675,8 +723,7 @@ def test_rust_router_json_matches_python_search_json(query: str, limit: int) -> 
     ).search_skill_rows(query=query, limit=limit)
     hydrated = search_skills(query, codex_home=PROJECT_ROOT, limit=limit)
 
-    assert [str(row["slug"]) for row in payload] == [match.record.name for match in hydrated]
-    assert [float(row["score"]) for row in payload] == [match.score for match in hydrated]
+    assert payload == [match.to_transport_row() for match in hydrated]
 
 
 @pytest.mark.parametrize(

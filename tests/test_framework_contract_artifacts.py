@@ -119,10 +119,14 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert cli_common["shared_contract"]["supervisor_state_contract"]["state_artifact_path"] == (
         ".supervisor_state.json"
     )
+    assert cli_common["bridge_contract"] == cli_common["shared_contract"]["workspace_bootstrap"][
+        "bridges"
+    ]
 
     common = json.loads(Path(paths["codex_common_adapter"]).read_text(encoding="utf-8"))
     assert common["controller_boundary"]["framework_truth"] == "framework_core"
     assert common["metadata"]["adapter_alias_of"] == "cli_common_adapter"
+    assert common["bridge_contract"] == common["shared_contract"]["workspace_bootstrap"]["bridges"]
 
     claude = json.loads(Path(paths["claude_code_adapter"]).read_text(encoding="utf-8"))
     assert claude["host_projection"]["context_files"] == [
@@ -435,9 +439,15 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
 
     rust_common = json.loads(Path(paths["rust_codex_common_adapter"]).read_text(encoding="utf-8"))
     assert rust_common["metadata"]["adapter_alias_of"] == "cli_common_adapter"
+    assert rust_common["bridge_contract"] == rust_common["shared_contract"]["workspace_bootstrap"][
+        "bridges"
+    ]
 
     rust_cli_common = json.loads(Path(paths["rust_cli_common_adapter"]).read_text(encoding="utf-8"))
     assert rust_cli_common["controller_boundary"]["shared_adapter"] == "cli_common_adapter"
+    assert rust_cli_common["bridge_contract"] == rust_cli_common["shared_contract"][
+        "workspace_bootstrap"
+    ]["bridges"]
 
     rust_desktop = json.loads(Path(paths["rust_codex_desktop_adapter"]).read_text(encoding="utf-8"))
     assert rust_desktop["entrypoint_contract"]["shared_adapter"] == "cli_common_adapter"

@@ -8,6 +8,7 @@ import json
 import os
 import select
 import subprocess
+import sys
 import threading
 from functools import lru_cache
 from pathlib import Path
@@ -19,7 +20,6 @@ from codex_agno_runtime.schemas import (
     RouteDiagnosticReport,
     RouteExecutionPolicy,
     SearchMatchResult,
-    SkillMetadata,
 )
 
 
@@ -73,6 +73,68 @@ def build_route_cli_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Whether current task is the first turn for session-start boost.",
+    )
+    return parser
+
+
+def build_routing_eval_cli_parser(
+    *,
+    default_skills_root: Path,
+    default_cases_path: Path,
+) -> argparse.ArgumentParser:
+    """Build the shared offline routing-eval CLI parser."""
+
+    parser = argparse.ArgumentParser(description="Run offline routing evaluation cases.")
+    parser.add_argument(
+        "--skills-root",
+        type=Path,
+        default=default_skills_root,
+        help="Skill root path.",
+    )
+    parser.add_argument(
+        "--cases",
+        type=Path,
+        default=default_cases_path,
+        help="Routing eval case file.",
+    )
+    return parser
+
+
+def build_framework_contract_artifacts_cli_parser() -> argparse.ArgumentParser:
+    """Build the shared framework-contract artifact CLI parser."""
+
+    parser = argparse.ArgumentParser(description="Write framework contract artifacts.")
+    parser.add_argument(
+        "--framework-profile",
+        type=Path,
+        required=True,
+        help="Input framework_profile JSON.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+        help="Output directory for emitted artifacts.",
+    )
+    parser.add_argument(
+        "--include-rust-bundle",
+        action="store_true",
+        help="Also compile the Rust-side profile bundle via router-rs.",
+    )
+    parser.add_argument(
+        "--include-fallback-artifacts",
+        action="store_true",
+        help="Also write fallback/compatibility host artifacts such as aionrs_companion_adapter, aionui_host_adapter, and generic_host_adapter.",
+    )
+    parser.add_argument(
+        "--include-compatibility-inventory",
+        action="store_true",
+        help="Also write the secondary compatibility inventory artifact upgrade_compatibility_matrix.",
+    )
+    parser.add_argument(
+        "--include-legacy-alias-artifact",
+        action="store_true",
+        help="Force legacy codex_desktop_host_adapter artifacts to be written alongside the parity-first defaults.",
     )
     return parser
 
@@ -349,6 +411,153 @@ def run_route_cli(
     return 0
 
 
+def load_routing_eval_cases(path: Path) -> dict[str, Any]:
+    """Load offline routing evaluation cases from JSON."""
+
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def evaluate_routing_cases(
+    *,
+    skills_root: Path,
+    cases_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Run offline routing evaluation cases through the Rust-backed route contract."""
+
+    runtime_path = skills_root / "SKILL_ROUTING_RUNTIME.json"
+    manifest_path = skills_root / "SKILL_MANIFEST.json"
+    codex_home = skills_root.parent
+
+    metrics = {
+        "case_count": 0,
+        "trigger_hit": 0,
+        "trigger_miss": 0,
+        "overtrigger": 0,
+        "owner_correct": 0,
+        "overlay_correct": 0,
+    }
+    results: list[dict[str, Any]] = []
+
+    for case in cases_payload.get("cases", []):
+        if not isinstance(case, dict):
+            continue
+        task = str(case.get("task", "")).strip()
+        if not task:
+            continue
+
+        metrics["case_count"] += 1
+        contract = route_decision_contract(
+            task,
+            codex_home=codex_home,
+            session_id=f"routing-eval::{case.get('id', metrics['case_count'])}",
+            allow_overlay=True,
+            first_turn=bool(case.get("first_turn", True)),
+            runtime_path=runtime_path,
+            manifest_path=manifest_path,
+        )
+        selected_owner = contract.selected_skill
+        selected_overlay = contract.overlay_skill
+        category = str(case.get("category", "")).strip()
+        expected_owner = case.get("expected_owner")
+        expected_overlay = case.get("expected_overlay")
+        focus_skill = case.get("focus_skill")
+        forbidden_owners = {str(item) for item in case.get("forbidden_owners", [])}
+
+        trigger_hit = False
+        overtrigger = False
+        owner_correct = expected_owner == selected_owner if expected_owner else False
+        overlay_correct = expected_overlay == selected_overlay if "expected_overlay" in case else False
+
+        if category == "should-trigger":
+            trigger_hit = focus_skill == selected_owner
+            metrics["trigger_hit" if trigger_hit else "trigger_miss"] += 1
+        elif category == "should-not-trigger":
+            overtrigger = selected_owner in forbidden_owners
+            if overtrigger:
+                metrics["overtrigger"] += 1
+        elif category in {"wrong-owner-near-miss", "gate-vs-owner-conflict"}:
+            trigger_hit = focus_skill == selected_owner
+            metrics["trigger_hit" if trigger_hit else "trigger_miss"] += 1
+            if selected_owner in forbidden_owners:
+                metrics["overtrigger"] += 1
+
+        if owner_correct:
+            metrics["owner_correct"] += 1
+        if overlay_correct:
+            metrics["overlay_correct"] += 1
+
+        results.append(
+            {
+                "id": case.get("id"),
+                "category": category,
+                "task": task,
+                "focus_skill": focus_skill,
+                "selected_owner": selected_owner,
+                "selected_overlay": selected_overlay,
+                "expected_owner": expected_owner,
+                "expected_overlay": expected_overlay,
+                "forbidden_owners": sorted(forbidden_owners),
+                "trigger_hit": trigger_hit,
+                "overtrigger": overtrigger,
+                "owner_correct": owner_correct,
+                "overlay_correct": overlay_correct,
+            }
+        )
+
+    return {
+        "schema_version": "routing-eval-v1",
+        "metrics": metrics,
+        "results": results,
+    }
+
+
+def run_routing_eval_cli(
+    *,
+    codex_home: Path,
+    argv: list[str] | None = None,
+) -> int:
+    """Run the offline routing evaluation CLI for one repo."""
+
+    args = build_routing_eval_cli_parser(
+        default_skills_root=codex_home / "skills",
+        default_cases_path=codex_home / "tests" / "routing_eval_cases.json",
+    ).parse_args(argv)
+
+    payload = evaluate_routing_cases(
+        skills_root=args.skills_root,
+        cases_payload=load_routing_eval_cases(args.cases),
+    )
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def run_framework_contract_artifacts_cli(
+    *,
+    codex_home: Path,
+    argv: list[str] | None = None,
+) -> int:
+    """Run the shared framework-contract artifact emission CLI for one repo."""
+
+    from codex_agno_runtime.framework_profile import FrameworkProfile
+    from codex_agno_runtime.profile_artifacts import emit_framework_contract_artifacts
+
+    args = build_framework_contract_artifacts_cli_parser().parse_args(argv)
+    profile = FrameworkProfile.from_dict(
+        json.loads(args.framework_profile.read_text(encoding="utf-8"))
+    )
+    rust_adapter = route_adapter(codex_home=codex_home) if args.include_rust_bundle else None
+    paths = emit_framework_contract_artifacts(
+        args.output_dir,
+        profile=profile,
+        rust_adapter=rust_adapter,
+        include_fallback_artifacts=args.include_fallback_artifacts,
+        include_compatibility_inventory=args.include_compatibility_inventory,
+        include_legacy_alias_artifact=args.include_legacy_alias_artifact,
+    )
+    print(json.dumps(paths, ensure_ascii=False, indent=2))
+    return 0
+
+
 class RustRouteAdapter:
     """Call the repository Rust route engine for final route decisions."""
 
@@ -479,13 +688,13 @@ class RustRouteAdapter:
             )
         return RouteDecisionContract.model_validate(payload)
 
-    def search_skill_rows(
+    def _search_skill_transport_rows(
         self,
         *,
         query: str,
         limit: int,
     ) -> list[dict[str, Any]]:
-        """Return Rust-backed search rows for local Python hydration."""
+        """Return raw Rust search rows at the transport boundary."""
 
         command = self.query_cli_command(query=query, limit=limit, json_output=True)
         resolved: Any = self._run_hot_json_command(
@@ -504,6 +713,19 @@ class RustRouteAdapter:
             raise RuntimeError(f"Rust search engine returned an unexpected rows payload: {rows!r}")
         return [dict(row) for row in rows]
 
+    def search_skill_rows(
+        self,
+        *,
+        query: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Compatibility shim that serializes typed matches back to Rust JSON rows."""
+
+        return [
+            match.to_transport_row()
+            for match in self.search_skill_matches(query=query, limit=limit)
+        ]
+
     def search_skill_matches(
         self,
         *,
@@ -512,31 +734,17 @@ class RustRouteAdapter:
     ) -> list[SearchMatchResult]:
         """Return Rust-backed search rows as shared typed match results."""
 
-        return self.search_skill_matches_from_rows(self.search_skill_rows(query=query, limit=limit))
+        return self.search_skill_matches_from_rows(
+            self._search_skill_transport_rows(query=query, limit=limit)
+        )
 
     def search_skill_matches_from_rows(
         self,
-        rows: list[dict[str, Any]],
+        rows: list[Mapping[str, Any]],
     ) -> list[SearchMatchResult]:
         """Project raw Rust search rows into shared typed match results."""
 
-        hydrated: list[SearchMatchResult] = []
-        for row in rows:
-            hydrated.append(
-                SearchMatchResult(
-                    record=SkillMetadata(
-                        name=str(row["slug"]),
-                        description=str(row["description"]),
-                        routing_layer=str(row["layer"]),
-                        routing_gate=str(row["gate"]),
-                        routing_owner=str(row["owner"]),
-                    ),
-                    score=float(row["score"]),
-                    matched_terms=int(row["matched_terms"]),
-                    total_terms=int(row["total_terms"]),
-                )
-            )
-        return hydrated
+        return [SearchMatchResult.from_transport_row(row) for row in rows]
 
     def render_search_matches_text(
         self,
@@ -568,9 +776,13 @@ class RustRouteAdapter:
         query: str,
         limit: int,
     ) -> str:
-        """Render raw Rust search rows as formatted JSON text."""
+        """Render search JSON only at the CLI transport boundary."""
 
-        return json.dumps(self.search_skill_rows(query=query, limit=limit), indent=2, ensure_ascii=False)
+        return json.dumps(
+            [match.to_transport_row() for match in self.search_skill_matches(query=query, limit=limit)],
+            indent=2,
+            ensure_ascii=False,
+        )
 
     def route_contract_json_text(
         self,
@@ -1601,7 +1813,8 @@ class RustRouteAdapter:
         try:
             return self._stdio_client().request(operation, payload)
         except RuntimeError as exc:
-            if "unsupported stdio operation" in str(exc):
+            error_text = str(exc)
+            if "unsupported" in error_text and "operation" in error_text:
                 self._reset_stdio_client()
                 self._invalidate_binary_cache()
                 return self._run_json_command(command, failure_label=failure_label)

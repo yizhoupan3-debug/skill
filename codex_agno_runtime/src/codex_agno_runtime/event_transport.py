@@ -26,6 +26,25 @@ def _clone_json(payload: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in payload.items()}
 
 
+def _build_external_runtime_attach_request(
+    *,
+    attach_descriptor: Mapping[str, Any] | None = None,
+    binding_artifact_path: str | None = None,
+    handoff_path: str | None = None,
+    resume_manifest_path: str | None = None,
+) -> dict[str, Any]:
+    request: dict[str, Any] = {}
+    if attach_descriptor is not None:
+        request["attach_descriptor"] = dict(attach_descriptor)
+    if binding_artifact_path is not None:
+        request["binding_artifact_path"] = binding_artifact_path
+    if handoff_path is not None:
+        request["handoff_path"] = handoff_path
+    if resume_manifest_path is not None:
+        request["resume_manifest_path"] = resume_manifest_path
+    return request
+
+
 def _optional_path(value: Any) -> Path | None:
     if not isinstance(value, str) or not value:
         return None
@@ -45,6 +64,18 @@ def _unwrap_rust_attach_error(exc: RuntimeError) -> ValueError | None:
     return ValueError(detail)
 
 
+def _validated_attach_descriptor(payload: Mapping[str, Any]) -> dict[str, Any]:
+    attach_descriptor = payload.get("attach_descriptor")
+    if not isinstance(attach_descriptor, Mapping):
+        raise ValueError("External runtime event attach payload is missing attach_descriptor.")
+    descriptor = dict(attach_descriptor)
+    if descriptor.get("schema_version") != RUNTIME_EVENT_ATTACH_DESCRIPTOR_SCHEMA_VERSION:
+        raise ValueError(
+            "External runtime event attach payload returned an unknown attach_descriptor schema_version."
+        )
+    return descriptor
+
+
 class ExternalRuntimeEventTransportBridge:
     """Thin Python projection over the Rust-owned attached runtime transport lane."""
 
@@ -56,6 +87,7 @@ class ExternalRuntimeEventTransportBridge:
     ) -> None:
         self._adapter = adapter
         self._payload = _clone_json(payload)
+        self._attach_descriptor = _validated_attach_descriptor(self._payload)
         self.transport = RuntimeEventTransport.model_validate(self._payload["transport"])
         self.handoff = (
             RuntimeEventHandoff.model_validate(self._payload["handoff"])
@@ -70,9 +102,9 @@ class ExternalRuntimeEventTransportBridge:
         self.binding_artifact_path = _optional_path(self._payload.get("binding_artifact_path"))
         self.handoff_path = _optional_path(self._payload.get("handoff_path"))
         self.resume_manifest_path = _optional_path(self._payload.get("resume_manifest_path"))
-        self.binding_artifact_source = self.attach_descriptor().get("resolution", {}).get("binding_artifact_path")
-        self.handoff_source = self.attach_descriptor().get("resolution", {}).get("handoff_path")
-        self.resume_manifest_source = self.attach_descriptor().get("resolution", {}).get("resume_manifest_path")
+        self.binding_artifact_source = self._attach_descriptor.get("resolution", {}).get("binding_artifact_path")
+        self.handoff_source = self._attach_descriptor.get("resolution", {}).get("handoff_path")
+        self.resume_manifest_source = self._attach_descriptor.get("resolution", {}).get("resume_manifest_path")
         self.storage_backend = None
 
     @classmethod
@@ -91,15 +123,12 @@ class ExternalRuntimeEventTransportBridge:
             settings.codex_home,
             timeout_seconds=settings.rust_router_timeout_seconds,
         )
-        request: dict[str, Any] = {}
-        if attach_descriptor is not None:
-            request["attach_descriptor"] = dict(attach_descriptor)
-        if binding_artifact_path is not None:
-            request["binding_artifact_path"] = binding_artifact_path
-        if handoff_path is not None:
-            request["handoff_path"] = handoff_path
-        if resume_manifest_path is not None:
-            request["resume_manifest_path"] = resume_manifest_path
+        request = _build_external_runtime_attach_request(
+            attach_descriptor=attach_descriptor,
+            binding_artifact_path=binding_artifact_path,
+            handoff_path=handoff_path,
+            resume_manifest_path=resume_manifest_path,
+        )
         try:
             payload = adapter.attach_runtime_event_transport(request)
         except RuntimeError as exc:
@@ -117,10 +146,7 @@ class ExternalRuntimeEventTransportBridge:
     def attach_descriptor(self) -> dict[str, Any]:
         """Return a stable attach descriptor that external consumers can persist and replay."""
 
-        payload = self._payload.get("attach_descriptor")
-        if not isinstance(payload, Mapping):
-            raise ValueError("External runtime event attach payload is missing attach_descriptor.")
-        return dict(payload)
+        return dict(self._attach_descriptor)
 
     def subscribe(
         self,
@@ -133,7 +159,7 @@ class ExternalRuntimeEventTransportBridge:
 
         payload = self._adapter.subscribe_attached_runtime_events(
             {
-                "attach_descriptor": self.attach_descriptor(),
+                **_build_external_runtime_attach_request(attach_descriptor=self._attach_descriptor),
                 "after_event_id": after_event_id,
                 "limit": limit,
                 "heartbeat": heartbeat,
@@ -144,10 +170,12 @@ class ExternalRuntimeEventTransportBridge:
     def cleanup(self) -> dict[str, Any]:
         """Report cleanup semantics for artifact-backed external attach."""
 
-        return {
-            "cleanup_semantics": "no_persisted_state",
-            "cleanup_preserves_replay": True,
-            "cleanup_method": RUNTIME_EVENT_ATTACH_CLEANUP_METHOD,
-            "binding_artifact_path": str(self.binding_artifact_path) if self.binding_artifact_path is not None else None,
-            "trace_stream_path": self._payload.get("trace_stream_path"),
-        }
+        try:
+            return self._adapter.cleanup_attached_runtime_event_transport(
+                _build_external_runtime_attach_request(attach_descriptor=self._attach_descriptor)
+            )
+        except RuntimeError as exc:
+            attach_error = _unwrap_rust_attach_error(exc)
+            if attach_error is not None:
+                raise attach_error from exc
+            raise
