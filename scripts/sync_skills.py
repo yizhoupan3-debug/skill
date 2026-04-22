@@ -131,10 +131,7 @@ def repo_relative(path: Path) -> str:
 def resolve_skill_compiler_binary() -> Path | None:
     """Return the compiled Rust skill compiler when available."""
 
-    for candidate in (SKILL_COMPILER_RS_RELEASE_BIN, SKILL_COMPILER_RS_DEBUG_BIN):
-        if candidate.is_file():
-            return candidate
-    return None
+    return SKILL_COMPILER_RS_RELEASE_BIN if SKILL_COMPILER_RS_RELEASE_BIN.is_file() else None
 
 
 def load_compiled_skill_artifacts() -> dict[str, Any] | None:

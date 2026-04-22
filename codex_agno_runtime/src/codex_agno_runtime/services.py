@@ -29,6 +29,7 @@ from codex_agno_runtime.checkpoint_store import RuntimeCheckpointer
 from codex_agno_runtime.config import RuntimeSettings
 from codex_agno_runtime.execution_kernel import (
     ExecutionKernelRequest,
+    RouterRsInfrastructureError,
     RouterRsExecutionKernel,
     SANDBOX_CAPABILITY_CATEGORIES,
     SandboxExecutionPolicy,
@@ -38,7 +39,6 @@ from codex_agno_runtime.execution_kernel import (
 from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_BRIDGE_AUTHORITY,
     EXECUTION_KERNEL_BRIDGE_KIND,
-    build_execution_kernel_bridge_metadata_projection,
 )
 from codex_agno_runtime.host_adapters import (
     build_control_plane_contract_descriptors,
@@ -54,7 +54,6 @@ from codex_agno_runtime.schemas import (
     BackgroundRunStatus,
     RouteDecisionContract,
     RouteDiagnosticReport,
-    RouteDecisionSnapshot,
     RouteExecutionPolicy,
     RoutingResult,
     RunTaskResponse,
@@ -748,7 +747,7 @@ class RouterService:
 
         self._last_route_report = None
         policy = self._resolve_route_policy()
-        rust_result = self._route_rust(
+        decision, rust_result = self._route_rust(
             task=task,
             session_id=session_id,
             allow_overlay=allow_overlay,
@@ -756,7 +755,7 @@ class RouterService:
         )
         report = self._collect_diagnostic_route_report(
             policy=policy,
-            rust_result=rust_result,
+            decision=decision,
         )
         self._last_route_report = report
         return self._decorate_route_result(
@@ -802,7 +801,14 @@ class RouterService:
             "last_route_report": self._last_route_report.model_dump(mode="json") if self._last_route_report else None,
         }
 
-    def _route_rust(self, *, task: str, session_id: str, allow_overlay: bool, first_turn: bool) -> RoutingResult:
+    def _route_rust(
+        self,
+        *,
+        task: str,
+        session_id: str,
+        allow_overlay: bool,
+        first_turn: bool,
+    ) -> tuple[RouteDecisionContract, RoutingResult]:
         decision = self._rust_adapter.route_contract(
             query=task,
             session_id=session_id,
@@ -815,7 +821,7 @@ class RouterService:
             if decision.overlay_skill
             else None
         )
-        return RoutingResult(
+        return decision, RoutingResult(
             task=decision.task,
             session_id=decision.session_id,
             selected_skill=selected,
@@ -846,53 +852,29 @@ class RouterService:
         self,
         *,
         policy: RouteExecutionPolicy,
-        rust_result: RoutingResult,
+        decision: RouteDecisionContract,
     ) -> RouteDiagnosticReport | None:
         if not policy.diagnostic_report_required:
             return None
-        rust_snapshot = self._build_route_snapshot("rust", rust_result)
-        report = self._build_route_diff_report(mode=policy.mode, rust_snapshot=rust_snapshot)
-        if policy.strict_verification_required:
-            self._assert_rust_route_contract(rust_result, rust_snapshot)
+        report = self._build_route_diff_report(mode=policy.mode, decision=decision)
+        if policy.strict_verification_required and not report.verification_passed:
+            mismatch_fields = ", ".join(report.contract_mismatch_fields) or "unknown"
+            raise RuntimeError(
+                "Rust verification route report detected contract drift: "
+                f"{mismatch_fields}."
+            )
         return report
 
     def _build_route_diff_report(
         self,
         *,
         mode: str,
-        rust_snapshot: RouteDecisionSnapshot,
+        decision: RouteDecisionContract,
     ) -> RouteDiagnosticReport:
         return self._rust_adapter.route_report_contract(
             mode=mode,
-            rust_route_snapshot=rust_snapshot,
+            route_decision_contract=decision,
         )
-
-    def _build_route_snapshot(self, engine: str, result: RoutingResult) -> RouteDecisionSnapshot:
-        if result.route_snapshot is not None:
-            return result.route_snapshot
-        return self._rust_adapter.route_snapshot_contract(
-            engine=engine,
-            selected_skill=result.selected_skill.name,
-            overlay_skill=result.overlay_skill.name if result.overlay_skill else None,
-            layer=result.layer,
-            score=float(result.score),
-            reasons=[str(reason) for reason in result.reasons],
-        )
-
-    def _assert_rust_route_contract(
-        self,
-        result: RoutingResult,
-        route_snapshot: RouteDecisionSnapshot,
-    ) -> None:
-        expected_overlay = result.overlay_skill.name if result.overlay_skill else None
-        if route_snapshot.engine != "rust":
-            raise RuntimeError("Rust verification route snapshot must keep engine=rust.")
-        if route_snapshot.selected_skill != result.selected_skill.name:
-            raise RuntimeError("Rust verification route snapshot drifted on selected_skill.")
-        if route_snapshot.overlay_skill != expected_overlay:
-            raise RuntimeError("Rust verification route snapshot drifted on overlay_skill.")
-        if route_snapshot.layer != result.layer:
-            raise RuntimeError("Rust verification route snapshot drifted on layer.")
 
     def _resolve_route_policy(self, *, refresh: bool = False) -> RouteExecutionPolicy:
         if refresh or self._route_policy is None:
@@ -1240,16 +1222,9 @@ class _RustExecutionKernelAuthorityAdapter:
             and response.metadata.get("execution_kernel_authority") == self.authority
         ):
             return response
-
-        delegate_health = self._delegate.health()
-        response.metadata = build_execution_kernel_bridge_metadata_projection(
-            response.metadata,
-            delegate_kind=str(delegate_health.get("kernel_adapter_kind", "router-rs")),
-            delegate_authority=str(delegate_health.get("kernel_authority", "rust-execution-cli")),
-            delegate_family=str(delegate_health.get("kernel_live_backend_family", "rust-cli")),
-            delegate_impl=str(delegate_health.get("kernel_live_backend_impl", "router-rs")),
+        raise RouterRsInfrastructureError(
+            "router-rs execute returned a non-canonical execution-kernel metadata shape"
         )
-        return response
 
     def health(self) -> dict[str, Any]:
         delegate_health = self._delegate.health()
@@ -1308,11 +1283,12 @@ class ExecutionEnvironmentService:
         max_background_jobs: int,
         background_job_timeout_seconds: float,
         control_plane_descriptor: Mapping[str, Any] | None = None,
+        rust_adapter: RustRouteAdapter | None = None,
     ) -> None:
         self.settings = settings
         self.control_plane_descriptor = dict(control_plane_descriptor or {})
         self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "execution")
-        self.primary_kernel = RouterRsExecutionKernel(settings)
+        self.primary_kernel = RouterRsExecutionKernel(settings, rust_adapter=rust_adapter)
         self.kernel = _RustExecutionKernelAuthorityAdapter(self.primary_kernel)
         self.sandbox = SandboxLifecycleService(
             settings,

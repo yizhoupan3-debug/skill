@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-import json
 from pathlib import Path
-import subprocess
 from typing import Any
 
 from codex_agno_runtime.config import RuntimeSettings
@@ -19,6 +17,7 @@ from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION,
     decode_router_rs_execution_response,
 )
+from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import RoutingResult, RunTaskResponse
 
 
@@ -152,13 +151,43 @@ class RouterRsExecutionKernel(ExecutionKernel):
     authority = EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY
     bridge_kind = EXECUTION_KERNEL_BRIDGE_KIND
     bridge_authority = EXECUTION_KERNEL_BRIDGE_AUTHORITY
-    execution_schema_version = "router-rs-execute-response-v1"
+    execution_schema_version = RustRouteAdapter.execution_schema_version
 
-    def __init__(self, settings: RuntimeSettings) -> None:
+    def __init__(
+        self,
+        settings: RuntimeSettings,
+        *,
+        rust_adapter: RustRouteAdapter | None = None,
+    ) -> None:
         self.settings = settings
-        self.router_dir = self.settings.codex_home / "scripts" / "router-rs"
-        self.release_bin = self.router_dir / "target" / "release" / "router-rs"
-        self.debug_bin = self.router_dir / "target" / "debug" / "router-rs"
+        self._rust_adapter = rust_adapter or RustRouteAdapter(
+            self.settings.codex_home,
+            timeout_seconds=self.settings.rust_router_timeout_seconds,
+        )
+
+    @property
+    def router_dir(self) -> Path:
+        return self._rust_adapter.router_dir
+
+    @router_dir.setter
+    def router_dir(self, value: Path) -> None:
+        self._rust_adapter.router_dir = value
+
+    @property
+    def release_bin(self) -> Path:
+        return self._rust_adapter.release_bin
+
+    @release_bin.setter
+    def release_bin(self, value: Path) -> None:
+        self._rust_adapter.release_bin = value
+
+    @property
+    def debug_bin(self) -> Path:
+        return self._rust_adapter.debug_bin
+
+    @debug_bin.setter
+    def debug_bin(self, value: Path) -> None:
+        self._rust_adapter.debug_bin = value
 
     async def execute(self, request: ExecutionKernelRequest) -> RunTaskResponse:
         payload = self._build_payload(request)
@@ -176,6 +205,7 @@ class RouterRsExecutionKernel(ExecutionKernel):
 
     def health(self) -> dict[str, Any]:
         payload = super().health()
+        adapter_health = self._rust_adapter.health()
         payload.update(
             {
                 "kernel_replace_ready": False,
@@ -183,29 +213,16 @@ class RouterRsExecutionKernel(ExecutionKernel):
                 "kernel_live_backend_impl": "router-rs",
                 "kernel_mode_support": ["dry_run", "live"],
                 "execution_schema_version": self.execution_schema_version,
-                "resolved_binary": str(self._resolved_binary()) if self._resolved_binary() is not None else None,
+                "resolved_binary": adapter_health.get("resolved_binary"),
             }
         )
         return payload
 
     def _resolved_binary(self) -> Path | None:
-        for candidate in (self.release_bin, self.debug_bin):
-            if candidate.is_file():
-                return candidate
-        return None
+        return self._rust_adapter._resolved_binary()
 
     def _binary_command(self) -> list[str]:
-        resolved_binary = self._resolved_binary()
-        if resolved_binary is not None:
-            return [str(resolved_binary)]
-        return [
-            "cargo",
-            "run",
-            "--quiet",
-            "--manifest-path",
-            str(self.router_dir / "Cargo.toml"),
-            "--",
-        ]
+        return self._rust_adapter._binary_command()
 
     def _build_payload(self, request: ExecutionKernelRequest) -> dict[str, Any]:
         routing_result = request.routing_result
@@ -231,47 +248,13 @@ class RouterRsExecutionKernel(ExecutionKernel):
         }
 
     def _run_execute_command(self, payload: dict[str, Any]) -> dict[str, Any]:
-        command = [
-            *self._binary_command(),
-            "--execute-json",
-            "--execute-input-json",
-            json.dumps(payload, ensure_ascii=False),
-        ]
         try:
-            completed = subprocess.run(
-                command,
-                cwd=self.settings.codex_home,
-                capture_output=True,
-                text=True,
-                timeout=self.settings.rust_router_timeout_seconds,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise RouterRsInfrastructureError(
-                "router-rs execute timed out before returning a response"
-            ) from exc
-        except OSError as exc:
-            raise RouterRsInfrastructureError(
-                f"router-rs execute could not be launched: {exc}"
-            ) from exc
-        if completed.returncode != 0:
-            stderr = completed.stderr.strip() or completed.stdout.strip() or "unknown router-rs failure"
-            raise RouterRsExecutionError(f"router-rs execute failed: {stderr}")
-        try:
-            parsed = json.loads(completed.stdout)
-        except json.JSONDecodeError as exc:  # pragma: no cover - defensive guard
-            raise RouterRsInfrastructureError(f"router-rs execute returned invalid JSON: {exc}") from exc
-        if parsed.get("execution_schema_version") != self.execution_schema_version:
-            raise RouterRsInfrastructureError(
-                "router-rs execute returned an unknown schema: "
-                f"{parsed.get('execution_schema_version')!r}"
-            )
-        if parsed.get("authority") != self.authority:
-            raise RouterRsInfrastructureError(
-                "router-rs execute returned an unexpected authority marker: "
-                f"{parsed.get('authority')!r}"
-            )
-        return parsed
+            return self._rust_adapter.execute(payload)
+        except RuntimeError as exc:
+            message = str(exc)
+            if message.startswith("router-rs execute failed:"):
+                raise RouterRsExecutionError(message) from exc
+            raise RouterRsInfrastructureError(message) from exc
 
     def _decode_response(self, payload: dict[str, Any]) -> RunTaskResponse:
         try:

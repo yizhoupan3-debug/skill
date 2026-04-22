@@ -52,6 +52,7 @@ __all__ = [
     "RUNTIME_OBSERVABILITY_DASHBOARD_DIMENSIONS",
     "RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION",
     "RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION",
+    "RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION",
     "RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION",
     "RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION",
     "RUNTIME_OBSERVABILITY_METRIC_SPECS",
@@ -63,8 +64,10 @@ __all__ = [
     "build_runtime_observability_exporter_descriptor",
     "build_runtime_observability_health_snapshot",
     "build_runtime_observability_resource_attributes",
+    "runtime_observability_metric_catalog",
     "runtime_observability_dashboard_schema",
 ]
+RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION = "runtime-observability-metric-catalog-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,15 +299,44 @@ def build_runtime_observability_health_snapshot() -> dict[str, Any]:
 
     exporter = build_runtime_observability_exporter_descriptor()
     dashboard = runtime_observability_dashboard_schema()
+    metric_catalog = runtime_observability_metric_catalog()
     return {
         "ownership_lane": exporter["ownership_lane"],
         "metric_catalog_version": exporter["metric_catalog_version"],
         "dashboard_schema_version": dashboard["schema_version"],
         "resource_dimensions": list(dashboard["resource_dimensions"]),
-        "metric_names": [spec.metric_name for spec in RUNTIME_OBSERVABILITY_METRIC_SPECS],
+        "metric_catalog_schema_version": metric_catalog["schema_version"],
+        "metric_names": [metric["metric_name"] for metric in metric_catalog["metrics"]],
         "dashboard_panel_count": len(dashboard["panels"]),
         "dashboard_alert_count": len(dashboard["alerts"]),
         "exporter": exporter,
+    }
+
+
+def runtime_observability_metric_catalog() -> dict[str, Any]:
+    """Return the machine-readable runtime metric catalog frozen by the contract."""
+
+    catalog = _with_rust_observability_adapter(
+        lambda adapter_obj: adapter_obj.runtime_observability_metric_catalog()
+    )
+    if catalog is not None:
+        return catalog
+    return {
+        "schema_version": RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION,
+        "metric_catalog_version": RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION,
+        "resource_dimensions": list(RUNTIME_OBSERVABILITY_RESOURCE_DIMENSIONS),
+        "base_dimensions": list(RUNTIME_OBSERVABILITY_BASE_DIMENSIONS),
+        "metrics": [
+            {
+                "intent": spec.intent,
+                "metric_name": spec.metric_name,
+                "metric_type": spec.metric_type,
+                "unit": spec.unit,
+                "dimensions": list(spec.base_dimensions),
+                "dashboard_derivation": spec.dashboard_derivation,
+            }
+            for spec in RUNTIME_OBSERVABILITY_METRIC_SPECS
+        ],
     }
 
 

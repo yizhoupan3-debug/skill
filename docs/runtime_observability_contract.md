@@ -160,6 +160,9 @@ The runtime now exposes a concrete exporter and metric-record helper surface at
 - `build_runtime_observability_exporter_descriptor()` freezes the Rust-owned
   exporter lane and ties it to the JSONL sink plus replay/handoff schema
   versions used by the trace lane.
+- `runtime_observability_metric_catalog()` returns the machine-readable metric
+  catalog frozen by this contract, including each metric name, type, unit,
+  dimensions, and dashboard derivation.
 - `build_runtime_metric_record()` emits one versioned metric payload using only
   cataloged metric names and the shared base dimensions above.
 - `runtime_observability_dashboard_schema()` returns the machine-readable
@@ -182,6 +185,8 @@ Concrete path invariants:
   negative retry marker.
 - helper payloads must not introduce host-private or high-cardinality
   dimensions outside the base dimensions table.
+- the machine-readable metric catalog must stay additive-only and must not
+  redefine existing metric names, units, or dimension sets.
 
 ## Dashboard Schema
 

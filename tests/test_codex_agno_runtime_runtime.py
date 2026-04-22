@@ -116,6 +116,20 @@ trigger_phrases:
     assert skill.trigger_hints == []
 
 
+def test_runtime_shares_one_rust_adapter_across_route_and_execute(tmp_path: Path) -> None:
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=False,
+    )
+
+    runtime = CodexAgnoRuntime(settings)
+
+    assert runtime.router_service._rust_adapter is runtime.rust_adapter
+    assert runtime.execution_service.primary_kernel._rust_adapter is runtime.rust_adapter
+
+
 def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> None:
     """Verify the runtime remains usable when the Python-backed kernel delegate is unavailable."""
 
@@ -544,6 +558,7 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
                 binding_artifact_path=transport["binding_artifact_path"]
             )
             assert attached["attach_mode"] == "process_external_artifact_replay"
+            assert attached["authority"] == attached_runtime.rust_adapter.attached_runtime_event_transport_authority
             assert attached["transport"]["stream_id"] == transport["stream_id"]
             assert attached["binding_artifact_path"] == transport["binding_artifact_path"]
             assert attached["trace_stream_path"].endswith("TRACE_EVENTS.jsonl")
@@ -577,6 +592,7 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
                 after_event_id=first_window["events"][-1]["event_id"],
                 limit=20,
             )
+            assert resumed_via_binding["schema_version"] == "runtime-event-bridge-v1"
             assert resumed_via_binding["events"]
             assert resumed_via_binding["after_event_id"] == first_window["events"][-1]["event_id"]
 
@@ -603,6 +619,7 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             manifest_cleanup = attached_runtime.cleanup_attached_runtime_event_transport(
                 attach_descriptor=attached_via_manifest["attach_descriptor"]
             )
+            assert manifest_cleanup["authority"] == attached_runtime.rust_adapter.attached_runtime_event_transport_authority
             assert manifest_cleanup["cleanup_semantics"] == "no_persisted_state"
             assert manifest_cleanup["cleanup_preserves_replay"] is True
 
@@ -625,6 +642,7 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             attached_cleanup = attached_runtime.cleanup_attached_runtime_event_transport(
                 attach_descriptor=attached_via_handoff["attach_descriptor"]
             )
+            assert attached_cleanup["authority"] == attached_runtime.rust_adapter.attached_runtime_event_transport_authority
             assert attached_cleanup["cleanup_semantics"] == "no_persisted_state"
             assert attached_cleanup["cleanup_preserves_replay"] is True
 
@@ -787,6 +805,7 @@ def test_runtime_event_attach_replays_from_sqlite_backend(monkeypatch: pytest.Mo
                 binding_artifact_path=transport["binding_artifact_path"]
             )
             assert attached["artifact_backend_family"] == "sqlite"
+            assert attached["authority"] == attached_runtime.rust_adapter.attached_runtime_event_transport_authority
             assert attached["transport"]["binding_backend_family"] == "sqlite"
             assert attached["resume_manifest"]["session_id"] == response.session_id
             assert attached["attach_descriptor"]["resolution"]["binding_artifact_path"] == "explicit_request"
@@ -1891,6 +1910,7 @@ def test_prepare_session_shadow_mode_returns_soak_report(tmp_path: Path) -> None
     assert prepared.route_diagnostic_report.evidence_kind == "rust-owned-snapshot"
     assert prepared.route_diagnostic_report.strict_verification is False
     assert prepared.route_diagnostic_report.verification_passed is True
+    assert prepared.route_diagnostic_report.contract_mismatch_fields == []
     assert prepared.route_diagnostic_report.route_snapshot.selected_skill == prepared.skill
 
 
@@ -1927,6 +1947,7 @@ def test_runtime_metadata_includes_route_diagnostic_report(tmp_path: Path) -> No
         assert report["evidence_kind"] == "rust-owned-snapshot"
         assert report["strict_verification"] is False
         assert report["verification_passed"] is True
+        assert report["contract_mismatch_fields"] == []
 
     asyncio.run(_run())
 
@@ -1939,6 +1960,7 @@ def test_runtime_metadata_includes_route_diagnostic_report(tmp_path: Path) -> No
     assert route_event["payload"]["route_diagnostic_report"]["report_schema_version"] == "router-rs-route-report-v2"
     assert route_event["payload"]["route_diagnostic_report"]["authority"] == "rust-route-core"
     assert route_event["payload"]["route_diagnostic_report"]["verification_passed"] is True
+    assert route_event["payload"]["route_diagnostic_report"]["contract_mismatch_fields"] == []
 
 
 def test_runtime_parallel_group_trace_metadata_updates_for_interrupted_terminal_state(tmp_path: Path) -> None:

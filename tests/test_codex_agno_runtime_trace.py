@@ -7,6 +7,7 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+import tempfile
 
 import pytest
 
@@ -48,6 +49,7 @@ from codex_agno_runtime.trace import (
     RuntimeEventHandoff,
     RuntimeEventTransport,
     RuntimeTraceRecorder,
+    _load_routing_runtime_version,
     TRACE_EVENT_SCHEMA_VERSION,
     TRACE_METADATA_SCHEMA_VERSION,
     TRACE_REPLAY_CHUNK_SCHEMA_VERSION,
@@ -132,6 +134,17 @@ class _InMemoryStorageBackend:
 
     def delete_text(self, path: Path) -> None:
         self._payloads.pop(path, None)
+
+
+def test_trace_routing_runtime_version_follows_codex_home_env(monkeypatch) -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        codex_home = Path(tmpdir)
+        runtime_path = codex_home / "skills" / "SKILL_ROUTING_RUNTIME.json"
+        runtime_path.parent.mkdir(parents=True)
+        runtime_path.write_text(json.dumps({"version": 7}), encoding="utf-8")
+        monkeypatch.setenv("CODEX_HOME", str(codex_home))
+
+        assert _load_routing_runtime_version() == 7
 
 
 @dataclass(frozen=True)

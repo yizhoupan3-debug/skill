@@ -18,9 +18,12 @@ if str(RUNTIME_SRC) not in sys.path:
 
 from codex_agno_runtime.observability import (
     RUNTIME_OBSERVABILITY_DASHBOARD_DIMENSIONS,
+    RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION,
     RUNTIME_OBSERVABILITY_METRIC_SPECS,
     build_runtime_metric_record,
     build_runtime_observability_exporter_descriptor,
+    build_runtime_observability_health_snapshot,
+    runtime_observability_metric_catalog,
     runtime_observability_dashboard_schema,
 )
 from codex_agno_runtime.paths import default_codex_home
@@ -278,11 +281,45 @@ def test_concrete_observability_helpers_match_the_contract() -> None:
         assert "build_runtime_metric_record()" in CONTRACT_TEXT
 
 
+def test_metric_catalog_helper_freezes_machine_readable_metrics_path() -> None:
+    catalog = runtime_observability_metric_catalog()
+
+    assert catalog["schema_version"] == RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION
+    assert catalog["metric_catalog_version"] == "runtime-observability-metrics-v1"
+    assert catalog["resource_dimensions"] == [
+        "service.name",
+        "service.version",
+        "runtime.instance.id",
+        "route_engine_mode",
+    ]
+    assert catalog["base_dimensions"] == [
+        "runtime.job_id",
+        "runtime.session_id",
+        "runtime.attempt",
+        "runtime.worker_id",
+        "runtime.generation",
+    ]
+    assert [metric["metric_name"] for metric in catalog["metrics"]] == [
+        spec.metric_name for spec in RUNTIME_OBSERVABILITY_METRIC_SPECS
+    ]
+    assert [metric["dimensions"] for metric in catalog["metrics"]] == [
+        list(spec.base_dimensions) for spec in RUNTIME_OBSERVABILITY_METRIC_SPECS
+    ]
+    assert "runtime_observability_metric_catalog()" in CONTRACT_TEXT
+
+    health = build_runtime_observability_health_snapshot()
+    assert health["metric_catalog_schema_version"] == RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION
+    assert health["metric_names"] == [metric["metric_name"] for metric in catalog["metrics"]]
+
+
 def test_observability_helpers_delegate_to_rust_contract_lane() -> None:
     adapter = RustRouteAdapter(default_codex_home(), timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS)
     with patch("codex_agno_runtime.observability._observability_rust_adapter", return_value=adapter):
         exporter = build_runtime_observability_exporter_descriptor()
         assert exporter == adapter.runtime_observability_exporter_descriptor()
+
+        catalog = runtime_observability_metric_catalog()
+        assert catalog == adapter.runtime_observability_metric_catalog()
 
         dashboard = runtime_observability_dashboard_schema()
         assert dashboard == adapter.runtime_observability_dashboard_schema()
@@ -321,6 +358,9 @@ def test_observability_helpers_fallback_to_python_when_rust_lane_is_unavailable(
         def runtime_observability_exporter_descriptor(self) -> dict[str, object]:
             raise RuntimeError("rust observability lane unavailable")
 
+        def runtime_observability_metric_catalog(self) -> dict[str, object]:
+            raise RuntimeError("rust observability lane unavailable")
+
         def runtime_observability_dashboard_schema(self) -> dict[str, object]:
             raise RuntimeError("rust observability lane unavailable")
 
@@ -336,6 +376,16 @@ def test_observability_helpers_fallback_to_python_when_rust_lane_is_unavailable(
         assert exporter["producer_owner"] == "rust-control-plane"
         assert exporter["exporter_owner"] == "rust-control-plane"
         assert exporter["export_path"] == "jsonl-plus-otel"
+
+        catalog = runtime_observability_metric_catalog()
+        assert catalog["schema_version"] == "runtime-observability-metric-catalog-v1"
+        assert catalog["metric_catalog_version"] == "runtime-observability-metrics-v1"
+        assert tuple(catalog["resource_dimensions"]) == (
+            "service.name",
+            "service.version",
+            "runtime.instance.id",
+            "route_engine_mode",
+        )
 
         schema = runtime_observability_dashboard_schema()
         assert schema["schema_version"] == "runtime-observability-dashboard-v1"

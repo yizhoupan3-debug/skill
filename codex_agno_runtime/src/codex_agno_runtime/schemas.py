@@ -183,6 +183,8 @@ class RouteDiagnosticReport(BaseModel):
     evidence_kind: str = "rust-owned-snapshot"
     strict_verification: bool = False
     verification_passed: bool = True
+    verified_contract_fields: list[str] = Field(default_factory=list)
+    contract_mismatch_fields: list[str] = Field(default_factory=list)
     route_snapshot: RouteDecisionSnapshot
 
     @model_validator(mode="after")
@@ -194,6 +196,10 @@ class RouteDiagnosticReport(BaseModel):
         expected_verification = self.mode == "verify"
         if self.strict_verification != expected_verification:
             raise ValueError("route diagnostic report strict_verification must align with mode")
+        if self.verification_passed and self.contract_mismatch_fields:
+            raise ValueError("route diagnostic report must not list contract mismatches when verification passes")
+        if not self.verification_passed and not self.contract_mismatch_fields:
+            raise ValueError("route diagnostic report must describe contract mismatches when verification fails")
         return self
 
 

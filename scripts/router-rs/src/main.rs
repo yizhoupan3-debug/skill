@@ -1,11 +1,12 @@
 use clap::{ArgAction, Parser};
 use regex::Regex;
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -54,6 +55,7 @@ const TRANSPORT_BINDING_WRITE_SCHEMA_VERSION: &str = "router-rs-transport-bindin
 const TRANSPORT_BINDING_WRITE_AUTHORITY: &str = "rust-runtime-transport-binding-writer";
 const CHECKPOINT_MANIFEST_WRITE_SCHEMA_VERSION: &str = "router-rs-checkpoint-manifest-write-v1";
 const CHECKPOINT_MANIFEST_WRITE_AUTHORITY: &str = "rust-runtime-checkpoint-manifest-writer";
+const ATTACHED_RUNTIME_EVENT_ATTACH_AUTHORITY: &str = "rust-runtime-attached-event-transport";
 const TRACE_STREAM_REPLAY_SCHEMA_VERSION: &str = "router-rs-trace-stream-replay-v1";
 const TRACE_STREAM_INSPECT_SCHEMA_VERSION: &str = "router-rs-trace-stream-inspect-v1";
 const TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION: &str =
@@ -62,6 +64,8 @@ const TRACE_STREAM_IO_AUTHORITY: &str = "rust-runtime-trace-io";
 const RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION: &str = "runtime-observability-exporter-v1";
 const RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION: &str =
     "runtime-observability-metric-record-v1";
+const RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION: &str =
+    "runtime-observability-metric-catalog-v1";
 const RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION: &str = "runtime-observability-metrics-v1";
 const RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION: &str = "runtime-observability-dashboard-v1";
 const RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY: &str = "shared-runtime-v1";
@@ -105,6 +109,8 @@ struct Cli {
     #[arg(long)]
     json: bool,
     #[arg(long)]
+    stdio_json: bool,
+    #[arg(long)]
     route_json: bool,
     #[arg(long)]
     route_policy_json: bool,
@@ -127,7 +133,15 @@ struct Cli {
     #[arg(long)]
     write_checkpoint_resume_manifest_json: bool,
     #[arg(long)]
+    attach_runtime_event_transport_json: bool,
+    #[arg(long)]
+    subscribe_attached_runtime_events_json: bool,
+    #[arg(long)]
+    cleanup_attached_runtime_event_transport_json: bool,
+    #[arg(long)]
     runtime_observability_exporter_json: bool,
+    #[arg(long)]
+    runtime_observability_metric_catalog_json: bool,
     #[arg(long)]
     runtime_observability_dashboard_json: bool,
     #[arg(long)]
@@ -155,6 +169,8 @@ struct Cli {
     #[arg(long)]
     rust_route_snapshot_json: Option<String>,
     #[arg(long)]
+    route_decision_json: Option<String>,
+    #[arg(long)]
     route_snapshot_input_json: Option<String>,
     #[arg(long)]
     execute_input_json: Option<String>,
@@ -170,6 +186,12 @@ struct Cli {
     write_transport_binding_input_json: Option<String>,
     #[arg(long)]
     write_checkpoint_resume_manifest_input_json: Option<String>,
+    #[arg(long)]
+    attach_runtime_event_transport_input_json: Option<String>,
+    #[arg(long)]
+    subscribe_attached_runtime_events_input_json: Option<String>,
+    #[arg(long)]
+    cleanup_attached_runtime_event_transport_input_json: Option<String>,
     #[arg(long)]
     runtime_metric_record_input_json: Option<String>,
     #[arg(long)]
@@ -246,10 +268,12 @@ struct RouteDiffReportPayload {
     evidence_kind: String,
     strict_verification: bool,
     verification_passed: bool,
+    verified_contract_fields: Vec<String>,
+    contract_mismatch_fields: Vec<String>,
     route_snapshot: RouteDecisionSnapshotPayload,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteDecision {
     decision_schema_version: String,
     authority: String,
@@ -465,6 +489,24 @@ struct TraceCompactionDeltaWriteResponsePayload {
     bytes_written: usize,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct StdioJsonRequestPayload {
+    id: Value,
+    op: String,
+    #[serde(default)]
+    payload: Value,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct StdioJsonResponsePayload {
+    id: Value,
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    payload: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
 fn background_effect_plan(next_step: &str) -> BackgroundControlEffectPlanPayload {
     BackgroundControlEffectPlanPayload {
         next_step: next_step.to_string(),
@@ -551,6 +593,7 @@ fn main() -> Result<(), String> {
     let args = Cli::parse();
     if [
         args.json,
+        args.stdio_json,
         args.route_json,
         args.route_policy_json,
         args.route_snapshot_json,
@@ -562,7 +605,11 @@ fn main() -> Result<(), String> {
         args.checkpoint_resume_manifest_json,
         args.write_transport_binding_json,
         args.write_checkpoint_resume_manifest_json,
+        args.attach_runtime_event_transport_json,
+        args.subscribe_attached_runtime_events_json,
+        args.cleanup_attached_runtime_event_transport_json,
         args.runtime_observability_exporter_json,
+        args.runtime_observability_metric_catalog_json,
         args.runtime_observability_dashboard_json,
         args.runtime_metric_record_json,
         args.trace_stream_replay_json,
@@ -580,9 +627,13 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --background-control-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --runtime-observability-exporter-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --route-report-json, --profile-json, and --profile-artifacts-json"
+            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --background-control-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --route-report-json, --profile-json, and --profile-artifacts-json"
                 .to_string(),
         );
+    }
+
+    if args.stdio_json {
+        return run_stdio_json_loop();
     }
 
     if args.background_control_json {
@@ -690,6 +741,60 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.attach_runtime_event_transport_json {
+        let payload = serde_json::from_str::<Value>(
+            args.attach_runtime_event_transport_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--attach-runtime-event-transport-input-json is required with --attach-runtime-event-transport-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse attach runtime event transport input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&attach_runtime_event_transport(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.subscribe_attached_runtime_events_json {
+        let payload = serde_json::from_str::<Value>(
+            args.subscribe_attached_runtime_events_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--subscribe-attached-runtime-events-input-json is required with --subscribe-attached-runtime-events-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse subscribe attached runtime events input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&subscribe_attached_runtime_events(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.cleanup_attached_runtime_event_transport_json {
+        let payload = serde_json::from_str::<Value>(
+            args.cleanup_attached_runtime_event_transport_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--cleanup-attached-runtime-event-transport-input-json is required with --cleanup-attached-runtime-event-transport-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse attached runtime event cleanup input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&cleanup_attached_runtime_event_transport(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
     if args.runtime_control_plane_json {
         println!(
             "{}",
@@ -703,6 +808,15 @@ fn main() -> Result<(), String> {
         println!(
             "{}",
             serde_json::to_string(&build_runtime_observability_exporter_descriptor())
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.runtime_observability_metric_catalog_json {
+        println!(
+            "{}",
+            serde_json::to_string(&build_runtime_observability_metric_catalog_payload())
                 .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());
@@ -847,13 +961,24 @@ fn main() -> Result<(), String> {
             .route_mode
             .as_deref()
             .ok_or_else(|| "--route-mode is required with --route-report-json".to_string())?;
-        let rust_snapshot = serde_json::from_str::<RouteDecisionSnapshotPayload>(
-            args.rust_route_snapshot_json.as_deref().ok_or_else(|| {
-                "--rust-route-snapshot-json is required with --route-report-json".to_string()
-            })?,
-        )
-        .map_err(|err| format!("parse rust route snapshot failed: {err}"))?;
-        let report = build_route_diff_report(mode, rust_snapshot)?;
+        let route_decision = args
+            .route_decision_json
+            .as_deref()
+            .map(serde_json::from_str::<RouteDecision>)
+            .transpose()
+            .map_err(|err| format!("parse route decision contract failed: {err}"))?;
+        let rust_snapshot = match args.rust_route_snapshot_json.as_deref() {
+            Some(raw) => serde_json::from_str::<RouteDecisionSnapshotPayload>(raw)
+                .map_err(|err| format!("parse rust route snapshot failed: {err}"))?,
+            None => route_decision
+                .as_ref()
+                .map(|decision| decision.route_snapshot.clone())
+                .ok_or_else(|| {
+                    "--route-report-json requires --rust-route-snapshot-json or --route-decision-json"
+                        .to_string()
+                })?,
+        };
+        let report = build_route_diff_report(mode, rust_snapshot, route_decision.as_ref())?;
         println!(
             "{}",
             serde_json::to_string(&report)
@@ -975,6 +1100,251 @@ fn main() -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+fn run_stdio_json_loop() -> Result<(), String> {
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    let mut stdout_lock = stdout.lock();
+    for line_result in stdin.lock().lines() {
+        let line = line_result.map_err(|err| format!("read stdio request failed: {err}"))?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let response = handle_stdio_json_line(&line);
+        let encoded = serde_json::to_string(&response)
+            .map_err(|err| format!("serialize stdio response failed: {err}"))?;
+        writeln!(stdout_lock, "{encoded}")
+            .map_err(|err| format!("write stdio response failed: {err}"))?;
+        stdout_lock
+            .flush()
+            .map_err(|err| format!("flush stdio response failed: {err}"))?;
+    }
+    Ok(())
+}
+
+fn handle_stdio_json_line(line: &str) -> StdioJsonResponsePayload {
+    match serde_json::from_str::<StdioJsonRequestPayload>(line) {
+        Ok(request) => match dispatch_stdio_json_request(&request.op, request.payload) {
+            Ok(payload) => StdioJsonResponsePayload {
+                id: request.id,
+                ok: true,
+                payload: Some(payload),
+                error: None,
+            },
+            Err(error) => StdioJsonResponsePayload {
+                id: request.id,
+                ok: false,
+                payload: None,
+                error: Some(error),
+            },
+        },
+        Err(err) => StdioJsonResponsePayload {
+            id: Value::Null,
+            ok: false,
+            payload: None,
+            error: Some(format!("parse stdio request failed: {err}")),
+        },
+    }
+}
+
+fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String> {
+    match op {
+        "route" => dispatch_stdio_route(payload),
+        "execute" => {
+            let request = serde_json::from_value::<ExecuteRequestPayload>(payload)
+                .map_err(|err| format!("parse execute input failed: {err}"))?;
+            serde_json::to_value(execute_request(request)?)
+                .map_err(|err| format!("serialize execute output failed: {err}"))
+        }
+        "route_report" => dispatch_stdio_route_report(payload),
+        "route_policy" => dispatch_stdio_route_policy(payload),
+        "route_snapshot" => dispatch_stdio_route_snapshot(payload),
+        "compile_profile_bundle" => dispatch_stdio_compile_profile_bundle(payload),
+        "compile_codex_profile_artifacts" => {
+            dispatch_stdio_compile_codex_profile_artifacts(payload)
+        }
+        "runtime_control_plane" => Ok(build_runtime_control_plane_payload()),
+        "runtime_observability_exporter_descriptor" => {
+            serde_json::to_value(build_runtime_observability_exporter_descriptor()).map_err(|err| {
+                format!("serialize runtime observability exporter output failed: {err}")
+            })
+        }
+        "runtime_observability_metric_catalog" => {
+            serde_json::to_value(build_runtime_observability_metric_catalog_payload()).map_err(
+                |err| format!("serialize runtime observability metric catalog output failed: {err}"),
+            )
+        }
+        "runtime_observability_dashboard_schema" => {
+            serde_json::to_value(runtime_observability_dashboard_schema()).map_err(|err| {
+                format!("serialize runtime observability dashboard output failed: {err}")
+            })
+        }
+        "runtime_metric_record" => serde_json::to_value(build_runtime_metric_record(payload)?)
+            .map_err(|err| format!("serialize runtime metric record output failed: {err}")),
+        "background_control" => {
+            let request = serde_json::from_value::<BackgroundControlRequestPayload>(payload)
+                .map_err(|err| format!("parse background control input failed: {err}"))?;
+            serde_json::to_value(build_background_control_response(request)?)
+                .map_err(|err| format!("serialize background control output failed: {err}"))
+        }
+        "describe_transport" => build_trace_transport_descriptor(payload),
+        "describe_handoff" => build_trace_handoff_descriptor(payload),
+        "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload),
+        "write_transport_binding" => write_transport_binding_payload(payload),
+        "write_checkpoint_resume_manifest" => write_checkpoint_resume_manifest_payload(payload),
+        "attach_runtime_event_transport" => attach_runtime_event_transport(payload),
+        "subscribe_attached_runtime_events" => subscribe_attached_runtime_events(payload),
+        "cleanup_attached_runtime_event_transport" => {
+            cleanup_attached_runtime_event_transport(payload)
+        }
+        "trace_stream_replay" => {
+            let request = serde_json::from_value::<TraceStreamReplayRequestPayload>(payload)
+                .map_err(|err| format!("parse trace stream replay input failed: {err}"))?;
+            serde_json::to_value(replay_trace_stream(request)?)
+                .map_err(|err| format!("serialize trace stream replay output failed: {err}"))
+        }
+        "trace_stream_inspect" => {
+            let request = serde_json::from_value::<TraceStreamInspectRequestPayload>(payload)
+                .map_err(|err| format!("parse trace stream inspect input failed: {err}"))?;
+            serde_json::to_value(inspect_trace_stream(request)?)
+                .map_err(|err| format!("serialize trace stream inspect output failed: {err}"))
+        }
+        "write_trace_compaction_delta" => {
+            let request =
+                serde_json::from_value::<TraceCompactionDeltaWriteRequestPayload>(payload)
+                    .map_err(|err| format!("parse trace compaction delta input failed: {err}"))?;
+            serde_json::to_value(write_trace_compaction_delta(request)?)
+                .map_err(|err| format!("serialize trace compaction delta output failed: {err}"))
+        }
+        "framework_runtime_snapshot" => dispatch_stdio_framework_runtime_snapshot(payload),
+        "framework_contract_summary" => dispatch_stdio_framework_contract_summary(payload),
+        _ => Err(format!("unsupported stdio operation: {op}")),
+    }
+}
+
+fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
+    let query = required_non_empty_string(&payload, "query", "stdio route")?;
+    let session_id = optional_non_empty_string(&payload, "session_id")
+        .unwrap_or_else(|| "route-cli".to_string());
+    let allow_overlay = payload
+        .get("allow_overlay")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let first_turn = payload
+        .get("first_turn")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
+    let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
+    let records = load_records(runtime_path.as_deref(), manifest_path.as_deref())?;
+    serde_json::to_value(route_task(
+        &records,
+        &query,
+        &session_id,
+        allow_overlay,
+        first_turn,
+    )?)
+    .map_err(|err| format!("serialize route output failed: {err}"))
+}
+
+fn dispatch_stdio_route_report(payload: Value) -> Result<Value, String> {
+    let mode = required_non_empty_string(&payload, "mode", "stdio route report")?;
+    let route_decision = payload
+        .get("route_decision")
+        .cloned()
+        .filter(|value| !value.is_null())
+        .map(serde_json::from_value::<RouteDecision>)
+        .transpose()
+        .map_err(|err| format!("parse route decision contract failed: {err}"))?;
+    let rust_snapshot = match payload.get("rust_route_snapshot").cloned() {
+        Some(raw) if !raw.is_null() => serde_json::from_value::<RouteDecisionSnapshotPayload>(raw)
+            .map_err(|err| format!("parse rust route snapshot failed: {err}"))?,
+        _ => route_decision
+            .as_ref()
+            .map(|decision| decision.route_snapshot.clone())
+            .ok_or_else(|| {
+                "route_report requires rust_route_snapshot or route_decision".to_string()
+            })?,
+    };
+    serde_json::to_value(build_route_diff_report(
+        &mode,
+        rust_snapshot,
+        route_decision.as_ref(),
+    )?)
+    .map_err(|err| format!("serialize route report output failed: {err}"))
+}
+
+fn dispatch_stdio_route_policy(payload: Value) -> Result<Value, String> {
+    let mode = required_non_empty_string(&payload, "mode", "stdio route policy")?;
+    serde_json::to_value(build_route_policy(&mode)?)
+        .map_err(|err| format!("serialize route policy output failed: {err}"))
+}
+
+fn dispatch_stdio_route_snapshot(payload: Value) -> Result<Value, String> {
+    let request = serde_json::from_value::<RouteSnapshotRequestPayload>(payload)
+        .map_err(|err| format!("parse route snapshot input failed: {err}"))?;
+    let snapshot = build_route_snapshot(
+        &request.engine,
+        &request.selected_skill,
+        request.overlay_skill.as_deref(),
+        &request.layer,
+        request.score,
+        &request.reasons,
+    );
+    serde_json::to_value(RouteSnapshotEnvelopePayload {
+        snapshot_schema_version: ROUTE_SNAPSHOT_SCHEMA_VERSION.to_string(),
+        authority: ROUTE_AUTHORITY.to_string(),
+        route_snapshot: snapshot,
+    })
+    .map_err(|err| format!("serialize route snapshot output failed: {err}"))
+}
+
+fn dispatch_stdio_framework_runtime_snapshot(payload: Value) -> Result<Value, String> {
+    let repo_root =
+        required_non_empty_string(&payload, "repo_root", "stdio framework runtime snapshot")?;
+    serde_json::to_value(build_framework_runtime_snapshot_envelope(Path::new(
+        &repo_root,
+    ))?)
+    .map_err(|err| format!("serialize framework runtime snapshot output failed: {err}"))
+}
+
+fn dispatch_stdio_framework_contract_summary(payload: Value) -> Result<Value, String> {
+    let repo_root =
+        required_non_empty_string(&payload, "repo_root", "stdio framework contract summary")?;
+    serde_json::to_value(build_framework_contract_summary_envelope(Path::new(
+        &repo_root,
+    ))?)
+    .map_err(|err| format!("serialize framework contract summary output failed: {err}"))
+}
+
+fn dispatch_stdio_compile_profile_bundle(payload: Value) -> Result<Value, String> {
+    let profile_path = required_non_empty_string(&payload, "profile_path", "stdio profile bundle")?;
+    let include_legacy_alias_artifact = payload
+        .get("include_legacy_alias_artifact")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let profile = load_framework_profile(Path::new(&profile_path))?;
+    let bundle = if include_legacy_alias_artifact {
+        build_profile_bundle_with_legacy_alias(&profile, true)?
+    } else {
+        build_profile_bundle(&profile)?
+    };
+    serde_json::to_value(bundle)
+        .map_err(|err| format!("serialize profile bundle output failed: {err}"))
+}
+
+fn dispatch_stdio_compile_codex_profile_artifacts(payload: Value) -> Result<Value, String> {
+    let profile_path =
+        required_non_empty_string(&payload, "profile_path", "stdio codex profile artifacts")?;
+    let include_legacy_alias_artifact = payload
+        .get("include_legacy_alias_artifact")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let profile = load_framework_profile(Path::new(&profile_path))?;
+    let artifacts = build_codex_artifact_bundle(&profile, include_legacy_alias_artifact)?;
+    serde_json::to_value(artifacts)
+        .map_err(|err| format!("serialize codex profile artifacts output failed: {err}"))
 }
 
 fn load_records(
@@ -1636,6 +2006,7 @@ fn build_route_snapshot(
 fn build_route_diff_report(
     mode: &str,
     rust_snapshot: RouteDecisionSnapshotPayload,
+    route_decision: Option<&RouteDecision>,
 ) -> Result<RouteDiffReportPayload, String> {
     let normalized_mode = mode.trim().to_ascii_lowercase();
     let strict_verification = match normalized_mode.as_str() {
@@ -1647,6 +2018,8 @@ fn build_route_diff_report(
             ))
         }
     };
+    let (verified_contract_fields, contract_mismatch_fields) =
+        compare_route_contract_to_snapshot(route_decision, &rust_snapshot);
 
     Ok(RouteDiffReportPayload {
         report_schema_version: ROUTE_REPORT_SCHEMA_VERSION.to_string(),
@@ -1655,9 +2028,56 @@ fn build_route_diff_report(
         primary_engine: "rust".to_string(),
         evidence_kind: "rust-owned-snapshot".to_string(),
         strict_verification,
-        verification_passed: true,
+        verification_passed: contract_mismatch_fields.is_empty(),
+        verified_contract_fields,
+        contract_mismatch_fields,
         route_snapshot: rust_snapshot,
     })
+}
+
+fn compare_route_contract_to_snapshot(
+    route_decision: Option<&RouteDecision>,
+    rust_snapshot: &RouteDecisionSnapshotPayload,
+) -> (Vec<String>, Vec<String>) {
+    let Some(route_decision) = route_decision else {
+        return (Vec::new(), Vec::new());
+    };
+
+    let mut verified_fields = Vec::new();
+    let mut mismatch_fields = Vec::new();
+
+    let expected_fields = [
+        (
+            "engine",
+            route_decision.route_snapshot.engine.as_str(),
+            rust_snapshot.engine.as_str(),
+        ),
+        (
+            "selected_skill",
+            route_decision.selected_skill.as_str(),
+            rust_snapshot.selected_skill.as_str(),
+        ),
+        (
+            "layer",
+            route_decision.layer.as_str(),
+            rust_snapshot.layer.as_str(),
+        ),
+    ];
+    for (field, expected, actual) in expected_fields {
+        if expected == actual {
+            verified_fields.push(field.to_string());
+        } else {
+            mismatch_fields.push(field.to_string());
+        }
+    }
+
+    if route_decision.overlay_skill == rust_snapshot.overlay_skill {
+        verified_fields.push("overlay_skill".to_string());
+    } else {
+        mismatch_fields.push("overlay_skill".to_string());
+    }
+
+    (verified_fields, mismatch_fields)
 }
 
 fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponsePayload, String> {
@@ -2774,6 +3194,898 @@ fn write_checkpoint_resume_manifest_payload(payload: Value) -> Result<Value, Str
     }))
 }
 
+#[derive(Debug, Clone)]
+enum ResolvedStorageBackend {
+    Filesystem,
+    Sqlite {
+        db_path: PathBuf,
+        storage_root: PathBuf,
+    },
+}
+
+fn normalize_runtime_path(path: &str) -> Result<PathBuf, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("runtime attach path must be non-empty".to_string());
+    }
+    let candidate = PathBuf::from(trimmed);
+    if candidate.is_absolute() {
+        return Ok(candidate);
+    }
+    std::env::current_dir()
+        .map(|cwd| cwd.join(candidate))
+        .map_err(|err| format!("resolve runtime attach path failed: {err}"))
+}
+
+fn normalize_optional_runtime_path(path: Option<String>) -> Result<Option<PathBuf>, String> {
+    path.map(|value| normalize_runtime_path(&value)).transpose()
+}
+
+fn env_checkpoint_storage_db_path() -> Option<PathBuf> {
+    std::env::var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
+fn runtime_storage_db_name_candidates() -> Vec<String> {
+    let mut ordered = Vec::new();
+    let mut seen = HashSet::new();
+    for candidate in [
+        env_checkpoint_storage_db_path().and_then(|path| {
+            path.file_name()
+                .and_then(|value| value.to_str())
+                .map(str::to_string)
+        }),
+        Some("runtime_checkpoint_store.sqlite3".to_string()),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if seen.insert(candidate.clone()) {
+            ordered.push(candidate);
+        }
+    }
+    ordered
+}
+
+fn sqlite_connection(path: &Path) -> Result<Connection, String> {
+    Connection::open(path).map_err(|err| {
+        format!(
+            "open sqlite runtime storage failed for {}: {err}",
+            path.display()
+        )
+    })
+}
+
+fn sqlite_lookup_keys(path: &Path, storage_root: &Path) -> Result<(String, String), String> {
+    let resolved_path = normalize_runtime_path(&path.display().to_string())?;
+    let resolved_root = normalize_runtime_path(&storage_root.display().to_string())?;
+    let stable_key = resolved_path
+        .strip_prefix(&resolved_root)
+        .map_err(|_| {
+            format!(
+                "sqlite runtime storage path {} must stay under storage root {}",
+                resolved_path.display(),
+                resolved_root.display()
+            )
+        })?
+        .to_string_lossy()
+        .replace('\\', "/");
+    let legacy_key = resolved_path.display().to_string();
+    Ok((stable_key, legacy_key))
+}
+
+fn sqlite_payload_exists(path: &Path, db_path: &Path, storage_root: &Path) -> Result<bool, String> {
+    let (stable_key, legacy_key) = sqlite_lookup_keys(path, storage_root)?;
+    let conn = sqlite_connection(db_path)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT 1 FROM runtime_storage_payloads WHERE payload_key = ?1 OR payload_key = ?2 LIMIT 1",
+        )
+        .map_err(|err| format!("prepare sqlite exists query failed: {err}"))?;
+    let exists = stmt
+        .query_row(params![stable_key, legacy_key], |row| row.get::<_, i64>(0))
+        .optional()
+        .map_err(|err| format!("run sqlite exists query failed: {err}"))?
+        .is_some();
+    Ok(exists)
+}
+
+fn sqlite_read_text(path: &Path, db_path: &Path, storage_root: &Path) -> Result<String, String> {
+    let (stable_key, legacy_key) = sqlite_lookup_keys(path, storage_root)?;
+    let conn = sqlite_connection(db_path)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT payload_text FROM runtime_storage_payloads WHERE payload_key = ?1 OR payload_key = ?2 LIMIT 1",
+        )
+        .map_err(|err| format!("prepare sqlite read query failed: {err}"))?;
+    stmt.query_row(params![stable_key, legacy_key], |row| {
+        row.get::<_, String>(0)
+    })
+    .map_err(|err| format!("read sqlite payload failed for {}: {err}", path.display()))
+}
+
+fn storage_artifact_exists(path: &Path, storage_backend: Option<&ResolvedStorageBackend>) -> bool {
+    if path.exists() {
+        return true;
+    }
+    match storage_backend {
+        Some(ResolvedStorageBackend::Filesystem) => false,
+        Some(ResolvedStorageBackend::Sqlite {
+            db_path,
+            storage_root,
+        }) => sqlite_payload_exists(path, db_path, storage_root).unwrap_or(false),
+        None => false,
+    }
+}
+
+fn storage_read_text(
+    path: &Path,
+    storage_backend: Option<&ResolvedStorageBackend>,
+) -> Result<String, String> {
+    if path.exists() {
+        return fs::read_to_string(path)
+            .map_err(|err| format!("read artifact failed for {}: {err}", path.display()));
+    }
+    match storage_backend {
+        Some(ResolvedStorageBackend::Filesystem) | None => {
+            Err(format!("artifact does not exist: {}", path.display()))
+        }
+        Some(ResolvedStorageBackend::Sqlite {
+            db_path,
+            storage_root,
+        }) => sqlite_read_text(path, db_path, storage_root),
+    }
+}
+
+fn resolve_storage_backend(paths: &[PathBuf]) -> Option<ResolvedStorageBackend> {
+    if paths.is_empty() {
+        return None;
+    }
+    if paths.iter().any(|path| path.exists()) {
+        return Some(ResolvedStorageBackend::Filesystem);
+    }
+
+    let mut roots = Vec::new();
+    let mut seen_roots = HashSet::new();
+    for path in paths {
+        let mut candidates = Vec::new();
+        let parent = path.parent();
+        let parent_name = parent
+            .and_then(|value| value.file_name())
+            .and_then(|name| name.to_str());
+        let grandparent = parent.and_then(Path::parent);
+        let grandparent_name = grandparent
+            .and_then(|value| value.file_name())
+            .and_then(|name| name.to_str());
+
+        if parent_name == Some("runtime_event_transports")
+            || parent_name == Some("trace_compaction")
+        {
+            if let Some(root) = grandparent {
+                candidates.push(root.to_path_buf());
+            }
+            if let Some(root) = grandparent.and_then(Path::parent) {
+                candidates.push(root.to_path_buf());
+            }
+        }
+        if grandparent_name == Some("trace_compaction") {
+            if let Some(root) = grandparent.and_then(Path::parent) {
+                candidates.push(root.to_path_buf());
+            }
+        }
+        if let Some(parent) = path.parent() {
+            candidates.push(parent.to_path_buf());
+        }
+        for candidate in candidates {
+            let normalized = normalize_runtime_path(&candidate.display().to_string()).ok()?;
+            if seen_roots.insert(normalized.clone()) {
+                roots.push(normalized);
+            }
+        }
+    }
+
+    if let Some(db_path) = env_checkpoint_storage_db_path()
+        .and_then(|path| normalize_runtime_path(&path.display().to_string()).ok())
+        .filter(|path| path.is_absolute() && path.exists())
+    {
+        for root in &roots {
+            let backend = ResolvedStorageBackend::Sqlite {
+                db_path: db_path.clone(),
+                storage_root: root.clone(),
+            };
+            if paths
+                .iter()
+                .any(|path| storage_artifact_exists(path, Some(&backend)))
+            {
+                return Some(backend);
+            }
+        }
+    }
+
+    let db_name_candidates = runtime_storage_db_name_candidates();
+    for root in &roots {
+        for db_name in &db_name_candidates {
+            let db_path = root.join(db_name);
+            if !db_path.exists() {
+                continue;
+            }
+            let backend = ResolvedStorageBackend::Sqlite {
+                db_path,
+                storage_root: root.clone(),
+            };
+            if paths
+                .iter()
+                .any(|path| storage_artifact_exists(path, Some(&backend)))
+            {
+                return Some(backend);
+            }
+        }
+    }
+
+    None
+}
+
+fn descriptor_mapping<'a>(
+    attach_descriptor: &'a Value,
+    field_name: &str,
+) -> Result<Option<&'a Map<String, Value>>, String> {
+    match attach_descriptor.get(field_name) {
+        None => Ok(None),
+        Some(Value::Object(map)) => Ok(Some(map)),
+        Some(_) => Err(format!(
+            "External runtime event attach descriptor field {field_name:?} must be a mapping."
+        )),
+    }
+}
+
+fn mapping_string(
+    mapping: &Map<String, Value>,
+    field_name: &str,
+) -> Result<Option<String>, String> {
+    match mapping.get(field_name) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(value)) => Ok(Some(value.clone())),
+        Some(_) => Err(format!(
+            "External runtime event attach descriptor field {field_name:?} must be a string."
+        )),
+    }
+}
+
+fn merge_attach_path_values(
+    explicit_value: Option<String>,
+    descriptor_value: Option<String>,
+    field_name: &str,
+) -> Result<Option<String>, String> {
+    match (explicit_value, descriptor_value) {
+        (None, descriptor) => Ok(descriptor),
+        (Some(explicit), None) => Ok(Some(explicit)),
+        (Some(explicit), Some(descriptor)) if explicit == descriptor => Ok(Some(explicit)),
+        (Some(_), Some(_)) => Err(format!(
+            "External runtime event attach received conflicting {field_name:?} values between direct args and attach_descriptor."
+        )),
+    }
+}
+
+fn normalize_attach_request(
+    payload: &Value,
+) -> Result<(Option<String>, Option<String>, Option<String>), String> {
+    let binding_artifact_path = optional_non_empty_string(payload, "binding_artifact_path");
+    let handoff_path = optional_non_empty_string(payload, "handoff_path");
+    let resume_manifest_path = optional_non_empty_string(payload, "resume_manifest_path");
+    let Some(attach_descriptor) = payload.get("attach_descriptor") else {
+        return Ok((binding_artifact_path, handoff_path, resume_manifest_path));
+    };
+    if attach_descriptor.is_null() {
+        return Ok((binding_artifact_path, handoff_path, resume_manifest_path));
+    }
+    if !attach_descriptor.is_object() {
+        return Err("External runtime event attach descriptor must be a mapping.".to_string());
+    }
+    let schema_version = attach_descriptor
+        .get("schema_version")
+        .and_then(Value::as_str);
+    if let Some(schema_version) = schema_version {
+        if schema_version != "runtime-event-attach-descriptor-v1" {
+            return Err(format!(
+                "Unsupported runtime event attach descriptor schema: {schema_version:?}"
+            ));
+        }
+    }
+    let attach_mode = attach_descriptor.get("attach_mode").and_then(Value::as_str);
+    if let Some(attach_mode) = attach_mode {
+        if attach_mode != "process_external_artifact_replay" {
+            return Err(format!(
+                "Unsupported runtime event attach mode: {attach_mode:?}"
+            ));
+        }
+    }
+    if let Some(capabilities) = descriptor_mapping(attach_descriptor, "attach_capabilities")? {
+        if capabilities.get("artifact_replay").and_then(Value::as_bool) != Some(true) {
+            return Err(
+                "External runtime event attach descriptor must advertise attach_capabilities.artifact_replay=True."
+                    .to_string(),
+            );
+        }
+        if !matches!(
+            capabilities
+                .get("live_remote_stream")
+                .and_then(Value::as_bool),
+            None | Some(false)
+        ) {
+            return Err(
+                "External runtime event attach descriptor must advertise attach_capabilities.live_remote_stream=False."
+                    .to_string(),
+            );
+        }
+        if !matches!(
+            capabilities
+                .get("cleanup_preserves_replay")
+                .and_then(Value::as_bool),
+            None | Some(true)
+        ) {
+            return Err(
+                "External runtime event attach descriptor must advertise attach_capabilities.cleanup_preserves_replay=True."
+                    .to_string(),
+            );
+        }
+    }
+    let _ = descriptor_mapping(attach_descriptor, "requested_artifacts")?;
+    let _ = descriptor_mapping(attach_descriptor, "resolution")?;
+    let resolved_mapping = descriptor_mapping(attach_descriptor, "resolved_artifacts")?
+        .unwrap_or_else(|| {
+            attach_descriptor
+                .as_object()
+                .expect("attach descriptor object")
+        });
+    let descriptor_binding = mapping_string(resolved_mapping, "binding_artifact_path")?;
+    let descriptor_handoff = mapping_string(resolved_mapping, "handoff_path")?;
+    let descriptor_resume = mapping_string(resolved_mapping, "resume_manifest_path")?;
+    Ok((
+        merge_attach_path_values(
+            binding_artifact_path,
+            descriptor_binding,
+            "binding_artifact_path",
+        )?,
+        merge_attach_path_values(handoff_path, descriptor_handoff, "handoff_path")?,
+        merge_attach_path_values(
+            resume_manifest_path,
+            descriptor_resume,
+            "resume_manifest_path",
+        )?,
+    ))
+}
+
+fn require_requested_artifact(
+    path: &Option<PathBuf>,
+    storage_backend: Option<&ResolvedStorageBackend>,
+    field_name: &str,
+) -> Result<(), String> {
+    if let Some(path) = path {
+        if !storage_artifact_exists(path, storage_backend) {
+            return Err(format!(
+                "External runtime event attach requested {field_name:?} that does not exist: {}",
+                path.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn load_json_artifact(
+    path: &Option<PathBuf>,
+    storage_backend: Option<&ResolvedStorageBackend>,
+) -> Result<Option<Value>, String> {
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    if !storage_artifact_exists(path, storage_backend) {
+        return Ok(None);
+    }
+    serde_json::from_str::<Value>(&storage_read_text(path, storage_backend)?)
+        .map(Some)
+        .map_err(|err| {
+            format!(
+                "parse runtime attach artifact failed for {}: {err}",
+                path.display()
+            )
+        })
+}
+
+fn json_path(value: &Value, key: &str) -> Result<Option<PathBuf>, String> {
+    normalize_optional_runtime_path(optional_non_empty_string(value, key))
+}
+
+fn nested_json_path(value: &Value, path: &[&str]) -> Result<Option<PathBuf>, String> {
+    normalize_optional_runtime_path(nested_non_empty_string(value, path))
+}
+
+fn normalize_path_for_compare(path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+    std::env::current_dir()
+        .map(|cwd| cwd.join(path))
+        .unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn infer_resume_manifest_path(binding_artifact_path: &Path) -> PathBuf {
+    let candidates = [
+        binding_artifact_path
+            .parent()
+            .and_then(Path::parent)
+            .map(|parent| parent.join("TRACE_RESUME_MANIFEST.json")),
+        binding_artifact_path
+            .parent()
+            .and_then(Path::parent)
+            .and_then(Path::parent)
+            .map(|parent| parent.join("TRACE_RESUME_MANIFEST.json")),
+    ];
+    candidates
+        .into_iter()
+        .flatten()
+        .find(|candidate| candidate.exists())
+        .unwrap_or_else(|| {
+            binding_artifact_path
+                .parent()
+                .and_then(Path::parent)
+                .map(|parent| parent.join("TRACE_RESUME_MANIFEST.json"))
+                .unwrap_or_else(|| PathBuf::from("TRACE_RESUME_MANIFEST.json"))
+        })
+}
+
+fn infer_trace_stream_from_binding_artifact(
+    binding_artifact_path: Option<&Path>,
+    storage_backend: Option<&ResolvedStorageBackend>,
+) -> Option<PathBuf> {
+    let binding_artifact_path = binding_artifact_path?;
+    let candidates = [
+        binding_artifact_path
+            .parent()
+            .and_then(Path::parent)
+            .map(|parent| parent.join("TRACE_EVENTS.jsonl")),
+        binding_artifact_path
+            .parent()
+            .and_then(Path::parent)
+            .and_then(Path::parent)
+            .map(|parent| parent.join("TRACE_EVENTS.jsonl")),
+    ];
+    candidates
+        .into_iter()
+        .flatten()
+        .find(|candidate| storage_artifact_exists(candidate, storage_backend))
+}
+
+fn validate_attached_runtime_alignment(
+    transport: &Value,
+    handoff: Option<&Value>,
+    resume_manifest: Option<&Value>,
+    binding_artifact_path: Option<&Path>,
+    resume_manifest_path: Option<&Path>,
+    storage_backend: Option<&ResolvedStorageBackend>,
+) -> Result<(), String> {
+    let transport_stream_id = optional_non_empty_string(transport, "stream_id");
+    let transport_session_id = optional_non_empty_string(transport, "session_id");
+    let transport_job_id = optional_non_empty_string(transport, "job_id");
+
+    if let Some(handoff) = handoff {
+        if optional_non_empty_string(handoff, "stream_id") != transport_stream_id {
+            return Err(
+                "External runtime event attach rejected mismatched transport/handoff stream ids."
+                    .to_string(),
+            );
+        }
+        if optional_non_empty_string(handoff, "session_id") != transport_session_id
+            || optional_non_empty_string(handoff, "job_id") != transport_job_id
+        {
+            return Err(
+                "External runtime event attach rejected mismatched transport/handoff stream scope."
+                    .to_string(),
+            );
+        }
+        if let (Some(binding_artifact_path), Some(handoff_binding_path)) = (
+            binding_artifact_path,
+            nested_json_path(handoff, &["transport", "binding_artifact_path"])?,
+        ) {
+            if normalize_path_for_compare(&handoff_binding_path)
+                != normalize_path_for_compare(binding_artifact_path)
+            {
+                return Err("External runtime event attach rejected mismatched transport/handoff binding artifact paths.".to_string());
+            }
+        }
+        if let (Some(resume_manifest_path), Some(handoff_resume_manifest_path)) = (
+            resume_manifest_path,
+            json_path(handoff, "resume_manifest_path")?,
+        ) {
+            if normalize_path_for_compare(&handoff_resume_manifest_path)
+                != normalize_path_for_compare(resume_manifest_path)
+            {
+                return Err("External runtime event attach rejected mismatched handoff/resume manifest paths.".to_string());
+            }
+        }
+    }
+
+    if let Some(resume_manifest) = resume_manifest {
+        if optional_non_empty_string(resume_manifest, "session_id") != transport_session_id
+            || optional_non_empty_string(resume_manifest, "job_id") != transport_job_id
+        {
+            return Err(
+                "External runtime event attach rejected mismatched transport/resume stream scope."
+                    .to_string(),
+            );
+        }
+        if let (Some(binding_artifact_path), Some(resume_binding_path)) = (
+            binding_artifact_path,
+            json_path(resume_manifest, "event_transport_path")?,
+        ) {
+            if normalize_path_for_compare(&resume_binding_path)
+                != normalize_path_for_compare(binding_artifact_path)
+            {
+                return Err("External runtime event attach rejected mismatched transport/resume binding artifact paths.".to_string());
+            }
+        }
+        if let (Some(_handoff), Some(handoff_trace_stream_path), Some(resume_trace_stream_path)) = (
+            handoff,
+            handoff
+                .map(|value| json_path(value, "trace_stream_path"))
+                .transpose()?
+                .flatten(),
+            json_path(resume_manifest, "trace_stream_path")?,
+        ) {
+            if normalize_path_for_compare(&handoff_trace_stream_path)
+                != normalize_path_for_compare(&resume_trace_stream_path)
+            {
+                return Err("External runtime event attach rejected mismatched handoff/resume trace stream paths.".to_string());
+            }
+        }
+    }
+
+    let binding_trace_stream_path =
+        infer_trace_stream_from_binding_artifact(binding_artifact_path, storage_backend);
+    if let (Some(binding_trace_stream_path), Some(_handoff), Some(handoff_trace_stream_path)) = (
+        binding_trace_stream_path.as_ref(),
+        handoff,
+        handoff
+            .map(|value| json_path(value, "trace_stream_path"))
+            .transpose()?
+            .flatten(),
+    ) {
+        if normalize_path_for_compare(&handoff_trace_stream_path)
+            != normalize_path_for_compare(binding_trace_stream_path)
+        {
+            return Err("External runtime event attach rejected mismatched binding/handoff trace stream paths.".to_string());
+        }
+    }
+    if let (
+        Some(binding_trace_stream_path),
+        Some(_resume_manifest),
+        Some(resume_trace_stream_path),
+    ) = (
+        binding_trace_stream_path.as_ref(),
+        resume_manifest,
+        resume_manifest
+            .map(|value| json_path(value, "trace_stream_path"))
+            .transpose()?
+            .flatten(),
+    ) {
+        if normalize_path_for_compare(&resume_trace_stream_path)
+            != normalize_path_for_compare(binding_trace_stream_path)
+        {
+            return Err("External runtime event attach rejected mismatched binding/resume trace stream paths.".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn trace_stream_resolution(
+    handoff: Option<&Value>,
+    resume_manifest: Option<&Value>,
+    binding_artifact_path: Option<&Path>,
+    storage_backend: Option<&ResolvedStorageBackend>,
+) -> Result<Option<(PathBuf, String)>, String> {
+    if let Some(handoff) = handoff {
+        if let Some(path) = json_path(handoff, "trace_stream_path")? {
+            return Ok(Some((path, "handoff_manifest".to_string())));
+        }
+    }
+    if let Some(resume_manifest) = resume_manifest {
+        if let Some(path) = json_path(resume_manifest, "trace_stream_path")? {
+            return Ok(Some((path, "resume_manifest".to_string())));
+        }
+    }
+    if let Some(path) =
+        infer_trace_stream_from_binding_artifact(binding_artifact_path, storage_backend)
+    {
+        return Ok(Some((path, "binding_artifact_adjacency".to_string())));
+    }
+    Ok(None)
+}
+
+fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
+    let (binding_artifact_path, handoff_path, resume_manifest_path) =
+        normalize_attach_request(&payload)?;
+    if binding_artifact_path.is_none() && handoff_path.is_none() && resume_manifest_path.is_none() {
+        return Err(
+            "External runtime event attach requires a binding artifact, handoff manifest, or resume manifest path."
+                .to_string(),
+        );
+    }
+
+    let binding_path = normalize_optional_runtime_path(binding_artifact_path)?;
+    let handoff_file = normalize_optional_runtime_path(handoff_path)?;
+    let resume_file = normalize_optional_runtime_path(resume_manifest_path)?;
+    let mut binding_source = binding_path
+        .as_ref()
+        .map(|_| "explicit_request".to_string());
+    let handoff_source = handoff_file
+        .as_ref()
+        .map(|_| "explicit_request".to_string());
+    let mut resume_source = resume_file.as_ref().map(|_| "explicit_request".to_string());
+
+    let requested_paths = [
+        binding_path.clone(),
+        handoff_file.clone(),
+        resume_file.clone(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    let storage_backend = resolve_storage_backend(&requested_paths);
+    require_requested_artifact(
+        &binding_path,
+        storage_backend.as_ref(),
+        "binding_artifact_path",
+    )?;
+    require_requested_artifact(&handoff_file, storage_backend.as_ref(), "handoff_path")?;
+    require_requested_artifact(
+        &resume_file,
+        storage_backend.as_ref(),
+        "resume_manifest_path",
+    )?;
+
+    let handoff = load_json_artifact(&handoff_file, storage_backend.as_ref())?;
+    let mut resume_manifest = load_json_artifact(&resume_file, storage_backend.as_ref())?;
+    let mut resolved_resume_file = resume_file.clone();
+
+    if resume_manifest.is_none() {
+        if let Some(handoff_resume_path) = handoff
+            .as_ref()
+            .map(|payload| json_path(payload, "resume_manifest_path"))
+            .transpose()?
+            .flatten()
+        {
+            if storage_artifact_exists(&handoff_resume_path, storage_backend.as_ref()) {
+                resolved_resume_file = Some(handoff_resume_path.clone());
+                resume_manifest =
+                    load_json_artifact(&Some(handoff_resume_path), storage_backend.as_ref())?;
+                resume_source = Some("handoff_manifest".to_string());
+            }
+        }
+    }
+
+    let mut transport_path = binding_path.clone();
+    if transport_path.is_none() {
+        if let Some(resume_transport_path) = resume_manifest
+            .as_ref()
+            .map(|payload| json_path(payload, "event_transport_path"))
+            .transpose()?
+            .flatten()
+        {
+            if storage_artifact_exists(&resume_transport_path, storage_backend.as_ref()) {
+                transport_path = Some(resume_transport_path);
+                binding_source = Some("resume_manifest".to_string());
+            }
+        }
+    }
+    if transport_path.is_none() {
+        if let Some(handoff_transport_path) = handoff
+            .as_ref()
+            .map(|payload| nested_json_path(payload, &["transport", "binding_artifact_path"]))
+            .transpose()?
+            .flatten()
+        {
+            if storage_artifact_exists(&handoff_transport_path, storage_backend.as_ref()) {
+                transport_path = Some(handoff_transport_path);
+                binding_source = Some("handoff_transport".to_string());
+            }
+        }
+    }
+
+    if transport_path.is_none() && handoff.is_none() {
+        return Err(
+            "External runtime event attach could not resolve a transport binding artifact from the provided manifests."
+                .to_string(),
+        );
+    }
+
+    let transport = if let Some(transport_path) = transport_path.as_ref() {
+        load_json_artifact(&Some(transport_path.clone()), storage_backend.as_ref())?.ok_or_else(
+            || "External runtime event attach could not load a transport descriptor.".to_string(),
+        )?
+    } else {
+        handoff
+            .as_ref()
+            .and_then(|payload| payload.get("transport").cloned())
+            .ok_or_else(|| {
+                "External runtime event attach could not load a transport descriptor.".to_string()
+            })?
+    };
+
+    if resume_manifest.is_none() {
+        if let Some(transport_path) = transport_path.as_ref() {
+            let inferred_resume_path = infer_resume_manifest_path(transport_path);
+            if storage_artifact_exists(&inferred_resume_path, storage_backend.as_ref()) {
+                resolved_resume_file = Some(inferred_resume_path.clone());
+                resume_manifest =
+                    load_json_artifact(&Some(inferred_resume_path), storage_backend.as_ref())?;
+            }
+        }
+    }
+
+    validate_attached_runtime_alignment(
+        &transport,
+        handoff.as_ref(),
+        resume_manifest.as_ref(),
+        transport_path.as_deref(),
+        resolved_resume_file.as_deref(),
+        storage_backend.as_ref(),
+    )?;
+
+    let Some((trace_stream_path, trace_stream_source)) = trace_stream_resolution(
+        handoff.as_ref(),
+        resume_manifest.as_ref(),
+        transport_path.as_deref(),
+        storage_backend.as_ref(),
+    )?
+    else {
+        return Err(
+            "External runtime event replay requires a handoff or resume manifest with trace_stream_path, or a filesystem binding artifact adjacent to TRACE_EVENTS.jsonl."
+                .to_string(),
+        );
+    };
+    if !storage_artifact_exists(&trace_stream_path, storage_backend.as_ref()) {
+        return Err(format!(
+            "External runtime event replay trace stream not found: {}",
+            trace_stream_path.display()
+        ));
+    }
+
+    let resume_mode = optional_non_empty_string(&transport, "resume_mode")
+        .unwrap_or_else(|| "after_event_id".to_string());
+    let artifact_backend_family = optional_non_empty_string(&transport, "binding_backend_family")
+        .unwrap_or_else(|| "filesystem".to_string());
+    let attach_descriptor = json!({
+        "schema_version": "runtime-event-attach-descriptor-v1",
+        "attach_mode": "process_external_artifact_replay",
+        "artifact_backend_family": artifact_backend_family,
+        "source_transport_method": "describe_runtime_event_transport",
+        "source_handoff_method": "describe_runtime_event_handoff",
+        "attach_method": "attach_runtime_event_transport",
+        "subscribe_method": "subscribe_attached_runtime_events",
+        "cleanup_method": "cleanup_attached_runtime_event_transport",
+        "resume_mode": resume_mode,
+        "cleanup_semantics": "no_persisted_state",
+        "attach_capabilities": {
+            "artifact_replay": true,
+            "live_remote_stream": false,
+            "cleanup_preserves_replay": true,
+        },
+        "recommended_entrypoint": "describe_runtime_event_handoff",
+        "requested_artifacts": {
+            "binding_artifact_path": transport_path.as_ref().map(|path| path.display().to_string()),
+            "handoff_path": handoff_file.as_ref().map(|path| path.display().to_string()),
+            "resume_manifest_path": resolved_resume_file.as_ref().map(|path| path.display().to_string()),
+        },
+        "resolved_artifacts": {
+            "binding_artifact_path": transport_path.as_ref().map(|path| path.display().to_string()),
+            "handoff_path": handoff_file.as_ref().map(|path| path.display().to_string()),
+            "resume_manifest_path": resolved_resume_file.as_ref().map(|path| path.display().to_string()),
+            "trace_stream_path": trace_stream_path.display().to_string(),
+        },
+        "resolution": {
+            "binding_artifact_path": binding_source,
+            "handoff_path": handoff_source,
+            "resume_manifest_path": resume_source,
+            "trace_stream_path": trace_stream_source,
+        },
+    });
+
+    Ok(json!({
+        "attach_mode": "process_external_artifact_replay",
+        "artifact_backend_family": optional_non_empty_string(&transport, "binding_backend_family"),
+        "source_handoff_method": "describe_runtime_event_handoff",
+        "source_transport_method": "describe_runtime_event_transport",
+        "attach_method": "attach_runtime_event_transport",
+        "subscribe_method": "subscribe_attached_runtime_events",
+        "cleanup_method": "cleanup_attached_runtime_event_transport",
+        "resume_mode": optional_non_empty_string(&transport, "resume_mode"),
+        "transport": transport,
+        "handoff": handoff,
+        "resume_manifest": resume_manifest,
+        "binding_artifact_path": transport_path.as_ref().map(|path| path.display().to_string()),
+        "handoff_path": handoff_file.as_ref().map(|path| path.display().to_string()),
+        "resume_manifest_path": resolved_resume_file.as_ref().map(|path| path.display().to_string()),
+        "trace_stream_path": trace_stream_path.display().to_string(),
+        "replay_supported": true,
+        "cleanup_semantics": "no_persisted_state",
+        "cleanup_preserves_replay": true,
+        "authority": ATTACHED_RUNTIME_EVENT_ATTACH_AUTHORITY,
+        "attach_descriptor": attach_descriptor,
+    }))
+}
+
+fn subscribe_attached_runtime_events(payload: Value) -> Result<Value, String> {
+    let attached = attach_runtime_event_transport(payload.clone())?;
+    let transport = attached
+        .get("transport")
+        .ok_or_else(|| "attached runtime transport payload missing transport".to_string())?;
+    let session_id = optional_non_empty_string(transport, "session_id")
+        .ok_or_else(|| "attached runtime transport payload missing session_id".to_string())?;
+    let job_id = optional_non_empty_string(transport, "job_id");
+    let trace_stream_path = attached
+        .get("trace_stream_path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            "attached runtime transport payload missing trace_stream_path".to_string()
+        })?;
+    let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
+        path: Some(trace_stream_path.to_string()),
+        compaction_manifest_path: None,
+        session_id: Some(session_id.clone()),
+        job_id: job_id.clone(),
+        stream_scope_fields: None,
+        after_event_id: optional_non_empty_string(&payload, "after_event_id"),
+        limit: payload
+            .get("limit")
+            .and_then(Value::as_u64)
+            .map(|value| value as usize),
+    })?;
+    let heartbeat = optional_bool(&payload, "heartbeat").unwrap_or(false);
+    let events = replay.events.clone();
+    let has_more = replay.has_more;
+    let next_cursor = replay.next_cursor.as_ref().and_then(|cursor| {
+        let event_id = cursor.event_id.as_ref()?;
+        events
+            .iter()
+            .find(|payload| {
+                payload.get("event_id").and_then(Value::as_str) == Some(event_id.as_str())
+            })
+            .cloned()
+    });
+    Ok(json!({
+        "schema_version": "runtime-event-bridge-v1",
+        "session_id": session_id,
+        "job_id": job_id,
+        "events": events,
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+        "after_event_id": optional_non_empty_string(&payload, "after_event_id"),
+        "heartbeat": if heartbeat && replay.events.is_empty() {
+            json!({
+                "schema_version": "runtime-event-bridge-heartbeat-v1",
+                "kind": "bridge.heartbeat",
+                "status": "idle",
+            })
+        } else {
+            Value::Null
+        },
+    }))
+}
+
+fn cleanup_attached_runtime_event_transport(payload: Value) -> Result<Value, String> {
+    let attached = attach_runtime_event_transport(payload)?;
+    Ok(json!({
+        "authority": ATTACHED_RUNTIME_EVENT_ATTACH_AUTHORITY,
+        "cleanup_semantics": "no_persisted_state",
+        "cleanup_preserves_replay": true,
+        "cleanup_method": "cleanup_attached_runtime_event_transport",
+        "binding_artifact_path": attached.get("binding_artifact_path").cloned().unwrap_or(Value::Null),
+        "trace_stream_path": attached.get("trace_stream_path").cloned().unwrap_or(Value::Null),
+    }))
+}
+
 fn build_runtime_control_plane_payload() -> Value {
     serde_json::json!({
         "schema_version": RUNTIME_CONTROL_PLANE_SCHEMA_VERSION,
@@ -2939,6 +4251,30 @@ fn runtime_observability_metric_catalog() -> Vec<Value> {
             "dashboard_derivation": "rate(sandbox_timeout_total) / rate(sandbox_execution_total)",
         }),
     ]
+}
+
+fn build_runtime_observability_metric_catalog_payload() -> Value {
+    let metrics = runtime_observability_metric_catalog()
+        .into_iter()
+        .map(|metric| {
+            let mut metric_object = metric;
+            if let Some(base_dimensions) = metric_object.get("base_dimensions").cloned() {
+                if let Some(object) = metric_object.as_object_mut() {
+                    object.remove("base_dimensions");
+                    object.insert("dimensions".to_string(), base_dimensions);
+                }
+            }
+            metric_object
+        })
+        .collect::<Vec<Value>>();
+
+    json!({
+        "schema_version": RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION,
+        "metric_catalog_version": RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION,
+        "resource_dimensions": runtime_observability_resource_dimensions(),
+        "base_dimensions": runtime_observability_base_dimensions(),
+        "metrics": metrics,
+    })
 }
 
 fn build_runtime_observability_exporter_descriptor() -> Value {
@@ -3747,7 +5083,9 @@ fn trace_event_matches_scope(
         .unwrap_or(true);
     if session_scoped {
         if let Some(expected_session_id) = session_id {
-            if trace_event_string_field(payload, "session_id").as_deref() != Some(expected_session_id) {
+            if trace_event_string_field(payload, "session_id").as_deref()
+                != Some(expected_session_id)
+            {
                 return false;
             }
         }
@@ -3762,9 +5100,7 @@ fn trace_event_matches_scope(
     true
 }
 
-fn trace_scope_fields<'a>(
-    payload: &'a Option<Vec<String>>,
-) -> Option<&'a [String]> {
+fn trace_scope_fields<'a>(payload: &'a Option<Vec<String>>) -> Option<&'a [String]> {
     payload.as_deref().filter(|fields| !fields.is_empty())
 }
 
@@ -3788,29 +5124,26 @@ fn load_trace_stream_events(
     job_id: Option<&str>,
     stream_scope_fields: &Option<Vec<String>>,
 ) -> Result<Vec<Map<String, Value>>, String> {
-    let file = fs::File::open(path)
-        .map_err(|err| format!("open trace stream failed for {}: {err}", path.display()))?;
-    let reader = BufReader::new(file);
     let mut events = Vec::new();
+    let storage_backend = resolve_storage_backend(&[path.to_path_buf()]);
+    let raw_payload = storage_read_text(path, storage_backend.as_ref())?;
 
-    for (line_number, line) in reader.lines().enumerate() {
-        let raw_line = line.map_err(|err| {
-            format!(
-                "read trace stream failed at line {}: {err}",
-                line_number + 1
-            )
-        })?;
+    for (line_number, raw_line) in raw_payload.lines().enumerate() {
         if raw_line.trim().is_empty() {
             continue;
         }
-        let event_payload =
-            hydrate_trace_event_object(
-                trace_event_object(serde_json::from_str::<Value>(&raw_line).map_err(|err| {
-                    format!("parse trace stream line {} failed: {err}", line_number + 1)
-                })?)?,
-                line_number + 1,
-            );
-        if trace_event_matches_request_scope(&event_payload, session_id, job_id, stream_scope_fields) {
+        let event_payload = hydrate_trace_event_object(
+            trace_event_object(serde_json::from_str::<Value>(&raw_line).map_err(|err| {
+                format!("parse trace stream line {} failed: {err}", line_number + 1)
+            })?)?,
+            line_number + 1,
+        );
+        if trace_event_matches_request_scope(
+            &event_payload,
+            session_id,
+            job_id,
+            stream_scope_fields,
+        ) {
             events.push(event_payload);
         }
     }
@@ -3855,7 +5188,9 @@ fn compaction_delta_to_trace_event(
     let session_id = applies_to
         .get("session_id")
         .and_then(Value::as_str)
-        .ok_or_else(|| format!("trace compaction delta line {line_number} missing applies_to.session_id"))?;
+        .ok_or_else(|| {
+            format!("trace compaction delta line {line_number} missing applies_to.session_id")
+        })?;
     let payload_object = object
         .get("payload")
         .and_then(Value::as_object)
@@ -3943,11 +5278,15 @@ fn load_compaction_recovery(
     job_id: Option<&str>,
     stream_scope_fields: &Option<Vec<String>>,
 ) -> Result<ResolvedTraceSource, String> {
-    let manifest_payload = serde_json::from_str::<Value>(
-        &fs::read_to_string(manifest_path)
-            .map_err(|err| format!("open compaction manifest failed for {}: {err}", manifest_path.display()))?,
-    )
-    .map_err(|err| format!("parse compaction manifest failed for {}: {err}", manifest_path.display()))?;
+    let storage_backend = resolve_storage_backend(&[manifest_path.to_path_buf()]);
+    let manifest_payload =
+        serde_json::from_str::<Value>(&storage_read_text(manifest_path, storage_backend.as_ref())?)
+            .map_err(|err| {
+                format!(
+                    "parse compaction manifest failed for {}: {err}",
+                    manifest_path.display()
+                )
+            })?;
     let manifest = manifest_payload.as_object().ok_or_else(|| {
         format!(
             "compaction manifest must decode to a JSON object: {}",
@@ -3963,33 +5302,39 @@ fn load_compaction_recovery(
         .and_then(Value::as_object)
         .and_then(|payload| payload.get("uri"))
         .and_then(Value::as_str)
-        .ok_or_else(|| "compaction manifest is missing required recovery artifact refs.".to_string())?;
+        .ok_or_else(|| {
+            "compaction manifest is missing required recovery artifact refs.".to_string()
+        })?;
     let artifact_index_uri = snapshot
         .get("artifact_index_ref")
         .and_then(Value::as_object)
         .and_then(|payload| payload.get("uri"))
         .and_then(Value::as_str)
-        .ok_or_else(|| "compaction manifest is missing required recovery artifact refs.".to_string())?;
+        .ok_or_else(|| {
+            "compaction manifest is missing required recovery artifact refs.".to_string()
+        })?;
     let state_path = PathBuf::from(state_ref_uri);
     let artifact_index_path = PathBuf::from(artifact_index_uri);
-    if !state_path.exists() || !artifact_index_path.exists() {
+    if !storage_artifact_exists(&state_path, storage_backend.as_ref())
+        || !storage_artifact_exists(&artifact_index_path, storage_backend.as_ref())
+    {
         return Err(
-            "Compaction recovery failed closed because a referenced artifact is missing.".to_string()
+            "Compaction recovery failed closed because a referenced artifact is missing."
+                .to_string(),
         );
     }
-    let state_payload = serde_json::from_str::<Value>(
-        &fs::read_to_string(&state_path)
-            .map_err(|err| format!("open compaction state failed for {}: {err}", state_path.display()))?,
-    )
-    .map_err(|err| format!("parse compaction state failed for {}: {err}", state_path.display()))?;
-    let artifact_index_payload = serde_json::from_str::<Value>(
-        &fs::read_to_string(&artifact_index_path).map_err(|err| {
+    let state_payload =
+        serde_json::from_str::<Value>(&storage_read_text(&state_path, storage_backend.as_ref())?)
+            .map_err(|err| {
             format!(
-                "open compaction artifact index failed for {}: {err}",
-                artifact_index_path.display()
+                "parse compaction state failed for {}: {err}",
+                state_path.display()
             )
-        })?,
-    )
+        })?;
+    let artifact_index_payload = serde_json::from_str::<Value>(&storage_read_text(
+        &artifact_index_path,
+        storage_backend.as_ref(),
+    )?)
     .map_err(|err| {
         format!(
             "parse compaction artifact index failed for {}: {err}",
@@ -4004,22 +5349,17 @@ fn load_compaction_recovery(
     let mut deltas = Vec::new();
     let mut events = Vec::new();
     if let Some(delta_path) = delta_path.as_ref() {
-        if delta_path.exists() {
-            let file = fs::File::open(delta_path)
-                .map_err(|err| format!("open compaction delta stream failed for {}: {err}", delta_path.display()))?;
-            let reader = BufReader::new(file);
-            for (line_number, line) in reader.lines().enumerate() {
-                let raw_line = line.map_err(|err| {
-                    format!(
-                        "read compaction delta stream failed at line {}: {err}",
-                        line_number + 1
-                    )
-                })?;
+        if storage_artifact_exists(delta_path, storage_backend.as_ref()) {
+            let raw_delta_payload = storage_read_text(delta_path, storage_backend.as_ref())?;
+            for (line_number, raw_line) in raw_delta_payload.lines().enumerate() {
                 if raw_line.trim().is_empty() {
                     continue;
                 }
                 let delta_payload = serde_json::from_str::<Value>(&raw_line).map_err(|err| {
-                    format!("parse compaction delta line {} failed: {err}", line_number + 1)
+                    format!(
+                        "parse compaction delta line {} failed: {err}",
+                        line_number + 1
+                    )
                 })?;
                 let event_payload =
                     compaction_delta_to_trace_event(delta_payload.clone(), line_number + 1)?;
@@ -4124,9 +5464,12 @@ fn resolve_trace_source(
         path: path_buf,
         source_kind: "trace_stream",
         latest_cursor: latest_event.and_then(latest_cursor_from_trace_event),
-        latest_event_id: latest_event.and_then(|payload| trace_event_string_field(payload, "event_id")),
-        latest_event_kind: latest_event.and_then(|payload| trace_event_string_field(payload, "kind")),
-        latest_event_timestamp: latest_event.and_then(|payload| trace_event_string_field(payload, "ts")),
+        latest_event_id: latest_event
+            .and_then(|payload| trace_event_string_field(payload, "event_id")),
+        latest_event_kind: latest_event
+            .and_then(|payload| trace_event_string_field(payload, "kind")),
+        latest_event_timestamp: latest_event
+            .and_then(|payload| trace_event_string_field(payload, "ts")),
         recovery: None,
         events,
     })
@@ -4241,9 +5584,18 @@ fn write_trace_compaction_delta(
         .create(true)
         .append(true)
         .open(&path)
-        .map_err(|err| format!("open trace compaction delta failed for {}: {err}", path.display()))?;
-    file.write_all(serialized.as_bytes())
-        .map_err(|err| format!("write trace compaction delta failed for {}: {err}", path.display()))?;
+        .map_err(|err| {
+            format!(
+                "open trace compaction delta failed for {}: {err}",
+                path.display()
+            )
+        })?;
+    file.write_all(serialized.as_bytes()).map_err(|err| {
+        format!(
+            "write trace compaction delta failed for {}: {err}",
+            path.display()
+        )
+    })?;
     Ok(TraceCompactionDeltaWriteResponsePayload {
         schema_version: TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION.to_string(),
         authority: TRACE_STREAM_IO_AUTHORITY.to_string(),
@@ -4290,6 +5642,62 @@ mod tests {
             .expect("clock before epoch")
             .as_nanos();
         std::env::temp_dir().join(format!("router-rs-{name}-{nonce}.jsonl"))
+    }
+
+    #[test]
+    fn stdio_request_dispatches_route_policy_payload() {
+        let response =
+            handle_stdio_json_line(r#"{"id":1,"op":"route_policy","payload":{"mode":"verify"}}"#);
+        assert!(response.ok);
+        assert_eq!(response.id, json!(1));
+        assert_eq!(
+            response.payload.expect("payload")["policy_schema_version"],
+            json!(ROUTE_POLICY_SCHEMA_VERSION)
+        );
+    }
+
+    #[test]
+    fn stdio_request_dispatches_execute_payload() {
+        let payload = serde_json::to_string(&sample_execute_request()).expect("serialize execute payload");
+        let response = handle_stdio_json_line(&format!(
+            "{{\"id\":3,\"op\":\"execute\",\"payload\":{payload}}}"
+        ));
+        assert!(response.ok);
+        assert_eq!(response.id, json!(3));
+        let payload = response.payload.expect("payload");
+        assert_eq!(
+            payload["execution_schema_version"],
+            json!(EXECUTION_SCHEMA_VERSION)
+        );
+        assert_eq!(payload["authority"], json!(EXECUTION_AUTHORITY));
+        assert_eq!(payload["live_run"], json!(false));
+    }
+
+    #[test]
+    fn stdio_request_rejects_unknown_operations() {
+        let response =
+            handle_stdio_json_line(r#"{"id":"req-1","op":"not-supported","payload":{}}"#);
+        assert!(!response.ok);
+        assert_eq!(response.id, json!("req-1"));
+        assert!(response
+            .error
+            .expect("error")
+            .contains("unsupported stdio operation"));
+    }
+
+    #[test]
+    fn stdio_request_dispatches_route_snapshot_payload() {
+        let response = handle_stdio_json_line(
+            r#"{"id":2,"op":"route_snapshot","payload":{"engine":"rust","selected_skill":"router","overlay_skill":null,"layer":"L2","score":42.0,"reasons":["matched"]}}"#,
+        );
+        assert!(response.ok);
+        assert_eq!(response.id, json!(2));
+        let payload = response.payload.expect("payload");
+        assert_eq!(
+            payload["snapshot_schema_version"],
+            json!(ROUTE_SNAPSHOT_SCHEMA_VERSION)
+        );
+        assert_eq!(payload["route_snapshot"]["selected_skill"], json!("router"));
     }
 
     #[test]
@@ -4370,7 +5778,7 @@ mod tests {
             &["Trigger phrase matched: 直接做代码.".to_string()],
         );
 
-        let report = build_route_diff_report("shadow", rust_snapshot).expect("shadow report");
+        let report = build_route_diff_report("shadow", rust_snapshot, None).expect("shadow report");
 
         assert_eq!(report.report_schema_version, ROUTE_REPORT_SCHEMA_VERSION);
         assert_eq!(report.authority, ROUTE_AUTHORITY);
@@ -4379,6 +5787,8 @@ mod tests {
         assert_eq!(report.evidence_kind, "rust-owned-snapshot");
         assert!(!report.strict_verification);
         assert!(report.verification_passed);
+        assert!(report.verified_contract_fields.is_empty());
+        assert!(report.contract_mismatch_fields.is_empty());
         assert_eq!(report.route_snapshot.engine, "rust");
     }
 
@@ -4485,6 +5895,21 @@ mod tests {
 
     #[test]
     fn runtime_observability_dashboard_and_metric_record_follow_contract() {
+        let catalog = build_runtime_observability_metric_catalog_payload();
+        let metrics = catalog["metrics"].as_array().expect("metric catalog array");
+        assert_eq!(
+            catalog["schema_version"],
+            Value::String(RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            catalog["metric_catalog_version"],
+            Value::String(RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION.to_string())
+        );
+        assert!(metrics.iter().all(|metric| metric.get("dimensions").is_some()));
+        assert!(metrics
+            .iter()
+            .all(|metric| metric.get("base_dimensions").is_none()));
+
         let dashboard = runtime_observability_dashboard_schema();
         let resource_dimensions = dashboard["resource_dimensions"]
             .as_array()
@@ -5211,7 +6636,10 @@ mod tests {
 
         assert_eq!(replay.event_count, 1);
         assert_eq!(replay.events.len(), 1);
-        assert_eq!(replay.events[0]["event_id"], Value::String("evt-1".to_string()));
+        assert_eq!(
+            replay.events[0]["event_id"],
+            Value::String("evt-1".to_string())
+        );
         assert_eq!(replay.events[0]["seq"], json!(1));
         assert_eq!(replay.events[0]["generation"], json!(0));
         assert_eq!(
@@ -5362,7 +6790,10 @@ mod tests {
         .expect("replay compaction manifest");
         assert_eq!(replay.source_kind, "compaction_manifest");
         assert_eq!(replay.events.len(), 1);
-        assert_eq!(replay.events[0]["event_id"], Value::String("evt-2".to_string()));
+        assert_eq!(
+            replay.events[0]["event_id"],
+            Value::String("evt-2".to_string())
+        );
 
         fs::remove_dir_all(&trace_root).expect("cleanup compaction root");
     }
@@ -5391,5 +6822,23 @@ mod tests {
         assert!(persisted.contains("\"delta_id\":\"delta-1\""));
 
         fs::remove_file(&delta_path).expect("cleanup delta path");
+    }
+
+    #[test]
+    fn stdio_request_dispatches_write_trace_compaction_delta_payload() {
+        let delta_path = temp_trace_path("trace-delta-write-stdio");
+        let response = handle_stdio_json_line(&format!(
+            "{{\"id\":2,\"op\":\"write_trace_compaction_delta\",\"payload\":{{\"path\":\"{}\",\"delta\":{{\"schema_version\":\"runtime-trace-compaction-delta-v1\",\"delta_id\":\"delta-stdio\",\"seq\":2}}}}}}",
+            delta_path.display()
+        ));
+        assert!(response.ok);
+        assert_eq!(response.id, json!(2));
+        assert_eq!(
+            response.payload.expect("payload")["schema_version"],
+            json!(TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION)
+        );
+        let persisted = fs::read_to_string(&delta_path).expect("read stdio delta");
+        assert!(persisted.contains("\"delta_id\":\"delta-stdio\""));
+        fs::remove_file(&delta_path).expect("cleanup stdio delta path");
     }
 }

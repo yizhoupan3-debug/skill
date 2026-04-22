@@ -35,6 +35,7 @@ from codex_agno_runtime.middleware import MiddlewareContext
 from codex_agno_runtime.memory import FactMemoryStore
 from codex_agno_runtime.schemas import (
     RouteDecisionContract,
+    RouteDiagnosticReport,
     RunTaskResponse,
     UsageMetrics,
 )
@@ -1112,8 +1113,13 @@ def test_execution_service_prefers_rust_live_metadata_when_present(tmp_path: Pat
             model_id="gpt-5.4",
             usage=UsageMetrics(input_tokens=8, output_tokens=5, total_tokens=13, mode="live"),
             metadata={
-                "execution_kernel": "router-rs",
-                "execution_kernel_authority": "rust-execution-cli",
+                "execution_kernel": "rust-execution-kernel-slice",
+                "execution_kernel_authority": "rust-execution-kernel-authority",
+                "execution_kernel_delegate": "router-rs",
+                "execution_kernel_delegate_authority": "rust-execution-cli",
+                "execution_kernel_contract_mode": "rust-live-primary",
+                "execution_kernel_fallback_policy": "infrastructure-only-explicit",
+                "execution_kernel_in_process_replacement_complete": True,
                 "execution_kernel_delegate_family": "rust-direct-live",
                 "execution_kernel_delegate_impl": "router-rs-http",
                 "execution_kernel_live_primary": "router-rs-live-primary",
@@ -1146,6 +1152,79 @@ def test_execution_service_prefers_rust_live_metadata_when_present(tmp_path: Pat
         assert response.metadata["execution_kernel_live_fallback_authority"] is None
         assert response.metadata["execution_kernel_live_fallback_enabled"] is False
         assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
+
+    asyncio.run(_run())
+
+
+def test_execution_service_rejects_legacy_live_metadata_shape(tmp_path: Path) -> None:
+    """Authority adapter should fail closed instead of projecting legacy delegate-first metadata."""
+
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=True,
+    )
+    router_service = RouterService(settings)
+    execution_service = ExecutionEnvironmentService(
+        settings,
+        router_service.prompt_builder,
+        max_background_jobs=4,
+        background_job_timeout_seconds=30.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
+    )
+    routing_result = router_service.route(
+        task="帮我写一个 Rust CLI 工具",
+        session_id="kernel-service-legacy-live-metadata-session",
+        allow_overlay=True,
+        first_turn=True,
+    )
+    ctx = MiddlewareContext(
+        task=routing_result.task,
+        session_id=routing_result.session_id,
+        user_id="tester",
+        routing_result=routing_result,
+        prompt="legacy-python-prompt",
+    )
+
+    async def fake_execute(request):
+        return RunTaskResponse(
+            session_id=request.session_id,
+            user_id=request.user_id,
+            skill=request.routing_result.selected_skill.name,
+            overlay=request.routing_result.overlay_skill.name if request.routing_result.overlay_skill else None,
+            live_run=True,
+            content="legacy live result",
+            prompt_preview=None,
+            model_id="gpt-5.4",
+            usage=UsageMetrics(input_tokens=8, output_tokens=5, total_tokens=13, mode="live"),
+            metadata={
+                "execution_kernel": "router-rs",
+                "execution_kernel_authority": "rust-execution-cli",
+                "execution_kernel_delegate_family": "rust-direct-live",
+                "execution_kernel_delegate_impl": "router-rs-http",
+                "execution_kernel_live_primary": "router-rs-live-primary",
+                "execution_kernel_live_primary_authority": "rust-primary-authority",
+                "execution_kernel_live_fallback": None,
+                "execution_kernel_live_fallback_authority": None,
+                "execution_kernel_live_fallback_enabled": False,
+                "execution_kernel_live_fallback_mode": "disabled",
+            },
+        )
+
+    execution_service.kernel._delegate.execute = fake_execute  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        with pytest.raises(
+            RouterRsInfrastructureError,
+            match="non-canonical execution-kernel metadata shape",
+        ):
+            await execution_service.execute(
+                ctx=ctx,
+                dry_run=False,
+                trace_event_count=5,
+                trace_output_path="/tmp/TRACE_METADATA.json",
+            )
 
     asyncio.run(_run())
 
@@ -1192,12 +1271,21 @@ def test_execution_service_live_path_uses_router_rs_before_python_fallback(tmp_p
             model_id="gpt-5.4",
             usage=UsageMetrics(input_tokens=8, output_tokens=5, total_tokens=13, mode="live"),
             metadata={
-                "execution_kernel": "router-rs",
-                "execution_kernel_authority": "rust-execution-cli",
+                "execution_kernel": "rust-execution-kernel-slice",
+                "execution_kernel_authority": "rust-execution-kernel-authority",
+                "execution_kernel_delegate": "router-rs",
+                "execution_kernel_delegate_authority": "rust-execution-cli",
+                "execution_kernel_contract_mode": "rust-live-primary",
+                "execution_kernel_fallback_policy": "infrastructure-only-explicit",
+                "execution_kernel_in_process_replacement_complete": True,
                 "execution_kernel_delegate_family": "rust-cli",
                 "execution_kernel_delegate_impl": "router-rs",
                 "execution_kernel_live_primary": "router-rs",
                 "execution_kernel_live_primary_authority": "rust-execution-cli",
+                "execution_kernel_live_fallback": None,
+                "execution_kernel_live_fallback_authority": None,
+                "execution_kernel_live_fallback_enabled": False,
+                "execution_kernel_live_fallback_mode": "disabled",
             },
         )
 
@@ -1401,6 +1489,7 @@ def test_router_service_verify_mode_keeps_rust_primary_and_emits_diagnostic_evid
     assert verify_result.route_diagnostic_report.evidence_kind == "rust-owned-snapshot"
     assert verify_result.route_diagnostic_report.strict_verification is True
     assert verify_result.route_diagnostic_report.verification_passed is True
+    assert verify_result.route_diagnostic_report.contract_mismatch_fields == []
     assert (
         verify_result.route_diagnostic_report.route_snapshot.selected_skill
         == verify_result.selected_skill.name
@@ -1441,6 +1530,7 @@ def test_router_service_shadow_mode_keeps_rust_primary_and_records_diff() -> Non
     assert result.route_diagnostic_report.evidence_kind == "rust-owned-snapshot"
     assert result.route_diagnostic_report.strict_verification is False
     assert result.route_diagnostic_report.verification_passed is True
+    assert result.route_diagnostic_report.contract_mismatch_fields == []
     assert result.route_diagnostic_report.route_snapshot.selected_skill == result.selected_skill.name
     assert shadow_service.health()["diagnostic_route_mode"] == "shadow"
     assert shadow_service.health()["diagnostic_report_required"] is True
@@ -1490,6 +1580,52 @@ def test_router_service_rejects_unloaded_skill_from_rust_contract(monkeypatch: p
         router_service.route(
             task="reject unknown rust skill",
             session_id="unknown-skill-session",
+            allow_overlay=True,
+            first_turn=True,
+        )
+
+
+def test_router_service_verify_mode_fails_closed_on_rust_report_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify mode should trust the Rust diagnostic report when it signals contract drift."""
+
+    verify_service = RouterService(
+        RuntimeSettings(
+            codex_home=PROJECT_ROOT,
+            live_model_override=False,
+            route_engine_mode="verify",
+        )
+    )
+
+    original_contract = verify_service._rust_adapter.route_contract(
+        query="帮我写一个 Rust CLI 工具",
+        session_id="verify-drift-session",
+        allow_overlay=True,
+        first_turn=True,
+    )
+    drift_report = RouteDiagnosticReport.model_validate(
+        {
+            "report_schema_version": "router-rs-route-report-v2",
+            "authority": "rust-route-core",
+            "mode": "verify",
+            "primary_engine": "rust",
+            "evidence_kind": "rust-owned-snapshot",
+            "strict_verification": True,
+            "verification_passed": False,
+            "verified_contract_fields": ["engine", "layer", "overlay_skill"],
+            "contract_mismatch_fields": ["selected_skill"],
+            "route_snapshot": original_contract.route_snapshot.model_dump(mode="json"),
+        }
+    )
+
+    monkeypatch.setattr(verify_service._rust_adapter, "route_contract", lambda **_: original_contract)
+    monkeypatch.setattr(verify_service._rust_adapter, "route_report_contract", lambda **_: drift_report)
+
+    with pytest.raises(RuntimeError, match="selected_skill"):
+        verify_service.route(
+            task="帮我写一个 Rust CLI 工具",
+            session_id="verify-drift-session",
             allow_overlay=True,
             first_turn=True,
         )

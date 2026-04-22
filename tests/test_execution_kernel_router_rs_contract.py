@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -38,7 +39,6 @@ from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
     LIVE_PRIMARY_MODEL_ID_SOURCE,
     LIVE_PRIMARY_PROMPT_PREVIEW_OWNER,
-    build_execution_kernel_bridge_metadata_projection,
     build_execution_kernel_dry_run_response,
     build_execution_kernel_live_response_serialization_contract_core,
     build_execution_kernel_runtime_metadata,
@@ -96,47 +96,84 @@ def _settings() -> SimpleNamespace:
     )
 
 
+def test_router_rs_execution_kernel_prefers_release_binary() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        codex_home = Path(tmpdir)
+        router_dir = codex_home / "scripts" / "router-rs"
+        source_dir = router_dir / "src"
+        debug_bin = router_dir / "target" / "debug" / "router-rs"
+        release_bin = router_dir / "target" / "release" / "router-rs"
+        source_dir.mkdir(parents=True)
+        debug_bin.parent.mkdir(parents=True)
+        release_bin.parent.mkdir(parents=True)
+        (router_dir / "Cargo.toml").write_text("[package]\nname='router-rs'\nversion='0.1.0'\n", encoding="utf-8")
+        (source_dir / "main.rs").write_text("fn main() {}\n", encoding="utf-8")
+        debug_bin.write_text("debug", encoding="utf-8")
+        release_bin.write_text("release", encoding="utf-8")
+        os.utime(router_dir / "Cargo.toml", (1_700_000_000, 1_700_000_000))
+        os.utime(source_dir / "main.rs", (1_700_000_050, 1_700_000_050))
+        os.utime(debug_bin, (1_700_000_100, 1_700_000_100))
+        os.utime(release_bin, (1_700_000_200, 1_700_000_200))
+
+        kernel = RouterRsExecutionKernel(_settings())  # type: ignore[arg-type]
+        kernel.settings.codex_home = codex_home
+        kernel.router_dir = router_dir
+        kernel.release_bin = release_bin
+        kernel.debug_bin = debug_bin
+
+        assert kernel._binary_command() == [str(release_bin)]
+
+
+def test_router_rs_execution_kernel_requires_prebuilt_binary_when_missing() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        codex_home = Path(tmpdir)
+        router_dir = codex_home / "scripts" / "router-rs"
+        router_dir.mkdir(parents=True)
+        (router_dir / "Cargo.toml").write_text("[package]\nname='router-rs'\nversion='0.1.0'\n", encoding="utf-8")
+
+        kernel = RouterRsExecutionKernel(_settings())  # type: ignore[arg-type]
+        kernel.settings.codex_home = codex_home
+        kernel.router_dir = router_dir
+        kernel.release_bin = router_dir / "target" / "release" / "router-rs"
+        kernel.debug_bin = router_dir / "target" / "debug" / "router-rs"
+
+        with pytest.raises(RuntimeError, match="requires a prebuilt binary"):
+            kernel._binary_command()
+
+
 def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
     kernel = RouterRsExecutionKernel(_settings())  # type: ignore[arg-type]
 
-    def fake_run(command, **kwargs):
-        assert "--execute-json" in command
-        payload = json.loads(command[command.index("--execute-input-json") + 1])
-        return SimpleNamespace(
-            returncode=0,
-            stdout=json.dumps(
-                {
-                    "execution_schema_version": "router-rs-execute-response-v1",
-                    "authority": "rust-execution-cli",
-                    "session_id": payload["session_id"],
-                    "user_id": payload["user_id"],
-                    "skill": payload["selected_skill"],
-                    "overlay": payload["overlay_skill"],
-                    "live_run": True,
-                    "content": "router-rs content",
-                    "usage": {
-                        "input_tokens": 21,
-                        "output_tokens": 13,
-                        "total_tokens": 34,
-                        "mode": "live",
-                    },
-                    "prompt_preview": payload["prompt_preview"],
-                    "model_id": "gpt-5.4",
-                    "metadata": _steady_state_kernel_metadata(
-                        run_id="run-1",
-                        status="completed",
-                        trace_event_count=payload["trace_event_count"],
-                        trace_output_path=payload["trace_output_path"],
-                        execution_mode="live",
-                        route_engine=payload["route_engine"],
-                        diagnostic_route_mode=payload["diagnostic_route_mode"],
-                    ),
-                }
+    def fake_execute(payload):
+        return {
+            "execution_schema_version": "router-rs-execute-response-v1",
+            "authority": "rust-execution-cli",
+            "session_id": payload["session_id"],
+            "user_id": payload["user_id"],
+            "skill": payload["selected_skill"],
+            "overlay": payload["overlay_skill"],
+            "live_run": True,
+            "content": "router-rs content",
+            "usage": {
+                "input_tokens": 21,
+                "output_tokens": 13,
+                "total_tokens": 34,
+                "mode": "live",
+            },
+            "prompt_preview": payload["prompt_preview"],
+            "model_id": "gpt-5.4",
+            "metadata": _steady_state_kernel_metadata(
+                run_id="run-1",
+                status="completed",
+                trace_event_count=payload["trace_event_count"],
+                trace_output_path=payload["trace_output_path"],
+                execution_mode="live",
+                route_engine=payload["route_engine"],
+                diagnostic_route_mode=payload["diagnostic_route_mode"],
             ),
-            stderr="",
-        )
+        }
 
-    monkeypatch.setattr("codex_agno_runtime.execution_kernel.subprocess.run", fake_run)
+    monkeypatch.setattr(kernel._rust_adapter, "execute", fake_execute)
 
     response = asyncio.run(kernel.execute(_request()))
 
@@ -174,8 +211,7 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
 def test_router_rs_execution_kernel_rejects_missing_steady_state_metadata(monkeypatch) -> None:
     kernel = RouterRsExecutionKernel(_settings())  # type: ignore[arg-type]
 
-    def fake_run(command, **kwargs):
-        payload = json.loads(command[command.index("--execute-input-json") + 1])
+    def fake_execute(payload):
         broken_metadata = _steady_state_kernel_metadata(
             run_id="run-1",
             status="completed",
@@ -186,90 +222,71 @@ def test_router_rs_execution_kernel_rejects_missing_steady_state_metadata(monkey
             diagnostic_route_mode=payload["diagnostic_route_mode"],
         )
         broken_metadata.pop("execution_kernel_delegate_authority")
-        return SimpleNamespace(
-            returncode=0,
-            stdout=json.dumps(
-                {
-                    "execution_schema_version": "router-rs-execute-response-v1",
-                    "authority": "rust-execution-cli",
-                    "session_id": payload["session_id"],
-                    "user_id": payload["user_id"],
-                    "skill": payload["selected_skill"],
-                    "overlay": payload["overlay_skill"],
-                    "live_run": True,
-                    "content": "router-rs content",
-                    "usage": {
-                        "input_tokens": 21,
-                        "output_tokens": 13,
-                        "total_tokens": 34,
-                        "mode": "live",
-                    },
-                    "prompt_preview": "Rust-owned live prompt preview",
-                    "model_id": "gpt-5.4",
-                    "metadata": broken_metadata,
-                }
-            ),
-            stderr="",
-        )
+        return {
+            "execution_schema_version": "router-rs-execute-response-v1",
+            "authority": "rust-execution-cli",
+            "session_id": payload["session_id"],
+            "user_id": payload["user_id"],
+            "skill": payload["selected_skill"],
+            "overlay": payload["overlay_skill"],
+            "live_run": True,
+            "content": "router-rs content",
+            "usage": {
+                "input_tokens": 21,
+                "output_tokens": 13,
+                "total_tokens": 34,
+                "mode": "live",
+            },
+            "prompt_preview": "Rust-owned live prompt preview",
+            "model_id": "gpt-5.4",
+            "metadata": broken_metadata,
+        }
 
-    monkeypatch.setattr("codex_agno_runtime.execution_kernel.subprocess.run", fake_run)
+    monkeypatch.setattr(kernel._rust_adapter, "execute", fake_execute)
 
     with pytest.raises(RuntimeError, match="execution_kernel_delegate_authority"):
         asyncio.run(kernel.execute(_request()))
 
 
-def test_router_rs_execution_kernel_normalizes_legacy_delegate_first_metadata(monkeypatch) -> None:
+def test_router_rs_execution_kernel_rejects_legacy_delegate_first_metadata(monkeypatch) -> None:
     kernel = RouterRsExecutionKernel(_settings())  # type: ignore[arg-type]
 
-    def fake_run(command, **kwargs):
-        payload = json.loads(command[command.index("--execute-input-json") + 1])
-        legacy_metadata = build_execution_kernel_bridge_metadata_projection(
-            _steady_state_kernel_metadata(
-                run_id="run-legacy",
-                status="completed",
-                trace_event_count=payload["trace_event_count"],
-                trace_output_path=payload["trace_output_path"],
-                execution_mode="live",
-                route_engine=payload["route_engine"],
-                diagnostic_route_mode=payload["diagnostic_route_mode"],
-            )
+    def fake_execute(payload):
+        legacy_metadata = _steady_state_kernel_metadata(
+            run_id="run-legacy",
+            status="completed",
+            trace_event_count=payload["trace_event_count"],
+            trace_output_path=payload["trace_output_path"],
+            execution_mode="live",
+            route_engine=payload["route_engine"],
+            diagnostic_route_mode=payload["diagnostic_route_mode"],
         )
         legacy_metadata["execution_kernel"] = "router-rs"
         legacy_metadata["execution_kernel_authority"] = "rust-execution-cli"
-        return SimpleNamespace(
-            returncode=0,
-            stdout=json.dumps(
-                {
-                    "execution_schema_version": "router-rs-execute-response-v1",
-                    "authority": "rust-execution-cli",
-                    "session_id": payload["session_id"],
-                    "user_id": payload["user_id"],
-                    "skill": payload["selected_skill"],
-                    "overlay": payload["overlay_skill"],
-                    "live_run": True,
-                    "content": "legacy router-rs content",
-                    "usage": {
-                        "input_tokens": 21,
-                        "output_tokens": 13,
-                        "total_tokens": 34,
-                        "mode": "live",
-                    },
-                    "prompt_preview": payload["prompt_preview"],
-                    "model_id": "gpt-5.4",
-                    "metadata": legacy_metadata,
-                }
-            ),
-            stderr="",
-        )
+        return {
+            "execution_schema_version": "router-rs-execute-response-v1",
+            "authority": "rust-execution-cli",
+            "session_id": payload["session_id"],
+            "user_id": payload["user_id"],
+            "skill": payload["selected_skill"],
+            "overlay": payload["overlay_skill"],
+            "live_run": True,
+            "content": "legacy router-rs content",
+            "usage": {
+                "input_tokens": 21,
+                "output_tokens": 13,
+                "total_tokens": 34,
+                "mode": "live",
+            },
+            "prompt_preview": payload["prompt_preview"],
+            "model_id": "gpt-5.4",
+            "metadata": legacy_metadata,
+        }
 
-    monkeypatch.setattr("codex_agno_runtime.execution_kernel.subprocess.run", fake_run)
+    monkeypatch.setattr(kernel._rust_adapter, "execute", fake_execute)
 
-    response = asyncio.run(kernel.execute(_request()))
-
-    assert response.metadata["execution_kernel"] == EXECUTION_KERNEL_BRIDGE_KIND
-    assert response.metadata["execution_kernel_authority"] == EXECUTION_KERNEL_BRIDGE_AUTHORITY
-    assert response.metadata["execution_kernel_delegate"] == "router-rs"
-    assert response.metadata["execution_kernel_delegate_authority"] == "rust-execution-cli"
+    with pytest.raises(RuntimeError, match="execution_kernel='router-rs'"):
+        asyncio.run(kernel.execute(_request()))
 
 
 def test_execution_kernel_contract_helpers_stay_rust_primary() -> None:

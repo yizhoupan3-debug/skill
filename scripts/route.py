@@ -18,6 +18,9 @@ if str(ROOT) not in sys.path:
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
+from codex_agno_runtime.rust_router import (
+    resolve_router_binary_candidate,
+)
 from codex_agno_runtime.schemas import RouteDecisionContract
 
 
@@ -231,10 +234,7 @@ def _hydrate_match_results(
 def resolve_router_binary() -> Path | None:
     """Return the compiled Rust router when available."""
 
-    for candidate in (ROUTER_RS_DEBUG_BIN, ROUTER_RS_RELEASE_BIN):
-        if candidate.is_file():
-            return candidate
-    return None
+    return resolve_router_binary_candidate(ROUTER_RS_RELEASE_BIN, ROUTER_RS_DEBUG_BIN)
 
 
 def build_rust_router_command(
@@ -272,21 +272,12 @@ def build_rust_router_command(
 
 
 def _run_rust_json_command(args: list[str], *, failure_label: str) -> dict[str, object] | list[dict[str, object]]:
-    """Run the Rust router through the compiled binary when available, else cargo."""
+    """Run the Rust router through the compiled binary."""
 
     binary = resolve_router_binary()
-    if binary is not None:
-        command = [str(binary), *args]
-    else:
-        command = [
-            "cargo",
-            "run",
-            "--quiet",
-            "--manifest-path",
-            str(ROUTER_RS_DIR / "Cargo.toml"),
-            "--",
-            *args,
-        ]
+    if binary is None:
+        raise RuntimeError("Rust router requires a prebuilt binary; build scripts/router-rs before running route.py.")
+    command = [str(binary), *args]
 
     try:
         proc = subprocess.run(command, capture_output=True, text=True, check=True)
@@ -363,18 +354,6 @@ def _run_rust_route_transport(
         first_turn=first_turn,
     )
     payload = _run_rust_json_command(args, failure_label=f"Rust route decision failed for {query!r}")
-    if "route_snapshot" not in payload:
-        command = [
-            "cargo",
-            "run",
-            "--quiet",
-            "--manifest-path",
-            str(ROUTER_RS_DIR / "Cargo.toml"),
-            "--",
-            *args,
-        ]
-        proc = subprocess.run(command, capture_output=True, text=True, check=True)
-        payload = dict(json.loads(proc.stdout))
     return dict(payload)
 
 

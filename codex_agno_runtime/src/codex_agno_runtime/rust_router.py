@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import atexit
 import json
+import select
 import subprocess
+import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from codex_agno_runtime.schemas import (
     RouteDecisionContract,
@@ -15,10 +18,160 @@ from codex_agno_runtime.schemas import (
 )
 
 
+def resolve_router_binary_candidate(*candidates: Path) -> Path | None:
+    """Return the first existing router-rs binary in caller preference order."""
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+class _RouterStdioClient:
+    """Keep one router-rs process alive and exchange line-delimited JSON requests."""
+
+    def __init__(self, command: list[str], *, cwd: Path, timeout_seconds: float) -> None:
+        self._command = list(command)
+        self._cwd = cwd
+        self._timeout_seconds = timeout_seconds
+        self._lock = threading.Lock()
+        self._proc: subprocess.Popen[str] | None = None
+        self._next_request_id = 1
+
+    def request(self, operation: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        with self._lock:
+            proc = self._ensure_process_locked()
+            request_id = self._next_request_id
+            self._next_request_id += 1
+            message = json.dumps(
+                {
+                    "id": request_id,
+                    "op": operation,
+                    "payload": dict(payload or {}),
+                },
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+            try:
+                assert proc.stdin is not None
+                proc.stdin.write(f"{message}\n")
+                proc.stdin.flush()
+            except BrokenPipeError as exc:
+                self._discard_process_locked()
+                raise RuntimeError("router stdio pipe broke while sending request") from exc
+            response_line = self._read_response_line_locked(proc)
+            try:
+                response = json.loads(response_line)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"router stdio returned invalid JSON: {response_line!r}") from exc
+            if response.get("id") != request_id:
+                raise RuntimeError(
+                    f"router stdio returned mismatched response id: {response.get('id')!r}"
+                )
+            if not response.get("ok"):
+                error = response.get("error")
+                raise RuntimeError(str(error or "router stdio request failed"))
+            resolved = response.get("payload")
+            if not isinstance(resolved, dict):
+                raise RuntimeError(f"router stdio returned a non-object payload: {resolved!r}")
+            return resolved
+
+    def close(self) -> None:
+        with self._lock:
+            self._discard_process_locked()
+
+    def _ensure_process_locked(self) -> subprocess.Popen[str]:
+        proc = self._proc
+        if proc is not None and proc.poll() is None:
+            return proc
+        try:
+            proc = subprocess.Popen(
+                self._command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=self._cwd,
+                bufsize=1,
+            )
+        except OSError as exc:
+            raise RuntimeError(f"router stdio launch failed: {exc}") from exc
+        self._proc = proc
+        return proc
+
+    def _read_response_line_locked(self, proc: subprocess.Popen[str]) -> str:
+        if proc.stdout is None:
+            self._discard_process_locked()
+            raise RuntimeError("router stdio stdout is unavailable")
+        ready, _, _ = select.select([proc.stdout], [], [], self._timeout_seconds)
+        if not ready:
+            self._discard_process_locked()
+            raise RuntimeError(f"router stdio timed out after {self._timeout_seconds}s")
+        response_line = proc.stdout.readline()
+        if response_line:
+            return response_line
+        stderr = ""
+        if proc.stderr is not None:
+            try:
+                stderr = proc.stderr.read().strip()
+            except OSError:
+                stderr = ""
+        returncode = proc.poll()
+        self._discard_process_locked()
+        if returncode is None:
+            raise RuntimeError("router stdio closed the response stream unexpectedly")
+        detail = stderr or f"router stdio exited with code {returncode}"
+        raise RuntimeError(detail)
+
+    def _discard_process_locked(self) -> None:
+        proc = self._proc
+        self._proc = None
+        if proc is None:
+            return
+        try:
+            if proc.stdin is not None:
+                proc.stdin.close()
+        except OSError:
+            pass
+        try:
+            if proc.stdout is not None:
+                proc.stdout.close()
+        except OSError:
+            pass
+        try:
+            if proc.stderr is not None:
+                proc.stderr.close()
+        except OSError:
+            pass
+        if proc.poll() is None:
+            proc.kill()
+            try:
+                proc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                pass
+
+
+_STDIO_CLIENTS: dict[tuple[str, ...], _RouterStdioClient] = {}
+_STDIO_CLIENTS_LOCK = threading.Lock()
+_ROUTER_BINARY_CACHE_UNSET = object()
+
+
+def _close_router_stdio_clients() -> None:
+    with _STDIO_CLIENTS_LOCK:
+        clients = list(_STDIO_CLIENTS.values())
+        _STDIO_CLIENTS.clear()
+    for client in clients:
+        client.close()
+
+
+atexit.register(_close_router_stdio_clients)
+
+
 class RustRouteAdapter:
     """Call the repository Rust route engine for final route decisions."""
 
     route_decision_schema_version = "router-rs-route-decision-v1"
+    execution_schema_version = "router-rs-execute-response-v1"
     route_policy_schema_version = "router-rs-route-policy-v1"
     route_snapshot_schema_version = "router-rs-route-snapshot-v1"
     route_report_schema_version = "router-rs-route-report-v2"
@@ -28,15 +181,18 @@ class RustRouteAdapter:
     checkpoint_resume_manifest_schema_version = "router-rs-checkpoint-resume-manifest-v1"
     transport_binding_write_schema_version = "router-rs-transport-binding-write-v1"
     checkpoint_manifest_write_schema_version = "router-rs-checkpoint-manifest-write-v1"
+    attached_runtime_event_transport_authority = "rust-runtime-attached-event-transport"
     trace_stream_replay_schema_version = "router-rs-trace-stream-replay-v1"
     trace_stream_inspect_schema_version = "router-rs-trace-stream-inspect-v1"
     trace_compaction_delta_write_schema_version = "router-rs-trace-compaction-delta-write-v1"
     runtime_observability_exporter_schema_version = "runtime-observability-exporter-v1"
+    runtime_observability_metric_catalog_schema_version = "runtime-observability-metric-catalog-v1"
     runtime_observability_metric_record_schema_version = "runtime-observability-metric-record-v1"
     runtime_observability_dashboard_schema_version = "runtime-observability-dashboard-v1"
     framework_runtime_snapshot_schema_version = "router-rs-framework-runtime-snapshot-v1"
     framework_contract_summary_schema_version = "router-rs-framework-contract-summary-v1"
     route_authority = "rust-route-core"
+    execution_authority = "rust-execution-cli"
     compile_authority = "rust-route-compiler"
     runtime_control_plane_authority = "rust-runtime-control-plane"
     background_control_authority = "rust-background-control"
@@ -62,6 +218,7 @@ class RustRouteAdapter:
         self.router_dir = codex_home / "scripts" / "router-rs"
         self.release_bin = self.router_dir / "target" / "release" / "router-rs"
         self.debug_bin = self.router_dir / "target" / "debug" / "router-rs"
+        self._cached_runtime_binary: Path | None | object = _ROUTER_BINARY_CACHE_UNSET
 
     def route(
         self,
@@ -80,6 +237,49 @@ class RustRouteAdapter:
             first_turn=first_turn,
         ).to_transport_payload()
 
+    def execute(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Run one Rust-owned execution request through router-rs."""
+
+        args = [
+            "--execute-json",
+            "--execute-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        try:
+            resolved = self._run_hot_json_command(
+                "execute",
+                payload,
+                [*self._binary_command(), *args],
+                failure_label="execution kernel",
+            )
+        except OSError as exc:
+            raise RuntimeError(f"router-rs execute could not be launched: {exc}") from exc
+        except RuntimeError as exc:
+            message = str(exc)
+            if message.startswith("Rust execution kernel failed:"):
+                raise RuntimeError(
+                    message.replace("Rust execution kernel failed:", "router-rs execute failed:", 1)
+                ) from exc
+            if message.startswith("Rust execution kernel timed out after"):
+                raise RuntimeError("router-rs execute timed out before returning a response") from exc
+            raise
+        if resolved.get("execution_schema_version") != self.execution_schema_version:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="execution kernel",
+            )
+            if resolved.get("execution_schema_version") != self.execution_schema_version:
+                raise RuntimeError(
+                    "router-rs execute returned an unknown schema: "
+                    f"{resolved.get('execution_schema_version')!r}"
+                )
+        if resolved.get("authority") != self.execution_authority:
+            raise RuntimeError(
+                "router-rs execute returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        return resolved
+
     def route_contract(
         self,
         *,
@@ -91,8 +291,19 @@ class RustRouteAdapter:
         """Return one typed Rust-backed route decision contract."""
 
         args = self._route_args(query, session_id, allow_overlay, first_turn)
-        command = [*self._binary_command(), *args]
-        payload = self._run_json_command(command, failure_label="route engine")
+        payload = self._run_hot_json_command(
+            "route",
+            {
+                "query": query,
+                "session_id": session_id,
+                "allow_overlay": allow_overlay,
+                "first_turn": first_turn,
+                "runtime_path": str(self.runtime_path),
+                "manifest_path": str(self.manifest_path),
+            },
+            [*self._binary_command(), *args],
+            failure_label="route engine",
+        )
         if payload.get("decision_schema_version") != self.route_decision_schema_version:
             payload = self._run_json_command(
                 [*self._cargo_command(), *args],
@@ -119,29 +330,48 @@ class RustRouteAdapter:
             "--framework-profile",
             str(profile_path),
         ]
-        return self._run_json_command(command, failure_label="profile compiler")
+        return self._run_hot_json_command(
+            "compile_profile_bundle",
+            {"profile_path": str(profile_path), "include_legacy_alias_artifact": False},
+            command,
+            failure_label="profile compiler",
+        )
 
     def route_report(
         self,
         *,
         mode: str,
-        rust_route_snapshot: dict[str, Any],
+        rust_route_snapshot: dict[str, Any] | None = None,
+        route_decision_contract: RouteDecisionContract | Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build the stable Rust-owned route diagnostic report."""
 
         return self.route_report_contract(
             mode=mode,
             rust_route_snapshot=rust_route_snapshot,
+            route_decision_contract=route_decision_contract,
         ).model_dump(mode="json")
 
     def route_report_contract(
         self,
         *,
         mode: str,
-        rust_route_snapshot: dict[str, Any] | RouteDecisionSnapshot,
+        rust_route_snapshot: dict[str, Any] | RouteDecisionSnapshot | None = None,
+        route_decision_contract: RouteDecisionContract | Mapping[str, Any] | None = None,
     ) -> RouteDiagnosticReport:
         """Build one typed Rust-owned route diagnostic report."""
 
+        if rust_route_snapshot is None:
+            if route_decision_contract is None:
+                raise ValueError(
+                    "route_report_contract requires rust_route_snapshot or route_decision_contract"
+                )
+            if isinstance(route_decision_contract, RouteDecisionContract):
+                rust_route_snapshot = route_decision_contract.route_snapshot
+            else:
+                rust_route_snapshot = dict(route_decision_contract).get("route_snapshot")
+        if rust_route_snapshot is None:
+            raise ValueError("route_report_contract could not resolve a route snapshot from the route decision")
         args = [
             "--route-report-json",
             "--route-mode",
@@ -154,8 +384,32 @@ class RustRouteAdapter:
                 ensure_ascii=False,
             ),
         ]
+        if route_decision_contract is not None:
+            serialized_route_decision = (
+                route_decision_contract.model_dump(mode="json")
+                if isinstance(route_decision_contract, RouteDecisionContract)
+                else dict(route_decision_contract)
+            )
+            args.extend(
+                [
+                    "--route-decision-json",
+                    json.dumps(serialized_route_decision, ensure_ascii=False),
+                ]
+            )
+        else:
+            serialized_route_decision = None
         try:
-            payload = self._run_json_command(
+            payload = self._run_hot_json_command(
+                "route_report",
+                {
+                    "mode": mode,
+                    "rust_route_snapshot": (
+                        rust_route_snapshot.model_dump(mode="json")
+                        if isinstance(rust_route_snapshot, RouteDecisionSnapshot)
+                        else rust_route_snapshot
+                    ),
+                    "route_decision": serialized_route_decision,
+                },
                 [*self._binary_command(), *args],
                 failure_label="route report engine",
             )
@@ -203,7 +457,9 @@ class RustRouteAdapter:
             mode,
         ]
         try:
-            payload = self._run_json_command(
+            payload = self._run_hot_json_command(
+                "route_policy",
+                {"mode": mode},
                 [*self._binary_command(), *args],
                 failure_label="route policy engine",
             )
@@ -278,7 +534,16 @@ class RustRouteAdapter:
             ),
         ]
         try:
-            payload = self._run_json_command(
+            payload = self._run_hot_json_command(
+                "route_snapshot",
+                {
+                    "engine": engine,
+                    "selected_skill": selected_skill,
+                    "overlay_skill": overlay_skill,
+                    "layer": layer,
+                    "score": score,
+                    "reasons": reasons,
+                },
                 [*self._binary_command(), *args],
                 failure_label="route snapshot engine",
             )
@@ -323,7 +588,15 @@ class RustRouteAdapter:
         ]
         if include_legacy_alias_artifact:
             command.append("--include-legacy-alias-artifact")
-        return self._run_json_command(command, failure_label="profile artifact compiler")
+        return self._run_hot_json_command(
+            "compile_codex_profile_artifacts",
+            {
+                "profile_path": str(profile_path),
+                "include_legacy_alias_artifact": include_legacy_alias_artifact,
+            },
+            command,
+            failure_label="profile artifact compiler",
+        )
 
     def framework_runtime_snapshot(self, *, repo_root: Path) -> dict[str, Any]:
         """Build the framework runtime snapshot read-model through router-rs."""
@@ -334,7 +607,9 @@ class RustRouteAdapter:
             str(repo_root),
         ]
         try:
-            payload = self._run_json_command(
+            payload = self._run_hot_json_command(
+                "framework_runtime_snapshot",
+                {"repo_root": str(repo_root)},
                 [*self._binary_command(), *args],
                 failure_label="framework runtime snapshot compiler",
             )
@@ -374,7 +649,9 @@ class RustRouteAdapter:
             str(repo_root),
         ]
         try:
-            payload = self._run_json_command(
+            payload = self._run_hot_json_command(
+                "framework_contract_summary",
+                {"repo_root": str(repo_root)},
                 [*self._binary_command(), *args],
                 failure_label="framework contract summary compiler",
             )
@@ -410,7 +687,9 @@ class RustRouteAdapter:
 
         args = ["--runtime-control-plane-json"]
         try:
-            payload = self._run_json_command(
+            payload = self._run_hot_json_command(
+                "runtime_control_plane",
+                {},
                 [*self._binary_command(), *args],
                 failure_label="runtime control-plane compiler",
             )
@@ -441,7 +720,9 @@ class RustRouteAdapter:
 
         args = ["--runtime-observability-exporter-json"]
         try:
-            payload = self._run_json_command(
+            payload = self._run_hot_json_command(
+                "runtime_observability_exporter_descriptor",
+                {},
                 [*self._binary_command(), *args],
                 failure_label="runtime observability exporter compiler",
             )
@@ -467,12 +748,42 @@ class RustRouteAdapter:
             )
         return payload
 
+    def runtime_observability_metric_catalog(self) -> dict[str, Any]:
+        """Return the Rust-owned machine-readable runtime metric catalog."""
+
+        args = ["--runtime-observability-metric-catalog-json"]
+        try:
+            payload = self._run_hot_json_command(
+                "runtime_observability_metric_catalog",
+                {},
+                [*self._binary_command(), *args],
+                failure_label="runtime observability metric catalog compiler",
+            )
+        except RuntimeError:
+            payload = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="runtime observability metric catalog compiler",
+            )
+        if payload.get("schema_version") != self.runtime_observability_metric_catalog_schema_version:
+            payload = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="runtime observability metric catalog compiler",
+            )
+            if payload.get("schema_version") != self.runtime_observability_metric_catalog_schema_version:
+                raise RuntimeError(
+                    "Rust runtime observability metric catalog compiler returned an unknown schema: "
+                    f"{payload.get('schema_version')!r}"
+                )
+        return payload
+
     def runtime_observability_dashboard_schema(self) -> dict[str, Any]:
         """Return the Rust-owned runtime observability dashboard schema."""
 
         args = ["--runtime-observability-dashboard-json"]
         try:
-            payload = self._run_json_command(
+            payload = self._run_hot_json_command(
+                "runtime_observability_dashboard_schema",
+                {},
                 [*self._binary_command(), *args],
                 failure_label="runtime observability dashboard compiler",
             )
@@ -502,7 +813,9 @@ class RustRouteAdapter:
             json.dumps(payload, ensure_ascii=False, allow_nan=False),
         ]
         try:
-            resolved = self._run_json_command(
+            resolved = self._run_hot_json_command(
+                "runtime_metric_record",
+                payload,
                 [*self._binary_command(), *args],
                 failure_label="runtime metric record compiler",
             )
@@ -538,7 +851,9 @@ class RustRouteAdapter:
             json.dumps(payload, ensure_ascii=False),
         ]
         try:
-            resolved = self._run_json_command(
+            resolved = self._run_hot_json_command(
+                "background_control",
+                payload,
                 [*self._binary_command(), *args],
                 failure_label="background control compiler",
             )
@@ -571,7 +886,9 @@ class RustRouteAdapter:
             json.dumps(payload, ensure_ascii=False),
         ]
         try:
-            resolved = self._run_json_command(
+            resolved = self._run_hot_json_command(
+                "describe_transport",
+                payload,
                 [*self._binary_command(), *args],
                 failure_label="trace transport descriptor compiler",
             )
@@ -607,7 +924,9 @@ class RustRouteAdapter:
             json.dumps(payload, ensure_ascii=False),
         ]
         try:
-            resolved = self._run_json_command(
+            resolved = self._run_hot_json_command(
+                "describe_handoff",
+                payload,
                 [*self._binary_command(), *args],
                 failure_label="trace handoff descriptor compiler",
             )
@@ -643,7 +962,9 @@ class RustRouteAdapter:
             json.dumps(payload, ensure_ascii=False),
         ]
         try:
-            resolved = self._run_json_command(
+            resolved = self._run_hot_json_command(
+                "checkpoint_resume_manifest",
+                payload,
                 [*self._binary_command(), *args],
                 failure_label="checkpoint resume manifest compiler",
             )
@@ -681,7 +1002,9 @@ class RustRouteAdapter:
             json.dumps(payload, ensure_ascii=False),
         ]
         try:
-            resolved = self._run_json_command(
+            resolved = self._run_hot_json_command(
+                "write_transport_binding",
+                payload,
                 [*self._binary_command(), *args],
                 failure_label="transport binding writer",
             )
@@ -720,7 +1043,9 @@ class RustRouteAdapter:
             json.dumps(payload, ensure_ascii=False),
         ]
         try:
-            resolved = self._run_json_command(
+            resolved = self._run_hot_json_command(
+                "write_checkpoint_resume_manifest",
+                payload,
                 [*self._binary_command(), *args],
                 failure_label="checkpoint resume manifest writer",
             )
@@ -752,6 +1077,106 @@ class RustRouteAdapter:
             raise RuntimeError("Rust checkpoint resume manifest writer returned invalid bytes_written.")
         return resolved
 
+    def attach_runtime_event_transport(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--attach-runtime-event-transport-json",
+            "--attach-runtime-event-transport-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        try:
+            resolved = self._run_hot_json_command(
+                "attach_runtime_event_transport",
+                payload,
+                [*self._binary_command(), *args],
+                failure_label="attached runtime event transport",
+            )
+        except RuntimeError:
+            resolved = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="attached runtime event transport",
+            )
+        if resolved.get("attach_mode") != "process_external_artifact_replay":
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="attached runtime event transport",
+            )
+            if resolved.get("attach_mode") != "process_external_artifact_replay":
+                raise RuntimeError(
+                    "Rust attached runtime event transport returned an unknown attach mode: "
+                    f"{resolved.get('attach_mode')!r}"
+                )
+        if resolved.get("authority") != self.attached_runtime_event_transport_authority:
+            raise RuntimeError(
+                "Rust attached runtime event transport returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        return resolved
+
+    def subscribe_attached_runtime_events(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--subscribe-attached-runtime-events-json",
+            "--subscribe-attached-runtime-events-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        try:
+            resolved = self._run_hot_json_command(
+                "subscribe_attached_runtime_events",
+                payload,
+                [*self._binary_command(), *args],
+                failure_label="attached runtime event replay",
+            )
+        except RuntimeError:
+            resolved = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="attached runtime event replay",
+            )
+        if resolved.get("schema_version") != "runtime-event-bridge-v1":
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="attached runtime event replay",
+            )
+            if resolved.get("schema_version") != "runtime-event-bridge-v1":
+                raise RuntimeError(
+                    "Rust attached runtime event replay returned an unknown schema: "
+                    f"{resolved.get('schema_version')!r}"
+                )
+        return resolved
+
+    def cleanup_attached_runtime_event_transport(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--cleanup-attached-runtime-event-transport-json",
+            "--cleanup-attached-runtime-event-transport-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        try:
+            resolved = self._run_hot_json_command(
+                "cleanup_attached_runtime_event_transport",
+                payload,
+                [*self._binary_command(), *args],
+                failure_label="attached runtime event cleanup",
+            )
+        except RuntimeError:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="attached runtime event cleanup",
+            )
+        if resolved.get("cleanup_method") != "cleanup_attached_runtime_event_transport":
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="attached runtime event cleanup",
+            )
+            if resolved.get("cleanup_method") != "cleanup_attached_runtime_event_transport":
+                raise RuntimeError(
+                    "Rust attached runtime event cleanup returned an unknown cleanup method: "
+                    f"{resolved.get('cleanup_method')!r}"
+                )
+        if resolved.get("authority") != self.attached_runtime_event_transport_authority:
+            raise RuntimeError(
+                "Rust attached runtime event cleanup returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        return resolved
+
     def trace_stream_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         args = [
             "--trace-stream-replay-json",
@@ -759,7 +1184,9 @@ class RustRouteAdapter:
             json.dumps(payload, ensure_ascii=False),
         ]
         try:
-            resolved = self._run_json_command(
+            resolved = self._run_hot_json_command(
+                "trace_stream_replay",
+                payload,
                 [*self._binary_command(), *args],
                 failure_label="trace stream replay",
             )
@@ -792,7 +1219,9 @@ class RustRouteAdapter:
             json.dumps(payload, ensure_ascii=False),
         ]
         try:
-            resolved = self._run_json_command(
+            resolved = self._run_hot_json_command(
+                "trace_stream_inspect",
+                payload,
                 [*self._binary_command(), *args],
                 failure_label="trace stream inspect",
             )
@@ -825,7 +1254,9 @@ class RustRouteAdapter:
             json.dumps(payload, ensure_ascii=False),
         ]
         try:
-            resolved = self._run_json_command(
+            resolved = self._run_hot_json_command(
+                "write_trace_compaction_delta",
+                payload,
                 [*self._binary_command(), *args],
                 failure_label="trace compaction delta writer",
             )
@@ -861,10 +1292,19 @@ class RustRouteAdapter:
         """Describe Rust route-adapter availability."""
 
         resolved_binary = self._resolved_binary()
+        latest_source_mtime = self._latest_source_mtime()
+        resolved_binary_mtime = resolved_binary.stat().st_mtime if resolved_binary is not None else None
         return {
             "runtime_path": str(self.runtime_path),
             "manifest_path": str(self.manifest_path),
             "resolved_binary": str(resolved_binary) if resolved_binary is not None else None,
+            "resolved_binary_mtime": resolved_binary_mtime,
+            "latest_source_mtime": latest_source_mtime,
+            "source_newer_than_resolved_binary": (
+                latest_source_mtime > resolved_binary_mtime
+                if resolved_binary_mtime is not None
+                else None
+            ),
             "available": resolved_binary is not None or (self.router_dir / "Cargo.toml").exists(),
             "route_authority": self.route_authority,
             "compile_authority": self.compile_authority,
@@ -884,6 +1324,7 @@ class RustRouteAdapter:
             "trace_stream_inspect_schema_version": self.trace_stream_inspect_schema_version,
             "trace_compaction_delta_write_schema_version": self.trace_compaction_delta_write_schema_version,
             "runtime_observability_exporter_schema_version": self.runtime_observability_exporter_schema_version,
+            "runtime_observability_metric_catalog_schema_version": self.runtime_observability_metric_catalog_schema_version,
             "runtime_observability_metric_record_schema_version": self.runtime_observability_metric_record_schema_version,
             "runtime_observability_dashboard_schema_version": self.runtime_observability_dashboard_schema_version,
             "trace_descriptor_authority": self.trace_descriptor_authority,
@@ -894,22 +1335,23 @@ class RustRouteAdapter:
         }
 
     def _binary_command(self) -> list[str]:
-        resolved_binary = self._resolved_binary()
-        if resolved_binary is not None:
-            return [str(resolved_binary)]
-        return self._cargo_command()
+        return self._compiled_binary_command()
+
+    def _stdio_command(self) -> list[str]:
+        return [*self._compiled_binary_command(), "--stdio-json"]
 
     def _cargo_command(self) -> list[str]:
-        """Return the cargo-run fallback command for a fresh Rust invocation."""
+        """Compatibility alias while older fallback call sites are retired."""
 
-        return [
-            "cargo",
-            "run",
-            "--quiet",
-            "--manifest-path",
-            str(self.router_dir / "Cargo.toml"),
-            "--",
-        ]
+        return self._compiled_binary_command()
+
+    def _compiled_binary_command(self) -> list[str]:
+        resolved_binary = self._cached_resolved_binary()
+        if resolved_binary is None:
+            raise RuntimeError(
+                "router-rs requires a prebuilt binary; build scripts/router-rs before running the Python host runtime."
+            )
+        return [str(resolved_binary)]
 
     def _route_args(self, query: str, session_id: str, allow_overlay: bool, first_turn: bool) -> list[str]:
         args = [
@@ -931,10 +1373,28 @@ class RustRouteAdapter:
 
     def _resolved_binary(self) -> Path | None:
         latest_source_mtime = self._latest_source_mtime()
-        for candidate in (self.debug_bin, self.release_bin):
-            if candidate.is_file() and candidate.stat().st_mtime >= latest_source_mtime:
-                return candidate
-        return None
+        fresh_release = (
+            self.release_bin
+            if self.release_bin.is_file() and self.release_bin.stat().st_mtime >= latest_source_mtime
+            else None
+        )
+        fresh_debug = (
+            self.debug_bin
+            if self.debug_bin.is_file() and self.debug_bin.stat().st_mtime >= latest_source_mtime
+            else None
+        )
+        return resolve_router_binary_candidate(
+            *(candidate for candidate in (fresh_release, fresh_debug) if candidate is not None)
+        )
+
+    def _cached_resolved_binary(self) -> Path | None:
+        cached = self._cached_runtime_binary
+        if cached is not _ROUTER_BINARY_CACHE_UNSET:
+            return cached if isinstance(cached, Path) else None
+        resolved_binary = self._resolved_binary()
+        if resolved_binary is not None:
+            self._cached_runtime_binary = resolved_binary
+        return resolved_binary
 
     def _latest_source_mtime(self) -> float:
         candidates = [self.router_dir / "Cargo.toml"]
@@ -959,3 +1419,35 @@ class RustRouteAdapter:
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(f"Rust {failure_label} timed out after {self.timeout_seconds}s.") from exc
         return json.loads(proc.stdout)
+
+    def _run_hot_json_command(
+        self,
+        operation: str,
+        payload: Mapping[str, Any],
+        command: list[str],
+        *,
+        failure_label: str,
+    ) -> dict[str, Any]:
+        if not self._uses_default_json_runner():
+            return self._run_json_command(command, failure_label=failure_label)
+        try:
+            return self._stdio_client().request(operation, payload)
+        except RuntimeError:
+            return self._run_json_command(command, failure_label=failure_label)
+
+    def _stdio_client(self) -> _RouterStdioClient:
+        command = self._stdio_command()
+        key = (*command, str(self.codex_home))
+        with _STDIO_CLIENTS_LOCK:
+            client = _STDIO_CLIENTS.get(key)
+            if client is None:
+                client = _RouterStdioClient(
+                    command,
+                    cwd=self.codex_home,
+                    timeout_seconds=self.timeout_seconds,
+                )
+                _STDIO_CLIENTS[key] = client
+            return client
+
+    def _uses_default_json_runner(self) -> bool:
+        return getattr(self._run_json_command, "__func__", None) is RustRouteAdapter._run_json_command

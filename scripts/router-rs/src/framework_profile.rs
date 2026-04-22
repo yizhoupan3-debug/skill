@@ -4012,7 +4012,10 @@ mod tests {
             }
         });
 
-        assert_eq!(Value::Object(bundle.workspace_bootstrap.clone()), expected_bootstrap);
+        assert_eq!(
+            Value::Object(bundle.workspace_bootstrap.clone()),
+            expected_bootstrap
+        );
         assert_eq!(
             bundle.cli_common_adapter["shared_contract"]["workspace_bootstrap"],
             expected_bootstrap
