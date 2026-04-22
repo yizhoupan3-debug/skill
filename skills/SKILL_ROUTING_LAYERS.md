@@ -61,7 +61,7 @@ L3  academic-search, accessibility-auditor, api-design, api-load-tester,
     mermaid-expert, monorepo-tooling, native-app-debugging, npm-package-authoring, pdf,
     performance-expert, playwright, release-engineering, screenshot,
     security-threat-model, skill-developer, skill-installer-antigravity,
-    spreadsheets, tao-ci, visual-review, xlsx
+    spreadsheets, sustech-mailer, visual-review, xlsx
 L4  nextjs, node-backend, auth-implementation, chatgpt-apps, react, vue, svelte,
     ppt-markdown, ppt-beamer, ppt-html-export, ppt-pptx,
     paper-logic, paper-notation-audit, paper-reviewer, paper-reviser,
