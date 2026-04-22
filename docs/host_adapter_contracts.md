@@ -230,7 +230,7 @@ continuity lane 里保留。
 已实现：
 
 - `compile_cli_common_adapter(...)`
-- `compile_codex_common_adapter(...)`
+- `codex_agno_runtime.compatibility.compile_codex_common_adapter(...)`
 - `codex_agno_runtime.compatibility.compile_aionrs_companion_adapter(...)`
 - `codex_agno_runtime.compatibility.compile_aionui_host_adapter(...)`
 - `compile_codex_desktop_adapter(...)`
@@ -241,7 +241,7 @@ continuity lane 里保留。
 - `build_cli_family_capability_discovery(...)`
 - `build_cli_family_parity_snapshot(...)`
 - `build_codex_dual_entry_parity_snapshot(...)`
-- `build_codex_desktop_alias_retirement_status(...)`
+- `codex_agno_runtime.compatibility.build_codex_desktop_alias_retirement_status(...)`
 - `build_execution_kernel_live_fallback_retirement_status(...)`
 - `build_execution_kernel_live_response_serialization_contract(...)`
 - `codex_agno_runtime.compatibility.build_upgrade_compatibility_matrix(...)`
@@ -265,9 +265,12 @@ compatibility-only bridge，而不是下一阶段的命名中心。
 必须显式开启 compatibility inventory lane。
 当前默认 artifact emission 已不再把 `codex_desktop_host_adapter` 作为一等
 输出；如需兼容 continuity lane，必须显式 opt-in legacy alias artifact。
-同样，legacy compiler 入口不再作为根包 `codex_agno_runtime` 的 public
-export；兼容消费者必须显式改走
-`codex_agno_runtime.compatibility.compile_codex_desktop_host_adapter(...)`。
+同样，legacy / compatibility compiler 入口不再作为根包 `codex_agno_runtime`
+的 public export；兼容消费者必须显式改走
+`codex_agno_runtime.compatibility.compile_codex_common_adapter(...)`、
+`codex_agno_runtime.compatibility.compile_codex_desktop_host_adapter(...)`、
+`codex_agno_runtime.compatibility.build_codex_desktop_alias_retirement_status(...)`
+等显式 compatibility surface。
 默认 lookup / registry helper 也已与该收口方向对齐：不显式开启
 compatibility lane 时，`codex_desktop_host_adapter` 不再作为 peer adapter
 出现在 runtime helper surface。

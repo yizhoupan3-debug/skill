@@ -30,11 +30,16 @@ const ROUTE_REPORT_SCHEMA_VERSION: &str = "router-rs-route-report-v2";
 const ROUTE_AUTHORITY: &str = "rust-route-core";
 const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
 const EXECUTION_SCHEMA_VERSION: &str = "router-rs-execute-response-v1";
+const EXECUTION_METADATA_SCHEMA_VERSION: &str = "router-rs-execution-kernel-metadata-v1";
 const EXECUTION_AUTHORITY: &str = "rust-execution-cli";
 const EXECUTION_KERNEL_CONTRACT_MODE: &str = "rust-live-primary";
 const EXECUTION_KERNEL_FALLBACK_POLICY: &str = "infrastructure-only-explicit";
 const EXECUTION_KERNEL_DELEGATE_FAMILY: &str = "rust-cli";
 const EXECUTION_KERNEL_DELEGATE_IMPL: &str = "router-rs";
+const EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY: &str = "live_primary";
+const EXECUTION_RESPONSE_SHAPE_DRY_RUN: &str = "dry_run";
+const EXECUTION_PROMPT_PREVIEW_OWNER: &str = "rust-execution-cli";
+const EXECUTION_MODEL_ID_SOURCE: &str = "aggregator-response.model";
 const RUNTIME_CONTROL_PLANE_SCHEMA_VERSION: &str = "router-rs-runtime-control-plane-v1";
 const RUNTIME_CONTROL_PLANE_AUTHORITY: &str = "rust-runtime-control-plane";
 const BACKGROUND_CONTROL_SCHEMA_VERSION: &str = "router-rs-background-control-v1";
@@ -2128,8 +2133,12 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     lines.join("\n")
 }
 
-fn build_steady_state_execution_kernel_metadata() -> Map<String, Value> {
+fn build_steady_state_execution_kernel_metadata(response_shape: &str) -> Map<String, Value> {
     let mut metadata = Map::new();
+    metadata.insert(
+        "execution_kernel_metadata_schema_version".to_string(),
+        Value::String(EXECUTION_METADATA_SCHEMA_VERSION.to_string()),
+    );
     metadata.insert(
         "execution_kernel".to_string(),
         Value::String(EXECUTION_KERNEL_DELEGATE_IMPL.to_string()),
@@ -2187,6 +2196,14 @@ fn build_steady_state_execution_kernel_metadata() -> Map<String, Value> {
         "execution_kernel_live_fallback_mode".to_string(),
         Value::String("disabled".to_string()),
     );
+    metadata.insert(
+        "execution_kernel_response_shape".to_string(),
+        Value::String(response_shape.to_string()),
+    );
+    metadata.insert(
+        "execution_kernel_prompt_preview_owner".to_string(),
+        Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string()),
+    );
     metadata
 }
 
@@ -2201,7 +2218,8 @@ fn build_dry_run_execute_response(
         "[dry-run] Routed to `{}` on {}. Session `{}` is ready for Rust-owned execution.",
         payload.selected_skill, payload.layer, payload.session_id
     );
-    let mut metadata = build_steady_state_execution_kernel_metadata();
+    let mut metadata =
+        build_steady_state_execution_kernel_metadata(EXECUTION_RESPONSE_SHAPE_DRY_RUN);
     metadata.insert(
         "reason".to_string(),
         Value::String("router-rs returned a deterministic dry-run payload.".to_string()),
@@ -2341,7 +2359,8 @@ fn build_live_execute_response(
     prompt_preview: Option<String>,
     live_result: LiveExecuteResult,
 ) -> ExecuteResponsePayload {
-    let mut metadata = build_steady_state_execution_kernel_metadata();
+    let mut metadata =
+        build_steady_state_execution_kernel_metadata(EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY);
     metadata.insert("run_id".to_string(), json!(live_result.run_id));
     metadata.insert("status".to_string(), json!(live_result.status));
     metadata.insert(
@@ -2360,6 +2379,10 @@ fn build_live_execute_response(
     metadata.insert(
         "diagnostic_route_mode".to_string(),
         json!(payload.diagnostic_route_mode),
+    );
+    metadata.insert(
+        "execution_kernel_model_id_source".to_string(),
+        Value::String(EXECUTION_MODEL_ID_SOURCE.to_string()),
     );
     ExecuteResponsePayload {
         execution_schema_version: EXECUTION_SCHEMA_VERSION.to_string(),

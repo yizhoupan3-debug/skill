@@ -25,8 +25,17 @@ from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
     EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
     EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
+    EXECUTION_KERNEL_METADATA_SCHEMA_VERSION,
+    EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY,
+    EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY,
+    EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY,
+    EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
+    EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
+    EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
     EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
     EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
+    LIVE_PRIMARY_MODEL_ID_SOURCE,
+    LIVE_PRIMARY_PROMPT_PREVIEW_OWNER,
     build_execution_kernel_dry_run_response,
     build_execution_kernel_live_response_serialization_contract_core,
     build_execution_kernel_runtime_metadata,
@@ -61,27 +70,16 @@ def _request(*, dry_run: bool = False) -> ExecutionKernelRequest:
 
 
 def _steady_state_kernel_metadata(**extra: object) -> dict[str, object]:
-    metadata: dict[str, object] = {
-        "execution_kernel": "router-rs",
-        "execution_kernel_authority": "rust-execution-cli",
-        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY: EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
-        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY: (
-            EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
-        ),
-        "execution_kernel_in_process_replacement_complete": True,
-        "execution_kernel_delegate": "router-rs",
-        "execution_kernel_delegate_authority": "rust-execution-cli",
-        "execution_kernel_delegate_family": "rust-cli",
-        "execution_kernel_delegate_impl": "router-rs",
-        "execution_kernel_live_primary": "router-rs",
-        "execution_kernel_live_primary_authority": "rust-execution-cli",
-        "execution_kernel_live_fallback": None,
-        "execution_kernel_live_fallback_authority": None,
-        "execution_kernel_live_fallback_enabled": False,
-        "execution_kernel_live_fallback_mode": "disabled",
-    }
-    metadata.update(extra)
-    return metadata
+    merged_extra = dict(extra)
+    merged_extra.setdefault(EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY, LIVE_PRIMARY_MODEL_ID_SOURCE)
+    return build_execution_kernel_runtime_metadata(
+        execution_kernel="router-rs",
+        execution_kernel_authority="rust-execution-cli",
+        trace_event_count=int(merged_extra.pop("trace_event_count")),
+        trace_output_path=str(merged_extra.pop("trace_output_path")),
+        response_shape=EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
+        extra_fields=merged_extra,
+    )
 
 
 def _settings() -> SimpleNamespace:
@@ -143,6 +141,10 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
     assert response.content == "router-rs content"
     assert response.metadata["execution_kernel"] == "router-rs"
     assert response.metadata["execution_kernel_authority"] == "rust-execution-cli"
+    assert (
+        response.metadata[EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY]
+        == EXECUTION_KERNEL_METADATA_SCHEMA_VERSION
+    )
     assert response.metadata["execution_kernel_delegate_family"] == "rust-cli"
     assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
     assert response.metadata["execution_kernel_live_primary"] == "router-rs"
@@ -151,6 +153,18 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
     assert response.metadata["execution_kernel_live_fallback_authority"] is None
     assert response.metadata["execution_kernel_live_fallback_enabled"] is False
     assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
+    assert (
+        response.metadata[EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY]
+        == EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
+    )
+    assert (
+        response.metadata[EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY]
+        == LIVE_PRIMARY_PROMPT_PREVIEW_OWNER
+    )
+    assert (
+        response.metadata[EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY]
+        == LIVE_PRIMARY_MODEL_ID_SOURCE
+    )
     assert response.usage.total_tokens == 34
 
 
@@ -224,20 +238,42 @@ def test_execution_kernel_contract_helpers_stay_rust_primary() -> None:
         "trace_event_count": 9,
         "trace_output_path": "/tmp/TRACE_METADATA.json",
     }
-    assert runtime_metadata == {
-        "execution_kernel": "router-rs",
-        "execution_kernel_authority": "rust-execution-cli",
-        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY: EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
-        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY: (
-            EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
-        ),
-        "reason": "Live model execution is disabled; returned a deterministic dry-run payload.",
-        "trace_event_count": 9,
-        "trace_output_path": "/tmp/TRACE_METADATA.json",
-    }
+    assert runtime_metadata["execution_kernel"] == "router-rs"
+    assert runtime_metadata["execution_kernel_authority"] == "rust-execution-cli"
+    assert (
+        runtime_metadata[EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY]
+        == EXECUTION_KERNEL_METADATA_SCHEMA_VERSION
+    )
+    assert (
+        runtime_metadata[EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY]
+        == EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE
+    )
+    assert (
+        runtime_metadata[EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY]
+        == EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
+    )
+    assert (
+        runtime_metadata[EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY]
+        == EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
+    )
+    assert (
+        runtime_metadata[EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY]
+        == "rust-execution-cli"
+    )
+    assert runtime_metadata["reason"] == (
+        "Live model execution is disabled; returned a deterministic dry-run payload."
+    )
+    assert runtime_metadata["trace_event_count"] == 9
+    assert runtime_metadata["trace_output_path"] == "/tmp/TRACE_METADATA.json"
 
     contract_core = build_execution_kernel_live_response_serialization_contract_core()
     assert contract_core["current_contract_truth"]["public_response_model"] == "RunTaskResponse"
+    assert contract_core["current_contract_truth"]["execution_request_schema_version"] == (
+        "router-rs-execute-request-v1"
+    )
+    assert contract_core["current_contract_truth"]["steady_state_metadata_schema_version"] == (
+        "router-rs-execution-kernel-metadata-v1"
+    )
     assert contract_core["current_contract_truth"]["steady_state_response_shapes"] == [
         "live_primary",
         "dry_run",
@@ -288,6 +324,10 @@ def test_execution_kernel_dry_run_response_stays_rust_primary() -> None:
     assert dry_run_response.usage.mode == "estimated"
     assert dry_run_response.metadata["execution_kernel"] == "router-rs"
     assert dry_run_response.metadata["execution_kernel_authority"] == "rust-execution-cli"
+    assert (
+        dry_run_response.metadata[EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY]
+        == EXECUTION_KERNEL_METADATA_SCHEMA_VERSION
+    )
     assert dry_run_response.metadata["reason"] == (
         "Live model execution is disabled; returned a deterministic dry-run payload."
     )
@@ -296,4 +336,12 @@ def test_execution_kernel_dry_run_response_stays_rust_primary() -> None:
     )
     assert dry_run_response.metadata[EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY] == (
         EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
+    )
+    assert (
+        dry_run_response.metadata[EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY]
+        == EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
+    )
+    assert (
+        dry_run_response.metadata[EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY]
+        == "rust-execution-cli"
     )
