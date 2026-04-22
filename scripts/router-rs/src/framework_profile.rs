@@ -38,7 +38,7 @@ const CODEX_DESKTOP_HOST_CAPABILITIES: [&str; 6] = [
     "automation_bridge",
     "orchestration_control",
 ];
-const CODEX_CLI_HOST_CAPABILITIES: [&str; 8] = [
+const CODEX_CLI_HOST_CAPABILITIES: [&str; 13] = [
     "artifact_contract",
     "memory_mounts",
     "mcp_servers",
@@ -47,8 +47,13 @@ const CODEX_CLI_HOST_CAPABILITIES: [&str; 8] = [
     "cron_execution",
     "ci_runner",
     "non_interactive_entrypoint",
+    "external_session_supervisor",
+    "rate_limit_auto_resume",
+    "host_resume_entrypoint",
+    "host_tmux_worker_management",
+    "framework_alias_entrypoints",
 ];
-const CLAUDE_CODE_HOST_CAPABILITIES: [&str; 16] = [
+const CLAUDE_CODE_HOST_CAPABILITIES: [&str; 21] = [
     "artifact_contract",
     "memory_mounts",
     "mcp_servers",
@@ -65,6 +70,11 @@ const CLAUDE_CODE_HOST_CAPABILITIES: [&str; 16] = [
     "hook_policy",
     "hook_browser",
     "checkpoint_restore",
+    "external_session_supervisor",
+    "rate_limit_auto_resume",
+    "host_resume_entrypoint",
+    "host_tmux_worker_management",
+    "framework_alias_entrypoints",
 ];
 const GEMINI_CLI_HOST_CAPABILITIES: [&str; 9] = [
     "artifact_contract",
@@ -1514,6 +1524,12 @@ fn complete_cli_host_projection(
     completed.insert("managed_mcp_paths".to_string(), Value::Array(vec![]));
     completed.insert("structured_output_modes".to_string(), Value::Array(vec![]));
     completed.insert("checkpointing_supported".to_string(), Value::Bool(false));
+    completed.insert("session_supervisor_driver".to_string(), Value::Null);
+    completed.insert("resume_command_examples".to_string(), Value::Array(vec![]));
+    completed.insert(
+        "framework_alias_entrypoints".to_string(),
+        Value::Object(Map::new()),
+    );
     for (key, value) in projection {
         completed.insert(key, value);
     }
@@ -1536,6 +1552,18 @@ fn build_codex_host_projection() -> Map<String, Value> {
     projection.insert(
         "mcp_config_paths".to_string(),
         Value::Array(vec![Value::String(".codex/config.toml".to_string())]),
+    );
+    projection.insert(
+        "session_supervisor_driver".to_string(),
+        Value::String("codex_driver".to_string()),
+    );
+    projection.insert(
+        "resume_command_examples".to_string(),
+        json!(["codex resume --last", "codex resume <session_id>"]),
+    );
+    projection.insert(
+        "framework_alias_entrypoints".to_string(),
+        json!({"autopilot": "$autopilot", "deepreview": "$deepreview"}),
     );
     projection
 }
@@ -1751,6 +1779,18 @@ fn build_claude_host_projection() -> Map<String, Value> {
         ]),
     );
     projection.insert("checkpointing_supported".to_string(), Value::Bool(true));
+    projection.insert(
+        "session_supervisor_driver".to_string(),
+        Value::String("claude_driver".to_string()),
+    );
+    projection.insert(
+        "resume_command_examples".to_string(),
+        json!(["claude --continue", "claude --resume <session_id>"]),
+    );
+    projection.insert(
+        "framework_alias_entrypoints".to_string(),
+        json!({"autopilot": "/autopilot", "deepreview": "/deepreview"}),
+    );
     projection
 }
 
@@ -2282,6 +2322,12 @@ fn build_cli_family_capability_discovery_entry(
         .filter(|capability| !available_set.contains(*capability))
         .map(|capability| Value::String(capability.to_string()))
         .collect();
+    let supervisor_capabilities = json!({
+        "external_session_supervisor": available_set.contains("external_session_supervisor"),
+        "rate_limit_auto_resume": available_set.contains("rate_limit_auto_resume"),
+        "host_resume_entrypoint": available_set.contains("host_resume_entrypoint"),
+        "host_tmux_worker_management": available_set.contains("host_tmux_worker_management"),
+    });
 
     let mut payload = Map::new();
     payload.insert(
@@ -2370,6 +2416,9 @@ fn build_cli_family_capability_discovery_entry(
         "hook_inspection_commands",
         "hook_environment_markers",
         "checkpointing_supported",
+        "session_supervisor_driver",
+        "resume_command_examples",
+        "framework_alias_entrypoints",
     ] {
         payload.insert(
             field.to_string(),
@@ -2379,10 +2428,16 @@ fn build_cli_family_capability_discovery_entry(
                 .unwrap_or_else(|| match field {
                     "config_root_env_var" => Value::Null,
                     "checkpointing_supported" => Value::Bool(false),
+                    "session_supervisor_driver" => Value::Null,
+                    "framework_alias_entrypoints" => Value::Object(Map::new()),
                     _ => Value::Array(vec![]),
                 }),
         );
     }
+    payload.insert(
+        "supervisor_capabilities".to_string(),
+        supervisor_capabilities,
+    );
     payload.insert(
         "compatibility_passes".to_string(),
         Value::Bool(missing_host_capabilities.is_empty()),

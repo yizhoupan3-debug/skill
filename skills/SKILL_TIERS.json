@@ -32,16 +32,16 @@
     }
   },
   "summary": {
-    "total_skills": 143,
+    "total_skills": 145,
     "tier_counts": {
       "core": 19,
-      "optional": 122,
+      "optional": 124,
       "experimental": 2,
       "deprecated": 0
     },
     "activation_counts": {
       "default": 25,
-      "explicit_opt_in": 118,
+      "explicit_opt_in": 120,
       "disabled": 0
     }
   },
@@ -81,6 +81,7 @@
       "architect-review",
       "assignment-compliance",
       "auth-implementation",
+      "autopilot",
       "autoresearch",
       "backend-runtime-debugging",
       "brainstorm-research",
@@ -98,6 +99,7 @@
       "css-pro",
       "data-wrangling",
       "datastore-cache-queue",
+      "deepreview",
       "dependency-migration",
       "docker",
       "documentation-engineering",
@@ -586,6 +588,34 @@
         "health": {
           "dynamic_score": 97.3,
           "static_score": 93.3,
+          "usage_30d": 0,
+          "reroutes_30d": 0,
+          "health_status": "Healthy"
+        },
+        "loadouts": []
+      }
+    },
+    "autopilot": {
+      "tier": "optional",
+      "reasons": [
+        "gate:delegation"
+      ],
+      "surface": {
+        "activation_mode": "explicit_opt_in",
+        "default_surface_enabled": false,
+        "default_loadout_memberships": []
+      },
+      "signals": {
+        "layer": "L1",
+        "owner": "owner",
+        "gate": "delegation",
+        "priority": "P2",
+        "session_start": "preferred",
+        "source": "project",
+        "source_position": 3,
+        "health": {
+          "dynamic_score": 100.0,
+          "static_score": 100.0,
           "usage_30d": 0,
           "reroutes_30d": 0,
           "health_status": "Healthy"
@@ -1119,6 +1149,34 @@
         "health": {
           "dynamic_score": 97.3,
           "static_score": 93.3,
+          "usage_30d": 0,
+          "reroutes_30d": 0,
+          "health_status": "Healthy"
+        },
+        "loadouts": []
+      }
+    },
+    "deepreview": {
+      "tier": "optional",
+      "reasons": [
+        "specialist-opt-in"
+      ],
+      "surface": {
+        "activation_mode": "explicit_opt_in",
+        "default_surface_enabled": false,
+        "default_loadout_memberships": []
+      },
+      "signals": {
+        "layer": "L1",
+        "owner": "owner",
+        "gate": "none",
+        "priority": "P2",
+        "session_start": "n/a",
+        "source": "project",
+        "source_position": 3,
+        "health": {
+          "dynamic_score": 100.0,
+          "static_score": 100.0,
           "usage_30d": 0,
           "reroutes_30d": 0,
           "health_status": "Healthy"

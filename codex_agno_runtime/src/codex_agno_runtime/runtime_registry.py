@@ -15,6 +15,10 @@ _FALLBACK_DEFAULT_HOST_PEER_SET = (
     "claude_code_adapter",
     "gemini_cli_adapter",
 )
+_FALLBACK_SHARED_PROJECT_MCP_SERVERS = (
+    "browser-mcp",
+    "framework-mcp",
+)
 _FALLBACK_PLUGIN_RECORD = {
     "plugin_name": "skill-framework-native",
     "source_rel": "plugins/skill-framework-native",
@@ -32,6 +36,43 @@ _FALLBACK_WORKSPACE_BOOTSTRAP_DEFAULTS = {
     "memory_bridge": {
         "bridge_dir": ".aionrs-memory-bridge",
     },
+}
+_FALLBACK_FRAMEWORK_NATIVE_ALIASES = {
+    "autopilot": {
+        "canonical_owner": "execution-controller-coding",
+        "reroute_when_ambiguous": "idea-to-plan",
+        "reroute_when_root_cause_unknown": "systematic-debugging",
+        "execution_owners": [
+            "plan-to-code",
+            "subagent-delegation",
+            "execution-audit-codex",
+        ],
+        "host_entrypoints": {"codex-cli": "$autopilot", "claude-code": "/autopilot"},
+        "omc_dependency": False,
+    },
+    "deepreview": {
+        "canonical_owner": "code-review",
+        "review_lanes": [
+            "architect-review",
+            "security-audit",
+            "test-engineering",
+            "execution-audit-codex",
+        ],
+        "host_entrypoints": {"codex-cli": "$deepreview", "claude-code": "/deepreview"},
+        "omc_dependency": False,
+    },
+}
+_FALLBACK_OMC_RETIREMENT_CONTRACT = {
+    "replaced_object": "oh-my-claudecode",
+    "runtime_authority": "rust-session-supervisor",
+    "steady_state_forbidden_roots": [".omc"],
+    "replacement_capabilities": [
+        "external_session_supervisor",
+        "rate_limit_auto_resume",
+        "host_resume_entrypoint",
+        "host_tmux_worker_management",
+    ],
+    "omc_is_runtime_dependency": False,
 }
 _FALLBACK_HOST_ADAPTER_ORDER = (
     "aionrs_companion_adapter",
@@ -190,6 +231,16 @@ def default_host_peer_set(*, repo_root: Path | None = None) -> tuple[str, ...]:
     return tuple(str(row) for row in rows)
 
 
+def shared_project_mcp_servers(*, repo_root: Path | None = None) -> tuple[str, ...]:
+    payload = _load_runtime_registry_or_none(repo_root)
+    if payload is None:
+        return _FALLBACK_SHARED_PROJECT_MCP_SERVERS
+    rows = payload.get("shared_project_mcp_servers")
+    if not isinstance(rows, list):
+        raise ValueError("Runtime registry shared_project_mcp_servers must be a list.")
+    return tuple(str(row) for row in rows)
+
+
 def plugin_records(*, repo_root: Path | None = None) -> tuple[dict[str, Any], ...]:
     payload = _load_runtime_registry_or_none(repo_root)
     if payload is None:
@@ -215,3 +266,23 @@ def workspace_bootstrap_defaults(*, repo_root: Path | None = None) -> dict[str, 
     if not isinstance(defaults, dict):
         raise ValueError("Runtime registry workspace_bootstrap_defaults must be an object.")
     return deepcopy(defaults)
+
+
+def framework_native_aliases(*, repo_root: Path | None = None) -> dict[str, Any]:
+    payload = _load_runtime_registry_or_none(repo_root)
+    if payload is None:
+        return _clone_json_like(_FALLBACK_FRAMEWORK_NATIVE_ALIASES)
+    aliases = payload.get("framework_native_aliases")
+    if not isinstance(aliases, dict):
+        raise ValueError("Runtime registry framework_native_aliases must be an object.")
+    return deepcopy(aliases)
+
+
+def omc_retirement_contract(*, repo_root: Path | None = None) -> dict[str, Any]:
+    payload = _load_runtime_registry_or_none(repo_root)
+    if payload is None:
+        return _clone_json_like(_FALLBACK_OMC_RETIREMENT_CONTRACT)
+    contract = payload.get("omc_retirement_contract")
+    if not isinstance(contract, dict):
+        raise ValueError("Runtime registry omc_retirement_contract must be an object.")
+    return deepcopy(contract)

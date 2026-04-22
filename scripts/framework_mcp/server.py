@@ -9,15 +9,10 @@ from typing import Any, TextIO
 
 from codex_agno_runtime.rust_router import RustRouteAdapter
 
-from scripts.claude_memory_bridge import (
-    build_claude_memory_projection,
-    build_refresh_workflow_prompt,
-)
 from scripts.default_bootstrap import resolve_bootstrap_path, run_default_bootstrap
 from scripts.framework_bridge import build_framework_memory_bootstrap, export_framework_skills
 from scripts.memory_support import (
     bootstrap_artifact_root,
-    classify_runtime_continuity,
     get_repo_root,
     load_runtime_snapshot,
     normalize_evidence_index,
@@ -316,38 +311,17 @@ class FrameworkMcpServer:
             ) from error
 
     def _recap_refresh(self, *, max_lines: int) -> JSONDict:
-        snapshot = load_runtime_snapshot(
-            self._repo_root,
-            repair=False,
-            include_contract_snapshots=False,
-        )
-        continuity = classify_runtime_continuity(snapshot)
-        projection = build_claude_memory_projection(
-            self._repo_root,
-            max_lines=max_lines,
-            snapshot=snapshot,
-            continuity=continuity,
-        )
-        workflow_prompt = build_refresh_workflow_prompt(
-            self._repo_root,
-            max_lines=max_lines,
-            snapshot=snapshot,
-            continuity=continuity,
-        )
-        return {
-            "ok": True,
-            "workspace": self._workspace,
-            "continuity_state": continuity.get("state"),
-            "task": continuity.get("task"),
-            "phase": continuity.get("phase"),
-            "status": continuity.get("status"),
-            "max_lines": max_lines,
-            "projection": projection,
-            "workflow_prompt": workflow_prompt,
-            "projection_path": str(
-                resolve_effective_memory_dir(repo_root=self._repo_root) / "CLAUDE_MEMORY.md"
-            ),
-        }
+        try:
+            return self._rust_adapter.framework_recap(repo_root=self._repo_root, max_lines=max_lines)
+        except RuntimeError as error:
+            raise FrameworkServerError(
+                code="RUST_FRAMEWORK_RECAP_FAILED",
+                message=str(error),
+                suggested_next_actions=[
+                    "verify scripts/router-rs builds cleanly",
+                    "inspect .supervisor_state.json and artifacts/current for drift",
+                ],
+            ) from error
 
     def _build_tool_definitions(self) -> dict[str, dict[str, Any]]:
         return {
@@ -468,13 +442,18 @@ class FrameworkMcpServer:
             text = self._read_text_file(path=path, missing_message="Project memory file not found.")
             return {"uri": uri, "mimeType": "text/markdown", "text": text}
         if uri == "framework://memory/claude-recap":
-            snapshot = load_runtime_snapshot(self._repo_root, repair=False, include_contract_snapshots=False)
-            continuity = classify_runtime_continuity(snapshot)
-            text = build_claude_memory_projection(
-                self._repo_root,
-                snapshot=snapshot,
-                continuity=continuity,
-            )
+            try:
+                recap = self._rust_adapter.framework_recap(repo_root=self._repo_root)
+            except RuntimeError as error:
+                raise FrameworkServerError(
+                    code="RUST_FRAMEWORK_RECAP_FAILED",
+                    message=str(error),
+                    suggested_next_actions=[
+                        "verify scripts/router-rs builds cleanly",
+                        "inspect .supervisor_state.json and artifacts/current for drift",
+                    ],
+                ) from error
+            text = str(recap.get("projection", ""))
             return {"uri": uri, "mimeType": "text/markdown", "text": text}
         if uri == "framework://routing/runtime":
             path = self._repo_root / "skills" / "SKILL_ROUTING_RUNTIME.json"

@@ -13,7 +13,9 @@ if str(PROJECT_ROOT) not in sys.path:
 from scripts.claude_hook_audit import run_config_change, run_stop_failure
 from scripts.claude_statusline import render_statusline
 from scripts.materialize_cli_host_entrypoints import (
+    CLAUDE_AUTOPILOT_COMMAND,
     CLAUDE_BACKGROUND_BATCH_COMMAND,
+    CLAUDE_DEEPREVIEW_COMMAND,
     CLAUDE_REFRESH_COMMAND,
     materialize_repo_host_entrypoints,
     sync_repo_host_entrypoints,
@@ -120,34 +122,43 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert not (tmp_path / ".codex" / "model_instructions.md").exists()
     assert not (tmp_path / ".mcp.json").exists()
     claude_entry = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
-    assert "@AGENT.md" in claude_entry
-    assert "@.codex/memory/CLAUDE_MEMORY.md" in claude_entry
-    assert ".claude/settings.json" in claude_entry
+    assert "@.codex/memory/CLAUDE_MEMORY.md" not in claude_entry
+    assert "Keep startup lean." in claude_entry
+    assert "host-shell glue" in claude_entry
+    assert "manual resume" in claude_entry
+    assert "Generated-first maintenance rule" in claude_entry
     assert "AGENT.md" in (tmp_path / "GEMINI.md").read_text(encoding="utf-8")
     settings = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
     assert settings["$schema"] == "https://json.schemastore.org/claude-code-settings.json"
     assert settings["permissions"]["allow"] == [
         "Bash(ls)",
         "Bash(pwd)",
+        "Bash(rg *)",
+        "Bash(cat *)",
+        "Bash(sed -n *)",
         "Bash(git status)",
         "Bash(git diff)",
+        "Bash(git show *)",
+        "Bash(git rev-parse *)",
+        "Bash(git ls-files *)",
         "Bash(python3 scripts/check_skills.py --verify-sync)",
         "Bash(python3 scripts/check_skills.py --verify-codex-link)",
-        "Bash(python3 scripts/session_lifecycle_hook.py *)",
-        "Bash(python3 scripts/claude_memory_bridge.py *)",
+        "Bash(python3 scripts/materialize_cli_host_entrypoints.py)",
+        "Bash(python3 -m pytest *)",
+        "Bash(python3 -m compileall *)",
+        "Bash(cargo test *)",
+        "Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *)",
+        "Bash(*/scripts/router-rs/target/debug/router-rs *)",
         "Bash(python3 scripts/runtime_background_cli.py *)",
-        "Bash(python3 scripts/claude_statusline.py --repo-root *)",
         "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
         "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
         "Bash(bash ./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
     ]
-    assert settings["allowedMcpServers"] == [{"serverName": "browser-mcp"}]
-    assert settings["statusLine"] == {
-        "type": "command",
-        "command": 'python3 "$CLAUDE_PROJECT_DIR"/scripts/claude_statusline.py --repo-root "$CLAUDE_PROJECT_DIR"',
-        "padding": 1,
-        "refreshInterval": 30,
-    }
+    assert settings["allowedMcpServers"] == [
+        {"serverName": "browser-mcp"},
+        {"serverName": "framework-mcp"},
+    ]
+    assert "statusLine" not in settings
     assert set(settings["hooks"]) == {
         "SessionStart",
         "Stop",
@@ -161,24 +172,45 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert (tmp_path / ".claude" / "agents" / "README.md").is_file()
     assert (tmp_path / ".claude" / "commands" / "refresh.md").is_file()
     assert (tmp_path / ".claude" / "commands" / "background_batch.md").is_file()
+    assert (tmp_path / ".claude" / "commands" / "autopilot.md").is_file()
+    assert (tmp_path / ".claude" / "commands" / "deepreview.md").is_file()
     refresh_command = (tmp_path / ".claude" / "commands" / "refresh.md").read_text(encoding="utf-8")
     background_batch_command = (
         tmp_path / ".claude" / "commands" / "background_batch.md"
     ).read_text(encoding="utf-8")
+    autopilot_command = (
+        tmp_path / ".claude" / "commands" / "autopilot.md"
+    ).read_text(encoding="utf-8")
+    deepreview_command = (
+        tmp_path / ".claude" / "commands" / "deepreview.md"
+    ).read_text(encoding="utf-8")
     assert refresh_command == CLAUDE_REFRESH_COMMAND
     assert background_batch_command == CLAUDE_BACKGROUND_BATCH_COMMAND
-    assert "claude_memory_bridge.py refresh-workflow --json" in refresh_command
+    assert autopilot_command == CLAUDE_AUTOPILOT_COMMAND
+    assert deepreview_command == CLAUDE_DEEPREVIEW_COMMAND
+    assert "cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --framework-recap-json" in refresh_command
     assert "one fixed sentence" in refresh_command
     assert "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。" in refresh_command
     assert "summary" not in refresh_command.lower()
     assert "clear" not in refresh_command.lower()
     assert "CLAUDE_PROJECT_DIR" not in refresh_command
-    assert "allowed-tools: Bash(python3 scripts/claude_memory_bridge.py *)" in refresh_command
+    assert (
+        "allowed-tools: Bash(cargo run --quiet --manifest-path */scripts/router-rs/Cargo.toml -- *), "
+        "Bash(*/scripts/router-rs/target/debug/router-rs *)"
+    ) in refresh_command
     assert "runtime_background_cli.py" in background_batch_command
     assert "enqueue-batch" in background_batch_command
     assert "group-summary" in background_batch_command
     assert "list-groups" in background_batch_command
     assert "allowed-tools: Bash(python3 scripts/runtime_background_cli.py *)" in background_batch_command
+    assert "thin alias" in autopilot_command
+    assert "execution-controller-coding" in autopilot_command
+    assert "idea-to-plan" in autopilot_command
+    assert "/autopilot" in autopilot_command
+    assert "thin alias" in deepreview_command
+    assert "code-review" in deepreview_command
+    assert "architect-review" in deepreview_command
+    assert "/deepreview" in deepreview_command
     assert (tmp_path / ".claude" / "hooks" / "README.md").is_file()
     hooks_readme = (tmp_path / ".claude" / "hooks" / "README.md").read_text(encoding="utf-8")
     assert "Generated-first maintenance" in hooks_readme

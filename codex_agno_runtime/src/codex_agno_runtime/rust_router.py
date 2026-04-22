@@ -29,12 +29,15 @@ from codex_agno_runtime.schemas import (
 
 
 def resolve_router_binary_candidate(*candidates: Path) -> Path | None:
-    """Prefer the first existing router-rs binary, falling back only when needed."""
+    """Prefer the freshest existing router-rs binary, keeping call order as the tiebreaker."""
 
-    for candidate in candidates:
+    existing: list[tuple[float, int, Path]] = []
+    for index, candidate in enumerate(candidates):
         if candidate.is_file():
-            return candidate
-    return None
+            existing.append((candidate.stat().st_mtime, -index, candidate))
+    if not existing:
+        return None
+    return max(existing)[2]
 
 
 def _load_json_object(payload: str, *, source: str) -> dict[str, Any]:
@@ -598,6 +601,8 @@ class RustRouteAdapter:
     runtime_observability_dashboard_schema_version = "runtime-observability-dashboard-v1"
     framework_runtime_snapshot_schema_version = "router-rs-framework-runtime-snapshot-v1"
     framework_contract_summary_schema_version = "router-rs-framework-contract-summary-v1"
+    framework_recap_schema_version = "router-rs-framework-recap-v1"
+    claude_hook_schema_version = "router-rs-claude-hook-response-v1"
     route_authority = "rust-route-core"
     execution_authority = "rust-execution-cli"
     compile_authority = "rust-route-compiler"
@@ -611,6 +616,7 @@ class RustRouteAdapter:
     checkpoint_manifest_write_authority = "rust-runtime-checkpoint-manifest-writer"
     trace_stream_io_authority = "rust-runtime-trace-io"
     framework_runtime_authority = "rust-framework-runtime-read-model"
+    claude_hook_authority = "rust-claude-hook"
 
     def __init__(
         self,
@@ -1132,6 +1138,72 @@ class RustRouteAdapter:
                 "Rust framework contract summary compiler returned a missing contract_summary payload."
             )
         return summary
+
+    def framework_recap(self, *, repo_root: Path, max_lines: int = 6) -> dict[str, Any]:
+        """Build the Rust-owned recap surface for thin host shells."""
+
+        args = [
+            "--framework-recap-json",
+            "--repo-root",
+            str(repo_root),
+            "--claude-hook-max-lines",
+            str(max_lines),
+        ]
+        payload = self._run_hot_json_command(
+            "framework_recap",
+            {"repo_root": str(repo_root), "max_lines": max_lines},
+            [*self._binary_command(), *args],
+            failure_label="framework recap compiler",
+        )
+        if payload.get("schema_version") != self.framework_recap_schema_version:
+            raise RuntimeError(
+                "Rust framework recap compiler returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
+            )
+        if payload.get("authority") != self.framework_runtime_authority:
+            raise RuntimeError(
+                "Rust framework recap compiler returned an unexpected authority marker: "
+                f"{payload.get('authority')!r}"
+            )
+        recap = payload.get("recap")
+        if not isinstance(recap, dict):
+            raise RuntimeError(
+                "Rust framework recap compiler returned a missing recap payload."
+            )
+        return recap
+
+    def claude_lifecycle_hook(
+        self,
+        *,
+        command: str,
+        repo_root: Path,
+        max_lines: int = 6,
+    ) -> dict[str, Any]:
+        """Run the Rust-owned Claude lifecycle hook contract."""
+
+        args = [
+            "--claude-hook-command",
+            command,
+            "--repo-root",
+            str(repo_root),
+            "--claude-hook-max-lines",
+            str(max_lines),
+        ]
+        payload = self._run_json_command(
+            [*self._binary_command(), *args],
+            failure_label="Claude lifecycle hook",
+        )
+        if payload.get("schema_version") != self.claude_hook_schema_version:
+            raise RuntimeError(
+                "Rust Claude lifecycle hook returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
+            )
+        if payload.get("authority") != self.claude_hook_authority:
+            raise RuntimeError(
+                "Rust Claude lifecycle hook returned an unexpected authority marker: "
+                f"{payload.get('authority')!r}"
+            )
+        return payload
 
     def runtime_control_plane(self) -> dict[str, Any]:
         """Return the Rust-owned runtime control-plane authority descriptor."""

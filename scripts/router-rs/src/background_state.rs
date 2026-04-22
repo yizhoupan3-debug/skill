@@ -180,7 +180,6 @@ struct BackgroundStateStore {
     state_path: PathBuf,
     backend_family: String,
     sqlite_db_path: Option<PathBuf>,
-    control_plane_descriptor: Option<Value>,
     control_plane: Value,
     jobs: HashMap<String, BackgroundRunStatus>,
     active_sessions: HashMap<String, String>,
@@ -525,7 +524,6 @@ impl BackgroundStateStore {
             state_path,
             backend_family: normalized_backend_family(&backend_family),
             sqlite_db_path,
-            control_plane_descriptor: request.control_plane_descriptor.clone(),
             control_plane,
             jobs: HashMap::new(),
             active_sessions: HashMap::new(),
@@ -565,18 +563,16 @@ impl BackgroundStateStore {
             self.jobs
                 .get(job_id)
                 .map(|job| is_active_status(&job.status))
-                .unwrap_or(false)
+                .unwrap_or(true)
         });
         self.pending_session_takeovers = persisted
             .pending_session_takeovers
             .into_iter()
             .filter(|row| {
-                self.active_sessions.contains_key(&row.session_id)
-                    && self
-                        .jobs
-                        .get(&row.incoming_job_id)
-                        .map(|job| is_active_status(&job.status))
-                        .unwrap_or(false)
+                self.jobs
+                    .get(&row.incoming_job_id)
+                    .map(|job| is_active_status(&job.status))
+                    .unwrap_or(true)
             })
             .map(|row| (row.session_id, row.incoming_job_id))
             .collect();
@@ -1158,9 +1154,9 @@ fn open_sqlite_connection(db_path: &Path) -> Result<Connection, String> {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
     let conn = Connection::open(db_path).map_err(|err| err.to_string())?;
-    conn.execute("PRAGMA journal_mode=WAL", [])
+    conn.pragma_update(None, "journal_mode", "WAL")
         .map_err(|err| err.to_string())?;
-    conn.execute("PRAGMA synchronous=NORMAL", [])
+    conn.pragma_update(None, "synchronous", "NORMAL")
         .map_err(|err| err.to_string())?;
     conn.execute(
         &format!(

@@ -20,7 +20,7 @@ Lifecycle matrix:
 | `SessionEnd` | enabled | `session_end.sh` | `session-end` | project-local memory bundle plus host projection | Consolidates shared memory bundle, then refreshes projection. Never rewrites root continuity artifacts. |
 | `ConfigChange` | enabled | `config_change.sh` | n/a | host-private audit only | Audit project-level generated-surface drift and remind maintainers to regenerate from source. Never auto-repairs or rewrites shared continuity. |
 | `StopFailure` | enabled | `stop_failure.sh` | n/a | host-private alert only | Classify Claude stop failures and point maintainers back to host projection drift or hook inspection. Never rewrites shared continuity. |
-| `InstructionsLoaded` | document-disable | n/a | n/a | none | Redundant with imported `../.codex/memory/CLAUDE_MEMORY.md` and `SessionStart` refresh; no extra repo-specific action is needed. |
+| `InstructionsLoaded` | document-disable | n/a | n/a | none | Keep startup lean; the Claude projection stays on disk for `/refresh` or manual recovery instead of default auto-import. |
 | `PostToolUse` | document-disable | n/a | n/a | none | High-frequency tool hook would require payload-aware hidden side effects, which violates the thin projection goal. |
 | `UserPromptSubmit` | disabled | n/a | n/a | none | Avoid hidden prompt mutation; this repo prefers artifact-driven context. |
 | `Notification` | disabled | n/a | n/a | none | Informational only; not part of projection or continuity refresh. |
@@ -53,9 +53,12 @@ Validation commands:
 - `printf '{"hook_event_name":"StopFailure","failure_type":"server_error"}
 ' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/stop_failure.sh`
   Expected: host-private failure classification hint on stderr; exit 0.
-- `python3 scripts/session_lifecycle_hook.py session-start --repo-root "$PWD" --json`
+- `cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-command session-start --repo-root "$PWD"`
   Expected: JSON result with `canonical_command`, `contract`, and `projection`.
-- `python3 scripts/session_lifecycle_hook.py end-session --repo-root "$PWD" --json`
+- `cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-command session-end --repo-root "$PWD"`
   Expected: compatibility alias for `session-end`; same consolidation and projection contract.
+- `printf '{"hook_event_name":"ConfigChange","scope":"project_settings","changed_path":".claude/settings.json"}
+' | cargo run --quiet --manifest-path scripts/router-rs/Cargo.toml -- --claude-hook-audit-command config-change --repo-root "$PWD"`
+  Expected: JSON on stdout plus audit-only stderr guidance; exit 0.
 
 Shared routing policy still comes from `../../AGENT.md`.

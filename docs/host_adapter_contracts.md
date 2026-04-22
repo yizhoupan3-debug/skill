@@ -218,6 +218,24 @@ continuity lane 里保留。
   - `delegation_contract`
   - `supervisor_state_contract`
 
+## OMC Retirement Boundary
+
+- `oh-my-claudecode` / OMC 是被替代对象，不是兼容内核。
+- steady-state runtime truth 不得再落到 `.omc/**`。
+- 新能力面固定为 framework-native capability：
+  - `external_session_supervisor`
+  - `rate_limit_auto_resume`
+  - `host_resume_entrypoint`
+  - `host_tmux_worker_management`
+- `autopilot` / `deepreview` 只保留为 framework-native alias：
+  - canonical owner 在 framework
+  - Claude / Codex 只暴露不同入口，不得分叉语义
+- `cli_family_capability_discovery` 现在必须能直接回答：
+  - 哪些 host 有 shared supervisor 能力
+  - 哪些 host 有 resume 入口
+  - 哪些 host 有 rate-limit auto-resume
+  - 两端 alias 入口分别是什么
+
 ## Non-Goals
 
 - 不在 adapter 中引入 aionrs 私有 runtime patch。
@@ -240,6 +258,13 @@ continuity lane 里保留。
 - `build_cli_family_capability_discovery(...)`
 - `build_cli_family_parity_snapshot(...)`
 - `build_codex_dual_entry_parity_snapshot(...)`
+- framework-native alias registry for `autopilot` / `deepreview`
+- OMC retirement contract in `RUNTIME_REGISTRY.json`
+- CLI-family capability discovery now exposes:
+  - `supervisor_capabilities`
+  - `session_supervisor_driver`
+  - `resume_command_examples`
+  - `framework_alias_entrypoints`
 - `codex_agno_runtime.compatibility.build_codex_desktop_alias_retirement_status(...)`
 - `build_execution_kernel_live_fallback_retirement_status(...)`
 - `build_execution_kernel_live_response_serialization_contract(...)`

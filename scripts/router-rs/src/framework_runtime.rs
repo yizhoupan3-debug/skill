@@ -8,6 +8,7 @@ pub const FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION: &str =
     "router-rs-framework-runtime-snapshot-v1";
 pub const FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION: &str =
     "router-rs-framework-contract-summary-v1";
+pub const FRAMEWORK_RECAP_SCHEMA_VERSION: &str = "router-rs-framework-recap-v1";
 pub const FRAMEWORK_RUNTIME_AUTHORITY: &str = "rust-framework-runtime-read-model";
 
 const CURRENT_ARTIFACT_DIR: &str = "current";
@@ -199,6 +200,50 @@ pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Val
             "recovery_hints": continuity.get("recovery_hints").cloned().unwrap_or_else(|| Value::Array(Vec::new())),
         }
     }))
+}
+
+pub fn build_framework_recap_envelope(repo_root: &Path, max_lines: usize) -> Result<Value, String> {
+    let snapshot = load_framework_runtime_view(repo_root);
+    let continuity = classify_runtime_continuity(&snapshot);
+    let contract = supervisor_contract(&snapshot.supervisor_state);
+    let projection = build_framework_recap_projection(repo_root, max_lines)?;
+    let workflow_prompt =
+        render_framework_workflow_prompt(&snapshot, &continuity, &contract, max_lines);
+    Ok(json!({
+        "schema_version": FRAMEWORK_RECAP_SCHEMA_VERSION,
+        "authority": FRAMEWORK_RUNTIME_AUTHORITY,
+        "recap": {
+            "ok": true,
+            "workspace": workspace_name_from_root(repo_root),
+            "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
+            "task": continuity.get("task").cloned().unwrap_or(Value::Null),
+            "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
+            "status": continuity.get("status").cloned().unwrap_or(Value::Null),
+            "max_lines": max_lines,
+            "projection": projection,
+            "workflow_prompt": workflow_prompt,
+            "projection_path": repo_root
+                .join(".codex")
+                .join("memory")
+                .join("CLAUDE_MEMORY.md")
+                .display()
+                .to_string(),
+            "continuity": continuity,
+        }
+    }))
+}
+
+pub fn build_framework_recap_projection(repo_root: &Path, max_lines: usize) -> Result<String, String> {
+    let snapshot = load_framework_runtime_view(repo_root);
+    let continuity = classify_runtime_continuity(&snapshot);
+    let memory_md = read_text_if_exists(&repo_root.join(".codex").join("memory").join("MEMORY.md"));
+    Ok(render_framework_recap_projection(
+        repo_root,
+        &snapshot,
+        &continuity,
+        &memory_md,
+        max_lines,
+    ))
 }
 
 fn load_framework_runtime_view(repo_root: &Path) -> FrameworkRuntimeView {
@@ -542,6 +587,445 @@ fn workspace_name_from_root(repo_root: &Path) -> String {
         .and_then(|name| name.to_str())
         .unwrap_or("workspace")
         .to_string()
+}
+
+fn render_framework_recap_projection(
+    repo_root: &Path,
+    snapshot: &FrameworkRuntimeView,
+    continuity: &Value,
+    memory_md: &str,
+    max_lines: usize,
+) -> String {
+    let stable_patterns = extract_bullets(
+        &extract_markdown_section(memory_md, &["Active Patterns", "项目约定", "稳定事实"]),
+        max_lines,
+    );
+    let stable_decisions = extract_bullets(
+        &extract_markdown_section(memory_md, &["稳定决策", "Decisions"]),
+        max_lines,
+    );
+    let lessons = extract_bullets(
+        &extract_markdown_section(memory_md, &["Lessons", "经验教训"]),
+        max_lines,
+    );
+    let startup_rules = vec![
+        "默认用中文；先给答案；默认只回一小段。".to_string(),
+        "用大白话，第一次出现术语时顺手解释。".to_string(),
+        "`.claude/**` 只是宿主胶水；先信 live runtime artifacts。".to_string(),
+        "不要用 Got it / Understood 这种状态汇报式开场；直接给结果或第一步。".to_string(),
+        "目标明确时直接执行可验证的小步，不先写长计划，也不要复述将要做什么。".to_string(),
+        "不要扩大任务范围，不要把历史记忆当现状。".to_string(),
+        "如果 Claude 当前走的是 OpenAI/GPT 后端，保持直接风格，不模仿 Claude 套话。"
+            .to_string(),
+    ];
+    let reminders = stable_line_items(vec![
+        stable_patterns.get(0).cloned().unwrap_or_default(),
+        stable_patterns.get(1).cloned().unwrap_or_default(),
+        stable_decisions.get(0).cloned().unwrap_or_default(),
+        lessons.get(0).cloned().unwrap_or_default(),
+    ]);
+    let anchor_lines = vec![
+        "primary: `artifacts/current/SESSION_SUMMARY.md` / `artifacts/current/NEXT_ACTIONS.json` / `artifacts/current/TRACE_METADATA.json` / `.supervisor_state.json`".to_string(),
+        format!(
+            "active task: `{}`",
+            snapshot
+                .mirror_root
+                .join(ACTIVE_TASK_POINTER_NAME)
+                .display()
+        ),
+        format!(
+            "memory: `./.codex/memory/` -> `{}`",
+            repo_root.join(".codex").join("memory").display()
+        ),
+    ];
+    let (state_title, state_items) = render_current_state_section(continuity);
+    [
+        "# Claude Startup Projection".to_string(),
+        "".to_string(),
+        "_Generated from shared runtime artifacts for one lightweight Claude startup import. Do not edit manually._".to_string(),
+        "".to_string(),
+        markdown_block("Startup Rules", &startup_rules),
+        "".to_string(),
+        markdown_block(&state_title, &state_items),
+        "".to_string(),
+        markdown_block("Stable Reminders", &reminders),
+        "".to_string(),
+        markdown_block("Recovery Anchors", &anchor_lines),
+    ]
+    .join("\n")
+        + "\n"
+}
+
+fn render_framework_workflow_prompt(
+    _snapshot: &FrameworkRuntimeView,
+    continuity: &Value,
+    contract: &Map<String, Value>,
+    max_lines: usize,
+) -> String {
+    let state = value_text(continuity.get("state"));
+    let task = value_text(continuity.get("task"));
+    let phase = value_text(continuity.get("phase"));
+    let status = {
+        let raw = value_text(continuity.get("status"));
+        if raw.is_empty() {
+            state.clone()
+        } else {
+            raw
+        }
+    };
+    let route = value_string_list(continuity.get("route"));
+    let paths_map = continuity
+        .get("paths")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let current = continuity
+        .get("current_execution")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let completed = continuity
+        .get("recent_completed_execution")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let recovery_hints = value_string_list(continuity.get("recovery_hints"));
+    let continuity_next_actions = value_string_list(continuity.get("next_actions"));
+    let continuity_blockers = value_string_list(continuity.get("blockers"));
+    let remaining_tasks = if state == "active" && !current.is_empty() {
+        stable_line_items(
+            contract
+                .get("scope")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .chain(
+                    contract
+                        .get("acceptance_criteria")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten(),
+                )
+                .map(|item| value_text(Some(item)))
+                .filter(|item| !item.is_empty())
+                .collect(),
+        )
+    } else if state == "completed" && !completed.is_empty() {
+        value_string_list(completed.get("follow_up_notes"))
+    } else if state == "inconsistent" {
+        value_string_list(continuity.get("inconsistency_reasons"))
+    } else {
+        recovery_hints.clone()
+    };
+    let next_steps = if state == "active" && !current.is_empty() {
+        let mut items = vec!["先核对恢复锚点与当前代码状态".to_string()];
+        items.extend(continuity_next_actions.clone());
+        stable_line_items(items)
+    } else if state == "completed" && !completed.is_empty() {
+        let mut items =
+            vec!["如果要继续相关工作，先新开独立任务，不要直接续接已完成任务".to_string()];
+        items.extend(recovery_hints.clone());
+        stable_line_items(items)
+    } else if state == "stale" {
+        let mut items = vec!["先重读恢复锚点并重建新鲜任务上下文".to_string()];
+        if continuity_next_actions.is_empty() {
+            items.extend(recovery_hints.clone());
+        } else {
+            items.extend(continuity_next_actions.clone());
+        }
+        stable_line_items(items)
+    } else if state == "inconsistent" {
+        let mut items =
+            vec!["先对齐 SESSION_SUMMARY、TRACE_METADATA 和 SUPERVISOR_STATE".to_string()];
+        items.extend(recovery_hints.clone());
+        stable_line_items(items)
+    } else {
+        let mut items = vec!["先补齐缺失锚点并确认任务状态".to_string()];
+        if continuity_next_actions.is_empty() {
+            items.extend(recovery_hints.clone());
+        } else {
+            items.extend(continuity_next_actions.clone());
+        }
+        stable_line_items(items)
+    };
+    let blockers = if state == "active" {
+        continuity_blockers.clone()
+    } else if state == "completed" {
+        Vec::new()
+    } else {
+        continuity_blockers.clone()
+    };
+    let anchors = stable_line_items(vec![
+        value_text(paths_map.get("session_summary"))
+            .chars()
+            .next()
+            .map(|_| {
+                format!(
+                    "SESSION_SUMMARY: {}",
+                    value_text(paths_map.get("session_summary"))
+                )
+            })
+            .unwrap_or_default(),
+        value_text(paths_map.get("next_actions"))
+            .chars()
+            .next()
+            .map(|_| {
+                format!(
+                    "NEXT_ACTIONS: {}",
+                    value_text(paths_map.get("next_actions"))
+                )
+            })
+            .unwrap_or_default(),
+        value_text(paths_map.get("trace_metadata"))
+            .chars()
+            .next()
+            .map(|_| {
+                format!(
+                    "TRACE_METADATA: {}",
+                    value_text(paths_map.get("trace_metadata"))
+                )
+            })
+            .unwrap_or_default(),
+        value_text(paths_map.get("supervisor_state"))
+            .chars()
+            .next()
+            .map(|_| {
+                format!(
+                    "SUPERVISOR_STATE: {}",
+                    value_text(paths_map.get("supervisor_state"))
+                )
+            })
+            .unwrap_or_default(),
+    ]);
+
+    let mut lines = vec!["继续当前仓库的工作。先阅读并使用这些恢复锚点：".to_string()];
+    lines.extend(anchors.iter().map(|anchor| format!("- {anchor}")));
+    lines.extend([
+        "".to_string(),
+        "当前上下文：".to_string(),
+        format!("- task: {}", if task.is_empty() { "未记录" } else { &task }),
+        format!(
+            "- phase: {}",
+            if phase.is_empty() {
+                "未记录"
+            } else {
+                &phase
+            }
+        ),
+        format!(
+            "- status: {}",
+            if status.is_empty() {
+                "missing"
+            } else {
+                &status
+            }
+        ),
+        format!(
+            "- continuity_state: {}",
+            if state.is_empty() { "missing" } else { &state }
+        ),
+    ]);
+    if !route.is_empty() {
+        lines.push(format!("- route: {}", join_lines(&route)));
+    }
+    if !remaining_tasks.is_empty() {
+        lines.push("".to_string());
+        lines.push("待完成事项：".to_string());
+        lines.extend(
+            remaining_tasks
+                .into_iter()
+                .take(max_lines)
+                .map(|item| format!("- {item}")),
+        );
+    }
+    if !next_steps.is_empty() {
+        lines.push("".to_string());
+        lines.push("必须先做的下一步：".to_string());
+        lines.extend(
+            next_steps
+                .into_iter()
+                .take(max_lines)
+                .map(|item| format!("- {item}")),
+        );
+    }
+    if !blockers.is_empty() {
+        lines.push("".to_string());
+        lines.push("阻塞：".to_string());
+        lines.extend(
+            blockers
+                .into_iter()
+                .take(max_lines)
+                .map(|item| format!("- {item}")),
+        );
+    }
+    lines.push("".to_string());
+    lines.push("执行要求：参考prompt设置的串并行分工，直接开始执行！".to_string());
+    lines.join("\n") + "\n"
+}
+
+fn render_current_state_section(continuity: &Value) -> (String, Vec<String>) {
+    let state = value_text(continuity.get("state"));
+    if state == "active" {
+        if let Some(current) = continuity
+            .get("current_execution")
+            .and_then(Value::as_object)
+        {
+            return (
+                "Task Snapshot".to_string(),
+                stable_line_items(vec![
+                    format!(
+                        "current: {} / {} / {}",
+                        nonempty_or(current.get("task"), "未记录"),
+                        nonempty_or(current.get("phase"), "未记录"),
+                        nonempty_or(current.get("status"), "in_progress")
+                    ),
+                    format_optional_joined("route", current.get("route")),
+                    format_optional_joined("next", current.get("next_actions")),
+                    format_optional_joined("blockers", current.get("blockers")),
+                ]),
+            );
+        }
+    }
+    if state == "completed" {
+        if let Some(completed) = continuity
+            .get("recent_completed_execution")
+            .and_then(Value::as_object)
+        {
+            return (
+                "Task Snapshot".to_string(),
+                stable_line_items(vec![
+                    format!(
+                        "recent: {} / {} / {}",
+                        nonempty_or(completed.get("task"), "未记录"),
+                        nonempty_or(completed.get("phase"), "未记录"),
+                        nonempty_or(completed.get("status"), "completed")
+                    ),
+                    format_optional_joined("route", completed.get("route")),
+                    "resume: blocked; start a new task before reviving related work".to_string(),
+                    format_optional_joined("follow_up", completed.get("follow_up_notes")),
+                ]),
+            );
+        }
+    }
+    let reasons_key = match state.as_str() {
+        "stale" => "stale_reasons",
+        "inconsistent" => "inconsistency_reasons",
+        "missing" => "recovery_hints",
+        _ => "recovery_hints",
+    };
+    let reasons = continuity
+        .get(reasons_key)
+        .or_else(|| continuity.get("recovery_hints"));
+    (
+        "Task Snapshot".to_string(),
+        stable_line_items(vec![
+            format!(
+                "continuity: {}",
+                if state.is_empty() { "missing" } else { state.as_str() }
+            ),
+            if continuity.get("task").is_some() || continuity.get("phase").is_some() {
+                format!(
+                    "last_known: {} / {}",
+                    nonempty_or(continuity.get("task"), "未记录"),
+                    nonempty_or(continuity.get("phase"), "未记录")
+                )
+            } else {
+                String::new()
+            },
+            format_optional_joined("warning", reasons),
+            format_optional_joined("recovery", continuity.get("recovery_hints")),
+        ]),
+    )
+}
+
+fn markdown_block(title: &str, items: &[String]) -> String {
+    let rendered = if items.is_empty() {
+        vec!["暂无".to_string()]
+    } else {
+        items.to_vec()
+    };
+    let mut lines = vec![format!("## {title}"), "".to_string()];
+    lines.extend(rendered.into_iter().map(|item| format!("- {item}")));
+    lines.push(String::new());
+    lines.join("\n")
+}
+
+fn extract_markdown_section(text: &str, headings: &[&str]) -> String {
+    let mut capture = false;
+    let mut lines = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('#') {
+            let title = trimmed.trim_start_matches('#').trim();
+            if capture {
+                break;
+            }
+            if headings.iter().any(|heading| title == *heading) {
+                capture = true;
+                continue;
+            }
+        }
+        if capture {
+            lines.push(line.to_string());
+        }
+    }
+    lines.join("\n").trim().to_string()
+}
+
+fn extract_bullets(text: &str, max_lines: usize) -> Vec<String> {
+    stable_line_items(
+        text.lines()
+            .filter_map(|line| coerce_bullet_line(line.trim()))
+            .take(max_lines)
+            .collect(),
+    )
+}
+
+fn coerce_bullet_line(line: &str) -> Option<String> {
+    if let Some(value) = line.strip_prefix("- ").or_else(|| line.strip_prefix("* ")) {
+        let resolved = value.trim();
+        return (!resolved.is_empty()).then(|| resolved.to_string());
+    }
+    let mut seen_digit = false;
+    for (idx, ch) in line.char_indices() {
+        if ch.is_ascii_digit() {
+            seen_digit = true;
+            continue;
+        }
+        if seen_digit && (ch == '.' || ch == ')') {
+            let value = line[idx + 1..].trim();
+            return (!value.is_empty()).then(|| value.to_string());
+        }
+        break;
+    }
+    None
+}
+
+fn format_optional_joined(label: &str, value: Option<&Value>) -> String {
+    let values = value_string_list(value);
+    if values.is_empty() {
+        String::new()
+    } else {
+        format!("{label}: {}", join_lines(&values))
+    }
+}
+
+fn nonempty_or(value: Option<&Value>, fallback: &str) -> String {
+    let resolved = value_text(value);
+    if resolved.is_empty() {
+        fallback.to_string()
+    } else {
+        resolved
+    }
+}
+
+fn join_lines(values: &[String]) -> String {
+    values
+        .iter()
+        .filter(|item| !item.trim().is_empty())
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" / ")
 }
 
 fn current_local_timestamp() -> String {

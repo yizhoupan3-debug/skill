@@ -35,6 +35,7 @@ HOME_PLUGIN_ROOT = Path.home() / ".codex" / "plugins" / "skill-framework-native"
 HOME_MARKETPLACE_PATH = Path.home() / ".agents" / "plugins" / "marketplace.json"
 HOME_CODEX_SKILLS_PATH = Path.home() / ".codex" / "skills"
 HOME_CLAUDE_REFRESH_PATH = Path.home() / ".claude" / "commands" / "refresh.md"
+HOME_CLAUDE_MCP_CONFIG_PATH = Path.home() / ".claude.json"
 PROJECT_INSTRUCTIONS_PATH = Path(".codex") / "model_instructions.md"
 REPO_MARKETPLACE_PATH = Path(".agents") / "plugins" / "marketplace.json"
 PLUGIN_NAME = str(primary_plugin_record().get("plugin_name", "skill-framework-native"))
@@ -362,6 +363,7 @@ def install_native_integration(
     home_marketplace_path: Path = HOME_MARKETPLACE_PATH,
     home_codex_skills_path: Path = HOME_CODEX_SKILLS_PATH,
     home_claude_refresh_path: Path = HOME_CLAUDE_REFRESH_PATH,
+    home_claude_mcp_config_path: Path = HOME_CLAUDE_MCP_CONFIG_PATH,
     project_instructions_path: Path = PROJECT_INSTRUCTIONS_PATH,
     install_browser_mcp: bool = True,
     install_framework_mcp: bool = True,
@@ -370,6 +372,7 @@ def install_native_integration(
     install_personal_marketplace_entry: bool = True,
     install_home_codex_skills_link: bool = True,
     install_home_claude_refresh_command: bool = True,
+    install_home_claude_mcp_sync: bool = True,
     install_default_bootstrap: bool = True,
     bootstrap_output_dir: Path | None = None,
 ) -> dict[str, Any]:
@@ -444,6 +447,7 @@ def install_native_integration(
     home_marketplace_path: Path = HOME_MARKETPLACE_PATH,
     home_codex_skills_path: Path = HOME_CODEX_SKILLS_PATH,
     home_claude_refresh_path: Path = HOME_CLAUDE_REFRESH_PATH,
+    home_claude_mcp_config_path: Path = HOME_CLAUDE_MCP_CONFIG_PATH,
     project_instructions_path: Path = PROJECT_INSTRUCTIONS_PATH,
     install_browser_mcp: bool = True,
     install_framework_mcp: bool = True,
@@ -452,6 +456,7 @@ def install_native_integration(
     install_personal_marketplace_entry: bool = True,
     install_home_codex_skills_link: bool = True,
     install_home_claude_refresh_command: bool = True,
+    install_home_claude_mcp_sync: bool = True,
     install_default_bootstrap: bool = True,
     bootstrap_output_dir: Path | None = None,
 ) -> dict[str, Any]:
@@ -474,6 +479,8 @@ def install_native_integration(
         str(home_codex_skills_path),
         "--home-claude-refresh-path",
         str(home_claude_refresh_path),
+        "--home-claude-mcp-config-path",
+        str(home_claude_mcp_config_path),
         "--project-instructions-path",
         str(project_instructions_path),
     ]
@@ -493,6 +500,8 @@ def install_native_integration(
         command.append("--skip-home-codex-skills-link")
     if not install_home_claude_refresh_command:
         command.append("--skip-home-claude-refresh")
+    if not install_home_claude_mcp_sync:
+        command.append("--skip-home-claude-mcp-sync")
     if not install_default_bootstrap:
         command.append("--skip-default-bootstrap")
     return run_host_integration_rs(*command)
@@ -505,6 +514,7 @@ def main() -> int:
     parser.add_argument("--home-marketplace-path", type=Path, default=HOME_MARKETPLACE_PATH)
     parser.add_argument("--home-codex-skills-path", type=Path, default=HOME_CODEX_SKILLS_PATH)
     parser.add_argument("--home-claude-refresh-path", type=Path, default=HOME_CLAUDE_REFRESH_PATH)
+    parser.add_argument("--home-claude-mcp-config-path", type=Path, default=HOME_CLAUDE_MCP_CONFIG_PATH)
     parser.add_argument("--project-instructions-path", type=Path, default=PROJECT_INSTRUCTIONS_PATH)
     parser.add_argument("--bootstrap-output-dir", type=Path, default=None)
     parser.add_argument("--repo-root", type=Path, default=None)
@@ -515,6 +525,7 @@ def main() -> int:
     parser.add_argument("--skip-personal-marketplace", action="store_true")
     parser.add_argument("--skip-home-codex-skills-link", action="store_true")
     parser.add_argument("--skip-home-claude-refresh", action="store_true")
+    parser.add_argument("--skip-home-claude-mcp-sync", action="store_true")
     parser.add_argument("--skip-default-bootstrap", action="store_true")
     parser.add_argument("--json", action="store_true", dest="json_output")
     args = parser.parse_args()
@@ -524,6 +535,7 @@ def main() -> int:
         home_marketplace_path=args.home_marketplace_path,
         home_codex_skills_path=args.home_codex_skills_path,
         home_claude_refresh_path=args.home_claude_refresh_path,
+        home_claude_mcp_config_path=args.home_claude_mcp_config_path,
         repo_root=args.repo_root,
         project_instructions_path=args.project_instructions_path,
         install_browser_mcp=not args.skip_browser_mcp,
@@ -533,6 +545,7 @@ def main() -> int:
         install_personal_marketplace_entry=not args.skip_personal_marketplace,
         install_home_codex_skills_link=not args.skip_home_codex_skills_link,
         install_home_claude_refresh_command=not args.skip_home_claude_refresh,
+        install_home_claude_mcp_sync=not args.skip_home_claude_mcp_sync,
         install_default_bootstrap=not args.skip_default_bootstrap,
         bootstrap_output_dir=args.bootstrap_output_dir,
     )

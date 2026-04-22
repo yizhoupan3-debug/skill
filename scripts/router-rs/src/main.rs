@@ -15,18 +15,22 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use strsim::jaro_winkler;
 
 mod background_state;
+mod claude_hooks;
 mod framework_profile;
 mod framework_runtime;
+mod session_supervisor;
 
 use background_state::handle_background_state_operation;
+use claude_hooks::{run_claude_audit_hook, run_claude_lifecycle_hook};
 use framework_profile::{
     build_codex_artifact_bundle, build_profile_bundle, build_profile_bundle_with_legacy_alias,
     load_framework_profile,
 };
 use framework_runtime::{
-    build_framework_contract_summary_envelope, build_framework_runtime_snapshot_envelope,
-    resolve_repo_root_arg,
+    build_framework_contract_summary_envelope, build_framework_recap_envelope,
+    build_framework_runtime_snapshot_envelope, resolve_repo_root_arg,
 };
+use session_supervisor::handle_session_supervisor_operation;
 
 const ROUTE_DECISION_SCHEMA_VERSION: &str = "router-rs-route-decision-v1";
 const SEARCH_RESULTS_SCHEMA_VERSION: &str = "router-rs-search-results-v1";
@@ -138,6 +142,8 @@ struct Cli {
     #[arg(long)]
     background_state_json: bool,
     #[arg(long)]
+    session_supervisor_json: bool,
+    #[arg(long)]
     describe_transport_json: bool,
     #[arg(long)]
     describe_handoff_json: bool,
@@ -172,11 +178,19 @@ struct Cli {
     #[arg(long)]
     framework_contract_summary_json: bool,
     #[arg(long)]
+    framework_recap_json: bool,
+    #[arg(long)]
     profile_json: bool,
     #[arg(long)]
     profile_artifacts_json: bool,
     #[arg(long)]
     route_report_json: bool,
+    #[arg(long)]
+    claude_hook_command: Option<String>,
+    #[arg(long)]
+    claude_hook_audit_command: Option<String>,
+    #[arg(long, default_value_t = 6)]
+    claude_hook_max_lines: usize,
     #[arg(long)]
     include_legacy_alias_artifact: bool,
     #[arg(long)]
@@ -195,6 +209,8 @@ struct Cli {
     background_control_input_json: Option<String>,
     #[arg(long)]
     background_state_input_json: Option<String>,
+    #[arg(long)]
+    session_supervisor_input_json: Option<String>,
     #[arg(long)]
     describe_transport_input_json: Option<String>,
     #[arg(long)]
@@ -672,6 +688,7 @@ fn main() -> Result<(), String> {
         args.sandbox_control_json,
         args.background_control_json,
         args.background_state_json,
+        args.session_supervisor_json,
         args.describe_transport_json,
         args.describe_handoff_json,
         args.checkpoint_resume_manifest_json,
@@ -689,9 +706,12 @@ fn main() -> Result<(), String> {
         args.write_trace_compaction_delta_json,
         args.framework_runtime_snapshot_json,
         args.framework_contract_summary_json,
+        args.framework_recap_json,
         args.profile_json,
         args.profile_artifacts_json,
         args.route_report_json,
+        args.claude_hook_command.is_some(),
+        args.claude_hook_audit_command.is_some(),
     ]
     .into_iter()
     .filter(|enabled| *enabled)
@@ -699,7 +719,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --route-report-json, --profile-json, and --profile-artifacts-json"
+            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --route-report-json, --profile-json, and --profile-artifacts-json"
                 .to_string(),
         );
     }
@@ -751,6 +771,24 @@ fn main() -> Result<(), String> {
         println!(
             "{}",
             serde_json::to_string(&handle_background_state_operation(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.session_supervisor_json {
+        let payload = serde_json::from_str::<Value>(
+            args.session_supervisor_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--session-supervisor-input-json is required with --session-supervisor-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse session supervisor input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&handle_session_supervisor_operation(payload)?)
                 .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());
@@ -1025,6 +1063,19 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.framework_recap_json {
+        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_framework_recap_envelope(
+                &repo_root,
+                args.claude_hook_max_lines,
+            )?)
+            .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
     if args.profile_json {
         let profile_path = args
             .framework_profile
@@ -1084,6 +1135,30 @@ fn main() -> Result<(), String> {
         println!(
             "{}",
             serde_json::to_string(&report)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if let Some(command) = args.claude_hook_command.as_deref() {
+        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+        println!(
+            "{}",
+            serde_json::to_string(&run_claude_lifecycle_hook(
+                command,
+                &repo_root,
+                args.claude_hook_max_lines,
+            )?)
+            .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if let Some(command) = args.claude_hook_audit_command.as_deref() {
+        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+        println!(
+            "{}",
+            serde_json::to_string(&run_claude_audit_hook(command, &repo_root)?)
                 .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());
@@ -1310,6 +1385,7 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
                 .map_err(|err| format!("serialize background control output failed: {err}"))
         }
         "background_state" => handle_background_state_operation(payload),
+        "session_supervisor" => handle_session_supervisor_operation(payload),
         "describe_transport" => build_trace_transport_descriptor(payload),
         "describe_handoff" => build_trace_handoff_descriptor(payload),
         "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload),
@@ -1341,6 +1417,7 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
         }
         "framework_runtime_snapshot" => dispatch_stdio_framework_runtime_snapshot(payload),
         "framework_contract_summary" => dispatch_stdio_framework_contract_summary(payload),
+        "framework_recap" => dispatch_stdio_framework_recap(payload),
         _ => Err(format!("unsupported stdio operation: {op}")),
     }
 }
@@ -1453,6 +1530,20 @@ fn dispatch_stdio_framework_contract_summary(payload: Value) -> Result<Value, St
         &repo_root,
     ))?)
     .map_err(|err| format!("serialize framework contract summary output failed: {err}"))
+}
+
+fn dispatch_stdio_framework_recap(payload: Value) -> Result<Value, String> {
+    let repo_root = required_non_empty_string(&payload, "repo_root", "stdio framework recap")?;
+    let max_lines = payload
+        .get("max_lines")
+        .and_then(Value::as_u64)
+        .map(|value| value as usize)
+        .unwrap_or(6);
+    serde_json::to_value(build_framework_recap_envelope(
+        Path::new(&repo_root),
+        max_lines,
+    )?)
+    .map_err(|err| format!("serialize framework recap output failed: {err}"))
 }
 
 fn dispatch_stdio_compile_profile_bundle(payload: Value) -> Result<Value, String> {
@@ -4135,17 +4226,51 @@ fn merge_attach_path_values(
     }
 }
 
-fn normalize_attach_request(
-    payload: &Value,
-) -> Result<(Option<String>, Option<String>, Option<String>), String> {
-    let binding_artifact_path = optional_non_empty_string(payload, "binding_artifact_path");
-    let handoff_path = optional_non_empty_string(payload, "handoff_path");
-    let resume_manifest_path = optional_non_empty_string(payload, "resume_manifest_path");
+struct NormalizedAttachRequest {
+    binding_artifact_path: Option<String>,
+    handoff_path: Option<String>,
+    resume_manifest_path: Option<String>,
+    binding_artifact_resolution: Option<String>,
+    handoff_resolution: Option<String>,
+    resume_manifest_resolution: Option<String>,
+}
+
+fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, String> {
+    let explicit_binding_artifact_path =
+        optional_non_empty_string(payload, "binding_artifact_path");
+    let explicit_handoff_path = optional_non_empty_string(payload, "handoff_path");
+    let explicit_resume_manifest_path = optional_non_empty_string(payload, "resume_manifest_path");
     let Some(attach_descriptor) = payload.get("attach_descriptor") else {
-        return Ok((binding_artifact_path, handoff_path, resume_manifest_path));
+        return Ok(NormalizedAttachRequest {
+            binding_artifact_path: explicit_binding_artifact_path.clone(),
+            handoff_path: explicit_handoff_path.clone(),
+            resume_manifest_path: explicit_resume_manifest_path.clone(),
+            binding_artifact_resolution: explicit_binding_artifact_path
+                .as_ref()
+                .map(|_| "explicit_request".to_string()),
+            handoff_resolution: explicit_handoff_path
+                .as_ref()
+                .map(|_| "explicit_request".to_string()),
+            resume_manifest_resolution: explicit_resume_manifest_path
+                .as_ref()
+                .map(|_| "explicit_request".to_string()),
+        });
     };
     if attach_descriptor.is_null() {
-        return Ok((binding_artifact_path, handoff_path, resume_manifest_path));
+        return Ok(NormalizedAttachRequest {
+            binding_artifact_path: explicit_binding_artifact_path.clone(),
+            handoff_path: explicit_handoff_path.clone(),
+            resume_manifest_path: explicit_resume_manifest_path.clone(),
+            binding_artifact_resolution: explicit_binding_artifact_path
+                .as_ref()
+                .map(|_| "explicit_request".to_string()),
+            handoff_resolution: explicit_handoff_path
+                .as_ref()
+                .map(|_| "explicit_request".to_string()),
+            resume_manifest_resolution: explicit_resume_manifest_path
+                .as_ref()
+                .map(|_| "explicit_request".to_string()),
+        });
     }
     if !attach_descriptor.is_object() {
         return Err("External runtime event attach descriptor must be a mapping.".to_string());
@@ -4199,7 +4324,7 @@ fn normalize_attach_request(
         }
     }
     let _ = descriptor_mapping(attach_descriptor, "requested_artifacts")?;
-    let _ = descriptor_mapping(attach_descriptor, "resolution")?;
+    let resolution_mapping = descriptor_mapping(attach_descriptor, "resolution")?;
     let resolved_mapping = descriptor_mapping(attach_descriptor, "resolved_artifacts")?
         .unwrap_or_else(|| {
             attach_descriptor
@@ -4209,19 +4334,53 @@ fn normalize_attach_request(
     let descriptor_binding = mapping_string(resolved_mapping, "binding_artifact_path")?;
     let descriptor_handoff = mapping_string(resolved_mapping, "handoff_path")?;
     let descriptor_resume = mapping_string(resolved_mapping, "resume_manifest_path")?;
-    Ok((
-        merge_attach_path_values(
-            binding_artifact_path,
-            descriptor_binding,
-            "binding_artifact_path",
-        )?,
-        merge_attach_path_values(handoff_path, descriptor_handoff, "handoff_path")?,
-        merge_attach_path_values(
-            resume_manifest_path,
-            descriptor_resume,
-            "resume_manifest_path",
-        )?,
-    ))
+    let binding_artifact_path = merge_attach_path_values(
+        explicit_binding_artifact_path.clone(),
+        descriptor_binding,
+        "binding_artifact_path",
+    )?;
+    let handoff_path = merge_attach_path_values(
+        explicit_handoff_path.clone(),
+        descriptor_handoff,
+        "handoff_path",
+    )?;
+    let resume_manifest_path = merge_attach_path_values(
+        explicit_resume_manifest_path.clone(),
+        descriptor_resume,
+        "resume_manifest_path",
+    )?;
+    Ok(NormalizedAttachRequest {
+        binding_artifact_path,
+        handoff_path,
+        resume_manifest_path,
+        binding_artifact_resolution: if explicit_binding_artifact_path.is_some() {
+            Some("explicit_request".to_string())
+        } else {
+            resolution_mapping
+                .as_ref()
+                .map(|mapping| mapping_string(mapping, "binding_artifact_path"))
+                .transpose()?
+                .flatten()
+        },
+        handoff_resolution: if explicit_handoff_path.is_some() {
+            Some("explicit_request".to_string())
+        } else {
+            resolution_mapping
+                .as_ref()
+                .map(|mapping| mapping_string(mapping, "handoff_path"))
+                .transpose()?
+                .flatten()
+        },
+        resume_manifest_resolution: if explicit_resume_manifest_path.is_some() {
+            Some("explicit_request".to_string())
+        } else {
+            resolution_mapping
+                .as_ref()
+                .map(|mapping| mapping_string(mapping, "resume_manifest_path"))
+                .transpose()?
+                .flatten()
+        },
+    })
 }
 
 fn require_requested_artifact(
@@ -4470,8 +4629,10 @@ fn trace_stream_resolution(
 }
 
 fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
-    let (binding_artifact_path, handoff_path, resume_manifest_path) =
-        normalize_attach_request(&payload)?;
+    let normalized_request = normalize_attach_request(&payload)?;
+    let binding_artifact_path = normalized_request.binding_artifact_path;
+    let handoff_path = normalized_request.handoff_path;
+    let resume_manifest_path = normalized_request.resume_manifest_path;
     if binding_artifact_path.is_none() && handoff_path.is_none() && resume_manifest_path.is_none() {
         return Err(
             "External runtime event attach requires a binding artifact, handoff manifest, or resume manifest path."
@@ -4482,13 +4643,9 @@ fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
     let binding_path = normalize_optional_runtime_path(binding_artifact_path)?;
     let handoff_file = normalize_optional_runtime_path(handoff_path)?;
     let resume_file = normalize_optional_runtime_path(resume_manifest_path)?;
-    let mut binding_source = binding_path
-        .as_ref()
-        .map(|_| "explicit_request".to_string());
-    let handoff_source = handoff_file
-        .as_ref()
-        .map(|_| "explicit_request".to_string());
-    let mut resume_source = resume_file.as_ref().map(|_| "explicit_request".to_string());
+    let mut binding_source = normalized_request.binding_artifact_resolution;
+    let handoff_source = normalized_request.handoff_resolution;
+    let mut resume_source = normalized_request.resume_manifest_resolution;
 
     let requested_paths = [
         binding_path.clone(),
@@ -7879,6 +8036,465 @@ mod tests {
         );
 
         fs::remove_file(&trace_path).expect("cleanup trace stream");
+    }
+
+    #[test]
+    fn attach_runtime_event_transport_preserves_resume_manifest_resolution_on_descriptor_roundtrip()
+    {
+        let binding_artifact_path = temp_json_path("attach-transport");
+        let resume_manifest_path = temp_json_path("attach-resume-manifest");
+        let trace_stream_path = temp_trace_path("attach-trace-stream");
+
+        fs::write(
+            &binding_artifact_path,
+            serde_json::to_string_pretty(&json!({
+                "stream_id": "stream-attach-roundtrip",
+                "session_id": "session-attach-roundtrip",
+                "job_id": "job-attach-roundtrip",
+                "binding_backend_family": "filesystem",
+                "resume_mode": "after_event_id"
+            }))
+            .expect("serialize binding artifact"),
+        )
+        .expect("write binding artifact");
+        fs::write(&trace_stream_path, "").expect("write empty trace stream");
+        fs::write(
+            &resume_manifest_path,
+            serde_json::to_string_pretty(&json!({
+                "session_id": "session-attach-roundtrip",
+                "job_id": "job-attach-roundtrip",
+                "event_transport_path": binding_artifact_path.display().to_string(),
+                "trace_stream_path": trace_stream_path.display().to_string()
+            }))
+            .expect("serialize resume manifest"),
+        )
+        .expect("write resume manifest");
+
+        let attached = attach_runtime_event_transport(json!({
+            "resume_manifest_path": resume_manifest_path.display().to_string()
+        }))
+        .expect("attach via resume manifest");
+        let attach_descriptor = attached
+            .get("attach_descriptor")
+            .cloned()
+            .expect("attach descriptor");
+        assert_eq!(
+            attach_descriptor["resolution"]["binding_artifact_path"],
+            Value::String("resume_manifest".to_string())
+        );
+        assert_eq!(
+            attach_descriptor["resolution"]["resume_manifest_path"],
+            Value::String("explicit_request".to_string())
+        );
+
+        let roundtrip = attach_runtime_event_transport(json!({
+            "attach_descriptor": attach_descriptor
+        }))
+        .expect("attach via descriptor roundtrip");
+        assert_eq!(
+            roundtrip["attach_descriptor"]["resolution"]["binding_artifact_path"],
+            Value::String("resume_manifest".to_string())
+        );
+        assert_eq!(
+            roundtrip["attach_descriptor"]["resolution"]["resume_manifest_path"],
+            Value::String("explicit_request".to_string())
+        );
+        assert_eq!(
+            roundtrip["binding_artifact_path"],
+            Value::String(binding_artifact_path.display().to_string())
+        );
+        assert_eq!(
+            roundtrip["resume_manifest_path"],
+            Value::String(resume_manifest_path.display().to_string())
+        );
+
+        fs::remove_file(&binding_artifact_path).expect("cleanup binding artifact");
+        fs::remove_file(&resume_manifest_path).expect("cleanup resume manifest");
+        fs::remove_file(&trace_stream_path).expect("cleanup trace stream");
+    }
+
+    #[test]
+    fn background_state_operation_persists_control_plane_projection_and_health() {
+        let state_path = temp_json_path("background-state-filesystem");
+        let response = handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "apply_mutation",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "control_plane_descriptor": {
+                "schema_version": "router-rs-runtime-control-plane-v1",
+                "authority": "rust-runtime-control-plane",
+                "services": {
+                    "state": {
+                        "authority": "rust-runtime-control-plane",
+                        "role": "durable-background-state",
+                        "projection": "python-thin-projection",
+                        "delegate_kind": "filesystem-state-store"
+                    },
+                    "trace": {
+                        "authority": "rust-runtime-control-plane",
+                        "role": "trace-and-handoff",
+                        "projection": "python-thin-projection",
+                        "delegate_kind": "filesystem-trace-store"
+                    }
+                }
+            },
+            "job_id": "job-filesystem-1",
+            "mutation": {
+                "status": "queued",
+                "session_id": "session-filesystem-1"
+            }
+        }))
+        .expect("filesystem background state response");
+
+        assert_eq!(
+            response["schema_version"],
+            Value::String("router-rs-background-state-store-v1".to_string())
+        );
+        assert_eq!(
+            response["authority"],
+            Value::String("rust-background-state-store".to_string())
+        );
+        assert_eq!(
+            response["health"]["runtime_control_plane_authority"],
+            Value::String("rust-runtime-control-plane".to_string())
+        );
+        assert_eq!(
+            response["health"]["runtime_control_plane_schema_version"],
+            Value::String("router-rs-runtime-control-plane-v1".to_string())
+        );
+        assert_eq!(
+            response["health"]["control_plane_projection"],
+            Value::String("python-thin-projection".to_string())
+        );
+        assert_eq!(
+            response["health"]["control_plane_delegate_kind"],
+            Value::String("filesystem-state-store".to_string())
+        );
+        assert_eq!(
+            response["health"]["backend_family"],
+            Value::String("filesystem".to_string())
+        );
+        assert_eq!(
+            response["health"]["supports_atomic_replace"],
+            Value::Bool(true)
+        );
+        assert_eq!(
+            response["health"]["supports_compaction"],
+            Value::Bool(false)
+        );
+        assert_eq!(
+            response["health"]["supports_snapshot_delta"],
+            Value::Bool(false)
+        );
+        assert_eq!(
+            response["health"]["supports_remote_event_transport"],
+            Value::Bool(true)
+        );
+
+        let persisted = read_json(&state_path).expect("read persisted state");
+        assert_eq!(
+            persisted["control_plane"]["authority"],
+            Value::String("rust-runtime-control-plane".to_string())
+        );
+        assert_eq!(
+            persisted["control_plane"]["projection"],
+            Value::String("python-thin-projection".to_string())
+        );
+        assert_eq!(
+            persisted["control_plane"]["delegate_kind"],
+            Value::String("filesystem-state-store".to_string())
+        );
+        assert_eq!(
+            persisted["control_plane"]["supports_atomic_replace"],
+            Value::Bool(true)
+        );
+        assert_eq!(
+            persisted["jobs"][0]["status"],
+            Value::String("queued".to_string())
+        );
+
+        let recovered = handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "snapshot",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem"
+        }))
+        .expect("recovered background state snapshot");
+        assert_eq!(
+            recovered["health"]["control_plane_delegate_kind"],
+            Value::String("filesystem-state-store".to_string())
+        );
+        assert_eq!(
+            recovered["state"]["jobs"][0]["job_id"],
+            Value::String("job-filesystem-1".to_string())
+        );
+
+        fs::remove_file(&state_path).expect("cleanup filesystem background state");
+    }
+
+    #[test]
+    fn background_state_operation_reports_sqlite_backend_capabilities() {
+        let temp_dir = temp_json_path("background-state-sqlite-root")
+            .parent()
+            .expect("temp root parent")
+            .join(format!(
+                "router-rs-bg-sqlite-{}",
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("clock before epoch")
+                    .as_nanos()
+            ));
+        fs::create_dir_all(&temp_dir).expect("create sqlite temp dir");
+        let canonical_temp_dir = temp_dir
+            .canonicalize()
+            .expect("canonicalize sqlite temp dir");
+        let state_path = canonical_temp_dir.join("runtime_background_jobs.json");
+        let sqlite_db_path = canonical_temp_dir.join("runtime_background_jobs.sqlite");
+
+        let response = handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "apply_mutation",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "sqlite",
+            "sqlite_db_path": sqlite_db_path.display().to_string(),
+            "control_plane_descriptor": {
+                "schema_version": "router-rs-runtime-control-plane-v1",
+                "authority": "rust-runtime-control-plane",
+                "services": {
+                    "state": {
+                        "authority": "rust-runtime-control-plane",
+                        "role": "durable-background-state",
+                        "projection": "python-thin-projection",
+                        "delegate_kind": "filesystem-state-store"
+                    }
+                }
+            },
+            "job_id": "job-sqlite-1",
+            "mutation": {
+                "status": "completed",
+                "session_id": "session-sqlite-1"
+            }
+        }))
+        .expect("sqlite background state response");
+
+        assert_eq!(
+            response["health"]["control_plane_delegate_kind"],
+            Value::String("sqlite-state-store".to_string())
+        );
+        assert_eq!(
+            response["health"]["backend_family"],
+            Value::String("sqlite".to_string())
+        );
+        assert_eq!(
+            response["health"]["supports_atomic_replace"],
+            Value::Bool(true)
+        );
+        assert_eq!(response["health"]["supports_compaction"], Value::Bool(true));
+        assert_eq!(
+            response["health"]["supports_snapshot_delta"],
+            Value::Bool(true)
+        );
+        assert_eq!(
+            response["health"]["supports_remote_event_transport"],
+            Value::Bool(true)
+        );
+        assert!(!state_path.exists());
+        assert!(sqlite_db_path.exists());
+
+        let recovered = handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "snapshot",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "sqlite",
+            "sqlite_db_path": sqlite_db_path.display().to_string()
+        }))
+        .expect("recovered sqlite background state snapshot");
+        assert_eq!(
+            recovered["state"]["jobs"][0]["job_id"],
+            Value::String("job-sqlite-1".to_string())
+        );
+        assert_eq!(
+            recovered["health"]["control_plane_delegate_kind"],
+            Value::String("sqlite-state-store".to_string())
+        );
+
+        fs::remove_dir_all(&canonical_temp_dir).expect("cleanup sqlite background state dir");
+    }
+
+    #[test]
+    fn background_state_operation_arbitrates_takeover_across_persisted_roundtrip() {
+        let state_path = temp_json_path("background-state-takeover");
+        let control_plane_descriptor = json!({
+            "schema_version": "router-rs-runtime-control-plane-v1",
+            "authority": "rust-runtime-control-plane",
+            "services": {
+                "state": {
+                    "authority": "rust-runtime-control-plane",
+                    "role": "durable-background-state",
+                    "projection": "python-thin-projection",
+                    "delegate_kind": "filesystem-state-store"
+                }
+            }
+        });
+
+        handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "apply_mutation",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "control_plane_descriptor": control_plane_descriptor,
+            "job_id": "job-1",
+            "mutation": {
+                "status": "running",
+                "session_id": "shared-session",
+                "claimed_by": "job-1"
+            }
+        }))
+        .expect("seed active owner");
+
+        let reserved = handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "reserve",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "session_id": "shared-session",
+            "incoming_job_id": "job-2"
+        }))
+        .expect("reserve takeover");
+        assert_eq!(
+            reserved["takeover"]["outcome"],
+            Value::String("pending".to_string())
+        );
+        assert_eq!(reserved["takeover"]["changed"], Value::Bool(true));
+        assert_eq!(
+            reserved["takeover"]["previous_active_job_id"],
+            Value::String("job-1".to_string())
+        );
+        assert_eq!(
+            reserved["takeover"]["pending_job_id"],
+            Value::String("job-2".to_string())
+        );
+        assert_eq!(reserved["health"]["pending_session_takeovers"], json!(1));
+
+        let completed = handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "apply_mutation",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "job_id": "job-1",
+            "mutation": {
+                "status": "completed",
+                "session_id": "shared-session",
+                "claimed_by": "job-1"
+            }
+        }))
+        .expect("complete previous owner");
+        assert_eq!(completed["health"]["active_job_count"], json!(0));
+
+        let claimed = handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "claim",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "session_id": "shared-session",
+            "incoming_job_id": "job-2"
+        }))
+        .expect("claim takeover");
+        assert_eq!(
+            claimed["takeover"]["outcome"],
+            Value::String("claimed".to_string())
+        );
+        assert_eq!(claimed["takeover"]["changed"], Value::Bool(true));
+        assert_eq!(
+            claimed["takeover"]["active_job_id"],
+            Value::String("job-2".to_string())
+        );
+        assert_eq!(claimed["takeover"]["pending_job_id"], Value::Null);
+        assert_eq!(claimed["health"]["pending_session_takeovers"], json!(0));
+
+        let active = handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "get_active_job",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "session_id": "shared-session"
+        }))
+        .expect("get active job after claim");
+        assert_eq!(active["active_job_id"], Value::String("job-2".to_string()));
+
+        let persisted = read_json(&state_path).expect("read persisted takeover state");
+        assert_eq!(persisted["pending_session_takeovers"], Value::Array(vec![]));
+        assert_eq!(
+            persisted["active_sessions"],
+            Value::Array(vec![json!({
+                "session_id": "shared-session",
+                "job_id": "job-2"
+            })])
+        );
+
+        fs::remove_file(&state_path).expect("cleanup takeover background state");
+    }
+
+    #[test]
+    fn background_state_operation_release_keeps_current_owner_when_only_pending_takeover_exists() {
+        let state_path = temp_json_path("background-state-release");
+
+        handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "apply_mutation",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "job_id": "job-1",
+            "mutation": {
+                "status": "running",
+                "session_id": "shared-session"
+            }
+        }))
+        .expect("seed release owner");
+
+        handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "reserve",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "session_id": "shared-session",
+            "incoming_job_id": "job-2"
+        }))
+        .expect("seed pending takeover");
+
+        let released = handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "release",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "session_id": "shared-session",
+            "incoming_job_id": "job-2"
+        }))
+        .expect("release pending takeover");
+        assert_eq!(
+            released["takeover"]["outcome"],
+            Value::String("released".to_string())
+        );
+        assert_eq!(released["takeover"]["changed"], Value::Bool(true));
+        assert_eq!(
+            released["takeover"]["active_job_id"],
+            Value::String("job-1".to_string())
+        );
+        assert_eq!(released["takeover"]["pending_job_id"], Value::Null);
+        assert_eq!(released["health"]["pending_session_takeovers"], json!(0));
+
+        let active = handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "get_active_job",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "session_id": "shared-session"
+        }))
+        .expect("get active job after release");
+        assert_eq!(active["active_job_id"], Value::String("job-1".to_string()));
+
+        fs::remove_file(&state_path).expect("cleanup release background state");
     }
 
     #[test]
