@@ -348,6 +348,7 @@ Required fields:
 - `mode: python | verify | shadow | rust`
 - `rollback_active: boolean`
 - `python_route_required: boolean`
+- `python_lane_kind: none | legacy-primary | diagnostic-compare-only`
 - `primary_authority: python | rust`
 - `route_result_engine: python | rust`
 - `shadow_engine: python | rust | null`
@@ -359,6 +360,9 @@ Invariants:
 - `rollback_active` may only be true when `mode=rust`
 - `python_route_required=true` means Python route execution is required for the
   current lane; it does not make Python the live runtime kernel
+- `python_lane_kind=legacy-primary` is the only mode where Python is the route
+  result authority; `diagnostic-compare-only` marks shadow / verify / rollback
+  evidence lanes and must not become the live route-result engine
 - `primary_authority` and `route_result_engine` must match the engine whose
   route result is returned to the Python runtime
 - `shadow_engine` names the comparison lane only; it may be null for pure

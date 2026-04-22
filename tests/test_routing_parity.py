@@ -584,6 +584,7 @@ def test_live_route_expectations_hold_for_framework_and_openai_queries(
             "python",
             False,
             {
+                "python_lane_kind": "legacy-primary",
                 "primary_authority": "python",
                 "route_result_engine": "python",
                 "shadow_engine": None,
@@ -597,6 +598,7 @@ def test_live_route_expectations_hold_for_framework_and_openai_queries(
             "shadow",
             False,
             {
+                "python_lane_kind": "diagnostic-compare-only",
                 "primary_authority": "rust",
                 "route_result_engine": "rust",
                 "shadow_engine": "python",
@@ -610,6 +612,7 @@ def test_live_route_expectations_hold_for_framework_and_openai_queries(
             "verify",
             False,
             {
+                "python_lane_kind": "diagnostic-compare-only",
                 "primary_authority": "rust",
                 "route_result_engine": "rust",
                 "shadow_engine": "python",
@@ -623,6 +626,7 @@ def test_live_route_expectations_hold_for_framework_and_openai_queries(
             "rust",
             False,
             {
+                "python_lane_kind": "none",
                 "primary_authority": "rust",
                 "route_result_engine": "rust",
                 "shadow_engine": None,
@@ -636,6 +640,7 @@ def test_live_route_expectations_hold_for_framework_and_openai_queries(
             "rust",
             True,
             {
+                "python_lane_kind": "diagnostic-compare-only",
                 "primary_authority": "rust",
                 "route_result_engine": "rust",
                 "shadow_engine": "python",
@@ -668,7 +673,12 @@ def test_route_policy_mode_matrix_stays_rust_authoritative(
     if payload["verify_parity_required"]:
         assert payload["diff_report_required"] is True
     if payload["diagnostic_python_lane"]:
+        assert payload["python_lane_kind"] == "diagnostic-compare-only"
         assert payload["shadow_engine"] == "python"
+    if payload["python_route_required"]:
+        assert payload["python_lane_kind"] == "legacy-primary"
+    if not payload["python_route_required"] and not payload["diagnostic_python_lane"]:
+        assert payload["python_lane_kind"] == "none"
     if payload["rollback_active"]:
         assert payload["primary_authority"] == "rust"
         assert payload["route_result_engine"] == "rust"

@@ -144,11 +144,13 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert router_service.health()["shadow_engine"] is None
     assert router_service.health()["python_router_loaded"] is False
     assert router_service.health()["python_router_required"] is False
+    assert router_service.health()["python_lane_kind"] == "none"
     assert router_service.health()["default_route_mode"] == "rust"
     assert router_service.health()["control_plane_authority"] == "rust-route-core"
     assert router_service.health()["python_runtime_role"] == "thin-projection"
     assert router_service.health()["rustification_status"]["runtime_primary_owner"] == "rust-control-plane"
     assert router_service.health()["route_policy"]["policy_schema_version"] == "router-rs-route-policy-v1"
+    assert router_service.health()["route_policy"]["python_lane_kind"] == "none"
     assert router_service.health()["rust_adapter"]["route_authority"] == "rust-route-core"
     assert router_service.health()["rust_adapter"]["compile_authority"] == "rust-route-compiler"
     assert (
@@ -1398,6 +1400,8 @@ def test_router_service_verify_mode_keeps_rust_primary_and_emits_diagnostic_evid
     assert verify_service.health()["route_result_engine"] == "rust"
     assert verify_service.health()["shadow_engine"] == "python"
     assert verify_service.health()["python_router_required"] is False
+    assert verify_service.health()["python_lane_kind"] == "diagnostic-compare-only"
+    assert verify_service.health()["route_policy"]["python_lane_kind"] == "diagnostic-compare-only"
 
 
 def test_router_service_shadow_mode_keeps_rust_primary_and_records_diff() -> None:
@@ -1431,6 +1435,8 @@ def test_router_service_shadow_mode_keeps_rust_primary_and_records_diff() -> Non
     assert result.shadow_route_report.layer_match is True
     assert result.shadow_route_report.python.engine == "python"
     assert result.shadow_route_report.rust.selected_skill == result.selected_skill.name
+    assert shadow_service.health()["python_lane_kind"] == "diagnostic-compare-only"
+    assert shadow_service.health()["route_policy"]["python_lane_kind"] == "diagnostic-compare-only"
 
 
 def test_router_service_rust_mode_keeps_rollback_as_diagnostic_lane() -> None:
@@ -1466,7 +1472,8 @@ def test_router_service_rust_mode_keeps_rollback_as_diagnostic_lane() -> None:
     assert rollback_service.health()["shadow_engine"] == "python"
     assert rollback_service.health()["diagnostic_python_lane_active"] is True
     assert rollback_service.health()["python_router_required"] is False
-    assert rollback_service.health()["python_router_required"] is False
+    assert rollback_service.health()["python_lane_kind"] == "diagnostic-compare-only"
+    assert rollback_service.health()["route_policy"]["python_lane_kind"] == "diagnostic-compare-only"
 
 
 def test_runtime_checkpointer_round_trips_resume_manifest(tmp_path: Path) -> None:
