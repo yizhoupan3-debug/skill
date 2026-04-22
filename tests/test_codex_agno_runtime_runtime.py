@@ -1591,6 +1591,22 @@ def test_runtime_background_batch_persists_parallel_group_resume_summary(tmp_pat
             status.job_id for status in batch.statuses
         )
 
+        trace_metadata = json.loads(trace_path.read_text(encoding="utf-8"))
+        assert trace_metadata["verification_status"] == "dry_run"
+        assert trace_metadata["parallel_group"]["parallel_group_id"] == "pgroup-contract"
+        assert trace_metadata["parallel_group"]["total_job_count"] == 2
+        assert trace_metadata["parallel_group"]["terminal_job_count"] == 2
+        assert trace_metadata["parallel_group"]["active_job_count"] == 0
+        assert trace_metadata["parallel_group"]["parent_job_ids"] == ["parent-job"]
+        assert trace_metadata["parallel_group"]["lane_ids"] == ["lane-1", "lane-2"]
+        assert sorted(trace_metadata["parallel_group"]["session_ids"]) == [
+            "parallel-session-1",
+            "parallel-session-2",
+        ]
+        assert sorted(trace_metadata["parallel_group"]["job_ids"]) == sorted(
+            status.job_id for status in batch.statuses
+        )
+
     asyncio.run(_run())
 
 
@@ -1693,6 +1709,207 @@ def test_runtime_metadata_includes_route_diagnostic_report(tmp_path: Path) -> No
     route_event = next(event for event in data["events"] if event["kind"] == "route.selected")
     assert route_event["payload"]["route_engine_mode"] == "shadow"
     assert route_event["payload"]["diagnostic_route_mode"] == "shadow"
+    assert route_event["payload"]["routing_gate"] == "none"
+    assert route_event["payload"]["routing_owner"]
     assert route_event["payload"]["route_diagnostic_report"]["report_schema_version"] == "router-rs-route-report-v2"
     assert route_event["payload"]["route_diagnostic_report"]["authority"] == "rust-route-core"
     assert route_event["payload"]["route_diagnostic_report"]["verification_passed"] is True
+
+
+def test_runtime_parallel_group_trace_metadata_updates_for_interrupted_terminal_state(tmp_path: Path) -> None:
+    """Interrupted grouped background jobs should also project the top-level batch trace summary."""
+
+    trace_path = tmp_path / "TRACE_METADATA.json"
+    runtime = CodexAgnoRuntime(
+        RuntimeSettings(
+            codex_home=PROJECT_ROOT,
+            data_dir=tmp_path / "interrupt-runtime-data",
+            trace_output_path=trace_path,
+            live_model_override=False,
+        )
+    )
+    started = asyncio.Event()
+
+    async def fake_execute(*, ctx, dry_run, trace_event_count, trace_output_path):  # type: ignore[no-untyped-def]
+        started.set()
+        await asyncio.sleep(10)
+        return RunTaskResponse(
+            session_id=ctx.session_id,
+            user_id=ctx.user_id,
+            skill=ctx.routing_result.selected_skill.name,
+            overlay=ctx.routing_result.overlay_skill.name if ctx.routing_result.overlay_skill else None,
+            live_run=not dry_run,
+            content="should-not-complete",
+            usage=UsageMetrics(),
+        )
+
+    runtime.execution_service.execute = fake_execute  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        batch = await runtime.enqueue_background_batch(
+            [
+                BackgroundRunRequest(
+                    task="请处理中断批次",
+                    user_id="tester",
+                    session_id="interrupt-session",
+                    dry_run=True,
+                )
+            ],
+            parallel_group_id="pgroup-interrupted",
+        )
+        await started.wait()
+        interrupted = await runtime.request_background_interrupt(batch.statuses[0].job_id)
+
+        deadline = asyncio.get_running_loop().time() + 2.0
+        while asyncio.get_running_loop().time() < deadline:
+            current = runtime.get_background_status(batch.statuses[0].job_id)
+            if current is not None and current.status == "interrupted":
+                interrupted = current
+                break
+            await asyncio.sleep(0.02)
+
+        assert interrupted is not None
+        assert interrupted.status == "interrupted"
+
+        trace_metadata = json.loads(trace_path.read_text(encoding="utf-8"))
+        assert trace_metadata["verification_status"] == "interrupted"
+        assert trace_metadata["parallel_group"]["parallel_group_id"] == "pgroup-interrupted"
+        assert trace_metadata["parallel_group"]["total_job_count"] == 1
+        assert trace_metadata["parallel_group"]["terminal_job_count"] == 1
+        assert trace_metadata["parallel_group"]["active_job_count"] == 0
+        assert trace_metadata["parallel_group"]["status_counts"]["interrupted"] == 1
+
+    asyncio.run(_run())
+
+
+def test_runtime_parallel_group_trace_metadata_updates_for_retry_exhausted_terminal_state(tmp_path: Path) -> None:
+    """Retry-exhausted grouped background jobs should project the top-level batch trace summary."""
+
+    trace_path = tmp_path / "TRACE_METADATA.json"
+    runtime = CodexAgnoRuntime(
+        RuntimeSettings(
+            codex_home=PROJECT_ROOT,
+            data_dir=tmp_path / "retry-runtime-data",
+            trace_output_path=trace_path,
+            live_model_override=False,
+        )
+    )
+
+    async def failing_execute(*, ctx, dry_run, trace_event_count, trace_output_path):  # type: ignore[no-untyped-def]
+        raise RuntimeError(f"boom for {ctx.session_id}")
+
+    runtime.execution_service.execute = failing_execute  # type: ignore[method-assign]
+
+    async def _run() -> None:
+        batch = await runtime.enqueue_background_batch(
+            [
+                BackgroundRunRequest(
+                    task="请处理失败批次",
+                    user_id="tester",
+                    session_id="retry-session",
+                    dry_run=True,
+                    max_attempts=2,
+                    backoff_base_seconds=0.01,
+                )
+            ],
+            parallel_group_id="pgroup-retry-exhausted",
+        )
+
+        deadline = asyncio.get_running_loop().time() + 2.0
+        exhausted = None
+        while asyncio.get_running_loop().time() < deadline:
+            current = runtime.get_background_status(batch.statuses[0].job_id)
+            if current is not None and current.status == "retry_exhausted":
+                exhausted = current
+                break
+            await asyncio.sleep(0.02)
+
+        assert exhausted is not None
+        assert exhausted.status == "retry_exhausted"
+
+        trace_metadata = json.loads(trace_path.read_text(encoding="utf-8"))
+        assert trace_metadata["verification_status"] == "retry_exhausted"
+        assert trace_metadata["parallel_group"]["parallel_group_id"] == "pgroup-retry-exhausted"
+        assert trace_metadata["parallel_group"]["total_job_count"] == 1
+        assert trace_metadata["parallel_group"]["terminal_job_count"] == 1
+        assert trace_metadata["parallel_group"]["active_job_count"] == 0
+        assert trace_metadata["parallel_group"]["status_counts"]["retry_exhausted"] == 1
+
+    asyncio.run(_run())
+
+
+def test_runtime_parallel_group_trace_metadata_updates_for_pre_execution_failed_admission(tmp_path: Path) -> None:
+    """Grouped pre-execution failures should also project the top-level batch trace summary."""
+
+    trace_path = tmp_path / "TRACE_METADATA.json"
+    runtime = CodexAgnoRuntime(
+        RuntimeSettings(
+            codex_home=PROJECT_ROOT,
+            data_dir=tmp_path / "failed-admission-runtime-data",
+            trace_output_path=trace_path,
+            live_model_override=False,
+        )
+    )
+
+    async def _run() -> None:
+        batch = await runtime.enqueue_background_batch(
+            [
+                BackgroundRunRequest(
+                    task="请处理预执行失败批次",
+                    user_id="tester",
+                    session_id="failed-admission-session",
+                    dry_run=True,
+                    multitask_strategy="rollback",
+                )
+            ],
+            parallel_group_id="pgroup-failed-admission",
+        )
+
+        failed = batch.statuses[0]
+        assert failed.status == "failed"
+        assert failed.parallel_group_id == "pgroup-failed-admission"
+
+        trace_metadata = json.loads(trace_path.read_text(encoding="utf-8"))
+        assert trace_metadata["verification_status"] == "failed"
+        assert trace_metadata["matched_skills"] == ["background-runtime-host"]
+        assert trace_metadata["decision"]["owner"] == "background-runtime-host"
+        assert trace_metadata["parallel_group"]["parallel_group_id"] == "pgroup-failed-admission"
+        assert trace_metadata["parallel_group"]["total_job_count"] == 1
+        assert trace_metadata["parallel_group"]["terminal_job_count"] == 1
+        assert trace_metadata["parallel_group"]["active_job_count"] == 0
+        assert trace_metadata["parallel_group"]["status_counts"]["failed"] == 1
+
+    asyncio.run(_run())
+
+
+def test_runtime_pre_execution_failed_admission_without_group_does_not_flush_top_level_trace(
+    tmp_path: Path,
+) -> None:
+    """Standalone pre-execution failures should stay out of top-level trace projection."""
+
+    trace_path = tmp_path / "TRACE_METADATA.json"
+    runtime = CodexAgnoRuntime(
+        RuntimeSettings(
+            codex_home=PROJECT_ROOT,
+            data_dir=tmp_path / "standalone-failed-admission-runtime-data",
+            trace_output_path=trace_path,
+            live_model_override=False,
+        )
+    )
+
+    async def _run() -> None:
+        status = await runtime.enqueue_background_run(
+            BackgroundRunRequest(
+                task="请处理单任务预执行失败",
+                user_id="tester",
+                session_id="standalone-failed-admission-session",
+                dry_run=True,
+                multitask_strategy="rollback",
+            )
+        )
+
+        assert status.status == "failed"
+        assert status.parallel_group_id is None
+        assert trace_path.exists() is False
+
+    asyncio.run(_run())

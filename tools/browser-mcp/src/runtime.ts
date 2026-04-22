@@ -1,5 +1,8 @@
+import { execFile as execFileCallback } from 'node:child_process';
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import {
   type Browser,
   type BrowserType,
@@ -64,6 +67,15 @@ const RUNTIME_VERSION = '0.2.0';
 const RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION = 'runtime-event-attach-descriptor-v1';
 const RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION = 'runtime-event-transport-v1';
 const RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION = 'runtime-event-handoff-v1';
+const ROUTER_RS_TRACE_STREAM_REPLAY_SCHEMA_VERSION = 'router-rs-trace-stream-replay-v1';
+const ROUTER_RS_TRACE_STREAM_INSPECT_SCHEMA_VERSION = 'router-rs-trace-stream-inspect-v1';
+const ROUTER_RS_TRACE_IO_AUTHORITY = 'rust-runtime-trace-io';
+const ROUTER_RS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'scripts', 'router-rs');
+const ROUTER_RS_MANIFEST_PATH = path.join(ROUTER_RS_DIR, 'Cargo.toml');
+const ROUTER_RS_SOURCE_DIR = path.join(ROUTER_RS_DIR, 'src');
+const ROUTER_RS_DEBUG_BIN = path.join(ROUTER_RS_DIR, 'target', 'debug', 'router-rs');
+const ROUTER_RS_RELEASE_BIN = path.join(ROUTER_RS_DIR, 'target', 'release', 'router-rs');
+const execFile = promisify(execFileCallback);
 
 const INTERACTIVE_SELECTOR = [
   'button',
@@ -76,6 +88,29 @@ const INTERACTIVE_SELECTOR = [
   '[role="textbox"]',
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ');
+
+interface RouterRsTraceStreamSummary {
+  schema_version: string;
+  authority: string;
+  path: string;
+  event_count: number;
+  latest_event_id?: string | null;
+  latest_event_kind?: string | null;
+  latest_event_timestamp?: string | null;
+}
+
+interface RouterRsTraceStreamReplayResult extends RouterRsTraceStreamSummary {
+  after_event_id?: string | null;
+  window_start_index: number;
+  has_more: boolean;
+  next_cursor:
+    | {
+        event_id?: string | null;
+        event_index: number;
+      }
+    | null;
+  events: AttachedRuntimeEvent[];
+}
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -109,6 +144,83 @@ function toTextLines(text: string): string[] {
  */
 function truncateText(text: string, maxChars: number): string {
   return text.length <= maxChars ? text : `${text.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+async function newestRouterRsSourceMtimeMs(target: string): Promise<number> {
+  let newest = 0;
+  let entries;
+  try {
+    entries = await readdir(target, { withFileTypes: true });
+  } catch {
+    return newest;
+  }
+  for (const entry of entries) {
+    const entryPath = path.join(target, entry.name);
+    if (entry.isDirectory()) {
+      newest = Math.max(newest, await newestRouterRsSourceMtimeMs(entryPath));
+      continue;
+    }
+    if (entry.isFile() && entry.name.endsWith('.rs')) {
+      try {
+        newest = Math.max(newest, (await stat(entryPath)).mtimeMs);
+      } catch {
+        // Ignore racing file-system updates and keep the best-known mtime.
+      }
+    }
+  }
+  return newest;
+}
+
+async function resolveRouterRsCommand(): Promise<{ command: string; args: string[] }> {
+  let newestSourceMtime = 0;
+  try {
+    newestSourceMtime = Math.max(
+      (await stat(ROUTER_RS_MANIFEST_PATH)).mtimeMs,
+      await newestRouterRsSourceMtimeMs(ROUTER_RS_SOURCE_DIR),
+    );
+  } catch {
+    newestSourceMtime = 0;
+  }
+
+  for (const candidate of [ROUTER_RS_DEBUG_BIN, ROUTER_RS_RELEASE_BIN]) {
+    try {
+      const candidateStat = await stat(candidate);
+      if (candidateStat.isFile() && candidateStat.mtimeMs >= newestSourceMtime) {
+        return { command: candidate, args: [] };
+      }
+    } catch {
+      // Fall back to cargo when no fresh binary is available.
+    }
+  }
+
+  return {
+    command: 'cargo',
+    args: ['run', '--quiet', '--manifest-path', ROUTER_RS_MANIFEST_PATH, '--'],
+  };
+}
+
+async function runRouterRsJson<T>(modeFlag: string, inputFlag: string, payload: object): Promise<T> {
+  const command = await resolveRouterRsCommand();
+  try {
+    const { stdout } = await execFile(
+      command.command,
+      [...command.args, modeFlag, inputFlag, JSON.stringify(payload)],
+      { maxBuffer: 20 * 1024 * 1024 },
+    );
+    return JSON.parse(stdout) as T;
+  } catch (error) {
+    const stderr =
+      error && typeof error === 'object' && 'stderr' in error && typeof error.stderr === 'string'
+        ? error.stderr.trim()
+        : '';
+    const message =
+      stderr.length > 0
+        ? stderr
+        : error instanceof Error
+          ? error.message
+          : 'router-rs trace command failed';
+    throw new Error(message);
+  }
 }
 
 /**
@@ -678,42 +790,34 @@ export class BrowserRuntime {
         ['provide a positive integer limit'],
       );
     }
-    const replay = await this.resolveAttachedRuntimeReplay();
-    const events = replay.events;
-    let startIndex = 0;
-
-    if (input.afterEventId) {
-      const matchedIndex = events.findIndex((event) => event.event_id === input.afterEventId);
-      if (matchedIndex === -1) {
-        throw new BrowserToolError(
-          'ATTACHED_RUNTIME_CURSOR_NOT_FOUND',
-          `No attached runtime event was found for afterEventId=${input.afterEventId}.`,
-          true,
-          ['call browser_get_attached_runtime_events without afterEventId', 'inspect browser_diagnostics'],
-        );
-      }
-      startIndex = matchedIndex + 1;
-    }
-
-    const window = events.slice(startIndex, startIndex + limit);
-    const nextIndex = startIndex + window.length;
-    const hasMore = nextIndex < events.length;
-    const lastEvent = window.at(-1) ?? null;
+    const resolved = await this.resolveAttachedRuntimeDescriptorContext();
+    const replay = await this.replayAttachedRuntimeTrace(
+      resolved.traceStreamPath,
+      input.afterEventId ?? null,
+      limit,
+    );
+    const lastEvent = replay.events.at(-1) ?? null;
 
     return {
       ok: true,
-      attachedRuntime: replay.diagnostics,
-      events: window,
+      attachedRuntime: {
+        ...resolved.diagnosticsBase,
+        eventCount: replay.event_count,
+        latestEventId: replay.latest_event_id ?? null,
+        latestEventKind: replay.latest_event_kind ?? null,
+        latestEventTimestamp: replay.latest_event_timestamp ?? null,
+      },
+      events: replay.events,
       afterEventId: input.afterEventId ?? null,
-      hasMore,
+      hasMore: replay.has_more,
       nextCursor:
-        window.length > 0
+        replay.events.length > 0
           ? {
               eventId: typeof lastEvent?.event_id === 'string' ? lastEvent.event_id : null,
-              eventIndex: nextIndex - 1,
+              eventIndex: replay.next_cursor?.event_index ?? replay.window_start_index + replay.events.length - 1,
             }
           : null,
-      heartbeat: window.length === 0 && input.heartbeat === true ? { status: 'idle' } : null,
+      heartbeat: replay.events.length === 0 && input.heartbeat === true ? { status: 'idle' } : null,
     };
   }
 
@@ -785,7 +889,15 @@ export class BrowserRuntime {
     }
 
     try {
-      return (await this.resolveAttachedRuntimeReplay()).diagnostics;
+      const resolved = await this.resolveAttachedRuntimeDescriptorContext();
+      const summary = await this.inspectAttachedRuntimeTrace(resolved.traceStreamPath);
+      return {
+        ...resolved.diagnosticsBase,
+        eventCount: summary.event_count,
+        latestEventId: summary.latest_event_id ?? null,
+        latestEventKind: summary.latest_event_kind ?? null,
+        latestEventTimestamp: summary.latest_event_timestamp ?? null,
+      };
     } catch (error) {
       if (error instanceof BrowserToolError) {
         if (error.code === 'ATTACHED_RUNTIME_NOT_CONFIGURED') {
@@ -843,10 +955,10 @@ export class BrowserRuntime {
     }
   }
 
-  private async resolveAttachedRuntimeReplay(): Promise<{
-    diagnostics: AttachedRuntimeDiagnostics;
+  private async resolveAttachedRuntimeDescriptorContext(): Promise<{
     descriptor: RuntimeAttachDescriptor;
-    events: AttachedRuntimeEvent[];
+    traceStreamPath: string;
+    diagnosticsBase: AttachedRuntimeDiagnostics;
   }> {
     const configuredSource = this.getConfiguredRuntimeAttachSource();
     if (configuredSource.source === null) {
@@ -916,28 +1028,80 @@ export class BrowserRuntime {
 
     try {
       await stat(traceStreamPath);
-      const traceContent = await readFile(traceStreamPath, 'utf8');
-      const events = traceContent
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .map((line) => JSON.parse(line) as AttachedRuntimeEvent);
-      const latestEvent = events.at(-1);
-      return {
-        descriptor,
-        events,
-        diagnostics: {
-          ...diagnosticsBase,
-          eventCount: events.length,
-          latestEventId: typeof latestEvent?.event_id === 'string' ? latestEvent.event_id : null,
-          latestEventKind: typeof latestEvent?.kind === 'string' ? latestEvent.kind : null,
-          latestEventTimestamp: typeof latestEvent?.ts === 'string' ? latestEvent.ts : null,
-        },
-      };
     } catch (error) {
       throw new BrowserToolError(
         'ATTACHED_RUNTIME_TRACE_UNAVAILABLE',
         error instanceof Error ? error.message : 'failed to read runtime trace stream',
+        true,
+        ['inspect browser_diagnostics', 'refresh the attach descriptor or trace artifacts'],
+      );
+    }
+
+    return {
+      descriptor,
+      traceStreamPath,
+      diagnosticsBase,
+    };
+  }
+
+  private async inspectAttachedRuntimeTrace(traceStreamPath: string): Promise<RouterRsTraceStreamSummary> {
+    try {
+      const summary = await runRouterRsJson<RouterRsTraceStreamSummary>(
+        '--trace-stream-inspect-json',
+        '--trace-stream-inspect-input-json',
+        { path: traceStreamPath },
+      );
+      if (
+        summary.schema_version !== ROUTER_RS_TRACE_STREAM_INSPECT_SCHEMA_VERSION ||
+        summary.authority !== ROUTER_RS_TRACE_IO_AUTHORITY
+      ) {
+        throw new Error('router-rs trace inspect returned an unexpected schema');
+      }
+      return summary;
+    } catch (error) {
+      throw new BrowserToolError(
+        'ATTACHED_RUNTIME_TRACE_UNAVAILABLE',
+        error instanceof Error ? error.message : 'failed to inspect runtime trace stream',
+        true,
+        ['inspect browser_diagnostics', 'refresh the attach descriptor or trace artifacts'],
+      );
+    }
+  }
+
+  private async replayAttachedRuntimeTrace(
+    traceStreamPath: string,
+    afterEventId: string | null,
+    limit: number,
+  ): Promise<RouterRsTraceStreamReplayResult> {
+    try {
+      const replay = await runRouterRsJson<RouterRsTraceStreamReplayResult>(
+        '--trace-stream-replay-json',
+        '--trace-stream-replay-input-json',
+        {
+          path: traceStreamPath,
+          after_event_id: afterEventId,
+          limit,
+        },
+      );
+      if (
+        replay.schema_version !== ROUTER_RS_TRACE_STREAM_REPLAY_SCHEMA_VERSION ||
+        replay.authority !== ROUTER_RS_TRACE_IO_AUTHORITY
+      ) {
+        throw new Error('router-rs trace replay returned an unexpected schema');
+      }
+      return replay;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Unknown event id for stream resume')) {
+        throw new BrowserToolError(
+          'ATTACHED_RUNTIME_CURSOR_NOT_FOUND',
+          `No attached runtime event was found for afterEventId=${afterEventId}.`,
+          true,
+          ['call browser_get_attached_runtime_events without afterEventId', 'inspect browser_diagnostics'],
+        );
+      }
+      throw new BrowserToolError(
+        'ATTACHED_RUNTIME_TRACE_UNAVAILABLE',
+        error instanceof Error ? error.message : 'failed to replay runtime trace stream',
         true,
         ['inspect browser_diagnostics', 'refresh the attach descriptor or trace artifacts'],
       );

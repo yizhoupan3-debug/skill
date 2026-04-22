@@ -9,10 +9,13 @@
 
 1. 创建 `skills/<skill-name>/SKILL.md`，frontmatter 必填：`name`, `description`, `routing_layer`, `routing_owner`, `routing_gate`, `session_start`
 2. Body 必含：`## When to use` + `## Do not use`
-3. 更新 [SKILL_ROUTING_INDEX.md](file:///Users/joe/Documents/skill/skills/SKILL_ROUTING_INDEX.md)
-4. 运行验证：
+3. 运行生成同步：
    ```bash
    python3 scripts/sync_skills.py --apply
+   ```
+   这一步会统一刷新 `SKILL_ROUTING_RUNTIME.json`、`SKILL_ROUTING_INDEX.md` 等生成路由产物；不要手改这些生成文件。
+4. 运行验证：
+   ```bash
    python3 scripts/check_skills.py --verify-codex-link
    python3 scripts/check_skills.py --include-system --verify-codex-link
    ```
@@ -22,7 +25,7 @@
 ## 改 Skill 必查
 
 - 触发词是否变化 → 更新 description
-- 边界是否变化 → 更新索引
+- 边界是否变化 → 重新运行 `scripts/sync_skills.py --apply`
 - 是否引入第二份 live source → 删除多余副本
 
 ## 边界重叠处理

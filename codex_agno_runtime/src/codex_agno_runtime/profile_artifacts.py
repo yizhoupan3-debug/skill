@@ -9,6 +9,7 @@ from typing import Any, Mapping
 from codex_agno_runtime.framework_profile import (
     FRAMEWORK_SHARED_CONTRACT_FIELDS,
     FrameworkProfile,
+    merge_profile_overrides,
 )
 from codex_agno_runtime.host_adapters import (
     DELEGATION_CONTRACT_ARTIFACT_ID,
@@ -41,11 +42,34 @@ from codex_agno_runtime.schemas import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 LEGACY_DESKTOP_ALIAS_ID = "codex_desktop_host_adapter"
+FRAMEWORK_SURFACE_POLICY_PATH = PROJECT_ROOT / "configs" / "framework" / "FRAMEWORK_SURFACE_POLICY.json"
 
 
 def _write_json(path: Path, payload: Any) -> str:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return str(path)
+
+
+def _load_repo_framework_surface_policy() -> dict[str, Any]:
+    if not FRAMEWORK_SURFACE_POLICY_PATH.exists():
+        return {}
+    try:
+        payload = json.loads(FRAMEWORK_SURFACE_POLICY_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _profile_with_surface_policy(profile: FrameworkProfile) -> FrameworkProfile:
+    if profile.framework_surface_policy:
+        return profile
+    repo_policy = _load_repo_framework_surface_policy()
+    if not repo_policy:
+        return profile
+    return merge_profile_overrides(
+        profile,
+        {"framework_surface_policy": repo_policy},
+    )
 
 
 DEFAULT_RUST_CODEX_ARTIFACT_FILENAMES = {
@@ -270,11 +294,14 @@ def _extract_shared_contract_surface(
     payload: Mapping[str, Any],
     field_name: str,
 ) -> dict[str, Any]:
-    source = payload[field_name]
-    return {
-        field: _clone_payload(source[field])
-        for field in FRAMEWORK_SHARED_CONTRACT_FIELDS
-    }
+    source = payload.get(field_name, {})
+    projected_surface = FrameworkSharedContractSurface().model_dump(mode="python")
+    if not isinstance(source, Mapping):
+        return projected_surface
+    for field in FRAMEWORK_SHARED_CONTRACT_FIELDS:
+        if field in source:
+            projected_surface[field] = _clone_payload(source[field])
+    return projected_surface
 
 
 def build_framework_shared_contract_projection_report(
@@ -393,12 +420,14 @@ def emit_framework_contract_artifacts(
     """Write concrete framework-profile and adapter artifacts for bridge consumers."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    profile = _profile_with_surface_policy(profile)
     alias_inventory = build_codex_desktop_alias_inventory()
     emit_legacy_alias_artifact = include_legacy_alias_artifact is True
 
     profile_path = output_dir / "framework_profile.json"
     python_artifacts = {
         "framework_profile": profile.to_dict(),
+        "framework_surface_policy": profile.framework_surface_policy,
         "cli_common_adapter": compile_cli_common_adapter(profile, host_overrides=host_overrides).host_payload,
         "codex_common_adapter": compile_codex_common_adapter(
             profile,
@@ -464,6 +493,10 @@ def emit_framework_contract_artifacts(
         )
     paths = {
         "framework_profile": _write_json(profile_path, python_artifacts["framework_profile"]),
+        "framework_surface_policy": _write_json(
+            output_dir / "framework_surface_policy.json",
+            python_artifacts["framework_surface_policy"],
+        ),
         "cli_common_adapter": _write_json(output_dir / "cli_common_adapter.json", python_artifacts["cli_common_adapter"]),
         "codex_common_adapter": _write_json(
             output_dir / "codex_common_adapter.json",

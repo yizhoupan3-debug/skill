@@ -8,11 +8,10 @@ from typing import Any, Mapping
 from codex_agno_runtime.checkpoint_store import SQLiteRuntimeStorageBackend
 from codex_agno_runtime.config import RuntimeSettings
 from codex_agno_runtime.trace import (
-    InMemoryRuntimeEventBridge,
-    JsonlTraceEventSink,
     RuntimeEventHandoff,
     RuntimeEventStreamChunk,
     RuntimeEventTransport,
+    RuntimeTraceRecorder,
     TraceResumeManifest,
 )
 
@@ -208,14 +207,11 @@ class ExternalRuntimeEventTransportBridge:
         """Replay a stream window from persisted artifacts in a new process."""
 
         trace_stream_path = self._required_trace_stream_path()
-        bridge = InMemoryRuntimeEventBridge()
-        bridge.seed(
-            JsonlTraceEventSink(
-                trace_stream_path,
-                storage_backend=self.storage_backend,
-            ).read_events()
+        recorder = RuntimeTraceRecorder(
+            event_stream_path=trace_stream_path,
+            storage_backend=self.storage_backend,
         )
-        return bridge.subscribe(
+        return recorder.subscribe_chunk(
             session_id=self.transport.session_id,
             job_id=self.transport.job_id,
             after_event_id=after_event_id,

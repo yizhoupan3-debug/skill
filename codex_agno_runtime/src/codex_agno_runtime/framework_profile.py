@@ -13,6 +13,7 @@ FRAMEWORK_SHARED_CONTRACT_FIELDS = (
     "tool_policy",
     "approval_policy",
     "loadout_policy",
+    "framework_surface_policy",
     "workspace_bootstrap",
     "session_contract",
 )
@@ -173,6 +174,7 @@ class FrameworkProfile:
     tool_policy: Dict[str, Any] = field(default_factory=dict)
     approval_policy: Dict[str, Any] = field(default_factory=dict)
     loadout_policy: Dict[str, Any] = field(default_factory=dict)
+    framework_surface_policy: Dict[str, Any] = field(default_factory=dict)
     artifact_contract: Dict[str, Any] = field(default_factory=dict)
     model_policy: Dict[str, Any] = field(default_factory=dict)
     memory_mounts: tuple[Any, ...] = ()
@@ -189,6 +191,7 @@ class FrameworkProfile:
             "tool_policy": _clone_json_like(self.tool_policy),
             "approval_policy": _clone_json_like(self.approval_policy),
             "loadout_policy": _clone_json_like(self.loadout_policy),
+            "framework_surface_policy": _clone_json_like(self.framework_surface_policy),
             "workspace_bootstrap": build_framework_workspace_bootstrap(
                 self.workspace_bootstrap,
                 self.memory_mounts,
@@ -222,6 +225,7 @@ class FrameworkProfile:
             "tool_policy": _clone_json_like(self.tool_policy),
             "approval_policy": _clone_json_like(self.approval_policy),
             "loadout_policy": _clone_json_like(self.loadout_policy),
+            "framework_surface_policy": _clone_json_like(self.framework_surface_policy),
             "artifact_contract": _clone_json_like(self.artifact_contract),
             "model_policy": _clone_json_like(self.model_policy),
             "memory_mounts": _clone_json_like(self.memory_mounts),
@@ -266,6 +270,7 @@ class FrameworkProfile:
             tool_policy=_clone_json_like(data.get("tool_policy", {})),
             approval_policy=_clone_json_like(data.get("approval_policy", {})),
             loadout_policy=_clone_json_like(data.get("loadout_policy", {})),
+            framework_surface_policy=_clone_json_like(data.get("framework_surface_policy", {})),
             artifact_contract=_clone_json_like(data.get("artifact_contract", {})),
             model_policy=_clone_json_like(data.get("model_policy", {})),
             memory_mounts=tuple(data.get("memory_mounts", ())),
@@ -290,6 +295,7 @@ def build_framework_profile(
     tool_policy: Mapping[str, Any] | None = None,
     approval_policy: Mapping[str, Any] | None = None,
     loadout_policy: Mapping[str, Any] | None = None,
+    framework_surface_policy: Mapping[str, Any] | None = None,
     artifact_contract: Mapping[str, Any] | None = None,
     model_policy: Mapping[str, Any] | None = None,
     memory_mounts: Sequence[Any] = (),
@@ -311,6 +317,7 @@ def build_framework_profile(
         tool_policy=_clone_json_like(tool_policy or {}),
         approval_policy=_clone_json_like(approval_policy or {}),
         loadout_policy=_clone_json_like(loadout_policy or {}),
+        framework_surface_policy=_clone_json_like(framework_surface_policy or {}),
         artifact_contract=_clone_json_like(artifact_contract or {}),
         model_policy=_clone_json_like(model_policy or {}),
         memory_mounts=tuple(memory_mounts),
@@ -334,6 +341,7 @@ def merge_profile_overrides(
             "tool_policy",
             "approval_policy",
             "loadout_policy",
+            "framework_surface_policy",
             "artifact_contract",
             "model_policy",
             "workspace_bootstrap",

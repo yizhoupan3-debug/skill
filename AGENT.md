@@ -51,8 +51,8 @@ framework policy instead of forking per-host routing or memory rules.
 2. Check gates before owners.
 3. Use the narrowest matching skill.
 4. Read the chosen `SKILL.md` before analysis, search, coding, or edits.
-5. If no skill matches, consult `skills/SKILL_ROUTING_RUNTIME.json`, then
-   `skills/SKILL_ROUTING_INDEX.md`.
+5. If no skill matches, consult `skills/SKILL_ROUTING_RUNTIME.json` first, then
+   `skills/SKILL_ROUTING_INDEX.md` for the human quick scan.
 6. Keep exactly one primary owner and at most one overlay.
 7. For high-load, cross-file, or long-running tasks, invoke
    `execution-controller-coding` and maintain `.supervisor_state.json`.
@@ -116,18 +116,31 @@ framework policy instead of forking per-host routing or memory rules.
 
 ## Runtime Sources Of Truth
 
+Primary routing entrypoints:
+
 - `skills/SKILL_ROUTING_RUNTIME.json`: machine-readable routing truth
 - `skills/SKILL_ROUTING_INDEX.md`: human quick reference
+
+Extended generated references, only when needed:
+
 - `skills/SKILL_ROUTING_LAYERS.md`: owner and reroute map
 - `skills/SKILL_SOURCE_MANIFEST.json`: source precedence
 - `skills/SKILL_SHADOW_MAP.json`: shadow audit
 - `skills/SKILL_LOADOUTS.json`: loadout definitions
+- `configs/framework/FRAMEWORK_SURFACE_POLICY.json`: default surface, boundary, and outcome policy
 - `skills/SKILL_APPROVAL_POLICY.json`: approval policy registry
 
 ## Host Entry Files
 
+Default host entrypoints:
+
 - Codex: `AGENTS.md`
-- Claude Code: `CLAUDE.md`, `.claude/CLAUDE.md`, `.claude/settings.json`
-- Gemini CLI: `GEMINI.md`, `.gemini/settings.json`
+- Claude Code: `CLAUDE.md`
+- Gemini CLI: `GEMINI.md`
+
+Host-private local overlays:
+
+- Claude Code: `.claude/settings.json`
+- Gemini CLI: `.gemini/settings.json`
 
 These entry files must stay thin and point back to this shared policy.

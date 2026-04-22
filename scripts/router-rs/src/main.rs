@@ -5,6 +5,7 @@ use serde_json::{json, Map, Value};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -46,6 +47,11 @@ const TRANSPORT_BINDING_WRITE_SCHEMA_VERSION: &str = "router-rs-transport-bindin
 const TRANSPORT_BINDING_WRITE_AUTHORITY: &str = "rust-runtime-transport-binding-writer";
 const CHECKPOINT_MANIFEST_WRITE_SCHEMA_VERSION: &str = "router-rs-checkpoint-manifest-write-v1";
 const CHECKPOINT_MANIFEST_WRITE_AUTHORITY: &str = "rust-runtime-checkpoint-manifest-writer";
+const TRACE_STREAM_REPLAY_SCHEMA_VERSION: &str = "router-rs-trace-stream-replay-v1";
+const TRACE_STREAM_INSPECT_SCHEMA_VERSION: &str = "router-rs-trace-stream-inspect-v1";
+const TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION: &str =
+    "router-rs-trace-compaction-delta-write-v1";
+const TRACE_STREAM_IO_AUTHORITY: &str = "rust-runtime-trace-io";
 const RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION: &str = "runtime-observability-exporter-v1";
 const RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION: &str =
     "runtime-observability-metric-record-v1";
@@ -120,6 +126,12 @@ struct Cli {
     #[arg(long)]
     runtime_metric_record_json: bool,
     #[arg(long)]
+    trace_stream_replay_json: bool,
+    #[arg(long)]
+    trace_stream_inspect_json: bool,
+    #[arg(long)]
+    write_trace_compaction_delta_json: bool,
+    #[arg(long)]
     framework_runtime_snapshot_json: bool,
     #[arg(long)]
     framework_contract_summary_json: bool,
@@ -153,6 +165,12 @@ struct Cli {
     write_checkpoint_resume_manifest_input_json: Option<String>,
     #[arg(long)]
     runtime_metric_record_input_json: Option<String>,
+    #[arg(long)]
+    trace_stream_replay_input_json: Option<String>,
+    #[arg(long)]
+    trace_stream_inspect_input_json: Option<String>,
+    #[arg(long)]
+    write_trace_compaction_delta_input_json: Option<String>,
     #[arg(long, default_value = "route-cli")]
     session_id: String,
     #[arg(long, default_value_t = true, action = ArgAction::Set, num_args = 1)]
@@ -368,6 +386,78 @@ struct BackgroundControlResponsePayload {
     effect_plan: BackgroundControlEffectPlanPayload,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TraceStreamReplayRequestPayload {
+    path: Option<String>,
+    compaction_manifest_path: Option<String>,
+    session_id: Option<String>,
+    job_id: Option<String>,
+    stream_scope_fields: Option<Vec<String>>,
+    after_event_id: Option<String>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TraceStreamInspectRequestPayload {
+    path: Option<String>,
+    compaction_manifest_path: Option<String>,
+    session_id: Option<String>,
+    job_id: Option<String>,
+    stream_scope_fields: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TraceStreamReplayCursorPayload {
+    event_id: Option<String>,
+    event_index: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TraceStreamReplayResponsePayload {
+    schema_version: String,
+    authority: String,
+    path: String,
+    source_kind: String,
+    event_count: usize,
+    latest_event_id: Option<String>,
+    latest_event_kind: Option<String>,
+    latest_event_timestamp: Option<String>,
+    latest_cursor: Option<Value>,
+    after_event_id: Option<String>,
+    window_start_index: usize,
+    has_more: bool,
+    next_cursor: Option<TraceStreamReplayCursorPayload>,
+    events: Vec<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TraceStreamInspectResponsePayload {
+    schema_version: String,
+    authority: String,
+    path: String,
+    source_kind: String,
+    event_count: usize,
+    latest_event_id: Option<String>,
+    latest_event_kind: Option<String>,
+    latest_event_timestamp: Option<String>,
+    latest_cursor: Option<Value>,
+    recovery: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TraceCompactionDeltaWriteRequestPayload {
+    path: String,
+    delta: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TraceCompactionDeltaWriteResponsePayload {
+    schema_version: String,
+    authority: String,
+    path: String,
+    bytes_written: usize,
+}
+
 fn background_effect_plan(next_step: &str) -> BackgroundControlEffectPlanPayload {
     BackgroundControlEffectPlanPayload {
         next_step: next_step.to_string(),
@@ -468,6 +558,9 @@ fn main() -> Result<(), String> {
         args.runtime_observability_exporter_json,
         args.runtime_observability_dashboard_json,
         args.runtime_metric_record_json,
+        args.trace_stream_replay_json,
+        args.trace_stream_inspect_json,
+        args.write_trace_compaction_delta_json,
         args.framework_runtime_snapshot_json,
         args.framework_contract_summary_json,
         args.profile_json,
@@ -480,7 +573,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --background-control-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --runtime-observability-exporter-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --route-report-json, --profile-json, and --profile-artifacts-json"
+            "choose only one output mode among --json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --background-control-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --runtime-observability-exporter-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --route-report-json, --profile-json, and --profile-artifacts-json"
                 .to_string(),
         );
     }
@@ -630,6 +723,60 @@ fn main() -> Result<(), String> {
         println!(
             "{}",
             serde_json::to_string(&build_runtime_metric_record(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.trace_stream_replay_json {
+        let payload = serde_json::from_str::<TraceStreamReplayRequestPayload>(
+            args.trace_stream_replay_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--trace-stream-replay-input-json is required with --trace-stream-replay-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse trace stream replay input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&replay_trace_stream(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.trace_stream_inspect_json {
+        let payload = serde_json::from_str::<TraceStreamInspectRequestPayload>(
+            args.trace_stream_inspect_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--trace-stream-inspect-input-json is required with --trace-stream-inspect-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse trace stream inspect input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&inspect_trace_stream(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.write_trace_compaction_delta_json {
+        let payload = serde_json::from_str::<TraceCompactionDeltaWriteRequestPayload>(
+            args.write_trace_compaction_delta_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--write-trace-compaction-delta-input-json is required with --write-trace-compaction-delta-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse trace compaction delta write input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&write_trace_compaction_delta(payload)?)
                 .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());
@@ -1940,7 +2087,8 @@ fn build_background_control_response(
 
 fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     let mut lines = vec![
-        "Help with the user's request directly. The route is already chosen, so stay on it.".to_string(),
+        "Help with the user's request directly. The route is already chosen, so stay on it."
+            .to_string(),
         format!("Primary focus: {}", payload.selected_skill),
     ];
     if let Some(overlay) = payload
@@ -1954,7 +2102,10 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     lines.push("- Lead with the answer or result.".to_string());
     lines.push("- Use plain Chinese unless the user asks otherwise.".to_string());
     lines.push("- Be brief, clear, and friendly.".to_string());
-    lines.push("- Keep the default reply to one short paragraph unless a list is truly needed.".to_string());
+    lines.push(
+        "- Keep the default reply to one short paragraph unless a list is truly needed."
+            .to_string(),
+    );
     lines.push("- Avoid internal runtime or routing jargon unless the user asks.".to_string());
     lines.push(
         "- If a technical term is necessary, explain it in simple words the first time."
@@ -3021,12 +3172,13 @@ fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, String>
     };
     if policy.diagnostic_report_required && policy.diagnostic_route_mode == "none" {
         return Err(
-            "route policy declared diagnostics outside the diagnostic route mode"
-                .to_string(),
+            "route policy declared diagnostics outside the diagnostic route mode".to_string(),
         );
     }
     if policy.strict_verification_required && !policy.diagnostic_report_required {
-        return Err("route policy declared strict verification without diagnostic reporting".to_string());
+        return Err(
+            "route policy declared strict verification without diagnostic reporting".to_string(),
+        );
     }
     Ok(policy)
 }
@@ -3475,9 +3627,610 @@ fn layer_threshold(layer: &str) -> f64 {
     }
 }
 
+fn extract_trace_event_payload(payload: Value) -> Result<Value, String> {
+    let event_payload = match payload {
+        Value::Object(mut object) => match object.remove("event") {
+            Some(Value::Object(event)) => Value::Object(event),
+            Some(other) => {
+                return Err(format!(
+                    "trace stream line contained non-object event wrapper: {other}"
+                ))
+            }
+            None => Value::Object(object),
+        },
+        other => {
+            return Err(format!(
+                "trace stream line must decode to a JSON object: {other}"
+            ))
+        }
+    };
+    Ok(event_payload)
+}
+
+fn trace_event_object(payload: Value) -> Result<Map<String, Value>, String> {
+    match extract_trace_event_payload(payload)? {
+        Value::Object(object) => Ok(object),
+        other => Err(format!(
+            "trace stream payload must resolve to a JSON object: {other}"
+        )),
+    }
+}
+
+fn trace_event_string_field(payload: &Map<String, Value>, field: &str) -> Option<String> {
+    payload
+        .get(field)
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn trace_event_usize_field(payload: &Map<String, Value>, field: &str) -> Option<usize> {
+    payload
+        .get(field)
+        .and_then(|value| value.as_u64().map(|number| number as usize))
+}
+
+fn build_trace_cursor(generation: usize, seq: usize, event_id: &str) -> String {
+    format!("g{generation}:s{seq}:{event_id}")
+}
+
+fn hydrate_trace_event_object(
+    mut payload: Map<String, Value>,
+    line_number: usize,
+) -> Map<String, Value> {
+    let seq = trace_event_usize_field(&payload, "seq").unwrap_or(line_number);
+    let generation = trace_event_usize_field(&payload, "generation").unwrap_or(0);
+    let event_id = trace_event_string_field(&payload, "event_id")
+        .unwrap_or_else(|| format!("evt_replay_{line_number:06}"));
+    let cursor = trace_event_string_field(&payload, "cursor")
+        .unwrap_or_else(|| build_trace_cursor(generation, seq, &event_id));
+
+    payload
+        .entry("seq".to_string())
+        .or_insert_with(|| json!(seq));
+    payload
+        .entry("generation".to_string())
+        .or_insert_with(|| json!(generation));
+    payload
+        .entry("event_id".to_string())
+        .or_insert_with(|| Value::String(event_id));
+    payload
+        .entry("cursor".to_string())
+        .or_insert_with(|| Value::String(cursor));
+    payload
+        .entry("status".to_string())
+        .or_insert_with(|| Value::String("ok".to_string()));
+    payload
+        .entry("schema_version".to_string())
+        .or_insert_with(|| Value::String("runtime-trace-v2".to_string()));
+    Value::Object(payload)
+        .as_object()
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn trace_event_matches_scope(
+    payload: &Map<String, Value>,
+    session_id: Option<&str>,
+    job_id: Option<&str>,
+    stream_scope_fields: Option<&[String]>,
+) -> bool {
+    let session_scoped = stream_scope_fields
+        .map(|fields| fields.iter().any(|field| field == "session_id"))
+        .unwrap_or(true);
+    let job_scoped = stream_scope_fields
+        .map(|fields| fields.iter().any(|field| field == "job_id"))
+        .unwrap_or(true);
+    if session_scoped {
+        if let Some(expected_session_id) = session_id {
+            if trace_event_string_field(payload, "session_id").as_deref() != Some(expected_session_id) {
+                return false;
+            }
+        }
+    }
+    if job_scoped {
+        if let Some(expected_job_id) = job_id {
+            if trace_event_string_field(payload, "job_id").as_deref() != Some(expected_job_id) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn trace_scope_fields<'a>(
+    payload: &'a Option<Vec<String>>,
+) -> Option<&'a [String]> {
+    payload.as_deref().filter(|fields| !fields.is_empty())
+}
+
+fn trace_event_matches_request_scope(
+    payload: &Map<String, Value>,
+    session_id: Option<&str>,
+    job_id: Option<&str>,
+    stream_scope_fields: &Option<Vec<String>>,
+) -> bool {
+    trace_event_matches_scope(
+        payload,
+        session_id,
+        job_id,
+        trace_scope_fields(stream_scope_fields),
+    )
+}
+
+fn load_trace_stream_events(
+    path: &Path,
+    session_id: Option<&str>,
+    job_id: Option<&str>,
+    stream_scope_fields: &Option<Vec<String>>,
+) -> Result<Vec<Map<String, Value>>, String> {
+    let file = fs::File::open(path)
+        .map_err(|err| format!("open trace stream failed for {}: {err}", path.display()))?;
+    let reader = BufReader::new(file);
+    let mut events = Vec::new();
+
+    for (line_number, line) in reader.lines().enumerate() {
+        let raw_line = line.map_err(|err| {
+            format!(
+                "read trace stream failed at line {}: {err}",
+                line_number + 1
+            )
+        })?;
+        if raw_line.trim().is_empty() {
+            continue;
+        }
+        let event_payload =
+            hydrate_trace_event_object(
+                trace_event_object(serde_json::from_str::<Value>(&raw_line).map_err(|err| {
+                    format!("parse trace stream line {} failed: {err}", line_number + 1)
+                })?)?,
+                line_number + 1,
+            );
+        if trace_event_matches_request_scope(&event_payload, session_id, job_id, stream_scope_fields) {
+            events.push(event_payload);
+        }
+    }
+    Ok(events)
+}
+
+fn latest_cursor_from_trace_event(payload: &Map<String, Value>) -> Option<Value> {
+    let session_id = trace_event_string_field(payload, "session_id")?;
+    let seq = trace_event_usize_field(payload, "seq")?;
+    let generation = trace_event_usize_field(payload, "generation").unwrap_or(0);
+    let event_id = trace_event_string_field(payload, "event_id")?;
+    let cursor = trace_event_string_field(payload, "cursor")
+        .unwrap_or_else(|| build_trace_cursor(generation, seq, &event_id));
+    Some(json!({
+        "schema_version": "runtime-trace-cursor-v1",
+        "session_id": session_id,
+        "job_id": trace_event_string_field(payload, "job_id"),
+        "generation": generation,
+        "seq": seq,
+        "event_id": event_id,
+        "cursor": cursor,
+    }))
+}
+
+fn compaction_delta_to_trace_event(
+    payload: Value,
+    line_number: usize,
+) -> Result<Map<String, Value>, String> {
+    let object = payload.as_object().cloned().ok_or_else(|| {
+        format!(
+            "trace compaction delta line {} must decode to a JSON object",
+            line_number
+        )
+    })?;
+    let generation = trace_event_usize_field(&object, "generation").unwrap_or(0);
+    let seq = trace_event_usize_field(&object, "seq")
+        .ok_or_else(|| format!("trace compaction delta line {line_number} missing seq"))?;
+    let applies_to = object
+        .get("applies_to")
+        .and_then(Value::as_object)
+        .ok_or_else(|| format!("trace compaction delta line {line_number} missing applies_to"))?;
+    let session_id = applies_to
+        .get("session_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("trace compaction delta line {line_number} missing applies_to.session_id"))?;
+    let payload_object = object
+        .get("payload")
+        .and_then(Value::as_object)
+        .ok_or_else(|| format!("trace compaction delta line {line_number} missing payload"))?;
+    let event_id = payload_object
+        .get("event_id")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("evt_replay_{line_number:06}"));
+    let cursor = payload_object
+        .get("cursor")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| build_trace_cursor(generation, seq, &event_id));
+
+    let mut event = Map::new();
+    event.insert("event_id".to_string(), Value::String(event_id));
+    event.insert("seq".to_string(), json!(seq));
+    event.insert("generation".to_string(), json!(generation));
+    event.insert("cursor".to_string(), Value::String(cursor));
+    event.insert(
+        "ts".to_string(),
+        object
+            .get("ts")
+            .cloned()
+            .unwrap_or_else(|| Value::String(String::new())),
+    );
+    event.insert(
+        "session_id".to_string(),
+        Value::String(session_id.to_string()),
+    );
+    event.insert(
+        "job_id".to_string(),
+        applies_to.get("job_id").cloned().unwrap_or(Value::Null),
+    );
+    event.insert(
+        "kind".to_string(),
+        object
+            .get("kind")
+            .cloned()
+            .unwrap_or_else(|| Value::String(String::new())),
+    );
+    event.insert(
+        "stage".to_string(),
+        payload_object
+            .get("stage")
+            .cloned()
+            .unwrap_or_else(|| Value::String("background".to_string())),
+    );
+    event.insert(
+        "status".to_string(),
+        payload_object
+            .get("status")
+            .cloned()
+            .unwrap_or_else(|| Value::String("ok".to_string())),
+    );
+    event.insert(
+        "payload".to_string(),
+        payload_object
+            .get("payload")
+            .cloned()
+            .unwrap_or_else(|| json!({})),
+    );
+    event.insert(
+        "schema_version".to_string(),
+        Value::String("runtime-trace-v2".to_string()),
+    );
+    Ok(event)
+}
+
+struct ResolvedTraceSource {
+    path: PathBuf,
+    source_kind: &'static str,
+    events: Vec<Map<String, Value>>,
+    latest_cursor: Option<Value>,
+    latest_event_id: Option<String>,
+    latest_event_kind: Option<String>,
+    latest_event_timestamp: Option<String>,
+    recovery: Option<Value>,
+}
+
+fn load_compaction_recovery(
+    manifest_path: &Path,
+    session_id: Option<&str>,
+    job_id: Option<&str>,
+    stream_scope_fields: &Option<Vec<String>>,
+) -> Result<ResolvedTraceSource, String> {
+    let manifest_payload = serde_json::from_str::<Value>(
+        &fs::read_to_string(manifest_path)
+            .map_err(|err| format!("open compaction manifest failed for {}: {err}", manifest_path.display()))?,
+    )
+    .map_err(|err| format!("parse compaction manifest failed for {}: {err}", manifest_path.display()))?;
+    let manifest = manifest_payload.as_object().ok_or_else(|| {
+        format!(
+            "compaction manifest must decode to a JSON object: {}",
+            manifest_path.display()
+        )
+    })?;
+    let snapshot = manifest
+        .get("latest_stable_snapshot")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "compaction manifest is missing latest_stable_snapshot".to_string())?;
+    let state_ref_uri = snapshot
+        .get("state_ref")
+        .and_then(Value::as_object)
+        .and_then(|payload| payload.get("uri"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| "compaction manifest is missing required recovery artifact refs.".to_string())?;
+    let artifact_index_uri = snapshot
+        .get("artifact_index_ref")
+        .and_then(Value::as_object)
+        .and_then(|payload| payload.get("uri"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| "compaction manifest is missing required recovery artifact refs.".to_string())?;
+    let state_path = PathBuf::from(state_ref_uri);
+    let artifact_index_path = PathBuf::from(artifact_index_uri);
+    if !state_path.exists() || !artifact_index_path.exists() {
+        return Err(
+            "Compaction recovery failed closed because a referenced artifact is missing.".to_string()
+        );
+    }
+    let state_payload = serde_json::from_str::<Value>(
+        &fs::read_to_string(&state_path)
+            .map_err(|err| format!("open compaction state failed for {}: {err}", state_path.display()))?,
+    )
+    .map_err(|err| format!("parse compaction state failed for {}: {err}", state_path.display()))?;
+    let artifact_index_payload = serde_json::from_str::<Value>(
+        &fs::read_to_string(&artifact_index_path).map_err(|err| {
+            format!(
+                "open compaction artifact index failed for {}: {err}",
+                artifact_index_path.display()
+            )
+        })?,
+    )
+    .map_err(|err| {
+        format!(
+            "parse compaction artifact index failed for {}: {err}",
+            artifact_index_path.display()
+        )
+    })?;
+
+    let delta_path = manifest
+        .get("delta_path")
+        .and_then(Value::as_str)
+        .map(PathBuf::from);
+    let mut deltas = Vec::new();
+    let mut events = Vec::new();
+    if let Some(delta_path) = delta_path.as_ref() {
+        if delta_path.exists() {
+            let file = fs::File::open(delta_path)
+                .map_err(|err| format!("open compaction delta stream failed for {}: {err}", delta_path.display()))?;
+            let reader = BufReader::new(file);
+            for (line_number, line) in reader.lines().enumerate() {
+                let raw_line = line.map_err(|err| {
+                    format!(
+                        "read compaction delta stream failed at line {}: {err}",
+                        line_number + 1
+                    )
+                })?;
+                if raw_line.trim().is_empty() {
+                    continue;
+                }
+                let delta_payload = serde_json::from_str::<Value>(&raw_line).map_err(|err| {
+                    format!("parse compaction delta line {} failed: {err}", line_number + 1)
+                })?;
+                let event_payload =
+                    compaction_delta_to_trace_event(delta_payload.clone(), line_number + 1)?;
+                if trace_event_matches_request_scope(
+                    &event_payload,
+                    session_id,
+                    job_id,
+                    stream_scope_fields,
+                ) {
+                    deltas.push(delta_payload);
+                    events.push(event_payload);
+                }
+            }
+        }
+    }
+
+    let latest_cursor = events
+        .last()
+        .and_then(latest_cursor_from_trace_event)
+        .or_else(|| state_payload.get("latest_cursor").cloned());
+    let latest_event = events.last().cloned().or_else(|| {
+        state_payload
+            .get("latest_event")
+            .and_then(Value::as_object)
+            .cloned()
+    });
+    let latest_event_id = latest_cursor
+        .as_ref()
+        .and_then(Value::as_object)
+        .and_then(|payload| payload.get("event_id"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            latest_event
+                .as_ref()
+                .and_then(|payload| trace_event_string_field(payload, "event_id"))
+        });
+    let latest_event_kind = latest_event
+        .as_ref()
+        .and_then(|payload| trace_event_string_field(payload, "kind"));
+    let latest_event_timestamp = latest_event
+        .as_ref()
+        .and_then(|payload| trace_event_string_field(payload, "ts"));
+    let latest_recoverable_generation = latest_cursor
+        .as_ref()
+        .and_then(Value::as_object)
+        .and_then(|payload| payload.get("generation"))
+        .and_then(Value::as_u64)
+        .map(|value| value as usize)
+        .or_else(|| {
+            manifest
+                .get("active_generation")
+                .and_then(Value::as_u64)
+                .map(|value| value as usize)
+        })
+        .unwrap_or(0);
+    let recovery = Some(json!({
+        "schema_version": "runtime-trace-compaction-recovery-v1",
+        "session_id": manifest.get("session_id").cloned().unwrap_or(Value::Null),
+        "job_id": manifest.get("job_id").cloned().unwrap_or(Value::Null),
+        "latest_recoverable_generation": latest_recoverable_generation,
+        "snapshot": Value::Object(snapshot.clone()),
+        "deltas": deltas,
+        "artifact_index": artifact_index_payload,
+        "state": state_payload,
+        "latest_cursor": latest_cursor.clone(),
+    }));
+    Ok(ResolvedTraceSource {
+        path: manifest_path.to_path_buf(),
+        source_kind: "compaction_manifest",
+        events,
+        latest_cursor,
+        latest_event_id,
+        latest_event_kind,
+        latest_event_timestamp,
+        recovery,
+    })
+}
+
+fn resolve_trace_source(
+    path: Option<&str>,
+    compaction_manifest_path: Option<&str>,
+    session_id: Option<&str>,
+    job_id: Option<&str>,
+    stream_scope_fields: &Option<Vec<String>>,
+) -> Result<ResolvedTraceSource, String> {
+    if let Some(compaction_path) = compaction_manifest_path {
+        return load_compaction_recovery(
+            &PathBuf::from(compaction_path),
+            session_id,
+            job_id,
+            stream_scope_fields,
+        );
+    }
+    let path = path.ok_or_else(|| {
+        "trace stream replay requires path or compaction_manifest_path".to_string()
+    })?;
+    let path_buf = PathBuf::from(path);
+    let events = load_trace_stream_events(&path_buf, session_id, job_id, stream_scope_fields)?;
+    let latest_event = events.last();
+    Ok(ResolvedTraceSource {
+        path: path_buf,
+        source_kind: "trace_stream",
+        latest_cursor: latest_event.and_then(latest_cursor_from_trace_event),
+        latest_event_id: latest_event.and_then(|payload| trace_event_string_field(payload, "event_id")),
+        latest_event_kind: latest_event.and_then(|payload| trace_event_string_field(payload, "kind")),
+        latest_event_timestamp: latest_event.and_then(|payload| trace_event_string_field(payload, "ts")),
+        recovery: None,
+        events,
+    })
+}
+
+fn inspect_trace_stream(
+    payload: TraceStreamInspectRequestPayload,
+) -> Result<TraceStreamInspectResponsePayload, String> {
+    let resolved = resolve_trace_source(
+        payload.path.as_deref(),
+        payload.compaction_manifest_path.as_deref(),
+        payload.session_id.as_deref(),
+        payload.job_id.as_deref(),
+        &payload.stream_scope_fields,
+    )?;
+
+    Ok(TraceStreamInspectResponsePayload {
+        schema_version: TRACE_STREAM_INSPECT_SCHEMA_VERSION.to_string(),
+        authority: TRACE_STREAM_IO_AUTHORITY.to_string(),
+        path: resolved.path.display().to_string(),
+        source_kind: resolved.source_kind.to_string(),
+        event_count: resolved.events.len(),
+        latest_event_id: resolved.latest_event_id,
+        latest_event_kind: resolved.latest_event_kind,
+        latest_event_timestamp: resolved.latest_event_timestamp,
+        latest_cursor: resolved.latest_cursor,
+        recovery: resolved.recovery,
+    })
+}
+
+fn replay_trace_stream(
+    payload: TraceStreamReplayRequestPayload,
+) -> Result<TraceStreamReplayResponsePayload, String> {
+    let resolved = resolve_trace_source(
+        payload.path.as_deref(),
+        payload.compaction_manifest_path.as_deref(),
+        payload.session_id.as_deref(),
+        payload.job_id.as_deref(),
+        &payload.stream_scope_fields,
+    )?;
+    let after_event_id = payload.after_event_id.clone();
+    let limit = payload.limit.unwrap_or(usize::MAX);
+    let mut anchor_found = after_event_id.is_none();
+    let mut anchor_index = None;
+    let mut next_cursor = None;
+    let mut events = Vec::new();
+
+    for (current_index, event_payload) in resolved.events.iter().enumerate() {
+        let event_id = trace_event_string_field(event_payload, "event_id");
+        if !anchor_found {
+            if event_id.as_deref() == after_event_id.as_deref() {
+                anchor_found = true;
+                anchor_index = Some(current_index);
+                continue;
+            }
+            continue;
+        }
+        if events.len() >= limit {
+            continue;
+        }
+        next_cursor = Some(TraceStreamReplayCursorPayload {
+            event_id: event_id.clone(),
+            event_index: current_index,
+        });
+        events.push(Value::Object(event_payload.clone()));
+    }
+
+    if after_event_id.is_some() && !anchor_found {
+        return Err(format!(
+            "Unknown event id for stream resume: {}",
+            after_event_id.unwrap_or_default()
+        ));
+    }
+
+    let window_start_index = anchor_index.map_or(0, |index| index + 1);
+    let has_more = resolved.events.len() > window_start_index + events.len();
+    Ok(TraceStreamReplayResponsePayload {
+        schema_version: TRACE_STREAM_REPLAY_SCHEMA_VERSION.to_string(),
+        authority: TRACE_STREAM_IO_AUTHORITY.to_string(),
+        path: resolved.path.display().to_string(),
+        source_kind: resolved.source_kind.to_string(),
+        event_count: resolved.events.len(),
+        latest_event_id: resolved.latest_event_id,
+        latest_event_kind: resolved.latest_event_kind,
+        latest_event_timestamp: resolved.latest_event_timestamp,
+        latest_cursor: resolved.latest_cursor,
+        after_event_id,
+        window_start_index,
+        has_more,
+        next_cursor,
+        events,
+    })
+}
+
+fn write_trace_compaction_delta(
+    payload: TraceCompactionDeltaWriteRequestPayload,
+) -> Result<TraceCompactionDeltaWriteResponsePayload, String> {
+    let path = PathBuf::from(&payload.path);
+    let serialized = serde_json::to_string(&payload.delta)
+        .map_err(|err| format!("serialize trace compaction delta failed: {err}"))?
+        + "\n";
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "create trace compaction delta parent failed for {}: {err}",
+                parent.display()
+            )
+        })?;
+    }
+    use std::io::Write;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|err| format!("open trace compaction delta failed for {}: {err}", path.display()))?;
+    file.write_all(serialized.as_bytes())
+        .map_err(|err| format!("write trace compaction delta failed for {}: {err}", path.display()))?;
+    Ok(TraceCompactionDeltaWriteResponsePayload {
+        schema_version: TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION.to_string(),
+        authority: TRACE_STREAM_IO_AUTHORITY.to_string(),
+        path: path.display().to_string(),
+        bytes_written: serialized.as_bytes().len(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn fixture_path() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/routing_route_fixtures.json")
@@ -3504,6 +4257,14 @@ mod tests {
             aggregator_base_url: "http://127.0.0.1:20128/v1".to_string(),
             aggregator_api_key: "test-key".to_string(),
         }
+    }
+
+    fn temp_trace_path(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("router-rs-{name}-{nonce}.jsonl"))
     }
 
     #[test]
@@ -4282,5 +5043,294 @@ mod tests {
             extract_chat_completion_content(&parts_payload).expect("parts content"),
             "hello from router-rs"
         );
+    }
+
+    #[test]
+    fn trace_stream_replay_unwraps_wrapped_events_and_supports_resume() {
+        let trace_path = temp_trace_path("trace-replay");
+        fs::write(
+            &trace_path,
+            concat!(
+                "{\"sink_schema_version\":\"runtime-trace-sink-v2\",\"event\":{\"event_id\":\"evt-1\",\"kind\":\"job.started\",\"ts\":\"2026-04-22T10:00:00.000Z\"}}\n",
+                "{\"event_id\":\"evt-2\",\"kind\":\"job.completed\",\"ts\":\"2026-04-22T10:00:01.000Z\"}\n"
+            ),
+        )
+        .expect("write trace stream");
+
+        let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
+            path: Some(trace_path.display().to_string()),
+            compaction_manifest_path: None,
+            session_id: None,
+            job_id: None,
+            stream_scope_fields: None,
+            after_event_id: Some("evt-1".to_string()),
+            limit: Some(10),
+        })
+        .expect("replay trace stream");
+
+        assert_eq!(replay.schema_version, TRACE_STREAM_REPLAY_SCHEMA_VERSION);
+        assert_eq!(replay.authority, TRACE_STREAM_IO_AUTHORITY);
+        assert_eq!(replay.event_count, 2);
+        assert_eq!(replay.source_kind, "trace_stream");
+        assert_eq!(replay.events.len(), 1);
+        assert_eq!(
+            replay.events[0]["event_id"],
+            Value::String("evt-2".to_string())
+        );
+        assert_eq!(
+            replay.events[0]["kind"],
+            Value::String("job.completed".to_string())
+        );
+        assert!(!replay.has_more);
+        assert_eq!(
+            replay.next_cursor.expect("next cursor").event_id.as_deref(),
+            Some("evt-2")
+        );
+        assert!(replay.latest_cursor.is_none());
+
+        fs::remove_file(&trace_path).expect("cleanup trace stream");
+    }
+
+    #[test]
+    fn trace_stream_inspect_reports_latest_event_metadata() {
+        let trace_path = temp_trace_path("trace-inspect");
+        fs::write(
+            &trace_path,
+            concat!(
+                "{\"event_id\":\"evt-1\",\"kind\":\"job.started\",\"ts\":\"2026-04-22T10:00:00.000Z\"}\n",
+                "{\"sink_schema_version\":\"runtime-trace-sink-v2\",\"event\":{\"event_id\":\"evt-2\",\"kind\":\"job.completed\",\"ts\":\"2026-04-22T10:00:01.000Z\"}}\n"
+            ),
+        )
+        .expect("write trace stream");
+
+        let summary = inspect_trace_stream(TraceStreamInspectRequestPayload {
+            path: Some(trace_path.display().to_string()),
+            compaction_manifest_path: None,
+            session_id: None,
+            job_id: None,
+            stream_scope_fields: None,
+        })
+        .expect("inspect trace stream");
+
+        assert_eq!(summary.schema_version, TRACE_STREAM_INSPECT_SCHEMA_VERSION);
+        assert_eq!(summary.authority, TRACE_STREAM_IO_AUTHORITY);
+        assert_eq!(summary.source_kind, "trace_stream");
+        assert_eq!(summary.event_count, 2);
+        assert_eq!(summary.latest_event_id.as_deref(), Some("evt-2"));
+        assert_eq!(summary.latest_event_kind.as_deref(), Some("job.completed"));
+        assert_eq!(
+            summary.latest_event_timestamp.as_deref(),
+            Some("2026-04-22T10:00:01.000Z")
+        );
+        assert!(summary.latest_cursor.is_none());
+
+        fs::remove_file(&trace_path).expect("cleanup trace stream");
+    }
+
+    #[test]
+    fn trace_stream_replay_filters_by_scope_and_hydrates_cursor_fields() {
+        let trace_path = temp_trace_path("trace-scope");
+        fs::write(
+            &trace_path,
+            concat!(
+                "{\"sink_schema_version\":\"runtime-trace-sink-v2\",\"event\":{\"session_id\":\"session-1\",\"job_id\":\"job-1\",\"event_id\":\"evt-1\",\"kind\":\"job.started\",\"stage\":\"background\",\"ts\":\"2026-04-22T10:00:00.000Z\"}}\n",
+                "{\"session_id\":\"session-1\",\"job_id\":\"job-2\",\"event_id\":\"evt-2\",\"kind\":\"job.completed\",\"stage\":\"background\",\"ts\":\"2026-04-22T10:00:01.000Z\"}\n"
+            ),
+        )
+        .expect("write trace stream");
+
+        let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
+            path: Some(trace_path.display().to_string()),
+            compaction_manifest_path: None,
+            session_id: Some("session-1".to_string()),
+            job_id: Some("job-1".to_string()),
+            stream_scope_fields: None,
+            after_event_id: None,
+            limit: Some(10),
+        })
+        .expect("replay scoped trace stream");
+
+        assert_eq!(replay.event_count, 1);
+        assert_eq!(replay.events.len(), 1);
+        assert_eq!(replay.events[0]["event_id"], Value::String("evt-1".to_string()));
+        assert_eq!(replay.events[0]["seq"], json!(1));
+        assert_eq!(replay.events[0]["generation"], json!(0));
+        assert_eq!(
+            replay.events[0]["cursor"],
+            Value::String("g0:s1:evt-1".to_string())
+        );
+        assert_eq!(
+            replay.latest_cursor.expect("latest cursor")["cursor"],
+            Value::String("g0:s1:evt-1".to_string())
+        );
+
+        fs::remove_file(&trace_path).expect("cleanup trace stream");
+    }
+
+    #[test]
+    fn trace_compaction_inspect_and_replay_read_snapshot_plus_deltas() {
+        let temp_root = temp_trace_path("trace-compaction");
+        let trace_root = temp_root.parent().expect("temp root parent").join(
+            temp_root
+                .file_stem()
+                .expect("temp root stem")
+                .to_string_lossy()
+                .to_string(),
+        );
+        let manifest_path = trace_root.join("stream.manifest.json");
+        let delta_path = trace_root.join("stream.deltas.jsonl");
+        let artifact_dir = trace_root.join("artifacts");
+        let state_path = artifact_dir.join("stream.state.json");
+        let artifact_index_path = artifact_dir.join("stream.artifacts.json");
+        fs::create_dir_all(&artifact_dir).expect("create artifact dir");
+        fs::write(
+            &state_path,
+            serde_json::to_string_pretty(&json!({
+                "session_id": "session-compact",
+                "job_id": "job-compact",
+                "latest_cursor": {
+                    "schema_version": "runtime-trace-cursor-v1",
+                    "session_id": "session-compact",
+                    "job_id": "job-compact",
+                    "generation": 0,
+                    "seq": 2,
+                    "event_id": "evt-snapshot",
+                    "cursor": "g0:s2:evt-snapshot"
+                },
+                "latest_event": {
+                    "event_id": "evt-snapshot",
+                    "kind": "job.progress",
+                    "stage": "background",
+                    "status": "ok",
+                    "ts": "2026-04-22T10:00:00.000Z"
+                }
+            }))
+            .expect("serialize state"),
+        )
+        .expect("write state");
+        fs::write(
+            &artifact_index_path,
+            serde_json::to_string_pretty(&json!([
+                {
+                    "schema_version": "runtime-trace-artifact-ref-v1",
+                    "artifact_id": "art-state",
+                    "kind": "state_ref",
+                    "uri": state_path.display().to_string(),
+                    "digest": "abc",
+                    "size_bytes": 10
+                }
+            ]))
+            .expect("serialize artifact index"),
+        )
+        .expect("write artifact index");
+        fs::write(
+            &delta_path,
+            concat!(
+                "{\"schema_version\":\"runtime-trace-compaction-delta-v1\",\"generation\":1,\"delta_id\":\"delta-1\",\"parent_snapshot_id\":\"snap-1\",\"seq\":1,\"ts\":\"2026-04-22T10:00:01.000Z\",\"kind\":\"job.resumed\",\"payload\":{\"event_id\":\"evt-1\",\"cursor\":\"g1:s1:evt-1\",\"stage\":\"background\",\"status\":\"ok\",\"payload\":{\"step\":3}},\"artifact_refs\":[],\"applies_to\":{\"session_id\":\"session-compact\",\"job_id\":\"job-compact\"}}\n",
+                "{\"schema_version\":\"runtime-trace-compaction-delta-v1\",\"generation\":1,\"delta_id\":\"delta-2\",\"parent_snapshot_id\":\"snap-1\",\"seq\":2,\"ts\":\"2026-04-22T10:00:02.000Z\",\"kind\":\"job.completed\",\"payload\":{\"event_id\":\"evt-2\",\"cursor\":\"g1:s2:evt-2\",\"stage\":\"background\",\"status\":\"ok\",\"payload\":{\"step\":4}},\"artifact_refs\":[],\"applies_to\":{\"session_id\":\"session-compact\",\"job_id\":\"job-compact\"}}\n"
+            ),
+        )
+        .expect("write deltas");
+        fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "runtime-trace-compaction-manifest-v1",
+                "session_id": "session-compact",
+                "job_id": "job-compact",
+                "backend_family": "filesystem",
+                "compaction_supported": true,
+                "snapshot_delta_supported": true,
+                "latest_stable_snapshot": {
+                    "schema_version": "runtime-trace-compaction-snapshot-v1",
+                    "generation": 0,
+                    "snapshot_id": "snap-1",
+                    "session_id": "session-compact",
+                    "job_id": "job-compact",
+                    "state_digest": "state-digest",
+                    "artifact_index_ref": {
+                        "schema_version": "runtime-trace-artifact-ref-v1",
+                        "artifact_id": "art-index",
+                        "kind": "artifact_index_ref",
+                        "uri": artifact_index_path.display().to_string(),
+                        "digest": "artifact-digest",
+                        "size_bytes": 10
+                    },
+                    "state_ref": {
+                        "schema_version": "runtime-trace-artifact-ref-v1",
+                        "artifact_id": "art-state",
+                        "kind": "state_ref",
+                        "uri": state_path.display().to_string(),
+                        "digest": "state-digest",
+                        "size_bytes": 10
+                    }
+                },
+                "active_generation": 1,
+                "active_parent_snapshot_id": "snap-1",
+                "manifest_path": manifest_path.display().to_string(),
+                "delta_path": delta_path.display().to_string(),
+                "artifact_index_path": artifact_index_path.display().to_string(),
+                "state_path": state_path.display().to_string()
+            }))
+            .expect("serialize manifest"),
+        )
+        .expect("write manifest");
+
+        let summary = inspect_trace_stream(TraceStreamInspectRequestPayload {
+            path: None,
+            compaction_manifest_path: Some(manifest_path.display().to_string()),
+            session_id: Some("session-compact".to_string()),
+            job_id: Some("job-compact".to_string()),
+            stream_scope_fields: None,
+        })
+        .expect("inspect compaction manifest");
+        assert_eq!(summary.source_kind, "compaction_manifest");
+        assert_eq!(summary.event_count, 2);
+        assert_eq!(summary.latest_event_id.as_deref(), Some("evt-2"));
+        assert_eq!(
+            summary.recovery.expect("recovery")["latest_recoverable_generation"],
+            json!(1)
+        );
+
+        let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
+            path: None,
+            compaction_manifest_path: Some(manifest_path.display().to_string()),
+            session_id: Some("session-compact".to_string()),
+            job_id: Some("job-compact".to_string()),
+            stream_scope_fields: None,
+            after_event_id: Some("evt-1".to_string()),
+            limit: Some(10),
+        })
+        .expect("replay compaction manifest");
+        assert_eq!(replay.source_kind, "compaction_manifest");
+        assert_eq!(replay.events.len(), 1);
+        assert_eq!(replay.events[0]["event_id"], Value::String("evt-2".to_string()));
+
+        fs::remove_dir_all(&trace_root).expect("cleanup compaction root");
+    }
+
+    #[test]
+    fn write_trace_compaction_delta_appends_one_jsonl_line() {
+        let delta_path = temp_trace_path("trace-delta-write");
+        let response = write_trace_compaction_delta(TraceCompactionDeltaWriteRequestPayload {
+            path: delta_path.display().to_string(),
+            delta: json!({
+                "schema_version": "runtime-trace-compaction-delta-v1",
+                "delta_id": "delta-1",
+                "seq": 1
+            }),
+        })
+        .expect("write delta");
+
+        assert_eq!(
+            response.schema_version,
+            TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION
+        );
+        assert_eq!(response.authority, TRACE_STREAM_IO_AUTHORITY);
+        assert_eq!(response.path, delta_path.display().to_string());
+        assert!(response.bytes_written > 0);
+        let persisted = fs::read_to_string(&delta_path).expect("read delta");
+        assert!(persisted.contains("\"delta_id\":\"delta-1\""));
+
+        fs::remove_file(&delta_path).expect("cleanup delta path");
     }
 }

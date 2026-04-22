@@ -19,6 +19,7 @@ TIERS_PATH = SKILLS_ROOT / "SKILL_TIERS.json"
 KNOWN_TIERS = ("core", "optional", "experimental", "deprecated")
 CORE_LOADOUTS = {"framework_loadout"}
 CORE_OWNER_ROLES = {"gate", "@app-controller", "@kernel-controller", "@strategic-orchestrator"}
+ACTIVATION_MODES = ("default", "explicit_opt_in", "disabled")
 DEPRECATED_DYNAMIC_SCORE_MAX = 60.0
 EXPERIMENTAL_DYNAMIC_SCORE_MAX = 85.0
 STABLE_HEALTH_STATUSES = {"Healthy"}
@@ -79,6 +80,32 @@ def collect_loadout_memberships(loadouts: dict[str, Any]) -> dict[str, list[dict
                     {"loadout": str(loadout_name), "bucket": bucket}
                 )
     return memberships
+
+
+def collect_loadout_activation(loadouts: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Return default and explicit-opt-in loadout names."""
+
+    activation_policy = loadouts.get("activation_policy", {})
+    configured_default = [
+        str(name)
+        for name in activation_policy.get("default_loadouts", [])
+        if isinstance(name, str) and name
+    ]
+    loadout_configs = loadouts.get("loadouts", {})
+    if configured_default:
+        default_loadouts = configured_default
+    else:
+        default_loadouts = sorted(
+            str(name)
+            for name, config in loadout_configs.items()
+            if isinstance(config, dict) and str(config.get("activation", "explicit")) == "default"
+        )
+    explicit_loadouts = sorted(
+        str(name)
+        for name, config in loadout_configs.items()
+        if isinstance(config, dict) and str(name) not in set(default_loadouts)
+    )
+    return sorted(default_loadouts), explicit_loadouts
 
 
 def _looks_deprecated(
@@ -177,18 +204,40 @@ def build_skill_tiers(
     manifest_skills = normalize_manifest(manifest)
     health_skills = normalize_health(health_manifest or {})
     memberships = collect_loadout_memberships(loadouts or {})
+    default_loadouts, explicit_loadouts = collect_loadout_activation(loadouts or {})
 
     groups = {tier: [] for tier in KNOWN_TIERS}
+    activation_counts = {mode: 0 for mode in ACTIVATION_MODES}
     skills: dict[str, Any] = {}
     for slug in sorted(manifest_skills):
         manifest_entry = manifest_skills[slug]
         health_entry = health_skills.get(slug, {})
         loadout_memberships = memberships.get(slug, [])
         tier, reasons = tier_skill(manifest_entry, health_entry, loadout_memberships)
+        default_loadout_memberships = [
+            row
+            for row in loadout_memberships
+            if row.get("bucket") != "exclude" and row.get("loadout") in default_loadouts
+        ]
+        default_surface_enabled = tier == "core" or bool(default_loadout_memberships)
+        if tier == "deprecated":
+            activation_mode = "disabled"
+        elif tier == "experimental":
+            activation_mode = "explicit_opt_in"
+        elif default_surface_enabled:
+            activation_mode = "default"
+        else:
+            activation_mode = "explicit_opt_in"
         groups[tier].append(slug)
+        activation_counts[activation_mode] += 1
         skills[slug] = {
             "tier": tier,
             "reasons": reasons,
+            "surface": {
+                "activation_mode": activation_mode,
+                "default_surface_enabled": default_surface_enabled,
+                "default_loadout_memberships": default_loadout_memberships,
+            },
             "signals": {
                 "layer": manifest_entry.get("layer"),
                 "owner": manifest_entry.get("owner"),
@@ -218,9 +267,20 @@ def build_skill_tiers(
             "experimental": "skills with unstable or low-health routing signals",
             "deprecated": "very-low-health and unused skills with reroute pressure",
         },
+        "surface_policy": {
+            "default_loadouts": default_loadouts,
+            "explicit_opt_in_loadouts": explicit_loadouts,
+            "tier_activation_defaults": {
+                "core": "default",
+                "optional": "explicit_opt_in",
+                "experimental": "explicit_opt_in",
+                "deprecated": "disabled",
+            },
+        },
         "summary": {
             "total_skills": len(skills),
             "tier_counts": {tier: len(groups[tier]) for tier in KNOWN_TIERS},
+            "activation_counts": activation_counts,
         },
         "tiers": groups,
         "skills": skills,
@@ -273,6 +333,10 @@ def validate_skill_tiers(payload: dict[str, Any], manifest: dict[str, Any]) -> N
             continue
         if slug not in groups.get(tier, []):
             errors.append(f"skills:{slug}:tier-mismatch:{tier}")
+        surface = entry.get("surface", {})
+        activation_mode = surface.get("activation_mode")
+        if activation_mode not in ACTIVATION_MODES:
+            errors.append(f"skills:{slug}:invalid-activation-mode:{activation_mode}")
 
     if errors:
         raise SystemExit(f"Invalid skill tiers: {', '.join(errors)}")

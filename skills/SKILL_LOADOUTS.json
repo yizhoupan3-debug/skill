@@ -1,13 +1,29 @@
 {
-  "version": 1,
+  "version": 2,
+  "schema_version": "skill-loadouts-v2",
+  "activation_policy": {
+    "default_loadouts": [
+      "default_surface_loadout"
+    ],
+    "explicit_opt_in_loadouts": [
+      "research_loadout",
+      "implementation_loadout",
+      "audit_loadout",
+      "framework_loadout",
+      "ops_loadout"
+    ],
+    "experimental_tiers": "explicit_opt_in",
+    "deprecated_tiers": "disabled",
+    "compatibility_surfaces": "explicit_opt_in"
+  },
   "loadouts": {
     "default_surface_loadout": {
+      "activation": "default",
+      "surface_class": "default",
       "owners": [
-        "information-retrieval",
         "plan-to-code",
         "python-pro",
         "typescript-pro",
-        "documentation-engineering",
         "git-workflow",
         "shell-cli"
       ],
@@ -15,6 +31,9 @@
         "anti-laziness"
       ],
       "exclude": [
+        "academic-search",
+        "autoresearch",
+        "github-investigator",
         "brainstorm-research",
         "copywriting",
         "iterative-optimizer",
@@ -22,9 +41,11 @@
         "seo-web",
         "sustech-mailer"
       ],
-      "purpose": "Lean day-to-day default surface for evidence-first repo work; specialist lanes stay opt-in."
+      "purpose": "Single default day-to-day surface for implementation-first repo work; research, audit, and compatibility lanes stay explicit."
     },
     "research_loadout": {
+      "activation": "explicit",
+      "surface_class": "specialist",
       "owners": [
         "information-retrieval",
         "github-investigator",
@@ -40,6 +61,8 @@
       "purpose": "Bounded research, repo investigation, and evidence gathering."
     },
     "implementation_loadout": {
+      "activation": "explicit",
+      "surface_class": "specialist",
       "owners": [
         "plan-to-code",
         "typescript-pro",
@@ -56,6 +79,8 @@
       "purpose": "Concrete implementation and refactor execution with test support."
     },
     "audit_loadout": {
+      "activation": "explicit",
+      "surface_class": "specialist",
       "owners": [],
       "overlays": [
         "execution-audit-codex",
@@ -69,6 +94,8 @@
       "purpose": "Strict sign-off, audit, verification, and issue surfacing."
     },
     "framework_loadout": {
+      "activation": "explicit",
+      "surface_class": "specialist",
       "owners": [
         "skill-developer-codex",
         "execution-controller-coding",
@@ -84,6 +111,8 @@
       "purpose": "Framework design, routing policy, orchestrator evolution, and execution-shape normalization work."
     },
     "ops_loadout": {
+      "activation": "explicit",
+      "surface_class": "specialist",
       "owners": [
         "git-workflow",
         "linux-server-ops",

@@ -129,6 +129,10 @@ def test_framework_profile_emits_host_neutral_shared_contract_surface() -> None:
         tool_policy={"shell": "allow"},
         approval_policy={"mode": "manual"},
         loadout_policy={"default": "framework"},
+        framework_surface_policy={
+            "kernel": {"canonical_axes": ["routing", "memory", "continuity", "host_projection"]},
+            "default_surface": {"default_loadouts": ["default_surface_loadout"]},
+        },
         artifact_contract={"layout": "stable-v1"},
         memory_mounts=(
             {"mount_id": "project", "source": ".codex/memory"},
@@ -157,6 +161,10 @@ def test_framework_profile_emits_host_neutral_shared_contract_surface() -> None:
     assert payload["shared_contract"]["mcp_servers"] == [
         {"server_id": "local-memory", "transport": "stdio"},
     ]
+    assert payload["shared_contract"]["framework_surface_policy"] == {
+        "kernel": {"canonical_axes": ["routing", "memory", "continuity", "host_projection"]},
+        "default_surface": {"default_loadouts": ["default_surface_loadout"]},
+    }
     assert payload["shared_contract"]["session_contract"] == {
         "mode": "bounded",
         "approval_mode": "manual",
@@ -432,7 +440,6 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     assert claude.host_payload["execution_surface"]["shared_adapter"] == "cli_common_adapter"
     assert claude.host_payload["host_projection"]["context_files"] == [
         "CLAUDE.md",
-        ".claude/CLAUDE.md",
         "CLAUDE.local.md",
     ]
     assert claude.host_payload["host_projection"]["settings_paths"] == [
@@ -454,7 +461,6 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     assert claude.host_payload["host_projection"]["settings_scopes"][2]["locations"] == [
         ".claude/settings.json",
         "CLAUDE.md",
-        ".claude/CLAUDE.md",
         ".claude/agents/",
     ]
     assert claude.host_payload["host_projection"]["subagent_paths"] == [
@@ -765,6 +771,7 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
         "tool_policy",
         "approval_policy",
         "loadout_policy",
+        "framework_surface_policy",
         "workspace_bootstrap",
         "session_contract",
         "execution_controller_contract",
@@ -979,8 +986,8 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert status["retirement_exit_contract"]["current_decision"] == "completed"
     assert status["retirement_exit_contract"]["removal_owner"] == "runtime-integrator"
     assert status["retirement_exit_contract"]["observation_sources"]["local_runtime_health"] == [
-        "PythonAgnoExecutionKernel.health().kernel_live_fallback_request_status",
-        "PythonAgnoExecutionKernel.health().kernel_live_fallback_mode",
+        "ExecutionEnvironmentService.describe_kernel_contract()",
+        "RouterRsExecutionKernel.health().kernel_live_backend_impl",
     ]
     assert status["public_runtime_contract_fields"] == [
         "execution_kernel",
@@ -1138,7 +1145,6 @@ def test_router_rs_profile_json_matches_outer_framework_contract() -> None:
     assert payload["codex_common_adapter"]["metadata"]["adapter_alias_of"] == "cli_common_adapter"
     assert payload["claude_code_adapter"]["host_projection"]["context_files"] == [
         "CLAUDE.md",
-        ".claude/CLAUDE.md",
         "CLAUDE.local.md",
     ]
     assert payload["gemini_cli_adapter"]["host_projection"]["context_files"] == ["GEMINI.md"]

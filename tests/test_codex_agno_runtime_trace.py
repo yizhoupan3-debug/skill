@@ -17,8 +17,9 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-from codex_agno_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
+from codex_agno_runtime.checkpoint_store import FilesystemRuntimeCheckpointer, SQLiteRuntimeStorageBackend
 from codex_agno_runtime.config import RuntimeSettings
+from codex_agno_runtime.event_transport import ExternalRuntimeEventTransportBridge
 from codex_agno_runtime.middleware import (
     MemoryMiddleware,
     Middleware,
@@ -43,6 +44,7 @@ from codex_agno_runtime.trace import (
     TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
     TRACE_EVENT_HANDOFF_SCHEMA_VERSION,
     InMemoryRuntimeEventBridge,
+    JsonlTraceEventSink,
     RuntimeEventHandoff,
     RuntimeEventTransport,
     RuntimeTraceRecorder,
@@ -119,8 +121,14 @@ class _InMemoryStorageBackend:
     def read_text(self, path: Path) -> str:
         return self._payloads[path]
 
+    def iter_text_lines(self, path: Path):
+        yield from self.read_text(path).splitlines(keepends=True)
+
     def write_text(self, path: Path, payload: str) -> None:
         self._payloads[path] = payload
+
+    def append_text(self, path: Path, payload: str) -> None:
+        self._payloads[path] = self._payloads.get(path, "") + payload
 
     def delete_text(self, path: Path) -> None:
         self._payloads.pop(path, None)
@@ -140,6 +148,35 @@ class _CompactionStorageBackend(_InMemoryStorageBackend):
 
     def capabilities(self) -> _CompactionStorageCapabilities:
         return _CompactionStorageCapabilities()
+
+
+class _FilesystemCompactionStorageBackend:
+    """Filesystem-backed test double that keeps compaction enabled for Rust hot-path coverage."""
+
+    def capabilities(self) -> _CompactionStorageCapabilities:
+        return _CompactionStorageCapabilities(backend_family="filesystem")
+
+    def exists(self, path: Path) -> bool:
+        return path.exists()
+
+    def read_text(self, path: Path) -> str:
+        return path.read_text(encoding="utf-8")
+
+    def iter_text_lines(self, path: Path):
+        with path.open(encoding="utf-8") as handle:
+            yield from handle
+
+    def write_text(self, path: Path, payload: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(payload, encoding="utf-8")
+
+    def append_text(self, path: Path, payload: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(payload)
+
+    def delete_text(self, path: Path) -> None:
+        path.unlink(missing_ok=True)
 
 
 def _build_routing_result(session_id: str) -> RoutingResult:
@@ -475,8 +512,8 @@ def test_middleware_chain_emits_trace_events_and_skips_memory_write_on_dry_run()
         routing_result=_build_routing_result("session-2"),
         execution_kernel="rust-execution-kernel-slice",
         execution_kernel_authority="rust-execution-kernel-authority",
-        execution_kernel_delegate="python-agno",
-        execution_kernel_delegate_authority="python-agno-kernel-adapter",
+        execution_kernel_delegate="router-rs",
+        execution_kernel_delegate_authority="rust-execution-cli",
     )
     ctx.metadata["dry_run"] = True
 
@@ -506,8 +543,8 @@ def test_middleware_chain_emits_trace_events_and_skips_memory_write_on_dry_run()
     assert trace.events[0].payload["middleware"] == "MemoryMiddleware"
     assert trace.events[0].payload["execution_kernel"] == "rust-execution-kernel-slice"
     assert trace.events[0].payload["execution_kernel_authority"] == "rust-execution-kernel-authority"
-    assert trace.events[0].payload["execution_kernel_delegate"] == "python-agno"
-    assert trace.events[0].payload["execution_kernel_delegate_authority"] == "python-agno-kernel-adapter"
+    assert trace.events[0].payload["execution_kernel_delegate"] == "router-rs"
+    assert trace.events[0].payload["execution_kernel_delegate_authority"] == "rust-execution-cli"
     assert trace.events[-1].payload["middleware"] == "MemoryMiddleware"
 
 
@@ -600,6 +637,105 @@ def test_trace_recorder_supports_resumable_replay_windows(tmp_path: Path) -> Non
     assert second_window.next_cursor.seq == 3
 
 
+def test_trace_recorder_latest_cursor_prefers_rust_trace_io_on_filesystem(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Filesystem latest-cursor lookups should not fall back to Python full-stream reads."""
+
+    stream = tmp_path / "TRACE_EVENTS.jsonl"
+    recorder = RuntimeTraceRecorder(event_stream_path=stream)
+    recorder.record(
+        session_id="session-rust-cursor",
+        job_id="job-rust-cursor",
+        kind="job.started",
+        stage="background",
+    )
+    recorder.record(
+        session_id="session-rust-cursor",
+        job_id="job-rust-cursor",
+        kind="job.completed",
+        stage="background",
+    )
+
+    monkeypatch.setattr(
+        JsonlTraceEventSink,
+        "read_events",
+        lambda self: (_ for _ in ()).throw(AssertionError("python read_events hot path should stay unused")),
+    )
+
+    latest_cursor = recorder.latest_cursor(session_id="session-rust-cursor", job_id="job-rust-cursor")
+    assert latest_cursor is not None
+    assert latest_cursor.event_id.startswith("evt_")
+    assert latest_cursor.seq == 2
+
+
+def test_trace_recorder_replay_prefers_rust_trace_io_on_filesystem(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Filesystem replay should go through router-rs instead of Python stream hydration."""
+
+    stream = tmp_path / "TRACE_EVENTS.jsonl"
+    recorder = RuntimeTraceRecorder(event_stream_path=stream)
+    for index in range(3):
+        recorder.record(
+            session_id="session-rust-replay",
+            job_id="job-rust-replay",
+            kind=f"job.event.{index}",
+            stage="background",
+        )
+
+    monkeypatch.setattr(
+        JsonlTraceEventSink,
+        "read_events",
+        lambda self: (_ for _ in ()).throw(AssertionError("python read_events hot path should stay unused")),
+    )
+
+    replay = recorder.replay(session_id="session-rust-replay", job_id="job-rust-replay", limit=2)
+    assert [event.seq for event in replay.events] == [1, 2]
+    assert replay.has_more is True
+    assert replay.next_cursor is not None
+    assert replay.next_cursor.seq == 2
+
+
+def test_trace_recorder_replay_prefers_rust_trace_io_on_sqlite_backend(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SQLite-backed replay should still route through router-rs via compatibility staging."""
+
+    backend = SQLiteRuntimeStorageBackend(
+        db_path=tmp_path / "runtime_checkpoint_store.sqlite3",
+        storage_root=tmp_path,
+    )
+    stream = tmp_path / "TRACE_EVENTS.jsonl"
+    recorder = RuntimeTraceRecorder(event_stream_path=stream, storage_backend=backend)
+    for index in range(3):
+        recorder.record(
+            session_id="session-sqlite-replay",
+            job_id="job-sqlite-replay",
+            kind=f"job.event.{index}",
+            stage="background",
+        )
+
+    monkeypatch.setattr(
+        JsonlTraceEventSink,
+        "read_events",
+        lambda self: (_ for _ in ()).throw(AssertionError("python read_events hot path should stay unused")),
+    )
+
+    latest_cursor = recorder.latest_cursor(session_id="session-sqlite-replay", job_id="job-sqlite-replay")
+    assert latest_cursor is not None
+    assert latest_cursor.seq == 3
+
+    replay = recorder.replay(session_id="session-sqlite-replay", job_id="job-sqlite-replay", limit=2)
+    assert [event.seq for event in replay.events] == [1, 2]
+    assert replay.has_more is True
+    assert replay.next_cursor is not None
+    assert replay.next_cursor.seq == 2
+
+
 def test_trace_compaction_rolls_generation_and_recovers_from_snapshot_plus_deltas(tmp_path: Path) -> None:
     """Compaction should freeze one stable snapshot and replay later deltas from the next generation."""
 
@@ -687,6 +823,140 @@ def test_trace_compaction_rolls_generation_and_recovers_from_snapshot_plus_delta
     assert replay.next_cursor.generation == 1
     assert replay.next_cursor.seq == 2
     assert recorder.describe_stream()["compaction_manifest_path"].endswith("trace_compaction")
+
+
+def test_trace_compaction_delta_append_prefers_rust_trace_io_on_filesystem(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Filesystem delta append should not fall back to the Python append helper."""
+
+    recorder = RuntimeTraceRecorder(
+        output_path=tmp_path / "TRACE_METADATA.json",
+        event_stream_path=tmp_path / "TRACE_EVENTS.jsonl",
+        storage_backend=_FilesystemCompactionStorageBackend(),
+    )
+    recorder.record(
+        session_id="session-rust-delta",
+        job_id="job-rust-delta",
+        kind="job.started",
+        stage="background",
+    )
+    compaction = recorder.compact(session_id="session-rust-delta", job_id="job-rust-delta")
+    assert compaction.applied is True
+
+    monkeypatch.setattr(
+        RuntimeTraceRecorder,
+        "_append_text",
+        lambda self, path, payload: (_ for _ in ()).throw(AssertionError("python delta append should stay unused")),
+    )
+
+    recorder.record(
+        session_id="session-rust-delta",
+        job_id="job-rust-delta",
+        kind="job.completed",
+        stage="background",
+    )
+
+    manifest = recorder.load_compaction_manifest(session_id="session-rust-delta", job_id="job-rust-delta")
+    assert manifest is not None
+    assert manifest.delta_path is not None
+    delta_payload = Path(manifest.delta_path).read_text(encoding="utf-8")
+    assert '"kind":"job.completed"' in delta_payload
+
+
+def test_trace_compaction_recovery_prefers_rust_trace_io_on_filesystem(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Filesystem compaction recovery should use router-rs instead of Python delta loading."""
+
+    recorder = RuntimeTraceRecorder(
+        output_path=tmp_path / "TRACE_METADATA.json",
+        event_stream_path=tmp_path / "TRACE_EVENTS.jsonl",
+        storage_backend=_FilesystemCompactionStorageBackend(),
+    )
+    recorder.record(
+        session_id="session-rust-recovery",
+        job_id="job-rust-recovery",
+        kind="job.started",
+        stage="background",
+    )
+    recorder.record(
+        session_id="session-rust-recovery",
+        job_id="job-rust-recovery",
+        kind="job.progress",
+        stage="background",
+    )
+    compaction = recorder.compact(session_id="session-rust-recovery", job_id="job-rust-recovery")
+    assert compaction.applied is True
+    recorder.record(
+        session_id="session-rust-recovery",
+        job_id="job-rust-recovery",
+        kind="job.completed",
+        stage="background",
+    )
+
+    monkeypatch.setattr(
+        RuntimeTraceRecorder,
+        "_load_compaction_deltas",
+        lambda self, path: (_ for _ in ()).throw(AssertionError("python delta recovery should stay unused")),
+    )
+
+    recovery = recorder.recover_compacted_state(session_id="session-rust-recovery", job_id="job-rust-recovery")
+    assert recovery is not None
+    assert [delta.kind for delta in recovery.deltas] == ["job.completed"]
+    assert recovery.latest_cursor is not None
+    assert recovery.latest_cursor.generation == 1
+
+
+def test_trace_compaction_recovery_prefers_rust_trace_io_on_sqlite_backend(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SQLite compaction recovery should use the staged Rust contract instead of Python delta parsing."""
+
+    backend = SQLiteRuntimeStorageBackend(
+        db_path=tmp_path / "runtime_checkpoint_store.sqlite3",
+        storage_root=tmp_path,
+    )
+    recorder = RuntimeTraceRecorder(
+        output_path=tmp_path / "TRACE_METADATA.json",
+        event_stream_path=tmp_path / "TRACE_EVENTS.jsonl",
+        storage_backend=backend,
+    )
+    recorder.record(
+        session_id="session-sqlite-recovery",
+        job_id="job-sqlite-recovery",
+        kind="job.started",
+        stage="background",
+    )
+    recorder.record(
+        session_id="session-sqlite-recovery",
+        job_id="job-sqlite-recovery",
+        kind="job.progress",
+        stage="background",
+    )
+    compaction = recorder.compact(session_id="session-sqlite-recovery", job_id="job-sqlite-recovery")
+    assert compaction.applied is True
+    recorder.record(
+        session_id="session-sqlite-recovery",
+        job_id="job-sqlite-recovery",
+        kind="job.completed",
+        stage="background",
+    )
+
+    monkeypatch.setattr(
+        RuntimeTraceRecorder,
+        "_load_compaction_deltas",
+        lambda self, path: (_ for _ in ()).throw(AssertionError("python delta recovery should stay unused")),
+    )
+
+    recovery = recorder.recover_compacted_state(session_id="session-sqlite-recovery", job_id="job-sqlite-recovery")
+    assert recovery is not None
+    assert [delta.kind for delta in recovery.deltas] == ["job.completed"]
+    assert recovery.latest_cursor is not None
+    assert recovery.latest_cursor.generation == 1
 
 
 def test_trace_compaction_fail_closed_when_referenced_artifact_is_missing(tmp_path: Path) -> None:
@@ -904,3 +1174,109 @@ def test_in_memory_event_bridge_supports_last_event_id_heartbeat_and_cleanup() -
 
     with pytest.raises(ValueError, match="Unknown event id"):
         bridge.subscribe(session_id="session-4", after_event_id="evt_missing")
+
+
+def test_external_runtime_transport_bridge_subscribe_prefers_rust_trace_io_on_filesystem(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """External attach replay should route through router-rs instead of Python replay hydration."""
+
+    stream = tmp_path / "TRACE_EVENTS.jsonl"
+    recorder = RuntimeTraceRecorder(event_stream_path=stream)
+    recorder.record(
+        session_id="session-attach",
+        job_id="job-attach",
+        kind="job.started",
+        stage="background",
+    )
+    recorder.record(
+        session_id="session-attach",
+        job_id="job-attach",
+        kind="job.completed",
+        stage="background",
+    )
+
+    handoff_path = tmp_path / "ATTACHED_RUNTIME_EVENT_HANDOFF.json"
+    handoff = RuntimeEventHandoff(
+        stream_id="stream::session-attach",
+        session_id="session-attach",
+        job_id="job-attach",
+        checkpoint_backend_family="filesystem",
+        trace_stream_path=str(stream),
+        transport=RuntimeEventTransport(
+            stream_id="stream::session-attach",
+            session_id="session-attach",
+            job_id="job-attach",
+            binding_backend_family="filesystem",
+            binding_artifact_path=str(tmp_path / "runtime_event_transports" / "session-attach__job-attach.json"),
+        ),
+    )
+    handoff_path.write_text(handoff.model_dump_json(indent=2) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        JsonlTraceEventSink,
+        "read_events",
+        lambda self: (_ for _ in ()).throw(AssertionError("python read_events hot path should stay unused")),
+    )
+
+    bridge = ExternalRuntimeEventTransportBridge.attach(handoff_path=str(handoff_path))
+    replay = bridge.subscribe(limit=1)
+    assert replay.events[0].kind == "job.started"
+    resumed = bridge.subscribe(after_event_id=replay.events[0].event_id, limit=5)
+    assert [event.kind for event in resumed.events] == ["job.completed"]
+
+
+def test_external_runtime_transport_bridge_subscribe_prefers_rust_trace_io_on_sqlite_backend(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SQLite-backed external attach replay should still route through the Rust trace contract."""
+
+    backend = SQLiteRuntimeStorageBackend(
+        db_path=tmp_path / "runtime_checkpoint_store.sqlite3",
+        storage_root=tmp_path,
+    )
+    stream = tmp_path / "TRACE_EVENTS.jsonl"
+    recorder = RuntimeTraceRecorder(event_stream_path=stream, storage_backend=backend)
+    recorder.record(
+        session_id="session-attach-sqlite",
+        job_id="job-attach-sqlite",
+        kind="job.started",
+        stage="background",
+    )
+    recorder.record(
+        session_id="session-attach-sqlite",
+        job_id="job-attach-sqlite",
+        kind="job.completed",
+        stage="background",
+    )
+
+    handoff_path = tmp_path / "ATTACHED_RUNTIME_EVENT_HANDOFF.json"
+    handoff = RuntimeEventHandoff(
+        stream_id="stream::session-attach-sqlite",
+        session_id="session-attach-sqlite",
+        job_id="job-attach-sqlite",
+        checkpoint_backend_family="sqlite",
+        trace_stream_path=str(stream),
+        transport=RuntimeEventTransport(
+            stream_id="stream::session-attach-sqlite",
+            session_id="session-attach-sqlite",
+            job_id="job-attach-sqlite",
+            binding_backend_family="sqlite",
+            binding_artifact_path=str(tmp_path / "runtime_event_transports" / "session-attach-sqlite__job-attach-sqlite.json"),
+        ),
+    )
+    backend.write_text(handoff_path, handoff.model_dump_json(indent=2) + "\n")
+
+    monkeypatch.setattr(
+        JsonlTraceEventSink,
+        "read_events",
+        lambda self: (_ for _ in ()).throw(AssertionError("python read_events hot path should stay unused")),
+    )
+
+    bridge = ExternalRuntimeEventTransportBridge.attach(handoff_path=str(handoff_path))
+    replay = bridge.subscribe(limit=1)
+    assert replay.events[0].kind == "job.started"
+    resumed = bridge.subscribe(after_event_id=replay.events[0].event_id, limit=5)
+    assert [event.kind for event in resumed.events] == ["job.completed"]

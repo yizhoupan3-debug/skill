@@ -44,6 +44,7 @@ from codex_agno_runtime.services import (
     TraceService,
     _normalize_rusage_maxrss,
 )
+from codex_agno_runtime.trace import JsonlTraceEventSink
 
 
 _MINIMAL_SUPERVISOR_STATE = {
@@ -100,8 +101,14 @@ class _InMemoryStorageBackend:
     def read_text(self, path: Path) -> str:
         return self._payloads[path]
 
+    def iter_text_lines(self, path: Path):
+        yield from self.read_text(path).splitlines(keepends=True)
+
     def write_text(self, path: Path, payload: str) -> None:
         self._payloads[path] = payload
+
+    def append_text(self, path: Path, payload: str) -> None:
+        self._payloads[path] = self._payloads.get(path, "") + payload
 
 
 def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
@@ -1630,3 +1637,57 @@ def test_trace_service_describes_host_facing_transport(tmp_path: Path) -> None:
         handoff.trace_stream_path,
     ]
     assert handoff.transport.binding_artifact_path == transport.binding_artifact_path
+
+
+def test_trace_service_subscribe_prefers_rust_replay_over_bridge_reseed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TraceService subscribe should use recorder replay directly instead of bridge reseed hot paths."""
+
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=False,
+        route_engine_mode="rust",
+    )
+    checkpointer = FilesystemRuntimeCheckpointer(
+        data_dir=settings.resolved_data_dir,
+        trace_output_path=settings.resolved_trace_output_path,
+    )
+    router_service = RouterService(settings)
+    trace_service = TraceService(checkpointer, control_plane_descriptor=router_service.control_plane_descriptor)
+    trace_service.recorder.record(
+        session_id="subscribe-session",
+        job_id="job-subscribe",
+        kind="job.started",
+        stage="background",
+    )
+    trace_service.recorder.record(
+        session_id="subscribe-session",
+        job_id="job-subscribe",
+        kind="job.completed",
+        stage="background",
+    )
+
+    monkeypatch.setattr(
+        trace_service.event_bridge,
+        "seed",
+        lambda events: (_ for _ in ()).throw(AssertionError("bridge reseed hot path should stay unused")),
+    )
+    monkeypatch.setattr(
+        JsonlTraceEventSink,
+        "read_events",
+        lambda self: (_ for _ in ()).throw(AssertionError("python read_events hot path should stay unused")),
+    )
+
+    first_window = trace_service.subscribe(session_id="subscribe-session", job_id="job-subscribe", limit=1)
+    assert [event.kind for event in first_window.events] == ["job.started"]
+    resumed = trace_service.subscribe(
+        session_id="subscribe-session",
+        job_id="job-subscribe",
+        after_event_id=first_window.events[0].event_id,
+        limit=5,
+    )
+    assert [event.kind for event in resumed.events] == ["job.completed"]

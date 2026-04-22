@@ -69,8 +69,8 @@ framework policy instead of forking per-host routing or memory rules.
 2. Check gates before owners.
 3. Use the narrowest matching skill.
 4. Read the chosen `SKILL.md` before analysis, search, coding, or edits.
-5. If no skill matches, consult `skills/SKILL_ROUTING_RUNTIME.json`, then
-   `skills/SKILL_ROUTING_INDEX.md`.
+5. If no skill matches, consult `skills/SKILL_ROUTING_RUNTIME.json` first, then
+   `skills/SKILL_ROUTING_INDEX.md` for the human quick scan.
 6. Keep exactly one primary owner and at most one overlay.
 7. For high-load, cross-file, or long-running tasks, invoke
    `execution-controller-coding` and maintain `.supervisor_state.json`.
@@ -134,19 +134,32 @@ framework policy instead of forking per-host routing or memory rules.
 
 ## Runtime Sources Of Truth
 
+Primary routing entrypoints:
+
 - `skills/SKILL_ROUTING_RUNTIME.json`: machine-readable routing truth
 - `skills/SKILL_ROUTING_INDEX.md`: human quick reference
+
+Extended generated references, only when needed:
+
 - `skills/SKILL_ROUTING_LAYERS.md`: owner and reroute map
 - `skills/SKILL_SOURCE_MANIFEST.json`: source precedence
 - `skills/SKILL_SHADOW_MAP.json`: shadow audit
 - `skills/SKILL_LOADOUTS.json`: loadout definitions
+- `configs/framework/FRAMEWORK_SURFACE_POLICY.json`: default surface, boundary, and outcome policy
 - `skills/SKILL_APPROVAL_POLICY.json`: approval policy registry
 
 ## Host Entry Files
 
+Default host entrypoints:
+
 - Codex: `AGENTS.md`
-- Claude Code: `CLAUDE.md`, `.claude/CLAUDE.md`, `.claude/settings.json`
-- Gemini CLI: `GEMINI.md`, `.gemini/settings.json`
+- Claude Code: `CLAUDE.md`
+- Gemini CLI: `GEMINI.md`
+
+Host-private local overlays:
+
+- Claude Code: `.claude/settings.json`
+- Gemini CLI: `.gemini/settings.json`
 
 These entry files must stay thin and point back to this shared policy.
 """
@@ -164,23 +177,17 @@ ROOT_CLAUDE_PROXY = """# Claude Code Entry Proxy
 
 This file exists because Claude Code discovers `CLAUDE.md`.
 
-@.claude/CLAUDE.md
-"""
+@AGENT.md
+@.codex/memory/CLAUDE_MEMORY.md
 
-CLAUDE_LOCAL_PROXY = """# Claude Local Overlay
+## Claude Project Entry
 
-@../AGENT.md
-@../.codex/memory/CLAUDE_MEMORY.md
-
-## Claude Local Overlay
-
-Use this directory only for Claude host-private files such as:
+Use `.claude/` only for Claude host-private files such as:
 
 - `.claude/settings.json`
 - `.claude/agents/`
 - `.claude/commands/`
 - `.claude/hooks/`
-- `../.codex/memory/CLAUDE_MEMORY.md`
 
 Claude-specific hooks may refresh the imported memory projection, but must not
 fork the shared framework policy or memory ownership.
@@ -204,36 +211,6 @@ This file exists because Gemini CLI discovers `GEMINI.md`.
 
 Gemini-specific config belongs in `.gemini/`, but the shared routing, memory,
 and artifact rules still come from `AGENT.md`.
-"""
-
-CONFIG_CODEX_PROXY = """# Codex Entry Proxy
-
-This file is a thin proxy only.
-
-- Repository policy source of truth: `/Users/joe/Documents/skill/AGENT.md`
-- Codex project entrypoint: `AGENTS.md`
-
-Do not duplicate or diverge from the shared policy here.
-"""
-
-CONFIG_CLAUDE_PROXY = """# Claude Config Proxy
-
-This file is a thin proxy only.
-
-- Repository policy source of truth: `/Users/joe/Documents/skill/AGENT.md`
-- Repository Claude entrypoint: `/Users/joe/Documents/skill/CLAUDE.md`
-
-Do not duplicate or diverge from the shared policy here.
-"""
-
-CONFIG_GEMINI_PROXY = """# Gemini Config Proxy
-
-This file is a thin proxy only.
-
-- Repository policy source of truth: `/Users/joe/Documents/skill/AGENT.md`
-- Repository Gemini entrypoint: `/Users/joe/Documents/skill/GEMINI.md`
-
-Do not duplicate or diverge from the shared policy here.
 """
 
 CLAUDE_REFRESH_COMMAND = """---
@@ -627,7 +604,6 @@ def _sync_single_root(
             target_root / "AGENTS.md": ROOT_AGENTS_PROXY,
             target_root / "CLAUDE.md": ROOT_CLAUDE_PROXY,
             target_root / "GEMINI.md": ROOT_GEMINI_PROXY,
-            target_root / ".claude" / "CLAUDE.md": CLAUDE_LOCAL_PROXY,
             target_root / ".claude" / "agents" / "README.md": CLAUDE_AGENTS_README,
             target_root / ".claude" / "commands" / "refresh.md": CLAUDE_REFRESH_COMMAND,
             target_root / ".claude" / "commands" / "background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
@@ -639,17 +615,18 @@ def _sync_single_root(
             target_root / ".claude" / "hooks" / "session_end.sh": CLAUDE_SESSION_END_HOOK,
             target_root / ".claude" / "hooks" / "config_change.sh": CLAUDE_CONFIG_CHANGE_HOOK,
             target_root / ".claude" / "hooks" / "stop_failure.sh": CLAUDE_STOP_FAILURE_HOOK,
-            target_root / "configs" / "codex" / "AGENTS.md": CONFIG_CODEX_PROXY,
-            target_root / "configs" / "claude" / "CLAUDE.md": CONFIG_CLAUDE_PROXY,
-            target_root / "configs" / "gemini" / "GEMINI.md": CONFIG_GEMINI_PROXY,
         }
         json_files = {
             target_root / ".claude" / "settings.json": CLAUDE_PROJECT_SETTINGS,
             target_root / ".gemini" / "settings.json": {},
         }
         retired_paths = [
+            target_root / ".claude" / "CLAUDE.md",
             target_root / ".codex" / "model_instructions.md",
             target_root / ".mcp.json",
+            target_root / "configs" / "codex" / "AGENTS.md",
+            target_root / "configs" / "claude" / "CLAUDE.md",
+            target_root / "configs" / "gemini" / "GEMINI.md",
         ]
         managed_directories = (
             target_root / ".claude",
@@ -657,9 +634,6 @@ def _sync_single_root(
             target_root / ".claude" / "commands",
             target_root / ".claude" / "hooks",
             target_root / ".gemini",
-            target_root / "configs" / "claude",
-            target_root / "configs" / "gemini",
-            target_root / "configs" / "codex",
             target_root / ".codex",
         )
     else:
@@ -698,11 +672,11 @@ def _sync_single_root(
         (written if is_changed else unchanged).append(relative)
 
     for path in retired_paths:
-        relative = _describe_path(report_root, target_root, path)
         exists = path.exists()
         if exists and apply:
             path.unlink()
-        (written if exists else unchanged).append(relative)
+        if exists:
+            written.append(_describe_path(report_root, target_root, path))
 
     return {
         "written": written,
@@ -726,7 +700,6 @@ def sync_repo_host_entrypoints(
             "AGENTS.md": ROOT_AGENTS_PROXY,
             "CLAUDE.md": ROOT_CLAUDE_PROXY,
             "GEMINI.md": ROOT_GEMINI_PROXY,
-            ".claude/CLAUDE.md": CLAUDE_LOCAL_PROXY,
             ".claude/agents/README.md": CLAUDE_AGENTS_README,
             ".claude/commands/refresh.md": CLAUDE_REFRESH_COMMAND,
             ".claude/commands/background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
@@ -738,9 +711,6 @@ def sync_repo_host_entrypoints(
             ".claude/hooks/session_end.sh": CLAUDE_SESSION_END_HOOK,
             ".claude/hooks/config_change.sh": CLAUDE_CONFIG_CHANGE_HOOK,
             ".claude/hooks/stop_failure.sh": CLAUDE_STOP_FAILURE_HOOK,
-            "configs/codex/AGENTS.md": CONFIG_CODEX_PROXY,
-            "configs/claude/CLAUDE.md": CONFIG_CLAUDE_PROXY,
-            "configs/gemini/GEMINI.md": CONFIG_GEMINI_PROXY,
         }.items():
             _write_text(template_root / relative_path, content)
         for relative_path, payload in {

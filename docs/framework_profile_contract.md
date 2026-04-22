@@ -40,6 +40,7 @@ discovery 这些稳定层持续 Rust 化。
 - `tool_policy`
 - `approval_policy`
 - `loadout_policy`
+- `framework_surface_policy`
 - `artifact_contract`
 - `model_policy`
 - `memory_mounts`
@@ -62,6 +63,34 @@ discovery 这些稳定层持续 Rust 化。
 3. adapter 只能投影 `framework_profile`，不能篡改其核心语义。
 4. nested policy 使用 merge override，不使用 host-specific hard fork。
 5. artifact / memory / orchestration 的 schema 以框架 contract 为中心，不以单个 host 事件流为中心。
+
+## Surface Compaction Direction
+
+为避免和当前 Rust 主线冲突，后续收口优先落在外层 surface policy，而不是重新改
+runtime kernel 语义。
+
+- 核心主航道只保留 4 个轴：
+  `routing / memory / continuity / host_projection`
+- 其余能力默认都当成 opt-in capability：
+  通过 loadout、tier、或显式 compatibility lane 开启
+- 默认面只保留一条正规路径：
+  `default_surface_loadout`
+  是默认启用面；research / implementation / audit / framework / ops 都是显式
+  opt-in
+- 技能体系按 `core / optional / experimental / deprecated` 分级：
+  `experimental` 默认不进默认面，`deprecated` 默认禁用
+- 物理边界必须继续分开：
+  source roots、compiled outputs、generated artifacts、session artifacts
+  不允许混写
+- 后续评价主指标改成 4 个结果：
+  第一次成功率、跨宿主一致性、断点恢复成功率、新任务接入成本
+
+这些收口规则的机器可读真源放在
+`configs/framework/FRAMEWORK_SURFACE_POLICY.json`，并由
+`skills/SKILL_LOADOUTS.json` 与 `skills/SKILL_TIERS.json` 共同支撑。
+当 artifact emitter 写出 `framework_profile.json`、CLI common adapter、以及
+多宿主 parity artifacts 时，也应同步把这份 policy 作为 shared contract 的一等字段
+和独立 artifact 带出，而不是只留在 repo 配置目录里。
 
 ## Current Minimal Implementation
 

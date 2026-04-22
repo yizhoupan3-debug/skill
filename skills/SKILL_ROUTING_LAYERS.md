@@ -1,8 +1,15 @@
 # Skill 分层路由详解
 
-> 速查入口见 [SKILL_ROUTING_INDEX.md](file:///Users/joe/Documents/skill/skills/SKILL_ROUTING_INDEX.md)
+> 这是扩展参考，不是默认入口。
+> 默认先看 `SKILL_ROUTING_RUNTIME.json`，人读再看 [SKILL_ROUTING_INDEX.md](file:///Users/joe/Documents/skill/skills/SKILL_ROUTING_INDEX.md)。
 > 协议细节见 [SKILL_FRAMEWORK_PROTOCOLS.md](file:///Users/joe/Documents/skill/skills/SKILL_FRAMEWORK_PROTOCOLS.md)
 > 维护约定见 [SKILL_MAINTENANCE_GUIDE.md](file:///Users/joe/Documents/skill/skills/SKILL_MAINTENANCE_GUIDE.md)
+
+适用场景：
+
+- 你已经过了默认入口，但还在判断 owner / overlay / reroute 边界
+- 你需要查某一层常见误用，或者处理技能重叠
+- 你在做 skill 治理，而不是普通任务起步路由
 
 ## 路由顺序
 

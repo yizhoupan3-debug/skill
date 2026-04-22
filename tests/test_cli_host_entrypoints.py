@@ -111,18 +111,16 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "what now works or what" in agent_policy
     assert "effect was achieved" in agent_policy
     assert "Avoid internal runtime, routing, framework, or tool jargon" in agent_policy
+    assert "configs/framework/FRAMEWORK_SURFACE_POLICY.json" in agent_policy
     assert "AGENT.md" in (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert not (tmp_path / ".claude" / "CLAUDE.md").exists()
     assert not (tmp_path / ".codex" / "model_instructions.md").exists()
     assert not (tmp_path / ".mcp.json").exists()
-    assert "@.claude/CLAUDE.md" in (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+    claude_entry = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "@AGENT.md" in claude_entry
+    assert "@.codex/memory/CLAUDE_MEMORY.md" in claude_entry
+    assert ".claude/settings.json" in claude_entry
     assert "AGENT.md" in (tmp_path / "GEMINI.md").read_text(encoding="utf-8")
-    assert "@../AGENT.md" in (tmp_path / ".claude" / "CLAUDE.md").read_text(encoding="utf-8")
-    assert "@../.codex/memory/CLAUDE_MEMORY.md" in (
-        tmp_path / ".claude" / "CLAUDE.md"
-    ).read_text(encoding="utf-8")
-    assert "scripts/materialize_cli_host_entrypoints.py" in (
-        tmp_path / ".claude" / "CLAUDE.md"
-    ).read_text(encoding="utf-8")
     settings = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
     assert settings["$schema"] == "https://json.schemastore.org/claude-code-settings.json"
     assert settings["permissions"]["allow"] == [
@@ -181,9 +179,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert (tmp_path / ".claude" / "hooks" / "README.md").is_file()
     hooks_readme = (tmp_path / ".claude" / "hooks" / "README.md").read_text(encoding="utf-8")
     assert "Generated-first maintenance" in hooks_readme
-    assert "Event-level lifecycle decisions live in `.claude/hooks/README.md`." in (
-        tmp_path / ".claude" / "CLAUDE.md"
-    ).read_text(encoding="utf-8")
+    assert "Event-level lifecycle decisions live in `.claude/hooks/README.md`." in claude_entry
     for marker in (
         "`StopFailure` | enabled",
         "`ConfigChange` | enabled",
@@ -203,8 +199,6 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert (tmp_path / ".claude" / "hooks" / "session_end.sh").is_file()
     assert (tmp_path / ".claude" / "hooks" / "config_change.sh").is_file()
     assert (tmp_path / ".claude" / "hooks" / "stop_failure.sh").is_file()
-    assert (tmp_path / "configs" / "claude" / "CLAUDE.md").is_file()
-    assert (tmp_path / "configs" / "gemini" / "GEMINI.md").is_file()
 
 
 def test_materialize_repo_host_entrypoints_is_idempotent(tmp_path: Path) -> None:
@@ -214,6 +208,10 @@ def test_materialize_repo_host_entrypoints_is_idempotent(tmp_path: Path) -> None
     assert result["written"] == []
     assert "AGENT.md" in result["unchanged"]
     assert ".claude/settings.json" in result["unchanged"]
+    assert ".claude/CLAUDE.md" not in result["unchanged"]
+    assert "configs/codex/AGENTS.md" not in result["unchanged"]
+    assert "configs/claude/CLAUDE.md" not in result["unchanged"]
+    assert "configs/gemini/GEMINI.md" not in result["unchanged"]
 
 
 def test_sync_repo_host_entrypoints_reports_drift_without_writing(tmp_path: Path) -> None:
@@ -221,6 +219,29 @@ def test_sync_repo_host_entrypoints_reports_drift_without_writing(tmp_path: Path
 
     assert "AGENT.md" in result["written"]
     assert not (tmp_path / "AGENT.md").exists()
+
+
+def test_materialize_repo_host_entrypoints_retires_redundant_claude_and_config_proxies(tmp_path: Path) -> None:
+    for relative in (
+        ".claude/CLAUDE.md",
+        "configs/codex/AGENTS.md",
+        "configs/claude/CLAUDE.md",
+        "configs/gemini/GEMINI.md",
+    ):
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("legacy proxy\n", encoding="utf-8")
+
+    result = materialize_repo_host_entrypoints(tmp_path)
+
+    assert ".claude/CLAUDE.md" in result["written"]
+    assert "configs/codex/AGENTS.md" in result["written"]
+    assert "configs/claude/CLAUDE.md" in result["written"]
+    assert "configs/gemini/GEMINI.md" in result["written"]
+    assert not (tmp_path / ".claude" / "CLAUDE.md").exists()
+    assert not (tmp_path / "configs/codex/AGENTS.md").exists()
+    assert not (tmp_path / "configs/claude/CLAUDE.md").exists()
+    assert not (tmp_path / "configs/gemini/GEMINI.md").exists()
 
 
 def test_materialize_repo_host_entrypoints_syncs_matching_worktrees(tmp_path: Path) -> None:
@@ -249,7 +270,6 @@ def test_write_generated_files_includes_shared_cli_entrypoints_when_repo_is_dirt
         root / "AGENTS.md",
         root / "CLAUDE.md",
         root / "GEMINI.md",
-        root / ".claude" / "CLAUDE.md",
         root / ".claude" / "settings.json",
         root / ".claude" / "agents" / "README.md",
         root / ".claude" / "commands" / "refresh.md",
@@ -263,9 +283,6 @@ def test_write_generated_files_includes_shared_cli_entrypoints_when_repo_is_dirt
         root / ".claude" / "hooks" / "config_change.sh",
         root / ".claude" / "hooks" / "stop_failure.sh",
         root / ".gemini" / "settings.json",
-        root / "configs" / "claude" / "CLAUDE.md",
-        root / "configs" / "codex" / "AGENTS.md",
-        root / "configs" / "gemini" / "GEMINI.md",
     ]
     backups = {
         path: path.read_text(encoding="utf-8") if path.exists() else None
