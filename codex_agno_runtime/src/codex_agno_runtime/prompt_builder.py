@@ -104,34 +104,41 @@ class PromptBuilder:
         selected = routing_result.selected_skill
         overlay_name = routing_result.overlay_skill.name if routing_result.overlay_skill else "none"
         reasons = routing_result.reasons or ["Rust route decision already resolved upstream."]
-        reason_block = "\n".join(f"- {reason}" for reason in reasons[:5])
+        reason_block = "\n".join(f"- {reason}" for reason in reasons[:3])
         if routing_result.route_engine == "rust":
             return dedent(
                 f"""
-                You are the Python compatibility projection for a Rust-routed Codex runtime.
-                The Rust control plane already selected the route. Do not reroute or reinterpret ownership.
+                Help with the user's request directly. The route is already chosen, so stay on it.
 
-                Active owner skill: {selected.name}
-                Active overlay skill: {overlay_name}
-                Routing layer: {routing_result.layer}
-                Session id: {routing_result.session_id}
-                Route engine authority: rust-first
-                Compatibility role: prompt fallback / dry-run projection only
+                Primary focus: {selected.name}
+                Extra guidance: {overlay_name}
 
-                Route reasons:
+                How to reply:
+                - Lead with the answer or result.
+                - Use plain Chinese unless the user asks otherwise.
+                - Be brief, clear, and friendly.
+                - Keep the default reply to one short paragraph unless a list is truly needed.
+                - Avoid internal runtime or routing jargon unless the user asks.
+                - If a technical term is necessary, explain it in simple words the first time.
+
+                Task cues:
                 {reason_block}
                 """
             ).strip()
         return dedent(
             f"""
-            You are the Codex Singleton running on Agno.
-            Use exactly one primary owner skill and at most one overlay.
-            The active route is already selected for this task.
+            Help with the user's request directly. The route below is already selected.
 
-            Active owner skill: {selected.name}
-            Active overlay skill: {overlay_name}
-            Routing layer: {routing_result.layer}
-            Session id: {routing_result.session_id}
+            Primary focus: {selected.name}
+            Extra guidance: {overlay_name}
+
+            How to reply:
+            - Lead with the answer or result.
+            - Use plain Chinese unless the user asks otherwise.
+            - Be brief, clear, and friendly.
+            - Keep the default reply to one short paragraph unless a list is truly needed.
+            - Avoid internal runtime or routing jargon unless the user asks.
+            - If a technical term is necessary, explain it in simple words the first time.
             """
         ).strip()
 
@@ -148,25 +155,25 @@ class PromptBuilder:
         """
         sections = [
             f"{heading}: {skill.name}",
-            f"Description: {skill.description.strip()}" if skill.description else "Description: not provided.",
+            f"Purpose: {skill.description.strip()}" if skill.description else "Purpose: not provided.",
         ]
         # Overlay skills omit when_to_use/do_not_use to reduce token overhead
         if not is_overlay:
             if skill.when_to_use:
-                sections.append(f"When to use:\n{skill.when_to_use.strip()}")
+                sections.append(f"Use it when:\n{skill.when_to_use.strip()}")
             if skill.do_not_use:
-                sections.append(f"Do not use:\n{skill.do_not_use.strip()}")
+                sections.append(f"Avoid it when:\n{skill.do_not_use.strip()}")
 
         # Token budget: L0/L-1 controllers get full body; domain skills get key sections only
         if skill.body.strip() and skill.routing_layer in ("L0", "L-1"):
-            sections.append(f"Skill body:\n{skill.body.strip()}")
+            sections.append(f"Full instructions:\n{skill.body.strip()}")
         else:
             key_content = self._extract_key_sections(skill.body)
             if key_content:
-                sections.append(f"Key instructions:\n{key_content}")
+                sections.append(f"Key rules:\n{key_content}")
             elif skill.body.strip():
                 # Fallback: use full body if no key sections found
-                sections.append(f"Skill body:\n{skill.body.strip()}")
+                sections.append(f"Full instructions:\n{skill.body.strip()}")
         return "\n\n".join(sections).strip()
 
     @staticmethod

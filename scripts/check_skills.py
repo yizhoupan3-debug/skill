@@ -227,17 +227,16 @@ def normalize_string_list(value: Any) -> list[str]:
 
 
 def collect_trigger_hints(metadata: dict[str, Any]) -> list[str]:
-    """Collect canonical trigger hints with one legacy compatibility window."""
+    """Collect canonical trigger hints only."""
 
     hints: list[str] = []
     seen: set[str] = set()
-    for field_name in (CANONICAL_TRIGGER_HINT_FIELD, *LEGACY_TRIGGER_HINT_FIELDS):
-        for hint in normalize_string_list(metadata.get(field_name)):
-            lowered = hint.lower()
-            if lowered in seen:
-                continue
-            seen.add(lowered)
-            hints.append(hint)
+    for hint in normalize_string_list(metadata.get(CANONICAL_TRIGGER_HINT_FIELD)):
+        lowered = hint.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        hints.append(hint)
     return hints
 
 
@@ -586,8 +585,8 @@ def validate_skill_document(document: SkillDocument) -> SkillReport:
         ):
             report.errors.append(f"{legacy_field} must be a list of strings when provided")
         if legacy_value is not None:
-            report.warnings.append(
-                f"{legacy_field} is deprecated; migrate to {CANONICAL_TRIGGER_HINT_FIELD}"
+            report.errors.append(
+                f"{legacy_field} is no longer supported; use {CANONICAL_TRIGGER_HINT_FIELD}"
             )
 
     for list_field in ("allowed_tools", "approval_required_tools", "artifact_outputs"):

@@ -1662,7 +1662,7 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
         "compatibility_fallback": {
             "runtime_path_available": False,
             "retired_mode": "retired",
-            "request_behavior": "explicit-request-rejected",
+            "request_behavior": "surface-removed",
             "former_adapter_kind": "python-agno",
             "former_authority": "python-agno-kernel-adapter",
             "former_family": "python",
@@ -1670,33 +1670,24 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
             "purpose_before_retirement": "compatibility-only-escape-hatch",
         },
         "control_surfaces": {
-            "settings_field": "rust_execute_fallback_to_python",
-            "env_var": "CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON",
-            "enabled_by_default": False,
+            "former_settings_field": "rust_execute_fallback_to_python",
+            "former_env_var": "CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON",
+            "enabled_by_default_before_removal": False,
             "accepted_after_retirement": False,
-            "request_behavior": "explicit-request-rejected",
-            "steady_state_mode": "retired",
-            "surface_role": "retired-explicit-request-surface",
-            "preserved_for": "backward-compatible explicit rejection and auditability",
+            "request_behavior": "surface-removed",
+            "steady_state_mode": "removed",
+            "surface_role": "removed-retired-request-surface",
+            "removal_status": "completed",
         },
         "retirement_exit_contract": {
-            "surface_status": "pending-removal",
-            "current_decision": "keep-temporarily",
-            "removal_owner": "runtime-integrator-with-host-confirmation",
-            "remove_when": [
-                (
-                    "external host or integration evidence confirms no downstream "
-                    "caller still probes rust_execute_fallback_to_python"
-                ),
-                (
-                    "settings field, env var, explicit rejection shim, and retirement "
-                    "artifact exposure are removed in the same change"
-                ),
-                "targeted runtime and contract regression suites are rerun after removal",
-            ],
+            "surface_status": "removed",
+            "current_decision": "completed",
+            "removal_owner": "runtime-integrator",
+            "remove_when": [],
             "observation_sources": {
                 "local_runtime_health": [
-                    "PythonAgnoExecutionKernel.health().kernel_live_fallback_request_status"
+                    "PythonAgnoExecutionKernel.health().kernel_live_fallback_request_status",
+                    "PythonAgnoExecutionKernel.health().kernel_live_fallback_mode",
                 ],
                 "local_contract_artifacts": [
                     "execution_kernel_live_fallback_retirement_status.control_surfaces",
@@ -1712,10 +1703,7 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
                     )
                 ],
             },
-            "stop_rule": (
-                "repo-only search is insufficient for deletion; without external caller "
-                "evidence the surface stays pending-removal"
-            ),
+            "stop_rule": "request surface already removed from runtime settings and steady-state artifacts",
         },
         "public_runtime_contract_fields": [
             "execution_kernel",
@@ -1743,8 +1731,8 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
             "live_primary_authority": "rust-execution-cli",
             "live_fallback_runtime_path_available": False,
             "live_fallback_mode": "retired",
-            "live_fallback_request_behavior": "explicit-request-rejected",
-            "live_fallback_request_surface": "retired-explicit-request-only",
+            "live_fallback_request_behavior": "surface-removed",
+            "live_fallback_request_surface": "removed",
             "live_prompt_preview_passthrough_disabled": True,
             "compatibility_fallback_reason_metadata_key": EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
         },

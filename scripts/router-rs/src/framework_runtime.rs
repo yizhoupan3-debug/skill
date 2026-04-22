@@ -55,6 +55,7 @@ struct FrameworkRuntimeView {
     evidence_index: Value,
     trace_metadata: Value,
     supervisor_state: Map<String, Value>,
+    routing_runtime_version: u64,
     artifact_base: PathBuf,
     current_root: PathBuf,
     mirror_root: PathBuf,
@@ -75,11 +76,15 @@ pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String
 pub fn build_framework_runtime_snapshot_envelope(repo_root: &Path) -> Result<Value, String> {
     let snapshot = load_framework_runtime_view(repo_root);
     let continuity = classify_runtime_continuity(&snapshot);
-    let trace_skills = normalize_trace_skills(&snapshot.trace_metadata);
+    let continuity_route = continuity
+        .get("route")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let primary_owner = {
         let direct = value_text(snapshot.supervisor_state.get("primary_owner"));
         if direct.is_empty() {
-            trace_skills.first().cloned()
+            continuity_route.first().map(|item| value_text(Some(item)))
         } else {
             Some(direct)
         }
@@ -102,9 +107,13 @@ pub fn build_framework_runtime_snapshot_envelope(repo_root: &Path) -> Result<Val
             "active_task_id": snapshot.active_task_id,
             "collected_at": snapshot.collected_at,
             "session_summary_present": !snapshot.session_summary_text.trim().is_empty(),
-            "next_action_count": normalize_next_actions(&snapshot.next_actions).len(),
+            "next_action_count": continuity
+                .get("next_actions")
+                .and_then(Value::as_array)
+                .map(|rows| rows.len())
+                .unwrap_or(0),
             "evidence_count": normalize_evidence_index(&snapshot.evidence_index).len(),
-            "trace_skill_count": trace_skills.len(),
+            "trace_skill_count": continuity_route.len(),
             "continuity": continuity,
             "supervisor_state": {
                 "task_id": nonempty_string(snapshot.supervisor_state.get("task_id")),
@@ -129,11 +138,15 @@ pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Val
     let snapshot = load_framework_runtime_view(repo_root);
     let continuity = classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
-    let trace_skills = normalize_trace_skills(&snapshot.trace_metadata);
+    let continuity_route = continuity
+        .get("route")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let primary_owner = {
         let direct = value_text(snapshot.supervisor_state.get("primary_owner"));
         if direct.is_empty() {
-            trace_skills.first().cloned()
+            continuity_route.first().map(|item| value_text(Some(item)))
         } else {
             Some(direct)
         }
@@ -168,9 +181,17 @@ pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Val
             "evidence_required": if is_active { value_string_list(contract.get("evidence_required")) } else { Vec::<String>::new() },
             "active_phase": if is_active { nonempty_string(snapshot.supervisor_state.get("active_phase")) } else { Option::<String>::None },
             "primary_owner": primary_owner,
-            "next_actions": if is_active { normalize_next_actions(&snapshot.next_actions) } else { Vec::<String>::new() },
+            "next_actions": if is_active {
+                continuity
+                    .get("next_actions")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default()
+            } else {
+                Vec::<Value>::new()
+            },
             "open_blockers": if is_active { blocker_list } else { Vec::<String>::new() },
-            "trace_skills": trace_skills,
+            "trace_skills": continuity_route,
             "session_summary": parse_session_summary(&snapshot.session_summary_text),
             "evidence_count": normalize_evidence_index(&snapshot.evidence_index).len(),
             "artifacts_root": snapshot.current_root.display().to_string(),
@@ -234,6 +255,7 @@ fn load_framework_runtime_view(repo_root: &Path) -> FrameworkRuntimeView {
         evidence_index: read_json_if_exists(&read_task_or_mirror(EVIDENCE_INDEX_FILENAME)),
         trace_metadata: read_json_if_exists(&read_task_or_mirror(TRACE_METADATA_FILENAME)),
         supervisor_state,
+        routing_runtime_version: load_routing_runtime_version(repo_root),
         artifact_base,
         current_root: preferred_root,
         mirror_root,
@@ -275,11 +297,19 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
         verification_status.clone(),
         story_state.clone(),
     ]);
-    let route = normalize_trace_skills(&snapshot.trace_metadata);
-    let mut next_actions = normalize_next_actions(&snapshot.next_actions);
-    if next_actions.is_empty() {
-        next_actions = value_string_list(supervisor.get("next_actions"));
-    }
+    let authoritative_status = if status.is_empty() {
+        synthesized_status(supervisor)
+    } else {
+        status.clone()
+    };
+    let next_actions = authoritative_next_actions(&snapshot.next_actions, supervisor);
+    let route = authoritative_route(
+        &snapshot.trace_metadata,
+        supervisor,
+        &task,
+        &authoritative_status,
+        snapshot.routing_runtime_version,
+    );
     let blockers = supervisor
         .get("blockers")
         .and_then(Value::as_object)
@@ -649,7 +679,7 @@ fn normalize_next_actions(payload: &Value) -> Vec<String> {
         .and_then(Value::as_array)
         .map(|rows| {
             rows.iter()
-                .map(|item| value_text(Some(item)))
+                .map(coerce_next_action_line)
                 .filter(|item| !item.is_empty())
                 .collect()
         })
@@ -673,6 +703,105 @@ fn normalize_trace_skills(payload: &Value) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn coerce_next_action_line(value: &Value) -> String {
+    if let Some(text) = value.as_str() {
+        return text.trim().to_string();
+    }
+    if let Some(map) = value.as_object() {
+        for key in ["title", "summary", "action", "label", "details"] {
+            let text = value_text(map.get(key));
+            if !text.is_empty() {
+                return text;
+            }
+        }
+    }
+    value_text(Some(value))
+}
+
+fn authoritative_next_actions(
+    snapshot_payload: &Value,
+    supervisor_state: &Map<String, Value>,
+) -> Vec<String> {
+    let supervisor_actions = supervisor_state
+        .get("next_actions")
+        .and_then(Value::as_array)
+        .map(|rows| {
+            stable_line_items(
+                rows.iter()
+                    .map(coerce_next_action_line)
+                    .filter(|item| !item.is_empty())
+                    .collect(),
+            )
+        })
+        .unwrap_or_default();
+    if supervisor_actions.is_empty() {
+        normalize_next_actions(snapshot_payload)
+    } else {
+        supervisor_actions
+    }
+}
+
+fn fallback_route_from_supervisor(supervisor_state: &Map<String, Value>) -> Vec<String> {
+    let controller = supervisor_state
+        .get("controller")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    stable_line_items(vec![
+        value_text(controller.get("gate")),
+        value_text(controller.get("primary_owner")),
+        value_text(controller.get("overlay")),
+        value_text(controller.get("owner_lane")),
+        value_text(supervisor_state.get("primary_owner")),
+    ])
+}
+
+fn trace_payload_identity_matches(
+    payload: &Value,
+    task: &str,
+    status: &str,
+    current_routing_runtime_version: u64,
+) -> bool {
+    if !payload.is_object() {
+        return false;
+    }
+    let payload_task = value_text(payload.get("task"));
+    let payload_status = value_text(payload.get("verification_status"));
+    if !looks_same_identity(&payload_task, task) {
+        return false;
+    }
+    if !payload_status.is_empty() && payload_status != status {
+        return false;
+    }
+    if let Some(version) = payload.get("routing_runtime_version").and_then(Value::as_u64) {
+        if version != current_routing_runtime_version {
+            return false;
+        }
+    }
+    true
+}
+
+fn authoritative_route(
+    trace_payload: &Value,
+    supervisor_state: &Map<String, Value>,
+    task: &str,
+    status: &str,
+    current_routing_runtime_version: u64,
+) -> Vec<String> {
+    if trace_payload_identity_matches(
+        trace_payload,
+        task,
+        status,
+        current_routing_runtime_version,
+    ) {
+        let route = normalize_trace_skills(trace_payload);
+        if !route.is_empty() {
+            return route;
+        }
+    }
+    fallback_route_from_supervisor(supervisor_state)
 }
 
 fn normalize_supervisor_state(payload: &Value) -> Map<String, Value> {
@@ -773,6 +902,33 @@ fn parse_iso_timestamp(value: Option<&Value>) -> Option<DateTime<FixedOffset>> {
         text
     };
     DateTime::parse_from_rfc3339(&normalized).ok()
+}
+
+fn load_routing_runtime_version(repo_root: &Path) -> u64 {
+    let runtime_path = repo_root.join("skills").join("SKILL_ROUTING_RUNTIME.json");
+    read_json_if_exists(&runtime_path)
+        .get("version")
+        .and_then(Value::as_u64)
+        .unwrap_or(1)
+}
+
+fn synthesized_status(supervisor_state: &Map<String, Value>) -> String {
+    let verification = supervisor_state
+        .get("verification")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let continuity = supervisor_state
+        .get("continuity")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    first_nonempty(&[
+        value_text(verification.get("verification_status")),
+        value_text(continuity.get("story_state")),
+        value_text(supervisor_state.get("active_phase")),
+        "in_progress".to_string(),
+    ])
 }
 
 fn object_has_any_signal(value: &Value) -> bool {

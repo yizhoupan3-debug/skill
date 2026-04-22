@@ -21,6 +21,27 @@ OVERLAY_ONLY_SKILLS = {"iterative-optimizer", "execution-audit-codex", "i18n-l10
 DEFAULT_LOADOUTS = {
     "version": 1,
     "loadouts": {
+        "default_surface_loadout": {
+            "owners": [
+                "information-retrieval",
+                "plan-to-code",
+                "python-pro",
+                "typescript-pro",
+                "documentation-engineering",
+                "git-workflow",
+                "shell-cli",
+            ],
+            "overlays": ["anti-laziness"],
+            "exclude": [
+                "brainstorm-research",
+                "copywriting",
+                "iterative-optimizer",
+                "paper-writing",
+                "seo-web",
+                "sustech-mailer",
+            ],
+            "purpose": "Lean day-to-day default surface for evidence-first repo work; specialist lanes stay opt-in.",
+        },
         "research_loadout": {
             "owners": ["information-retrieval", "github-investigator", "academic-search"],
             "overlays": ["anti-laziness"],

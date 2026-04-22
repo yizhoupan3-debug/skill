@@ -68,35 +68,20 @@ class RoutingResult(BaseModel):
     route_snapshot: "RouteDecisionSnapshot | None" = None
     prompt_preview: str | None = None
     route_engine: str = "rust"
-    diagnostic_python_lane_active: bool = Field(
-        default=False,
-        validation_alias=AliasChoices("diagnostic_python_lane_active", "rollback_to_python"),
-        serialization_alias="diagnostic_python_lane_active",
-    )
-    python_lane_kind: Literal["none", "legacy-primary", "diagnostic-compare-only"] = "none"
-    shadow_route_report: "RouteDiffReport | None" = None
+    diagnostic_route_mode: Literal["none", "shadow", "verify"] = "none"
+    route_diagnostic_report: "RouteDiagnosticReport | None" = None
 
     @model_validator(mode="after")
-    def _validate_python_lane_contract(self) -> "RoutingResult":
-        if self.python_lane_kind == "diagnostic-compare-only":
-            if not self.diagnostic_python_lane_active:
-                raise ValueError(
-                    "diagnostic-compare-only routing results must keep diagnostic_python_lane_active enabled"
-                )
-            if self.shadow_route_report is None:
-                raise ValueError("diagnostic-compare-only routing results must carry shadow_route_report evidence")
+    def _validate_diagnostic_route_contract(self) -> "RoutingResult":
+        if self.diagnostic_route_mode == "none":
+            if self.route_diagnostic_report is not None:
+                raise ValueError("non-diagnostic routing results must not expose route_diagnostic_report")
             return self
-        if self.diagnostic_python_lane_active:
-            raise ValueError("non-diagnostic routing results must keep diagnostic_python_lane_active disabled")
-        if self.shadow_route_report is not None:
-            raise ValueError("non-diagnostic routing results must not expose shadow_route_report")
+        if self.route_diagnostic_report is None:
+            raise ValueError("diagnostic routing results must carry route_diagnostic_report evidence")
+        if self.route_diagnostic_report.mode != self.diagnostic_route_mode:
+            raise ValueError("diagnostic routing results must align diagnostic_route_mode with route_diagnostic_report")
         return self
-
-    @property
-    def rollback_to_python(self) -> bool:
-        """Backward-compatible attribute kept during the naming migration."""
-
-        return self.diagnostic_python_lane_active
 
 
 class RouteDecisionSnapshot(BaseModel):
@@ -113,88 +98,70 @@ class RouteDecisionSnapshot(BaseModel):
 
 
 class RouteExecutionPolicy(BaseModel):
-    """Stable route-mode policy owned by the Rust routing core.
-
-    `python_route_required` only covers the explicit legacy primary-authority lane.
-    `diagnostic_python_lane` marks compare-only shadow/verify/rollback lanes.
-    `rollback_active` records a compatibility/diagnostic marker and never changes
-    the live route-result authority on its own.
-    """
+    """Stable Rust-owned route-mode policy."""
 
     policy_schema_version: str
     authority: str
     mode: str
-    rollback_active: bool = False
-    python_route_required: bool = False
-    diagnostic_python_lane: bool = False
-    python_lane_kind: Literal["none", "legacy-primary", "diagnostic-compare-only"] = "none"
+    diagnostic_route_mode: Literal["none", "shadow", "verify"] = "none"
     primary_authority: str
     route_result_engine: str
-    shadow_engine: str | None = None
-    diff_report_required: bool = False
-    verify_parity_required: bool = False
+    diagnostic_report_required: bool = False
+    strict_verification_required: bool = False
 
     @property
-    def legacy_primary_python_lane_active(self) -> bool:
-        """Return whether Python is the explicit primary route lane."""
+    def diagnostic_route_active(self) -> bool:
+        """Return whether one Rust-owned diagnostic route mode is active."""
 
-        return self.python_lane_kind == "legacy-primary"
-
-    @property
-    def diagnostic_compare_only_python_lane_active(self) -> bool:
-        """Return whether Python is only participating as compare-only evidence."""
-
-        return self.python_lane_kind == "diagnostic-compare-only"
+        return self.diagnostic_route_mode != "none"
 
     @model_validator(mode="after")
-    def _validate_python_lane_contract(self) -> "RouteExecutionPolicy":
-        if self.verify_parity_required and not self.diff_report_required:
-            raise ValueError("verify_parity_required requires diff_report_required")
-        if self.python_lane_kind == "legacy-primary":
-            if not self.python_route_required or self.diagnostic_python_lane:
-                raise ValueError(
-                    "legacy-primary route policy must enable python_route_required and disable diagnostic_python_lane"
-                )
-            if self.primary_authority != "python" or self.route_result_engine != "python":
-                raise ValueError("legacy-primary route policy must keep Python as the route-result authority")
-            if self.shadow_engine is not None:
-                raise ValueError("legacy-primary route policy must not expose shadow_engine")
+    def _validate_rust_only_route_policy(self) -> "RouteExecutionPolicy":
+        if self.primary_authority != "rust" or self.route_result_engine != "rust":
+            raise ValueError("route policy must keep Rust as the route-result authority")
+        if self.mode == "rust":
+            if self.diagnostic_route_mode != "none":
+                raise ValueError("rust route policy must disable diagnostic_route_mode")
+            if self.diagnostic_report_required or self.strict_verification_required:
+                raise ValueError("rust route policy must not require diagnostic reporting")
             return self
-        if self.python_lane_kind == "diagnostic-compare-only":
-            if self.python_route_required or not self.diagnostic_python_lane:
-                raise ValueError(
-                    "diagnostic-compare-only route policy must disable python_route_required and enable diagnostic_python_lane"
-                )
-            if self.primary_authority != "rust" or self.route_result_engine != "rust":
-                raise ValueError("diagnostic-compare-only route policy must keep Rust as the route-result authority")
-            if self.shadow_engine != "python":
-                raise ValueError("diagnostic-compare-only route policy must keep shadow_engine set to python")
+        if self.mode == "shadow":
+            if self.diagnostic_route_mode != "shadow":
+                raise ValueError("shadow route policy must set diagnostic_route_mode=shadow")
+            if not self.diagnostic_report_required or self.strict_verification_required:
+                raise ValueError("shadow route policy must require report-only diagnostics")
             return self
-        if self.python_route_required or self.diagnostic_python_lane:
-            raise ValueError("python_lane_kind=none must disable all Python route lanes")
-        if self.shadow_engine is not None:
-            raise ValueError("python_lane_kind=none must not expose shadow_engine")
-        return self
+        if self.mode == "verify":
+            if self.diagnostic_route_mode != "verify":
+                raise ValueError("verify route policy must set diagnostic_route_mode=verify")
+            if not self.diagnostic_report_required or not self.strict_verification_required:
+                raise ValueError("verify route policy must require strict Rust verification")
+            return self
+        raise ValueError(f"unsupported route policy mode: {self.mode}")
 
 
-class RouteDiffReport(BaseModel):
-    """Stable diagnostic evidence payload shared by shadow/verify/rust lanes."""
+class RouteDiagnosticReport(BaseModel):
+    """Stable Rust-owned diagnostic evidence payload for shadow/verify modes."""
 
     report_schema_version: str
     authority: str
-    mode: str
+    mode: Literal["shadow", "verify"]
     primary_engine: str
-    shadow_engine: str | None = None
-    mismatch: bool = False
-    mismatch_fields: list[str] = Field(default_factory=list)
-    selected_skill_match: bool = True
-    overlay_skill_match: bool = True
-    layer_match: bool = True
-    score_bucket_match: bool = True
-    reasons_class_match: bool = True
-    rollback_active: bool = False
-    python: RouteDecisionSnapshot
-    rust: RouteDecisionSnapshot
+    evidence_kind: str = "rust-owned-snapshot"
+    strict_verification: bool = False
+    verification_passed: bool = True
+    route_snapshot: RouteDecisionSnapshot
+
+    @model_validator(mode="after")
+    def _validate_route_diagnostic_report(self) -> "RouteDiagnosticReport":
+        if self.primary_engine != "rust":
+            raise ValueError("route diagnostic report must keep Rust as the primary engine")
+        if self.evidence_kind != "rust-owned-snapshot":
+            raise ValueError("route diagnostic report must use the rust-owned-snapshot evidence kind")
+        expected_verification = self.mode == "verify"
+        if self.strict_verification != expected_verification:
+            raise ValueError("route diagnostic report strict_verification must align with mode")
+        return self
 
 
 class FrameworkSessionContract(BaseModel):
@@ -287,35 +254,22 @@ class PrepareSessionResponse(BaseModel):
     prompt_preview: str | None = None
     loaded_skill_count: int = 0
     route_engine: str = "rust"
-    diagnostic_python_lane_active: bool = Field(
-        default=False,
-        validation_alias=AliasChoices("diagnostic_python_lane_active", "rollback_to_python"),
-        serialization_alias="diagnostic_python_lane_active",
-    )
-    python_lane_kind: Literal["none", "legacy-primary", "diagnostic-compare-only"] = "none"
-    shadow_route_report: RouteDiffReport | None = None
+    diagnostic_route_mode: Literal["none", "shadow", "verify"] = "none"
+    route_diagnostic_report: RouteDiagnosticReport | None = None
 
     @model_validator(mode="after")
-    def _validate_python_lane_contract(self) -> "PrepareSessionResponse":
-        if self.python_lane_kind == "diagnostic-compare-only":
-            if not self.diagnostic_python_lane_active:
-                raise ValueError(
-                    "diagnostic-compare-only prepared sessions must keep diagnostic_python_lane_active enabled"
-                )
-            if self.shadow_route_report is None:
-                raise ValueError("diagnostic-compare-only prepared sessions must carry shadow_route_report")
+    def _validate_diagnostic_route_contract(self) -> "PrepareSessionResponse":
+        if self.diagnostic_route_mode == "none":
+            if self.route_diagnostic_report is not None:
+                raise ValueError("non-diagnostic prepared sessions must not expose route_diagnostic_report")
             return self
-        if self.diagnostic_python_lane_active:
-            raise ValueError("non-diagnostic prepared sessions must keep diagnostic_python_lane_active disabled")
-        if self.shadow_route_report is not None:
-            raise ValueError("non-diagnostic prepared sessions must not expose shadow_route_report")
+        if self.route_diagnostic_report is None:
+            raise ValueError("diagnostic prepared sessions must carry route_diagnostic_report")
+        if self.route_diagnostic_report.mode != self.diagnostic_route_mode:
+            raise ValueError(
+                "diagnostic prepared sessions must align diagnostic_route_mode with route_diagnostic_report"
+            )
         return self
-
-    @property
-    def rollback_to_python(self) -> bool:
-        """Backward-compatible attribute kept during the naming migration."""
-
-        return self.diagnostic_python_lane_active
 
 
 class UsageMetrics(BaseModel):

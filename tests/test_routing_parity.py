@@ -610,154 +610,93 @@ def test_live_route_expectations_hold_for_framework_and_openai_queries(
 
 
 @pytest.mark.parametrize(
-    ("mode", "rollback_to_python", "expected"),
+    ("mode", "expected"),
     [
         (
-            "python",
-            False,
-            {
-                "python_lane_kind": "legacy-primary",
-                "primary_authority": "python",
-                "route_result_engine": "python",
-                "shadow_engine": None,
-                "diff_report_required": False,
-                "verify_parity_required": False,
-                "rollback_active": False,
-                "diagnostic_python_lane": False,
-            },
-        ),
-        (
             "shadow",
-            False,
             {
-                "python_lane_kind": "diagnostic-compare-only",
+                "diagnostic_route_mode": "shadow",
                 "primary_authority": "rust",
                 "route_result_engine": "rust",
-                "shadow_engine": "python",
-                "diff_report_required": True,
-                "verify_parity_required": False,
-                "rollback_active": False,
-                "diagnostic_python_lane": True,
+                "diagnostic_report_required": True,
+                "strict_verification_required": False,
             },
         ),
         (
             "verify",
-            False,
             {
-                "python_lane_kind": "diagnostic-compare-only",
+                "diagnostic_route_mode": "verify",
                 "primary_authority": "rust",
                 "route_result_engine": "rust",
-                "shadow_engine": "python",
-                "diff_report_required": True,
-                "verify_parity_required": True,
-                "rollback_active": False,
-                "diagnostic_python_lane": True,
+                "diagnostic_report_required": True,
+                "strict_verification_required": True,
             },
         ),
         (
             "rust",
-            False,
             {
-                "python_lane_kind": "none",
+                "diagnostic_route_mode": "none",
                 "primary_authority": "rust",
                 "route_result_engine": "rust",
-                "shadow_engine": None,
-                "diff_report_required": False,
-                "verify_parity_required": False,
-                "rollback_active": False,
-                "diagnostic_python_lane": False,
-            },
-        ),
-        (
-            "rust",
-            True,
-            {
-                "python_lane_kind": "diagnostic-compare-only",
-                "primary_authority": "rust",
-                "route_result_engine": "rust",
-                "shadow_engine": "python",
-                "diff_report_required": True,
-                "verify_parity_required": False,
-                "rollback_active": True,
-                "diagnostic_python_lane": True,
+                "diagnostic_report_required": False,
+                "strict_verification_required": False,
             },
         ),
     ],
-    ids=["python", "shadow", "verify", "rust", "rust-rollback"],
+    ids=["shadow", "verify", "rust"],
 )
 def test_route_policy_mode_matrix_stays_rust_authoritative(
     mode: str,
-    rollback_to_python: bool,
     expected: dict[str, object],
 ) -> None:
-    """Primary route-result policy should come from router-rs, not Python-side recompute."""
+    """Primary route-result policy should come from router-rs under the Rust-only contract."""
 
     adapter = RustRouteAdapter(PROJECT_ROOT)
-    payload = adapter.route_policy(mode=mode, rollback_to_python=rollback_to_python)
+    payload = adapter.route_policy(mode=mode)
 
     assert payload["policy_schema_version"] == adapter.route_policy_schema_version
     assert payload["authority"] == adapter.route_authority
     assert payload["mode"] == mode
     for key, value in expected.items():
         assert payload[key] == value
-    if payload["diff_report_required"] or payload["verify_parity_required"]:
-        assert payload["diagnostic_python_lane"] is True
-    if payload["verify_parity_required"]:
-        assert payload["diff_report_required"] is True
-    if payload["diagnostic_python_lane"]:
-        assert payload["python_lane_kind"] == "diagnostic-compare-only"
-        assert payload["shadow_engine"] == "python"
-    if payload["python_route_required"]:
-        assert payload["python_lane_kind"] == "legacy-primary"
-    if not payload["python_route_required"] and not payload["diagnostic_python_lane"]:
-        assert payload["python_lane_kind"] == "none"
-    if payload["rollback_active"]:
-        assert payload["primary_authority"] == "rust"
-        assert payload["route_result_engine"] == "rust"
+    assert payload["primary_authority"] == "rust"
+    assert payload["route_result_engine"] == "rust"
 
 
-def test_route_execution_policy_rejects_misaligned_python_lane_contract() -> None:
-    """The Python-lane classifier should be the single semantic source of truth."""
+def test_route_execution_policy_rejects_misaligned_rust_only_contract() -> None:
+    """The Rust-only route policy validator should reject mismatched diagnostic semantics."""
 
-    with pytest.raises(ValueError, match="legacy-primary route policy"):
+    with pytest.raises(ValueError, match="rust route policy must disable diagnostic_route_mode"):
         RouteExecutionPolicy.model_validate(
             {
                 "policy_schema_version": "router-rs-route-policy-v1",
                 "authority": "rust-route-core",
-                "mode": "python",
-                "rollback_active": False,
-                "python_route_required": False,
-                "diagnostic_python_lane": False,
-                "python_lane_kind": "legacy-primary",
-                "primary_authority": "python",
-                "route_result_engine": "python",
-                "shadow_engine": None,
-                "diff_report_required": False,
-                "verify_parity_required": False,
+                "mode": "rust",
+                "diagnostic_route_mode": "shadow",
+                "primary_authority": "rust",
+                "route_result_engine": "rust",
+                "diagnostic_report_required": False,
+                "strict_verification_required": False,
             }
         )
 
-    with pytest.raises(ValueError, match="diagnostic-compare-only route policy"):
+    with pytest.raises(ValueError, match="shadow route policy must require report-only diagnostics"):
         RouteExecutionPolicy.model_validate(
             {
                 "policy_schema_version": "router-rs-route-policy-v1",
                 "authority": "rust-route-core",
                 "mode": "shadow",
-                "rollback_active": False,
-                "python_route_required": False,
-                "diagnostic_python_lane": False,
-                "python_lane_kind": "diagnostic-compare-only",
+                "diagnostic_route_mode": "shadow",
                 "primary_authority": "rust",
                 "route_result_engine": "rust",
-                "shadow_engine": "python",
-                "diff_report_required": True,
-                "verify_parity_required": False,
+                "diagnostic_report_required": False,
+                "strict_verification_required": False,
             }
         )
 
 
-def test_route_report_contract_exposes_schema_and_stable_mismatch_vocabulary() -> None:
-    """The Rust diff report should own schema, authority, and diagnostic evidence vocabulary."""
+def test_route_report_contract_exposes_schema_and_rust_owned_snapshot_evidence() -> None:
+    """The Rust diagnostic report should expose the Rust-only evidence contract."""
 
     adapter = RustRouteAdapter(PROJECT_ROOT)
     baseline = route_decision_json(
@@ -766,52 +705,45 @@ def test_route_report_contract_exposes_schema_and_stable_mismatch_vocabulary() -
         allow_overlay=True,
         first_turn=True,
     )["route_snapshot"]
-    rust_snapshot = dict(baseline)
-    rust_snapshot["selected_skill"] = "python-pro"
-    rust_snapshot["score_bucket"] = "40-49"
 
     report = adapter.route_report(
         mode="shadow",
-        python_route_snapshot=baseline,
-        rust_route_snapshot=rust_snapshot,
-        rollback_active=False,
+        rust_route_snapshot=baseline,
     )
 
     assert report["report_schema_version"] == adapter.route_report_schema_version
     assert report["authority"] == adapter.route_authority
     assert report["mode"] == "shadow"
     assert report["primary_engine"] == "rust"
-    assert report["shadow_engine"] == "python"
-    assert report["rollback_active"] is False
-    assert report["mismatch"] is True
-    assert report["mismatch_fields"] == ["selected_skill", "score_bucket"]
+    assert report["evidence_kind"] == "rust-owned-snapshot"
+    assert report["strict_verification"] is False
+    assert report["verification_passed"] is True
+    assert report["route_snapshot"] == baseline
 
 
-def test_route_report_rollback_lane_keeps_rust_primary_engine() -> None:
-    """Rollback evidence should stay diagnostic and preserve Rust as the live engine."""
+def test_route_report_verify_mode_requires_strict_verification() -> None:
+    """Verify mode should mark the diagnostic report as strict Rust verification."""
 
     adapter = RustRouteAdapter(PROJECT_ROOT)
     baseline = route_decision_json(
         "帮我写一个 Rust CLI 工具",
-        session_id="route-report-rollback-session",
+        session_id="route-report-verify-session",
         allow_overlay=True,
         first_turn=True,
     )["route_snapshot"]
 
     report = adapter.route_report(
-        mode="rust",
-        python_route_snapshot=baseline,
+        mode="verify",
         rust_route_snapshot=baseline,
-        rollback_active=True,
     )
 
     assert report["report_schema_version"] == adapter.route_report_schema_version
     assert report["authority"] == adapter.route_authority
-    assert report["mode"] == "rust"
+    assert report["mode"] == "verify"
     assert report["primary_engine"] == "rust"
-    assert report["shadow_engine"] == "python"
-    assert report["rollback_active"] is True
-    assert report["mismatch"] is False
+    assert report["evidence_kind"] == "rust-owned-snapshot"
+    assert report["strict_verification"] is True
+    assert report["verification_passed"] is True
 
 
 def test_rust_route_adapter_framework_runtime_snapshot_reads_workspace_artifacts(
@@ -843,3 +775,67 @@ def test_rust_route_adapter_framework_contract_summary_handles_completed_snapsho
     assert summary["goal"] is None
     assert summary["next_actions"] == []
     assert summary["recent_completed_execution"]["task"] == "checklist-series final closeout"
+
+
+def test_rust_route_adapter_framework_runtime_snapshot_prefers_supervisor_owned_continuity(
+    tmp_path: Path,
+) -> None:
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    task_id = "active-bootstrap-repair-20260418210000"
+    task_root = tmp_path / "artifacts" / "current" / task_id
+    _write_json(
+        tmp_path / "artifacts" / "current" / "active_task.json",
+        {"task_id": task_id, "task": "active bootstrap repair"},
+    )
+    _write_text(
+        task_root / "SESSION_SUMMARY.md",
+        "\n".join(
+            [
+                "- task: active bootstrap repair",
+                "- phase: implementation",
+                "- status: in_progress",
+            ]
+        )
+        + "\n",
+    )
+    _write_json(task_root / "NEXT_ACTIONS.json", {"next_actions": ["stale sidecar action"]})
+    _write_json(task_root / "EVIDENCE_INDEX.json", {"artifacts": []})
+    _write_json(
+        task_root / "TRACE_METADATA.json",
+        {
+            "task": "active bootstrap repair",
+            "matched_skills": ["legacy-skill"],
+            "verification_status": "completed",
+            "routing_runtime_version": 0,
+        },
+    )
+    _write_json(
+        tmp_path / ".supervisor_state.json",
+        {
+            "task_id": task_id,
+            "task_summary": "active bootstrap repair",
+            "active_phase": "implementation",
+            "verification": {"verification_status": "in_progress"},
+            "continuity": {"story_state": "active", "resume_allowed": True},
+            "next_actions": [
+                {
+                    "title": "repair current continuity",
+                    "status": "pending",
+                }
+            ],
+            "controller": {
+                "primary_owner": "execution-controller-coding",
+                "gate": "subagent-delegation",
+            },
+        },
+    )
+
+    snapshot = adapter.framework_runtime_snapshot(repo_root=tmp_path)
+    summary = adapter.framework_contract_summary(repo_root=tmp_path)
+
+    assert snapshot["continuity"]["state"] == "active"
+    assert snapshot["continuity"]["next_actions"] == ["repair current continuity"]
+    assert snapshot["continuity"]["route"] == ["subagent-delegation", "execution-controller-coding"]
+    assert snapshot["trace_skill_count"] == 2
+    assert summary["next_actions"] == ["repair current continuity"]
+    assert summary["trace_skills"] == ["subagent-delegation", "execution-controller-coding"]

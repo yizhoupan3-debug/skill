@@ -37,6 +37,21 @@ def test_extract_trigger_hints_respects_explicit_frontmatter_hints() -> None:
     assert "history" not in " ".join(phrases).lower()
 
 
+def test_extract_trigger_hints_ignores_legacy_trigger_phrases() -> None:
+    """Verify legacy trigger_phrases no longer participates in routing manifests."""
+
+    phrases = extract_trigger_hints(
+        {
+            "trigger_phrases": ["旧字段", "legacy field"],
+        },
+        "Use for canonical routing only.",
+        "## When to use\n- test\n",
+    )
+
+    assert "旧字段" not in phrases
+    assert "legacy field" not in phrases
+
+
 def test_extract_trigger_hints_falls_back_to_description_examples_when_frontmatter_is_empty() -> None:
     """Verify fallback extraction still keeps concrete description examples.
 

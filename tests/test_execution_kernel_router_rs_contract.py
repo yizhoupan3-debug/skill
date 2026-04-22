@@ -169,7 +169,7 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
                         trace_output_path=payload["trace_output_path"],
                         execution_mode="live",
                         route_engine=payload["route_engine"],
-                        diagnostic_python_lane_active=payload["diagnostic_python_lane_active"],
+                        diagnostic_route_mode=payload["diagnostic_route_mode"],
                     ),
                 }
             ),
@@ -215,7 +215,7 @@ def test_router_rs_execution_kernel_rejects_missing_steady_state_metadata(monkey
             trace_output_path=payload["trace_output_path"],
             execution_mode="live",
             route_engine=payload["route_engine"],
-            diagnostic_python_lane_active=payload["diagnostic_python_lane_active"],
+            diagnostic_route_mode=payload["diagnostic_route_mode"],
         )
         broken_metadata.pop("execution_kernel_delegate_authority")
         return SimpleNamespace(
@@ -248,34 +248,6 @@ def test_router_rs_execution_kernel_rejects_missing_steady_state_metadata(monkey
 
     with pytest.raises(RuntimeError, match="execution_kernel_delegate_authority"):
         asyncio.run(kernel.execute(_request()))
-
-
-def test_python_kernel_rejects_explicit_live_fallback_requests_after_retirement(
-    monkeypatch,
-) -> None:
-    settings = SimpleNamespace(
-        codex_home=PROJECT_ROOT,
-        rust_router_timeout_seconds=5.0,
-        rust_execute_fallback_to_python=True,
-        default_output_tokens=512,
-        model_id="gpt-5.4",
-        aggregator_base_url="http://127.0.0.1:20128/v1",
-        aggregator_api_key="sk-test",
-    )
-    fallback_agent = _FallbackAgent()
-    prompt_builder = _PromptBuilder()
-    agent_factory = SimpleNamespace(build_compatibility_agent=lambda *args, **kwargs: fallback_agent)
-    kernel = PythonAgnoExecutionKernel(settings, prompt_builder, agent_factory=agent_factory)  # type: ignore[arg-type]
-
-    def failing_run(command, **kwargs):
-        raise OSError("router-rs missing")
-
-    monkeypatch.setattr("codex_agno_runtime.execution_kernel.subprocess.run", failing_run)
-
-    with pytest.raises(RuntimeError, match="requested Python compatibility fallback is rejected"):
-        asyncio.run(kernel.execute(_request()))
-
-    assert fallback_agent.instructions == []
 
 
 def test_execution_kernel_contract_helpers_define_compatibility_fallback_metadata() -> None:
@@ -527,35 +499,12 @@ def test_python_kernel_health_defaults_to_explicitly_disabled_fallback() -> None
 
     assert health["kernel_live_fallback_enabled"] is False
     assert health["kernel_live_fallback_mode"] == "retired"
-    assert health["kernel_live_fallback_request_status"] == "not-supported"
-
-
-def test_python_kernel_health_marks_explicit_compatibility_requests_as_rejected() -> None:
-    settings = SimpleNamespace(
-        codex_home=PROJECT_ROOT,
-        rust_router_timeout_seconds=5.0,
-        default_output_tokens=512,
-        model_id="gpt-5.4",
-        aggregator_base_url="http://127.0.0.1:20128/v1",
-        aggregator_api_key="sk-test",
-        rust_execute_fallback_to_python=True,
-    )
-    prompt_builder = _PromptBuilder()
-    agent_factory = AgentFactory(settings, prompt_builder)
-    kernel = PythonAgnoExecutionKernel(settings, prompt_builder, agent_factory=agent_factory)  # type: ignore[arg-type]
-
-    health = kernel.health()
-
-    assert health["kernel_live_fallback_enabled"] is False
-    assert health["kernel_live_fallback_mode"] == "retired"
-    assert health["kernel_live_fallback_request_status"] == "explicit-request-rejected"
-
+    assert health["kernel_live_fallback_request_status"] == "removed"
 
 def test_python_kernel_omits_python_prompt_preview_on_rust_live_path(monkeypatch) -> None:
     settings = SimpleNamespace(
         codex_home=PROJECT_ROOT,
         rust_router_timeout_seconds=5.0,
-        rust_execute_fallback_to_python=True,
         default_output_tokens=512,
         model_id="gpt-5.4",
         aggregator_base_url="http://127.0.0.1:20128/v1",
@@ -596,7 +545,7 @@ def test_python_kernel_omits_python_prompt_preview_on_rust_live_path(monkeypatch
                         trace_output_path=payload["trace_output_path"],
                         execution_mode="live",
                         route_engine=payload["route_engine"],
-                        diagnostic_python_lane_active=payload["diagnostic_python_lane_active"],
+                        diagnostic_route_mode=payload["diagnostic_route_mode"],
                     ),
                 }
             ),
@@ -629,7 +578,6 @@ def test_python_kernel_raises_when_router_rs_infrastructure_fails_and_live_fallb
         model_id="gpt-5.4",
         aggregator_base_url="http://127.0.0.1:20128/v1",
         aggregator_api_key="sk-test",
-        rust_execute_fallback_to_python=False,
     )
     fallback_calls = 0
 
@@ -648,7 +596,7 @@ def test_python_kernel_raises_when_router_rs_infrastructure_fails_and_live_fallb
 
     monkeypatch.setattr("codex_agno_runtime.execution_kernel.subprocess.run", failing_run)
 
-    with pytest.raises(RuntimeError, match="compatibility fallback retirement"):
+    with pytest.raises(RuntimeError, match="compatibility fallback removal"):
         asyncio.run(kernel.execute(_request()))
 
     assert fallback_calls == 0
@@ -658,7 +606,6 @@ def test_python_kernel_does_not_fallback_for_router_rs_live_execute_errors(monke
     settings = SimpleNamespace(
         codex_home=PROJECT_ROOT,
         rust_router_timeout_seconds=5.0,
-        rust_execute_fallback_to_python=True,
         default_output_tokens=512,
         model_id="gpt-5.4",
         aggregator_base_url="http://127.0.0.1:20128/v1",
@@ -681,7 +628,7 @@ def test_python_kernel_does_not_fallback_for_router_rs_live_execute_errors(monke
 
     monkeypatch.setattr("codex_agno_runtime.execution_kernel.subprocess.run", failing_run)
 
-    with pytest.raises(RuntimeError, match="compatibility fallback is rejected after retirement"):
+    with pytest.raises(RuntimeError, match="compatibility fallback removal"):
         asyncio.run(kernel.execute(_request()))
 
     assert fallback_calls == 0
@@ -695,7 +642,6 @@ def test_python_kernel_dry_run_still_works_when_live_fallback_is_disabled(monkey
         model_id="gpt-5.4",
         aggregator_base_url="http://127.0.0.1:20128/v1",
         aggregator_api_key="sk-test",
-        rust_execute_fallback_to_python=False,
     )
     fallback_calls = 0
 
@@ -739,7 +685,7 @@ def test_python_kernel_dry_run_still_works_when_live_fallback_is_disabled(monkey
                         trace_output_path=payload["trace_output_path"],
                         execution_mode="dry_run",
                         route_engine=payload["route_engine"],
-                        diagnostic_python_lane_active=payload["diagnostic_python_lane_active"],
+                        diagnostic_route_mode=payload["diagnostic_route_mode"],
                     ),
                 }
             ),

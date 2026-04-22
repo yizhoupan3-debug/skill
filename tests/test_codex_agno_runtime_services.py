@@ -141,16 +141,15 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert router_service.health()["loaded_skill_count"] > 0
     assert router_service.health()["primary_authority"] == "rust"
     assert router_service.health()["route_result_engine"] == "rust"
-    assert router_service.health()["shadow_engine"] is None
-    assert router_service.health()["python_router_loaded"] is False
-    assert router_service.health()["python_router_required"] is False
-    assert router_service.health()["python_lane_kind"] == "none"
+    assert router_service.health()["diagnostic_route_mode"] == "none"
+    assert router_service.health()["diagnostic_report_required"] is False
+    assert router_service.health()["strict_verification_required"] is False
     assert router_service.health()["default_route_mode"] == "rust"
     assert router_service.health()["control_plane_authority"] == "rust-route-core"
     assert router_service.health()["python_runtime_role"] == "thin-projection"
     assert router_service.health()["rustification_status"]["runtime_primary_owner"] == "rust-control-plane"
     assert router_service.health()["route_policy"]["policy_schema_version"] == "router-rs-route-policy-v1"
-    assert router_service.health()["route_policy"]["python_lane_kind"] == "none"
+    assert router_service.health()["route_policy"]["diagnostic_route_mode"] == "none"
     assert router_service.health()["rust_adapter"]["route_authority"] == "rust-route-core"
     assert router_service.health()["rust_adapter"]["compile_authority"] == "rust-route-compiler"
     assert (
@@ -982,7 +981,6 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
         data_dir=tmp_path / "runtime-data",
         trace_output_path=tmp_path / "TRACE_METADATA.json",
         live_model_override=False,
-        rust_execute_fallback_to_python=False,
     )
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
@@ -1268,7 +1266,6 @@ def test_execution_service_kernel_payload_prefers_explicit_metadata(tmp_path: Pa
         data_dir=tmp_path / "runtime-data",
         trace_output_path=tmp_path / "TRACE_METADATA.json",
         live_model_override=True,
-        rust_execute_fallback_to_python=False,
     )
     router_service = RouterService(settings)
     execution_service = ExecutionEnvironmentService(
@@ -1366,7 +1363,7 @@ def test_execution_environment_service_exposes_control_plane_contract_descriptor
 
 
 def test_router_service_verify_mode_keeps_rust_primary_and_emits_diagnostic_evidence() -> None:
-    """Verify mode should keep Rust as the live route while emitting diagnostic parity evidence."""
+    """Verify mode should keep Rust as the live route while emitting Rust-owned diagnostics."""
 
     verify_service = RouterService(
         RuntimeSettings(
@@ -1384,28 +1381,29 @@ def test_router_service_verify_mode_keeps_rust_primary_and_emits_diagnostic_evid
     )
 
     assert verify_result.route_engine == "rust"
-    assert verify_result.diagnostic_python_lane_active is True
-    assert verify_result.shadow_route_report is not None
-    assert verify_result.shadow_route_report.report_schema_version == "router-rs-route-report-v1"
-    assert verify_result.shadow_route_report.authority == "rust-route-core"
-    assert verify_result.shadow_route_report.mode == "verify"
-    assert verify_result.shadow_route_report.primary_engine == verify_result.route_engine
-    assert verify_result.shadow_route_report.shadow_engine == "python"
-    assert verify_result.shadow_route_report.selected_skill_match is True
-    assert verify_result.shadow_route_report.overlay_skill_match is True
-    assert verify_result.shadow_route_report.layer_match is True
-    assert verify_result.shadow_route_report.python.engine == "python"
-    assert verify_result.shadow_route_report.rust.selected_skill == verify_result.selected_skill.name
+    assert verify_result.diagnostic_route_mode == "verify"
+    assert verify_result.route_diagnostic_report is not None
+    assert verify_result.route_diagnostic_report.report_schema_version == "router-rs-route-report-v2"
+    assert verify_result.route_diagnostic_report.authority == "rust-route-core"
+    assert verify_result.route_diagnostic_report.mode == "verify"
+    assert verify_result.route_diagnostic_report.primary_engine == verify_result.route_engine
+    assert verify_result.route_diagnostic_report.evidence_kind == "rust-owned-snapshot"
+    assert verify_result.route_diagnostic_report.strict_verification is True
+    assert verify_result.route_diagnostic_report.verification_passed is True
+    assert (
+        verify_result.route_diagnostic_report.route_snapshot.selected_skill
+        == verify_result.selected_skill.name
+    )
     assert verify_service.health()["primary_authority"] == "rust"
     assert verify_service.health()["route_result_engine"] == "rust"
-    assert verify_service.health()["shadow_engine"] == "python"
-    assert verify_service.health()["python_router_required"] is False
-    assert verify_service.health()["python_lane_kind"] == "diagnostic-compare-only"
-    assert verify_service.health()["route_policy"]["python_lane_kind"] == "diagnostic-compare-only"
+    assert verify_service.health()["diagnostic_route_mode"] == "verify"
+    assert verify_service.health()["diagnostic_report_required"] is True
+    assert verify_service.health()["strict_verification_required"] is True
+    assert verify_service.health()["route_policy"]["diagnostic_route_mode"] == "verify"
 
 
 def test_router_service_shadow_mode_keeps_rust_primary_and_records_diff() -> None:
-    """Shadow mode should keep Rust as the live route and capture diagnostic evidence."""
+    """Shadow mode should keep Rust as the live route and capture Rust-owned diagnostics."""
 
     shadow_service = RouterService(
         RuntimeSettings(
@@ -1423,57 +1421,20 @@ def test_router_service_shadow_mode_keeps_rust_primary_and_records_diff() -> Non
     )
 
     assert result.route_engine == "rust"
-    assert result.diagnostic_python_lane_active is True
-    assert result.shadow_route_report is not None
-    assert result.shadow_route_report.report_schema_version == "router-rs-route-report-v1"
-    assert result.shadow_route_report.authority == "rust-route-core"
-    assert result.shadow_route_report.mode == "shadow"
-    assert result.shadow_route_report.primary_engine == result.route_engine
-    assert result.shadow_route_report.shadow_engine == "python"
-    assert result.shadow_route_report.selected_skill_match is True
-    assert result.shadow_route_report.overlay_skill_match is True
-    assert result.shadow_route_report.layer_match is True
-    assert result.shadow_route_report.python.engine == "python"
-    assert result.shadow_route_report.rust.selected_skill == result.selected_skill.name
-    assert shadow_service.health()["python_lane_kind"] == "diagnostic-compare-only"
-    assert shadow_service.health()["route_policy"]["python_lane_kind"] == "diagnostic-compare-only"
-
-
-def test_router_service_rust_mode_keeps_rollback_as_diagnostic_lane() -> None:
-    """Rust mode should keep rollback as diagnostic evidence without changing the live route engine."""
-
-    rollback_service = RouterService(
-        RuntimeSettings(
-            codex_home=PROJECT_ROOT,
-            live_model_override=False,
-            route_engine_mode="rust",
-            rust_route_rollback_to_python=True,
-        )
-    )
-
-    result = rollback_service.route(
-        task="帮我写一个 Rust CLI 工具",
-        session_id="rust-rollback-session",
-        allow_overlay=True,
-        first_turn=True,
-    )
-
-    assert result.route_engine == "rust"
-    assert result.diagnostic_python_lane_active is True
-    assert result.shadow_route_report is not None
-    assert result.shadow_route_report.report_schema_version == "router-rs-route-report-v1"
-    assert result.shadow_route_report.authority == "rust-route-core"
-    assert result.shadow_route_report.rollback_active is True
-    assert result.shadow_route_report.primary_engine == result.route_engine
-    assert result.shadow_route_report.shadow_engine == "python"
-    assert result.shadow_route_report.python.engine == "python"
-    assert rollback_service.health()["primary_authority"] == "rust"
-    assert rollback_service.health()["route_result_engine"] == "rust"
-    assert rollback_service.health()["shadow_engine"] == "python"
-    assert rollback_service.health()["diagnostic_python_lane_active"] is True
-    assert rollback_service.health()["python_router_required"] is False
-    assert rollback_service.health()["python_lane_kind"] == "diagnostic-compare-only"
-    assert rollback_service.health()["route_policy"]["python_lane_kind"] == "diagnostic-compare-only"
+    assert result.diagnostic_route_mode == "shadow"
+    assert result.route_diagnostic_report is not None
+    assert result.route_diagnostic_report.report_schema_version == "router-rs-route-report-v2"
+    assert result.route_diagnostic_report.authority == "rust-route-core"
+    assert result.route_diagnostic_report.mode == "shadow"
+    assert result.route_diagnostic_report.primary_engine == result.route_engine
+    assert result.route_diagnostic_report.evidence_kind == "rust-owned-snapshot"
+    assert result.route_diagnostic_report.strict_verification is False
+    assert result.route_diagnostic_report.verification_passed is True
+    assert result.route_diagnostic_report.route_snapshot.selected_skill == result.selected_skill.name
+    assert shadow_service.health()["diagnostic_route_mode"] == "shadow"
+    assert shadow_service.health()["diagnostic_report_required"] is True
+    assert shadow_service.health()["strict_verification_required"] is False
+    assert shadow_service.health()["route_policy"]["diagnostic_route_mode"] == "shadow"
 
 
 def test_runtime_checkpointer_round_trips_resume_manifest(tmp_path: Path) -> None:

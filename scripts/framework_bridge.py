@@ -191,8 +191,8 @@ def export_framework_skills(
                             gate=str(item.get("routing_gate", "")),
                             session_start=str(item.get("session_start", "")),
                             summary=str(item.get("description", ""))[:200],
-                            triggers=list(item.get("trigger_hints", item.get("trigger_phrases", [])))
-                            if isinstance(item.get("trigger_hints", item.get("trigger_phrases")), list)
+                            triggers=list(item.get("trigger_hints", []))
+                            if isinstance(item.get("trigger_hints"), list)
                             else [],
                             agent_role=str(item.get("routing_owner", "")),
                             approval=approvals.get(slug) if isinstance(approvals, dict) else None,

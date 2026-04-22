@@ -7,7 +7,6 @@ import argparse
 import json
 import re
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -18,6 +17,7 @@ if __package__ in {None, ""}:
 from scripts.install_browser_mcp_codex import install_server as install_browser_server
 from scripts.install_codex_framework_default import retire_overlay as retire_framework_overlay
 from scripts.materialize_cli_host_entrypoints import CLAUDE_REFRESH_COMMAND
+from scripts.host_integration_rs import run_host_integration_rs
 from scripts.memory_support import get_repo_root, read_json_if_exists, write_json_if_changed, write_text_if_changed
 
 HOME_CONFIG_PATH = Path.home() / ".codex" / "config.toml"
@@ -35,31 +35,6 @@ DEFAULT_TUI_STATUS_ITEMS = (
     "context-used",
     "fast-mode",
 )
-
-
-def run_host_integration_rs(*args: str) -> dict[str, Any]:
-    repo_root = Path(__file__).resolve().parents[1]
-    manifest_path = repo_root / "scripts" / "host-integration-rs" / "Cargo.toml"
-    crate_root = manifest_path.parent
-    binary_path = crate_root / "target" / "debug" / "host-integration-rs"
-    latest_source_mtime = manifest_path.stat().st_mtime
-    for path in (crate_root / "src").rglob("*.rs"):
-        latest_source_mtime = max(latest_source_mtime, path.stat().st_mtime)
-    if not binary_path.exists() or binary_path.stat().st_mtime < latest_source_mtime:
-        subprocess.run(
-            ["cargo", "build", "--manifest-path", str(manifest_path)],
-            cwd=repo_root,
-            check=True,
-        )
-    completed = subprocess.run(
-        [str(binary_path), *args],
-        cwd=repo_root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return json.loads(completed.stdout)
-
 
 def ensure_config_file(config_path: Path) -> bool:
     """Ensure the target Codex config file exists with a schema header."""

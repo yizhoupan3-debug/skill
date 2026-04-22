@@ -496,6 +496,26 @@ describe('BrowserRuntime', () => {
     }
   });
 
+  it('accepts the canonical attach artifact path for a persisted descriptor', async () => {
+    const { tempRoot, traceStreamPath, descriptorPath } = await createAttachedRuntimeFixture();
+
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeAttachArtifactPath: descriptorPath,
+      screenshotDir: path.join(tempRoot, 'screenshots'),
+    });
+
+    try {
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.attachedRuntime.status).toBe('ready');
+      expect(diagnostics.attachedRuntime.descriptorSource).toBe('attach_artifact_path');
+      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+    } finally {
+      await attachedRuntime.shutdown();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it('replays attached runtime events through the configured descriptor', async () => {
     const { tempRoot, traceStreamPath, descriptorPath } = await createAttachedRuntimeFixture();
     const attachedRuntime = new BrowserRuntime({
@@ -575,6 +595,29 @@ describe('BrowserRuntime', () => {
       const replay = await attachedRuntime.getAttachedRuntimeEvents({ afterEventId: 'evt-1', limit: 5 });
       expect(replay.events).toHaveLength(1);
       expect(replay.events[0]!.event_id).toBe('evt-2');
+    } finally {
+      await attachedRuntime.shutdown();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('auto-detects handoff artifacts through the canonical attach artifact path', async () => {
+    const { tempRoot, traceStreamPath, handoffPath } = await createAttachedRuntimeFixture();
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeAttachArtifactPath: handoffPath,
+      screenshotDir: path.join(tempRoot, 'screenshots'),
+    });
+
+    try {
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.attachedRuntime.status).toBe('ready');
+      expect(diagnostics.attachedRuntime.descriptorSource).toBe('attach_artifact_path');
+      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+
+      const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
+      expect(replay.events).toHaveLength(2);
+      expect(replay.events[1]!.event_id).toBe('evt-2');
     } finally {
       await attachedRuntime.shutdown();
       await rm(tempRoot, { recursive: true, force: true });

@@ -288,9 +288,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert fallback_retirement["live_primary"]["contract_mode"] == "rust-live-primary"
     assert fallback_retirement["compatibility_fallback"]["runtime_path_available"] is False
     assert fallback_retirement["compatibility_fallback"]["retired_mode"] == "retired"
-    assert fallback_retirement["compatibility_fallback"]["request_behavior"] == (
-        "explicit-request-rejected"
-    )
+    assert fallback_retirement["compatibility_fallback"]["request_behavior"] == "surface-removed"
     assert fallback_retirement["current_contract_truth"]["dry_run_delegate_kind"] == "router-rs"
     assert fallback_retirement["current_contract_truth"]["live_fallback_runtime_path_available"] is (
         False
@@ -339,7 +337,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     ] == [
         "execution_mode",
         "route_engine",
-        "diagnostic_python_lane_active",
+        "diagnostic_route_mode",
     ]
     assert response_serialization["current_contract_truth"]["steady_state_response_shapes"] == [
         "live_primary",
@@ -531,20 +529,17 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
             encoding="utf-8"
         )
     )
-    assert rust_fallback_retirement["control_surfaces"]["settings_field"] == (
+    assert rust_fallback_retirement["control_surfaces"]["former_settings_field"] == (
         "rust_execute_fallback_to_python"
     )
     assert rust_fallback_retirement["control_surfaces"]["accepted_after_retirement"] is False
     assert rust_fallback_retirement["retirement_exit_contract"]["surface_status"] == (
-        "pending-removal"
+        "removed"
     )
     assert rust_fallback_retirement["retirement_exit_contract"]["current_decision"] == (
-        "keep-temporarily"
+        "completed"
     )
-    assert rust_fallback_retirement["retirement_exit_contract"]["remove_when"][0] == (
-        "external host or integration evidence confirms no downstream caller still "
-        "probes rust_execute_fallback_to_python"
-    )
+    assert rust_fallback_retirement["retirement_exit_contract"]["remove_when"] == []
     assert rust_fallback_retirement["current_contract_truth"]["live_primary_kind"] == "router-rs"
     assert rust_fallback_retirement["retirement_gates"]["delegate_family_impl_metadata_externalized"] is True
     assert rust_fallback_retirement["retirement_gates"][
@@ -839,10 +834,10 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
     ] == ["execution_kernel_fallback_reason"]
     assert payload["execution_kernel_live_fallback_retirement_status"]["compatibility_fallback"][
         "request_behavior"
-    ] == "explicit-request-rejected"
+    ] == "surface-removed"
     assert payload["execution_kernel_live_fallback_retirement_status"]["retirement_exit_contract"][
         "surface_status"
-    ] == "pending-removal"
+    ] == "removed"
     assert payload["execution_kernel_live_fallback_retirement_status"]["current_response_metadata_truth"][
         "compatibility_fallback_reason_present_in_steady_state"
     ] is False
@@ -860,7 +855,7 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
     ]["live_primary"]["pass_through_metadata_fields"] == [
         "execution_mode",
         "route_engine",
-        "diagnostic_python_lane_active",
+        "diagnostic_route_mode",
     ]
     assert payload["gemini_cli_adapter"]["host_projection"]["context_files"] == ["GEMINI.md"]
     assert payload["cli_family_capability_discovery"]["all_cli_hosts_compatible"] is True

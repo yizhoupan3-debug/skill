@@ -715,10 +715,7 @@ fn extract_trigger_hints(
     _body: &str,
 ) -> Vec<String> {
     let mut explicit_trigger_hints = Vec::new();
-    if let Some(trigger_hints) = metadata
-        .get("trigger_hints")
-        .or_else(|| metadata.get("trigger_phrases"))
-    {
+    if let Some(trigger_hints) = metadata.get("trigger_hints") {
         match trigger_hints {
             Value::String(text) => explicit_trigger_hints.push(text.clone()),
             Value::Array(items) => {

@@ -22,7 +22,7 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "fast-mode",
 ];
 
-const FULL_SYNC_TEXT_FILES: [&str; 18] = [
+const FULL_SYNC_TEXT_FILES: [&str; 19] = [
     "AGENT.md",
     "AGENTS.md",
     "CLAUDE.md",
@@ -30,6 +30,7 @@ const FULL_SYNC_TEXT_FILES: [&str; 18] = [
     ".claude/CLAUDE.md",
     ".claude/agents/README.md",
     ".claude/commands/refresh.md",
+    ".claude/commands/background_batch.md",
     ".claude/hooks/README.md",
     ".claude/hooks/session_start.sh",
     ".claude/hooks/stop.sh",
@@ -55,7 +56,10 @@ const FULL_SYNC_MANAGED_DIRS: [&str; 9] = [
     "configs/codex",
     ".codex",
 ];
-const PARTIAL_SYNC_TEXT_FILES: [&str; 1] = [".claude/commands/refresh.md"];
+const PARTIAL_SYNC_TEXT_FILES: [&str; 2] = [
+    ".claude/commands/refresh.md",
+    ".claude/commands/background_batch.md",
+];
 const PARTIAL_SYNC_MANAGED_DIRS: [&str; 2] = [".claude", ".claude/commands"];
 const RETIRED_PATHS: [&str; 2] = [".codex/model_instructions.md", ".mcp.json"];
 

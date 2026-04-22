@@ -597,6 +597,115 @@ def _compatibility_mirror_outputs(
     }
 
 
+def _trace_payload_identity_matches(
+    payload: dict[str, Any],
+    *,
+    task: str,
+    status: str,
+) -> bool:
+    """Return whether one existing trace payload still belongs to the active task."""
+
+    if not payload:
+        return False
+    payload_task = _text(payload.get("task"))
+    runtime_version = payload.get("routing_runtime_version")
+    if payload_task and not _looks_same_identity(payload_task, task):
+        return False
+    if runtime_version is not None and runtime_version != load_routing_runtime_version():
+        return False
+    return bool(normalize_trace_skills(payload)) or not payload_task or _looks_same_identity(payload_task, task)
+
+
+def _harmonize_trace_payload(
+    payload: dict[str, Any],
+    *,
+    canonical: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge safe canonical continuity fields into one existing trace payload."""
+
+    if not payload:
+        return canonical
+    merged = dict(payload)
+    merged["schema_version"] = TRACE_METADATA_SCHEMA_VERSION
+    merged["task"] = canonical["task"]
+    merged["framework_version"] = canonical["framework_version"]
+    merged["routing_runtime_version"] = canonical["routing_runtime_version"]
+    merged["verification_status"] = canonical["verification_status"]
+    merged["artifact_paths"] = canonical["artifact_paths"]
+    if not normalize_trace_skills(merged):
+        merged["matched_skills"] = canonical["matched_skills"]
+    decision = merged.get("decision")
+    decision = dict(decision) if isinstance(decision, dict) else {}
+    canonical_decision = canonical.get("decision")
+    canonical_decision = dict(canonical_decision) if isinstance(canonical_decision, dict) else {}
+    for key in ("owner", "gate", "overlay"):
+        if _text(decision.get(key)) or canonical_decision.get(key) is None:
+            continue
+        decision[key] = canonical_decision.get(key)
+    merged["decision"] = decision
+    return merged
+
+
+def _materialize_next_actions_payload(
+    *,
+    existing_payload: dict[str, Any],
+    supervisor_actions: list[str],
+) -> dict[str, Any]:
+    """Choose the authoritative next-actions payload for continuity repair."""
+
+    if supervisor_actions:
+        actions = supervisor_actions
+    else:
+        actions = normalize_next_actions(existing_payload)
+    return _synthesized_next_actions_payload(actions)
+
+
+def _coerce_next_action_line(item: Any) -> str:
+    """Convert one next-action row into a compact human-readable line."""
+
+    if isinstance(item, str):
+        return item.strip()
+    if isinstance(item, dict):
+        for key in ("title", "summary", "action", "label", "details"):
+            value = str(item.get(key) or "").strip()
+            if value:
+                return value
+    return str(item).strip() if item is not None else ""
+
+
+def _authoritative_next_actions(
+    *,
+    snapshot_payload: dict[str, Any],
+    supervisor_state: dict[str, Any],
+) -> list[str]:
+    """Return the safest next-actions list for continuity reads."""
+
+    supervisor_actions = stable_line_items(
+        _coerce_next_action_line(item)
+        for item in supervisor_state.get("next_actions", [])
+        if _coerce_next_action_line(item)
+    )
+    if supervisor_actions:
+        return supervisor_actions
+    return normalize_next_actions(snapshot_payload)
+
+
+def _authoritative_route(
+    *,
+    trace_payload: dict[str, Any],
+    supervisor_state: dict[str, Any],
+    task: str,
+    status: str,
+) -> list[str]:
+    """Return the safest route list for continuity reads."""
+
+    if _trace_payload_identity_matches(trace_payload, task=task, status=status):
+        route = normalize_trace_skills(trace_payload)
+        if route:
+            return route
+    return _fallback_route_from_supervisor(supervisor_state)
+
+
 def _fallback_route_from_supervisor(supervisor_state: dict[str, Any]) -> list[str]:
     """Derive a minimal route list when trace metadata is missing."""
 
@@ -741,16 +850,15 @@ def repair_runtime_continuity_artifacts(
     phase = _text(supervisor.get("active_phase")) or "implementation"
     status = _synthesized_status(supervisor)
     next_actions = stable_line_items(
-        str(item).strip()
+        _coerce_next_action_line(item)
         for item in supervisor.get("next_actions", [])
-        if str(item).strip()
+        if _coerce_next_action_line(item)
     )
     evidence_index = {"schema_version": EVIDENCE_INDEX_SCHEMA_VERSION, "artifacts": []}
     source_summary_path = task_root / ARTIFACT_NAMES["session_summary"]
     source_next_actions_path = task_root / ARTIFACT_NAMES["next_actions"]
     source_evidence_path = task_root / ARTIFACT_NAMES["evidence_index"]
     source_trace_path = task_root / ARTIFACT_NAMES["trace_metadata"]
-    next_actions_payload = _synthesized_next_actions_payload(next_actions)
     trace_payload = _synthesized_trace_payload(
         supervisor_state=supervisor,
         task=task,
@@ -758,6 +866,7 @@ def repair_runtime_continuity_artifacts(
         route=route,
         status=status,
     )
+    next_actions_payload = _synthesized_next_actions_payload(next_actions)
     existing_summary = read_text_if_exists(source_summary_path)
     existing_fields = parse_session_summary(existing_summary)
     existing_conflicts = bool(
@@ -779,21 +888,24 @@ def repair_runtime_continuity_artifacts(
     if task_root.is_dir() and source_summary_path.is_file() and not existing_conflicts:
         summary_text = existing_summary
         existing_next_actions_payload = read_json_if_exists(source_next_actions_path)
-        if existing_next_actions_payload:
-            next_actions = normalize_next_actions(existing_next_actions_payload)
-            next_actions_payload = existing_next_actions_payload
-        else:
-            changed = write_json_if_changed(source_next_actions_path, next_actions_payload) or changed
+        next_actions_payload = _materialize_next_actions_payload(
+            existing_payload=existing_next_actions_payload,
+            supervisor_actions=next_actions,
+        )
+        next_actions = normalize_next_actions(next_actions_payload)
+        changed = write_json_if_changed(source_next_actions_path, next_actions_payload) or changed
         evidence_payload = read_json_if_exists(source_evidence_path)
         if evidence_payload:
             evidence_index = evidence_payload
         else:
             changed = write_json_if_changed(source_evidence_path, evidence_index) or changed
         existing_trace_payload = read_json_if_exists(source_trace_path)
-        if existing_trace_payload:
-            trace_payload = existing_trace_payload
-        else:
-            changed = write_json_if_changed(source_trace_path, trace_payload) or changed
+        if _trace_payload_identity_matches(existing_trace_payload, task=task, status=status):
+            trace_payload = _harmonize_trace_payload(
+                existing_trace_payload,
+                canonical=trace_payload,
+            )
+        changed = write_json_if_changed(source_trace_path, trace_payload) or changed
     else:
         task_root.mkdir(parents=True, exist_ok=True)
         summary_text = "\n".join(
@@ -857,11 +969,11 @@ def resolve_active_task_id(
     """Resolve the active task id from supervisor state first, then pointer."""
 
     state = normalize_supervisor_state(supervisor_state or {})
-    direct = safe_slug(_text(state.get("task_id")))
+    direct = safe_slug(_text(state.get("task_id")), fallback="")
     if direct:
         return direct
     pointer = read_active_task_pointer(source_root, artifact_root)
-    return safe_slug(_text(pointer.get("task_id")))
+    return safe_slug(_text(pointer.get("task_id")), fallback="")
 
 
 def load_runtime_snapshot(
@@ -983,7 +1095,7 @@ def normalize_next_actions(payload: dict[str, Any]) -> list[str]:
         actions = payload.get("next_actions") or []
     else:
         actions = payload.get("next_actions") or payload.get("actions") or []
-    return [str(item).strip() for item in actions if str(item).strip()]
+    return [_coerce_next_action_line(item) for item in actions if _coerce_next_action_line(item)]
 
 
 def normalize_trace_skills(payload: dict[str, Any]) -> list[str]:
@@ -1122,14 +1234,16 @@ def classify_runtime_continuity(snapshot: RuntimeSnapshot) -> dict[str, Any]:
     summary_status = _text(summary.get("status"))
     story_state = _text(continuity.get("story_state"))
     status = summary_status or verification_status or story_state
-    route = normalize_trace_skills(snapshot.trace_metadata)
-    next_actions = normalize_next_actions(snapshot.next_actions)
-    if not next_actions:
-        next_actions = stable_line_items(
-            str(item).strip()
-            for item in supervisor.get("next_actions", [])
-            if str(item).strip()
-        )
+    next_actions = _authoritative_next_actions(
+        snapshot_payload=snapshot.next_actions,
+        supervisor_state=supervisor,
+    )
+    route = _authoritative_route(
+        trace_payload=snapshot.trace_metadata if isinstance(snapshot.trace_metadata, dict) else {},
+        supervisor_state=supervisor,
+        task=task,
+        status=status or _synthesized_status(supervisor),
+    )
     blockers = stable_line_items(
         str(item).strip()
         for item in (supervisor.get("blockers", {}) or {}).get("open_blockers", [])

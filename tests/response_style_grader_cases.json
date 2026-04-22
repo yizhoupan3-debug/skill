@@ -1,0 +1,29 @@
+{
+  "schema_version": "response-style-grader-cases-v1",
+  "cases": [
+    {
+      "id": "good_short_closeout",
+      "text": "现在能跑了，核心报错已经消失。还差一轮真实数据验证，过了这一步就可以放心继续用。",
+      "should_pass": true,
+      "expected_findings": []
+    },
+    {
+      "id": "bad_internal_jargon",
+      "text": "我已经检查了当前 routing layer 和 control plane，这次 owner skill 与 overlay skill 都对齐了，所以 route engine 现在稳定。",
+      "should_pass": false,
+      "expected_findings": ["internal_jargon", "status_report_opener"]
+    },
+    {
+      "id": "bad_progress_report",
+      "text": "我先去检查一下日志，接下来再告诉你结果。下面是我做的几件事：\n- 看配置\n- 看运行时\n- 看路由",
+      "should_pass": false,
+      "expected_findings": ["status_report_opener", "tool_talk", "mechanical_wrapup"]
+    },
+    {
+      "id": "bad_too_long",
+      "text": "现在主问题其实已经基本解决了，不过我还是想把背景完整说一下，这样你会更容易理解这次为什么会出现这个现象、我刚刚分别看了哪些模块、哪些地方属于历史兼容层、哪些地方属于新的运行时约束、以及为什么我判断这次的结果虽然看起来已经没问题，但严格来说还需要再补一轮更贴近真实使用方式的验证，避免后面再次出现类似回退。除此之外，我还想把这次判断背后的几条前提、相关的边界条件、以及为什么我没有直接采用另一条修法也顺手说完，不然你后面单看结论可能会误以为这个问题已经百分之百彻底收敛，这也是我这里还不想把话说得太满的原因。",
+      "should_pass": false,
+      "expected_findings": ["too_long"]
+    }
+  ]
+}

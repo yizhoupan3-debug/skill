@@ -117,7 +117,7 @@ class CodexAgnoRuntime:
         self.loader = self.router_service.loader
         self.prompt_builder = self.router_service.prompt_builder
         self.skills = self.router_service.skills
-        self.router = self.router_service._python_router
+        self.router = None
         self._job_store = self.state_service.store
         self._trace = self.trace_service.recorder
         self._memory_store = self.memory_service.store
@@ -346,7 +346,7 @@ class CodexAgnoRuntime:
         self.router_service.reload()
         self._apply_control_plane_descriptor(self.router_service.control_plane_descriptor)
         self.skills = self.router_service.skills
-        self.router = self.router_service._python_router
+        self.router = None
 
     def _prepare_session(
         self,
@@ -386,8 +386,7 @@ class CodexAgnoRuntime:
                 "loaded_skill_count": len(self.skills),
                 "route_engine_mode": self.settings.route_engine_mode,
                 "route_engine": routing_result.route_engine,
-                "diagnostic_python_lane_active": routing_result.diagnostic_python_lane_active,
-                "python_lane_kind": routing_result.python_lane_kind,
+                "diagnostic_route_mode": routing_result.diagnostic_route_mode,
             },
         )
         self._trace.record(
@@ -401,11 +400,10 @@ class CodexAgnoRuntime:
                 "reasons": routing_result.reasons,
                 "route_engine": routing_result.route_engine,
                 "route_engine_mode": self.settings.route_engine_mode,
-                "diagnostic_python_lane_active": routing_result.diagnostic_python_lane_active,
-                "python_lane_kind": routing_result.python_lane_kind,
-                "shadow_route_report": (
-                    routing_result.shadow_route_report.model_dump(mode="json")
-                    if routing_result.shadow_route_report is not None
+                "diagnostic_route_mode": routing_result.diagnostic_route_mode,
+                "route_diagnostic_report": (
+                    routing_result.route_diagnostic_report.model_dump(mode="json")
+                    if routing_result.route_diagnostic_report is not None
                     else None
                 ),
             },
@@ -420,9 +418,8 @@ class CodexAgnoRuntime:
             prompt_preview=routing_result.prompt_preview,
             loaded_skill_count=len(self.skills),
             route_engine=routing_result.route_engine,
-            diagnostic_python_lane_active=routing_result.diagnostic_python_lane_active,
-            python_lane_kind=routing_result.python_lane_kind,
-            shadow_route_report=routing_result.shadow_route_report,
+            diagnostic_route_mode=routing_result.diagnostic_route_mode,
+            route_diagnostic_report=routing_result.route_diagnostic_report,
         )
 
     def prepare_session(self, request: PrepareSessionRequest) -> PrepareSessionResponse:
@@ -976,11 +973,10 @@ class CodexAgnoRuntime:
                 "retry_count": retry_count,
                 "route_engine_mode": self.settings.route_engine_mode,
                 "route_engine": routing_result.route_engine,
-                "diagnostic_python_lane_active": routing_result.diagnostic_python_lane_active,
-                "python_lane_kind": routing_result.python_lane_kind,
-                "shadow_route_report": (
-                    routing_result.shadow_route_report.model_dump(mode="json")
-                    if routing_result.shadow_route_report is not None
+                "diagnostic_route_mode": routing_result.diagnostic_route_mode,
+                "route_diagnostic_report": (
+                    routing_result.route_diagnostic_report.model_dump(mode="json")
+                    if routing_result.route_diagnostic_report is not None
                     else None
                 ),
             }
@@ -1001,9 +997,12 @@ class CodexAgnoRuntime:
             reasons=prepared.reasons,
             prompt_preview=prepared.prompt_preview,
             route_engine=prepared.route_engine,
-            diagnostic_python_lane_active=prepared.diagnostic_python_lane_active,
-            python_lane_kind=prepared.python_lane_kind,
-            shadow_route_report=prepared.shadow_route_report,
+            diagnostic_route_mode=prepared.diagnostic_route_mode,
+            route_diagnostic_report=(
+                prepared.route_diagnostic_report.model_dump(mode="json")
+                if prepared.route_diagnostic_report is not None
+                else None
+            ),
         )
 
     def _maybe_flush_trace(self, result: RunTaskResponse, routing_result: RoutingResult) -> None:

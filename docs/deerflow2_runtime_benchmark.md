@@ -107,10 +107,9 @@ Priority order:
 
 1. keep collapsing the residual route metadata/canonicalization lane behind the
    Rust-owned route policy/compiler authority
-2. keep the `rust_execute_fallback_to_python` control surface explicitly
-   retired-and-rejected until external caller evidence shows probes have
-   stopped, then delete the request shim, settings/env exposure, and retirement
-   artifact together without reopening the Python live path
+2. keep the compatibility fallback retirement artifact as historical evidence,
+   but do not reopen any request shim, settings/env exposure, or Python live
+   path
 3. decide which middleware transforms stay as Python host callbacks vs move
    behind the execution-kernel seam
 4. keep extending resumable persistence and backend-family seams without

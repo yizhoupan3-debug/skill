@@ -42,15 +42,14 @@ from codex_agno_runtime.memory import FactMemoryStore
 from codex_agno_runtime.middleware import MiddlewareContext
 from codex_agno_runtime.observability import build_runtime_observability_health_snapshot
 from codex_agno_runtime.prompt_builder import PromptBuilder
-from codex_agno_runtime.router import SkillRouter
 from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import (
     BackgroundParallelGroupSummary,
     BackgroundRunRequest,
     BackgroundRunStatus,
+    RouteDiagnosticReport,
     RouteDecisionSnapshot,
     RouteExecutionPolicy,
-    RouteDiffReport,
     RoutingResult,
     RunTaskResponse,
 )
@@ -716,8 +715,7 @@ class RouterService:
         )
         self.control_plane_descriptor = self._rust_adapter.runtime_control_plane()
         self.skills = []
-        self._python_router: SkillRouter | None = None
-        self._last_route_report: RouteDiffReport | None = None
+        self._last_route_report: RouteDiagnosticReport | None = None
         self._route_policy: RouteExecutionPolicy | None = None
         self.reload()
 
@@ -730,42 +728,20 @@ class RouterService:
         """Router service shutdown hook."""
 
     def reload(self) -> None:
-        """Refresh runtime skill metadata and the Python router for the legacy lane."""
+        """Refresh runtime skill metadata and the Rust-owned route policy."""
 
         self.control_plane_descriptor = self._rust_adapter.runtime_control_plane()
         self.skills = self.loader.load(
             refresh=True,
             load_bodies=not self.settings.progressive_skill_loading,
         )
-        policy = self._resolve_route_policy(refresh=True)
-        if self._python_router_required(policy=policy):
-            self._python_router = SkillRouter(
-                self.skills,
-                control_plane_descriptor=self.control_plane_descriptor,
-            )
-        else:
-            self._python_router = None
+        self._resolve_route_policy(refresh=True)
 
     def route(self, *, task: str, session_id: str, allow_overlay: bool, first_turn: bool) -> RoutingResult:
         """Return the configured route decision for one task."""
 
         self._last_route_report = None
         policy = self._resolve_route_policy()
-        if policy.primary_authority == "python":
-            python_result = self._route_python(
-                task=task,
-                session_id=session_id,
-                allow_overlay=allow_overlay,
-                first_turn=first_turn,
-            )
-            return self._decorate_route_result(
-                python_result,
-                route_engine="python",
-                diagnostic_python_lane_active=False,
-                python_lane_kind=policy.python_lane_kind,
-                report=None,
-            )
-
         rust_result = self._route_rust(
             task=task,
             session_id=session_id,
@@ -774,18 +750,13 @@ class RouterService:
         )
         report = self._collect_diagnostic_route_report(
             policy=policy,
-            task=task,
-            session_id=session_id,
-            allow_overlay=allow_overlay,
-            first_turn=first_turn,
             rust_result=rust_result,
         )
         self._last_route_report = report
         return self._decorate_route_result(
             rust_result,
             route_engine="rust",
-            diagnostic_python_lane_active=policy.diagnostic_compare_only_python_lane_active,
-            python_lane_kind=policy.python_lane_kind,
+            diagnostic_route_mode=policy.diagnostic_route_mode,
             report=report,
         )
 
@@ -805,16 +776,13 @@ class RouterService:
                 "default_route_authority",
                 self._rust_adapter.route_authority,
             ),
-            "diagnostic_python_lane_active": policy.diagnostic_compare_only_python_lane_active,
-            "python_lane_kind": policy.python_lane_kind,
-            "configured_rollback_to_python": self.settings.rust_route_rollback_to_python,
+            "diagnostic_route_mode": policy.diagnostic_route_mode,
             "loaded_skill_count": len(self.skills),
             "skill_root": str(self.settings.codex_home / "skills"),
             "primary_authority": policy.primary_authority,
             "route_result_engine": policy.route_result_engine,
-            "shadow_engine": policy.shadow_engine,
-            "python_router_loaded": self._python_router is not None,
-            "python_router_required": self._python_router_required(policy=policy),
+            "diagnostic_report_required": policy.diagnostic_report_required,
+            "strict_verification_required": policy.strict_verification_required,
             "control_plane_authority": service_descriptor.get(
                 "authority",
                 self.control_plane_descriptor.get("authority"),
@@ -828,30 +796,6 @@ class RouterService:
             "last_route_report": self._last_route_report.model_dump(mode="json") if self._last_route_report else None,
         }
 
-    def _route_python(self, *, task: str, session_id: str, allow_overlay: bool, first_turn: bool) -> RoutingResult:
-        result = self._ensure_python_router().route(
-            task=task,
-            session_id=session_id,
-            allow_overlay=allow_overlay,
-            first_turn=first_turn,
-        )
-        if result.route_snapshot is None:
-            result = result.model_copy(
-                update={
-                    "route_snapshot": RouteDecisionSnapshot.model_validate(
-                        self._rust_adapter.route_snapshot(
-                            engine="python",
-                            selected_skill=result.selected_skill.name,
-                            overlay_skill=result.overlay_skill.name if result.overlay_skill else None,
-                            layer=result.layer,
-                            score=float(result.score),
-                            reasons=[str(reason) for reason in result.reasons],
-                        )
-                    )
-                }
-            )
-        return result
-
     def _route_rust(self, *, task: str, session_id: str, allow_overlay: bool, first_turn: bool) -> RoutingResult:
         decision = self._rust_adapter.route(
             query=task,
@@ -861,11 +805,6 @@ class RouterService:
         )
         selected = next(skill for skill in self.skills if skill.name == decision["selected_skill"])
         overlay = next((skill for skill in self.skills if skill.name == decision["overlay_skill"]), None)
-        route_snapshot = (
-            RouteDecisionSnapshot.model_validate(decision["route_snapshot"])
-            if decision.get("route_snapshot") is not None
-            else None
-        )
         return RoutingResult(
             task=task,
             session_id=session_id,
@@ -874,7 +813,7 @@ class RouterService:
             score=float(decision.get("score", 0.0)),
             layer=str(decision["layer"]),
             reasons=[str(reason) for reason in decision.get("reasons", [])],
-            route_snapshot=route_snapshot,
+            route_snapshot=decision.get("route_snapshot"),
         )
 
     def _decorate_route_result(
@@ -882,16 +821,14 @@ class RouterService:
         result: RoutingResult,
         *,
         route_engine: str,
-        diagnostic_python_lane_active: bool,
-        python_lane_kind: str,
-        report: RouteDiffReport | None,
+        diagnostic_route_mode: str,
+        report: RouteDiagnosticReport | None,
     ) -> RoutingResult:
         return result.model_copy(
             update={
                 "route_engine": route_engine,
-                "diagnostic_python_lane_active": diagnostic_python_lane_active,
-                "python_lane_kind": python_lane_kind,
-                "shadow_route_report": report,
+                "diagnostic_route_mode": diagnostic_route_mode,
+                "route_diagnostic_report": report,
             }
         )
 
@@ -899,73 +836,27 @@ class RouterService:
         self,
         *,
         policy: RouteExecutionPolicy,
-        task: str,
-        session_id: str,
-        allow_overlay: bool,
-        first_turn: bool,
         rust_result: RoutingResult,
-    ) -> RouteDiffReport | None:
-        if policy.diff_report_required or policy.verify_parity_required:
-            if not policy.diagnostic_compare_only_python_lane_active:
-                raise RuntimeError(
-                    "Rust route policy declared diff/verify requirements outside the diagnostic lane."
-                )
-        if not policy.diagnostic_compare_only_python_lane_active:
+    ) -> RouteDiagnosticReport | None:
+        if not policy.diagnostic_report_required:
             return None
-        python_snapshot = self._route_python_snapshot(
-            task=task,
-            session_id=session_id,
-            allow_overlay=allow_overlay,
-            first_turn=first_turn,
-        )
         rust_snapshot = self._build_route_snapshot("rust", rust_result)
-        report = (
-            self._build_route_diff_report(
-                mode=policy.mode,
-                python_snapshot=python_snapshot,
-                rust_snapshot=rust_snapshot,
-                rollback_active=policy.rollback_active,
-            )
-            if policy.diff_report_required
-            else None
-        )
-        if policy.verify_parity_required:
-            if report is None:
-                raise RuntimeError("Rust route policy requires a parity report.")
-            self._assert_parity(report)
+        report = self._build_route_diff_report(mode=policy.mode, rust_snapshot=rust_snapshot)
+        if policy.strict_verification_required:
+            self._assert_rust_route_contract(rust_result, rust_snapshot)
         return report
-
-    def _route_python_snapshot(
-        self,
-        *,
-        task: str,
-        session_id: str,
-        allow_overlay: bool,
-        first_turn: bool,
-    ) -> RouteDecisionSnapshot:
-        python_result = self._route_python(
-            task=task,
-            session_id=session_id,
-            allow_overlay=allow_overlay,
-            first_turn=first_turn,
-        )
-        return self._build_route_snapshot("python", python_result)
 
     def _build_route_diff_report(
         self,
         *,
         mode: str,
-        python_snapshot: RouteDecisionSnapshot,
         rust_snapshot: RouteDecisionSnapshot,
-        rollback_active: bool,
-    ) -> RouteDiffReport:
+    ) -> RouteDiagnosticReport:
         payload = self._rust_adapter.route_report(
             mode=mode,
-            python_route_snapshot=python_snapshot.model_dump(mode="json"),
             rust_route_snapshot=rust_snapshot.model_dump(mode="json"),
-            rollback_active=rollback_active,
         )
-        return RouteDiffReport.model_validate(payload)
+        return RouteDiagnosticReport.model_validate(payload)
 
     def _build_route_snapshot(self, engine: str, result: RoutingResult) -> RouteDecisionSnapshot:
         if result.route_snapshot is not None:
@@ -981,37 +872,29 @@ class RouterService:
             )
         )
 
-    def _assert_parity(self, report: RouteDiffReport) -> None:
-        if report.selected_skill_match and report.overlay_skill_match and report.layer_match:
-            return
-        if report.mismatch:
-            raise RuntimeError(
-                "Rust route parity mismatch: "
-                f"python={report.python.selected_skill}/{report.python.overlay_skill}/{report.python.layer}/{report.python.score_bucket}/{report.python.reasons_class} "
-                f"rust={report.rust.selected_skill}/{report.rust.overlay_skill}/{report.rust.layer}/{report.rust.score_bucket}/{report.rust.reasons_class}"
-            )
+    def _assert_rust_route_contract(
+        self,
+        result: RoutingResult,
+        route_snapshot: RouteDecisionSnapshot,
+    ) -> None:
+        expected_overlay = result.overlay_skill.name if result.overlay_skill else None
+        if route_snapshot.engine != "rust":
+            raise RuntimeError("Rust verification route snapshot must keep engine=rust.")
+        if route_snapshot.selected_skill != result.selected_skill.name:
+            raise RuntimeError("Rust verification route snapshot drifted on selected_skill.")
+        if route_snapshot.overlay_skill != expected_overlay:
+            raise RuntimeError("Rust verification route snapshot drifted on overlay_skill.")
+        if route_snapshot.layer != result.layer:
+            raise RuntimeError("Rust verification route snapshot drifted on layer.")
 
     def _resolve_route_policy(self, *, refresh: bool = False) -> RouteExecutionPolicy:
         if refresh or self._route_policy is None:
             self._route_policy = RouteExecutionPolicy.model_validate(
                 self._rust_adapter.route_policy(
                     mode=self.settings.route_engine_mode,
-                    rollback_to_python=self.settings.rust_route_rollback_to_python,
                 )
             )
         return self._route_policy
-
-    def _python_router_required(self, *, policy: RouteExecutionPolicy | None = None) -> bool:
-        return (policy or self._resolve_route_policy()).legacy_primary_python_lane_active
-
-    def _ensure_python_router(self) -> SkillRouter:
-        if self._python_router is None:
-            self._python_router = SkillRouter(
-                self.skills,
-                control_plane_descriptor=self.control_plane_descriptor,
-            )
-        return self._python_router
-
 
 class StateService:
     """Own durable background-job state and session reservations."""
