@@ -36,6 +36,27 @@ _DEFAULT_STATE_SERVICE_DESCRIPTOR = {
 }
 
 
+def _default_service_delegate_kind(*, service_name: str, backend_family: str) -> str:
+    """Return the backend-aware default delegate kind for one service lane."""
+
+    normalized_backend = backend_family.strip().lower().replace("_", "-")
+    return f"{normalized_backend}-{service_name}-store"
+
+
+def _coerce_legacy_service_delegate_kind(
+    *,
+    delegate_kind: str,
+    service_name: str,
+    backend_family: str,
+) -> str:
+    """Rewrite stale filesystem delegate labels when the active backend is not filesystem."""
+
+    legacy_delegate = f"filesystem-{service_name}-store"
+    if backend_family == "filesystem" or delegate_kind != legacy_delegate:
+        return delegate_kind
+    return _default_service_delegate_kind(service_name=service_name, backend_family=backend_family)
+
+
 @dataclass(frozen=True)
 class RuntimeStoreCapabilities:
     """Describe the active persistence backend family and forward-compat flags."""
@@ -83,8 +104,13 @@ def _build_service_projection(
     control_plane_descriptor: Mapping[str, Any] | None,
     service_name: str,
     defaults: Mapping[str, Any],
+    capabilities: RuntimeStoreCapabilities,
 ) -> dict[str, Any]:
     payload = dict(defaults)
+    payload["delegate_kind"] = _default_service_delegate_kind(
+        service_name=service_name,
+        backend_family=capabilities.backend_family,
+    )
     if isinstance(control_plane_descriptor, Mapping):
         services = control_plane_descriptor.get("services")
         if isinstance(services, Mapping):
@@ -94,6 +120,13 @@ def _build_service_projection(
                     value = service.get(field)
                     if value is not None:
                         payload[field] = value
+    delegate_kind = payload.get("delegate_kind")
+    if isinstance(delegate_kind, str):
+        payload["delegate_kind"] = _coerce_legacy_service_delegate_kind(
+            delegate_kind=delegate_kind,
+            service_name=service_name,
+            backend_family=capabilities.backend_family,
+        )
     return payload
 
 
@@ -118,11 +151,13 @@ def _build_checkpoint_control_plane_descriptor(
             control_plane_descriptor=control_plane_descriptor,
             service_name="trace",
             defaults=_DEFAULT_TRACE_SERVICE_DESCRIPTOR,
+            capabilities=capabilities,
         ),
         "state_service": _build_service_projection(
             control_plane_descriptor=control_plane_descriptor,
             service_name="state",
             defaults=_DEFAULT_STATE_SERVICE_DESCRIPTOR,
+            capabilities=capabilities,
         ),
         "backend_family": capabilities.backend_family,
         "supports_atomic_replace": capabilities.supports_atomic_replace,

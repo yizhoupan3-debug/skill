@@ -310,7 +310,7 @@ Required fields:
 - `reasons: string[]`
 - `prompt_preview: string | null`
 - `route_engine: python | rust`
-- `rollback_to_python: boolean`
+- `diagnostic_python_lane_active: boolean`
 - `shadow_route_report: route diff report | null`
 
 Invariants:
@@ -327,6 +327,8 @@ Rust migration note:
   canonical route snapshot shaping through versioned route and snapshot
   contracts
 - Python may continue hydrating full skill bodies and prompt previews
+- `rollback_to_python` remains accepted only as a legacy input alias while the
+  canonical emitted field is `diagnostic_python_lane_active`
 
 ## Contract 1A: Route Policy
 

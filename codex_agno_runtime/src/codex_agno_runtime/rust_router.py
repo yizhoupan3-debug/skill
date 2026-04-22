@@ -21,6 +21,9 @@ class RustRouteAdapter:
     checkpoint_resume_manifest_schema_version = "router-rs-checkpoint-resume-manifest-v1"
     transport_binding_write_schema_version = "router-rs-transport-binding-write-v1"
     checkpoint_manifest_write_schema_version = "router-rs-checkpoint-manifest-write-v1"
+    runtime_observability_exporter_schema_version = "runtime-observability-exporter-v1"
+    runtime_observability_metric_record_schema_version = "runtime-observability-metric-record-v1"
+    runtime_observability_dashboard_schema_version = "runtime-observability-dashboard-v1"
     route_authority = "rust-route-core"
     compile_authority = "rust-route-compiler"
     runtime_control_plane_authority = "rust-runtime-control-plane"
@@ -283,6 +286,99 @@ class RustRouteAdapter:
             )
         return payload
 
+    def runtime_observability_exporter_descriptor(self) -> dict[str, Any]:
+        """Return the Rust-owned runtime observability exporter descriptor."""
+
+        args = ["--runtime-observability-exporter-json"]
+        try:
+            payload = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="runtime observability exporter compiler",
+            )
+        except RuntimeError:
+            payload = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="runtime observability exporter compiler",
+            )
+        if payload.get("schema_version") != self.runtime_observability_exporter_schema_version:
+            payload = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="runtime observability exporter compiler",
+            )
+            if payload.get("schema_version") != self.runtime_observability_exporter_schema_version:
+                raise RuntimeError(
+                    "Rust runtime observability exporter compiler returned an unknown schema: "
+                    f"{payload.get('schema_version')!r}"
+                )
+        if payload.get("exporter_authority") != self.runtime_control_plane_authority:
+            raise RuntimeError(
+                "Rust runtime observability exporter compiler returned an unexpected authority marker: "
+                f"{payload.get('exporter_authority')!r}"
+            )
+        return payload
+
+    def runtime_observability_dashboard_schema(self) -> dict[str, Any]:
+        """Return the Rust-owned runtime observability dashboard schema."""
+
+        args = ["--runtime-observability-dashboard-json"]
+        try:
+            payload = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="runtime observability dashboard compiler",
+            )
+        except RuntimeError:
+            payload = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="runtime observability dashboard compiler",
+            )
+        if payload.get("schema_version") != self.runtime_observability_dashboard_schema_version:
+            payload = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="runtime observability dashboard compiler",
+            )
+            if payload.get("schema_version") != self.runtime_observability_dashboard_schema_version:
+                raise RuntimeError(
+                    "Rust runtime observability dashboard compiler returned an unknown schema: "
+                    f"{payload.get('schema_version')!r}"
+                )
+        return payload
+
+    def runtime_metric_record(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Build one Rust-owned runtime observability metric record."""
+
+        args = [
+            "--runtime-metric-record-json",
+            "--runtime-metric-record-input-json",
+            json.dumps(payload, ensure_ascii=False, allow_nan=False),
+        ]
+        try:
+            resolved = self._run_json_command(
+                [*self._binary_command(), *args],
+                failure_label="runtime metric record compiler",
+            )
+        except RuntimeError:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="runtime metric record compiler",
+            )
+        if resolved.get("schema_version") != self.runtime_observability_metric_record_schema_version:
+            resolved = self._run_json_command(
+                [*self._cargo_command(), *args],
+                failure_label="runtime metric record compiler",
+            )
+            if resolved.get("schema_version") != self.runtime_observability_metric_record_schema_version:
+                raise RuntimeError(
+                    "Rust runtime metric record compiler returned an unknown schema: "
+                    f"{resolved.get('schema_version')!r}"
+                )
+        ownership = resolved.get("ownership")
+        if not isinstance(ownership, dict) or ownership.get("exporter_authority") != self.runtime_control_plane_authority:
+            raise RuntimeError(
+                "Rust runtime metric record compiler returned an unexpected authority marker: "
+                f"{ownership!r}"
+            )
+        return resolved
+
     def background_control(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Resolve background admission/retry policy through the Rust runtime core."""
 
@@ -529,6 +625,9 @@ class RustRouteAdapter:
             "checkpoint_resume_manifest_schema_version": self.checkpoint_resume_manifest_schema_version,
             "transport_binding_write_schema_version": self.transport_binding_write_schema_version,
             "checkpoint_manifest_write_schema_version": self.checkpoint_manifest_write_schema_version,
+            "runtime_observability_exporter_schema_version": self.runtime_observability_exporter_schema_version,
+            "runtime_observability_metric_record_schema_version": self.runtime_observability_metric_record_schema_version,
+            "runtime_observability_dashboard_schema_version": self.runtime_observability_dashboard_schema_version,
             "trace_descriptor_authority": self.trace_descriptor_authority,
             "checkpoint_resume_manifest_authority": self.checkpoint_resume_manifest_authority,
             "transport_binding_write_authority": self.transport_binding_write_authority,

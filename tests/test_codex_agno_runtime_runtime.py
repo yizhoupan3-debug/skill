@@ -106,6 +106,13 @@ def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> 
         assert health["rustification"]["python_host_role"] == "thin-projection"
         assert health["rustification"]["rustification_status"]["runtime_primary_owner"] == "rust-control-plane"
         assert health["rustification"]["rust_owned_service_count"] >= 8
+        assert health["trace"]["observability"]["ownership_lane"] == "rust-contract-lane"
+        assert health["trace"]["observability"]["dashboard_schema_version"] == (
+            "runtime-observability-dashboard-v1"
+        )
+        assert health["trace"]["observability"]["exporter"]["producer_authority"] == (
+            "rust-runtime-control-plane"
+        )
 
         async def _run() -> None:
             response = await runtime.run_task(
@@ -517,8 +524,18 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             assert attached["trace_stream_path"].endswith("TRACE_EVENTS.jsonl")
             assert attached["cleanup_semantics"] == "no_persisted_state"
             assert attached["cleanup_preserves_replay"] is True
+            assert attached["attach_descriptor"]["schema_version"] == "runtime-event-attach-descriptor-v1"
+            assert attached["attach_descriptor"]["attach_capabilities"] == {
+                "artifact_replay": True,
+                "live_remote_stream": False,
+                "cleanup_preserves_replay": True,
+            }
+            assert attached["attach_descriptor"]["resolved_artifacts"]["binding_artifact_path"] == (
+                transport["binding_artifact_path"]
+            )
+            assert attached["attach_descriptor"]["resolution"]["binding_artifact_path"] == "explicit_request"
             resumed_via_binding = attached_runtime.subscribe_attached_runtime_events(
-                binding_artifact_path=transport["binding_artifact_path"],
+                attach_descriptor=attached["attach_descriptor"],
                 after_event_id=first_window["events"][-1]["event_id"],
                 limit=20,
             )
@@ -532,15 +549,21 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             assert attached_via_manifest["handoff"] is None
             assert attached_via_manifest["resume_manifest"]["session_id"] == response.session_id
             assert attached_via_manifest["binding_artifact_path"] == transport["binding_artifact_path"]
+            assert attached_via_manifest["attach_descriptor"]["resolution"]["binding_artifact_path"] == (
+                "resume_manifest"
+            )
+            assert attached_via_manifest["attach_descriptor"]["resolution"]["resume_manifest_path"] == (
+                "explicit_request"
+            )
             resumed_via_manifest = attached_runtime.subscribe_attached_runtime_events(
-                resume_manifest_path=handoff["resume_manifest_path"],
+                attach_descriptor=attached_via_manifest["attach_descriptor"],
                 after_event_id=first_window["events"][-1]["event_id"],
                 limit=20,
             )
             assert resumed_via_manifest["events"]
             assert resumed_via_manifest["after_event_id"] == first_window["events"][-1]["event_id"]
             manifest_cleanup = attached_runtime.cleanup_attached_runtime_event_transport(
-                resume_manifest_path=handoff["resume_manifest_path"]
+                attach_descriptor=attached_via_manifest["attach_descriptor"]
             )
             assert manifest_cleanup["cleanup_semantics"] == "no_persisted_state"
             assert manifest_cleanup["cleanup_preserves_replay"] is True
@@ -550,14 +573,20 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             attached_via_handoff = attached_runtime.attach_runtime_event_transport(handoff_path=str(handoff_path))
             assert attached_via_handoff["handoff"]["stream_id"] == handoff["stream_id"]
             assert attached_via_handoff["resume_manifest"]["session_id"] == response.session_id
+            assert attached_via_handoff["attach_descriptor"]["resolution"]["handoff_path"] == "explicit_request"
+            assert attached_via_handoff["attach_descriptor"]["resolution"]["resume_manifest_path"] == (
+                "handoff_manifest"
+            )
             idle_via_handoff = attached_runtime.subscribe_attached_runtime_events(
-                handoff_path=str(handoff_path),
+                attach_descriptor=attached_via_handoff["attach_descriptor"],
                 after_event_id=transport["latest_cursor"]["event_id"],
                 heartbeat=True,
             )
             assert idle_via_handoff["events"] == []
             assert idle_via_handoff["heartbeat"]["status"] == "idle"
-            attached_cleanup = attached_runtime.cleanup_attached_runtime_event_transport(handoff_path=str(handoff_path))
+            attached_cleanup = attached_runtime.cleanup_attached_runtime_event_transport(
+                attach_descriptor=attached_via_handoff["attach_descriptor"]
+            )
             assert attached_cleanup["cleanup_semantics"] == "no_persisted_state"
             assert attached_cleanup["cleanup_preserves_replay"] is True
 
@@ -722,9 +751,10 @@ def test_runtime_event_attach_replays_from_sqlite_backend(monkeypatch: pytest.Mo
             assert attached["artifact_backend_family"] == "sqlite"
             assert attached["transport"]["binding_backend_family"] == "sqlite"
             assert attached["resume_manifest"]["session_id"] == response.session_id
+            assert attached["attach_descriptor"]["resolution"]["binding_artifact_path"] == "explicit_request"
 
             replay = attached_runtime.subscribe_attached_runtime_events(
-                binding_artifact_path=transport["binding_artifact_path"],
+                attach_descriptor=attached["attach_descriptor"],
                 limit=20,
             )
             assert replay["events"]
@@ -735,6 +765,169 @@ def test_runtime_event_attach_replays_from_sqlite_backend(monkeypatch: pytest.Mo
             )
             assert attached_via_manifest["artifact_backend_family"] == "sqlite"
             assert attached_via_manifest["binding_artifact_path"] == transport["binding_artifact_path"]
+            assert attached_via_manifest["attach_descriptor"]["resolution"]["binding_artifact_path"] == (
+                "resume_manifest"
+            )
+
+        asyncio.run(_run())
+
+
+def test_runtime_event_attach_rejects_mismatched_handoff_binding_artifact(tmp_path: Path) -> None:
+    """External attach should fail closed when handoff metadata points at a different binding artifact."""
+
+    with _project_supervisor_state():
+        trace_path = tmp_path / "TRACE_METADATA.json"
+        runtime = CodexAgnoRuntime(
+            RuntimeSettings(
+                codex_home=PROJECT_ROOT,
+                data_dir=tmp_path / "runtime-data",
+                trace_output_path=trace_path,
+                live_model_override=False,
+            )
+        )
+
+        async def _run() -> None:
+            response = await runtime.run_task(
+                RunTaskRequest(
+                    task="帮我写一个 Rust CLI 工具",
+                    session_id="attach-mismatch-session",
+                    user_id="tester",
+                    dry_run=True,
+                )
+            )
+            transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
+            handoff = runtime.describe_runtime_event_handoff(session_id=response.session_id)
+
+            mismatched_handoff = dict(handoff)
+            mismatched_handoff["transport"] = dict(handoff["transport"])
+            mismatched_handoff["transport"]["binding_artifact_path"] = str(
+                Path(transport["binding_artifact_path"]).with_name("WRONG_RUNTIME_EVENT_TRANSPORT.json")
+            )
+            handoff_path = Path(transport["binding_artifact_path"]).with_name("MISMATCHED_RUNTIME_EVENT_HANDOFF.json")
+            handoff_path.write_text(
+                json.dumps(mismatched_handoff, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            attached_runtime = CodexAgnoRuntime(
+                RuntimeSettings(
+                    codex_home=PROJECT_ROOT,
+                    data_dir=tmp_path / "attached-runtime-data",
+                    trace_output_path=tmp_path / "ATTACHED_TRACE_METADATA.json",
+                    live_model_override=False,
+                )
+            )
+            with pytest.raises(
+                ValueError,
+                match="mismatched transport/handoff binding artifact paths",
+            ):
+                attached_runtime.attach_runtime_event_transport(
+                    binding_artifact_path=transport["binding_artifact_path"],
+                    handoff_path=str(handoff_path),
+                )
+
+        asyncio.run(_run())
+
+
+def test_runtime_event_attach_rejects_mismatched_resume_binding_artifact(tmp_path: Path) -> None:
+    """External attach should fail closed when resume metadata points at a different binding artifact."""
+
+    with _project_supervisor_state():
+        trace_path = tmp_path / "TRACE_METADATA.json"
+        runtime = CodexAgnoRuntime(
+            RuntimeSettings(
+                codex_home=PROJECT_ROOT,
+                data_dir=tmp_path / "runtime-data",
+                trace_output_path=trace_path,
+                live_model_override=False,
+            )
+        )
+
+        async def _run() -> None:
+            response = await runtime.run_task(
+                RunTaskRequest(
+                    task="帮我写一个 Rust CLI 工具",
+                    session_id="resume-mismatch-session",
+                    user_id="tester",
+                    dry_run=True,
+                )
+            )
+            transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
+            handoff = runtime.describe_runtime_event_handoff(session_id=response.session_id)
+            resume_manifest_path = Path(handoff["resume_manifest_path"])
+            resume_manifest = json.loads(resume_manifest_path.read_text(encoding="utf-8"))
+            resume_manifest["event_transport_path"] = str(
+                Path(transport["binding_artifact_path"]).with_name("WRONG_RUNTIME_EVENT_TRANSPORT.json")
+            )
+            mismatched_resume_path = resume_manifest_path.with_name("MISMATCHED_TRACE_RESUME_MANIFEST.json")
+            mismatched_resume_path.write_text(
+                json.dumps(resume_manifest, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            attached_runtime = CodexAgnoRuntime(
+                RuntimeSettings(
+                    codex_home=PROJECT_ROOT,
+                    data_dir=tmp_path / "attached-runtime-data",
+                    trace_output_path=tmp_path / "ATTACHED_TRACE_METADATA.json",
+                    live_model_override=False,
+                )
+            )
+            with pytest.raises(
+                ValueError,
+                match="mismatched transport/resume binding artifact paths",
+            ):
+                attached_runtime.attach_runtime_event_transport(
+                    binding_artifact_path=transport["binding_artifact_path"],
+                    resume_manifest_path=str(mismatched_resume_path),
+                )
+
+        asyncio.run(_run())
+
+
+def test_runtime_event_attach_rejects_conflicting_attach_descriptor_args(tmp_path: Path) -> None:
+    """Stable attach descriptors should fail closed when callers also pass conflicting direct paths."""
+
+    with _project_supervisor_state():
+        trace_path = tmp_path / "TRACE_METADATA.json"
+        runtime = CodexAgnoRuntime(
+            RuntimeSettings(
+                codex_home=PROJECT_ROOT,
+                data_dir=tmp_path / "runtime-data",
+                trace_output_path=trace_path,
+                live_model_override=False,
+            )
+        )
+
+        async def _run() -> None:
+            response = await runtime.run_task(
+                RunTaskRequest(
+                    task="帮我写一个 Rust CLI 工具",
+                    session_id="attach-descriptor-conflict-session",
+                    user_id="tester",
+                    dry_run=True,
+                )
+            )
+            transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
+            attached_runtime = CodexAgnoRuntime(
+                RuntimeSettings(
+                    codex_home=PROJECT_ROOT,
+                    data_dir=tmp_path / "attached-runtime-data",
+                    trace_output_path=tmp_path / "ATTACHED_TRACE_METADATA.json",
+                    live_model_override=False,
+                )
+            )
+            attach_descriptor = attached_runtime.attach_runtime_event_transport(
+                binding_artifact_path=transport["binding_artifact_path"]
+            )["attach_descriptor"]
+
+            with pytest.raises(ValueError, match="conflicting 'binding_artifact_path' values"):
+                attached_runtime.attach_runtime_event_transport(
+                    attach_descriptor=attach_descriptor,
+                    binding_artifact_path=str(
+                        Path(transport["binding_artifact_path"]).with_name("WRONG_RUNTIME_EVENT_TRANSPORT.json")
+                    ),
+                )
 
         asyncio.run(_run())
 
@@ -1184,7 +1377,7 @@ def test_prepare_session_shadow_mode_returns_soak_report(tmp_path: Path) -> None
     )
 
     assert prepared.route_engine == "rust"
-    assert prepared.rollback_to_python is False
+    assert prepared.diagnostic_python_lane_active is True
     assert prepared.shadow_route_report is not None
     assert prepared.shadow_route_report.report_schema_version == "router-rs-route-report-v1"
     assert prepared.shadow_route_report.authority == "rust-route-core"
@@ -1220,7 +1413,7 @@ def test_runtime_metadata_includes_shadow_route_report(tmp_path: Path) -> None:
         )
         assert response.metadata["route_engine_mode"] == "shadow"
         assert response.metadata["route_engine"] == "rust"
-        assert response.metadata["rollback_to_python"] is False
+        assert response.metadata["diagnostic_python_lane_active"] is True
         report = response.metadata["shadow_route_report"]
         assert report is not None
         assert report["report_schema_version"] == "router-rs-route-report-v1"

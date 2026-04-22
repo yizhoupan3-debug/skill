@@ -521,12 +521,9 @@ fn main() -> Result<(), String> {
 
     if args.describe_handoff_json {
         let payload = serde_json::from_str::<Value>(
-            args.describe_handoff_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--describe-handoff-input-json is required with --describe-handoff-json"
-                        .to_string()
-                })?,
+            args.describe_handoff_input_json.as_deref().ok_or_else(|| {
+                "--describe-handoff-input-json is required with --describe-handoff-json".to_string()
+            })?,
         )
         .map_err(|err| format!("parse describe handoff input failed: {err}"))?;
         println!(
@@ -1205,9 +1202,13 @@ fn text_matches_phrase(task_tokens: &[String], phrase: &str) -> bool {
         return false;
     }
     for start in 0..=(task_tokens.len() - phrase_tokens.len()) {
-        if phrase_tokens.iter().enumerate().all(|(offset, phrase_token)| {
-            phrase_token_matches(&task_tokens[start + offset], phrase_token)
-        }) {
+        if phrase_tokens
+            .iter()
+            .enumerate()
+            .all(|(offset, phrase_token)| {
+                phrase_token_matches(&task_tokens[start + offset], phrase_token)
+            })
+        {
             return true;
         }
     }
@@ -2235,7 +2236,11 @@ fn build_attach_target_payload(
     })
 }
 
-fn build_replay_anchor_payload(latest_cursor: Value, resume_mode: &str, replay_supported: bool) -> Value {
+fn build_replay_anchor_payload(
+    latest_cursor: Value,
+    resume_mode: &str,
+    replay_supported: bool,
+) -> Value {
     serde_json::json!({
         "anchor_kind": "trace_replay_cursor",
         "cursor_schema_version": "runtime-trace-cursor-v1",
@@ -2247,7 +2252,10 @@ fn build_replay_anchor_payload(latest_cursor: Value, resume_mode: &str, replay_s
 
 fn build_transport_health_payload(payload: &Value) -> Value {
     if payload.get("transport_health").is_some() {
-        return payload.get("transport_health").cloned().unwrap_or(Value::Null);
+        return payload
+            .get("transport_health")
+            .cloned()
+            .unwrap_or(Value::Null);
     }
     if payload.get("control_plane").is_none() {
         return Value::Null;
@@ -2284,13 +2292,22 @@ fn build_trace_transport_payload(
     let binding_backend_family = optional_non_empty_string(payload, "binding_backend_family")
         .or_else(|| nested_non_empty_string(payload, &["control_plane", "backend_family"]));
     let control_plane_authority = optional_non_empty_string(payload, "control_plane_authority")
-        .or_else(|| nested_non_empty_string(payload, &["control_plane", "trace_service", "authority"]));
+        .or_else(|| {
+            nested_non_empty_string(payload, &["control_plane", "trace_service", "authority"])
+        });
     let control_plane_role = optional_non_empty_string(payload, "control_plane_role")
         .or_else(|| nested_non_empty_string(payload, &["control_plane", "trace_service", "role"]));
     let control_plane_projection = optional_non_empty_string(payload, "control_plane_projection")
-        .or_else(|| nested_non_empty_string(payload, &["control_plane", "trace_service", "projection"]));
-    let control_plane_delegate_kind = optional_non_empty_string(payload, "control_plane_delegate_kind")
-        .or_else(|| nested_non_empty_string(payload, &["control_plane", "trace_service", "delegate_kind"]));
+        .or_else(|| {
+            nested_non_empty_string(payload, &["control_plane", "trace_service", "projection"])
+        });
+    let control_plane_delegate_kind =
+        optional_non_empty_string(payload, "control_plane_delegate_kind").or_else(|| {
+            nested_non_empty_string(
+                payload,
+                &["control_plane", "trace_service", "delegate_kind"],
+            )
+        });
     let attach_target = build_attach_target_payload(
         &session_id,
         job_id.as_deref(),
@@ -2300,7 +2317,8 @@ fn build_trace_transport_payload(
         &cleanup_method,
         &handoff_method,
     );
-    let replay_anchor = build_replay_anchor_payload(latest_cursor.clone(), &resume_mode, replay_supported);
+    let replay_anchor =
+        build_replay_anchor_payload(latest_cursor.clone(), &resume_mode, replay_supported);
 
     serde_json::json!({
         "schema_version": "runtime-event-transport-v1",
@@ -2367,17 +2385,22 @@ fn build_trace_handoff_descriptor(payload: Value) -> Result<Value, String> {
     let transport_source = payload.get("transport").cloned().unwrap_or(Value::Null);
     let transport_session_id = optional_non_empty_string(&transport_source, "session_id")
         .unwrap_or_else(|| session_id.clone());
-    let transport_job_id = optional_non_empty_string(&transport_source, "job_id")
-        .or_else(|| job_id.clone());
+    let transport_job_id =
+        optional_non_empty_string(&transport_source, "job_id").or_else(|| job_id.clone());
     let transport = if transport_source.is_object() {
-        build_trace_transport_payload(&transport_source, transport_session_id.clone(), transport_job_id.clone())
+        build_trace_transport_payload(
+            &transport_source,
+            transport_session_id.clone(),
+            transport_job_id.clone(),
+        )
     } else {
         build_trace_transport_payload(&payload, session_id.clone(), job_id.clone())
     };
-    let checkpoint_backend_family = optional_non_empty_string(&payload, "checkpoint_backend_family")
-        .or_else(|| optional_non_empty_string(&transport, "binding_backend_family"))
-        .or_else(|| nested_non_empty_string(&payload, &["control_plane", "backend_family"]))
-        .unwrap_or_else(|| "filesystem".to_string());
+    let checkpoint_backend_family =
+        optional_non_empty_string(&payload, "checkpoint_backend_family")
+            .or_else(|| optional_non_empty_string(&transport, "binding_backend_family"))
+            .or_else(|| nested_non_empty_string(&payload, &["control_plane", "backend_family"]))
+            .unwrap_or_else(|| "filesystem".to_string());
     let trace_stream_path = optional_non_empty_string(&payload, "trace_stream_path");
     let resume_manifest_path = optional_non_empty_string(&payload, "resume_manifest_path");
     let recovery_artifacts = payload
@@ -2421,9 +2444,11 @@ fn build_trace_handoff_descriptor(payload: Value) -> Result<Value, String> {
 }
 
 fn build_checkpoint_resume_manifest(payload: Value) -> Result<Value, String> {
-    let session_id = required_non_empty_string(&payload, "session_id", "checkpoint resume manifest")?;
+    let session_id =
+        required_non_empty_string(&payload, "session_id", "checkpoint resume manifest")?;
     let job_id = optional_non_empty_string(&payload, "job_id");
-    let status = optional_non_empty_string(&payload, "status").unwrap_or_else(|| "running".to_string());
+    let status =
+        optional_non_empty_string(&payload, "status").unwrap_or_else(|| "running".to_string());
     let generation = payload
         .get("generation")
         .and_then(Value::as_i64)
@@ -2466,8 +2491,12 @@ fn write_json_payload(path: &Path, payload: &Value) -> Result<usize, String> {
             .map_err(|err| format!("serialize persisted payload failed: {err}"))?
     );
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("create parent directory for {} failed: {err}", path.display()))?;
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "create parent directory for {} failed: {err}",
+                path.display()
+            )
+        })?;
     }
     let file_name = path
         .file_name()
@@ -2478,7 +2507,7 @@ fn write_json_payload(path: &Path, payload: &Value) -> Result<usize, String> {
         .map_err(|err| format!("write temp payload {} failed: {err}", tmp_path.display()))?;
     fs::rename(&tmp_path, path)
         .map_err(|err| format!("replace payload {} failed: {err}", path.display()))?;
-    Ok(serialized.as_bytes().len())
+    Ok(serialized.len())
 }
 
 fn write_transport_binding_payload(payload: Value) -> Result<Value, String> {
@@ -2762,7 +2791,9 @@ fn build_runtime_metric_record(payload: Value) -> Result<Value, String> {
     let metric_name = required_non_empty_string(&payload, "metric_name", "runtime metric record")?;
     let spec = runtime_observability_metric_catalog()
         .into_iter()
-        .find(|entry| entry.get("metric_name").and_then(Value::as_str) == Some(metric_name.as_str()))
+        .find(|entry| {
+            entry.get("metric_name").and_then(Value::as_str) == Some(metric_name.as_str())
+        })
         .ok_or_else(|| format!("unsupported runtime metric: {metric_name}"))?;
 
     let value = payload
@@ -2776,11 +2807,14 @@ fn build_runtime_metric_record(payload: Value) -> Result<Value, String> {
         return Err("metric value must be finite".to_string());
     }
 
-    let service_name = required_non_empty_string(&payload, "service_name", "runtime metric record")?;
-    let service_version = required_non_empty_string(&payload, "service_version", "runtime metric record")?;
+    let service_name =
+        required_non_empty_string(&payload, "service_name", "runtime metric record")?;
+    let service_version =
+        required_non_empty_string(&payload, "service_version", "runtime metric record")?;
     let runtime_instance_id =
         required_non_empty_string(&payload, "runtime_instance_id", "runtime metric record")?;
-    let route_engine_mode = required_non_empty_string(&payload, "route_engine_mode", "runtime metric record")?;
+    let route_engine_mode =
+        required_non_empty_string(&payload, "route_engine_mode", "runtime metric record")?;
     let job_id = required_non_empty_string(&payload, "job_id", "runtime metric record")?;
     let session_id = required_non_empty_string(&payload, "session_id", "runtime metric record")?;
     let worker_id = required_non_empty_string(&payload, "worker_id", "runtime metric record")?;
@@ -2790,7 +2824,9 @@ fn build_runtime_metric_record(payload: Value) -> Result<Value, String> {
         .and_then(Value::as_i64)
         .ok_or_else(|| "runtime metric record requires integer field attempt".to_string())?;
     if attempt < 0 {
-        return Err("runtime metric record requires non-negative integer field attempt".to_string());
+        return Err(
+            "runtime metric record requires non-negative integer field attempt".to_string(),
+        );
     }
 
     Ok(json!({
@@ -2883,7 +2919,14 @@ fn estimate_tokens(text: &str) -> usize {
 }
 
 fn gsd_execution_markers() -> [&'static str; 6] {
-    ["gsd", "get shit done", "推进到底", "别停", "直接干完", "一路做完"]
+    [
+        "gsd",
+        "get shit done",
+        "推进到底",
+        "别停",
+        "直接干完",
+        "一路做完",
+    ]
 }
 
 fn build_route_policy(
@@ -2938,9 +2981,12 @@ fn build_route_policy(
             ))
         }
     };
-    if (policy.diff_report_required || policy.verify_parity_required) && !policy.diagnostic_python_lane {
+    if (policy.diff_report_required || policy.verify_parity_required)
+        && !policy.diagnostic_python_lane
+    {
         return Err(
-            "route policy declared diff/verify requirements outside the diagnostic lane".to_string(),
+            "route policy declared diff/verify requirements outside the diagnostic lane"
+                .to_string(),
         );
     }
     if policy.verify_parity_required && !policy.diff_report_required {
@@ -3093,9 +3139,15 @@ fn score_route_candidate(
     }
 
     if record.slug == "subagent-delegation" && score > 0.0 {
-        let explicit_delegation = ["sidecar", "subagent", "delegation", "子代理", "并行 sidecar"]
-            .iter()
-            .any(|marker| query_text.contains(*marker));
+        let explicit_delegation = [
+            "sidecar",
+            "subagent",
+            "delegation",
+            "子代理",
+            "并行 sidecar",
+        ]
+        .iter()
+        .any(|marker| query_text.contains(*marker));
         let controller_markers = [
             "高负载",
             "跨文件",
@@ -3308,9 +3360,15 @@ fn pick_overlay(
     }
 
     if selected_skill.slug == "skill-developer-codex"
-        && ["review", "framework-review", "routing-review", "审查", "审核"]
-            .iter()
-            .any(|marker| text_matches_phrase(query_tokens, marker))
+        && [
+            "review",
+            "framework-review",
+            "routing-review",
+            "审查",
+            "审核",
+        ]
+        .iter()
+        .any(|marker| text_matches_phrase(query_tokens, marker))
     {
         if let Some(skill) = records.iter().find(|record| record.slug == "code-review") {
             return Some(skill.slug.clone());
@@ -3634,7 +3692,10 @@ mod tests {
             payload["exporter_authority"],
             Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
         );
-        assert_eq!(payload["export_path"], Value::String("jsonl-plus-otel".to_string()));
+        assert_eq!(
+            payload["export_path"],
+            Value::String("jsonl-plus-otel".to_string())
+        );
     }
 
     #[test]
@@ -3647,8 +3708,12 @@ mod tests {
             dashboard["schema_version"],
             Value::String(RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION.to_string())
         );
-        assert!(resource_dimensions.iter().any(|value| value == "service.name"));
-        assert!(resource_dimensions.iter().any(|value| value == "runtime.generation"));
+        assert!(resource_dimensions
+            .iter()
+            .any(|value| value == "service.name"));
+        assert!(resource_dimensions
+            .iter()
+            .any(|value| value == "runtime.generation"));
 
         let record = build_runtime_metric_record(json!({
             "metric_name": "runtime.route_mismatch_total",
@@ -3668,10 +3733,7 @@ mod tests {
             record["schema_version"],
             Value::String(RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION.to_string())
         );
-        assert_eq!(
-            record["metric_type"],
-            Value::String("counter".to_string())
-        );
+        assert_eq!(record["metric_type"], Value::String("counter".to_string()));
         assert_eq!(record["unit"], Value::String("1".to_string()));
         assert_eq!(
             record["dimensions"]["runtime.stage"],
@@ -4087,6 +4149,10 @@ mod tests {
             response.metadata["execution_kernel_authority"],
             EXECUTION_AUTHORITY
         );
+        assert_eq!(
+            response.metadata["diagnostic_python_lane_active"],
+            Value::Bool(false)
+        );
     }
 
     #[test]
@@ -4102,7 +4168,7 @@ mod tests {
         assert!(prompt.contains("Active overlay skill: rust-pro"));
         assert!(prompt.contains("Routing layer: L2"));
         assert!(prompt.contains("Route engine: rust"));
-        assert!(prompt.contains("Rollback to python: false"));
+        assert!(prompt.contains("Diagnostic python lane active: false"));
         assert!(prompt.contains("Trigger phrase matched: 直接做代码."));
     }
 

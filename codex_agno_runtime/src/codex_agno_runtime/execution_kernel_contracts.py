@@ -56,7 +56,7 @@ LIVE_PRIMARY_RUNTIME_METADATA_FIELDS = (
     "status",
     "execution_mode",
     "route_engine",
-    "rollback_to_python",
+    "diagnostic_python_lane_active",
 )
 LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS = (
     "run_id",
@@ -66,7 +66,7 @@ LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS = (
 LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS = (
     "execution_mode",
     "route_engine",
-    "rollback_to_python",
+    "diagnostic_python_lane_active",
 )
 DRY_RUN_RUNTIME_METADATA_FIELDS = (
     "reason",

@@ -40,6 +40,7 @@ from codex_agno_runtime.host_adapters import (
 )
 from codex_agno_runtime.memory import FactMemoryStore
 from codex_agno_runtime.middleware import MiddlewareContext
+from codex_agno_runtime.observability import build_runtime_observability_health_snapshot
 from codex_agno_runtime.prompt_builder import PromptBuilder
 from codex_agno_runtime.router import SkillRouter
 from codex_agno_runtime.rust_router import RustRouteAdapter
@@ -759,7 +760,7 @@ class RouterService:
             return self._decorate_route_result(
                 python_result,
                 route_engine="python",
-                rollback_to_python=False,
+                diagnostic_python_lane_active=False,
                 report=None,
             )
 
@@ -781,7 +782,7 @@ class RouterService:
         return self._decorate_route_result(
             rust_result,
             route_engine="rust",
-            rollback_to_python=False,
+            diagnostic_python_lane_active=policy.diagnostic_python_lane,
             report=report,
         )
 
@@ -801,7 +802,7 @@ class RouterService:
                 "default_route_authority",
                 self._rust_adapter.route_authority,
             ),
-            "rollback_to_python": policy.primary_authority == "python" and policy.rollback_active,
+            "diagnostic_python_lane_active": policy.diagnostic_python_lane,
             "configured_rollback_to_python": self.settings.rust_route_rollback_to_python,
             "loaded_skill_count": len(self.skills),
             "skill_root": str(self.settings.codex_home / "skills"),
@@ -877,13 +878,13 @@ class RouterService:
         result: RoutingResult,
         *,
         route_engine: str,
-        rollback_to_python: bool,
+        diagnostic_python_lane_active: bool,
         report: RouteDiffReport | None,
     ) -> RoutingResult:
         return result.model_copy(
             update={
                 "route_engine": route_engine,
-                "rollback_to_python": rollback_to_python,
+                "diagnostic_python_lane_active": diagnostic_python_lane_active,
                 "shadow_route_report": report,
             }
         )
@@ -1255,6 +1256,7 @@ class TraceService:
             "replay_supported": self.recorder.describe_stream()["replay_supported"],
             "event_bridge_supported": True,
             "event_bridge_schema_version": self.event_bridge.schema_version,
+            "observability": build_runtime_observability_health_snapshot(),
             "background_effect_host_contract": _runtime_background_effect_host_contract(
                 self._control_plane_descriptor,
                 self._service_descriptor,
