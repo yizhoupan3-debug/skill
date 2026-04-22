@@ -327,7 +327,30 @@ def run_rust_route_json(
     runtime_path: Path | None = RUNTIME_PATH,
     manifest_path: Path | None = MANIFEST_PATH,
 ) -> dict[str, object]:
-    """Run Rust final route decision output without execv side effects."""
+    """Return the compatibility transport payload from the typed route contract."""
+
+    return run_rust_route_contract(
+        query,
+        session_id=session_id,
+        allow_overlay=allow_overlay,
+        first_turn=first_turn,
+        limit=limit,
+        runtime_path=runtime_path,
+        manifest_path=manifest_path,
+    ).to_transport_payload()
+
+
+def _run_rust_route_transport(
+    query: str,
+    *,
+    session_id: str = "route-cli",
+    allow_overlay: bool = True,
+    first_turn: bool = True,
+    limit: int = 5,
+    runtime_path: Path | None = RUNTIME_PATH,
+    manifest_path: Path | None = MANIFEST_PATH,
+) -> dict[str, object]:
+    """Run the raw Rust route transport and keep JSON handling at the subprocess boundary."""
 
     args = build_rust_router_command(
         query=query,
@@ -368,7 +391,7 @@ def run_rust_route_contract(
     """Return the Rust route decision as a typed contract."""
 
     return RouteDecisionContract.model_validate(
-        run_rust_route_json(
+        _run_rust_route_transport(
             query,
             session_id=session_id,
             allow_overlay=allow_overlay,
@@ -428,16 +451,16 @@ def route_decision_json(
     runtime_path: Path | None = None,
     manifest_path: Path | None = None,
 ) -> dict[str, object]:
-    """Return the Rust route decision in transport-shim form."""
+    """Return the compatibility transport payload exported from the typed route contract."""
 
-    return run_rust_route_json(
+    return route_decision_contract(
         query,
         session_id=session_id,
         allow_overlay=allow_overlay,
         first_turn=first_turn,
         runtime_path=runtime_path if runtime_path is not None else RUNTIME_PATH,
         manifest_path=manifest_path if manifest_path is not None else MANIFEST_PATH,
-    )
+    ).to_transport_payload()
 
 
 def route_decision_contract(
@@ -536,13 +559,13 @@ def main() -> None:
         return
 
     if args.route_json:
-        decision = route_decision_json(
+        decision = route_decision_contract(
             args.query,
             session_id=args.session_id,
             allow_overlay=args.allow_overlay,
             first_turn=args.first_turn,
         )
-        print(json.dumps(decision, indent=2, ensure_ascii=False))
+        print(json.dumps(decision.to_transport_payload(), indent=2, ensure_ascii=False))
         return
 
     matches = search_skills(args.query, limit=args.limit)

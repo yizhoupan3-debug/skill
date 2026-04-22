@@ -112,6 +112,11 @@ class RouteDecisionContract(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     route_snapshot: RouteDecisionSnapshot
 
+    def to_transport_payload(self) -> dict[str, Any]:
+        """Serialize the typed contract back to the transport JSON shape."""
+
+        return self.model_dump(mode="json")
+
     @model_validator(mode="after")
     def _validate_rust_route_decision_contract(self) -> "RouteDecisionContract":
         if self.route_snapshot.engine != "rust":

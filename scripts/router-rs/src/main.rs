@@ -32,6 +32,8 @@ const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
 const EXECUTION_SCHEMA_VERSION: &str = "router-rs-execute-response-v1";
 const EXECUTION_METADATA_SCHEMA_VERSION: &str = "router-rs-execution-kernel-metadata-v1";
 const EXECUTION_AUTHORITY: &str = "rust-execution-cli";
+const EXECUTION_KERNEL_BRIDGE_KIND: &str = "rust-execution-kernel-slice";
+const EXECUTION_KERNEL_BRIDGE_AUTHORITY: &str = "rust-execution-kernel-authority";
 const EXECUTION_KERNEL_CONTRACT_MODE: &str = "rust-live-primary";
 const EXECUTION_KERNEL_FALLBACK_POLICY: &str = "infrastructure-only-explicit";
 const EXECUTION_KERNEL_DELEGATE_FAMILY: &str = "rust-cli";
@@ -2141,11 +2143,11 @@ fn build_steady_state_execution_kernel_metadata(response_shape: &str) -> Map<Str
     );
     metadata.insert(
         "execution_kernel".to_string(),
-        Value::String(EXECUTION_KERNEL_DELEGATE_IMPL.to_string()),
+        Value::String(EXECUTION_KERNEL_BRIDGE_KIND.to_string()),
     );
     metadata.insert(
         "execution_kernel_authority".to_string(),
-        Value::String(EXECUTION_AUTHORITY.to_string()),
+        Value::String(EXECUTION_KERNEL_BRIDGE_AUTHORITY.to_string()),
     );
     metadata.insert(
         "execution_kernel_contract_mode".to_string(),
@@ -4927,14 +4929,17 @@ mod tests {
         assert_eq!(response.overlay.as_deref(), Some("rust-pro"));
         assert_eq!(response.usage.mode, "estimated");
         assert_eq!(response.model_id, None);
-        assert_eq!(response.metadata["execution_kernel"], "router-rs");
+        assert_eq!(
+            response.metadata["execution_kernel"],
+            EXECUTION_KERNEL_BRIDGE_KIND
+        );
         assert_eq!(
             response.metadata["execution_kernel_metadata_schema_version"],
             EXECUTION_METADATA_SCHEMA_VERSION
         );
         assert_eq!(
             response.metadata["execution_kernel_authority"],
-            EXECUTION_AUTHORITY
+            EXECUTION_KERNEL_BRIDGE_AUTHORITY
         );
         assert_eq!(
             response.metadata["execution_kernel_response_shape"],
@@ -5014,10 +5019,13 @@ mod tests {
             response.prompt_preview.as_deref(),
             Some("Python supplied live prompt")
         );
-        assert_eq!(response.metadata["execution_kernel"], "router-rs");
+        assert_eq!(
+            response.metadata["execution_kernel"],
+            EXECUTION_KERNEL_BRIDGE_KIND
+        );
         assert_eq!(
             response.metadata["execution_kernel_authority"],
-            EXECUTION_AUTHORITY
+            EXECUTION_KERNEL_BRIDGE_AUTHORITY
         );
         assert_eq!(
             response.metadata["execution_kernel_metadata_schema_version"],

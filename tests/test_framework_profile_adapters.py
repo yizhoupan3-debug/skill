@@ -188,6 +188,72 @@ def test_framework_profile_emits_host_neutral_shared_contract_surface() -> None:
     }
 
 
+def test_cli_common_shared_contract_keeps_framework_truth_under_host_overrides() -> None:
+    profile = build_framework_profile(
+        profile_id="shared-contract-host-overrides",
+        display_name="Shared Contract Host Overrides",
+        session_policy={"mode": "bounded", "approval_mode": "manual"},
+        tool_policy={"shell": "allow"},
+        approval_policy={"mode": "manual"},
+        loadout_policy={"default": "framework"},
+        artifact_contract={"layout": "stable-v1"},
+        memory_mounts=(
+            {"mount_id": "project", "source": ".codex/memory"},
+            "user",
+        ),
+        mcp_servers=({"server_id": "local-memory", "transport": "stdio"},),
+        workspace_bootstrap={"skill_bridge": {"project_dir": ".codex/skills"}},
+    )
+
+    cli_common = compile_cli_common_adapter(
+        profile,
+        host_overrides={
+            "workspace_bootstrap": {
+                "bridges": {
+                    "skills": {"project_dir": "host-shadow/.codex/skills"},
+                    "memory": {"bridge_dir": "host-shadow-memory"},
+                }
+            },
+            "tool_policy": {"shell": "deny"},
+            "metadata": {"host_shadow": True},
+        },
+    ).host_payload
+    canonical_shared_contract = profile.shared_contract_surface()
+
+    assert cli_common["metadata"]["host_shadow"] is True
+    assert cli_common["workspace_bootstrap"]["bridges"]["skills"]["project_dir"] == (
+        "host-shadow/.codex/skills"
+    )
+    assert cli_common["shared_contract"]["workspace_bootstrap"] == canonical_shared_contract[
+        "workspace_bootstrap"
+    ]
+    assert cli_common["shared_contract"]["tool_policy"] == canonical_shared_contract["tool_policy"]
+    assert cli_common["shared_contract"]["session_contract"] == canonical_shared_contract[
+        "session_contract"
+    ]
+    assert cli_common["bridge_contract"] == canonical_shared_contract["workspace_bootstrap"]["bridges"]
+
+    desktop = compile_codex_desktop_adapter(
+        profile,
+        host_overrides={
+            "workspace_bootstrap": {
+                "bridges": {
+                    "skills": {"project_dir": "desktop-shadow/.codex/skills"},
+                }
+            }
+        },
+    ).host_payload
+    assert desktop["workspace_bootstrap"]["bridges"]["skills"]["project_dir"] == (
+        "desktop-shadow/.codex/skills"
+    )
+    assert desktop["common_contract"]["workspace_bootstrap"] == canonical_shared_contract[
+        "workspace_bootstrap"
+    ]
+    assert desktop["runtime_surface"]["workspace_bootstrap"] == canonical_shared_contract[
+        "workspace_bootstrap"
+    ]
+
+
 def test_framework_profile_rejects_host_specific_metadata_in_framework_truth() -> None:
     try:
         build_framework_profile(

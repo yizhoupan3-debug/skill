@@ -11,6 +11,11 @@ from typing import Any
 
 from codex_agno_runtime.config import RuntimeSettings
 from codex_agno_runtime.execution_kernel_contracts import (
+    EXECUTION_KERNEL_BRIDGE_AUTHORITY,
+    EXECUTION_KERNEL_BRIDGE_KIND,
+    EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
+    EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
+    EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
     EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION,
     decode_router_rs_execution_response,
 )
@@ -143,8 +148,10 @@ class RouterRsInfrastructureError(RouterRsExecutionError):
 class RouterRsExecutionKernel(ExecutionKernel):
     """Rust-owned execution slice invoked out-of-process through router-rs."""
 
-    adapter_kind = "router-rs"
-    authority = "rust-execution-cli"
+    adapter_kind = EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL
+    authority = EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY
+    bridge_kind = EXECUTION_KERNEL_BRIDGE_KIND
+    bridge_authority = EXECUTION_KERNEL_BRIDGE_AUTHORITY
     execution_schema_version = "router-rs-execute-response-v1"
 
     def __init__(self, settings: RuntimeSettings) -> None:
@@ -270,8 +277,12 @@ class RouterRsExecutionKernel(ExecutionKernel):
         try:
             return decode_router_rs_execution_response(
                 payload,
-                execution_kernel=self.adapter_kind,
-                execution_kernel_authority=self.authority,
+                execution_kernel=self.bridge_kind,
+                execution_kernel_authority=self.bridge_authority,
+                execution_kernel_delegate=self.adapter_kind,
+                execution_kernel_delegate_authority=self.authority,
+                execution_kernel_delegate_family=EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
+                execution_kernel_delegate_impl=EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
             )
         except RuntimeError as exc:
             raise RouterRsInfrastructureError(str(exc)) from exc

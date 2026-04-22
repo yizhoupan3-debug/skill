@@ -27,6 +27,7 @@ from codex_agno_runtime.schemas import (
 )
 from scripts.route import (
     build_rust_router_command,
+    route_decision_contract,
     route_decision_json,
     run_rust_route_contract,
     run_rust_route_json,
@@ -100,6 +101,72 @@ def test_run_rust_route_contract_exposes_typed_decision() -> None:
     assert decision.selected_skill == "execution-controller-coding"
     assert decision.overlay_skill is None
     assert decision.route_snapshot.selected_skill == decision.selected_skill
+
+
+def test_run_rust_route_json_exports_transport_payload_from_typed_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = RouteDecisionContract.model_validate(
+        {
+            "decision_schema_version": "router-rs-route-decision-v1",
+            "authority": "rust-route-core",
+            "compile_authority": "rust-route-compiler",
+            "task": "typed-first transport export",
+            "session_id": "typed-first-transport-session",
+            "selected_skill": "execution-controller-coding",
+            "overlay_skill": None,
+            "layer": "L2",
+            "score": 42.0,
+            "reasons": ["Trigger phrase matched: gsd."],
+            "route_snapshot": {
+                "engine": "rust",
+                "selected_skill": "execution-controller-coding",
+                "overlay_skill": None,
+                "layer": "L2",
+                "score": 42.0,
+                "score_bucket": "40-49",
+                "reasons": ["Trigger phrase matched: gsd."],
+                "reasons_class": "trigger phrase matched: gsd.",
+            },
+        }
+    )
+
+    monkeypatch.setattr("scripts.route.run_rust_route_contract", lambda *args, **kwargs: contract)
+
+    assert run_rust_route_json("typed first") == contract.to_transport_payload()
+
+
+def test_route_decision_json_exports_transport_payload_from_typed_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = RouteDecisionContract.model_validate(
+        {
+            "decision_schema_version": "router-rs-route-decision-v1",
+            "authority": "rust-route-core",
+            "compile_authority": "rust-route-compiler",
+            "task": "route cli typed first",
+            "session_id": "route-cli-typed-session",
+            "selected_skill": "skill-developer-codex",
+            "overlay_skill": "anti-laziness",
+            "layer": "L2",
+            "score": 55.0,
+            "reasons": ["Trigger phrase matched: route."],
+            "route_snapshot": {
+                "engine": "rust",
+                "selected_skill": "skill-developer-codex",
+                "overlay_skill": "anti-laziness",
+                "layer": "L2",
+                "score": 55.0,
+                "score_bucket": "50-59",
+                "reasons": ["Trigger phrase matched: route."],
+                "reasons_class": "trigger phrase matched: route.",
+            },
+        }
+    )
+
+    monkeypatch.setattr("scripts.route.route_decision_contract", lambda *args, **kwargs: contract)
+
+    assert route_decision_json("route cli typed first") == contract.to_transport_payload()
 
 
 def _seed_framework_runtime_artifacts(repo_root: Path, *, terminal: bool) -> None:
@@ -714,6 +781,45 @@ def test_rust_route_adapter_route_contract_returns_typed_rust_owned_contract() -
     assert contract.route_snapshot.selected_skill == contract.selected_skill
     assert contract.route_snapshot.overlay_skill == contract.overlay_skill
     assert contract.route_snapshot.layer == contract.layer
+
+
+def test_rust_route_adapter_route_exports_transport_payload_from_typed_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    contract = RouteDecisionContract.model_validate(
+        {
+            "decision_schema_version": adapter.route_decision_schema_version,
+            "authority": adapter.route_authority,
+            "compile_authority": adapter.compile_authority,
+            "task": "adapter compatibility export",
+            "session_id": "adapter-compat-session",
+            "selected_skill": "execution-controller-coding",
+            "overlay_skill": None,
+            "layer": "L2",
+            "score": 41.0,
+            "reasons": ["Trigger phrase matched: gsd."],
+            "route_snapshot": {
+                "engine": "rust",
+                "selected_skill": "execution-controller-coding",
+                "overlay_skill": None,
+                "layer": "L2",
+                "score": 41.0,
+                "score_bucket": "40-49",
+                "reasons": ["Trigger phrase matched: gsd."],
+                "reasons_class": "trigger phrase matched: gsd.",
+            },
+        }
+    )
+
+    monkeypatch.setattr(adapter, "route_contract", lambda **_: contract)
+
+    assert adapter.route(
+        query="adapter compatibility export",
+        session_id="adapter-compat-session",
+        allow_overlay=True,
+        first_turn=True,
+    ) == contract.to_transport_payload()
 
 
 def test_route_decision_contract_rejects_snapshot_drift() -> None:

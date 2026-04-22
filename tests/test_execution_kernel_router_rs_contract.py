@@ -17,6 +17,8 @@ if str(RUNTIME_SRC) not in sys.path:
 
 from codex_agno_runtime.execution_kernel import ExecutionKernelRequest, RouterRsExecutionKernel
 from codex_agno_runtime.execution_kernel_contracts import (
+    EXECUTION_KERNEL_BRIDGE_AUTHORITY,
+    EXECUTION_KERNEL_BRIDGE_KIND,
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION,
@@ -36,6 +38,7 @@ from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
     LIVE_PRIMARY_MODEL_ID_SOURCE,
     LIVE_PRIMARY_PROMPT_PREVIEW_OWNER,
+    build_execution_kernel_bridge_metadata_projection,
     build_execution_kernel_dry_run_response,
     build_execution_kernel_live_response_serialization_contract_core,
     build_execution_kernel_runtime_metadata,
@@ -73,8 +76,8 @@ def _steady_state_kernel_metadata(**extra: object) -> dict[str, object]:
     merged_extra = dict(extra)
     merged_extra.setdefault(EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY, LIVE_PRIMARY_MODEL_ID_SOURCE)
     return build_execution_kernel_runtime_metadata(
-        execution_kernel="router-rs",
-        execution_kernel_authority="rust-execution-cli",
+        execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
+        execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
         trace_event_count=int(merged_extra.pop("trace_event_count")),
         trace_output_path=str(merged_extra.pop("trace_output_path")),
         response_shape=EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
@@ -139,8 +142,8 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
 
     assert response.live_run is True
     assert response.content == "router-rs content"
-    assert response.metadata["execution_kernel"] == "router-rs"
-    assert response.metadata["execution_kernel_authority"] == "rust-execution-cli"
+    assert response.metadata["execution_kernel"] == EXECUTION_KERNEL_BRIDGE_KIND
+    assert response.metadata["execution_kernel_authority"] == EXECUTION_KERNEL_BRIDGE_AUTHORITY
     assert (
         response.metadata[EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY]
         == EXECUTION_KERNEL_METADATA_SCHEMA_VERSION
@@ -215,14 +218,68 @@ def test_router_rs_execution_kernel_rejects_missing_steady_state_metadata(monkey
         asyncio.run(kernel.execute(_request()))
 
 
+def test_router_rs_execution_kernel_normalizes_legacy_delegate_first_metadata(monkeypatch) -> None:
+    kernel = RouterRsExecutionKernel(_settings())  # type: ignore[arg-type]
+
+    def fake_run(command, **kwargs):
+        payload = json.loads(command[command.index("--execute-input-json") + 1])
+        legacy_metadata = build_execution_kernel_bridge_metadata_projection(
+            _steady_state_kernel_metadata(
+                run_id="run-legacy",
+                status="completed",
+                trace_event_count=payload["trace_event_count"],
+                trace_output_path=payload["trace_output_path"],
+                execution_mode="live",
+                route_engine=payload["route_engine"],
+                diagnostic_route_mode=payload["diagnostic_route_mode"],
+            )
+        )
+        legacy_metadata["execution_kernel"] = "router-rs"
+        legacy_metadata["execution_kernel_authority"] = "rust-execution-cli"
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "execution_schema_version": "router-rs-execute-response-v1",
+                    "authority": "rust-execution-cli",
+                    "session_id": payload["session_id"],
+                    "user_id": payload["user_id"],
+                    "skill": payload["selected_skill"],
+                    "overlay": payload["overlay_skill"],
+                    "live_run": True,
+                    "content": "legacy router-rs content",
+                    "usage": {
+                        "input_tokens": 21,
+                        "output_tokens": 13,
+                        "total_tokens": 34,
+                        "mode": "live",
+                    },
+                    "prompt_preview": payload["prompt_preview"],
+                    "model_id": "gpt-5.4",
+                    "metadata": legacy_metadata,
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr("codex_agno_runtime.execution_kernel.subprocess.run", fake_run)
+
+    response = asyncio.run(kernel.execute(_request()))
+
+    assert response.metadata["execution_kernel"] == EXECUTION_KERNEL_BRIDGE_KIND
+    assert response.metadata["execution_kernel_authority"] == EXECUTION_KERNEL_BRIDGE_AUTHORITY
+    assert response.metadata["execution_kernel_delegate"] == "router-rs"
+    assert response.metadata["execution_kernel_delegate_authority"] == "rust-execution-cli"
+
+
 def test_execution_kernel_contract_helpers_stay_rust_primary() -> None:
     trace_metadata = build_trace_runtime_metadata(
         trace_event_count=9,
         trace_output_path="/tmp/TRACE_METADATA.json",
     )
     runtime_metadata = build_execution_kernel_runtime_metadata(
-        execution_kernel="router-rs",
-        execution_kernel_authority="rust-execution-cli",
+        execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
+        execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
         trace_event_count=9,
         trace_output_path="/tmp/TRACE_METADATA.json",
         extra_fields={
@@ -238,8 +295,8 @@ def test_execution_kernel_contract_helpers_stay_rust_primary() -> None:
         "trace_event_count": 9,
         "trace_output_path": "/tmp/TRACE_METADATA.json",
     }
-    assert runtime_metadata["execution_kernel"] == "router-rs"
-    assert runtime_metadata["execution_kernel_authority"] == "rust-execution-cli"
+    assert runtime_metadata["execution_kernel"] == EXECUTION_KERNEL_BRIDGE_KIND
+    assert runtime_metadata["execution_kernel_authority"] == EXECUTION_KERNEL_BRIDGE_AUTHORITY
     assert (
         runtime_metadata[EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY]
         == EXECUTION_KERNEL_METADATA_SCHEMA_VERSION
@@ -308,8 +365,8 @@ def test_execution_kernel_dry_run_response_stays_rust_primary() -> None:
         prompt_preview="Keep execution Rust-first.",
         input_tokens=12,
         output_tokens=34,
-        execution_kernel="router-rs",
-        execution_kernel_authority="rust-execution-cli",
+        execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
+        execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
         trace_event_count=9,
         trace_output_path="/tmp/TRACE_METADATA.json",
         extra_metadata={
@@ -322,8 +379,8 @@ def test_execution_kernel_dry_run_response_stays_rust_primary() -> None:
 
     assert dry_run_response.live_run is False
     assert dry_run_response.usage.mode == "estimated"
-    assert dry_run_response.metadata["execution_kernel"] == "router-rs"
-    assert dry_run_response.metadata["execution_kernel_authority"] == "rust-execution-cli"
+    assert dry_run_response.metadata["execution_kernel"] == EXECUTION_KERNEL_BRIDGE_KIND
+    assert dry_run_response.metadata["execution_kernel_authority"] == EXECUTION_KERNEL_BRIDGE_AUTHORITY
     assert (
         dry_run_response.metadata[EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY]
         == EXECUTION_KERNEL_METADATA_SCHEMA_VERSION
