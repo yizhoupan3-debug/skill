@@ -17,6 +17,8 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
+import framework_runtime.runtime as runtime_module
+
 from framework_runtime.config import RuntimeSettings
 from framework_runtime.runtime import CodexAgnoRuntime
 from framework_runtime.schemas import (
@@ -114,6 +116,63 @@ trigger_phrases:
 
     assert skill.name == "legacy-skill"
     assert skill.trigger_hints == []
+
+
+
+
+def test_runtime_uses_rust_control_plane_concurrency_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = RuntimeSettings(codex_home=PROJECT_ROOT, live_model_override=False)
+    control_plane = {
+        "runtime_host": {
+            "concurrency_contract": {
+                "max_background_jobs": 16,
+                "background_job_timeout_seconds": 600,
+            }
+        },
+        "services": {
+            "middleware": {
+                "subagent_limit_contract": {
+                    "max_concurrent_subagents": 8,
+                    "timeout_seconds": 900,
+                }
+            }
+        },
+    }
+
+    monkeypatch.delenv("CODEX_MAX_BACKGROUND_JOBS", raising=False)
+    monkeypatch.delenv("CODEX_BACKGROUND_JOB_TIMEOUT", raising=False)
+    monkeypatch.delenv("CODEX_AGNO_MAX_CONCURRENT_SUBAGENTS", raising=False)
+    monkeypatch.delenv("CODEX_AGNO_SUBAGENT_TIMEOUT_SECONDS", raising=False)
+
+    assert settings.max_concurrent_subagents == 3
+    assert runtime_module._runtime_background_defaults(control_plane) == (16, 600.0)
+    assert runtime_module._runtime_subagent_defaults(settings, control_plane) == (8, 900)
+
+
+def test_runtime_uses_rust_control_plane_defaults_over_settings(tmp_path: Path) -> None:
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=False,
+        max_concurrent_subagents=99,
+        subagent_timeout_seconds=111,
+    )
+
+    runtime = CodexAgnoRuntime(settings)
+
+    assert runtime._max_background_jobs == 16
+    assert runtime._background_job_timeout == 600.0
+    assert runtime.execution_service.max_background_jobs == 16
+    assert runtime.execution_service.background_job_timeout_seconds == 600.0
+    assert runtime.background_service._max_background_jobs == 16
+    subagent_middleware = next(
+        middleware
+        for middleware in runtime._middleware_chain.middlewares
+        if middleware.__class__.__name__ == "SubagentLimitMiddleware"
+    )
+    assert subagent_middleware._max_concurrent == 8
+    assert subagent_middleware._timeout == 900
 
 
 def test_runtime_shares_one_rust_adapter_across_route_and_execute(tmp_path: Path) -> None:

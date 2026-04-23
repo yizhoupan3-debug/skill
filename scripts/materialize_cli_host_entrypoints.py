@@ -107,13 +107,15 @@ framework policy instead of forking per-host routing or memory rules.
 - Default the closeout to one short paragraph that covers exactly three points:
   what was done, what effect was achieved, and what still needs to happen next
   or that the work is finished.
+- Keep the wording plain and natural; do not make the default closeout sound
+  like a task artifact, audit log, or status machine.
 - Prefer user-visible effect over implementation narration in the default
   closeout.
 - If no further work is needed, say that directly instead of inventing follow-up
   tasks.
-- Do not default to changed-file inventories, evidence lists, changelog-style
-  recaps, or step-by-step implementation retellings in the final user-facing
-  closeout.
+- Do not default to changed-file inventories, evidence lists, path dumps,
+  changelog-style recaps, or step-by-step implementation retellings in the
+  final user-facing closeout.
 - Machine continuity artifacts such as `NEXT_ACTIONS.json`,
   `.supervisor_state.json`, and verification or blocker fields remain the
   recovery truth; do not mirror them verbatim into the user-facing closeout
@@ -266,10 +268,10 @@ def _ensure_router_rs_binary() -> Path:
     )
 
 
-def _load_claude_hook_manifest() -> dict[str, Any]:
+def _load_router_rs_json_output(*args: str) -> dict[str, Any]:
     binary_path = _ensure_router_rs_binary()
     completed = __import__("subprocess").run(
-        [str(binary_path), "--claude-hook-manifest-json"],
+        [str(binary_path), *args],
         cwd=Path(__file__).resolve().parents[1],
         check=True,
         text=True,
@@ -277,8 +279,20 @@ def _load_claude_hook_manifest() -> dict[str, Any]:
     )
     payload = json.loads(completed.stdout)
     if not isinstance(payload, dict):
-        raise ValueError("router-rs hook manifest must be a JSON object")
+        raise ValueError("router-rs output must be a JSON object")
     return payload
+
+
+def _load_claude_hook_manifest() -> dict[str, Any]:
+    return _load_router_rs_json_output("--claude-hook-manifest-json")
+
+
+def _load_claude_project_settings(repo_root: Path) -> dict[str, Any]:
+    return _load_router_rs_json_output(
+        "--claude-project-settings-json",
+        "--repo-root",
+        str(repo_root),
+    )
 
 CLAUDE_PROJECT_DIR_SNIPPET = 'PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"'
 CLAUDE_ROUTER_RS_ALLOWED_TOOLS = """allowed-tools:
@@ -292,8 +306,11 @@ CLAUDE_ROUTER_RS_ALLOWED_TOOLS = """allowed-tools:
 """
 
 CLAUDE_REFRESH_COMMAND = """---
-description: 使用 Rust refresh 命令生成并复制下一轮执行提示。
+description: 使用 Rust refresh 命令继续当前活跃任务，并复制下一轮执行提示。
 {allowed_tools}---
+
+把 `/refresh` 当作当前仓库唯一显式的 continue / next 入口。
+它会读取现有 continuity 真源，为当前活跃任务生成下一轮执行提示。
 
 运行：
 
@@ -577,7 +594,7 @@ Active hooks:
 | Event | Runner | Purpose |
 | --- | --- | --- |
 | `UserPromptSubmit` | `run.sh user-prompt-submit` | Inject the repo-local shared memory and continuity truth on every real prompt, and only add a one-line closeout reminder on execution turns. |
-| `PreToolUse` | `run.sh pre-tool-use-quality` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |
+| `PreToolUse` | `run.sh pre-tool-use-quality` | Add a short path-aware implementation reminder before editing runtime, materializer, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |
 | `PreToolUse` | `run.sh pre-tool-use` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
 | `PostToolUse` | `run.sh post-tool-audit` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
 | `SessionEnd` | `run.sh session-end` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |
@@ -625,6 +642,10 @@ Validation commands:
   Expected: stdout returns a JSON `permissionDecision: allow` payload with `additionalContext`.
 - `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh post-tool-audit`
   Expected: stdout is empty for clean edits, or JSON with top-level `additionalContext` when the new delta still looks patchy, compatibility-heavy, or wasteful.
+- `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/materialize_cli_host_entrypoints.py"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh pre-tool-use-quality`
+  Expected: stdout returns a JSON `permissionDecision: allow` payload with Python-oriented `additionalContext`.
+- `printf '{"tool_name":"Edit","tool_input":{"file_path":".claude/hooks/run.sh"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh pre-tool-use-quality`
+  Expected: stdout returns a JSON `permissionDecision: allow` payload with hook-oriented `additionalContext`.
 - `printf '{"tool_name":"MultiEdit","tool_input":{"file_path":".claude/settings.json"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh pre-tool-use`
   Expected: stdout returns a JSON `permissionDecision: deny` payload.
 - `printf '{"tool_name":"Bash","tool_input":{"command":"cp tmp .claude/settings.json"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh pre-tool-use`
@@ -694,52 +715,6 @@ esac
 """
 
 
-def _claude_project_settings() -> dict[str, Any]:
-    hook_manifest = _load_claude_hook_manifest()
-    settings_hooks = hook_manifest.get("settings_hooks")
-    if not isinstance(settings_hooks, dict):
-        raise ValueError("router-rs hook manifest missing settings_hooks")
-    return {
-        "$schema": "https://json.schemastore.org/claude-code-settings.json",
-        "permissions": {
-            "allow": [
-                "Bash(ls)",
-                "Bash(pwd)",
-                "Bash(rg *)",
-                "Bash(cat *)",
-                "Bash(sed -n *)",
-                "Bash(git status)",
-                "Bash(git diff)",
-                "Bash(git show *)",
-                "Bash(git rev-parse *)",
-                "Bash(git ls-files *)",
-                "Bash(python3 scripts/check_skills.py --verify-sync)",
-                "Bash(python3 scripts/materialize_cli_host_entrypoints.py)",
-                "Bash(python3 -m pytest *)",
-                "Bash(python3 -m compileall *)",
-                "Bash(cargo test *)",
-                f"Bash(cargo run --manifest-path {CLAUDE_ROUTER_RS_MANIFEST_PATH} --release -- *)",
-                "Bash(./scripts/router-rs/target/release/router-rs *)",
-                "Bash(./scripts/router-rs/target/debug/router-rs *)",
-                "Bash(*scripts/router-rs/target/release/router-rs *)",
-                "Bash(*scripts/router-rs/target/debug/router-rs *)",
-                "Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)",
-                "Bash(python3 scripts/runtime_background_cli.py *)",
-                "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
-                "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
-                "Bash(bash ./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
-            ]
-        },
-        "allowedMcpServers": [
-            {"serverName": server_name} for server_name in _shared_project_mcp_servers()
-        ],
-        "hooks": settings_hooks,
-    }
-
-
-CLAUDE_PROJECT_SETTINGS = _claude_project_settings()
-
-
 CODEX_PROJECT_HOOKS = {"hooks": {}}
 
 HOST_ENTRYPOINT_SYNC_MANIFEST_PATH = ".codex/host_entrypoints_sync_manifest.json"
@@ -760,11 +735,23 @@ HOST_ENTRYPOINT_TEXT_FILES = {
     ".claude/hooks/run.sh": CLAUDE_HOOK_RUNNER,
 }
 
-HOST_ENTRYPOINT_JSON_FILES = {
+HOST_ENTRYPOINT_STATIC_JSON_FILES = {
     ".codex/hooks.json": CODEX_PROJECT_HOOKS,
-    ".claude/settings.json": CLAUDE_PROJECT_SETTINGS,
     ".gemini/settings.json": {},
 }
+
+HOST_ENTRYPOINT_JSON_RELATIVE_PATHS = (
+    ".codex/hooks.json",
+    ".claude/settings.json",
+    ".gemini/settings.json",
+)
+
+
+def _host_entrypoint_json_files(repo_root: Path) -> dict[str, dict[str, Any]]:
+    return {
+        **HOST_ENTRYPOINT_STATIC_JSON_FILES,
+        ".claude/settings.json": _load_claude_project_settings(repo_root),
+    }
 
 FULL_SYNC_MANAGED_DIRECTORIES = (
     ".claude",
@@ -819,23 +806,23 @@ def _build_host_entrypoint_sync_manifest() -> dict[str, Any]:
         "schema_version": "host-entrypoints-sync-manifest-v1",
         "full_sync": {
             "text_files": sorted(HOST_ENTRYPOINT_TEXT_FILES),
-            "json_files": sorted(HOST_ENTRYPOINT_JSON_FILES),
+            "json_files": sorted(HOST_ENTRYPOINT_JSON_RELATIVE_PATHS),
             "managed_directories": list(FULL_SYNC_MANAGED_DIRECTORIES),
             "retired_paths": list(RETIRED_HOST_ENTRYPOINT_PATHS),
         },
         "partial_sync": {
             "text_files": list(PARTIAL_SYNC_TEXT_FILES),
-            "json_files": sorted(HOST_ENTRYPOINT_JSON_FILES),
+            "json_files": sorted(HOST_ENTRYPOINT_JSON_RELATIVE_PATHS),
             "managed_directories": list(PARTIAL_SYNC_MANAGED_DIRECTORIES),
             "retired_paths": list(RETIRED_HOST_ENTRYPOINT_PATHS),
         },
     }
 
 
-def _write_host_entrypoint_template(template_root: Path) -> None:
+def _write_host_entrypoint_template(template_root: Path, *, repo_root: Path) -> None:
     for relative_path, content in HOST_ENTRYPOINT_TEXT_FILES.items():
         _write_text(template_root / relative_path, content)
-    for relative_path, payload in HOST_ENTRYPOINT_JSON_FILES.items():
+    for relative_path, payload in _host_entrypoint_json_files(repo_root).items():
         _write_json(template_root / relative_path, payload)
     _write_json(
         template_root / HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
@@ -843,10 +830,13 @@ def _write_host_entrypoint_template(template_root: Path) -> None:
     )
 
 
-def write_host_entrypoint_template(template_root: Path) -> None:
+def write_host_entrypoint_template(template_root: Path, *, repo_root: Path | None = None) -> None:
     """Materialize one temporary template tree for host-entrypoint consumers."""
 
-    _write_host_entrypoint_template(template_root)
+    _write_host_entrypoint_template(
+        template_root,
+        repo_root=(repo_root or Path(__file__).resolve().parents[1]).resolve(),
+    )
 
 
 def sync_repo_host_entrypoints(
@@ -859,7 +849,7 @@ def sync_repo_host_entrypoints(
     root = (repo_root or Path(__file__).resolve().parents[1]).resolve()
     with TemporaryDirectory() as temp_dir:
         template_root = Path(temp_dir)
-        write_host_entrypoint_template(template_root)
+        write_host_entrypoint_template(template_root, repo_root=root)
         return run_host_integration_rs(
             "sync-host-entrypoints",
             "--template-root",

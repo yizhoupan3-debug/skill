@@ -122,16 +122,19 @@ def _decision_hint(blockers: list[str], next_actions: list[str], *, git_state: s
         if isinstance(blocker, str) and blocker.strip():
             return f"blocked={_short_text(blocker, 36)}"
 
-    if status != "completed":
-        return "next=run verification"
+    if status == "completed":
+        for item in next_actions:
+            if isinstance(item, str) and item.strip():
+                return f"next={_short_text(item, 36)}"
+        if git_state == "dirty":
+            return "next=review local changes"
+        return "next=pick task"
 
     for item in next_actions:
         if isinstance(item, str) and item.strip():
-            return f"next={_short_text(item, 36)}"
+            return "next=/refresh"
 
-    if git_state == "dirty":
-        return "next=review local changes"
-    return "next=pick task"
+    return "next=run verification"
 
 
 def render_statusline(repo_root: Path) -> str:

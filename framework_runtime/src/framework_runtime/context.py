@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from framework_runtime.utils import estimate_tokens
 
@@ -53,14 +54,37 @@ class ContextEngineer:
                 artifact_offload_decision=False,
             )
 
-        sections = [chunk.strip() for chunk in prompt.split("\n\n") if chunk.strip()]
-        if len(sections) <= 4:
+        sections = self._dedupe_sections(prompt)
+        if len(sections) <= 1:
+            deduped_prompt = sections[0] if sections else prompt
             return self._truncate_contract(
-                prompt,
+                deduped_prompt,
                 token_limit,
                 input_tokens=input_tokens,
                 omitted_sections=0,
-                strategy="truncate",
+                strategy="dedupe+truncate" if deduped_prompt != prompt else "truncate",
+            )
+        deduped_prompt = "\n\n".join(sections)
+        deduped_tokens = estimate_tokens(deduped_prompt)
+        if deduped_tokens <= token_limit:
+            return CompressionResult(
+                schema_version="runtime-compression-v1",
+                prompt=deduped_prompt,
+                input_token_estimate=input_tokens,
+                output_token_estimate=deduped_tokens,
+                omitted_sections=0,
+                strategy="dedupe",
+                truncated=False,
+                artifact_offload_decision=False,
+            )
+
+        if len(sections) <= 4:
+            return self._truncate_contract(
+                deduped_prompt,
+                token_limit,
+                input_tokens=input_tokens,
+                omitted_sections=0,
+                strategy="dedupe+truncate",
             )
 
         head = sections[:3]
@@ -80,7 +104,7 @@ class ContextEngineer:
                 input_token_estimate=input_tokens,
                 output_token_estimate=estimate_tokens(compressed),
                 omitted_sections=omitted,
-                strategy="head-tail",
+                strategy="dedupe+head-tail",
                 truncated=False,
                 artifact_offload_decision=False,
             )
@@ -89,8 +113,29 @@ class ContextEngineer:
             token_limit,
             input_tokens=input_tokens,
             omitted_sections=omitted,
-            strategy="head-tail+truncate",
+            strategy="dedupe+head-tail+truncate",
         )
+
+    @staticmethod
+    def _normalize_section(section: str) -> str:
+        lines = [line.strip() for line in section.splitlines() if line.strip()]
+        normalized = "\n".join(lines)
+        normalized = re.sub(r"\s+", " ", normalized)
+        if normalized.startswith("How to reply:"):
+            return "style::" + normalized
+        return normalized
+
+    def _dedupe_sections(self, prompt: str) -> list[str]:
+        sections = [chunk.strip() for chunk in prompt.split("\n\n") if chunk.strip()]
+        seen: set[str] = set()
+        unique_sections: list[str] = []
+        for section in sections:
+            key = self._normalize_section(section)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_sections.append(section)
+        return unique_sections
 
     @staticmethod
     def _truncate_contract(

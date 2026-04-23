@@ -71,42 +71,63 @@
           {
             "async": true,
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
-            "if": "Edit(/tests/test_cli_host_entrypoints.py)",
+            "if": "Edit(/scripts/materialize_cli_host_entrypoints.py)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
-            "if": "MultiEdit(/tests/test_cli_host_entrypoints.py)",
+            "if": "MultiEdit(/scripts/materialize_cli_host_entrypoints.py)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
-            "if": "Write(/tests/test_cli_host_entrypoints.py)",
+            "if": "Write(/scripts/materialize_cli_host_entrypoints.py)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
-            "if": "Edit(/tests/test_codex_omx_hook_bridge.py)",
+            "if": "Edit(/tests/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
-            "if": "MultiEdit(/tests/test_codex_omx_hook_bridge.py)",
+            "if": "MultiEdit(/tests/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
-            "if": "Write(/tests/test_codex_omx_hook_bridge.py)",
+            "if": "Write(/tests/**)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "if": "Edit(/.claude/hooks/**)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "if": "MultiEdit(/.claude/hooks/**)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "if": "Write(/.claude/hooks/**)",
             "timeout": 8,
             "type": "command"
           }
@@ -414,32 +435,47 @@
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
-            "if": "Edit(/tests/test_cli_host_entrypoints.py)",
+            "if": "Edit(/scripts/materialize_cli_host_entrypoints.py)",
             "type": "command"
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
-            "if": "MultiEdit(/tests/test_cli_host_entrypoints.py)",
+            "if": "MultiEdit(/scripts/materialize_cli_host_entrypoints.py)",
             "type": "command"
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
-            "if": "Write(/tests/test_cli_host_entrypoints.py)",
+            "if": "Write(/scripts/materialize_cli_host_entrypoints.py)",
             "type": "command"
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
-            "if": "Edit(/tests/test_codex_omx_hook_bridge.py)",
+            "if": "Edit(/tests/**)",
             "type": "command"
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
-            "if": "MultiEdit(/tests/test_codex_omx_hook_bridge.py)",
+            "if": "MultiEdit(/tests/**)",
             "type": "command"
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
-            "if": "Write(/tests/test_codex_omx_hook_bridge.py)",
+            "if": "Write(/tests/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "if": "Edit(/.claude/hooks/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "if": "MultiEdit(/.claude/hooks/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "if": "Write(/.claude/hooks/**)",
             "type": "command"
           }
         ],

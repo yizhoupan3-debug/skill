@@ -23,7 +23,10 @@ mod framework_runtime;
 mod session_supervisor;
 
 use background_state::handle_background_state_operation;
-use claude_hooks::{build_claude_hook_manifest, run_claude_audit_hook, run_claude_lifecycle_hook};
+use claude_hooks::{
+    build_claude_hook_manifest, build_claude_project_settings, run_claude_audit_hook,
+    run_claude_lifecycle_hook,
+};
 use framework_profile::{
     build_codex_artifact_bundle, build_profile_bundle, build_profile_bundle_with_legacy_alias,
     load_framework_profile,
@@ -212,6 +215,8 @@ struct Cli {
     runtime_storage_json: bool,
     #[arg(long)]
     claude_hook_manifest_json: bool,
+    #[arg(long)]
+    claude_project_settings_json: bool,
     #[arg(long)]
     claude_hook_command: Option<String>,
     #[arg(long)]
@@ -870,6 +875,8 @@ fn main() -> Result<(), String> {
         args.route_report_json,
         args.route_resolution_json,
         args.runtime_storage_json,
+        args.claude_hook_manifest_json,
+        args.claude_project_settings_json,
         args.claude_hook_command.is_some(),
         args.claude_hook_audit_command.is_some(),
     ]
@@ -879,7 +886,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-alias-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --profile-json, --profile-artifacts-json, and --routing-eval-json"
+            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-alias-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-project-settings-json, --profile-json, --profile-artifacts-json, and --routing-eval-json"
                 .to_string(),
         );
     }
@@ -1405,6 +1412,16 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.claude_project_settings_json {
+        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_claude_project_settings(&repo_root))
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
     if let Some(command) = args.claude_hook_command.as_deref() {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
         println!(
@@ -1720,8 +1737,20 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
         "framework_contract_summary" => dispatch_stdio_framework_contract_summary(payload),
         "framework_memory_recall" => dispatch_stdio_framework_memory_recall(payload),
         "framework_alias" => dispatch_stdio_framework_alias(payload),
+        "claude_lifecycle_hook" => dispatch_stdio_claude_lifecycle_hook(payload),
         _ => Err(format!("unsupported stdio operation: {op}")),
     }
+}
+
+fn dispatch_stdio_claude_lifecycle_hook(payload: Value) -> Result<Value, String> {
+    let command = required_non_empty_string(&payload, "command", "stdio Claude lifecycle hook")?;
+    let repo_root = required_non_empty_string(&payload, "repo_root", "stdio Claude lifecycle hook")?;
+    let max_lines = payload
+        .get("max_lines")
+        .and_then(Value::as_u64)
+        .and_then(|value| usize::try_from(value).ok())
+        .unwrap_or(6);
+    run_claude_lifecycle_hook(&command, Path::new(&repo_root), max_lines)
 }
 
 fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
@@ -3718,19 +3747,10 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     }
     lines.push("How to reply:".to_string());
     lines.push("- Lead with the answer or result.".to_string());
-    lines.push("- Use plain Chinese unless the user asks otherwise.".to_string());
-    lines.push("- Be brief, clear, and friendly.".to_string());
-    lines.push("- Explain things in plain language first.".to_string());
-    lines.push(
-        "- Keep the default reply to one short paragraph unless a list is truly needed."
-            .to_string(),
-    );
-    lines.push("- Avoid internal runtime or routing jargon unless the user asks.".to_string());
-    lines.push(
-        "- If a technical term is necessary, explain it in simple words the first time."
-            .to_string(),
-    );
-    lines.push("- Do not force personality or performative style by default.".to_string());
+    lines.push("- Use plain Chinese unless the user asks otherwise, and keep the wording natural.".to_string());
+    lines.push("- Keep the default reply short; only use a list when the content is naturally list-shaped.".to_string());
+    lines.push("- For closeouts, say what was done, what effect was achieved, and what needs to happen next or that the work is finished.".to_string());
+    lines.push("- Do not default to file inventories, evidence dumps, or step-by-step process retellings unless the user asks for them.".to_string());
     if !payload.reasons.is_empty() {
         lines.push("Task cues:".to_string());
         for reason in &payload.reasons {
@@ -5698,6 +5718,11 @@ fn cleanup_attached_runtime_event_transport(payload: Value) -> Result<Value, Str
 }
 
 fn build_runtime_control_plane_payload() -> Value {
+    const DEFAULT_MAX_CONCURRENT_SUBAGENTS: u64 = 8;
+    const DEFAULT_SUBAGENT_TIMEOUT_SECONDS: u64 = 900;
+    const DEFAULT_MAX_BACKGROUND_JOBS: u64 = 16;
+    const DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS: u64 = 600;
+
     let services = serde_json::json!({
         "router": {
             "authority": ROUTE_AUTHORITY,
@@ -5722,6 +5747,15 @@ fn build_runtime_control_plane_payload() -> Value {
             "role": "middleware-policy-projection",
             "projection": "python-thin-projection",
             "delegate_kind": "rust-runtime-control-plane",
+            "subagent_limit_contract": {
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "owner": "rust-runtime-control-plane",
+                "projection": "python-thin-projection",
+                "limit_owner": "rust-control-plane",
+                "max_concurrent_subagents": DEFAULT_MAX_CONCURRENT_SUBAGENTS,
+                "timeout_seconds": DEFAULT_SUBAGENT_TIMEOUT_SECONDS,
+                "enforcement_mode": "rust-owned-policy-python-enforced",
+            },
         },
         "state": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
@@ -5855,6 +5889,10 @@ fn build_runtime_control_plane_payload() -> Value {
                     "completion-race",
                     "session-release"
                 ],
+                "max_background_jobs": DEFAULT_MAX_BACKGROUND_JOBS,
+                "background_job_timeout_seconds": DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS,
+                "admission_owner": "rust-background-control-policy",
+                "queue_concurrency_owner": "rust-control-plane",
             },
         },
     });
@@ -5894,6 +5932,16 @@ fn build_runtime_control_plane_payload() -> Value {
                 "checkpoint"
             ],
             "rust_owned_service_count": rust_owned_service_count,
+            "concurrency_contract": {
+                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+                "owner": "rust-control-plane",
+                "router_stdio_pool_owner": "rust-control-plane",
+                "router_stdio_pool_default_size": 4,
+                "max_background_jobs": DEFAULT_MAX_BACKGROUND_JOBS,
+                "max_concurrent_subagents": DEFAULT_MAX_CONCURRENT_SUBAGENTS,
+                "background_job_timeout_seconds": DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS,
+                "subagent_timeout_seconds": DEFAULT_SUBAGENT_TIMEOUT_SECONDS,
+            },
         },
         "services": services,
     })
@@ -7812,6 +7860,80 @@ mod tests {
     }
 
     #[test]
+    fn framework_refresh_completed_task_uses_plain_closeout_wording() {
+        let repo_root = std::env::temp_dir().join(format!(
+            "router-rs-refresh-completed-fixture-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock before epoch")
+                .as_nanos()
+        ));
+        let memory_root = repo_root.join(".codex").join("memory");
+        let task_root = repo_root
+            .join("artifacts")
+            .join("current")
+            .join("completed-rerun-20260423");
+        fs::create_dir_all(&memory_root).expect("create memory root");
+        fs::create_dir_all(&task_root).expect("create task root");
+        fs::create_dir_all(repo_root.join("artifacts").join("current"))
+            .expect("create current root");
+        fs::write(
+            task_root.join("SESSION_SUMMARY.md"),
+            "- task: bounded rerun\n- phase: closeout\n- status: completed\n",
+        )
+        .expect("write session summary");
+        fs::write(task_root.join("NEXT_ACTIONS.json"), r#"{"next_actions":[]}"#)
+            .expect("write next actions");
+        fs::write(task_root.join("EVIDENCE_INDEX.json"), r#"{"artifacts":[]}"#)
+            .expect("write evidence index");
+        fs::write(
+            task_root.join("TRACE_METADATA.json"),
+            r#"{"task":"bounded rerun","verification_status":"completed"}"#,
+        )
+        .expect("write trace metadata");
+        fs::write(
+            repo_root.join("artifacts").join("current").join("active_task.json"),
+            r#"{"task_id":"completed-rerun-20260423","task":"bounded rerun"}"#,
+        )
+        .expect("write active task");
+        fs::write(
+            repo_root.join(".supervisor_state.json"),
+            r#"{
+                "task_id":"completed-rerun-20260423",
+                "task_summary":"bounded rerun",
+                "active_phase":"closeout",
+                "verification":{"verification_status":"completed","last_verification_summary":"262 passed"},
+                "continuity":{"story_state":"completed","resume_allowed":false},
+                "next_actions":[],
+                "execution_contract":{"goal":"Re-run bounded verification"}
+            }"#,
+        )
+        .expect("write supervisor state");
+        fs::write(memory_root.join("MEMORY.md"), "# 项目长期记忆\n")
+            .expect("write memory");
+
+        let refresh =
+            build_framework_refresh_payload(&repo_root, 6, false).expect("build refresh payload");
+        let prompt = refresh
+            .get("prompt")
+            .and_then(Value::as_str)
+            .expect("refresh prompt");
+
+        assert!(prompt.contains("最近一轮已经收尾："));
+        assert!(prompt.contains("- bounded rerun"));
+        assert!(prompt.contains("- 结果已经稳定，可以直接按已完成上下文来看。"));
+        assert!(prompt.contains("- 如果还要继续相关工作，先新开一个 standalone task"));
+        assert!(prompt.contains("先看这些恢复锚点："));
+        assert!(!prompt.contains("剩余："));
+        assert!(!prompt.contains("先做："));
+        assert!(!prompt.contains("按既定串并行分工直接开始执行。"));
+        assert!(!prompt.contains("Keep this task only as recent-completed context"));
+        assert!(!prompt.contains("Start a new standalone task before resuming related work"));
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
     fn framework_alias_builds_compact_autopilot_payload() {
         let repo_root = std::env::temp_dir().join(format!(
             "router-rs-alias-fixture-{}",
@@ -8352,6 +8474,60 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn stdio_request_dispatches_claude_lifecycle_hook_payload() {
+        let repo_root = std::env::temp_dir().join(format!(
+            "router-rs-stdio-claude-hook-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock before epoch")
+                .as_nanos()
+        ));
+        fs::create_dir_all(repo_root.join("artifacts/current/task-1")).expect("create temp repo");
+        fs::create_dir_all(repo_root.join(".codex/memory")).expect("create memory dir");
+        fs::write(repo_root.join(".codex/memory/MEMORY.md"), "# 项目长期记忆\n").expect("write memory");
+        fs::write(
+            repo_root.join(".supervisor_state.json"),
+            serde_json::to_string_pretty(&json!({
+                "task_id": "task-1",
+                "task_summary": "repair claude hook",
+                "active_phase": "implementing",
+                "verification": {"verification_status": "in_progress"},
+                "continuity": {"story_state": "active", "resume_allowed": true},
+                "next_actions": ["finish rust hook"],
+                "execution_contract": {"scope": ["hooks"], "acceptance_criteria": ["smoke passes"]}
+            }))
+            .expect("serialize state"),
+        )
+        .expect("write state");
+        fs::write(
+            repo_root.join("artifacts/current/active_task.json"),
+            serde_json::to_string_pretty(&json!({"task_id": "task-1"})).expect("serialize pointer"),
+        )
+        .expect("write pointer");
+        fs::write(
+            repo_root.join("artifacts/current/task-1/SESSION_SUMMARY.md"),
+            "- task: repair claude hook\n- phase: implementing\n- status: in_progress\n",
+        )
+        .expect("write session summary");
+
+        let response = handle_stdio_json_line(&format!(
+            "{{\"id\":3,\"op\":\"claude_lifecycle_hook\",\"payload\":{{\"command\":\"session-end\",\"repo_root\":\"{}\",\"max_lines\":4}}}}",
+            repo_root.display()
+        ));
+        assert!(response.ok, "{:?}", response.error);
+        let payload = response.payload.expect("payload");
+        assert_eq!(
+            payload.get("schema_version").and_then(Value::as_str),
+            Some("router-rs-claude-hook-response-v1")
+        );
+        assert_eq!(
+            payload.get("authority").and_then(Value::as_str),
+            Some("rust-claude-hook")
+        );
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
     #[test]
@@ -9581,7 +9757,8 @@ mod tests {
         assert!(prompt.contains("Extra guidance: rust-pro"));
         assert!(prompt.contains("How to reply:"));
         assert!(prompt.contains("Lead with the answer or result."));
-        assert!(prompt.contains("Be brief, clear, and friendly"));
+        assert!(prompt.contains("Use plain Chinese unless the user asks otherwise, and keep the wording natural."));
+        assert!(prompt.contains("Keep the default reply short; only use a list when the content is naturally list-shaped."));
         assert!(prompt.contains("Trigger phrase matched: 直接做代码."));
     }
 

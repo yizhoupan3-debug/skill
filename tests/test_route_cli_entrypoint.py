@@ -14,6 +14,8 @@ if str(SCRIPTS_ROOT) not in sys.path:
 import route as route_script
 
 
+
+
 def _touch(path: Path, *, mtime: float) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("", encoding="utf-8")
@@ -66,31 +68,34 @@ def test_build_router_exec_command_injects_runtime_manifest_and_route_flags(tmp_
     ]
 
 
-def test_build_router_exec_command_prefers_typed_search_json_mode(tmp_path: Path) -> None:
+def test_build_router_exec_command_uses_shared_rust_binary_runner(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     codex_home = tmp_path
-    router_dir = codex_home / "scripts" / "router-rs"
-    _touch(router_dir / "Cargo.toml", mtime=100.0)
-    _touch(router_dir / "src" / "main.rs", mtime=100.0)
-    binary_path = router_dir / "target" / "debug" / "router-rs"
-    _touch(binary_path, mtime=200.0)
+    resolved_binary = codex_home / "scripts" / "router-rs" / "target" / "release" / "router-rs"
+    calls: dict[str, object] = {}
+
+    def fake_resolve_binary_candidate(*candidates: Path) -> Path:
+        calls["candidates"] = candidates
+        return resolved_binary
+
+    def fake_latest_crate_source_mtime(crate_root: Path) -> float:
+        calls["crate_root"] = crate_root
+        return 100.0
+
+    monkeypatch.setattr(route_script, "resolve_binary_candidate", fake_resolve_binary_candidate)
+    monkeypatch.setattr(route_script, "latest_crate_source_mtime", fake_latest_crate_source_mtime)
+    monkeypatch.setattr(Path, "stat", lambda self: type("_Stat", (), {"st_mtime": 200.0})())
 
     command = route_script._build_router_exec_command(
         codex_home=codex_home,
         argv=["--query", "typed first search", "--json"],
     )
 
-    assert command == [
-        str(binary_path),
-        "--query",
-        "typed first search",
-        "--limit",
-        "5",
-        "--runtime",
-        str(codex_home / "skills" / "SKILL_ROUTING_RUNTIME.json"),
-        "--manifest",
-        str(codex_home / "skills" / "SKILL_MANIFEST.json"),
-        "--json",
-    ]
+    assert calls["crate_root"] == codex_home / "scripts" / "router-rs"
+    assert calls["candidates"] == (
+        codex_home / "scripts" / "router-rs" / "target" / "release" / "router-rs",
+        codex_home / "scripts" / "router-rs" / "target" / "debug" / "router-rs",
+    )
+    assert command[0] == str(resolved_binary)
 
 
 def test_build_router_exec_command_requires_prebuilt_router_binary(tmp_path: Path) -> None:

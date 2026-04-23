@@ -124,17 +124,14 @@ class PromptBuilder:
 
                 How to reply:
                 - Lead with the answer or result.
-                - Use plain Chinese unless the user asks otherwise.
-                - Be brief, clear, and friendly.
-                - Explain things in plain language first.
-                - Keep the default reply to one short paragraph unless a list is truly needed.
-                - Avoid internal runtime or routing jargon unless the user asks.
-                - If a technical term is necessary, explain it in simple words the first time.
-                - Do not force personality or performative style by default.
+                - Use plain Chinese unless the user asks otherwise, and keep the wording natural.
+                - Keep the default reply short; only use a list when the content is naturally list-shaped.
+                - For closeouts, say what was done, what effect was achieved, and what needs to happen next or that the work is finished.
+                - Do not default to file inventories, evidence dumps, or step-by-step process retellings unless the user asks for them.
 
                 Task cues:
                 {reason_block}
-                """
+"""
             ).strip()
         return dedent(
             f"""
@@ -145,14 +142,9 @@ class PromptBuilder:
 
             How to reply:
             - Lead with the answer or result.
-            - Use plain Chinese unless the user asks otherwise.
-            - Be brief, clear, and friendly.
-            - Explain things in plain language first.
-            - Keep the default reply to one short paragraph unless a list is truly needed.
-            - Avoid internal runtime or routing jargon unless the user asks.
-            - If a technical term is necessary, explain it in simple words the first time.
-            - Do not force personality or performative style by default.
-            """
+            - Use plain Chinese unless the user asks otherwise, and keep the wording natural.
+            - Keep the default reply short; only use a list when the content is naturally list-shaped.
+"""
         ).strip()
 
     def _render_skill(self, skill: SkillMetadata, heading: str, is_overlay: bool = False) -> str:

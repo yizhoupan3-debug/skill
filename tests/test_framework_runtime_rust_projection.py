@@ -200,8 +200,13 @@ Implement the task directly.
     assert "How to reply:" in prompt
     assert "Key rules:" in prompt
     assert "Lead with the answer or result." in prompt
-    assert "Explain things in plain language first." in prompt
-    assert "Do not force personality or performative style by default." in prompt
+    assert "Use plain Chinese unless the user asks otherwise, and keep the wording natural." in prompt
+    assert "Keep the default reply short; only use a list when the content is naturally list-shaped." in prompt
+    assert "For closeouts, say what was done, what effect was achieved, and what needs to happen next or that the work is finished." in prompt
+    assert "Do not default to file inventories, evidence dumps, or step-by-step process retellings unless the user asks for them." in prompt
+    assert "Explain things in plain language first." not in prompt
+    assert "Keep closeouts plain and natural, not like an artifact log or status machine." not in prompt
+    assert "Do not force personality or performative style by default." not in prompt
 
 
 def test_prompt_builder_uses_skill_body_without_extra_idea_to_plan_contract() -> None:

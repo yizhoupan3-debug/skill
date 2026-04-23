@@ -468,6 +468,11 @@ def test_rust_route_adapter_reuses_stdio_process_for_hot_commands(
                         "stream_id": "stream::session-1",
                     },
                 },
+                "background_state": {
+                    "schema_version": adapter.background_state_store_schema_version,
+                    "authority": adapter.background_state_store_authority,
+                    "status": "ok",
+                },
                 "trace_stream_inspect": {
                     "schema_version": adapter.trace_stream_inspect_schema_version,
                     "authority": adapter.trace_stream_io_authority,
@@ -557,20 +562,24 @@ def test_rust_route_adapter_reuses_stdio_process_for_hot_commands(
     )
     transport = adapter.describe_transport({"session_id": "session-1"})
     inspect = adapter.trace_stream_inspect({"path": "/tmp/TRACE_EVENTS.jsonl"})
+    background_state = adapter.background_state({"operation": "snapshot"})
 
     assert control_plane["authority"] == adapter.runtime_control_plane_authority
     assert search_contract.matches[0].record.name == "iterative-optimizer"
     assert execute["execution_schema_version"] == adapter.execution_schema_version
     assert transport["stream_id"] == "stream::session-1"
     assert inspect["authority"] == adapter.trace_stream_io_authority
-    assert _FakePopen.launched_commands == [[str(release_bin), "--stdio-json"]]
-    assert [request["op"] for request in _FakePopen.instances[0].requests] == [
+    assert background_state["authority"] == adapter.background_state_store_authority
+    assert len(_FakePopen.launched_commands) == 4
+    assert all(command == [str(release_bin), "--stdio-json"] for command in _FakePopen.launched_commands)
+    assert sorted(request["op"] for instance in _FakePopen.instances for request in instance.requests) == sorted([
         "runtime_control_plane",
         "search_skills",
         "execute",
         "describe_transport",
         "trace_stream_inspect",
-    ]
+        "background_state",
+    ])
     rust_router_module._close_router_stdio_clients()
 
 
