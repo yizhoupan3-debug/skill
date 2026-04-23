@@ -60,7 +60,6 @@
     - `claude_code_adapter`
   - 已有 Rust-first background/control-plane 底座：
     - `scripts/router-rs/src/background_state.rs`
-    - `scripts/runtime_background_cli.py`
     - `framework_runtime/src/framework_runtime/control_plane_contracts.py`
   - 已有 continuity / resume / attach / replay seams：
     - `event_transport`

@@ -33,7 +33,7 @@ use claude_hooks::{
 use framework_mcp::run_framework_mcp_stdio_loop;
 use framework_profile::{
     build_codex_artifact_bundle, build_control_plane_contract_descriptors, build_profile_bundle,
-    build_profile_bundle_with_legacy_alias, load_framework_profile,
+    load_framework_profile,
 };
 use framework_runtime::{
     build_framework_alias_envelope, build_framework_contract_summary_envelope,
@@ -57,6 +57,8 @@ const ROUTE_AUTHORITY: &str = "rust-route-core";
 const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
 const EXECUTION_SCHEMA_VERSION: &str = "router-rs-execute-response-v1";
 const EXECUTION_METADATA_SCHEMA_VERSION: &str = "router-rs-execution-kernel-metadata-v1";
+const EXECUTION_METADATA_CONTRACT_SCHEMA_VERSION: &str =
+    "router-rs-execution-kernel-metadata-contract-v1";
 const EXECUTION_AUTHORITY: &str = "rust-execution-cli";
 const EXECUTION_KERNEL_KIND: &str = "rust-execution-kernel-slice";
 const EXECUTION_KERNEL_AUTHORITY: &str = "rust-execution-kernel-authority";
@@ -265,8 +267,6 @@ struct Cli {
     framework_session_artifact_write_input_json: Option<String>,
     #[arg(long)]
     cases: Option<PathBuf>,
-    #[arg(long)]
-    include_legacy_alias_artifact: bool,
     #[arg(long)]
     include_compatibility_inventory: bool,
     #[arg(long)]
@@ -1694,11 +1694,7 @@ fn main() -> Result<(), String> {
             .as_deref()
             .ok_or_else(|| "--framework-profile is required with --profile-json".to_string())?;
         let profile = load_framework_profile(profile_path)?;
-        let bundle = if args.include_legacy_alias_artifact {
-            build_profile_bundle_with_legacy_alias(&profile, true)?
-        } else {
-            build_profile_bundle(&profile)?
-        };
+        let bundle = build_profile_bundle(&profile)?;
         println!(
             "{}",
             serde_json::to_string(&bundle)
@@ -1712,11 +1708,8 @@ fn main() -> Result<(), String> {
             "--framework-profile is required with --profile-artifacts-json".to_string()
         })?;
         let profile = load_framework_profile(profile_path)?;
-        let artifacts = build_codex_artifact_bundle(
-            &profile,
-            args.include_legacy_alias_artifact,
-            args.include_compatibility_inventory,
-        )?;
+        let artifacts =
+            build_codex_artifact_bundle(&profile, args.include_compatibility_inventory)?;
         println!(
             "{}",
             serde_json::to_string(&artifacts)
@@ -2435,16 +2428,8 @@ fn dispatch_stdio_framework_alias(payload: Value) -> Result<Value, String> {
 
 fn dispatch_stdio_compile_profile_bundle(payload: Value) -> Result<Value, String> {
     let profile_path = required_non_empty_string(&payload, "profile_path", "stdio profile bundle")?;
-    let include_legacy_alias_artifact = payload
-        .get("include_legacy_alias_artifact")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
     let profile = load_framework_profile(Path::new(&profile_path))?;
-    let bundle = if include_legacy_alias_artifact {
-        build_profile_bundle_with_legacy_alias(&profile, true)?
-    } else {
-        build_profile_bundle(&profile)?
-    };
+    let bundle = build_profile_bundle(&profile)?;
     serde_json::to_value(bundle)
         .map_err(|err| format!("serialize profile bundle output failed: {err}"))
 }
@@ -2452,20 +2437,12 @@ fn dispatch_stdio_compile_profile_bundle(payload: Value) -> Result<Value, String
 fn dispatch_stdio_compile_codex_profile_artifacts(payload: Value) -> Result<Value, String> {
     let profile_path =
         required_non_empty_string(&payload, "profile_path", "stdio codex profile artifacts")?;
-    let include_legacy_alias_artifact = payload
-        .get("include_legacy_alias_artifact")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
     let include_compatibility_inventory = payload
         .get("include_compatibility_inventory")
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let profile = load_framework_profile(Path::new(&profile_path))?;
-    let artifacts = build_codex_artifact_bundle(
-        &profile,
-        include_legacy_alias_artifact,
-        include_compatibility_inventory,
-    )?;
+    let artifacts = build_codex_artifact_bundle(&profile, include_compatibility_inventory)?;
     serde_json::to_value(artifacts)
         .map_err(|err| format!("serialize codex profile artifacts output failed: {err}"))
 }
@@ -4615,6 +4592,72 @@ fn build_execution_kernel_contracts_by_mode() -> Map<String, Value> {
     contracts
 }
 
+fn build_execution_kernel_metadata_contract() -> Value {
+    json!({
+        "schema_version": EXECUTION_METADATA_CONTRACT_SCHEMA_VERSION,
+        "authority": EXECUTION_KERNEL_AUTHORITY,
+        "steady_state_fields": [
+            "execution_kernel_metadata_schema_version",
+            "execution_kernel",
+            "execution_kernel_authority",
+            "execution_kernel_contract_mode",
+            "execution_kernel_fallback_policy",
+            "execution_kernel_in_process_replacement_complete",
+            "execution_kernel_delegate",
+            "execution_kernel_delegate_authority",
+            "execution_kernel_delegate_family",
+            "execution_kernel_delegate_impl",
+            "execution_kernel_live_primary",
+            "execution_kernel_live_primary_authority",
+            "execution_kernel_response_shape",
+            "execution_kernel_prompt_preview_owner",
+        ],
+        "runtime_fields": {
+            "shared": ["trace_event_count", "trace_output_path"],
+            "live_primary_required": [
+                "run_id",
+                "status",
+                "execution_kernel_model_id_source",
+                "trace_event_count",
+                "trace_output_path",
+            ],
+            "live_primary_passthrough": [
+                "execution_mode",
+                "route_engine",
+                "diagnostic_route_mode",
+            ],
+            "dry_run_required": [
+                "reason",
+                "execution_kernel_contract_mode",
+                "execution_kernel_fallback_policy",
+                "trace_event_count",
+                "trace_output_path",
+            ],
+        },
+        "metadata_keys": {
+            "metadata_schema_version": "execution_kernel_metadata_schema_version",
+            "contract_mode": "execution_kernel_contract_mode",
+            "fallback_policy": "execution_kernel_fallback_policy",
+            "response_shape": "execution_kernel_response_shape",
+            "prompt_preview_owner": "execution_kernel_prompt_preview_owner",
+            "model_id_source": "execution_kernel_model_id_source",
+        },
+        "defaults": {
+            "contract_mode": EXECUTION_KERNEL_CONTRACT_MODE,
+            "fallback_policy": EXECUTION_KERNEL_FALLBACK_POLICY,
+            "prompt_preview_owner_by_mode": {
+                EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY: EXECUTION_PROMPT_PREVIEW_OWNER,
+                EXECUTION_RESPONSE_SHAPE_DRY_RUN: EXECUTION_PROMPT_PREVIEW_OWNER,
+            },
+            "live_primary_model_id_source": EXECUTION_MODEL_ID_SOURCE,
+            "supported_response_shapes": [
+                EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
+                EXECUTION_RESPONSE_SHAPE_DRY_RUN,
+            ],
+        },
+    })
+}
+
 fn build_dry_run_execute_response(
     payload: &ExecuteRequestPayload,
     prompt_preview: Option<String>,
@@ -6515,6 +6558,7 @@ fn build_runtime_control_plane_payload() -> Value {
                 EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
             )),
             "kernel_contract_by_mode": Value::Object(build_execution_kernel_contracts_by_mode()),
+            "kernel_metadata_contract": build_execution_kernel_metadata_contract(),
             "kernel_adapter_kind": "rust-execution-kernel-slice",
             "kernel_authority": "rust-execution-kernel-authority",
             "kernel_owner_family": "rust",
@@ -9945,6 +9989,24 @@ mod tests {
             Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string())
         );
         assert_eq!(
+            payload["services"]["execution"]["kernel_metadata_contract"]["schema_version"],
+            Value::String(EXECUTION_METADATA_CONTRACT_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_metadata_contract"]["authority"],
+            Value::String(EXECUTION_KERNEL_AUTHORITY.to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_metadata_contract"]["runtime_fields"]
+                ["live_primary_passthrough"][2],
+            Value::String("diagnostic_route_mode".to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_metadata_contract"]["defaults"]
+                ["live_primary_model_id_source"],
+            Value::String(EXECUTION_MODEL_ID_SOURCE.to_string())
+        );
+        assert_eq!(
             payload["services"]["execution"]["kernel_live_delegate_authority"],
             Value::String("rust-execution-cli".to_string())
         );
@@ -10025,6 +10087,31 @@ mod tests {
             Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string())
         );
         assert_eq!(contracts.len(), 2);
+    }
+
+    #[test]
+    fn execution_kernel_metadata_contract_is_rust_owned() {
+        let contract = build_execution_kernel_metadata_contract();
+
+        assert_eq!(
+            contract["schema_version"],
+            Value::String(EXECUTION_METADATA_CONTRACT_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            contract["steady_state_fields"][0],
+            Value::String("execution_kernel_metadata_schema_version".to_string())
+        );
+        assert_eq!(
+            contract["runtime_fields"]["shared"],
+            json!(["trace_event_count", "trace_output_path"])
+        );
+        assert_eq!(
+            contract["defaults"]["supported_response_shapes"],
+            json!([
+                EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
+                EXECUTION_RESPONSE_SHAPE_DRY_RUN,
+            ])
+        );
     }
 
     #[test]
@@ -10733,10 +10820,7 @@ mod tests {
         assert_eq!(response.overlay.as_deref(), Some("rust-pro"));
         assert_eq!(response.usage.mode, "estimated");
         assert_eq!(response.model_id, None);
-        assert_eq!(
-            response.metadata["execution_kernel"],
-            EXECUTION_KERNEL_KIND
-        );
+        assert_eq!(response.metadata["execution_kernel"], EXECUTION_KERNEL_KIND);
         assert_eq!(
             response.metadata["execution_kernel_metadata_schema_version"],
             EXECUTION_METADATA_SCHEMA_VERSION
@@ -10850,10 +10934,7 @@ mod tests {
             response.prompt_preview.as_deref(),
             Some("Native supplied live prompt")
         );
-        assert_eq!(
-            response.metadata["execution_kernel"],
-            EXECUTION_KERNEL_KIND
-        );
+        assert_eq!(response.metadata["execution_kernel"], EXECUTION_KERNEL_KIND);
         assert_eq!(
             response.metadata["execution_kernel_authority"],
             EXECUTION_KERNEL_AUTHORITY

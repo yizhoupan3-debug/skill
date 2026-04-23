@@ -21,7 +21,7 @@ HOME_CODEX_SKILLS_PATH="$HOME/.codex/skills"
 HOME_CLAUDE_SKILLS_PATH="$HOME/.claude/skills"
 HOME_CLAUDE_REFRESH_PATH="$HOME/.claude/commands/refresh.md"
 HOME_CLAUDE_MCP_CONFIG_PATH="$HOME/.claude.json"
-PROJECT_INSTRUCTIONS_PATH="$REPO_ROOT/.codex/model_instructions.md"
+RETIRED_CODEX_MODEL_INSTRUCTIONS_PATH="$REPO_ROOT/.codex/model_instructions.md"
 FRAMEWORK_START_MARKER="<!-- FRAMEWORK_DEFAULT_RUNTIME_START -->"
 ROUTER_RS_MANIFEST="$REPO_ROOT/scripts/router-rs/Cargo.toml"
 ROUTER_RS_RELEASE_BIN="$REPO_ROOT/scripts/router-rs/target/release/router-rs"
@@ -89,7 +89,6 @@ run_codex_native_install() {
     --home-claude-skills-path "$HOME_CLAUDE_SKILLS_PATH"
     --home-claude-refresh-path "$HOME_CLAUDE_REFRESH_PATH"
     --home-claude-mcp-config-path "$HOME_CLAUDE_MCP_CONFIG_PATH"
-    --project-instructions-path "$PROJECT_INSTRUCTIONS_PATH"
     --skip-home-claude-skills-link
     --skip-home-claude-refresh
   )
@@ -218,7 +217,7 @@ show_codex_status() {
   if claude_mcp_has_shared_servers "$HOME_CLAUDE_MCP_CONFIG_PATH"; then
     claude_mcp_ok="true"
   fi
-  if [ ! -e "$PROJECT_INSTRUCTIONS_PATH" ] || ! grep -q "$FRAMEWORK_START_MARKER" "$PROJECT_INSTRUCTIONS_PATH"; then
+  if [ ! -e "$RETIRED_CODEX_MODEL_INSTRUCTIONS_PATH" ] || ! grep -q "$FRAMEWORK_START_MARKER" "$RETIRED_CODEX_MODEL_INSTRUCTIONS_PATH"; then
     overlay_ok="true"
   fi
 

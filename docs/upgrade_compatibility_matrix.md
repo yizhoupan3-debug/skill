@@ -8,12 +8,12 @@ lives in parity snapshots and first-class shared contract artifacts.
 | Adapter | Lifecycle | Host | Transport | Requires aionrs | Core runtime | Memory | Artifact | Orchestration | Notes |
 |---|---|---|---|---:|---:|---:|---:|---:|---|
 | `codex_common_adapter` | compatibility view | Codex shared contract | `host-neutral-contract` | No | Yes | Yes | Yes | Yes | Codex naming compatibility view over shared contract projection; does not replace `cli_common_adapter` as the canonical shared contract |
-| `generic_host_adapter` | fallback baseline | generic | `inproc` | No | Yes | Yes | Yes | Yes | Portable fallback baseline; keeps the outer-framework runtime surface alive |
+| `generic_host_adapter` | retired fallback baseline | generic | `inproc` | No | Yes | Yes | Yes | Yes | Retired fallback surface; not emitted by Python artifact generation |
 | `codex_desktop_adapter` | canonical desktop | Codex Desktop | `local-bridge` | No | Yes | Yes | Yes | Yes | Primary interactive desktop entrypoint and the desktop parity identity |
 | `codex_desktop_host_adapter` | temporary alias | Codex Desktop | `local-bridge` | No | Yes | Yes | Yes | Yes | Compatibility bridge only; mirrors `codex_desktop_adapter`, stays opt-in for continuity lanes, is omitted from default artifact emission, and remains a retirement candidate |
 | `codex_cli_adapter` | canonical headless | codexcli | `headless-exec` | No | Yes | Yes | Yes | Yes | Formal headless entrypoint for batch / cron / CI without becoming framework truth |
-| `aionui_host_adapter` | legacy debt | AionUI host shell | `bridge-contract` | No | Yes | Yes | Yes | Yes | Upstream-facing compatibility surface only; not a forward roadmap anchor |
-| `aionrs_companion_adapter` | legacy debt | aionrs companion sidecar | `stdio-jsonl` | Optional companion | Yes | Optional | Yes | Optional | Companion integration only; deep adaptation, not deep fork |
+| `aionui_host_adapter` | retired legacy debt | AionUI host shell | `bridge-contract` | No | Yes | Yes | Yes | Yes | Compatibility inventory row only; not emitted as a fallback artifact |
+| `aionrs_companion_adapter` | retired legacy debt | aionrs companion sidecar | `stdio-jsonl` | Optional companion | Yes | Optional | Yes | Optional | Compatibility inventory row only; not emitted as a fallback artifact |
 
 ## Upgrade Policy
 
@@ -37,8 +37,8 @@ following are true:
    `codex_desktop_adapter` as the canonical desktop identity.
 2. `codex_dual_entry_parity_snapshot` remains green without alias-specific
    semantics.
-3. Rust and Python artifact emitters can drop the alias without reintroducing
-   `aionrs` / `AionUI` mainline assumptions.
+3. Rust artifact emission can drop the alias without reintroducing `aionrs` /
+   `AionUI` mainline assumptions; Python must not keep a second emitter alive.
 4. Any last-mile translation shim is edge-local compatibility code, not a new
    framework controller or contract truth source.
 
@@ -50,17 +50,16 @@ following are true:
 - `codex_desktop_adapter`: canonical interactive desktop adapter is now implemented.
 - `codex_desktop_host_adapter`: compatibility alias remains available only for explicit continuity / compatibility lanes and is not part of the default artifact emission surface.
 - `codex_cli_adapter`: headless Codex entrypoint projection is now implemented.
-- `aionrs_companion_adapter`: outer-framework companion projection is contract-scoped legacy debt.
-- `AionUI host adapter`: outer-framework host projection is contract-scoped legacy debt.
+- `aionrs_companion_adapter`: retired compatibility inventory row only.
+- `AionUI host adapter`: retired compatibility inventory row only.
 - legacy Codex Desktop alias surface: contract-scoped compatibility debt only; not a first-class Desktop output target.
 - `build_codex_dual_entry_parity_snapshot(...)`: Desktop / CLI shared-contract parity is emitted as the first-class dual-entry artifact.
 - `build_cli_family_parity_snapshot(...)`: CLI-family shared-contract parity is emitted as the canonical CLI regression artifact.
-- `codex_desktop_alias_inventory.json`: current repo-side alias references are inventoried only on explicit continuity runs.
+- `codex_desktop_alias_inventory.json`: retired; no longer emitted by Python artifact generation.
 - `codex_desktop_alias_retirement_status.json`: alias retirement gates are externalized as a contract only on the explicit continuity lane.
-- `framework_runtime.host_adapter_compatibility.build_upgrade_compatibility_matrix(...)`: the upgrade lane is anchored in the outer-framework contract, not host internals.
-- `emit_framework_contract_artifacts(...)`: Python can now emit concrete bridge/contract artifacts for profile + default host adapters + dual-entry parity snapshot + the first-class control-plane contract artifacts `execution_controller_contract`, `delegation_contract`, and `supervisor_state_contract`; default outputs land under `default/`, fallback host artifacts under `fallback/`, legacy alias inventory/status under `continuity/`, and `upgrade_compatibility_matrix` itself is now an explicit compatibility-inventory output.
-- default Python artifact emission is parity-first: `codex_desktop_host_adapter` no longer has a
-  direct Python-emitted artifact, and its inventory/status artifacts stay behind explicit continuity opt-in.
+- `upgrade_compatibility_matrix`: compiled by Rust `--profile-artifacts-json`; Python no longer owns the matrix truth.
+- `emit_framework_contract_artifacts(...)`: calls Rust and writes Rust-owned bridge/contract artifacts. It no longer emits fallback host artifacts, no longer emits alias inventory, and no longer writes a Python/Rust parity report.
+- default Python artifact emission is Rust-first: `codex_desktop_host_adapter` no longer has a direct Python-emitted artifact, and alias retirement status stays behind explicit Rust continuity opt-in.
 - default Rust `--profile-artifacts-json` is now parity-first too: `codex_desktop_alias_retirement_status`
   stays behind explicit continuity opt-in together with the legacy alias artifact.
 - default regression authority is parity-first: this matrix stays secondary

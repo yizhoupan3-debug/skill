@@ -196,42 +196,5 @@
         "state_source": "framework_profile"
       }
     }
-  },
-  "legacy_opt_in": {
-    "codex_desktop_host_adapter": {
-      "bridge_contract": {
-        "memory": {
-          "bridge_dir": ".aionrs-memory-bridge",
-          "mounts": [
-            {
-              "bridge_kind": "framework-memory-mount",
-              "mount_id": "project",
-              "source": "project"
-            }
-          ]
-        },
-        "skills": {
-          "bridge_dir": ".aionrs/skills",
-          "project_dir": ".codex/skills",
-          "user_dir": "~/.codex/skills"
-        }
-      },
-      "source_contract": {
-        "adapter_alias_of": "codex_desktop_adapter",
-        "alias_mode": "mirror-only",
-        "bridge_contract_source": "common_contract.workspace_bootstrap.bridges",
-        "canonical_adapter_id": "codex_desktop_adapter",
-        "contract_source_fields": {
-          "bridge_contract": "bridge_contract",
-          "entrypoint_surface": "entrypoint_contract",
-          "runtime_surface": "runtime_surface",
-          "shared_contract": "common_contract"
-        },
-        "framework_truth": "framework_core",
-        "shared_adapter": "cli_common_adapter",
-        "single_source_of_truth": true,
-        "state_source": "framework_profile"
-      }
-    }
   }
 }

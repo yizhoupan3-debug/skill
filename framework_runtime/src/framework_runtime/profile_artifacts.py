@@ -4,13 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, Mapping
 
-from framework_runtime.framework_artifact_contracts import (
-    build_cli_family_capability_discovery,
-    build_cli_family_parity_snapshot,
-    build_codex_dual_entry_parity_snapshot,
-)
 from framework_runtime.framework_profile import (
     FRAMEWORK_SHARED_CONTRACT_FIELDS,
     FrameworkProfile,
@@ -20,15 +16,7 @@ from framework_runtime.framework_profile import (
 from framework_runtime.host_adapters import (
     DELEGATION_CONTRACT_ARTIFACT_ID,
     EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID,
-    GENERIC_HOST_ADAPTER,
     SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID,
-    adapt_framework_profile,
-    compile_claude_code_adapter,
-    compile_codex_cli_adapter,
-    compile_codex_common_adapter,
-    compile_codex_desktop_adapter,
-    compile_cli_common_adapter,
-    compile_gemini_cli_adapter,
 )
 from framework_runtime.rust_router import RustRouteAdapter
 from framework_runtime.schemas import (
@@ -38,7 +26,6 @@ from framework_runtime.schemas import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-LEGACY_DESKTOP_ALIAS_ID = "codex_desktop_host_adapter"
 FRAMEWORK_SURFACE_POLICY_PATH = PROJECT_ROOT / "configs" / "framework" / "FRAMEWORK_SURFACE_POLICY.json"
 DEFAULT_ARTIFACT_DIRNAME = "default"
 FALLBACK_ARTIFACT_DIRNAME = "fallback"
@@ -96,49 +83,8 @@ DEFAULT_RUST_CODEX_ARTIFACT_FILENAMES = {
     ),
     "upgrade_compatibility_matrix": "router_rs_upgrade_compatibility_matrix.json",
 }
-RUST_PYTHON_PARITY_REPORT_FILENAME = "rust_python_artifact_parity_report.json"
-RUST_PYTHON_PARITY_FIELDS = {
-    "cli_common_adapter": "rust_cli_common_adapter",
-    "codex_common_adapter": "rust_codex_common_adapter",
-    "codex_desktop_adapter": "rust_codex_desktop_adapter",
-    "codex_cli_adapter": "rust_codex_cli_adapter",
-    "claude_code_adapter": "rust_claude_code_adapter",
-    "gemini_cli_adapter": "rust_gemini_cli_adapter",
-    "cli_family_capability_discovery": "rust_cli_family_capability_discovery",
-    "cli_family_parity_snapshot": "rust_cli_family_parity_snapshot",
-    "codex_dual_entry_parity_snapshot": "rust_codex_dual_entry_parity_snapshot",
-    "execution_controller_contract": "rust_execution_controller_contract",
-    "delegation_contract": "rust_delegation_contract",
-    "supervisor_state_contract": "rust_supervisor_state_contract",
-    "execution_kernel_live_fallback_retirement_status": (
-        "rust_execution_kernel_live_fallback_retirement_status"
-    ),
-    "execution_kernel_live_response_serialization_contract": (
-        "rust_execution_kernel_live_response_serialization_contract"
-    ),
-}
-PYTHON_OWNED_RUST_PARITY_PATHS: dict[str, tuple[str, ...]] = {}
-
-
 def _clone_payload(payload: Any) -> Any:
     return json.loads(json.dumps(payload, ensure_ascii=False))
-
-
-def _drop_object_paths(payload: Any, paths: tuple[str, ...]) -> Any:
-    normalized = _clone_payload(payload)
-    if not isinstance(normalized, dict):
-        return normalized
-    for path in paths:
-        cursor = normalized
-        parts = path.split(".")
-        for part in parts[:-1]:
-            if not isinstance(cursor, dict):
-                cursor = None
-                break
-            cursor = cursor.get(part)
-        if isinstance(cursor, dict):
-            cursor.pop(parts[-1], None)
-    return normalized
 
 
 def _collect_diff_paths(left: Any, right: Any, prefix: str = "") -> list[str]:
@@ -168,48 +114,6 @@ def _collect_diff_paths(left: Any, right: Any, prefix: str = "") -> list[str]:
     return []
 
 
-def build_rust_python_artifact_parity_report(
-    *,
-    python_artifacts: Mapping[str, Any],
-    rust_artifacts: Mapping[str, Any],
-) -> dict[str, Any]:
-    artifacts: dict[str, Any] = {}
-    raw_all_match = True
-    normalized_all_match = True
-
-    for python_key, rust_key in RUST_PYTHON_PARITY_FIELDS.items():
-        python_payload = python_artifacts[python_key]
-        rust_payload = rust_artifacts[rust_key]
-        ignored_paths = list(PYTHON_OWNED_RUST_PARITY_PATHS.get(python_key, ()))
-        raw_diff_paths = _collect_diff_paths(python_payload, rust_payload)
-        normalized_diff_paths = _collect_diff_paths(
-            _drop_object_paths(python_payload, tuple(ignored_paths)),
-            _drop_object_paths(rust_payload, tuple(ignored_paths)),
-        )
-        raw_match = not raw_diff_paths
-        normalized_match = not normalized_diff_paths
-        raw_all_match = raw_all_match and raw_match
-        normalized_all_match = normalized_all_match and normalized_match
-        artifacts[python_key] = {
-            "rust_artifact_key": rust_key,
-            "raw_match": raw_match,
-            "normalized_match": normalized_match,
-            "ignored_python_owned_paths": ignored_paths,
-            "raw_diff_paths": raw_diff_paths[:25],
-            "normalized_diff_paths": normalized_diff_paths[:25],
-        }
-
-    return {
-        "schema_version": "rust-python-artifact-parity-report-v1",
-        "authority": "framework-contract-emitter",
-        "compared_artifacts": list(RUST_PYTHON_PARITY_FIELDS),
-        "python_owned_paths": {
-            key: list(paths) for key, paths in PYTHON_OWNED_RUST_PARITY_PATHS.items()
-        },
-        "raw_all_artifacts_match": raw_all_match,
-        "all_artifacts_match_after_normalization": normalized_all_match,
-        "artifacts": artifacts,
-    }
 
 
 def build_framework_artifact_layout_manifest(
@@ -261,86 +165,6 @@ def build_framework_artifact_layout_manifest(
     }
 
 
-def _classify_alias_reference(path: Path) -> tuple[str, str]:
-    parts = set(path.parts)
-    if path.name == "host_adapters.py":
-        return "legacy_alias_infrastructure", "legacy_alias_only"
-    if path.name == "profile_artifacts.py":
-        return "artifact_emitter", "legacy_alias_only"
-    if path.name == "runtime_registry.py":
-        return "runtime_registry_contract", "legacy_alias_only"
-    if path.name == "write_framework_contract_artifacts.py":
-        return "legacy_alias_emitter_cli", "legacy_alias_only"
-    if path.name == "rust_router.py":
-        return "legacy_alias_router_cli", "legacy_alias_only"
-    if path.name == "__init__.py":
-        return "retired_root_export_surface", "legacy_alias_only"
-    if path.name == "framework_profile.rs":
-        return "rust_contract_artifact_lane", "legacy_alias_only"
-    if "tests" in parts:
-        return "legacy_alias_regression_tests", "legacy_alias_only"
-    if "docs" in parts or "aionrs_fusion_docs" in parts:
-        return "legacy_alias_contract_docs", "legacy_alias_only"
-    return "unclassified_code", "primary_identity_risk"
-
-
-def build_codex_desktop_alias_inventory(repo_root: Path | None = None) -> dict[str, Any]:
-    scan_root = repo_root or PROJECT_ROOT
-    search_roots = (
-        scan_root / "framework_runtime" / "src",
-        scan_root / "scripts",
-        scan_root / "tests",
-        scan_root / "docs",
-        scan_root / "aionrs_fusion_docs",
-    )
-    references: list[dict[str, Any]] = []
-    category_counts: dict[str, int] = {}
-    risk_counts = {"legacy_alias_only": 0, "primary_identity_risk": 0}
-
-    for root in search_roots:
-        if not root.exists():
-            continue
-        for path in sorted(root.rglob("*")):
-            if not path.is_file() or path.suffix in {".pyc"}:
-                continue
-            try:
-                text = path.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                continue
-            for line_number, line in enumerate(text.splitlines(), start=1):
-                if LEGACY_DESKTOP_ALIAS_ID not in line:
-                    continue
-                category, risk = _classify_alias_reference(path)
-                category_counts[category] = category_counts.get(category, 0) + 1
-                risk_counts[risk] += 1
-                references.append(
-                    {
-                        "path": str(path.relative_to(scan_root)),
-                        "line": line_number,
-                        "category": category,
-                        "risk": risk,
-                        "line_text": line.strip(),
-                    }
-                )
-
-    summary = {
-        "inventory_complete": True,
-        "legacy_alias_id": LEGACY_DESKTOP_ALIAS_ID,
-        "total_occurrences": len(references),
-        "category_counts": category_counts,
-        "primary_identity_risk_occurrences": risk_counts["primary_identity_risk"],
-        "legacy_alias_only_occurrences": risk_counts["legacy_alias_only"],
-        "legacy_alias_shim_required": risk_counts["primary_identity_risk"] > 0,
-    }
-    return {
-        "canonical_adapter_id": "codex_desktop_adapter",
-        "legacy_alias_id": LEGACY_DESKTOP_ALIAS_ID,
-        "scan_root": str(scan_root),
-        "summary": summary,
-        "references": references,
-    }
-
-
 def _extract_shared_contract_surface(
     payload: Mapping[str, Any],
     field_name: str,
@@ -355,66 +179,16 @@ def _extract_shared_contract_surface(
     return projected_surface
 
 
-def _build_python_artifacts(
+def _build_rust_default_artifacts(
     profile: FrameworkProfile,
     *,
-    host_overrides: Mapping[str, Any] | None = None,
-    include_compatibility_inventory: bool = False,
-    rust_adapter: RustRouteAdapter | None = None,
+    rust_codex_artifacts: Mapping[str, Any],
 ) -> dict[str, Any]:
-    artifacts = {
+    artifacts = dict(rust_codex_artifacts)
+    artifacts.update({
         "framework_profile": profile.to_dict(),
         "framework_surface_policy": profile.framework_surface_policy,
-        "cli_common_adapter": compile_cli_common_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "codex_common_adapter": compile_codex_common_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "codex_cli_adapter": compile_codex_cli_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "claude_code_adapter": compile_claude_code_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "gemini_cli_adapter": compile_gemini_cli_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "cli_family_capability_discovery": build_cli_family_capability_discovery(
-            profile,
-            host_overrides=host_overrides,
-        ),
-        "codex_desktop_adapter": compile_codex_desktop_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "cli_family_parity_snapshot": build_cli_family_parity_snapshot(
-            profile,
-            host_overrides=host_overrides,
-        ),
-        "codex_dual_entry_parity_snapshot": build_codex_dual_entry_parity_snapshot(
-            profile,
-            host_overrides=host_overrides,
-        ),
-    }
-    if include_compatibility_inventory:
-        from framework_runtime.host_adapter_compatibility import (
-            build_codex_desktop_alias_retirement_status,
-        )
-
-        alias_inventory = build_codex_desktop_alias_inventory()
-        artifacts["codex_desktop_alias_inventory"] = alias_inventory
-        artifacts["codex_desktop_alias_retirement_status"] = (
-            build_codex_desktop_alias_retirement_status(
-                alias_inventory_summary=alias_inventory["summary"]
-            )
-        )
-    artifacts.update((rust_adapter or RustRouteAdapter(PROJECT_ROOT)).control_plane_contract_descriptors())
+    })
     return artifacts
 
 
@@ -491,14 +265,12 @@ def _write_rust_artifacts(
     *,
     profile_path: Path,
     rust_adapter: RustRouteAdapter,
-    emit_legacy_alias_artifact: bool,
     emit_compatibility_inventory: bool,
 ) -> tuple[dict[str, Any], dict[str, str]]:
     rust_dir = output_dir / RUST_ARTIFACT_DIRNAME
     rust_bundle = rust_adapter.compile_profile_bundle(profile_path)
     rust_codex_artifacts = rust_adapter.compile_codex_profile_artifacts(
         profile_path,
-        include_legacy_alias_artifact=emit_legacy_alias_artifact,
         include_compatibility_inventory=emit_compatibility_inventory,
     )
 
@@ -516,31 +288,7 @@ def _write_rust_artifacts(
             rust_codex_artifacts[artifact_key],
         )
 
-    if emit_legacy_alias_artifact and "codex_desktop_alias_retirement_status" in rust_codex_artifacts:
-        paths["rust_codex_desktop_alias_retirement_status"] = _write_json(
-            rust_dir / "router_rs_codex_desktop_alias_retirement_status.json",
-            rust_codex_artifacts["codex_desktop_alias_retirement_status"],
-        )
     return rust_codex_artifacts, paths
-
-
-def _emit_rust_python_parity_report(
-    output_dir: Path,
-    *,
-    python_artifacts: Mapping[str, Any],
-    rust_codex_artifacts: Mapping[str, Any],
-) -> dict[str, str]:
-    rust_dir = output_dir / RUST_ARTIFACT_DIRNAME
-    parity_report = build_rust_python_artifact_parity_report(
-        python_artifacts=python_artifacts,
-        rust_artifacts={f"rust_{key}": value for key, value in rust_codex_artifacts.items()},
-    )
-    return {
-        "rust_python_artifact_parity_report": _write_json(
-            rust_dir / RUST_PYTHON_PARITY_REPORT_FILENAME,
-            parity_report,
-        )
-    }
 
 
 def _emit_shared_contract_projection_report(
@@ -562,100 +310,25 @@ def _emit_shared_contract_projection_report(
     return report
 
 
-def _write_fallback_artifacts(
-    output_dir: Path,
-    *,
-    profile: FrameworkProfile,
-    host_overrides: Mapping[str, Any] | None = None,
-) -> dict[str, str]:
-    from framework_runtime.host_adapter_compatibility import (
-        compile_aionrs_companion_adapter,
-        compile_aionui_host_adapter,
-    )
-
-    fallback_dir = output_dir / FALLBACK_ARTIFACT_DIRNAME
-    artifacts = {
-        "aionrs_companion_adapter": compile_aionrs_companion_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "aionui_host_adapter": compile_aionui_host_adapter(
-            profile,
-            host_overrides=host_overrides,
-        ).host_payload,
-        "generic_host_adapter": adapt_framework_profile(
-            profile,
-            GENERIC_HOST_ADAPTER,
-            host_overrides=host_overrides,
-        ).host_payload,
-    }
-    return {
-        "aionrs_companion_adapter": _write_json(
-            fallback_dir / "aionrs_companion_adapter.json",
-            artifacts["aionrs_companion_adapter"],
-        ),
-        "aionui_host_adapter": _write_json(
-            fallback_dir / "aionui_host_adapter.json",
-            artifacts["aionui_host_adapter"],
-        ),
-        "generic_host_adapter": _write_json(
-            fallback_dir / "generic_host_adapter.json",
-            artifacts["generic_host_adapter"],
-        ),
-    }
-
-
 def _write_continuity_artifacts(
     output_dir: Path,
     *,
-    profile: FrameworkProfile,
     emit_compatibility_inventory: bool,
-    emit_legacy_alias_artifact: bool,
-    python_artifacts: Mapping[str, Any],
-    rust_codex_artifacts: Mapping[str, Any] | None = None,
+    rust_codex_artifacts: Mapping[str, Any],
 ) -> dict[str, str]:
     continuity_dir = output_dir / CONTINUITY_ARTIFACT_DIRNAME
     paths: dict[str, str] = {}
     if emit_compatibility_inventory:
-        from framework_runtime.host_adapter_compatibility import (
-            build_upgrade_compatibility_matrix,
-        )
-
         paths["codex_common_adapter"] = _write_json(
             continuity_dir / "codex_common_adapter.json",
-            (
-                rust_codex_artifacts["codex_common_adapter"]
-                if rust_codex_artifacts is not None and "codex_common_adapter" in rust_codex_artifacts
-                else python_artifacts["codex_common_adapter"]
-            ),
+            rust_codex_artifacts["codex_common_adapter"],
         )
-        compatibility_matrix = (
-            rust_codex_artifacts.get("upgrade_compatibility_matrix")
-            if rust_codex_artifacts is not None
-            else None
-        )
+        compatibility_matrix = rust_codex_artifacts.get("upgrade_compatibility_matrix")
         if compatibility_matrix is None:
-            compatibility_matrix = build_upgrade_compatibility_matrix(
-                profile,
-                include_legacy_aliases=emit_legacy_alias_artifact,
-            )
+            raise RuntimeError("router-rs did not emit upgrade_compatibility_matrix")
         paths["upgrade_compatibility_matrix"] = _write_json(
             continuity_dir / "upgrade_compatibility_matrix.json",
             compatibility_matrix,
-        )
-    if emit_legacy_alias_artifact:
-        paths["codex_desktop_alias_inventory"] = _write_json(
-            continuity_dir / "codex_desktop_alias_inventory.json",
-            python_artifacts["codex_desktop_alias_inventory"],
-        )
-        paths["codex_desktop_alias_retirement_status"] = _write_json(
-            continuity_dir / "codex_desktop_alias_retirement_status.json",
-            (
-                rust_codex_artifacts["codex_desktop_alias_retirement_status"]
-                if rust_codex_artifacts is not None
-                and "codex_desktop_alias_retirement_status" in rust_codex_artifacts
-                else python_artifacts["codex_desktop_alias_retirement_status"]
-            ),
         )
     return paths
 
@@ -666,6 +339,8 @@ def build_framework_shared_contract_projection_report(
     host_overrides: Mapping[str, Any] | None = None,
     adapter_payloads: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    if host_overrides is not None:
+        raise ValueError("host_overrides are not supported; router-rs owns host projection output.")
     canonical_payload = FrameworkSharedContract.model_validate(
         profile.shared_contract_payload()
     ).model_dump(mode="python")
@@ -674,36 +349,17 @@ def build_framework_shared_contract_projection_report(
         canonical_surface["workspace_bootstrap"]
     )
 
-    compiled_payloads = (
-        dict(adapter_payloads)
-        if adapter_payloads is not None
-        else {
-            "cli_common_adapter": compile_cli_common_adapter(
-                profile,
-                host_overrides=host_overrides,
-            ).host_payload,
-            "codex_common_adapter": compile_codex_common_adapter(
-                profile,
-                host_overrides=host_overrides,
-            ).host_payload,
-            "codex_desktop_adapter": compile_codex_desktop_adapter(
-                profile,
-                host_overrides=host_overrides,
-            ).host_payload,
-            "codex_cli_adapter": compile_codex_cli_adapter(
-                profile,
-                host_overrides=host_overrides,
-            ).host_payload,
-            "claude_code_adapter": compile_claude_code_adapter(
-                profile,
-                host_overrides=host_overrides,
-            ).host_payload,
-            "gemini_cli_adapter": compile_gemini_cli_adapter(
-                profile,
-                host_overrides=host_overrides,
-            ).host_payload,
-        }
-    )
+    if adapter_payloads is not None:
+        compiled_payloads = dict(adapter_payloads)
+    else:
+        with NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as handle:
+            json.dump(profile.to_dict(), handle, ensure_ascii=False)
+            handle.flush()
+            profile_path = Path(handle.name)
+        try:
+            compiled_payloads = RustRouteAdapter(PROJECT_ROOT).compile_codex_profile_artifacts(profile_path)
+        finally:
+            profile_path.unlink(missing_ok=True)
 
     adapter_projection_map = (
         ("cli_common_adapter", "shared_contract", None, "bridge_contract"),
@@ -796,69 +452,46 @@ def emit_framework_contract_artifacts(
     rust_adapter: RustRouteAdapter | None = None,
     include_fallback_artifacts: bool = False,
     include_compatibility_inventory: bool = False,
-    include_legacy_alias_artifact: bool | None = None,
 ) -> dict[str, str]:
     """Write concrete framework-profile and adapter artifacts for bridge consumers."""
 
+    if host_overrides is not None:
+        raise ValueError("host_overrides are not supported; router-rs owns host projection output.")
+    if include_fallback_artifacts:
+        raise ValueError("fallback host artifacts are retired; router-rs owns canonical outputs.")
+
     output_dir.mkdir(parents=True, exist_ok=True)
     profile = _profile_with_surface_policy(profile)
-    emit_legacy_alias_artifact = include_legacy_alias_artifact is True
-    emit_compatibility_inventory = include_compatibility_inventory or emit_legacy_alias_artifact
-    python_artifacts = _build_python_artifacts(
-        profile,
-        host_overrides=host_overrides,
-        include_compatibility_inventory=emit_compatibility_inventory,
-        rust_adapter=rust_adapter,
-    )
-    effective_default_artifacts = dict(python_artifacts)
-    rust_codex_artifacts: dict[str, Any] | None = None
+    emit_compatibility_inventory = include_compatibility_inventory
+    rust_adapter = rust_adapter or RustRouteAdapter(PROJECT_ROOT)
 
     profile_path = output_dir / DEFAULT_ARTIFACT_DIRNAME / "framework_profile.json"
     paths: dict[str, str] = {}
 
-    if rust_adapter is not None:
-        _write_json(profile_path, python_artifacts["framework_profile"])
-        rust_codex_artifacts, rust_paths = _write_rust_artifacts(
-            output_dir,
-            profile_path=profile_path,
-            rust_adapter=rust_adapter,
-            emit_legacy_alias_artifact=emit_legacy_alias_artifact,
-            emit_compatibility_inventory=emit_compatibility_inventory,
-        )
-        paths.update(rust_paths)
+    _write_json(profile_path, profile.to_dict())
+    rust_codex_artifacts, rust_paths = _write_rust_artifacts(
+        output_dir,
+        profile_path=profile_path,
+        rust_adapter=rust_adapter,
+        emit_compatibility_inventory=emit_compatibility_inventory,
+    )
+    paths.update(rust_paths)
 
-        # Keep Python-built payloads for parity auditing, but publish the Rust
-        # artifacts as the default contract surface when router-rs is present.
-        for python_key, rust_key in RUST_PYTHON_PARITY_FIELDS.items():
-            rust_value = rust_codex_artifacts.get(rust_key)
-            if rust_value is not None:
-                effective_default_artifacts[python_key] = rust_value
-
-        paths.update(
-            _emit_rust_python_parity_report(
-                output_dir,
-                python_artifacts=python_artifacts,
-                rust_codex_artifacts=rust_codex_artifacts,
-            )
-        )
-
+    effective_default_artifacts = _build_rust_default_artifacts(
+        profile,
+        rust_codex_artifacts=rust_codex_artifacts,
+    )
     paths.update(_write_default_artifacts(output_dir, effective_default_artifacts))
 
     _emit_shared_contract_projection_report(
         profile=profile,
-        host_overrides=host_overrides,
         adapter_payloads=effective_default_artifacts,
     )
 
-    if include_fallback_artifacts:
-        paths.update(_write_fallback_artifacts(output_dir, profile=profile, host_overrides=host_overrides))
     paths.update(
         _write_continuity_artifacts(
             output_dir,
-            profile=profile,
             emit_compatibility_inventory=emit_compatibility_inventory,
-            emit_legacy_alias_artifact=emit_legacy_alias_artifact,
-            python_artifacts=effective_default_artifacts,
             rust_codex_artifacts=rust_codex_artifacts,
         )
     )

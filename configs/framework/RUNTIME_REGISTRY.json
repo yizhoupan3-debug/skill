@@ -564,32 +564,6 @@
       "notes": "Primary non-aionrs host path for preserving portable framework core."
     },
     {
-      "adapter_id": "codex_desktop_host_adapter",
-      "registry_lane": "compatibility",
-      "host_id": "codex-desktop",
-      "transport": "local-bridge",
-      "required_capabilities": ["runtime", "memory", "artifact", "orchestration"],
-      "optional_capabilities": [],
-      "host_capabilities": ["local_runtime", "artifact_contract", "memory_mounts", "mcp_servers", "automation_bridge", "orchestration_control"],
-      "emits_artifacts": true,
-      "supports_memory_mounts": true,
-      "supports_orchestration": true,
-      "upgrade_zone": "upstream-safe-zone",
-      "thin_patch_surfaces": ["desktop_metadata_injection"],
-      "fork_danger_surfaces": ["aionrs_session_protocol", "aionrs_event_grammar", "aionrs_resume_semantics", "aionrs_tool_approval_semantics", "aionrs_provider_plumbing"],
-      "protocol_hints": {
-        "desktop_mode": true,
-        "state_source": "framework_profile",
-        "works_without_aionrs": true,
-        "canonical_adapter_id": "codex_desktop_adapter",
-        "legacy_alias": true,
-        "legacy_surface": true,
-        "legacy_lane": "compatibility",
-        "default_host_peer_set_member": false
-      },
-      "notes": "Compatibility alias for codex_desktop_adapter; preserves the legacy host-specific name."
-    },
-    {
       "adapter_id": "codex_cli_adapter",
       "registry_lane": "default",
       "host_id": "codex-cli",

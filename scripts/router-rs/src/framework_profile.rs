@@ -195,7 +195,6 @@ const CLI_FAMILY_TARGETS: [&str; 3] = [
     GEMINI_CLI_ADAPTER_ID,
 ];
 const CLI_FAMILY_PARITY_ARTIFACT_ID: &str = "cli_family_parity_snapshot";
-const LEGACY_CODEX_DESKTOP_ADAPTER_ID: &str = "codex_desktop_host_adapter";
 const EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID: &str = "execution_controller_contract";
 const DELEGATION_CONTRACT_ARTIFACT_ID: &str = "delegation_contract";
 const SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID: &str = "supervisor_state_contract";
@@ -310,26 +309,17 @@ pub struct ProfileBundle {
     pub cli_common_adapter: Value,
     pub codex_common_adapter: Value,
     pub codex_desktop_adapter: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub compatibility_lane: Option<CompatibilityLane>,
     pub codex_cli_adapter: Value,
     pub claude_code_adapter: Value,
     pub gemini_cli_adapter: Value,
     pub cli_family_capability_discovery: Value,
     pub cli_family_parity_snapshot: Value,
     pub codex_dual_entry_parity_snapshot: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub codex_desktop_alias_retirement_status: Option<Value>,
     pub execution_controller_contract: Value,
     pub delegation_contract: Value,
     pub supervisor_state_contract: Value,
     pub execution_kernel_live_fallback_retirement_status: Value,
     pub execution_kernel_live_response_serialization_contract: Value,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct CompatibilityLane {
-    pub codex_desktop_host_adapter: Value,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -369,13 +359,6 @@ pub fn load_framework_profile(path: &Path) -> Result<FrameworkProfileContract, S
 }
 
 pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<ProfileBundle, String> {
-    build_profile_bundle_with_legacy_alias(profile, false)
-}
-
-pub fn build_profile_bundle_with_legacy_alias(
-    profile: &FrameworkProfileContract,
-    include_legacy_alias_artifact: bool,
-) -> Result<ProfileBundle, String> {
     validate_framework_profile(profile)?;
 
     let normalized_memory_mounts = normalize_mounts(&profile.memory_mounts);
@@ -471,23 +454,11 @@ pub fn build_profile_bundle_with_legacy_alias(
         &shared_contract,
         &controller_boundary,
     );
-    let compatibility_lane = if include_legacy_alias_artifact {
-        Some(Value::Object(build_codex_desktop_host_adapter(
-            &codex_desktop_adapter,
-        )?))
-    } else {
-        None
-    };
     let codex_dual_entry_parity_snapshot = build_codex_dual_entry_parity_snapshot(
         &controller_boundary,
         &codex_desktop_adapter,
         &codex_cli_adapter,
     )?;
-    let codex_desktop_alias_retirement_status = if include_legacy_alias_artifact {
-        Some(Value::Object(build_codex_desktop_alias_retirement_status()))
-    } else {
-        None
-    };
     let mut control_plane_contracts = build_control_plane_contract_descriptors();
     let execution_controller_contract = control_plane_contracts
         .remove(EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID)
@@ -566,29 +537,17 @@ pub fn build_profile_bundle_with_legacy_alias(
                     "fallback_adapter",
                     Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
                 ),
-                (
-                    "legacy_fallback_aliases",
-                    Value::Array(vec![Value::String(
-                        LEGACY_CODEX_DESKTOP_ADAPTER_ID.to_string(),
-                    )]),
-                ),
             ]),
         },
         cli_common_adapter: Value::Object(cli_common_adapter),
         codex_common_adapter: Value::Object(codex_common_adapter),
         codex_desktop_adapter: Value::Object(codex_desktop_adapter),
-        compatibility_lane: compatibility_lane.map(|codex_desktop_host_adapter| {
-            CompatibilityLane {
-                codex_desktop_host_adapter,
-            }
-        }),
         codex_cli_adapter: Value::Object(codex_cli_adapter),
         claude_code_adapter: Value::Object(claude_code_adapter),
         gemini_cli_adapter: Value::Object(gemini_cli_adapter),
         cli_family_capability_discovery: Value::Object(cli_family_capability_discovery),
         cli_family_parity_snapshot: Value::Object(cli_family_parity_snapshot),
         codex_dual_entry_parity_snapshot: Value::Object(codex_dual_entry_parity_snapshot),
-        codex_desktop_alias_retirement_status,
         execution_controller_contract,
         delegation_contract,
         supervisor_state_contract,
@@ -599,10 +558,9 @@ pub fn build_profile_bundle_with_legacy_alias(
 
 pub fn build_codex_artifact_bundle(
     profile: &FrameworkProfileContract,
-    include_legacy_alias_artifact: bool,
     include_compatibility_inventory: bool,
 ) -> Result<Map<String, Value>, String> {
-    let bundle = build_profile_bundle_with_legacy_alias(profile, include_legacy_alias_artifact)?;
+    let bundle = build_profile_bundle(profile)?;
     let mut artifacts = Map::new();
     artifacts.insert("cli_common_adapter".to_string(), bundle.cli_common_adapter);
     artifacts.insert(
@@ -631,24 +589,12 @@ pub fn build_codex_artifact_bundle(
         "codex_dual_entry_parity_snapshot".to_string(),
         bundle.codex_dual_entry_parity_snapshot,
     );
-    if include_legacy_alias_artifact {
-        let codex_desktop_alias_retirement_status = bundle
-            .codex_desktop_alias_retirement_status
-            .ok_or_else(|| {
-                "missing codex desktop alias retirement status for explicit continuity lane"
-                    .to_string()
-            })?;
-        artifacts.insert(
-            "codex_desktop_alias_retirement_status".to_string(),
-            codex_desktop_alias_retirement_status,
-        );
-    }
     if include_compatibility_inventory {
         artifacts.insert(
             "upgrade_compatibility_matrix".to_string(),
             Value::Object(build_upgrade_compatibility_matrix(
                 Some(profile),
-                include_legacy_alias_artifact,
+                true,
             )),
         );
     }
@@ -778,20 +724,6 @@ fn compatibility_specs(include_legacy_aliases: bool) -> Vec<CompatibilityAdapter
     ];
     if include_legacy_aliases {
         specs.extend([
-            CompatibilityAdapterSpec {
-                adapter_id: LEGACY_CODEX_DESKTOP_ADAPTER_ID,
-                host_id: "codex-desktop",
-                transport: "local-bridge",
-                required_capabilities: &REQUIRED_CORE_CAPABILITIES,
-                optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
-                host_capabilities: &CODEX_DESKTOP_HOST_CAPABILITIES,
-                thin_patch_surfaces: &DESKTOP_THIN_PATCH_SURFACES,
-                works_without_aionrs: true,
-                legacy_surface: true,
-                legacy_lane: Some("compatibility"),
-                default_host_peer_set_member: false,
-                requires_aionrs: false,
-            },
             CompatibilityAdapterSpec {
                 adapter_id: "aionrs_companion_adapter",
                 host_id: "aionrs-companion",
@@ -1819,12 +1751,6 @@ fn build_cli_family_host_adapter(
                 "desktop_peer",
                 Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
             ),
-            (
-                "legacy_desktop_peer_aliases",
-                Value::Array(vec![Value::String(
-                    LEGACY_CODEX_DESKTOP_ADAPTER_ID.to_string(),
-                )]),
-            ),
         ]),
     );
     if let Some(fallback_semantics) = payload
@@ -2302,67 +2228,6 @@ fn build_codex_desktop_adapter(
     payload
 }
 
-fn build_codex_desktop_host_adapter(
-    desktop_adapter: &Map<String, Value>,
-) -> Result<Map<String, Value>, String> {
-    let mut payload = desktop_adapter.clone();
-    let metadata = payload
-        .get_mut("metadata")
-        .and_then(Value::as_object_mut)
-        .ok_or_else(|| "codex desktop adapter missing metadata".to_string())?;
-    metadata.insert(
-        "adapter_id".to_string(),
-        Value::String(LEGACY_CODEX_DESKTOP_ADAPTER_ID.to_string()),
-    );
-    metadata.insert(
-        "adapter_alias_of".to_string(),
-        Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-    );
-    metadata.insert(
-        "canonical_adapter_id".to_string(),
-        Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-    );
-
-    let entrypoint_contract = payload
-        .get_mut("entrypoint_contract")
-        .and_then(Value::as_object_mut)
-        .ok_or_else(|| "codex desktop adapter missing entrypoint_contract".to_string())?;
-    entrypoint_contract.insert(
-        "canonical_adapter_id".to_string(),
-        Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-    );
-    entrypoint_contract.insert(
-        "legacy_adapter_id".to_string(),
-        Value::String(LEGACY_CODEX_DESKTOP_ADAPTER_ID.to_string()),
-    );
-
-    let fallback_semantics = payload
-        .get_mut("fallback_semantics")
-        .and_then(Value::as_object_mut)
-        .ok_or_else(|| "codex desktop adapter missing fallback_semantics".to_string())?;
-    fallback_semantics.insert(
-        "legacy_adapter_id".to_string(),
-        Value::String(LEGACY_CODEX_DESKTOP_ADAPTER_ID.to_string()),
-    );
-    let source_contract = payload
-        .get_mut("source_contract")
-        .and_then(Value::as_object_mut)
-        .ok_or_else(|| "codex desktop adapter missing source_contract".to_string())?;
-    source_contract.insert(
-        "canonical_adapter_id".to_string(),
-        Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-    );
-    source_contract.insert(
-        "adapter_alias_of".to_string(),
-        Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-    );
-    source_contract.insert(
-        "alias_mode".to_string(),
-        Value::String("mirror-only".to_string()),
-    );
-    Ok(payload)
-}
-
 fn build_codex_cli_adapter(
     profile: &FrameworkProfileContract,
     normalized_memory_mounts: &[Value],
@@ -2416,12 +2281,6 @@ fn build_codex_cli_adapter(
                     Value::String(CLAUDE_CODE_ADAPTER_ID.to_string()),
                     Value::String(GEMINI_CLI_ADAPTER_ID.to_string()),
                 ]),
-            ),
-            (
-                "legacy_desktop_peer_aliases",
-                Value::Array(vec![Value::String(
-                    LEGACY_CODEX_DESKTOP_ADAPTER_ID.to_string(),
-                )]),
             ),
         ]),
     );
@@ -2494,12 +2353,6 @@ fn build_codex_dual_entry_parity_snapshot(
             (
                 "shared_adapter",
                 desktop_adapter["entrypoint_contract"]["shared_adapter"].clone(),
-            ),
-            (
-                "legacy_aliases",
-                Value::Array(vec![Value::String(
-                    LEGACY_CODEX_DESKTOP_ADAPTER_ID.to_string(),
-                )]),
             ),
         ]),
     );
@@ -3004,118 +2857,6 @@ fn build_cli_family_snapshot_entry(adapter: &Map<String, Value>) -> Result<Value
                 .unwrap_or(Value::Bool(false)),
         ),
     ]))
-}
-
-fn build_codex_desktop_alias_retirement_status() -> Map<String, Value> {
-    let inventory_summary = build_codex_desktop_alias_inventory_summary();
-    let inventory_complete = inventory_summary
-        .get("inventory_complete")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let primary_identity_risk_occurrences = inventory_summary
-        .get("primary_identity_risk_occurrences")
-        .and_then(Value::as_u64);
-    let legacy_alias_shim_required = inventory_summary
-        .get("legacy_alias_shim_required")
-        .and_then(Value::as_bool);
-    let runtime_primary_identity_consumers_cleared = if inventory_complete {
-        Value::Bool(primary_identity_risk_occurrences == Some(0))
-    } else {
-        Value::Null
-    };
-    let mut retirement_gates = Map::new();
-    retirement_gates.insert(
-        "canonical_desktop_identity_locked".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "parity_snapshot_is_primary_baseline".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "legacy_alias_inventory_is_secondary".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "runtime_primary_identity_consumers_cleared".to_string(),
-        runtime_primary_identity_consumers_cleared,
-    );
-    retirement_gates.insert(
-        "legacy_alias_shim_required".to_string(),
-        legacy_alias_shim_required
-            .map(Value::Bool)
-            .unwrap_or(Value::Null),
-    );
-    retirement_gates.insert(
-        "legacy_alias_shim_ready_if_needed".to_string(),
-        Value::Bool(!legacy_alias_shim_required.unwrap_or(false)),
-    );
-
-    let mut emitter_contract = Map::new();
-    emitter_contract.insert(
-        "native_emits_alias_artifact".to_string(),
-        Value::Bool(false),
-    );
-    emitter_contract.insert("rust_emits_alias_artifact".to_string(), Value::Bool(false));
-    emitter_contract.insert(
-        "drop_requires_joint_emitter_flip".to_string(),
-        Value::Bool(true),
-    );
-    emitter_contract.insert(
-        "legacy_alias_artifact_opt_in".to_string(),
-        Value::Bool(true),
-    );
-    emitter_contract.insert(
-        "alias_may_not_gain_new_host_semantics".to_string(),
-        Value::Bool(true),
-    );
-
-    let mut payload = Map::new();
-    payload.insert(
-        "canonical_adapter_id".to_string(),
-        Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-    );
-    payload.insert(
-        "legacy_alias_id".to_string(),
-        Value::String(LEGACY_CODEX_DESKTOP_ADAPTER_ID.to_string()),
-    );
-    payload.insert(
-        "alias_lifecycle".to_string(),
-        Value::String("retired-alias-only".to_string()),
-    );
-    payload.insert(
-        "alias_mode".to_string(),
-        Value::String("mirror-only".to_string()),
-    );
-    payload.insert(
-        "framework_truth".to_string(),
-        Value::String("framework_core".to_string()),
-    );
-    payload.insert(
-        "primary_regression_artifact".to_string(),
-        Value::String(CLI_FAMILY_PARITY_ARTIFACT_ID.to_string()),
-    );
-    payload.insert(
-        "codex_dual_entry_parity_artifact".to_string(),
-        Value::String("codex_dual_entry_parity_snapshot".to_string()),
-    );
-    payload.insert(
-        "secondary_inventory_artifact".to_string(),
-        Value::String("upgrade_compatibility_matrix".to_string()),
-    );
-    payload.insert(
-        "emitter_contract".to_string(),
-        Value::Object(emitter_contract),
-    );
-    payload.insert(
-        "retirement_gates".to_string(),
-        Value::Object(retirement_gates),
-    );
-    payload.insert(
-        "inventory_summary".to_string(),
-        Value::Object(inventory_summary),
-    );
-    payload
 }
 
 fn build_execution_controller_contract() -> Map<String, Value> {
@@ -3818,11 +3559,19 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         Value::Bool(false),
     );
     retirement_gates.insert(
+        "dry_run_prompt_preview_still_python_owned".to_string(),
+        Value::Bool(false),
+    );
+    retirement_gates.insert(
         "compatibility_fallback_agent_factory_still_native_owned".to_string(),
         Value::Bool(false),
     );
     retirement_gates.insert(
         "compatibility_live_response_serialization_still_native_owned".to_string(),
+        Value::Bool(false),
+    );
+    retirement_gates.insert(
+        "compatibility_live_response_serialization_still_python_owned".to_string(),
         Value::Bool(false),
     );
     retirement_gates.insert(
@@ -3888,6 +3637,10 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
     payload.insert(
         "remaining_native_owned_surfaces".to_string(),
         remaining_native_owned_surfaces,
+    );
+    payload.insert(
+        "remaining_python_owned_surfaces".to_string(),
+        Value::Array(vec![]),
     );
     payload.insert(
         "retirement_readiness".to_string(),
@@ -4099,6 +3852,10 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         Value::Bool(false),
     );
     retirement_gates.insert(
+        "compatibility_live_response_serialization_still_python_owned".to_string(),
+        Value::Bool(false),
+    );
+    retirement_gates.insert(
         "runtime_control_flow_change_required_for_removal".to_string(),
         Value::Bool(false),
     );
@@ -4190,156 +3947,12 @@ pub fn build_control_plane_contract_descriptors() -> Map<String, Value> {
     payload
 }
 
-fn build_codex_desktop_alias_inventory_summary() -> Map<String, Value> {
-    let scan_root = repo_scan_root();
-    let search_roots = [
-        scan_root.join("framework_runtime").join("src"),
-        scan_root.join("scripts"),
-        scan_root.join("tests"),
-        scan_root.join("docs"),
-        scan_root.join("aionrs_fusion_docs"),
-    ];
-
-    let mut category_counts = Map::new();
-    let mut total_occurrences = 0_u64;
-    let mut primary_identity_risk_occurrences = 0_u64;
-    let mut legacy_alias_only_occurrences = 0_u64;
-
-    for root in search_roots {
-        if !root.exists() {
-            continue;
-        }
-        for path in collect_files(&root) {
-            if path.extension().and_then(|ext| ext.to_str()) == Some("pyc") {
-                continue;
-            }
-            let Ok(text) = fs::read_to_string(&path) else {
-                continue;
-            };
-            for line in text.lines() {
-                if !line.contains(LEGACY_CODEX_DESKTOP_ADAPTER_ID) {
-                    continue;
-                }
-                total_occurrences += 1;
-                let (category, risk) = classify_alias_reference(&path);
-                increment_counter(&mut category_counts, category);
-                match risk {
-                    "legacy_alias_only" => legacy_alias_only_occurrences += 1,
-                    _ => primary_identity_risk_occurrences += 1,
-                }
-            }
-        }
-    }
-
-    let legacy_alias_shim_required = primary_identity_risk_occurrences > 0;
-    let mut summary = Map::new();
-    summary.insert("inventory_complete".to_string(), Value::Bool(true));
-    summary.insert(
-        "legacy_alias_id".to_string(),
-        Value::String(LEGACY_CODEX_DESKTOP_ADAPTER_ID.to_string()),
-    );
-    summary.insert(
-        "total_occurrences".to_string(),
-        Value::from(total_occurrences),
-    );
-    summary.insert(
-        "category_counts".to_string(),
-        Value::Object(category_counts),
-    );
-    summary.insert(
-        "primary_identity_risk_occurrences".to_string(),
-        Value::from(primary_identity_risk_occurrences),
-    );
-    summary.insert(
-        "legacy_alias_only_occurrences".to_string(),
-        Value::from(legacy_alias_only_occurrences),
-    );
-    summary.insert(
-        "legacy_alias_shim_required".to_string(),
-        Value::Bool(legacy_alias_shim_required),
-    );
-    summary
-}
-
 fn repo_scan_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."))
-}
-
-fn collect_files(root: &Path) -> Vec<PathBuf> {
-    let mut files = Vec::new();
-    let mut entries = match fs::read_dir(root) {
-        Ok(entries) => entries
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .collect::<Vec<_>>(),
-        Err(_) => return files,
-    };
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            let directory_name = path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or_default();
-            if matches!(directory_name, "target" | "__pycache__" | ".pytest_cache") {
-                continue;
-            }
-            files.extend(collect_files(&path));
-            continue;
-        }
-        if path.is_file() {
-            files.push(path);
-        }
-    }
-    files
-}
-
-fn classify_alias_reference(path: &Path) -> (&'static str, &'static str) {
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default();
-    let parts: HashSet<&str> = path
-        .components()
-        .filter_map(|component| component.as_os_str().to_str())
-        .collect();
-    if file_name == "host_adapters.py" {
-        return ("legacy_alias_infrastructure", "legacy_alias_only");
-    }
-    if file_name == "profile_artifacts.py" {
-        return ("artifact_emitter", "legacy_alias_only");
-    }
-    if file_name == "runtime_registry.py" {
-        return ("runtime_registry_contract", "legacy_alias_only");
-    }
-    if file_name == "write_framework_contract_artifacts.py" {
-        return ("legacy_alias_emitter_cli", "legacy_alias_only");
-    }
-    if file_name == "rust_router.py" {
-        return ("legacy_alias_router_cli", "legacy_alias_only");
-    }
-    if file_name == "__init__.py" {
-        return ("retired_root_export_surface", "legacy_alias_only");
-    }
-    if file_name == "framework_profile.rs" {
-        return ("rust_contract_artifact_lane", "legacy_alias_only");
-    }
-    if parts.contains("tests") {
-        return ("legacy_alias_regression_tests", "legacy_alias_only");
-    }
-    if parts.contains("docs") || parts.contains("aionrs_fusion_docs") {
-        return ("legacy_alias_contract_docs", "legacy_alias_only");
-    }
-    ("unclassified_code", "primary_identity_risk")
-}
-
-fn increment_counter(counter: &mut Map<String, Value>, key: &str) {
-    let next_value = counter.get(key).and_then(Value::as_u64).unwrap_or(0) + 1;
-    counter.insert(key.to_string(), Value::from(next_value));
 }
 
 fn value_to_string(value: &Value) -> String {
@@ -4487,7 +4100,6 @@ mod tests {
             bundle.codex_desktop_adapter["entrypoint_contract"]["entrypoint_kind"],
             Value::String("interactive".to_string())
         );
-        assert!(bundle.compatibility_lane.is_none());
         assert_eq!(
             bundle.codex_cli_adapter["execution_surface"]["entrypoint_kind"],
             Value::String("headless".to_string())
@@ -4554,7 +4166,6 @@ mod tests {
             bundle.codex_dual_entry_parity_snapshot["parity_checks"]["artifact_contract"],
             Value::Bool(true)
         );
-        assert!(bundle.codex_desktop_alias_retirement_status.is_none());
         assert_eq!(
             bundle.execution_controller_contract["status_contract"],
             Value::String("execution_controller_contract_v1".to_string())
@@ -4776,33 +4387,14 @@ mod tests {
     }
 
     #[test]
-    fn profile_bundle_quarantines_legacy_alias_in_compatibility_lane() {
-        let bundle = build_profile_bundle_with_legacy_alias(&sample_profile(), true)
-            .expect("bundle should build");
+    fn profile_bundle_legacy_alias_opt_in_stays_out_of_runtime_bundle() {
+        let bundle = build_profile_bundle(&sample_profile()).expect("bundle should build");
         let serialized = serde_json::to_value(&bundle).expect("bundle should serialize");
-        let compatibility_lane = bundle
-            .compatibility_lane
-            .as_ref()
-            .expect("compatibility lane should be present when opt-in is enabled");
-
-        assert_eq!(
-            compatibility_lane.codex_desktop_host_adapter["metadata"]["adapter_alias_of"],
-            Value::String("codex_desktop_adapter".to_string())
-        );
-        assert_eq!(
-            compatibility_lane.codex_desktop_host_adapter["bridge_contract"],
-            bundle.codex_desktop_adapter["bridge_contract"]
-        );
-        assert_eq!(
-            compatibility_lane.codex_desktop_host_adapter["source_contract"]["alias_mode"],
-            Value::String("mirror-only".to_string())
-        );
+        assert!(serialized.get("compatibility_lane").is_none());
         assert!(serialized.get("codex_desktop_host_adapter").is_none());
-        assert_eq!(
-            serialized["compatibility_lane"]["codex_desktop_host_adapter"]["metadata"]
-                ["canonical_adapter_id"],
-            Value::String("codex_desktop_adapter".to_string())
-        );
+        assert!(serialized
+            .get("codex_desktop_alias_retirement_status")
+            .is_none());
     }
 
     #[test]
@@ -4864,8 +4456,8 @@ mod tests {
 
     #[test]
     fn codex_artifact_bundle_exposes_first_class_outputs() {
-        let artifacts = build_codex_artifact_bundle(&sample_profile(), false, false)
-            .expect("artifacts should build");
+        let artifacts =
+            build_codex_artifact_bundle(&sample_profile(), false).expect("artifacts should build");
         assert_eq!(artifacts.len(), 14);
         assert_eq!(
             artifacts["cli_common_adapter"]["controller_boundary"]["shared_adapter"],
@@ -5005,10 +4597,9 @@ mod tests {
     }
 
     #[test]
-    fn codex_artifact_bundle_can_opt_in_continuity_alias_artifact() {
-        let artifacts = build_codex_artifact_bundle(&sample_profile(), true, false)
-            .expect("artifacts should build");
-        assert!(artifacts.contains_key("codex_desktop_alias_retirement_status"));
+    fn codex_artifact_bundle_ignores_removed_legacy_alias_opt_in() {
+        let artifacts =
+            build_codex_artifact_bundle(&sample_profile(), false).expect("artifacts should build");
         assert_eq!(
             artifacts["cli_common_adapter"]["controller_boundary"]["cli_family_entrypoints"],
             json!([
@@ -5028,14 +4619,6 @@ mod tests {
         assert_eq!(
             artifacts["codex_cli_adapter"]["execution_surface"]["entrypoint_kind"],
             Value::String("headless".to_string())
-        );
-        assert_eq!(
-            artifacts["codex_desktop_alias_retirement_status"]["canonical_adapter_id"],
-            Value::String("codex_desktop_adapter".to_string())
-        );
-        assert_eq!(
-            artifacts["codex_desktop_alias_retirement_status"]["primary_regression_artifact"],
-            Value::String("cli_family_parity_snapshot".to_string())
         );
         assert_eq!(
             artifacts["claude_code_adapter"]["host_adapter_payload"],
@@ -5101,10 +4684,7 @@ mod tests {
             Value::String("aggregator-response.model".to_string())
         );
         assert!(!artifacts.contains_key("codex_desktop_host_adapter"));
-        assert_eq!(
-            artifacts["codex_desktop_alias_retirement_status"]["canonical_adapter_id"],
-            Value::String("codex_desktop_adapter".to_string())
-        );
+        assert!(!artifacts.contains_key("codex_desktop_alias_retirement_status"));
     }
 
     #[test]

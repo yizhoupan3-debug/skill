@@ -1,21 +1,25 @@
 ---
-description: Run the repo's durable background parallel-batch CLI and answer from its JSON result.
-allowed-tools: Bash(python3 scripts/runtime_background_cli.py *)
+description: Use the repo's Rust-owned background batch control and state surfaces.
+allowed-tools:
+  - Bash(git rev-parse *)
+  - Bash(./scripts/router-rs/target/release/router-rs *)
+  - Bash(./scripts/router-rs/target/debug/router-rs *)
+  - Bash(*scripts/router-rs/target/release/router-rs *)
+  - Bash(*scripts/router-rs/target/debug/router-rs *)
+  - Bash(cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- *)
+  - Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)
 ---
 
-Use `python3 scripts/runtime_background_cli.py` as the only host-level entrypoint
-for this repository's durable background batch control.
+Use `router-rs` directly for durable background batch control. Do not call the legacy Python helper.
 
-Supported actions:
+Common Rust entrypoints:
 
-- Enqueue and wait:
-  `python3 scripts/runtime_background_cli.py enqueue-batch --input-file <path>`
-  or
-  `python3 scripts/runtime_background_cli.py enqueue-batch --input-json '<json>'`
-- Read one group:
-  `python3 scripts/runtime_background_cli.py group-summary --parallel-group-id <id>`
-- List all groups:
-  `python3 scripts/runtime_background_cli.py list-groups`
+- Plan a batch lane group with background control:
+  `PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/target/release/router-rs --background-control-json --background-control-input-json '<json>' --repo-root "$PROJECT_DIR"`
+- Read one persisted group summary with background state:
+  `PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/target/release/router-rs --background-state-json --background-state-input-json '<json>' --repo-root "$PROJECT_DIR"`
+- List persisted group summaries with background state:
+  `PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/target/release/router-rs --background-state-json --background-state-input-json '<json>' --repo-root "$PROJECT_DIR"`
 
-Always relay the command's JSON result and then summarize it briefly in plain Chinese.
-Do not invent batch state that the command did not return.
+Use operation `batch-plan` for control, and `parallel_group_summary` or `parallel_group_summaries` for state.
+Always relay the JSON result and then summarize it briefly in plain Chinese.

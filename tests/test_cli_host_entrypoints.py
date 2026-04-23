@@ -25,9 +25,17 @@ def _framework_native_aliases() -> dict[str, object]:
 
 
 def _router_rs_command(*args: str) -> list[str]:
-    release_binary = PROJECT_ROOT / "scripts" / "router-rs" / "target" / "release" / "router-rs"
-    if release_binary.is_file():
-        return [str(release_binary), *args]
+    candidates = [
+        path
+        for path in (
+            PROJECT_ROOT / "scripts" / "router-rs" / "target" / "release" / "router-rs",
+            PROJECT_ROOT / "scripts" / "router-rs" / "target" / "debug" / "router-rs",
+        )
+        if path.is_file()
+    ]
+    if candidates:
+        freshest = max(candidates, key=lambda path: (path.stat().st_mtime, path.name))
+        return [str(freshest), *args]
     return [
         "cargo",
         "run",
@@ -371,7 +379,6 @@ def test_router_rs_exports_claude_hook_manifest() -> None:
     assert "/.claude/settings.json" in manifest["protected_paths"]["edit_write"]
     assert "*.claude/settings.json*" in manifest["protected_paths"]["bash"]
     assert "/scripts/router-rs/src/**" in manifest["protected_paths"]["quality"]
-    assert "/scripts/router-rs/src/host_integration.rs" in manifest["protected_paths"]["quality"]
     assert "/scripts/install_skills.sh" in manifest["protected_paths"]["quality"]
     assert "/tests/**" in manifest["protected_paths"]["quality"]
     assert "/.claude/hooks/**" in manifest["protected_paths"]["quality"]
@@ -583,7 +590,6 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     quality_hooks = settings["hooks"]["PreToolUse"][2]["hooks"]
     assert any(item["if"] == "Edit(/scripts/router-rs/src/**)" for item in quality_hooks)
     assert any(item["if"] == "Write(/framework_runtime/src/**)" for item in quality_hooks)
-    assert any(item["if"] == "Edit(/scripts/router-rs/src/host_integration.rs)" for item in quality_hooks)
     assert any(item["if"] == "Edit(/scripts/install_skills.sh)" for item in quality_hooks)
     assert any(item["if"] == "Edit(/tests/**)" for item in quality_hooks)
     assert any(item["if"] == "Edit(/.claude/hooks/**)" for item in quality_hooks)
@@ -592,7 +598,6 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert settings["hooks"]["PostToolUse"][0]["matcher"] == "Edit|MultiEdit|Write"
     assert any(item["if"] == "Edit(/scripts/router-rs/src/**)" for item in post_tool_hooks)
     assert any(item["if"] == "Write(/framework_runtime/src/**)" for item in post_tool_hooks)
-    assert any(item["if"] == "Edit(/scripts/router-rs/src/host_integration.rs)" for item in post_tool_hooks)
     assert any(item["if"] == "Edit(/scripts/install_skills.sh)" for item in post_tool_hooks)
     assert any(item["if"] == "Edit(/tests/**)" for item in post_tool_hooks)
     assert any(item["if"] == "Edit(/.claude/hooks/**)" for item in post_tool_hooks)
@@ -670,11 +675,13 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     )
     assert "python3 scripts/router_rs_runner.py" not in refresh_command
     assert "copy `recap.workflow_prompt`" not in refresh_command
-    assert "runtime_background_cli.py" in background_batch_command
-    assert "enqueue-batch" in background_batch_command
-    assert "group-summary" in background_batch_command
-    assert "list-groups" in background_batch_command
-    assert "allowed-tools: Bash(python3 scripts/runtime_background_cli.py *)" in background_batch_command
+    assert "runtime_background_cli.py" not in background_batch_command
+    assert "--background-control-json" in background_batch_command
+    assert "--background-state-json" in background_batch_command
+    assert "batch-plan" in background_batch_command
+    assert "parallel_group_summary" in background_batch_command
+    assert "parallel_group_summaries" in background_batch_command
+    assert "Bash(python3 scripts/runtime_background_cli.py *)" not in background_batch_command
     assert "thin Rust-first alias" in autopilot_command
     assert aliases["autopilot"]["host_entrypoints"]["claude-code"] in autopilot_command
     assert "--framework-alias-json" in autopilot_command
@@ -898,6 +905,28 @@ def test_materialize_repo_host_entrypoints_syncs_matching_worktrees(tmp_path: Pa
     assert (
         peer_worktree / ".claude" / "commands" / "background_batch.md"
     ).read_text(encoding="utf-8") == projection["claude_commands"]["background_batch"]
+
+
+def test_materialize_repo_host_entrypoints_syncs_worktrees_even_when_head_differs(
+    tmp_path: Path,
+) -> None:
+    _init_git_repo(tmp_path)
+    peer_worktree = tmp_path / ".claude" / "worktrees" / "agent-peer"
+    peer_worktree.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "worktree", "add", str(peer_worktree), "--detach"], cwd=tmp_path, check=True)
+    _write_text(peer_worktree / ".claude" / "settings.json", '{"legacy": true}\n')
+    (tmp_path / "README.md").write_text("root change\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "root-only"], cwd=tmp_path, check=True)
+
+    result = materialize_repo_host_entrypoints(tmp_path)
+
+    assert str(peer_worktree.resolve()) in result["synced_worktrees"]
+    assert str(peer_worktree.resolve()) not in result["skipped_worktrees"]
+    assert json.loads((peer_worktree / ".claude" / "settings.json").read_text(encoding="utf-8"))["$schema"] == (
+        "https://json.schemastore.org/claude-code-settings.json"
+    )
+    assert (peer_worktree / ".claude" / "commands" / "refresh.md").is_file()
 
 
 def test_write_generated_files_includes_shared_cli_entrypoints_when_repo_is_dirty(tmp_path: Path) -> None:

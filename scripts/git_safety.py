@@ -24,10 +24,7 @@ VERIFY_PRESET_CONFIGS: dict[str, dict[str, Any]] = {
         "priority": 40,
         "commands": [
             {
-                "command": "python3 -m pytest -q --noconftest tests/test_git_safety.py tests/test_gitx_skill.py",
-            },
-            {
-                "command": "python3 -m py_compile scripts/git_safety.py",
+                "command": "cargo test --manifest-path scripts/router-rs/Cargo.toml",
             },
         ],
         "path_rules": (
@@ -42,10 +39,7 @@ VERIFY_PRESET_CONFIGS: dict[str, dict[str, Any]] = {
         "priority": 60,
         "commands": [
             {
-                "command": "python3 scripts/check_skills.py --verify-sync",
-            },
-            {
-                "command": "python3 -m pytest -q --noconftest tests/test_cli_host_entrypoints.py",
+                "command": "cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root .",
             },
         ],
         "path_rules": (
@@ -64,11 +58,7 @@ VERIFY_PRESET_CONFIGS: dict[str, dict[str, Any]] = {
         "priority": 90,
         "commands": [
             {
-                "command": "cargo build --manifest-path Cargo.toml",
-                "cwd": "scripts/router-rs",
-            },
-            {
-                "command": "python3 -m pytest -q --noconftest tests/test_rust_only_adapter_chain.py tests/test_rust_release_entrypoints.py",
+                "command": "cargo test --manifest-path scripts/router-rs/Cargo.toml",
             },
         ],
         "path_rules": (
@@ -83,7 +73,7 @@ VERIFY_PRESET_CONFIGS: dict[str, dict[str, Any]] = {
         "priority": 80,
         "commands": [
             {
-                "command": "python3 -m pytest -q --noconftest tests/test_routing_eval.py tests/test_routing_parity.py tests/test_evaluate_routing_entrypoint.py",
+                "command": "cargo test --manifest-path scripts/router-rs/Cargo.toml",
             },
         ],
         "path_rules": (
@@ -98,9 +88,6 @@ VERIFY_PRESET_CONFIGS: dict[str, dict[str, Any]] = {
         "label": "Browser Runtime",
         "priority": 70,
         "commands": [
-            {
-                "command": "python3 -m pytest -q --noconftest tests/test_browser_mcp_launcher_script.py",
-            },
             {
                 "command": "npm test -- --run tests/runtime.test.ts",
                 "cwd": "tools/browser-mcp",
@@ -728,23 +715,14 @@ def _should_wrap_with_rtk(command: str) -> bool:
         return False
     first = tokens[0]
     second = tokens[1] if len(tokens) > 1 else ""
-    if first in {"pytest", "cargo"}:
+    if first == "cargo":
         return True
     if first in {"npm", "pnpm", "yarn"} and second in {"test", "run", "lint", "build"}:
         return True
-    if first == "uv" and len(tokens) > 2 and second == "run" and tokens[2] in {"pytest", "cargo"}:
+    if first == "uv" and len(tokens) > 2 and second == "run" and tokens[2] == "cargo":
         return True
     if first == "git" and second in {"status", "diff", "log"}:
         return True
-    if first in {"python", "python3"} and len(tokens) >= 3:
-        if tokens[1] == "-m" and tokens[2] in {"pytest", "compileall", "unittest"}:
-            return True
-        script = tokens[1]
-        flag = tokens[2]
-        if script == "scripts/check_skills.py" and flag in {"--verify-sync", "--verify-codex-link"}:
-            return True
-        if script == "scripts/sync_skills.py" and flag == "--apply":
-            return True
     return False
 
 
