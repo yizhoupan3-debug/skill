@@ -95,6 +95,20 @@ EXECUTION_KERNEL_RETIRED_COMPATIBILITY_FALLBACK_METADATA_FIELDS = (
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
 )
+EXECUTION_KERNEL_PUBLIC_RUNTIME_CONTRACT_FIELDS = (
+    "execution_kernel",
+    "execution_kernel_authority",
+    EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
+    "execution_kernel_in_process_replacement_complete",
+    "execution_kernel_delegate",
+    "execution_kernel_delegate_authority",
+    "execution_kernel_live_primary",
+    "execution_kernel_live_primary_authority",
+)
+EXECUTION_KERNEL_PUBLIC_RUNTIME_RESPONSE_METADATA_FIELDS = (
+    "execution_kernel_delegate_family",
+    "execution_kernel_delegate_impl",
+)
 EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS = (
     *EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS,
     *EXECUTION_KERNEL_RETIRED_LIVE_FALLBACK_MARKER_METADATA_FIELDS,
@@ -157,7 +171,50 @@ COMPATIBILITY_FALLBACK_MODEL_ID_SOURCE = "agno-run-output.model"
 EXECUTION_KERNEL_RETIRED_COMPATIBILITY_FALLBACK_MODE = "retired"
 
 
-def _normalize_execution_kernel_metadata_bridge(
+def resolve_execution_kernel_expectations(
+    kernel_contract: Mapping[str, Any] | None = None,
+) -> dict[str, str]:
+    """Resolve the Rust-owned execution-kernel identity contract for response decode."""
+
+    contract = kernel_contract or {}
+
+    def _field(key: str, fallback: str) -> str:
+        value = contract.get(key)
+        if value is None:
+            return fallback
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                return stripped
+            return fallback
+        return str(value)
+
+    return {
+        "execution_kernel": _field("execution_kernel", EXECUTION_KERNEL_BRIDGE_KIND),
+        "execution_kernel_authority": _field(
+            "execution_kernel_authority",
+            EXECUTION_KERNEL_BRIDGE_AUTHORITY,
+        ),
+        "execution_kernel_delegate": _field(
+            "execution_kernel_delegate",
+            EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
+        ),
+        "execution_kernel_delegate_authority": _field(
+            "execution_kernel_delegate_authority",
+            EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
+        ),
+        "execution_kernel_delegate_family": _field(
+            "execution_kernel_delegate_family",
+            EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
+        ),
+        "execution_kernel_delegate_impl": _field(
+            "execution_kernel_delegate_impl",
+            EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
+        ),
+    }
+
+
+def normalize_execution_kernel_metadata_bridge(
     metadata_bridge: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     """Resolve the Rust-owned metadata bridge, falling back to compatibility defaults."""
@@ -294,6 +351,15 @@ def _normalize_execution_kernel_metadata_bridge(
             "supported_response_shapes": tuple(str(shape) for shape in supported_response_shapes),
         },
     }
+
+
+def execution_kernel_steady_state_fields(
+    metadata_bridge: Mapping[str, Any] | None,
+) -> tuple[str, ...]:
+    """Return the canonical steady-state metadata field list for one bridge payload."""
+
+    bridge = normalize_execution_kernel_metadata_bridge(metadata_bridge)
+    return tuple(str(field) for field in bridge["steady_state_fields"])
 
 
 def build_trace_runtime_metadata(
@@ -530,7 +596,7 @@ def validate_execution_kernel_steady_state_metadata(
 ) -> dict[str, Any]:
     """Validate the steady-state execution-kernel metadata owned by Rust."""
 
-    bridge = _normalize_execution_kernel_metadata_bridge(metadata_bridge)
+    bridge = normalize_execution_kernel_metadata_bridge(metadata_bridge)
     steady_state_fields = tuple(bridge["steady_state_fields"])
     metadata_keys = dict(bridge["metadata_keys"])
     defaults = dict(bridge["defaults"])
@@ -637,7 +703,7 @@ def validate_router_rs_execution_metadata(
 ) -> dict[str, Any]:
     """Validate one Rust-owned execution response metadata payload."""
 
-    bridge = _normalize_execution_kernel_metadata_bridge(metadata_bridge)
+    bridge = normalize_execution_kernel_metadata_bridge(metadata_bridge)
     metadata_keys = dict(bridge["metadata_keys"])
     defaults = dict(bridge["defaults"])
     normalized = validate_execution_kernel_steady_state_metadata(

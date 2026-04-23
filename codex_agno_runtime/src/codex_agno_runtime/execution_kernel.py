@@ -8,13 +8,9 @@ from typing import Any, Mapping
 
 from codex_agno_runtime.config import RuntimeSettings
 from codex_agno_runtime.execution_kernel_contracts import (
-    EXECUTION_KERNEL_BRIDGE_AUTHORITY,
-    EXECUTION_KERNEL_BRIDGE_KIND,
-    EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
-    EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
-    EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
     EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION,
     decode_router_rs_execution_response,
+    resolve_execution_kernel_expectations,
 )
 from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import RoutingResult, RunTaskResponse
@@ -121,70 +117,6 @@ class RouterRsInfrastructureError(RouterRsExecutionError):
     """Router-rs failed before a valid execution result could be produced."""
 
 
-def _coerce_naming_bridge_field(
-    contract: Mapping[str, Any] | None,
-    key: str,
-    fallback: str,
-) -> str:
-    """Resolve one Rust-owned naming bridge field with Python-safe fallback behavior."""
-
-    if not isinstance(contract, Mapping):
-        return fallback
-    value = contract.get(key)
-    if value is None:
-        return fallback
-    if isinstance(value, str):
-        stripped = value.strip()
-        if not stripped:
-            return fallback
-        return stripped
-    return str(value)
-
-
-def _resolve_rust_owned_naming_bridge(
-    kernel_contract: Mapping[str, Any] | None,
-    metadata: Mapping[str, Any] | None = None,
-) -> tuple[str, str, str, str, str, str]:
-    """Resolve Rust-owned naming-bridge outputs used by execution-kernel decode."""
-
-    contract = kernel_contract or {}
-    response_metadata = metadata or {}
-
-    def _resolve_field(key: str, fallback: str) -> str:
-        return _coerce_naming_bridge_field(
-            contract if key in contract else response_metadata,
-            key,
-            fallback,
-        )
-
-    return (
-        _resolve_field(
-            "execution_kernel",
-            EXECUTION_KERNEL_BRIDGE_KIND,
-        ),
-        _resolve_field(
-            "execution_kernel_authority",
-            EXECUTION_KERNEL_BRIDGE_AUTHORITY,
-        ),
-        _resolve_field(
-            "execution_kernel_delegate",
-            EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
-        ),
-        _resolve_field(
-            "execution_kernel_delegate_authority",
-            EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
-        ),
-        _resolve_field(
-            "execution_kernel_delegate_family",
-            EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
-        ),
-        _resolve_field(
-            "execution_kernel_delegate_impl",
-            EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
-        ),
-    )
-
-
 def build_router_rs_execution_request_payload(
     request: ExecutionKernelRequest,
     *,
@@ -230,23 +162,15 @@ def decode_router_rs_execution_payload_with_contract(
 ) -> RunTaskResponse:
     """Decode one router-rs execution payload using the Rust control-plane contract when present."""
 
-    contract = dict(kernel_contract or {})
-    (
-        execution_kernel,
-        execution_kernel_authority,
-        execution_kernel_delegate,
-        execution_kernel_delegate_authority,
-        execution_kernel_delegate_family,
-        execution_kernel_delegate_impl,
-    ) = _resolve_rust_owned_naming_bridge(contract, payload.get("metadata"))
+    expectations = resolve_execution_kernel_expectations(kernel_contract)
     return decode_router_rs_execution_response(
         payload,
-        execution_kernel=execution_kernel,
-        execution_kernel_authority=execution_kernel_authority,
-        execution_kernel_delegate=execution_kernel_delegate,
-        execution_kernel_delegate_authority=execution_kernel_delegate_authority,
-        execution_kernel_delegate_family=execution_kernel_delegate_family,
-        execution_kernel_delegate_impl=execution_kernel_delegate_impl,
+        execution_kernel=expectations["execution_kernel"],
+        execution_kernel_authority=expectations["execution_kernel_authority"],
+        execution_kernel_delegate=expectations["execution_kernel_delegate"],
+        execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
+        execution_kernel_delegate_family=expectations["execution_kernel_delegate_family"],
+        execution_kernel_delegate_impl=expectations["execution_kernel_delegate_impl"],
         metadata_bridge=metadata_bridge,
     )
 

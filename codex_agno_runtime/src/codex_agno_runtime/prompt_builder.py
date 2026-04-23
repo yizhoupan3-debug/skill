@@ -123,9 +123,11 @@ class PromptBuilder:
                 - Lead with the answer or result.
                 - Use plain Chinese unless the user asks otherwise.
                 - Be brief, clear, and friendly.
+                - Explain things in plain language first.
                 - Keep the default reply to one short paragraph unless a list is truly needed.
                 - Avoid internal runtime or routing jargon unless the user asks.
                 - If a technical term is necessary, explain it in simple words the first time.
+                - Do not force personality or performative style by default.
 
                 Task cues:
                 {reason_block}
@@ -142,9 +144,11 @@ class PromptBuilder:
             - Lead with the answer or result.
             - Use plain Chinese unless the user asks otherwise.
             - Be brief, clear, and friendly.
+            - Explain things in plain language first.
             - Keep the default reply to one short paragraph unless a list is truly needed.
             - Avoid internal runtime or routing jargon unless the user asks.
             - If a technical term is necessary, explain it in simple words the first time.
+            - Do not force personality or performative style by default.
             """
         ).strip()
 

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
-from codex_agno_runtime.cli_family_contracts import (
+from codex_agno_runtime.codex_artifact_contracts import (
     build_cli_family_capability_discovery,
     build_cli_family_parity_snapshot,
     build_codex_dual_entry_parity_snapshot,
@@ -18,7 +18,7 @@ from codex_agno_runtime.framework_profile import (
     extract_framework_workspace_bridges,
     merge_profile_overrides,
 )
-from codex_agno_runtime.compatibility import (
+from codex_agno_runtime.host_adapter_compatibility import (
     build_codex_desktop_alias_retirement_status,
     build_upgrade_compatibility_matrix,
     compile_aionrs_companion_adapter,
@@ -101,11 +101,8 @@ DEFAULT_RUST_CODEX_ARTIFACT_FILENAMES = {
     "execution_kernel_live_response_serialization_contract": (
         "router_rs_execution_kernel_live_response_serialization_contract.json"
     ),
+    "upgrade_compatibility_matrix": "router_rs_upgrade_compatibility_matrix.json",
 }
-LEGACY_RUST_CODEX_ARTIFACT_FILENAME = (
-    "codex_desktop_host_adapter",
-    "router_rs_codex_desktop_host_adapter.json",
-)
 RUST_PYTHON_PARITY_REPORT_FILENAME = "rust_python_artifact_parity_report.json"
 RUST_PYTHON_PARITY_FIELDS = {
     "cli_common_adapter": "rust_cli_common_adapter",
@@ -279,8 +276,6 @@ def _classify_alias_reference(path: Path) -> tuple[str, str]:
         return "artifact_emitter", "compatibility_only"
     if path.name == "runtime_registry.py":
         return "runtime_registry_contract", "compatibility_only"
-    if path.name == "compatibility.py":
-        return "compatibility_escape_hatch", "compatibility_only"
     if path.name == "write_framework_contract_artifacts.py":
         return "compatibility_emitter_cli", "compatibility_only"
     if path.name == "rust_router.py":
@@ -503,12 +498,14 @@ def _write_rust_artifacts(
     profile_path: Path,
     rust_adapter: RustRouteAdapter,
     emit_legacy_alias_artifact: bool,
+    emit_compatibility_inventory: bool,
 ) -> tuple[dict[str, Any], dict[str, str]]:
     rust_dir = output_dir / RUST_ARTIFACT_DIRNAME
     rust_bundle = rust_adapter.compile_profile_bundle(profile_path)
     rust_codex_artifacts = rust_adapter.compile_codex_profile_artifacts(
         profile_path,
         include_legacy_alias_artifact=emit_legacy_alias_artifact,
+        include_compatibility_inventory=emit_compatibility_inventory,
     )
 
     paths = {
@@ -525,12 +522,6 @@ def _write_rust_artifacts(
             rust_codex_artifacts[artifact_key],
         )
 
-    legacy_artifact_key, legacy_filename = LEGACY_RUST_CODEX_ARTIFACT_FILENAME
-    if legacy_artifact_key in rust_codex_artifacts:
-        paths[f"rust_{legacy_artifact_key}"] = _write_json(
-            rust_dir / legacy_filename,
-            rust_codex_artifacts[legacy_artifact_key],
-        )
     if emit_legacy_alias_artifact and "codex_desktop_alias_retirement_status" in rust_codex_artifacts:
         paths["rust_codex_desktop_alias_retirement_status"] = _write_json(
             rust_dir / "router_rs_codex_desktop_alias_retirement_status.json",
@@ -622,14 +613,21 @@ def _write_continuity_artifacts(
     emit_compatibility_inventory: bool,
     emit_legacy_alias_artifact: bool,
     python_artifacts: Mapping[str, Any],
+    rust_codex_artifacts: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
     continuity_dir = output_dir / CONTINUITY_ARTIFACT_DIRNAME
     paths: dict[str, str] = {}
     if emit_compatibility_inventory:
-        compatibility_matrix = build_upgrade_compatibility_matrix(
-            profile,
-            include_legacy_aliases=emit_legacy_alias_artifact,
+        compatibility_matrix = (
+            rust_codex_artifacts.get("upgrade_compatibility_matrix")
+            if rust_codex_artifacts is not None
+            else None
         )
+        if compatibility_matrix is None:
+            compatibility_matrix = build_upgrade_compatibility_matrix(
+                profile,
+                include_legacy_aliases=emit_legacy_alias_artifact,
+            )
         paths["upgrade_compatibility_matrix"] = _write_json(
             continuity_dir / "upgrade_compatibility_matrix.json",
             compatibility_matrix,
@@ -641,7 +639,12 @@ def _write_continuity_artifacts(
         )
         paths["codex_desktop_alias_retirement_status"] = _write_json(
             continuity_dir / "codex_desktop_alias_retirement_status.json",
-            python_artifacts["codex_desktop_alias_retirement_status"],
+            (
+                rust_codex_artifacts["codex_desktop_alias_retirement_status"]
+                if rust_codex_artifacts is not None
+                and "codex_desktop_alias_retirement_status" in rust_codex_artifacts
+                else python_artifacts["codex_desktop_alias_retirement_status"]
+            ),
         )
     return paths
 
@@ -795,25 +798,29 @@ def emit_framework_contract_artifacts(
         host_overrides=host_overrides,
         include_compatibility_inventory=emit_compatibility_inventory,
     )
+    effective_default_artifacts = dict(python_artifacts)
+    rust_codex_artifacts: dict[str, Any] | None = None
 
     profile_path = output_dir / DEFAULT_ARTIFACT_DIRNAME / "framework_profile.json"
-    paths = _write_default_artifacts(output_dir, python_artifacts)
+    paths: dict[str, str] = {}
 
     if rust_adapter is not None:
+        _write_json(profile_path, python_artifacts["framework_profile"])
         rust_codex_artifacts, rust_paths = _write_rust_artifacts(
             output_dir,
             profile_path=profile_path,
             rust_adapter=rust_adapter,
             emit_legacy_alias_artifact=emit_legacy_alias_artifact,
+            emit_compatibility_inventory=emit_compatibility_inventory,
         )
         paths.update(rust_paths)
 
-        # Keep Rust contract/adapter layer as source-of-truth when present,
-        # and avoid re-emitting Python duplicate builders for these artifacts.
+        # Keep Python-built payloads for parity auditing, but publish the Rust
+        # artifacts as the default contract surface when router-rs is present.
         for python_key, rust_key in RUST_PYTHON_PARITY_FIELDS.items():
             rust_value = rust_codex_artifacts.get(rust_key)
             if rust_value is not None:
-                python_artifacts[python_key] = rust_value
+                effective_default_artifacts[python_key] = rust_value
 
         paths.update(
             _emit_rust_python_parity_report(
@@ -823,10 +830,12 @@ def emit_framework_contract_artifacts(
             )
         )
 
+    paths.update(_write_default_artifacts(output_dir, effective_default_artifacts))
+
     _emit_shared_contract_projection_report(
         profile=profile,
         host_overrides=host_overrides,
-        adapter_payloads=python_artifacts,
+        adapter_payloads=effective_default_artifacts,
     )
 
     if include_fallback_artifacts:
@@ -837,7 +846,8 @@ def emit_framework_contract_artifacts(
             profile=profile,
             emit_compatibility_inventory=emit_compatibility_inventory,
             emit_legacy_alias_artifact=emit_legacy_alias_artifact,
-            python_artifacts=python_artifacts,
+            python_artifacts=effective_default_artifacts,
+            rust_codex_artifacts=rust_codex_artifacts,
         )
     )
     layout_manifest = build_framework_artifact_layout_manifest(

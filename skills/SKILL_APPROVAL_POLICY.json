@@ -399,6 +399,50 @@
       ],
       "network_access": "conditional"
     },
+    "design-md": {
+      "allowed_tools": [],
+      "approval_required_tools": [],
+      "artifact_outputs": [
+        "DESIGN.md"
+      ],
+      "bridge_behavior": "default",
+      "destructive_risk": "unspecified",
+      "filesystem_scope": [],
+      "network_access": "unspecified"
+    },
+    "design-output-auditor": {
+      "allowed_tools": [],
+      "approval_required_tools": [],
+      "artifact_outputs": [
+        "design_audit.md"
+      ],
+      "bridge_behavior": "default",
+      "destructive_risk": "unspecified",
+      "filesystem_scope": [],
+      "network_access": "unspecified"
+    },
+    "design-prompt-enhancer": {
+      "allowed_tools": [],
+      "approval_required_tools": [],
+      "artifact_outputs": [],
+      "bridge_behavior": "default",
+      "destructive_risk": "unspecified",
+      "filesystem_scope": [],
+      "network_access": "unspecified"
+    },
+    "design-workflow-protocol": {
+      "allowed_tools": [],
+      "approval_required_tools": [],
+      "artifact_outputs": [
+        "SESSION_SUMMARY.md",
+        "NEXT_ACTIONS.json",
+        "EVIDENCE_INDEX.json"
+      ],
+      "bridge_behavior": "default",
+      "destructive_risk": "unspecified",
+      "filesystem_scope": [],
+      "network_access": "unspecified"
+    },
     "doc": {
       "allowed_tools": [
         "shell",

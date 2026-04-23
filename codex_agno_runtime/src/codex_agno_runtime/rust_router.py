@@ -602,7 +602,6 @@ class RustRouteAdapter:
     framework_runtime_snapshot_schema_version = "router-rs-framework-runtime-snapshot-v1"
     framework_contract_summary_schema_version = "router-rs-framework-contract-summary-v1"
     framework_memory_recall_schema_version = "router-rs-framework-memory-recall-v1"
-    framework_recap_schema_version = "router-rs-framework-recap-v1"
     framework_refresh_schema_version = "router-rs-framework-refresh-v1"
     framework_alias_schema_version = "router-rs-framework-alias-v1"
     claude_hook_schema_version = "router-rs-claude-hook-response-v1"
@@ -871,20 +870,21 @@ class RustRouteAdapter:
         self,
         *,
         mode: str,
-        rust_route_snapshot: dict[str, Any] | RouteDecisionSnapshot | None = None,
-        route_decision_contract: RouteDecisionContract | Mapping[str, Any] | None = None,
+        rust_route_snapshot: RouteDecisionSnapshot | None = None,
+        route_decision_contract: RouteDecisionContract | None = None,
     ) -> RouteDiagnosticReport:
         """Build one typed Rust-owned route diagnostic report."""
 
+        if rust_route_snapshot is not None and not isinstance(rust_route_snapshot, RouteDecisionSnapshot):
+            raise TypeError("route_report_contract requires RouteDecisionSnapshot for rust_route_snapshot")
+        if route_decision_contract is not None and not isinstance(route_decision_contract, RouteDecisionContract):
+            raise TypeError("route_report_contract requires RouteDecisionContract for route_decision_contract")
         if rust_route_snapshot is None:
             if route_decision_contract is None:
                 raise ValueError(
                     "route_report_contract requires rust_route_snapshot or route_decision_contract"
                 )
-            if isinstance(route_decision_contract, RouteDecisionContract):
-                rust_route_snapshot = route_decision_contract.route_snapshot
-            else:
-                rust_route_snapshot = dict(route_decision_contract).get("route_snapshot")
+            rust_route_snapshot = route_decision_contract.route_snapshot
         if rust_route_snapshot is None:
             raise ValueError("route_report_contract could not resolve a route snapshot from the route decision")
         args = [
@@ -892,19 +892,10 @@ class RustRouteAdapter:
             "--route-mode",
             mode,
             "--rust-route-snapshot-json",
-            json.dumps(
-                rust_route_snapshot.model_dump(mode="json")
-                if isinstance(rust_route_snapshot, RouteDecisionSnapshot)
-                else rust_route_snapshot,
-                ensure_ascii=False,
-            ),
+            json.dumps(rust_route_snapshot.model_dump(mode="json"), ensure_ascii=False),
         ]
         if route_decision_contract is not None:
-            serialized_route_decision = (
-                route_decision_contract.model_dump(mode="json")
-                if isinstance(route_decision_contract, RouteDecisionContract)
-                else dict(route_decision_contract)
-            )
+            serialized_route_decision = route_decision_contract.model_dump(mode="json")
             args.extend(
                 [
                     "--route-decision-json",
@@ -917,11 +908,7 @@ class RustRouteAdapter:
             "route_report",
             {
                 "mode": mode,
-                "rust_route_snapshot": (
-                    rust_route_snapshot.model_dump(mode="json")
-                    if isinstance(rust_route_snapshot, RouteDecisionSnapshot)
-                    else rust_route_snapshot
-                ),
+                "rust_route_snapshot": rust_route_snapshot.model_dump(mode="json"),
                 "route_decision": serialized_route_decision,
             },
             [*self._binary_command(), *args],
@@ -1059,6 +1046,7 @@ class RustRouteAdapter:
         profile_path: Path,
         *,
         include_legacy_alias_artifact: bool = False,
+        include_compatibility_inventory: bool = False,
     ) -> dict[str, Any]:
         """Compile first-class Rust Codex contract/parity artifacts for one profile."""
 
@@ -1068,6 +1056,8 @@ class RustRouteAdapter:
             "--framework-profile",
             str(profile_path),
         ]
+        if include_compatibility_inventory:
+            command.append("--include-compatibility-inventory")
         if include_legacy_alias_artifact:
             command.append("--include-legacy-alias-artifact")
         return self._run_hot_json_command(
@@ -1075,6 +1065,7 @@ class RustRouteAdapter:
             {
                 "profile_path": str(profile_path),
                 "include_legacy_alias_artifact": include_legacy_alias_artifact,
+                "include_compatibility_inventory": include_compatibility_inventory,
             },
             command,
             failure_label="profile artifact compiler",
@@ -1204,39 +1195,6 @@ class RustRouteAdapter:
                 "Rust framework memory recall compiler returned a missing memory_recall payload."
             )
         return recall
-
-    def framework_recap(self, *, repo_root: Path, max_lines: int = 6) -> dict[str, Any]:
-        """Build the Rust-owned recap surface for thin host shells."""
-
-        args = [
-            "--framework-recap-json",
-            "--repo-root",
-            str(repo_root),
-            "--claude-hook-max-lines",
-            str(max_lines),
-        ]
-        payload = self._run_hot_json_command(
-            "framework_recap",
-            {"repo_root": str(repo_root), "max_lines": max_lines},
-            [*self._binary_command(), *args],
-            failure_label="framework recap compiler",
-        )
-        if payload.get("schema_version") != self.framework_recap_schema_version:
-            raise RuntimeError(
-                "Rust framework recap compiler returned an unknown schema: "
-                f"{payload.get('schema_version')!r}"
-            )
-        if payload.get("authority") != self.framework_runtime_authority:
-            raise RuntimeError(
-                "Rust framework recap compiler returned an unexpected authority marker: "
-                f"{payload.get('authority')!r}"
-            )
-        recap = payload.get("recap")
-        if not isinstance(recap, dict):
-            raise RuntimeError(
-                "Rust framework recap compiler returned a missing recap payload."
-            )
-        return recap
 
     def framework_refresh(self, *, repo_root: Path, max_lines: int = 4) -> dict[str, Any]:
         """Build and copy the compact Rust-owned refresh prompt."""
@@ -1922,22 +1880,13 @@ class RustRouteAdapter:
         resolved_binary = self._fresh_resolved_binary()
         if resolved_binary is not None:
             return resolved_binary
-        try:
-            subprocess.run(
-                ["cargo", "build", "--quiet", "--manifest-path", str(self.router_dir / "Cargo.toml")],
-                capture_output=True,
-                text=True,
-                check=True,
-                cwd=self.codex_home,
-                timeout=self.timeout_seconds,
-            )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            fallback_binary = self._resolved_binary()
-            if fallback_binary is not None:
-                return fallback_binary
-            raise
-        self._invalidate_binary_cache()
-        return self._resolved_binary()
+        fallback_binary = self._resolved_binary()
+        if fallback_binary is None:
+            return None
+        raise RuntimeError(
+            "router-rs prebuilt binary is stale; rebuild scripts/router-rs before "
+            "running the Python host runtime."
+        )
 
     def _cached_resolved_binary(self) -> Path | None:
         cached = self._cached_runtime_binary

@@ -64,6 +64,10 @@ SKILL_ALIAS_HINTS = {
     "execution-controller-coding": {"高负载", "跨文件", "长运行", "系统指挥中心", ".supervisor_state.json", "checkpoint", "rollback", "gsd", "get shit done", "推进到底", "别停"},
     "skill-developer-codex": {"skill框架", "边界重叠", "owner", "gate", "overlay", "framework", "routing", "token"},
 }
+FRAMEWORK_ALIAS_EXPLICIT_ENTRYPOINTS = {
+    "autopilot": {"/autopilot", "$autopilot"},
+    "deepinterview": {"/deepinterview", "$deepinterview"},
+}
 GSD_EXECUTION_MARKERS = ("gsd", "get shit done", "推进到底", "别停", "直接干完", "一路做完")
 GATE_HINTS = {
     "source": {"官方", "官方文档", "文档", "docs", "readme", "api", "openai", "github", "look up", "search"},
@@ -118,6 +122,18 @@ def _contains_phrase(task_tokens: list[str], phrase: str) -> bool:
         ):
             return True
     return False
+
+
+def _framework_alias_requires_explicit_call(skill_name: str) -> bool:
+    return skill_name in FRAMEWORK_ALIAS_EXPLICIT_ENTRYPOINTS
+
+
+def _has_explicit_framework_alias_call(normalized_task: str, task_tokens: list[str], skill_name: str) -> bool:
+    entrypoints = FRAMEWORK_ALIAS_EXPLICIT_ENTRYPOINTS.get(skill_name, set())
+    return any(
+        normalize_text(entrypoint) in normalized_task or entrypoint in task_tokens
+        for entrypoint in entrypoints
+    )
 
 
 def _gate_phrases(skill: SkillMetadata) -> list[str]:
@@ -370,6 +386,18 @@ class SkillRouter:
                 skill,
                 score=0.0,
                 reasons=["Suppressed: meta-routing repair request should not be treated as a generic runtime-debugging gate."],
+            )
+        if _framework_alias_requires_explicit_call(skill.name) and not _has_explicit_framework_alias_call(
+            normalized_task,
+            task_token_list,
+            skill.name,
+        ):
+            return _build_scored_skill(
+                skill,
+                score=0.0,
+                reasons=[
+                    "Suppressed: framework alias skills only route from explicit /alias or $alias entrypoints."
+                ],
             )
 
         if skill.name.startswith("skill-") and not any(hint in normalized_task for hint in ROUTING_META_HINTS):

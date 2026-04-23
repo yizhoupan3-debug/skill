@@ -4,8 +4,10 @@
     "required_policy_markers": [
       "Lead with the answer or result",
       "Use plain Chinese and everyday words by default",
+      "Explain things in plain language first",
       "Avoid internal runtime, routing, framework, or tool jargon",
       "If a technical term is necessary, explain it in simple words the first time",
+      "Do not force personality",
       "Keep the default reply to one short paragraph"
     ],
     "required_prompt_markers": [
@@ -14,9 +16,11 @@
       "Lead with the answer or result.",
       "Use plain Chinese unless the user asks otherwise.",
       "Be brief, clear, and friendly.",
+      "Explain things in plain language first.",
       "Keep the default reply to one short paragraph unless a list is truly needed.",
       "Avoid internal runtime or routing jargon unless the user asks.",
-      "If a technical term is necessary, explain it in simple words the first time."
+      "If a technical term is necessary, explain it in simple words the first time.",
+      "Do not force personality or performative style by default."
     ],
     "forbidden_prompt_markers": [
       "Active owner skill:",

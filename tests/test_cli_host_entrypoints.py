@@ -12,13 +12,17 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.runtime_registry import framework_native_aliases
-from scripts.claude_hook_audit import run_config_change, run_stop_failure
+from scripts.claude_hook_audit import run_config_change, run_pre_tool_use, run_stop_failure
 from scripts.claude_statusline import render_statusline
 from scripts.materialize_cli_host_entrypoints import (
     CLAUDE_AUTOPILOT_COMMAND,
     CLAUDE_BACKGROUND_BATCH_COMMAND,
     CLAUDE_DEEPINTERVIEW_COMMAND,
+    CLAUDE_PROJECT_DIR_SNIPPET,
     CLAUDE_REFRESH_COMMAND,
+    CLAUDE_ROUTER_RS_MANIFEST_PATH,
+    CLAUDE_ROUTER_RS_DEBUG_BINARY,
+    CLAUDE_ROUTER_RS_RELEASE_BINARY,
     materialize_repo_host_entrypoints,
     sync_repo_host_entrypoints,
 )
@@ -93,6 +97,22 @@ def _init_git_repo(repo_root: Path) -> None:
     subprocess.run(["git", "commit", "-m", "init"], cwd=repo_root, check=True)
 
 
+def _ensure_router_rs_debug_binary() -> None:
+    crate_root = PROJECT_ROOT / "scripts" / "router-rs"
+    debug_bin = crate_root / "target" / "debug" / "router-rs"
+    latest_source_mtime = max(
+        (path.stat().st_mtime for path in [crate_root / "Cargo.toml", *crate_root.joinpath("src").rglob("*.rs")]),
+        default=0.0,
+    )
+    if debug_bin.is_file() and debug_bin.stat().st_mtime >= latest_source_mtime:
+        return
+    subprocess.run(
+        ["cargo", "build", "--manifest-path", str(crate_root / "Cargo.toml")],
+        cwd=PROJECT_ROOT,
+        check=True,
+    )
+
+
 def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxies(
     tmp_path: Path,
 ) -> None:
@@ -110,15 +130,21 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     agent_policy = (tmp_path / "AGENT.md").read_text(encoding="utf-8")
     assert "Shared Agent Policy" in agent_policy
     assert "RTK.md" in agent_policy
+    assert "## Repo Landmarks" in agent_policy
     assert "## Communication Style" in agent_policy
+    assert "## Verification Defaults" in agent_policy
     assert "## Task Closeout" in agent_policy
     assert "changed-file inventories" in agent_policy
     assert "what now works or what" in agent_policy
     assert "effect was achieved" in agent_policy
+    assert "Explain things in plain language first" in agent_policy
     assert "Avoid internal runtime, routing, framework, or tool jargon" in agent_policy
+    assert "Do not force personality" in agent_policy
+    assert "user-visible effect over implementation narration" in agent_policy
     assert "Do not silently choose an ambiguous interpretation" in agent_policy
     assert "Prefer the smallest solution that fully solves the stated problem" in agent_policy
     assert "For non-trivial execution, state the minimum success criteria" in agent_policy
+    assert "Keep this file compact and factual" in agent_policy
     assert "configs/framework/FRAMEWORK_SURFACE_POLICY.json" in agent_policy
     assert "AGENT.md" in (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     assert not (tmp_path / ".claude" / "CLAUDE.md").exists()
@@ -149,7 +175,13 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         "Bash(python3 -m pytest *)",
         "Bash(python3 -m compileall *)",
         "Bash(cargo test *)",
-        "Bash(python3 scripts/router_rs_runner.py *)",
+        "Bash(git rev-parse *)",
+        f"Bash(cargo run --manifest-path {CLAUDE_ROUTER_RS_MANIFEST_PATH} --release -- *)",
+        f"Bash({CLAUDE_ROUTER_RS_RELEASE_BINARY} *)",
+        f"Bash({CLAUDE_ROUTER_RS_DEBUG_BINARY} *)",
+        "Bash(*scripts/router-rs/target/release/router-rs *)",
+        "Bash(*scripts/router-rs/target/debug/router-rs *)",
+        "Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)",
         "Bash(python3 scripts/runtime_background_cli.py *)",
         "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
         "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
@@ -162,10 +194,27 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     ]
     assert "statusLine" not in settings
     assert set(settings["hooks"]) == {
+        "UserPromptSubmit",
+        "PreToolUse",
         "SessionEnd",
         "ConfigChange",
         "StopFailure",
     }
+    assert settings["hooks"]["PreToolUse"][0]["matcher"] == "Edit|MultiEdit|Write"
+    assert settings["hooks"]["PreToolUse"][1]["matcher"] == "Bash"
+    assert settings["hooks"]["PreToolUse"][2]["matcher"] == "Edit|MultiEdit|Write"
+    assert settings["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"].endswith(
+        "/.claude/hooks/user_prompt_submit.sh"
+    )
+    pre_tool_hooks = settings["hooks"]["PreToolUse"][0]["hooks"]
+    assert any(item["if"] == "Edit(/.claude/**)" for item in pre_tool_hooks)
+    assert any(item["if"] == "MultiEdit(/.claude/**)" for item in pre_tool_hooks)
+    assert any(item["if"] == "Write(/.codex/memory/CLAUDE_MEMORY.md)" for item in pre_tool_hooks)
+    bash_hooks = settings["hooks"]["PreToolUse"][1]["hooks"]
+    assert any(item["if"] == "Bash(*.claude/*)" for item in bash_hooks)
+    quality_hooks = settings["hooks"]["PreToolUse"][2]["hooks"]
+    assert any(item["if"] == "Edit(/scripts/**)" for item in quality_hooks)
+    assert any(item["if"] == "Write(/codex_agno_runtime/src/**)" for item in quality_hooks)
     assert settings["hooks"]["ConfigChange"][0]["matcher"] == "project_settings"
     assert settings["hooks"]["StopFailure"][0]["matcher"] == (
         "invalid_request|server_error|max_output_tokens|rate_limit|authentication_failed|billing_error|unknown"
@@ -176,6 +225,8 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert (tmp_path / ".claude" / "commands" / "background_batch.md").is_file()
     assert (tmp_path / ".claude" / "commands" / "autopilot.md").is_file()
     assert (tmp_path / ".claude" / "commands" / "deepinterview.md").is_file()
+    assert (tmp_path / ".claude" / "hooks" / "user_prompt_submit.sh").is_file()
+    assert (tmp_path / ".claude" / "hooks" / "pre_tool_use_quality.sh").is_file()
     assert not (tmp_path / ".claude" / "commands" / "deepreview.md").exists()
     refresh_command = (tmp_path / ".claude" / "commands" / "refresh.md").read_text(encoding="utf-8")
     background_batch_command = (
@@ -191,13 +242,33 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert background_batch_command == CLAUDE_BACKGROUND_BATCH_COMMAND
     assert autopilot_command == CLAUDE_AUTOPILOT_COMMAND
     assert deepinterview_command == CLAUDE_DEEPINTERVIEW_COMMAND
-    assert "python3 scripts/router_rs_runner.py --framework-refresh-json --claude-hook-max-lines 4" in refresh_command
+    assert CLAUDE_PROJECT_DIR_SNIPPET in refresh_command
+    assert (
+        '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR"'
+        in refresh_command
+    )
+    assert (
+        '"$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR"'
+        in refresh_command
+    )
+    assert (
+        'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR"'
+        in refresh_command
+    )
     assert "reply with exactly" in refresh_command
     assert "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。" in refresh_command
     assert "summary" not in refresh_command.lower()
     assert "clear" not in refresh_command.lower()
-    assert "CLAUDE_PROJECT_DIR" not in refresh_command
-    assert "allowed-tools: Bash(python3 scripts/router_rs_runner.py *)" in refresh_command
+    assert "- Bash(git rev-parse *)" in refresh_command
+    assert f"- Bash({CLAUDE_ROUTER_RS_RELEASE_BINARY} *)" in refresh_command
+    assert f"- Bash({CLAUDE_ROUTER_RS_DEBUG_BINARY} *)" in refresh_command
+    assert "- Bash(*scripts/router-rs/target/release/router-rs *)" in refresh_command
+    assert "- Bash(*scripts/router-rs/target/debug/router-rs *)" in refresh_command
+    assert (
+        "- Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)"
+        in refresh_command
+    )
+    assert "python3 scripts/router_rs_runner.py" not in refresh_command
     assert "copy `recap.workflow_prompt`" not in refresh_command
     assert "runtime_background_cli.py" in background_batch_command
     assert "enqueue-batch" in background_batch_command
@@ -210,11 +281,17 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "--framework-alias autopilot" in autopilot_command
     assert "--compact-output" in autopilot_command
     assert "--claude-hook-max-lines 3" in autopilot_command
-    assert "resident router-rs stdio hot path" in autopilot_command
+    assert "resident Rust binary directly" in autopilot_command
     assert "alias.state_machine" in autopilot_command
     assert "alias.entry_contract" in autopilot_command
-    assert "alias.entry_prompt" in autopilot_command
-    assert "python3 scripts/router_rs_runner.py" in autopilot_command
+    assert CLAUDE_PROJECT_DIR_SNIPPET in autopilot_command
+    assert '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs' in autopilot_command
+    assert '"$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs' in autopilot_command
+    assert (
+        'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias autopilot --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"'
+        in autopilot_command
+    )
+    assert "python3 scripts/router_rs_runner.py" not in autopilot_command
     assert aliases["autopilot"]["upstream_source"]["official_skill_path"] in autopilot_command
     assert "Only open" in autopilot_command
     assert "thin Rust-first alias" in deepinterview_command
@@ -223,11 +300,17 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "--framework-alias deepinterview" in deepinterview_command
     assert "--compact-output" in deepinterview_command
     assert "--claude-hook-max-lines 3" in deepinterview_command
-    assert "resident router-rs stdio hot path" in deepinterview_command
+    assert "resident Rust binary directly" in deepinterview_command
     assert "alias.state_machine" in deepinterview_command
     assert "alias.entry_contract" in deepinterview_command
-    assert "alias.entry_prompt" in deepinterview_command
-    assert "python3 scripts/router_rs_runner.py" in deepinterview_command
+    assert CLAUDE_PROJECT_DIR_SNIPPET in deepinterview_command
+    assert '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs' in deepinterview_command
+    assert '"$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs' in deepinterview_command
+    assert (
+        'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias deepinterview --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"'
+        in deepinterview_command
+    )
+    assert "python3 scripts/router_rs_runner.py" not in deepinterview_command
     assert aliases["deepinterview"]["upstream_source"]["official_skill_path"] in deepinterview_command
     assert "Only open" in deepinterview_command
     assert "Otherwise run" not in autopilot_command
@@ -237,28 +320,25 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "Generated-first maintenance" in hooks_readme
     assert "Event-level lifecycle decisions live in `.claude/hooks/README.md`." in claude_entry
     for marker in (
-        "`StopFailure` | enabled",
-        "`ConfigChange` | enabled",
-        "`SessionStart` | disabled",
-        "`Stop` | disabled",
-        "`PreCompact` | disabled",
-        "`SubagentStop` | disabled",
-        "audit-only stderr guidance",
-        "host-private failure classification hint",
-        "`InstructionsLoaded` | document-disable",
-        "`PostToolUse` | document-disable",
-        "UserPromptSubmit",
-        "Notification",
+        "`PreToolUse` | `pre_tool_use.sh`",
+        "`SessionEnd` | `session_end.sh`",
+        "`ConfigChange` | `config_change.sh`",
+        "`StopFailure` | `stop_failure.sh`",
+        "generated-surface guard",
+        "intentionally uninstalled",
+        "live in `AGENT.md`, not in hooks",
+        "repo-specific invariants only",
+        "permissionDecision: deny",
     ):
         assert marker in hooks_readme
-    assert "UserPromptSubmit" in hooks_readme
-    assert (tmp_path / ".claude" / "hooks" / "session_start.sh").is_file()
-    assert (tmp_path / ".claude" / "hooks" / "stop.sh").is_file()
-    assert (tmp_path / ".claude" / "hooks" / "pre_compact.sh").is_file()
-    assert (tmp_path / ".claude" / "hooks" / "subagent_stop.sh").is_file()
+    assert (tmp_path / ".claude" / "hooks" / "pre_tool_use.sh").is_file()
     assert (tmp_path / ".claude" / "hooks" / "session_end.sh").is_file()
     assert (tmp_path / ".claude" / "hooks" / "config_change.sh").is_file()
     assert (tmp_path / ".claude" / "hooks" / "stop_failure.sh").is_file()
+    assert not (tmp_path / ".claude" / "hooks" / "session_start.sh").exists()
+    assert not (tmp_path / ".claude" / "hooks" / "stop.sh").exists()
+    assert not (tmp_path / ".claude" / "hooks" / "pre_compact.sh").exists()
+    assert not (tmp_path / ".claude" / "hooks" / "subagent_stop.sh").exists()
 
 
 def test_materialize_repo_host_entrypoints_is_idempotent(tmp_path: Path) -> None:
@@ -309,12 +389,22 @@ def test_materialize_repo_host_entrypoints_syncs_matching_worktrees(tmp_path: Pa
     peer_worktree = tmp_path / ".claude" / "worktrees" / "agent-peer"
     peer_worktree.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "worktree", "add", str(peer_worktree), "--detach"], cwd=tmp_path, check=True)
+    _write_text(peer_worktree / ".claude" / "hooks" / "session_start.sh", "#!/bin/sh\n")
+    _write_text(peer_worktree / ".claude" / "hooks" / "subagent_stop.sh", "#!/bin/sh\n")
+    _write_text(peer_worktree / ".claude" / "settings.json", '{"legacy": true}\n')
 
     result = materialize_repo_host_entrypoints(tmp_path)
 
     assert str(peer_worktree.resolve()) in result["synced_worktrees"]
     assert (peer_worktree / ".claude" / "commands" / "refresh.md").is_file()
     assert (peer_worktree / ".claude" / "commands" / "background_batch.md").is_file()
+    assert (peer_worktree / ".claude" / "hooks" / "pre_tool_use.sh").is_file()
+    assert (peer_worktree / ".claude" / "hooks" / "session_end.sh").is_file()
+    assert json.loads((peer_worktree / ".claude" / "settings.json").read_text(encoding="utf-8"))["$schema"] == (
+        "https://json.schemastore.org/claude-code-settings.json"
+    )
+    assert not (peer_worktree / ".claude" / "hooks" / "session_start.sh").exists()
+    assert not (peer_worktree / ".claude" / "hooks" / "subagent_stop.sh").exists()
     assert (
         peer_worktree / ".claude" / "commands" / "refresh.md"
     ).read_text(encoding="utf-8") == CLAUDE_REFRESH_COMMAND
@@ -335,10 +425,7 @@ def test_write_generated_files_includes_shared_cli_entrypoints_when_repo_is_dirt
         root / ".claude" / "commands" / "refresh.md",
         root / ".claude" / "commands" / "background_batch.md",
         root / ".claude" / "hooks" / "README.md",
-        root / ".claude" / "hooks" / "session_start.sh",
-        root / ".claude" / "hooks" / "stop.sh",
-        root / ".claude" / "hooks" / "pre_compact.sh",
-        root / ".claude" / "hooks" / "subagent_stop.sh",
+        root / ".claude" / "hooks" / "pre_tool_use.sh",
         root / ".claude" / "hooks" / "session_end.sh",
         root / ".claude" / "hooks" / "config_change.sh",
         root / ".claude" / "hooks" / "stop_failure.sh",
@@ -366,6 +453,7 @@ def test_write_generated_files_includes_shared_cli_entrypoints_when_repo_is_dirt
 
 
 def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None:
+    _ensure_router_rs_debug_binary()
     materialize_repo_host_entrypoints(tmp_path)
     (tmp_path / "scripts").symlink_to(PROJECT_ROOT / "scripts", target_is_directory=True)
     _seed_runtime_artifacts(tmp_path)
@@ -374,14 +462,45 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     env = os.environ.copy()
     env["CLAUDE_PROJECT_DIR"] = str(tmp_path)
 
-    for script_name in (
-        "session_start.sh",
-        "stop.sh",
-        "pre_compact.sh",
-        "subagent_stop.sh",
-        "config_change.sh",
-        "stop_failure.sh",
-    ):
+    blocked = subprocess.run(
+        ["sh", str(tmp_path / ".claude" / "hooks" / "pre_tool_use.sh")],
+        cwd=tmp_path,
+        env=env,
+        input='{"tool_name":"MultiEdit","tool_input":{"file_path":".claude/settings.json"}}\n',
+        text=True,
+        capture_output=True,
+    )
+    assert blocked.returncode == 0
+    blocked_payload = json.loads(blocked.stdout)
+    assert blocked_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert ".claude/settings.json" in blocked_payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+    allowed = subprocess.run(
+        ["sh", str(tmp_path / ".claude" / "hooks" / "pre_tool_use.sh")],
+        cwd=tmp_path,
+        env=env,
+        input='{"tool_name":"Edit","tool_input":{"file_path":"notes/todo.md"}}\n',
+        text=True,
+        capture_output=True,
+    )
+    assert allowed.returncode == 0
+    assert allowed.stdout == ""
+    assert allowed.stderr == ""
+
+    bash_blocked = subprocess.run(
+        ["sh", str(tmp_path / ".claude" / "hooks" / "pre_tool_use.sh")],
+        cwd=tmp_path,
+        env=env,
+        input='{"tool_name":"Bash","tool_input":{"command":"cp tmp .claude/settings.json"}}\n',
+        text=True,
+        capture_output=True,
+    )
+    assert bash_blocked.returncode == 0
+    bash_payload = json.loads(bash_blocked.stdout)
+    assert bash_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert ".claude/settings.json" in bash_payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+    for script_name in ("config_change.sh", "stop_failure.sh"):
         payload = None
         if script_name == "config_change.sh":
             payload = '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}\n'
@@ -395,7 +514,6 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
             input=payload,
             text=True,
         )
-        assert (tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md").is_file()
         assert not (tmp_path / ".codex" / "memory" / "MEMORY_AUTO.md").exists()
 
     subprocess.run(
@@ -409,7 +527,89 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert not (tmp_path / ".codex" / "memory" / "MEMORY_AUTO.md").exists()
 
 
-def test_session_end_projection_matches_framework_recap_and_includes_preferences(tmp_path: Path) -> None:
+def test_pre_tool_use_hook_bootstraps_router_rs_debug_binary_with_cargo(tmp_path: Path) -> None:
+    materialize_repo_host_entrypoints(tmp_path)
+    crate_root = tmp_path / "scripts" / "router-rs"
+    debug_binary = crate_root / "target" / "debug" / "router-rs"
+    cargo_bin_dir = tmp_path / "fake-bin"
+    cargo_log = tmp_path / "cargo-args.txt"
+    cargo_bin_dir.mkdir(parents=True)
+    _write_text(crate_root / "Cargo.toml", "[package]\nname = \"router-rs\"\nversion = \"0.1.0\"\n")
+    (crate_root / "src").mkdir(parents=True, exist_ok=True)
+    _write_text(
+        cargo_bin_dir / "cargo",
+        "\n".join(
+            [
+                "#!/bin/sh",
+                "set -eu",
+                f"printf '%s\\n' \"$@\" > '{cargo_log}'",
+                f"mkdir -p '{debug_binary.parent}'",
+                f"cat > '{debug_binary}' <<'EOF'",
+                "#!/bin/sh",
+                "printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"allowed\"}}'",
+                "EOF",
+                f"chmod +x '{debug_binary}'",
+            ]
+        )
+        + "\n",
+    )
+    os.chmod(cargo_bin_dir / "cargo", 0o755)
+
+    env = os.environ.copy()
+    env["CLAUDE_PROJECT_DIR"] = str(tmp_path)
+    env["PATH"] = f"{cargo_bin_dir}{os.pathsep}{env.get('PATH', '')}"
+
+    allowed = subprocess.run(
+        ["sh", str(tmp_path / ".claude" / "hooks" / "pre_tool_use.sh")],
+        cwd=tmp_path,
+        env=env,
+        input='{"tool_name":"Edit","tool_input":{"file_path":"notes/todo.md"}}\n',
+        text=True,
+        capture_output=True,
+    )
+
+    assert allowed.returncode == 0
+    assert allowed.stdout == ""
+    assert allowed.stderr == ""
+    assert debug_binary.is_file()
+    assert cargo_log.read_text(encoding="utf-8").splitlines() == [
+        "build",
+        "--manifest-path",
+        str(crate_root / "Cargo.toml"),
+    ]
+
+
+def test_pre_tool_use_hook_accepts_release_binary_without_cargo(tmp_path: Path) -> None:
+    materialize_repo_host_entrypoints(tmp_path)
+    crate_root = tmp_path / "scripts" / "router-rs"
+    release_binary = crate_root / "target" / "release" / "router-rs"
+    (crate_root / "src").mkdir(parents=True, exist_ok=True)
+    _write_text(crate_root / "Cargo.toml", "[package]\nname = \"router-rs\"\nversion = \"0.1.0\"\n")
+    _write_text(
+        release_binary,
+        "#!/bin/sh\nprintf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"allowed\"}}'",
+    )
+    os.chmod(release_binary, 0o755)
+
+    env = os.environ.copy()
+    env["CLAUDE_PROJECT_DIR"] = str(tmp_path)
+    env["PATH"] = "/usr/bin:/bin"
+
+    allowed = subprocess.run(
+        ["sh", str(tmp_path / ".claude" / "hooks" / "pre_tool_use.sh")],
+        cwd=tmp_path,
+        env=env,
+        input='{"tool_name":"Edit","tool_input":{"file_path":"notes/todo.md"}}\n',
+        text=True,
+        capture_output=True,
+    )
+
+    assert allowed.returncode == 0
+    assert allowed.stdout == ""
+    assert allowed.stderr == ""
+
+
+def test_session_end_projection_includes_preferences(tmp_path: Path) -> None:
     materialize_repo_host_entrypoints(tmp_path)
     (tmp_path / "scripts").symlink_to(PROJECT_ROOT / "scripts", target_is_directory=True)
     _seed_runtime_artifacts(tmp_path)
@@ -429,9 +629,6 @@ def test_session_end_projection_matches_framework_recap_and_includes_preferences
     )
 
     projection = (tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md").read_text(encoding="utf-8")
-    recap = RustRouteAdapter(PROJECT_ROOT).framework_recap(repo_root=tmp_path)
-
-    assert projection == recap["projection"]
     assert "Prefer direct answers" in projection
 
 
@@ -597,6 +794,91 @@ def test_claude_hook_audit_reports_generated_surface_drift(tmp_path: Path, capsy
     assert result == 0
     assert "generated Claude host surfaces" in captured.err
     assert "scripts/materialize_cli_host_entrypoints.py" in captured.err
+
+
+def test_claude_pre_tool_use_blocks_generated_host_surfaces(tmp_path: Path, capsys) -> None:
+    result = run_pre_tool_use(
+        tmp_path,
+        {
+            "tool_name": "MultiEdit",
+            "tool_input": {"file_path": str(tmp_path / ".claude" / "settings.json")},
+        },
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    payload = json.loads(captured.out)
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "generated host surface" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "materialize_cli_host_entrypoints.py" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_claude_pre_tool_use_allows_normal_workspace_files(tmp_path: Path, capsys) -> None:
+    result = run_pre_tool_use(
+        tmp_path,
+        {
+            "tool_name": "Edit",
+            "tool_input": {"file_path": str(tmp_path / "notes" / "todo.md")},
+        },
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_claude_pre_tool_use_blocks_targeted_bash_writes(tmp_path: Path, capsys) -> None:
+    result = run_pre_tool_use(
+        tmp_path,
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "cp tmp .claude/settings.json"},
+        },
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    payload = json.loads(captured.out)
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert ".claude/settings.json" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_claude_pre_tool_use_blocks_shell_redirection_into_generated_files(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    result = run_pre_tool_use(
+        tmp_path,
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "printf '{}' > .claude/settings.json"},
+        },
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    payload = json.loads(captured.out)
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert ".claude/settings.json" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_claude_pre_tool_use_allows_reading_generated_files_after_unrelated_write(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    result = run_pre_tool_use(
+        tmp_path,
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "cp tmp ./tmp.out && cat .claude/settings.json"},
+        },
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert captured.out == ""
+    assert captured.err == ""
 
 
 def test_claude_hook_audit_reports_stop_failure_without_mutation(tmp_path: Path, capsys) -> None:

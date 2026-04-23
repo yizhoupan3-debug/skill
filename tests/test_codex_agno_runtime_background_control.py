@@ -339,10 +339,11 @@ def test_background_runtime_sandbox_events_keep_background_job_id(tmp_path: Path
             prompt_preview="Rust-owned dry-run prompt",
             usage=UsageMetrics(input_tokens=3, output_tokens=2, total_tokens=5, mode="dry_run"),
             metadata={
-                "execution_kernel": "rust-execution-kernel-slice",
-                "execution_kernel_authority": "rust-execution-kernel-authority",
-                },
-            )
+                **runtime.execution_service.kernel_payload(dry_run=True),
+                "execution_kernel_live_fallback": None,
+                "execution_kernel_live_fallback_authority": None,
+            },
+        )
 
     async def fake_run_task(request: BackgroundRunRequest) -> RunTaskResponse:
         session_id = request.session_id or "background-sandbox-session"

@@ -19,6 +19,23 @@ if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
 import codex_agno_runtime.profile_artifacts as profile_artifacts_module
+import codex_agno_runtime.host_adapters as host_adapters_module
+import codex_agno_runtime.codex_artifact_contracts as codex_artifact_contracts_module
+from codex_agno_runtime.codex_artifact_contracts import (
+    build_cli_family_capability_discovery,
+    build_cli_family_parity_snapshot,
+    build_codex_dual_entry_parity_snapshot,
+    build_cli_family_capability_discovery as rust_build_cli_family_capability_discovery,
+    build_codex_dual_entry_parity_snapshot as rust_build_codex_dual_entry_parity_snapshot,
+)
+from codex_agno_runtime.control_plane_contracts import (
+    build_control_plane_contract_descriptors,
+    build_delegation_contract,
+    build_execution_controller_contract,
+    build_execution_kernel_live_fallback_retirement_status,
+    build_execution_kernel_live_response_serialization_contract,
+    build_supervisor_state_contract,
+)
 from codex_agno_runtime.framework_profile import (
     CORE_CAPABILITIES,
     FRAMEWORK_SHARED_CONTRACT_FIELDS,
@@ -46,22 +63,8 @@ from codex_agno_runtime.host_adapters import (
     CODEX_DESKTOP_HOST_ADAPTER,
     GEMINI_CLI_ADAPTER,
     GENERIC_HOST_ADAPTER,
-    build_cli_family_parity_snapshot,
-    build_cli_family_capability_discovery,
-    build_codex_desktop_alias_retirement_status,
-    build_control_plane_contract_descriptors,
-    build_codex_dual_entry_parity_snapshot,
-    build_delegation_contract,
-    build_execution_controller_contract,
-    build_execution_kernel_live_fallback_retirement_status,
-    build_execution_kernel_live_response_serialization_contract,
-    build_supervisor_state_contract,
-    build_upgrade_compatibility_matrix,
-    compatibility_snapshot,
     get_host_adapter,
     list_host_adapters,
-    compile_aionrs_companion_adapter,
-    compile_aionui_host_adapter,
     compile_claude_code_adapter,
     adapt_framework_profile,
     compile_codex_cli_adapter,
@@ -69,6 +72,13 @@ from codex_agno_runtime.host_adapters import (
     compile_codex_desktop_adapter,
     compile_cli_common_adapter,
     compile_gemini_cli_adapter,
+)
+from codex_agno_runtime.host_adapter_compatibility import (
+    compatibility_snapshot,
+    build_codex_desktop_alias_retirement_status,
+    build_upgrade_compatibility_matrix,
+    compile_aionrs_companion_adapter,
+    compile_aionui_host_adapter,
     validate_adapter_compatibility,
 )
 from codex_agno_runtime.rust_router import RustRouteAdapter
@@ -961,6 +971,85 @@ def test_adapt_framework_profile_allows_explicit_host_private_opt_in() -> None:
     assert adapted["host_projection"]["context_files"] == ["AGENTS.md"]
 
 
+def test_compile_cli_common_adapter_uses_rust_artifact_and_keeps_override_surface(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile = build_framework_profile(
+        profile_id="rust-wrapper-cli-common",
+        display_name="Rust Wrapper CLI Common",
+        session_policy={"mode": "bounded"},
+    )
+
+    def _fake_compile(profile_arg: FrameworkProfile, artifact_id: str) -> dict[str, Any]:
+        assert profile_arg is profile
+        assert artifact_id == "cli_common_adapter"
+        return {
+            "metadata": {
+                "adapter_id": "cli_common_adapter",
+                "host_id": "cli-family-shared",
+                "transport": "host-neutral-contract",
+                "rust_marker": True,
+            },
+            "shared_contract": {"rust_owned": True},
+            "controller_boundary": {"shared_adapter": "cli_common_adapter", "source": "rust"},
+            "parity_contract": {"source": "rust"},
+            "source_contract": {"shared_contract": "shared_contract"},
+        }
+
+    monkeypatch.setattr(
+        host_adapters_module,
+        "_compile_rust_codex_artifact",
+        _fake_compile,
+    )
+
+    adapted = compile_cli_common_adapter(
+        profile,
+        host_overrides={"display_name": "Override Display", "metadata": {"user_override": True}},
+    )
+
+    assert adapted.host_payload["display_name"] == "Override Display"
+    assert adapted.host_payload["shared_contract"] == {"rust_owned": True}
+    assert adapted.host_payload["controller_boundary"]["source"] == "rust"
+    assert adapted.host_payload["metadata"]["rust_marker"] is True
+    assert adapted.host_payload["metadata"]["user_override"] is True
+    assert adapted.host_payload["metadata"]["adapter_id"] == "cli_common_adapter"
+
+
+def test_host_adapter_artifact_wrappers_use_rust_compiler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile = build_framework_profile(
+        profile_id="rust-wrapper-artifacts",
+        display_name="Rust Wrapper Artifacts",
+        session_policy={"mode": "bounded"},
+    )
+    requested: list[str] = []
+
+    def _fake_compile(profile_arg: FrameworkProfile, artifact_id: str) -> dict[str, Any]:
+        assert profile_arg is profile
+        requested.append(artifact_id)
+        return {"artifact_id": artifact_id, "source": "rust"}
+
+    monkeypatch.setattr(
+        codex_artifact_contracts_module,
+        "_compile_rust_codex_artifact",
+        _fake_compile,
+    )
+
+    assert build_cli_family_capability_discovery(profile)["artifact_id"] == (
+        "cli_family_capability_discovery"
+    )
+    assert build_cli_family_parity_snapshot(profile)["artifact_id"] == "cli_family_parity_snapshot"
+    assert build_codex_dual_entry_parity_snapshot(profile)["artifact_id"] == (
+        "codex_dual_entry_parity_snapshot"
+    )
+    assert requested == [
+        "cli_family_capability_discovery",
+        "cli_family_parity_snapshot",
+        "codex_dual_entry_parity_snapshot",
+    ]
+
+
 def test_framework_profile_rejects_host_specific_metadata_in_framework_truth() -> None:
     try:
         build_framework_profile(
@@ -1737,25 +1826,36 @@ def test_codex_desktop_alias_retirement_status_tracks_parity_first_exit_gate() -
     assert status["retirement_gates"]["translation_shim_ready_if_needed"] is True
 
 
-def test_legacy_codex_desktop_alias_compiler_stays_on_explicit_compatibility_surface() -> None:
+def test_legacy_codex_desktop_alias_compiler_drops_the_old_compatibility_escape_hatch() -> None:
     root_package = importlib.import_module("codex_agno_runtime")
-    compatibility_surface = importlib.import_module("codex_agno_runtime.compatibility")
+    cli_family_surface = importlib.import_module("codex_agno_runtime.cli_family_contracts")
+    compatibility_module_path = (
+        PROJECT_ROOT / "codex_agno_runtime" / "src" / "codex_agno_runtime" / "compatibility.py"
+    )
 
+    assert (
+        root_package.build_cli_family_capability_discovery.__module__
+        == rust_build_cli_family_capability_discovery.__module__
+    )
+    assert (
+        root_package.build_codex_dual_entry_parity_snapshot.__module__
+        == rust_build_codex_dual_entry_parity_snapshot.__module__
+    )
+    assert (
+        cli_family_surface.build_cli_family_capability_discovery.__module__
+        == rust_build_cli_family_capability_discovery.__module__
+    )
+    assert (
+        cli_family_surface.build_codex_dual_entry_parity_snapshot.__module__
+        == rust_build_codex_dual_entry_parity_snapshot.__module__
+    )
     assert not hasattr(root_package, "compile_codex_desktop_host_adapter")
     assert not hasattr(root_package, "compile_aionrs_companion_adapter")
     assert not hasattr(root_package, "compile_aionui_host_adapter")
     assert not hasattr(root_package, "build_upgrade_compatibility_matrix")
     assert not hasattr(root_package, "compile_codex_common_adapter")
     assert not hasattr(root_package, "build_codex_desktop_alias_retirement_status")
-    assert not hasattr(compatibility_surface, "compile_codex_desktop_host_adapter")
-    assert compatibility_surface.compile_aionrs_companion_adapter is compile_aionrs_companion_adapter
-    assert compatibility_surface.compile_aionui_host_adapter is compile_aionui_host_adapter
-    assert compatibility_surface.build_upgrade_compatibility_matrix is build_upgrade_compatibility_matrix
-    assert compatibility_surface.compile_codex_common_adapter is compile_codex_common_adapter
-    assert (
-        compatibility_surface.build_codex_desktop_alias_retirement_status
-        is build_codex_desktop_alias_retirement_status
-    )
+    assert not compatibility_module_path.exists()
 
 
 def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> None:
@@ -2023,6 +2123,7 @@ def test_router_rs_profile_json_matches_outer_framework_contract() -> None:
         "bridge_contract": "bridge_contract",
         "execution_surface": "execution_surface",
     }
+    assert "legacy_codex_common_adapter" not in payload["codex_common_adapter"]["parity_contract"]
     assert payload["claude_code_adapter"]["host_projection"]["context_files"] == [
         "CLAUDE.md",
         "CLAUDE.local.md",
@@ -2175,6 +2276,7 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     }
     assert payload["cli_common_adapter"]["controller_boundary"]["shared_adapter"] == "cli_common_adapter"
     assert payload["codex_common_adapter"]["controller_boundary"]["framework_truth"] == "framework_core"
+    assert "legacy_codex_common_adapter" not in payload["codex_common_adapter"]["parity_contract"]
     assert payload["codex_desktop_adapter"]["entrypoint_contract"]["entrypoint_kind"] == "interactive"
     assert payload["codex_desktop_adapter"]["bridge_contract"] == (
         payload["codex_desktop_adapter"]["common_contract"]["workspace_bootstrap"]["bridges"]
@@ -2292,6 +2394,7 @@ def test_router_rs_profile_artifacts_json_can_opt_in_continuity_alias_artifact()
             [
                 *_router_rs_command(),
                 "--profile-artifacts-json",
+                "--include-compatibility-inventory",
                 "--include-legacy-alias-artifact",
                 "--framework-profile",
                 str(profile_path),
@@ -2312,15 +2415,47 @@ def test_router_rs_profile_artifacts_json_can_opt_in_continuity_alias_artifact()
         "json",
         "stream-json",
     ]
-    assert payload["codex_desktop_host_adapter"]["metadata"]["adapter_alias_of"] == "codex_desktop_adapter"
-    assert payload["codex_desktop_host_adapter"]["bridge_contract"] == (
-        payload["codex_desktop_host_adapter"]["common_contract"]["workspace_bootstrap"]["bridges"]
-    )
-    assert payload["codex_desktop_host_adapter"]["source_contract"]["adapter_alias_of"] == (
-        "codex_desktop_adapter"
-    )
+    assert "codex_desktop_host_adapter" not in payload
     assert payload["codex_desktop_alias_retirement_status"]["alias_lifecycle"] == "compatibility-only"
     assert payload["codex_desktop_alias_retirement_status"]["emitter_contract"]["rust_emits_alias_artifact"] is False
+    assert payload["upgrade_compatibility_matrix"]["codex_desktop_host_adapter"]["compatible"] is True
+    assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["legacy_surface"] is True
+
+
+def test_router_rs_profile_artifacts_json_can_include_compatibility_inventory() -> None:
+    profile = build_framework_profile(
+        profile_id="rust-profile-artifacts-compat",
+        display_name="Rust Profile Artifacts Compat",
+        rules_bundle={"rules": [{"id": "outer-owned"}]},
+        skill_bundle={"skills": ["router"]},
+        session_policy={"mode": "bounded"},
+        artifact_contract={"layout": "stable-v1"},
+        memory_mounts=("project",),
+        mcp_servers=("local-memory",),
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        profile_path = Path(tmpdir) / "framework_profile.json"
+        profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False), encoding="utf-8")
+
+        proc = subprocess.run(
+            [
+                *_router_rs_command(),
+                "--profile-artifacts-json",
+                "--include-compatibility-inventory",
+                "--framework-profile",
+                str(profile_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT,
+        )
+
+    payload = json.loads(proc.stdout)
+    assert payload["upgrade_compatibility_matrix"]["cli_common_adapter"]["compatible"] is True
+    assert payload["upgrade_compatibility_matrix"]["codex_desktop_adapter"]["compatible"] is True
+    assert "aionrs_companion_adapter" not in payload["upgrade_compatibility_matrix"]
 
 
 def test_ensure_capabilities_rejects_missing_capability() -> None:

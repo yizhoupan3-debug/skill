@@ -136,3 +136,80 @@ def test_search_skills_matches_memory_and_native_debug_queries() -> None:
     assert memory_results[0].record.name == "agent-memory"
     assert native_results
     assert native_results[0].record.name == "native-app-debugging"
+
+
+def test_search_skills_matches_design_md_system_synthesis_queries() -> None:
+    """Verify DESIGN.md-oriented queries hit the new design-system owner.
+
+    Returns:
+        None.
+    """
+
+    results = search_skills(
+        "深度分析现有界面 输出 DESIGN.md 统一设计语言 设计系统",
+        codex_home=PROJECT_ROOT,
+        limit=3,
+    )
+
+    assert results
+    assert results[0].record.name == "design-md"
+
+
+def test_search_skills_matches_design_prompt_enhancer_queries() -> None:
+    """Verify design-prompt queries hit the design-specific prompt owner.
+
+    Returns:
+        None.
+    """
+
+    results = search_skills(
+        "优化页面生成提示词 UI 提示词 design system block 页面结构",
+        codex_home=PROJECT_ROOT,
+        limit=3,
+    )
+
+    assert results
+    assert results[0].record.name == "design-prompt-enhancer"
+
+
+def test_search_skills_matches_design_output_auditor_queries() -> None:
+    """Verify design audit queries hit the design acceptance owner.
+
+    Returns:
+        None.
+    """
+
+    results = search_skills(
+        "设计验收 风格漂移 AI 味 anti-pattern 反模式回流",
+        codex_home=PROJECT_ROOT,
+        limit=3,
+    )
+
+    assert results
+    assert results[0].record.name == "design-output-auditor"
+
+    colloquial_results = search_skills(
+        "按设计系统做风格漂移检查",
+        codex_home=PROJECT_ROOT,
+        limit=3,
+    )
+
+    assert colloquial_results
+    assert colloquial_results[0].record.name == "design-output-auditor"
+
+
+def test_search_skills_matches_design_artifact_protocol_queries() -> None:
+    """Verify design workflow protocol queries hit the file-backed owner.
+
+    Returns:
+        None.
+    """
+
+    results = search_skills(
+        "设计工件协议 design workflow prompt 到 screenshot 到 verdict",
+        codex_home=PROJECT_ROOT,
+        limit=3,
+    )
+
+    assert results
+    assert results[0].record.name == "design-workflow-protocol"

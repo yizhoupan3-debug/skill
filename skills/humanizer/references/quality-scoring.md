@@ -13,7 +13,7 @@ For short snippets, use this mentally. For documents >300 words, show the score 
 | **检测脆弱度 (Detection Vulnerability)** | 句首是否存在长串连接词堆砌？句子长度是否呈现教科书般的均匀分布（低 burstiness）？是否存在被穷举的高危词汇？ | |
 | **学术/语境适配 (Register Adequacy)** | 学术场景下是否做到了克制的方法论描述（过 Turnitin）？商业场景下痛点是否足够具象且具代入感？ | |
 | **可读性与留白 (Reader Trust)** | 结论和过渡自然后文逻辑得出，移除了过度解释和"众所周知"式的自作主张。尊重读者的智商。 | |
-| **生动性与质感 (Authenticity & Soul)** | 阅读起来有明显的人类观点倾向甚至一点合理的主观态度/自我纠偏（视具体语境而定），而非平铺直叙的维基百科。 | |
+| **自然口吻与可信度 (Authenticity & Voice)** | 阅读起来像真实的人在说话：具体、克制、可信，必要时允许有限主观判断或自我纠偏，但不强行表演人格。 | |
 
 ---
 

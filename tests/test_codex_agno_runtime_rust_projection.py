@@ -200,6 +200,8 @@ Implement the task directly.
     assert "How to reply:" in prompt
     assert "Key rules:" in prompt
     assert "Lead with the answer or result." in prompt
+    assert "Explain things in plain language first." in prompt
+    assert "Do not force personality or performative style by default." in prompt
 
 
 def test_prompt_builder_uses_skill_body_without_extra_idea_to_plan_contract() -> None:

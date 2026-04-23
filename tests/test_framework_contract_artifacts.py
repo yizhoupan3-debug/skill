@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ast
 import json
+import subprocess
 import sys
 from typing import Any, Mapping
 from pathlib import Path
@@ -9,6 +11,8 @@ from unittest.mock import patch
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
 RUST_ADAPTER_TIMEOUT_SECONDS = 120.0
+ROUTER_RS_CRATE_ROOT = PROJECT_ROOT / "scripts" / "router-rs"
+ROUTER_RS_RELEASE_BIN = ROUTER_RS_CRATE_ROOT / "target" / "release" / "router-rs"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(RUNTIME_SRC) not in sys.path:
@@ -33,6 +37,102 @@ def _read_shared_contract_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     return FrameworkProfile.from_dict(payload).shared_contract_surface()
 
 
+def _ensure_current_router_rs_release_binary() -> None:
+    latest_source_mtime = max(
+        (
+            path.stat().st_mtime
+            for path in [ROUTER_RS_CRATE_ROOT / "Cargo.toml", *ROUTER_RS_CRATE_ROOT.joinpath("src").rglob("*.rs")]
+        ),
+        default=0.0,
+    )
+    if ROUTER_RS_RELEASE_BIN.is_file() and ROUTER_RS_RELEASE_BIN.stat().st_mtime >= latest_source_mtime:
+        return
+    subprocess.run(
+        ["cargo", "build", "--manifest-path", str(ROUTER_RS_CRATE_ROOT / "Cargo.toml"), "--release"],
+        cwd=PROJECT_ROOT,
+        check=True,
+    )
+
+
+def _rust_route_adapter() -> RustRouteAdapter:
+    _ensure_current_router_rs_release_binary()
+    return RustRouteAdapter(PROJECT_ROOT, timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS)
+
+
+def test_profile_artifacts_avoids_internal_compatibility_escape_hatch_import() -> None:
+    module_path = PROJECT_ROOT / "codex_agno_runtime" / "src" / "codex_agno_runtime" / "profile_artifacts.py"
+    tree = ast.parse(module_path.read_text(encoding="utf-8"))
+
+    cli_family_imports = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.module == "codex_agno_runtime.cli_family_contracts"
+    ]
+
+    assert cli_family_imports == []
+
+    compatibility_imports = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.module == "codex_agno_runtime.compatibility"
+    ]
+
+    assert compatibility_imports == []
+
+    host_adapter_wrapper_names = {
+        "build_codex_desktop_alias_retirement_status",
+        "build_upgrade_compatibility_matrix",
+        "compile_aionrs_companion_adapter",
+        "compile_aionui_host_adapter",
+    }
+    wrapper_imports = []
+    for node in tree.body:
+        if not isinstance(node, ast.ImportFrom) or node.module != "codex_agno_runtime.host_adapters":
+            continue
+        imported = {alias.name for alias in node.names}
+        overlap = sorted(imported & host_adapter_wrapper_names)
+        if overlap:
+            wrapper_imports.extend(overlap)
+
+    assert wrapper_imports == []
+
+
+def test_internal_runtime_modules_avoid_host_adapters_wrapper_imports() -> None:
+    runtime_root = PROJECT_ROOT / "codex_agno_runtime" / "src" / "codex_agno_runtime"
+    banned_wrapper_names = {
+        "build_cli_family_capability_discovery",
+        "build_cli_family_parity_snapshot",
+        "build_codex_desktop_alias_retirement_status",
+        "build_codex_dual_entry_parity_snapshot",
+        "build_control_plane_contract_descriptors",
+        "build_delegation_contract",
+        "build_execution_controller_contract",
+        "build_execution_kernel_live_fallback_retirement_status",
+        "build_execution_kernel_live_response_serialization_contract",
+        "build_supervisor_state_contract",
+        "build_upgrade_compatibility_matrix",
+        "compatibility_snapshot",
+        "compile_aionrs_companion_adapter",
+        "compile_aionui_host_adapter",
+        "validate_adapter_compatibility",
+    }
+
+    offenders: dict[str, list[str]] = {}
+    for module_path in sorted(runtime_root.glob("*.py")):
+        if module_path.name in {"host_adapters.py", "__init__.py"}:
+            continue
+        tree = ast.parse(module_path.read_text(encoding="utf-8"))
+        hits: set[str] = set()
+        for node in tree.body:
+            if not isinstance(node, ast.ImportFrom) or node.module != "codex_agno_runtime.host_adapters":
+                continue
+            hits.update(alias.name for alias in node.names if alias.name in banned_wrapper_names)
+        if hits:
+            offenders[module_path.name] = sorted(hits)
+
+    assert offenders == {}
+
+
 def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_rust_outputs(
     tmp_path: Path,
 ) -> None:
@@ -51,7 +151,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     paths = emit_framework_contract_artifacts(
         tmp_path,
         profile=profile,
-        rust_adapter=RustRouteAdapter(PROJECT_ROOT, timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS),
+        rust_adapter=_rust_route_adapter(),
     )
 
     expected_keys = {
@@ -588,6 +688,21 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "compatibility_live_response_serialization_still_python_owned"
     ] is False
 
+    assert cli_common == rust_cli_common
+    assert common == rust_common
+    assert rust_desktop == json.loads(Path(paths["codex_desktop_adapter"]).read_text(encoding="utf-8"))
+    assert rust_cli == json.loads(Path(paths["codex_cli_adapter"]).read_text(encoding="utf-8"))
+    assert claude == rust_claude
+    assert gemini == rust_gemini
+    assert cli_discovery == rust_cli_discovery
+    assert cli_parity == rust_cli_family
+    assert parity == rust_parity
+    assert execution_controller == rust_execution_controller
+    assert delegation == rust_delegation
+    assert supervisor_state == rust_supervisor
+    assert fallback_retirement == rust_fallback_retirement
+    assert response_serialization == rust_response_serialization
+
     rust_parity_report = json.loads(
         Path(paths["rust_python_artifact_parity_report"]).read_text(encoding="utf-8")
     )
@@ -819,7 +934,7 @@ def test_framework_profile_artifact_bidirectional_shared_contract_consistency(tm
     paths = emit_framework_contract_artifacts(
         tmp_path,
         profile=profile,
-        rust_adapter=RustRouteAdapter(PROJECT_ROOT, timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS),
+        rust_adapter=_rust_route_adapter(),
     )
 
     framework_profile = FrameworkProfile.from_dict(
@@ -864,7 +979,7 @@ def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
     paths = emit_framework_contract_artifacts(
         tmp_path,
         profile=profile,
-        rust_adapter=RustRouteAdapter(PROJECT_ROOT, timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS),
+        rust_adapter=_rust_route_adapter(),
         include_compatibility_inventory=True,
         include_legacy_alias_artifact=True,
     )
@@ -903,15 +1018,12 @@ def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
     matrix = json.loads(Path(paths["upgrade_compatibility_matrix"]).read_text(encoding="utf-8"))
     assert Path(paths["upgrade_compatibility_matrix"]).parent.name == "continuity"
     assert matrix["codex_desktop_host_adapter"]["compatible"] is True
-
-    rust_alias_payload = json.loads(
-        Path(paths["rust_codex_desktop_host_adapter"]).read_text(encoding="utf-8")
+    rust_matrix = json.loads(
+        Path(paths["rust_upgrade_compatibility_matrix"]).read_text(encoding="utf-8")
     )
-    assert rust_alias_payload["metadata"]["adapter_alias_of"] == "codex_desktop_adapter"
-    assert rust_alias_payload["bridge_contract"] == (
-        rust_alias_payload["common_contract"]["workspace_bootstrap"]["bridges"]
-    )
-    assert rust_alias_payload["source_contract"]["adapter_alias_of"] == "codex_desktop_adapter"
+    assert rust_matrix["codex_desktop_host_adapter"]["compatible"] is True
+    assert rust_matrix["aionrs_companion_adapter"]["legacy_surface"] is True
+    assert "rust_codex_desktop_host_adapter" not in paths
     rust_alias_retirement = json.loads(
         Path(paths["rust_codex_desktop_alias_retirement_status"]).read_text(encoding="utf-8")
     )
@@ -931,10 +1043,7 @@ def test_rust_route_adapter_can_compile_profile_bundle(tmp_path: Path) -> None:
     profile_path = tmp_path / "framework_profile.json"
     profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False), encoding="utf-8")
 
-    payload = RustRouteAdapter(
-        PROJECT_ROOT,
-        timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS,
-    ).compile_profile_bundle(profile_path)
+    payload = _rust_route_adapter().compile_profile_bundle(profile_path)
 
     assert payload["profile_id"] == "rust-compile-profile"
     assert payload["companion_projection"]["presetRules"][0]["id"] == "outer-owned"
@@ -955,10 +1064,7 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
     profile_path = tmp_path / "framework_profile.json"
     profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False), encoding="utf-8")
 
-    payload = RustRouteAdapter(
-        PROJECT_ROOT,
-        timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS,
-    ).compile_codex_profile_artifacts(profile_path)
+    payload = _rust_route_adapter().compile_codex_profile_artifacts(profile_path)
 
     assert set(payload) == {
         "cli_common_adapter",
@@ -1037,6 +1143,31 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
     ] == "headless-exec"
     assert payload["cli_family_parity_snapshot"]["all_shared_contract_checks_pass"] is True
     assert payload["codex_dual_entry_parity_snapshot"]["all_shared_contract_checks_pass"] is True
+
+
+def test_rust_route_adapter_can_compile_compatibility_inventory_artifact(tmp_path: Path) -> None:
+    profile = build_framework_profile(
+        profile_id="rust-artifacts-profile-compat",
+        display_name="Rust Artifacts Profile Compat",
+        rules_bundle={"rules": [{"id": "outer-owned"}]},
+        skill_bundle={"skills": ["router"]},
+        session_policy={"mode": "bounded"},
+    )
+    profile_path = tmp_path / "framework_profile.json"
+    profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False), encoding="utf-8")
+
+    payload = _rust_route_adapter().compile_codex_profile_artifacts(
+        profile_path,
+        include_compatibility_inventory=True,
+    )
+
+    assert payload["upgrade_compatibility_matrix"]["cli_common_adapter"]["compatible"] is True
+    assert payload["upgrade_compatibility_matrix"]["codex_desktop_adapter"]["compatible"] is True
+    assert payload["upgrade_compatibility_matrix"]["codex_cli_adapter"]["compatible"] is True
+    assert "aionrs_companion_adapter" not in payload["upgrade_compatibility_matrix"]
+    assert "codex_desktop_host_adapter" not in payload["upgrade_compatibility_matrix"]
+
+
 def test_rust_route_adapter_can_opt_in_continuity_alias_artifact(tmp_path: Path) -> None:
     profile = build_framework_profile(
         profile_id="rust-artifacts-profile-legacy",
@@ -1048,12 +1179,10 @@ def test_rust_route_adapter_can_opt_in_continuity_alias_artifact(tmp_path: Path)
     profile_path = tmp_path / "framework_profile.json"
     profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False), encoding="utf-8")
 
-    payload = RustRouteAdapter(
-        PROJECT_ROOT,
-        timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS,
-    ).compile_codex_profile_artifacts(
+    payload = _rust_route_adapter().compile_codex_profile_artifacts(
         profile_path,
         include_legacy_alias_artifact=True,
+        include_compatibility_inventory=True,
     )
 
     assert payload["cli_common_adapter"]["controller_boundary"]["shared_adapter"] == "cli_common_adapter"
@@ -1065,8 +1194,6 @@ def test_rust_route_adapter_can_opt_in_continuity_alias_artifact(tmp_path: Path)
         "json",
         "stream-json",
     ]
-    assert payload["codex_desktop_host_adapter"]["metadata"]["adapter_alias_of"] == "codex_desktop_adapter"
-    assert payload["codex_desktop_host_adapter"]["bridge_contract"] == (
-        payload["codex_desktop_host_adapter"]["common_contract"]["workspace_bootstrap"]["bridges"]
-    )
-    assert payload["codex_desktop_host_adapter"]["source_contract"]["alias_mode"] == "mirror-only"
+    assert "codex_desktop_host_adapter" not in payload
+    assert payload["upgrade_compatibility_matrix"]["codex_desktop_host_adapter"]["compatible"] is True
+    assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["legacy_surface"] is True

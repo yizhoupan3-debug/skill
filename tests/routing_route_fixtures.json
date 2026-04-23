@@ -267,6 +267,76 @@
       95.5
     ],
     [
+      "design-md",
+      "L3",
+      "owner",
+      "none",
+      "P1",
+      "Synthesize a reusable DESIGN.md from existing UI assets and product surfaces.",
+      "n/a",
+      [
+        "design.md",
+        "DESIGN.md",
+        "设计系统",
+        "设计语言",
+        "先沉淀 DESIGN.md"
+      ],
+      95.6
+    ],
+    [
+      "design-prompt-enhancer",
+      "L3",
+      "owner",
+      "none",
+      "P1",
+      "Rewrite vague UI requests into structured generation or edit prompts with design-system blocks.",
+      "n/a",
+      [
+        "设计 prompt",
+        "UI 提示词",
+        "优化页面生成提示词",
+        "结构化设计提示词",
+        "design system block"
+      ],
+      95.7
+    ],
+    [
+      "design-output-auditor",
+      "L3",
+      "owner",
+      "none",
+      "P1",
+      "Audit produced UI outputs against DESIGN.md, anti-pattern bans, and drift constraints.",
+      "n/a",
+      [
+        "设计审计",
+        "设计验收",
+        "风格漂移",
+        "AI 味",
+        "design drift"
+      ],
+      95.8
+    ],
+    [
+      "design-workflow-protocol",
+      "L3",
+      "owner",
+      "none",
+      "P1",
+      "Establish a durable file-backed design workflow connecting DESIGN.md, prompts, evidence, and verdicts.",
+      "n/a",
+      [
+        "设计工件协议",
+        "设计工作流",
+        "设计迭代协议",
+        "design workflow",
+        "design artifact protocol",
+        "prompt 到 screenshot 到 verdict",
+        "每轮都按这个工作流跑"
+      ],
+      95.9
+    ],
+    [
       "frontend-design",
       "L3",
       "owner",
@@ -497,6 +567,42 @@
       "query": "把这个 SaaS dashboard 做得更有品牌感和高级感，重新梳理视觉层级、配色和设计语言",
       "expected": {
         "selected_skill": "frontend-design",
+        "overlay_skill": null,
+        "layer": "L3"
+      }
+    },
+    {
+      "name": "design-md-system-synthesis-routing",
+      "query": "深度分析这个产品现有页面和组件，先别改 UI，先把设计语言沉淀成 DESIGN.md，后面所有页面都按这份设计系统走",
+      "expected": {
+        "selected_skill": "design-md",
+        "overlay_skill": null,
+        "layer": "L3"
+      }
+    },
+    {
+      "name": "design-prompt-enhancer-generation-routing",
+      "query": "先别做页面，帮我把这段需求改成结构化设计提示词，要包含 DESIGN SYSTEM block、平台、页面结构和组件说明",
+      "expected": {
+        "selected_skill": "design-prompt-enhancer",
+        "overlay_skill": null,
+        "layer": "L3"
+      }
+    },
+    {
+      "name": "design-output-auditor-drift-routing",
+      "query": "按 DESIGN.md 审计这版 UI 有没有风格漂移、AI 味和反模式回流，给我一个验收结论",
+      "expected": {
+        "selected_skill": "design-output-auditor",
+        "overlay_skill": null,
+        "layer": "L3"
+      }
+    },
+    {
+      "name": "design-artifact-protocol-routing",
+      "query": "给这个项目建立一套 DESIGN.md 到 prompt 到 screenshot 到 verdict 的设计工件协议，后面每轮都按这个工作流跑",
+      "expected": {
+        "selected_skill": "design-workflow-protocol",
         "overlay_skill": null,
         "layer": "L3"
       }

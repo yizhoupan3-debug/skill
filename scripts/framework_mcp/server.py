@@ -25,6 +25,13 @@ from scripts.memory_support import (
 
 JSONDict = dict[str, Any]
 PROTOCOL_VERSION = "2024-11-05"
+STABLE_MEMORY_FILENAMES = (
+    "MEMORY.md",
+    "preferences.md",
+    "decisions.md",
+    "lessons.md",
+    "runbooks.md",
+)
 
 
 class FrameworkServerError(Exception):
@@ -209,10 +216,6 @@ class FrameworkMcpServer:
             return self._runtime_snapshot()
         if tool_name == "framework_contract_summary":
             return self._contract_summary()
-        if tool_name == "framework_recap_refresh":
-            return self._recap_refresh(
-                max_lines=self._optional_int(arguments=arguments, key="max_lines", default=6, minimum=1),
-            )
         raise FrameworkServerError(
             code="UNSUPPORTED_OPERATION",
             message=f"Tool is registered but not implemented: {tool_name}",
@@ -240,12 +243,13 @@ class FrameworkMcpServer:
 
     def _memory_recall(self, *, query: str, top: int, mode: str) -> JSONDict:
         try:
-            return self._rust_adapter.framework_memory_recall(
+            payload = self._rust_adapter.framework_memory_recall(
                 repo_root=self._repo_root,
                 query=query,
                 top=top,
                 mode=mode,
             )
+            return self._compact_memory_recall_payload(payload)
         except RuntimeError as error:
             raise FrameworkServerError(
                 code="RUST_FRAMEWORK_MEMORY_RECALL_FAILED",
@@ -317,18 +321,38 @@ class FrameworkMcpServer:
                 ],
             ) from error
 
-    def _recap_refresh(self, *, max_lines: int) -> JSONDict:
-        try:
-            return self._rust_adapter.framework_recap(repo_root=self._repo_root, max_lines=max_lines)
-        except RuntimeError as error:
-            raise FrameworkServerError(
-                code="RUST_FRAMEWORK_RECAP_FAILED",
-                message=str(error),
-                suggested_next_actions=[
-                    "verify scripts/router-rs builds cleanly",
-                    "inspect .supervisor_state.json and artifacts/current for drift",
-                ],
-            ) from error
+    def _compact_memory_recall_payload(self, payload: JSONDict) -> JSONDict:
+        retrieval = payload.get("retrieval") if isinstance(payload.get("retrieval"), dict) else {}
+        continuity = payload.get("continuity") if isinstance(payload.get("continuity"), dict) else {}
+        compact_retrieval: JSONDict = {
+            "workspace": retrieval.get("workspace"),
+            "topic": retrieval.get("topic"),
+            "mode": retrieval.get("mode"),
+            "memory_root": retrieval.get("memory_root"),
+            "sqlite_path": retrieval.get("sqlite_path"),
+            "active_task_id": retrieval.get("active_task_id"),
+            "active_task_included": retrieval.get("active_task_included", False),
+            "freshness": retrieval.get("freshness", {}),
+            "items": retrieval.get("items", []),
+        }
+        compact_payload = dict(payload)
+        compact_payload["retrieval"] = compact_retrieval
+        compact_payload["continuity"] = {
+            "state": continuity.get("state"),
+            "can_resume": continuity.get("can_resume", False),
+            "task": continuity.get("task"),
+            "phase": continuity.get("phase"),
+            "status": continuity.get("status"),
+            "next_actions": continuity.get("next_actions", []),
+            "blockers": continuity.get("blockers", []),
+            "recovery_hints": continuity.get("recovery_hints", []),
+            "current_execution": continuity.get("current_execution"),
+            "recent_completed_execution": continuity.get("recent_completed_execution"),
+        }
+        compact_payload.pop("prompt_payload", None)
+        compact_payload.pop("active_task", None)
+        compact_payload.pop("focused_task", None)
+        return compact_payload
 
     def _build_tool_definitions(self) -> dict[str, dict[str, Any]]:
         return {
@@ -384,23 +408,6 @@ class FrameworkMcpServer:
                 "description": "Summarize the current execution contract, blockers, evidence, and next actions.",
                 "inputSchema": {"type": "object", "properties": {}},
             },
-            "framework_recap_refresh": {
-                "name": "framework_recap_refresh",
-                "description": (
-                    "Build the Claude-style recap surfaces for this workspace, including a concise "
-                    "memory projection and a next-turn workflow prompt that Codex can reuse."
-                ),
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "max_lines": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "description": "Maximum lines to keep per recap section. Defaults to 6.",
-                        }
-                    },
-                },
-            },
         }
 
     def _build_resource_definitions(self) -> dict[str, dict[str, Any]]:
@@ -409,12 +416,6 @@ class FrameworkMcpServer:
                 "uri": "framework://memory/project",
                 "name": "Project Memory",
                 "description": "Checked-in long-term framework memory for this repository.",
-                "mimeType": "text/markdown",
-            },
-            "framework://memory/claude-recap": {
-                "uri": "framework://memory/claude-recap",
-                "name": "Claude Recap",
-                "description": "Claude-style recap projection rendered from shared runtime artifacts and project memory.",
                 "mimeType": "text/markdown",
             },
             "framework://routing/runtime": {
@@ -445,38 +446,13 @@ class FrameworkMcpServer:
 
     def _read_resource(self, *, uri: str) -> dict[str, Any]:
         if uri == "framework://memory/project":
-            try:
-                recap = self._rust_adapter.framework_recap(repo_root=self._repo_root)
-            except RuntimeError as error:
-                raise FrameworkServerError(
-                    code="RUST_FRAMEWORK_RECAP_FAILED",
-                    message=str(error),
-                    suggested_next_actions=[
-                        "verify scripts/router-rs builds cleanly",
-                        "inspect .supervisor_state.json and artifacts/current for drift",
-                    ],
-                ) from error
-            text = str(recap.get("project_memory_bundle", "")).strip()
+            text = self._read_project_memory_bundle()
             if not text:
                 raise FrameworkServerError(
                     code="MISSING_RESOURCE",
                     message="Project memory file not found.",
                     suggested_next_actions=["refresh the bootstrap bundle", "verify the repository artifacts exist"],
                 )
-            return {"uri": uri, "mimeType": "text/markdown", "text": text}
-        if uri == "framework://memory/claude-recap":
-            try:
-                recap = self._rust_adapter.framework_recap(repo_root=self._repo_root)
-            except RuntimeError as error:
-                raise FrameworkServerError(
-                    code="RUST_FRAMEWORK_RECAP_FAILED",
-                    message=str(error),
-                    suggested_next_actions=[
-                        "verify scripts/router-rs builds cleanly",
-                        "inspect .supervisor_state.json and artifacts/current for drift",
-                    ],
-                ) from error
-            text = str(recap.get("projection", ""))
             return {"uri": uri, "mimeType": "text/markdown", "text": text}
         if uri == "framework://routing/runtime":
             path = self._repo_root / "skills" / "SKILL_ROUTING_RUNTIME.json"
@@ -510,6 +486,25 @@ class FrameworkMcpServer:
             message=f"Unknown resource URI: {uri}",
             suggested_next_actions=["call resources/list to inspect available resources"],
         )
+
+    def _read_project_memory_bundle(self) -> str:
+        documents: list[tuple[str, str]] = []
+        memory_root = self._repo_root / ".codex" / "memory"
+        for file_name in STABLE_MEMORY_FILENAMES:
+            path = memory_root / file_name
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8").strip()
+            if text:
+                documents.append((file_name, text))
+        if not documents:
+            return ""
+        if len(documents) == 1 and documents[0][0] == "MEMORY.md":
+            return documents[0][1]
+        lines = ["# Project Memory Bundle", ""]
+        for file_name, text in documents:
+            lines.extend([f"## {file_name}", "", text, ""])
+        return "\n".join(lines).strip()
 
     def _read_text_file(self, *, path: Path, missing_message: str) -> str:
         if not path.is_file():

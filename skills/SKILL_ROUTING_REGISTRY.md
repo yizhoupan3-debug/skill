@@ -43,6 +43,10 @@
 | `deepinterview` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Official OMC deep-interview workflow, localized onto this repo's evidence-first  |
 | `dependency-migration` | Active | P2 | L2 | owner | none | project | ✓ 97.2 | Manage, audit, upgrade, and migrate project dependencies across npm, pip, Cargo, |
 | `design-agent` | Active | P2 | L3 | gate | none | project | ✓ 100.0 | Route named-product design references and brand-plus-motion source grounding bef |
+| `design-md` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Analyze real UI assets and synthesize a reusable semantic design system into `DE |
+| `design-output-auditor` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Audit generated or redesigned UI outputs against `DESIGN.md`, prompt guardrails, |
+| `design-prompt-enhancer` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Transform vague UI or page-generation asks into structured, copy-ready design pr |
+| `design-workflow-protocol` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Establish a file-backed design iteration protocol that connects `DESIGN.md`, gen |
 | `doc` | Active | P1 | L3 | gate | artifact | project | ✓ 94.3 | Read, create, edit, repair, and review `.docx` Word documents when layout and Wo |
 | `docker` | Active | P2 | L3 | owner | none | project | ✓ 90.9 | Produce minimal, secure Docker images with correct layer caching, multi-stage bu |
 | `documentation-engineering` | Active | P2 | L1 | owner | none | project | ✓ 97.2 | Write, review, and maintain project documentation such as README, API docs, ADRs |

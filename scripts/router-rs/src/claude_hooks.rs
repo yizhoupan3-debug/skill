@@ -30,16 +30,39 @@ const STABLE_DOCUMENTS: [&str; 5] = [
     "lessons.md",
     "runbooks.md",
 ];
-const GENERATED_PATHS: [&str; 9] = [
+const GENERATED_PATHS: [&str; 6] = [
     ".claude/settings.json",
     ".claude/hooks/README.md",
-    ".claude/hooks/session_start.sh",
-    ".claude/hooks/stop.sh",
-    ".claude/hooks/pre_compact.sh",
-    ".claude/hooks/subagent_stop.sh",
+    ".claude/hooks/pre_tool_use.sh",
     ".claude/hooks/session_end.sh",
     ".claude/hooks/config_change.sh",
     ".claude/hooks/stop_failure.sh",
+];
+const PROTECTED_GENERATED_PATHS: [&str; 9] = [
+    "AGENT.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    ".gemini/settings.json",
+    ".claude/settings.json",
+    ".claude/agents/README.md",
+    ".codex/host_entrypoints_sync_manifest.json",
+    ".codex/memory/CLAUDE_MEMORY.md",
+];
+const PROTECTED_GENERATED_PREFIXES: [&str; 2] = [".claude/hooks/", ".claude/commands/"];
+const PROTECTED_BASH_PATH_HINTS: [&str; 12] = [
+    "AGENT.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    ".gemini/settings.json",
+    ".claude/settings.json",
+    ".claude/agents/README.md",
+    ".claude/hooks/",
+    ".claude/commands/",
+    ".claude/",
+    ".codex/host_entrypoints_sync_manifest.json",
+    ".codex/memory/CLAUDE_MEMORY.md",
 ];
 const SHARED_CONTINUITY_PATHS: [&str; 5] = [
     "SESSION_SUMMARY.md",
@@ -107,6 +130,7 @@ pub fn run_claude_audit_hook(command: &str, repo_root: &Path) -> Result<Value, S
     let canonical = canonical_audit_command(command)?;
     let payload = read_stdin_payload()?;
     match canonical {
+        "pre-tool-use" => run_pre_tool_use(repo_root, &payload),
         "config-change" => run_config_change(repo_root, &payload),
         "stop-failure" => run_stop_failure(repo_root, &payload),
         _ => Err(format!("Unsupported Claude audit command: {command}")),
@@ -115,18 +139,19 @@ pub fn run_claude_audit_hook(command: &str, repo_root: &Path) -> Result<Value, S
 
 fn canonical_lifecycle_command(command: &str) -> Result<&'static str, String> {
     match command {
-        "refresh-projection" | "sync" => Ok("refresh-projection"),
-        "session-start" | "start-session" => Ok("session-start"),
-        "session-stop" | "stop-session" => Ok("session-stop"),
+        "refresh-projection" => Ok("refresh-projection"),
+        "session-start" => Ok("session-start"),
+        "session-stop" => Ok("session-stop"),
         "pre-compact" => Ok("pre-compact"),
         "subagent-stop" => Ok("subagent-stop"),
-        "session-end" | "end-session" => Ok("session-end"),
+        "session-end" => Ok("session-end"),
         _ => Err(format!("Unsupported Claude lifecycle command: {command}")),
     }
 }
 
 fn canonical_audit_command(command: &str) -> Result<&'static str, String> {
     match command {
+        "pre-tool-use" => Ok("pre-tool-use"),
         "config-change" => Ok("config-change"),
         "stop-failure" => Ok("stop-failure"),
         _ => Err(format!("Unsupported Claude audit command: {command}")),
@@ -305,7 +330,7 @@ fn default_memory_md(repo_root: &Path) -> String {
 }
 
 fn default_runbooks() -> String {
-    "# runbooks\n\n## 标准操作\n\n- 统一维护入口：python3 scripts/run_memory_automation.py --workspace <workspace>\n- 需要迁移旧 artifact 布局时显式执行：python3 scripts/run_memory_automation.py --workspace <workspace> --apply-artifact-migrations\n- 合并稳定记忆：python3 scripts/consolidate_memory.py --workspace <workspace>\n- 召回上下文：python3 scripts/retrieve_memory.py --workspace <workspace> --mode stable|active|history|debug --topic <关键词>\n- 生命周期收口：python3 scripts/router_rs_runner.py --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4\n- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。\n"
+    "# runbooks\n\n## 标准操作\n\n- 统一维护入口：python3 scripts/run_memory_automation.py --workspace <workspace>\n- 需要迁移旧 artifact 布局时显式执行：python3 scripts/run_memory_automation.py --workspace <workspace> --apply-artifact-migrations\n- 合并稳定记忆：python3 scripts/consolidate_memory.py --workspace <workspace>\n- 召回上下文：python3 scripts/retrieve_memory.py --workspace <workspace> --mode stable|active|history|debug --topic <关键词>\n- 生命周期收口：./scripts/router-rs/target/release/router-rs --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4\n- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。\n"
         .to_string()
 }
 
@@ -598,6 +623,60 @@ fn run_config_change(repo_root: &Path, payload: &Value) -> Result<Value, String>
     }))
 }
 
+fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Result<Value, String> {
+    let tool_name = payload
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let mut rel_paths = HashSet::new();
+    for path in iter_payload_paths(payload) {
+        rel_paths.insert(relative_candidate_path(&path, repo_root));
+    }
+    for path in rel_paths.iter().cloned().collect::<Vec<_>>() {
+        if classify_protected_generated_path(&path).is_some() {
+            let message = pre_tool_use_message(&path);
+            return Ok(json!({
+                "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
+                "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
+                "command": "pre-tool-use",
+                "tool_name": tool_name,
+                "decision": "deny",
+                "path": path,
+                "message": message,
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": message,
+                },
+            }));
+        }
+    }
+    if let Some(path) = bash_generated_write_target(payload) {
+        let message = pre_tool_use_message(&path);
+        return Ok(json!({
+            "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
+            "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
+            "command": "pre-tool-use",
+            "tool_name": tool_name,
+            "decision": "deny",
+            "path": path,
+            "message": message,
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": message,
+            },
+        }));
+    }
+    Ok(json!({
+        "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
+        "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
+        "command": "pre-tool-use",
+        "tool_name": tool_name,
+        "decision": "allow",
+    }))
+}
+
 fn run_stop_failure(_repo_root: &Path, payload: &Value) -> Result<Value, String> {
     let failure_type = payload
         .get("error")
@@ -664,6 +743,14 @@ fn iter_candidate_paths(payload: &Value) -> Vec<String> {
     candidates
 }
 
+fn iter_payload_paths(payload: &Value) -> Vec<String> {
+    let mut candidates = iter_candidate_paths(payload);
+    if let Some(tool_input) = payload.get("tool_input") {
+        candidates.extend(iter_candidate_paths(tool_input));
+    }
+    candidates
+}
+
 fn relative_candidate_path(path: &str, repo_root: &Path) -> String {
     let candidate = PathBuf::from(path);
     if candidate.is_absolute() {
@@ -687,6 +774,112 @@ fn payload_mentions_continuity(payload: &Value) -> bool {
     SHARED_CONTINUITY_PATHS
         .iter()
         .any(|needle| serialized.contains(needle))
+}
+
+fn classify_protected_generated_path(path: &str) -> Option<&'static str> {
+    if PROTECTED_GENERATED_PATHS.contains(&path) {
+        return Some("generated_file");
+    }
+    if PROTECTED_GENERATED_PREFIXES
+        .iter()
+        .any(|prefix| path.starts_with(prefix))
+    {
+        return Some("generated_file");
+    }
+    None
+}
+
+fn pre_tool_use_message(path: &str) -> String {
+    if path == ".codex/memory/CLAUDE_MEMORY.md" {
+        return format!(
+            "[claude-pre-tool-use] blocked direct edits to imported Claude projection {path}; edit the memory source files or rerun the projection refresh instead."
+        );
+    }
+    format!(
+        "[claude-pre-tool-use] blocked direct edits to generated host surface {path}; edit scripts/materialize_cli_host_entrypoints.py and regenerate outputs instead."
+    )
+}
+
+fn bash_generated_write_target(payload: &Value) -> Option<String> {
+    let tool_name = payload.get("tool_name").and_then(Value::as_str)?;
+    if tool_name != "Bash" {
+        return None;
+    }
+    let command = payload
+        .get("tool_input")
+        .and_then(Value::as_object)
+        .and_then(|tool_input| tool_input.get("command"))
+        .or_else(|| payload.get("command"))
+        .and_then(Value::as_str)?;
+    for segment in split_bash_segments(command) {
+        let looks_mutating = bash_command_looks_mutating(&segment);
+        for hint in PROTECTED_BASH_PATH_HINTS {
+            if !segment.contains(hint) {
+                continue;
+            }
+            if looks_mutating || bash_segment_redirects_to_hint(&segment, hint) {
+                return Some(if hint == ".claude/" {
+                    ".claude/**".to_string()
+                } else {
+                    hint.to_string()
+                });
+            }
+        }
+    }
+    None
+}
+
+fn split_bash_segments(command: &str) -> Vec<String> {
+    Regex::new(r"\s*(?:&&|\|\||;|\|)\s*")
+        .ok()
+        .map(|regex| {
+            regex
+                .split(command)
+                .filter_map(|segment| {
+                    let trimmed = segment.trim();
+                    (!trimmed.is_empty()).then(|| trimmed.to_string())
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| vec![command.trim().to_string()])
+}
+
+fn bash_command_looks_mutating(command: &str) -> bool {
+    [
+        r"^\s*(mv|cp|install|touch|rm|unlink|truncate)\b",
+        r"^\s*ln\b[^\n]*\s-[^\n]*[fs][^\n]*\b",
+        r"^\s*git\s+(checkout\s+--|restore\b)",
+        r"\bsed\s+-i\b",
+        r"\bperl\s+-pi\b",
+        r"\bpython3?\s+-c\b",
+        r"\bnode\s+-e\b",
+        r"\bruby\s+-e\b",
+        r"\btee\b",
+        r"\bdd\b",
+    ]
+    .iter()
+    .any(|pattern| {
+        Regex::new(pattern)
+            .ok()
+            .map(|regex| regex.is_match(command))
+            .unwrap_or(false)
+    })
+}
+
+fn bash_segment_redirects_to_hint(segment: &str, hint: &str) -> bool {
+    let escaped = regex::escape(hint);
+    [
+        format!(r#"(>>?|>\|)\s*['"]?[^'"\n;&|]*{escaped}[^'"\n;&|]*['"]?"#),
+        format!(r#"\btee\b(?:\s+-a)?\s+['"]?[^'"\n;&|]*{escaped}[^'"\n;&|]*['"]?"#),
+        format!(r#"\bdd\b[^\n;&|]*\bof=['"]?[^'"\n;&|]*{escaped}[^'"\n;&|]*['"]?"#),
+    ]
+    .iter()
+    .any(|pattern| {
+        Regex::new(pattern)
+            .ok()
+            .map(|regex| regex.is_match(segment))
+            .unwrap_or(false)
+    })
 }
 
 fn open_memory_store(db_path: &Path) -> Result<Connection, String> {
@@ -1146,9 +1339,10 @@ mod tests {
     }
 
     #[test]
-    fn sync_alias_maps_to_refresh_projection() {
-        let repo_root = temp_repo_root("sync-alias");
-        let response = run_claude_lifecycle_hook("sync", &repo_root, 6).expect("hook ok");
+    fn refresh_projection_writes_projection() {
+        let repo_root = temp_repo_root("refresh-projection");
+        let response =
+            run_claude_lifecycle_hook("refresh-projection", &repo_root, 6).expect("hook ok");
         assert_eq!(
             response["canonical_command"],
             Value::String("refresh-projection".to_string())
@@ -1164,6 +1358,20 @@ mod tests {
             response["projection"]["target_path"],
             Value::String(repo_root.join(CLAUDE_MEMORY_PATH).display().to_string())
         );
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn legacy_lifecycle_aliases_are_rejected() {
+        let repo_root = temp_repo_root("legacy-aliases");
+        for alias in ["sync", "start-session", "stop-session", "end-session"] {
+            let error =
+                run_claude_lifecycle_hook(alias, &repo_root, 6).expect_err("alias should fail");
+            assert!(
+                error.contains(&format!("Unsupported Claude lifecycle command: {alias}")),
+                "unexpected error for {alias}: {error}"
+            );
+        }
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
@@ -1225,6 +1433,102 @@ mod tests {
                 .as_str()
                 .unwrap_or("")
                 .contains("generated Claude host surfaces")));
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn pre_tool_use_blocks_generated_host_surface_edits() {
+        let repo_root = temp_repo_root("pre-tool");
+        let payload = json!({
+            "tool_name": "MultiEdit",
+            "tool_input": {
+                "file_path": ".claude/settings.json"
+            }
+        });
+        let result = run_pre_tool_use(&repo_root, &payload).expect("guard ok");
+        assert_eq!(result["decision"], Value::String("deny".to_string()));
+        assert_eq!(
+            result["path"],
+            Value::String(".claude/settings.json".to_string())
+        );
+        assert_eq!(
+            result["hookSpecificOutput"]["permissionDecision"],
+            Value::String("deny".to_string())
+        );
+        assert!(result["hookSpecificOutput"]["permissionDecisionReason"]
+            .as_str()
+            .unwrap_or("")
+            .contains("generated host surface"));
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn pre_tool_use_allows_normal_workspace_edits() {
+        let repo_root = temp_repo_root("pre-tool-allow");
+        let payload = json!({
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": "notes/todo.md"
+            }
+        });
+        let result = run_pre_tool_use(&repo_root, &payload).expect("guard ok");
+        assert_eq!(result["decision"], Value::String("allow".to_string()));
+        assert!(result.get("hookSpecificOutput").is_none());
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn pre_tool_use_blocks_targeted_bash_writes() {
+        let repo_root = temp_repo_root("pre-tool-bash");
+        let payload = json!({
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": "cp tmp .claude/settings.json"
+            }
+        });
+        let result = run_pre_tool_use(&repo_root, &payload).expect("guard ok");
+        assert_eq!(result["decision"], Value::String("deny".to_string()));
+        assert_eq!(
+            result["path"],
+            Value::String(".claude/settings.json".to_string())
+        );
+        assert_eq!(
+            result["hookSpecificOutput"]["permissionDecision"],
+            Value::String("deny".to_string())
+        );
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn pre_tool_use_blocks_shell_redirection_into_generated_files() {
+        let repo_root = temp_repo_root("pre-tool-redirect");
+        let payload = json!({
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": "printf '{}' > .claude/settings.json"
+            }
+        });
+        let result = run_pre_tool_use(&repo_root, &payload).expect("guard ok");
+        assert_eq!(result["decision"], Value::String("deny".to_string()));
+        assert_eq!(
+            result["path"],
+            Value::String(".claude/settings.json".to_string())
+        );
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn pre_tool_use_allows_read_only_generated_file_checks_after_unrelated_write() {
+        let repo_root = temp_repo_root("pre-tool-bash-read");
+        let payload = json!({
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": "cp tmp ./tmp.out && cat .claude/settings.json"
+            }
+        });
+        let result = run_pre_tool_use(&repo_root, &payload).expect("guard ok");
+        assert_eq!(result["decision"], Value::String("allow".to_string()));
+        assert!(result.get("hookSpecificOutput").is_none());
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 

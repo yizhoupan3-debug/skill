@@ -157,38 +157,6 @@ _FALLBACK_OMC_RETIREMENT_CONTRACT = {
     },
     "omc_is_runtime_dependency": False,
 }
-_FALLBACK_HOST_ADAPTER_ORDER = (
-    "aionrs_companion_adapter",
-    "aionui_host_adapter",
-    "cli_common_adapter",
-    "codex_common_adapter",
-    "codex_desktop_adapter",
-    "codex_desktop_host_adapter",
-    "codex_cli_adapter",
-    "claude_code_adapter",
-    "gemini_cli_adapter",
-    "generic_host_adapter",
-)
-_FALLBACK_COMPATIBILITY_ADAPTER_IDS = frozenset(
-    {
-        "aionrs_companion_adapter",
-        "aionui_host_adapter",
-        "codex_desktop_host_adapter",
-    }
-)
-_FALLBACK_HOST_ADAPTER_FIELD_OVERRIDES: dict[str, dict[str, Any]] = {
-    "claude_code_adapter": {
-        "notes": "Headless Claude Code projection that stays host-specific only at the projection layer.",
-    },
-    "gemini_cli_adapter": {
-        "thin_patch_surfaces": ["cli_metadata_injection"],
-        "notes": "Headless Gemini CLI projection that consumes the shared framework contract.",
-    },
-    "generic_host_adapter": {
-        "host_id": "generic-host",
-        "emits_artifacts": False,
-    },
-}
 
 
 def _clone_json_like(value: Any) -> Any:
@@ -207,19 +175,53 @@ def _registry_candidates(repo_root: Path | None = None) -> tuple[Path, ...]:
     return tuple(dict.fromkeys(candidate.resolve() for candidate in candidates))
 
 
+def _read_runtime_registry_payload(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    schema_version = payload.get("schema_version")
+    if schema_version != RUNTIME_REGISTRY_SCHEMA_VERSION:
+        raise ValueError(f"Unsupported runtime registry schema_version: {schema_version!r} at {path}")
+    return payload
+
+
+def _last_resort_fallback_host_adapter_rows() -> tuple[dict[str, Any], ...]:
+    # Keep one import-based fallback only for environments that lack the bundled
+    # runtime registry snapshot entirely.
+    from codex_agno_runtime.host_adapters import list_host_adapters
+
+    return tuple(
+        _clone_json_like(spec.to_dict())
+        for spec in list_host_adapters(include_legacy_aliases=True)
+    )
+
+
+def _embedded_default_runtime_registry_payload() -> dict[str, Any]:
+    payload = _read_runtime_registry_payload(_DEFAULT_REGISTRY_PATH)
+    if payload is not None:
+        return payload
+    return {
+        "schema_version": RUNTIME_REGISTRY_SCHEMA_VERSION,
+        "default_host_peer_set": list(_FALLBACK_DEFAULT_HOST_PEER_SET),
+        "shared_project_mcp_servers": list(_FALLBACK_SHARED_PROJECT_MCP_SERVERS),
+        "workspace_bootstrap_defaults": _clone_json_like(_FALLBACK_WORKSPACE_BOOTSTRAP_DEFAULTS),
+        "framework_native_aliases": _clone_json_like(_FALLBACK_FRAMEWORK_NATIVE_ALIASES),
+        "omc_retirement_contract": _clone_json_like(_FALLBACK_OMC_RETIREMENT_CONTRACT),
+        "plugins": [_clone_json_like(_FALLBACK_PLUGIN_RECORD)],
+        "host_adapters": list(_last_resort_fallback_host_adapter_rows()),
+    }
+
+
+_EMBEDDED_DEFAULT_RUNTIME_REGISTRY_PAYLOAD = _embedded_default_runtime_registry_payload()
+
+
 @lru_cache(maxsize=8)
 def _load_runtime_registry_cached(cache_key: tuple[str, ...]) -> dict[str, Any]:
     for raw_path in cache_key:
         path = Path(raw_path)
-        if not path.is_file():
-            continue
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        schema_version = payload.get("schema_version")
-        if schema_version != RUNTIME_REGISTRY_SCHEMA_VERSION:
-            raise ValueError(
-                f"Unsupported runtime registry schema_version: {schema_version!r} at {path}"
-            )
-        return payload
+        payload = _read_runtime_registry_payload(path)
+        if payload is not None:
+            return payload
     raise FileNotFoundError(
         "Could not find configs/framework/RUNTIME_REGISTRY.json in any runtime registry search path."
     )
@@ -234,25 +236,18 @@ def _load_runtime_registry_or_none(repo_root: Path | None = None) -> dict[str, A
 
 
 def _fallback_host_adapter_records(*, include_legacy_aliases: bool) -> tuple[dict[str, Any], ...]:
-    # Import lazily so runtime_registry can still be imported by host_adapters itself.
-    from codex_agno_runtime.host_adapters import list_host_adapters
-
-    records_by_id = {
-        spec.adapter_id: _clone_json_like(spec.to_dict())
-        for spec in list_host_adapters(include_legacy_aliases=True)
-    }
-    ordered_records: list[dict[str, Any]] = []
-    for adapter_id in _FALLBACK_HOST_ADAPTER_ORDER:
-        record = records_by_id.get(adapter_id)
-        if record is None:
+    rows = _EMBEDDED_DEFAULT_RUNTIME_REGISTRY_PAYLOAD.get("host_adapters")
+    if not isinstance(rows, list):
+        return ()
+    records: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
             continue
-        is_compatibility = adapter_id in _FALLBACK_COMPATIBILITY_ADAPTER_IDS
-        if is_compatibility and not include_legacy_aliases:
+        lane = str(row.get("registry_lane", "default"))
+        if not include_legacy_aliases and lane != "default":
             continue
-        record["registry_lane"] = "compatibility" if is_compatibility else "default"
-        record.update(_clone_json_like(_FALLBACK_HOST_ADAPTER_FIELD_OVERRIDES.get(adapter_id, {})))
-        ordered_records.append(record)
-    return tuple(ordered_records)
+        records.append(deepcopy(row))
+    return tuple(records)
 
 
 def runtime_registry_path(repo_root: Path | None = None) -> Path:

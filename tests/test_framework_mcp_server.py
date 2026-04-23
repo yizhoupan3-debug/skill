@@ -125,11 +125,9 @@ def test_tools_and_resources_list_expose_framework_surface(tmp_path: Path) -> No
         "framework_skill_search",
         "framework_runtime_snapshot",
         "framework_contract_summary",
-        "framework_recap_refresh",
     }.issubset(tool_names)
     assert {
         "framework://memory/project",
-        "framework://memory/claude-recap",
         "framework://routing/runtime",
         "framework://bootstrap/default",
         "framework://supervisor/state",
@@ -176,6 +174,8 @@ def test_memory_recall_and_resource_read_return_repo_backed_content(tmp_path: Pa
     assert "memory_root" in recall
     assert recall["continuity"]["state"] == "active"
     assert recall["retrieval"]["active_task_included"] is True
+    assert "context" not in recall["retrieval"]
+    assert "prompt_payload" not in recall
     assert "source_artifacts" in recall
     assert "项目长期记忆" in resource["result"]["contents"][0]["text"]
     assert "prefer concise closeouts" in resource["result"]["contents"][0]["text"]
@@ -230,6 +230,7 @@ def test_memory_recall_without_query_stays_compact(tmp_path: Path) -> None:
 
     memory_item = next(item for item in recall["retrieval"]["items"] if item["path"] == "MEMORY.md")
     runbook_item = next(item for item in recall["retrieval"]["items"] if item["path"] == "runbooks.md")
+    assert "context" not in recall["retrieval"]
     assert "AP-1: keep recall compact" in memory_item["content"]
     assert "avoid full document injection" not in memory_item["content"]
     assert "step 1" in runbook_item["content"]
@@ -355,6 +356,8 @@ def test_memory_recall_uses_rust_adapter(tmp_path: Path) -> None:
     assert recall["ok"] is True
     assert recall["retrieval"]["mode"] == "active"
     assert recall["continuity"]["state"] == "query-mismatch"
+    assert "context" not in recall["retrieval"]
+    assert "prompt_payload" not in recall
 
 
 def test_skill_search_and_runtime_snapshot_are_actionable(tmp_path: Path) -> None:
@@ -403,105 +406,6 @@ def test_contract_summary_and_artifact_index_are_compact_and_actionable(tmp_path
     assert contract["recent_completed_execution"]["task"] == "checklist-series final closeout"
     assert payload["workspace"] == tmp_path.name
     assert isinstance(payload["next_actions"], list)
-
-
-def test_recap_tool_and_resource_expose_claude_style_resume_context(tmp_path: Path) -> None:
-    _seed_runtime_artifacts(tmp_path, terminal=False)
-    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n\n## Active Patterns\n\n- AP-1: Externalize task state\n")
-    _write_text(tmp_path / ".codex" / "memory" / "preferences.md", "# preferences\n\n## 处理偏好\n\n- Prefer direct answers\n")
-    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
-
-    recap = _tool_call(
-        server=server,
-        request_id=61,
-        name="framework_recap_refresh",
-        arguments={"max_lines": 4},
-    )
-    resource = _call(
-        server=server,
-        request_id=62,
-        method="resources/read",
-        params={"uri": "framework://memory/claude-recap"},
-    )
-
-    assert recap["ok"] is True
-    assert recap["continuity_state"] == "active"
-    assert recap["task"] == "active bootstrap repair"
-    assert "## Task Snapshot" in recap["projection"]
-    assert "active bootstrap repair" in recap["projection"]
-    assert "Prefer direct answers" in recap["projection"]
-    assert "继续当前仓库的工作。先阅读并使用这些恢复锚点：" in recap["workflow_prompt"]
-    assert "必须先做的下一步：" in recap["workflow_prompt"]
-    assert "active bootstrap repair" in resource["result"]["contents"][0]["text"]
-    assert "## Task Snapshot" in resource["result"]["contents"][0]["text"]
-
-
-def test_recap_projection_hides_completed_task_identity(tmp_path: Path) -> None:
-    _seed_runtime_artifacts(tmp_path, terminal=True)
-    _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n\n## Active Patterns\n\n- AP-1: Stable only\n")
-    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
-
-    recap = _tool_call(
-        server=server,
-        request_id=65,
-        name="framework_recap_refresh",
-        arguments={"max_lines": 4},
-    )
-
-    assert recap["continuity_state"] == "completed"
-    assert "recent:" not in recap["projection"]
-    assert "checklist-series final closeout" not in recap["projection"]
-    assert "no resumable active task" in recap["projection"]
-
-
-def test_recap_refresh_uses_rust_adapter(tmp_path: Path) -> None:
-    _seed_runtime_artifacts(tmp_path, terminal=False)
-    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
-    seen: list[tuple[Path, int]] = []
-
-    def fake_framework_recap(*, repo_root: Path, max_lines: int = 6) -> dict[str, object]:
-        seen.append((repo_root, max_lines))
-        return {
-            "ok": True,
-            "workspace": tmp_path.name,
-            "continuity_state": "active",
-            "task": "active bootstrap repair",
-            "phase": "implementation",
-            "status": "in_progress",
-            "max_lines": max_lines,
-            "projection": "## Task Snapshot\n\n- current: active bootstrap repair / implementation / in_progress",
-            "project_memory_bundle": "# Project Memory Bundle\n\n## MEMORY.md\n\n# 项目长期记忆",
-            "workflow_prompt": "继续当前仓库的工作。先阅读并使用这些恢复锚点：",
-            "projection_path": str(tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md"),
-        }
-
-    server._rust_adapter.framework_recap = fake_framework_recap  # type: ignore[method-assign]
-
-    recap = _tool_call(
-        server=server,
-        request_id=63,
-        name="framework_recap_refresh",
-        arguments={"max_lines": 4},
-    )
-    resource = _call(
-        server=server,
-        request_id=64,
-        method="resources/read",
-        params={"uri": "framework://memory/claude-recap"},
-    )
-    project_memory = _call(
-        server=server,
-        request_id=65,
-        method="resources/read",
-        params={"uri": "framework://memory/project"},
-    )
-
-    assert seen[0] == (tmp_path, 4)
-    assert seen[1] == (tmp_path, 6)
-    assert seen[2] == (tmp_path, 6)
-    assert recap["projection"].startswith("## Task Snapshot")
-    assert resource["result"]["contents"][0]["text"].startswith("## Task Snapshot")
-    assert project_memory["result"]["contents"][0]["text"].startswith("# Project Memory Bundle")
 
 
 def test_runtime_snapshot_falls_back_to_trace_skill_for_primary_owner(tmp_path: Path) -> None:
@@ -569,29 +473,6 @@ def test_contract_summary_surfaces_rust_adapter_failures(tmp_path: Path) -> None
     assert payload["ok"] is False
     assert payload["error"]["code"] == "RUST_CONTRACT_SUMMARY_FAILED"
     assert "boom for" in payload["error"]["message"]
-
-
-def test_recap_refresh_surfaces_rust_adapter_failures(tmp_path: Path) -> None:
-    _seed_runtime_artifacts(tmp_path, terminal=False)
-    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
-
-    def fail_framework_recap(*, repo_root: Path, max_lines: int = 6) -> dict[str, object]:
-        raise RuntimeError(f"recap boom for {repo_root.name} with {max_lines}")
-
-    server._rust_adapter.framework_recap = fail_framework_recap  # type: ignore[method-assign]
-
-    response = _call(
-        server=server,
-        request_id=72,
-        method="tools/call",
-        params={"name": "framework_recap_refresh", "arguments": {"max_lines": 5}},
-    )
-
-    assert response["result"]["isError"] is True
-    payload = response["result"]["structuredContent"]
-    assert payload["ok"] is False
-    assert payload["error"]["code"] == "RUST_FRAMEWORK_RECAP_FAILED"
-    assert "recap boom for" in payload["error"]["message"]
 
 
 def test_stdio_loop_handles_resource_listing(tmp_path: Path) -> None:

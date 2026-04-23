@@ -33,7 +33,6 @@ source: local
 - [de-aigc-standards.md](../writing-skills/resources/de-aigc-standards.md) — shared universal de-AIGC rules
 - [ai-patterns-checklist.md](references/ai-patterns-checklist.md) — 27 AI patterns + CN/EN phrase tables
 - [register-presets.md](references/register-presets.md) — 7 register presets (EN + CN)
-- [soul-injection.md](references/soul-injection.md) — 11 voice injection techniques
 - [detection-mechanics.md](references/detection-mechanics.md) — how detectors work (perplexity, burstiness)
 - [adversarial-strategies.md](references/adversarial-strategies.md) — 9 quality-based strategies to lower detection scores
 - [claim-safety.md](references/claim-safety.md) — safe wording for detector-related claims and limits
@@ -125,7 +124,7 @@ Apply all of these as a **single integrated pass**, not sequential layers:
 | **Rhythm** | Let sentence lengths vary naturally (Burstiness); break three-item patterns |
 | **Clean emphasis** | Remove gratuitous bold, emoji, em dash |
 | **Register voice** | Apply the matching preset from `references/register-presets.md` |
-| **Soul** | Apply techniques from `references/soul-injection.md` when register allows |
+| **Voice** | Keep the text natural and specific, but do not force personality or theatrical subjectivity |
 | **Perplexity** | Prefer accurate-but-less-generic word choices; avoid template phrases |
 | **Structure** | Break repetitive intro→body→conclusion flow when the source text is already predictable |
 | **De-sterilize** | For science: narrate decisions and failures (Adv. Strategy 7) |
@@ -137,6 +136,7 @@ Rules:
 - Rewrite long inputs paragraph-by-paragraph, not as a uniform blob.
 - Never insert fake anecdotes, fake opinions, or fake sourcing.
 - **Quality guard**: never reduce information density, specificity, or professional tone to lower a detector score. If a rewrite trades accuracy for "naturalness", revert.
+- Do not force extra personality as a default tactic. Prefer clarity, specificity, honest limits, and natural rhythm.
 
 ### Step 4 — Self-audit
 

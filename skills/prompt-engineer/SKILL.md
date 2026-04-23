@@ -73,6 +73,8 @@ system prompt design).
 
 ## Do not use
 
+- The task is UI / page-generation prompt strengthening with design-system blocks and page structure -> use `$design-prompt-enhancer`
+- The task is establishing a file-backed design workflow that happens to include prompts -> use `$design-workflow-protocol`
 - The task is general skill-authoring rather than prompt writing
 - The user wants direct task execution, not a prompt to use elsewhere
 - The task is domain implementation or debugging rather than prompt design

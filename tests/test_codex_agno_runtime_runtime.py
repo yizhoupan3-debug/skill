@@ -385,6 +385,7 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
         )
     )
     seen: dict[str, object] = {}
+    expected_kernel_metadata = runtime.execution_service.kernel_payload(dry_run=True)
 
     async def fake_execute(*, ctx, dry_run: bool, trace_event_count: int, trace_output_path: str | None):
         seen["prompt"] = ctx.prompt
@@ -400,24 +401,9 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
             content="delegated",
             prompt_preview="Rust-owned dry-run prompt",
             metadata={
-                "execution_kernel": "fake-kernel",
-                "execution_kernel_authority": "test-adapter",
-                "execution_kernel_contract_mode": "rust-live-primary",
-                "execution_kernel_fallback_policy": "infrastructure-only-explicit",
-                "execution_kernel_in_process_replacement_complete": True,
-                "execution_kernel_delegate": "router-rs",
-                "execution_kernel_delegate_authority": "rust-execution-cli",
-                "execution_kernel_delegate_family": "rust-cli",
-                "execution_kernel_delegate_impl": "router-rs",
-                "execution_kernel_live_primary": "router-rs",
-                "execution_kernel_live_primary_authority": "rust-execution-cli",
+                **expected_kernel_metadata,
                 "execution_kernel_live_fallback": None,
                 "execution_kernel_live_fallback_authority": None,
-                "execution_kernel_live_fallback_enabled": False,
-                "execution_kernel_live_fallback_mode": "disabled",
-                "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
-                "execution_kernel_response_shape": "dry_run",
-                "execution_kernel_prompt_preview_owner": "rust-execution-cli",
                 "trace_event_count": trace_event_count,
                 "trace_output_path": trace_output_path,
             },
@@ -440,14 +426,14 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
         assert seen["trace_event_count"] >= 4
         assert seen["trace_output_path"] == str(trace_path)
         assert response.prompt_preview == "Rust-owned dry-run prompt"
-        assert response.metadata["execution_kernel"] == "fake-kernel"
-        assert response.metadata["execution_kernel_authority"] == "test-adapter"
-        assert response.metadata["execution_kernel_delegate"] == "router-rs"
-        assert response.metadata["execution_kernel_delegate_authority"] == "rust-execution-cli"
-        assert response.metadata["execution_kernel_delegate_family"] == "rust-cli"
-        assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
-        assert response.metadata["execution_kernel_live_primary"] == "router-rs"
-        assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
+        assert response.metadata["execution_kernel"] == expected_kernel_metadata["execution_kernel"]
+        assert response.metadata["execution_kernel_authority"] == expected_kernel_metadata["execution_kernel_authority"]
+        assert response.metadata["execution_kernel_delegate"] == expected_kernel_metadata["execution_kernel_delegate"]
+        assert response.metadata["execution_kernel_delegate_authority"] == expected_kernel_metadata["execution_kernel_delegate_authority"]
+        assert response.metadata["execution_kernel_delegate_family"] == expected_kernel_metadata["execution_kernel_delegate_family"]
+        assert response.metadata["execution_kernel_delegate_impl"] == expected_kernel_metadata["execution_kernel_delegate_impl"]
+        assert response.metadata["execution_kernel_live_primary"] == expected_kernel_metadata["execution_kernel_live_primary"]
+        assert response.metadata["execution_kernel_live_primary_authority"] == expected_kernel_metadata["execution_kernel_live_primary_authority"]
         assert response.metadata["execution_kernel_live_fallback"] is None
         assert response.metadata["execution_kernel_live_fallback_authority"] is None
         assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
