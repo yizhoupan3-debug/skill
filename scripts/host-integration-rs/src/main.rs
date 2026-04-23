@@ -825,6 +825,23 @@ fn ensure_codex_hooks_feature(config_path: &Path) -> Result<bool, String> {
     let feature_line = "codex_hooks = true";
     if let Some((start, end)) = find_named_block_bounds(&content, "[features]") {
         let block = content[start..end].trim_end_matches('\n');
+        let mut codex_hooks_found = false;
+        let mut codex_hooks_needs_change = false;
+        for line in block.lines() {
+            if !is_named_setting(line, "codex_hooks") {
+                continue;
+            }
+            codex_hooks_found = true;
+            if line.trim() != feature_line {
+                codex_hooks_needs_change = true;
+            }
+        }
+        if !codex_hooks_found {
+            codex_hooks_needs_change = true;
+        }
+        if !codex_hooks_needs_change {
+            return Ok(false);
+        }
         let mut replaced = false;
         let mut updated_lines = Vec::new();
         for line in block.lines() {

@@ -46,6 +46,7 @@ Optional:
 ```text
 project/
 └── scripts/
+    ├── officecli_bridge.py
     ├── render_slides.py
     ├── slides_test.py
     ├── create_montage.py
@@ -69,6 +70,7 @@ When the input is an existing `.pptx`, choose one of two modes:
 2. Rebuild mode
    - Best for major redesign, consistent visual system, repeated generation, or a deck that should become reproducible from code.
    - Extract structure/assets if helpful, then rebuild in PptxGenJS and keep `deck.js` as the source of truth.
+   - Use `officecli_bridge.py doctor|get|query` first when you need stable IDs, shape paths, or a quick structural map from the old deck.
 
 Use the rebuild path when the current deck is just raw material and the real goal is a cleaner long-term authoring workflow.
 
@@ -132,6 +134,28 @@ Beauty comes from repeated visual logic, not from piling effects onto isolated s
 7. Fix the source `.js` and repeat.
 
 If the deck is using fallback placeholder panels because images are missing, treat the build as structurally valid but not visually final.
+
+## OfficeCLI Boost
+
+Use the optional OfficeCLI lane when the deck already exists and you need stronger inspection than rendered screenshots alone.
+
+Recommended commands:
+
+```bash
+python3 scripts/officecli_bridge.py doctor deck.pptx --json
+python3 scripts/officecli_bridge.py get deck.pptx '/slide[1]' --depth 2 --json
+python3 scripts/officecli_bridge.py query deck.pptx 'shape[font=Arial]' --json
+python3 scripts/officecli_bridge.py watch deck.pptx --port 18080
+```
+
+Use this lane for:
+
+- fast outline / issue / validation scans on a generated deck
+- stable `shape[@id=N]` addressing before a rebuild
+- watching an already-generated `.pptx` in HTML while iterating
+- batch patch plans against an existing artifact when you are not ready to fully rebuild the source
+
+Do not let OfficeCLI replace `deck.js` as the source of truth for new-code-authored decks. It is the inspection / patch / preview boost, not the authoring core.
 
 For a full regression pass from the skill root, run:
 
