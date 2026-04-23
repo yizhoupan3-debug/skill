@@ -353,6 +353,34 @@ def _runtime_host_contract(control_plane_descriptor: Mapping[str, Any] | None) -
     return payload
 
 
+def _runtime_service_health_projection(
+    service_descriptor: Mapping[str, Any] | None,
+    *,
+    authority_fallback: Any = None,
+) -> dict[str, Any]:
+    if not isinstance(service_descriptor, Mapping):
+        service_descriptor = {}
+    return {
+        "control_plane_authority": service_descriptor.get("authority", authority_fallback),
+        "control_plane_role": service_descriptor.get("role"),
+        "control_plane_projection": service_descriptor.get("projection"),
+        "control_plane_delegate_kind": service_descriptor.get("delegate_kind"),
+    }
+
+
+def _runtime_rustification_health(control_plane_descriptor: Mapping[str, Any] | None) -> dict[str, Any]:
+    runtime_host = _runtime_host_contract(control_plane_descriptor)
+    return {
+        "python_host_role": (
+            control_plane_descriptor.get("python_host_role")
+            if isinstance(control_plane_descriptor, Mapping)
+            else None
+        ),
+        "rustification_status": _runtime_control_plane_rustification_status(control_plane_descriptor),
+        "rust_owned_service_count": runtime_host.get("rust_owned_service_count", 0),
+    }
+
+
 def _runtime_background_effect_host_contract(
     control_plane_descriptor: Mapping[str, Any] | None,
     service_descriptor: Mapping[str, Any] | None,
@@ -1054,33 +1082,33 @@ class RouterService:
             self.control_plane_descriptor,
             "router",
         )
-        rustification_status = _runtime_control_plane_rustification_status(self.control_plane_descriptor)
-        return {
-            "mode": self.settings.route_engine_mode,
-            "default_route_mode": self.control_plane_descriptor.get("default_route_mode", "rust"),
-            "default_route_authority": self.control_plane_descriptor.get(
-                "default_route_authority",
-                self._rust_adapter.route_authority,
-            ),
-            "diagnostic_route_mode": policy.diagnostic_route_mode,
-            "loaded_skill_count": len(self.skills),
-            "skill_root": str(self.settings.codex_home / "skills"),
-            "primary_authority": policy.primary_authority,
-            "route_result_engine": policy.route_result_engine,
-            "diagnostic_report_required": policy.diagnostic_report_required,
-            "strict_verification_required": policy.strict_verification_required,
-            "control_plane_authority": service_descriptor.get(
-                "authority",
-                self.control_plane_descriptor.get("authority"),
-            ),
-            "control_plane_projection": service_descriptor.get("projection"),
-            "control_plane_delegate_kind": service_descriptor.get("delegate_kind"),
-            "python_runtime_role": self.control_plane_descriptor.get("python_host_role"),
-            "rustification_status": rustification_status,
-            "route_policy": policy.model_dump(mode="json"),
-            "rust_adapter": self._rust_adapter_health_snapshot(),
-            "last_route_report": self._last_route_report.model_dump(mode="json") if self._last_route_report else None,
-        }
+        payload = _runtime_service_health_projection(
+            service_descriptor,
+            authority_fallback=self.control_plane_descriptor.get("authority"),
+        )
+        payload.update(
+            {
+                "mode": self.settings.route_engine_mode,
+                "default_route_mode": self.control_plane_descriptor.get("default_route_mode", "rust"),
+                "default_route_authority": self.control_plane_descriptor.get(
+                    "default_route_authority",
+                    self._rust_adapter.route_authority,
+                ),
+                "diagnostic_route_mode": policy.diagnostic_route_mode,
+                "loaded_skill_count": len(self.skills),
+                "skill_root": str(self.settings.codex_home / "skills"),
+                "primary_authority": policy.primary_authority,
+                "route_result_engine": policy.route_result_engine,
+                "diagnostic_report_required": policy.diagnostic_report_required,
+                "strict_verification_required": policy.strict_verification_required,
+                "python_runtime_role": self.control_plane_descriptor.get("python_host_role"),
+                "rustification_status": _runtime_control_plane_rustification_status(self.control_plane_descriptor),
+                "route_policy": policy.model_dump(mode="json"),
+                "rust_adapter": self._rust_adapter_health_snapshot(),
+                "last_route_report": self._last_route_report.model_dump(mode="json") if self._last_route_report else None,
+            }
+        )
+        return payload
 
     def _route_rust(
         self,
@@ -1264,10 +1292,7 @@ class StateService:
 
     def health(self) -> dict[str, Any]:
         return {
-            "control_plane_authority": self._service_descriptor.get("authority"),
-            "control_plane_role": self._service_descriptor.get("role"),
-            "control_plane_projection": self._service_descriptor.get("projection"),
-            "control_plane_delegate_kind": self._service_descriptor.get("delegate_kind"),
+            **_runtime_service_health_projection(self._service_descriptor),
             "checkpoint_backend_family": self.checkpointer.storage_capabilities().backend_family,
             "state_path": str(self.state_path),
             "job_count": len(self.store.snapshot()),
@@ -1405,10 +1430,7 @@ class TraceService:
     def health(self) -> dict[str, Any]:
         paths = self.checkpointer.describe_paths()
         return {
-            "control_plane_authority": self._service_descriptor.get("authority"),
-            "control_plane_role": self._service_descriptor.get("role"),
-            "control_plane_projection": self._service_descriptor.get("projection"),
-            "control_plane_delegate_kind": self._service_descriptor.get("delegate_kind"),
+            **_runtime_service_health_projection(self._service_descriptor),
             "control_plane_contract": self.control_plane_contract(),
             "checkpoint_backend_family": self.checkpointer.storage_capabilities().backend_family,
             "trace_output_path": str(paths.trace_output_path) if paths.trace_output_path is not None else None,
@@ -1474,6 +1496,7 @@ class MemoryService:
 
     def health(self) -> dict[str, Any]:
         payload = self.store.health()
+        payload.update(_runtime_service_health_projection(self._service_descriptor, authority_fallback=payload.get("control_plane_authority")))
         payload["control_plane_contract"] = self.control_plane_contract()
         return payload
 
@@ -1584,16 +1607,13 @@ class ExecutionEnvironmentService:
     def health(self) -> dict[str, Any]:
         adapter_health = self._rust_adapter_health_snapshot()
         payload = {
+            **_runtime_service_health_projection(
+                self._service_descriptor,
+                authority_fallback=self.control_plane_descriptor.get("authority"),
+            ),
             "max_background_jobs": self.max_background_jobs,
             "background_job_timeout_seconds": self.background_job_timeout_seconds,
             "execution_mode_default": "live" if self.settings.use_live_model else "dry_run",
-            "control_plane_authority": self._service_descriptor.get(
-                "authority",
-                self.control_plane_descriptor.get("authority"),
-            ),
-            "control_plane_role": self._service_descriptor.get("role"),
-            "control_plane_projection": self._service_descriptor.get("projection"),
-            "control_plane_delegate_kind": self._service_descriptor.get("delegate_kind"),
         }
         payload.update(
             _runtime_execution_kernel_health(
@@ -2348,6 +2368,7 @@ class BackgroundRuntimeHost:
     def health(self) -> dict[str, Any]:
         parallel_groups = self.state_service.parallel_group_summaries()
         return {
+            **_runtime_service_health_projection(self._service_descriptor),
             "max_background_jobs": self._max_background_jobs,
             "background_job_timeout_seconds": self._background_job_timeout_seconds,
             "active_task_count": len([task for task in self._background_tasks.values() if not task.done()]),
@@ -2355,10 +2376,6 @@ class BackgroundRuntimeHost:
             "active_parallel_group_count": len(
                 [summary for summary in parallel_groups if summary.active_job_count > 0]
             ),
-            "control_plane_authority": self._service_descriptor.get("authority"),
-            "control_plane_role": self._service_descriptor.get("role"),
-            "control_plane_projection": self._service_descriptor.get("projection"),
-            "control_plane_delegate_kind": self._service_descriptor.get("delegate_kind"),
             "background_policy_authority": self._background_control_authority,
             "orchestration_contract": dict(self._orchestration_contract),
             "background_effect_host_contract": _runtime_background_effect_host_contract(

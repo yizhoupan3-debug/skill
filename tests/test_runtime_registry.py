@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -125,6 +126,45 @@ def test_runtime_registry_fallback_preserves_default_visibility_boundary(
     assert "codex_desktop_host_adapter" not in default_ids
     assert "codex_desktop_host_adapter" in legacy_ids
     assert default_ids == baseline_default_ids
+
+
+def test_runtime_registry_prefers_rust_export_for_explicit_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / "configs" / "framework").mkdir(parents=True)
+    registry_path = repo_root / "configs" / "framework" / "RUNTIME_REGISTRY.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "framework-runtime-registry-v1",
+                "default_host_peer_set": ["repo-host"],
+                "shared_project_mcp_servers": ["framework-mcp"],
+                "workspace_bootstrap_defaults": {"skill_bridge": {"source_rel": "repo-skills"}},
+                "framework_native_aliases": {"autopilot": {"canonical_owner": "repo-owner"}},
+                "omc_retirement_contract": {"runtime_authority": "repo-rust"},
+                "plugins": [{"plugin_name": "repo-plugin", "source_rel": "repo-plugin"}],
+                "host_adapters": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    captured: list[str] = []
+
+    def _fake_run_host_integration_rs(*args: str) -> dict[str, object]:
+        captured.extend(args)
+        return json.loads(registry_path.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(runtime_registry, "run_host_integration_rs", _fake_run_host_integration_rs)
+
+    payload = runtime_registry.load_runtime_registry(repo_root=repo_root)
+
+    assert payload["plugins"][0]["plugin_name"] == "repo-plugin"
+    assert captured == ["export-runtime-registry", "--repo-root", str(repo_root.resolve())]
 
 
 def test_runtime_registry_exposes_framework_native_aliases_and_omc_retirement_contract() -> None:

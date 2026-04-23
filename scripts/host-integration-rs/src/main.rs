@@ -44,7 +44,8 @@ struct SyncManifest {
 
 #[derive(Debug, Clone, Deserialize)]
 struct RuntimeRegistry {
-    schema_version: String,
+    #[serde(rename = "schema_version")]
+    _schema_version: String,
     #[serde(default)]
     shared_project_mcp_servers: Vec<String>,
     #[serde(default)]
@@ -93,6 +94,10 @@ enum Commands {
         apply: bool,
         #[arg(long, conflicts_with = "apply")]
         check: bool,
+    },
+    ExportRuntimeRegistry {
+        #[arg(long)]
+        repo_root: PathBuf,
     },
     InstallNativeIntegration {
         #[arg(long)]
@@ -168,6 +173,10 @@ fn main() -> Result<(), String> {
             check: _,
         } => serde_json::to_value(sync_host_entrypoints(&template_root, &repo_root, apply)?)
             .map_err(|err| err.to_string())?,
+        Commands::ExportRuntimeRegistry { repo_root } => {
+            serde_json::to_value(load_runtime_registry_payload(&repo_root)?)
+                .map_err(|err| err.to_string())?
+        }
         Commands::InstallNativeIntegration {
             template_root,
             repo_root,
@@ -446,19 +455,27 @@ fn runtime_registry_path(repo_root: &Path) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../configs/framework/RUNTIME_REGISTRY.json")
 }
 
-fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, String> {
+fn load_runtime_registry_payload(repo_root: &Path) -> Result<Value, String> {
     let path = runtime_registry_path(repo_root);
     let payload = fs::read_to_string(&path).map_err(|err| err.to_string())?;
-    let registry =
-        serde_json::from_str::<RuntimeRegistry>(&payload).map_err(|err| err.to_string())?;
-    if registry.schema_version != RUNTIME_REGISTRY_SCHEMA_VERSION {
+    let parsed = serde_json::from_str::<Value>(&payload).map_err(|err| err.to_string())?;
+    let schema_version = parsed
+        .get("schema_version")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("Runtime registry missing schema_version at {}", path.to_string_lossy()))?;
+    if schema_version != RUNTIME_REGISTRY_SCHEMA_VERSION {
         return Err(format!(
             "Unsupported runtime registry schema_version {:?} at {}",
-            registry.schema_version,
+            schema_version,
             path.to_string_lossy()
         ));
     }
-    Ok(registry)
+    Ok(parsed)
+}
+
+fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, String> {
+    let payload = load_runtime_registry_payload(repo_root)?;
+    serde_json::from_value::<RuntimeRegistry>(payload).map_err(|err| err.to_string())
 }
 
 fn primary_plugin_registration(repo_root: &Path) -> Result<RuntimePluginRegistration, String> {

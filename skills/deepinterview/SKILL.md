@@ -9,7 +9,6 @@ routing_gate: none
 session_start: n/a
 trigger_hints:
   - $deepinterview
-  - /deepinterview
   - deepinterview
   - deep-interview
   - deep interview

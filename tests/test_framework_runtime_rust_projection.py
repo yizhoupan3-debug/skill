@@ -14,7 +14,7 @@ if str(RUNTIME_SRC) not in sys.path:
 from framework_runtime.middleware import MiddlewareContext, SkillInjectionMiddleware
 from framework_runtime.prompt_builder import PromptBuilder
 from framework_runtime.router import SkillRouter
-from framework_runtime.schemas import RoutingResult, SkillMetadata
+from framework_runtime.schemas import RouteDecisionContract, RouteDecisionSnapshot, RoutingResult, SkillMetadata
 from framework_runtime.skill_loader import SkillLoader
 
 
@@ -309,6 +309,77 @@ def test_skill_router_reports_thin_projection_under_rust_control_plane() -> None
     assert router.projection_descriptor()["python_projection_materialization"] == (
         "compatibility-subprocess"
     )
+
+
+def test_skill_router_delegates_to_rust_contract_when_adapter_is_present() -> None:
+    skills = [
+        SkillMetadata(
+            name="plan-to-code",
+            description="Implement a concrete plan or spec into integrated code",
+            routing_layer="L2",
+            routing_owner="owner",
+            routing_gate="none",
+            routing_priority="P1",
+            session_start="preferred",
+            trigger_hints=["直接做代码"],
+        )
+    ]
+
+    class _StubRustAdapter:
+        def route_contract(self, **kwargs):
+            assert kwargs == {
+                "query": "直接做代码",
+                "session_id": "session-rust",
+                "allow_overlay": True,
+                "first_turn": True,
+            }
+            return RouteDecisionContract(
+                decision_schema_version="router-rs-route-decision-v1",
+                authority="rust-route-core",
+                compile_authority="rust-route-compiler",
+                task="直接做代码",
+                session_id="session-rust",
+                selected_skill="plan-to-code",
+                overlay_skill=None,
+                layer="L2",
+                score=88.0,
+                reasons=["Rust route contract matched directly."],
+                route_snapshot=RouteDecisionSnapshot(
+                    engine="rust",
+                    selected_skill="plan-to-code",
+                    overlay_skill=None,
+                    layer="L2",
+                    score=88.0,
+                    score_bucket="80-89",
+                    reasons=["Rust route contract matched directly."],
+                    reasons_class="direct-match",
+                ),
+            )
+
+    router = SkillRouter(
+        skills,
+        control_plane_descriptor={
+            "authority": "rust-runtime-control-plane",
+            "services": {
+                "router": {
+                    "authority": "rust-route-core",
+                    "role": "route-selection",
+                    "projection": "python-thin-projection",
+                    "delegate_kind": "rust-route-adapter",
+                    "python_projection_materialization": "compatibility-subprocess",
+                }
+            },
+        },
+        rust_adapter=_StubRustAdapter(),
+    )
+
+    result = router.route("直接做代码", session_id="session-rust")
+
+    assert result.route_engine == "rust"
+    assert result.selected_skill.name == "plan-to-code"
+    assert result.route_snapshot is not None
+    assert result.route_snapshot.engine == "rust"
+    assert any("thin compatibility projection" in reason for reason in result.reasons)
 
 
 def test_skill_router_overlay_skill_cannot_be_selected_as_primary_owner() -> None:

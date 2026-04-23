@@ -44,6 +44,19 @@ def run_host_integration_rs(*args: str) -> dict[str, Any]:
     return json.loads(completed.stdout)
 
 
+def export_runtime_registry(repo_root: Path | None = None) -> dict[str, Any]:
+    """Return the Rust-owned runtime registry payload for one repository root."""
+
+    payload = run_host_integration_rs(
+        "export-runtime-registry",
+        "--repo-root",
+        str((repo_root or PROJECT_ROOT).resolve()),
+    )
+    if not isinstance(payload, dict):
+        raise ValueError("Rust runtime registry export must be a JSON object.")
+    return payload
+
+
 def main() -> int:
     payload = run_host_integration_rs(*sys.argv[1:])
     print(json.dumps(payload, ensure_ascii=False, indent=2))

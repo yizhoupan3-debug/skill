@@ -51,6 +51,7 @@ from framework_runtime.services import (
     StateService,
     TraceService,
     _runtime_host_contract,
+    _runtime_rustification_health,
 )
 from framework_runtime.utils import build_session_id
 
@@ -162,11 +163,7 @@ class CodexAgnoRuntime:
         payload = {
             "control_plane": self.control_plane_descriptor,
             "runtime_host": runtime_host,
-            "rustification": {
-                "python_host_role": self.control_plane_descriptor.get("python_host_role"),
-                "rustification_status": self.control_plane_descriptor.get("rustification_status"),
-                "rust_owned_service_count": runtime_host.get("rust_owned_service_count", 0),
-            },
+            "rustification": _runtime_rustification_health(self.control_plane_descriptor),
         }
         section_payloads = {
             "router": self.router_service.health(),

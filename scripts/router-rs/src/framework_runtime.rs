@@ -1409,8 +1409,8 @@ fn workspace_name_from_root(repo_root: &Path) -> String {
 }
 
 fn render_framework_recap_projection(
-    repo_root: &Path,
-    snapshot: &FrameworkRuntimeView,
+    _repo_root: &Path,
+    _snapshot: &FrameworkRuntimeView,
     continuity: &Value,
     stable_documents: &[(String, String)],
     max_lines: usize,
@@ -1446,8 +1446,8 @@ fn render_framework_recap_projection(
     } else {
         lessons_md.as_str()
     };
-    let lessons = extract_bullets(lessons_source, max_lines);
-    let runbooks = extract_bullets(
+    let _lessons = extract_bullets(lessons_source, max_lines);
+    let _runbooks = extract_bullets(
         if runbooks_md.is_empty() {
             ""
         } else {
@@ -1457,55 +1457,30 @@ fn render_framework_recap_projection(
     );
     let startup_rules = vec![
         "默认用中文；先给答案；默认只回一小段。".to_string(),
-        "用大白话，第一次出现术语时顺手解释。".to_string(),
         "`.claude/**` 只是宿主胶水；先信 live runtime artifacts。".to_string(),
-        "不要用 Got it / Understood 这种状态汇报式开场；直接给结果或第一步。".to_string(),
-        "目标明确时直接执行可验证的小步，不先写长计划，也不要复述将要做什么。".to_string(),
-        "不要扩大任务范围，不要把历史记忆当现状。".to_string(),
-        "如果 Claude 当前走的是 OpenAI/GPT 后端，保持直接风格，不模仿 Claude 套话。".to_string(),
+        "目标明确时直接执行可验证的小步，不先写长计划。".to_string(),
     ];
     let reminders = stable_line_items(vec![
         preference_lines.get(0).cloned().unwrap_or_default(),
-        preference_lines.get(1).cloned().unwrap_or_default(),
         stable_patterns.get(0).cloned().unwrap_or_default(),
-        stable_patterns.get(1).cloned().unwrap_or_default(),
         stable_decisions.get(0).cloned().unwrap_or_default(),
-        lessons.get(0).cloned().unwrap_or_default(),
-        runbooks.get(0).cloned().unwrap_or_default(),
     ])
     .into_iter()
     .take(max_lines)
     .collect::<Vec<_>>();
     let anchor_lines = vec![
-        "primary: `artifacts/current/SESSION_SUMMARY.md` / `artifacts/current/NEXT_ACTIONS.json` / `artifacts/current/TRACE_METADATA.json` / `.supervisor_state.json`".to_string(),
-        format!(
-            "active task: `{}`",
-            snapshot
-                .mirror_root
-                .join(ACTIVE_TASK_POINTER_NAME)
-                .display()
-        ),
-        format!(
-            "memory: `./.codex/memory/` -> `{}`",
-            repo_root.join(".codex").join("memory").display()
-        ),
+        "runtime: `artifacts/current/SESSION_SUMMARY.md` / `artifacts/current/NEXT_ACTIONS.json` / `artifacts/current/TRACE_METADATA.json` / `.supervisor_state.json`".to_string(),
+        "active task: `artifacts/current/active_task.json`".to_string(),
+        "memory: `./.codex/memory/`".to_string(),
     ];
     let (state_title, state_items) = render_current_state_section(continuity);
-    [
-        "# Claude Startup Projection".to_string(),
-        "".to_string(),
-        "_Generated from shared runtime artifacts for one lightweight Claude startup import. Do not edit manually._".to_string(),
-        "".to_string(),
+    let sections = vec![
         markdown_block("Startup Rules", &startup_rules),
-        "".to_string(),
         markdown_block(&state_title, &state_items),
-        "".to_string(),
         markdown_block("Stable Reminders", &reminders),
-        "".to_string(),
         markdown_block("Recovery Anchors", &anchor_lines),
-    ]
-    .join("\n")
-        + "\n"
+    ];
+    format!("# Claude Startup Projection\n{}\n", sections.join("\n"))
 }
 
 fn render_framework_refresh_prompt(
@@ -1793,9 +1768,8 @@ fn markdown_block(title: &str, items: &[String]) -> String {
     } else {
         items.to_vec()
     };
-    let mut lines = vec![format!("## {title}"), "".to_string()];
+    let mut lines = vec![format!("## {title}")];
     lines.extend(rendered.into_iter().map(|item| format!("- {item}")));
-    lines.push(String::new());
     lines.join("\n")
 }
 

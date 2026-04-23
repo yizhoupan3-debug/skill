@@ -1005,7 +1005,15 @@ fn run_config_change(repo_root: &Path, payload: &Value) -> Result<Value, String>
 
 fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Result<Value, String> {
     let prompt_text = extract_user_prompt_text(payload);
-    let context = build_user_prompt_context(repo_root, &prompt_text)?;
+    let context_payload = build_user_prompt_context_payload(repo_root, &prompt_text)?;
+    let context = context_payload
+        .get("text")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "user prompt context payload missing text".to_string())?;
+    let telemetry = context_payload
+        .get("telemetry")
+        .cloned()
+        .unwrap_or(Value::Null);
     Ok(json!({
         "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
         "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
@@ -1013,7 +1021,8 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Result<Value, St
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
             "additionalContext": context,
-        }
+        },
+        "contextTelemetry": telemetry,
     }))
 }
 
@@ -1467,41 +1476,52 @@ fn shrink_user_prompt_context(text: &str, max_chars: usize) -> String {
     lines.join("\n\n")
 }
 
-fn build_user_prompt_context(repo_root: &Path, prompt_text: &str) -> Result<String, String> {
+fn build_user_prompt_context_payload(repo_root: &Path, prompt_text: &str) -> Result<Value, String> {
     let mut sections = vec![
         USER_PROMPT_MEMORY_PRIORITY_CONTEXT.to_string(),
         USER_PROMPT_CONTINUITY_CONTEXT.to_string(),
     ];
+    let mut lanes = vec!["memory-truth".to_string(), "continuity-truth".to_string()];
     let projection = compact_user_prompt_projection(repo_root)?;
     if !projection.trim().is_empty() {
         sections.push(projection);
+        lanes.push("state-compact".to_string());
     }
-    if !looks_like_coding_request(prompt_text) {
-        return Ok(shrink_user_prompt_context(
-            &sections.join("\n\n"),
-            USER_PROMPT_CONTEXT_MAX_CHARS,
-        ));
+    if looks_like_coding_request(prompt_text) {
+        let lowered = prompt_text.to_lowercase();
+        let mut parts = vec![USER_PROMPT_CLOSEOUT_CONTEXT];
+        lanes.push("closeout".to_string());
+        if count_contains(&lowered, &USER_PROMPT_PERF_TERMS) > 0 {
+            parts.push(USER_PROMPT_PERF_CONTEXT);
+            lanes.push("perf".to_string());
+        }
+        if count_contains(&lowered, &USER_PROMPT_COMPAT_TERMS) > 0 {
+            parts.push(USER_PROMPT_COMPAT_CONTEXT);
+            lanes.push("compat".to_string());
+        }
+        let path_hints = prompt_path_mentions(prompt_text, true);
+        let path_hint_has_hook = path_hints
+            .iter()
+            .any(|hint| hint.to_lowercase().contains("hook"));
+        if count_contains(&lowered, &USER_PROMPT_HOOK_TERMS) > 0 || path_hint_has_hook {
+            parts.push(USER_PROMPT_HOOK_CONTEXT);
+            lanes.push("hook".to_string());
+        }
+        sections.push(join_unique_context(&parts));
     }
-    let lowered = prompt_text.to_lowercase();
-    let mut parts = vec![USER_PROMPT_CLOSEOUT_CONTEXT];
-    if count_contains(&lowered, &USER_PROMPT_PERF_TERMS) > 0 {
-        parts.push(USER_PROMPT_PERF_CONTEXT);
-    }
-    if count_contains(&lowered, &USER_PROMPT_COMPAT_TERMS) > 0 {
-        parts.push(USER_PROMPT_COMPAT_CONTEXT);
-    }
-    let path_hints = prompt_path_mentions(prompt_text, true);
-    let path_hint_has_hook = path_hints
-        .iter()
-        .any(|hint| hint.to_lowercase().contains("hook"));
-    if count_contains(&lowered, &USER_PROMPT_HOOK_TERMS) > 0 || path_hint_has_hook {
-        parts.push(USER_PROMPT_HOOK_CONTEXT);
-    }
-    sections.push(join_unique_context(&parts));
-    Ok(shrink_user_prompt_context(
-        &sections.join("\n\n"),
-        USER_PROMPT_CONTEXT_MAX_CHARS,
-    ))
+    let pre_shrink = sections.join("\n\n");
+    let context = shrink_user_prompt_context(&pre_shrink, USER_PROMPT_CONTEXT_MAX_CHARS);
+    let trimmed = context.chars().count() < pre_shrink.chars().count();
+    Ok(json!({
+        "text": context,
+        "telemetry": {
+            "lanes": lanes,
+            "char_count": pre_shrink.chars().count(),
+            "final_char_count": pre_shrink.chars().count().min(USER_PROMPT_CONTEXT_MAX_CHARS).min(context.chars().count()),
+            "trimmed": trimmed,
+            "budget_chars": USER_PROMPT_CONTEXT_MAX_CHARS,
+        }
+    }))
 }
 
 fn is_quality_target_path(path: &str) -> bool {
@@ -2392,12 +2412,14 @@ mod tests {
             fs::read_to_string(repo_root.join(CLAUDE_MEMORY_PATH)).expect("projection");
         assert!(projection.contains("Claude Startup Projection"));
         assert!(projection.contains("## Startup Rules"));
-        assert!(projection.contains("不要用 Got it / Understood"));
-        assert!(projection.contains("目标明确时直接执行可验证的小步"));
-        assert!(projection.contains("OpenAI/GPT"));
+        assert!(projection.contains("默认用中文；先给答案；默认只回一小段。"));
+        assert!(projection.contains("## Task Snapshot"));
         assert!(projection.contains("repair claude hook"));
         assert!(projection.contains("AP-1: Sync skills after skill edits"));
         assert!(projection.contains("SD-1: Shared CLI memory root lives under `./.codex/memory/`"));
+        assert!(projection.contains("artifacts/current/active_task.json"));
+        assert!(!projection.contains("OpenAI/GPT"));
+        assert!(projection.lines().count() <= 24);
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
@@ -2549,17 +2571,16 @@ mod tests {
             result["hookSpecificOutput"]["hookEventName"],
             Value::String("UserPromptSubmit".to_string())
         );
-        let context = result["hookSpecificOutput"]["additionalContext"]
-            .as_str()
-            .unwrap_or("");
-        assert!(context.contains("repo-local shared memory"));
-        assert!(context.contains(".supervisor_state.json"));
-        assert!(context.contains("当前状态："));
-        assert!(context.contains("完成任务时默认只用一小段收尾"));
-        assert!(context.contains("热路径"));
-        assert!(context.contains("fallback"));
-        assert!(!context.contains("Task Snapshot"));
-        assert!(context.chars().count() <= USER_PROMPT_CONTEXT_MAX_CHARS);
+        let telemetry = result["contextTelemetry"].as_object().expect("telemetry");
+        let lanes = telemetry["lanes"].as_array().expect("lanes");
+        assert!(lanes.iter().any(|item| item.as_str() == Some("memory-truth")));
+        assert!(lanes.iter().any(|item| item.as_str() == Some("continuity-truth")));
+        assert!(lanes.iter().any(|item| item.as_str() == Some("state-compact")));
+        assert!(lanes.iter().any(|item| item.as_str() == Some("closeout")));
+        assert!(lanes.iter().any(|item| item.as_str() == Some("perf")));
+        assert!(lanes.iter().any(|item| item.as_str() == Some("compat")));
+        assert_eq!(telemetry["budget_chars"], Value::from(USER_PROMPT_CONTEXT_MAX_CHARS as u64));
+        assert_eq!(telemetry["trimmed"], Value::Bool(false));
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
@@ -2571,14 +2592,12 @@ mod tests {
             "prompt": "把这个结论改得更像人话一点，顺手润色一下措辞"
         });
         let result = run_user_prompt_submit(&repo_root, &payload).expect("audit ok");
-        let context = result["hookSpecificOutput"]["additionalContext"]
-            .as_str()
-            .unwrap_or("");
-        assert!(context.contains("repo-local shared memory"));
-        assert!(context.contains("当前状态："));
-        assert!(!context.contains("Task Snapshot"));
-        assert!(!context.contains("热路径"));
-        assert!(context.chars().count() <= USER_PROMPT_CONTEXT_MAX_CHARS);
+        let telemetry = result["contextTelemetry"].as_object().expect("telemetry");
+        let lanes = telemetry["lanes"].as_array().expect("lanes");
+        assert!(lanes.iter().any(|item| item.as_str() == Some("memory-truth")));
+        assert!(lanes.iter().any(|item| item.as_str() == Some("continuity-truth")));
+        assert!(lanes.iter().any(|item| item.as_str() == Some("state-compact")));
+        assert!(!lanes.iter().any(|item| item.as_str() == Some("closeout")));
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 

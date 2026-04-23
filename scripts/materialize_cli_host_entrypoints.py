@@ -13,12 +13,14 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from framework_runtime.runtime_registry import framework_native_aliases, shared_project_mcp_servers
-from scripts.host_integration_rs import run_host_integration_rs
+from scripts.host_integration_rs import export_runtime_registry, run_host_integration_rs
 from scripts.rust_binary_runner import ensure_rust_binary
 
 
-SHARED_AGENT_POLICY = """# Shared Agent Policy
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+SHARED_AGENT_POLICY ="""# Shared Agent Policy
 
 This repository is designed to be entered from `AGENTS.md` (Codex), `CLAUDE.md`
 (Claude Code), or `GEMINI.md` (Gemini CLI). These files must project one shared
@@ -335,8 +337,29 @@ Always relay the command's JSON result and then summarize it briefly in plain Ch
 Do not invent batch state that the command did not return.
 """
 
+def _runtime_registry_payload() -> dict[str, Any]:
+    payload = export_runtime_registry(PROJECT_ROOT)
+    if not isinstance(payload, dict):
+        raise ValueError("Rust runtime registry export must be a JSON object")
+    return payload
+
+
+def _framework_native_aliases() -> dict[str, Any]:
+    aliases = _runtime_registry_payload().get("framework_native_aliases")
+    if not isinstance(aliases, dict):
+        raise ValueError("runtime registry missing framework_native_aliases")
+    return aliases
+
+
+def _shared_project_mcp_servers() -> tuple[str, ...]:
+    servers = _runtime_registry_payload().get("shared_project_mcp_servers")
+    if not isinstance(servers, list):
+        raise ValueError("runtime registry missing shared_project_mcp_servers")
+    return tuple(str(server) for server in servers)
+
+
 def _framework_alias_payload(alias_name: str) -> dict[str, Any]:
-    payload = framework_native_aliases().get(alias_name)
+    payload = _framework_native_aliases().get(alias_name)
     if not isinstance(payload, dict):
         raise ValueError(f"framework_native_aliases missing alias payload for {alias_name!r}")
     return payload
@@ -655,7 +678,7 @@ def _claude_project_settings() -> dict[str, Any]:
             ]
         },
         "allowedMcpServers": [
-            {"serverName": server_name} for server_name in shared_project_mcp_servers()
+            {"serverName": server_name} for server_name in _shared_project_mcp_servers()
         ],
         "hooks": settings_hooks,
     }

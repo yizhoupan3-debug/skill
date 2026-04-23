@@ -287,6 +287,40 @@ session_start: n/a
     )
 
 
+def test_validate_skill_document_rejects_any_slash_trigger_hint(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "skills" / "autopilot"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: autopilot
+description: Alias skill
+routing_layer: L1
+routing_owner: owner
+routing_gate: none
+session_start: n/a
+trigger_hints:
+  - /autopilot
+  - autopilot
+---
+## When to use
+- test
+""",
+        encoding="utf-8",
+    )
+
+    document, error_report = _read_skill_document("autopilot", skill_dir)
+    assert document is not None
+    assert error_report is None
+
+    report = validate_skill_document(document)
+
+    assert any(
+        "trigger_hints must not include slash commands; Claude slash exposure is owned by .claude/commands"
+        in error
+        for error in report.errors
+    )
+
+
 def test_validate_skill_document_rejects_empty_trigger_hints(tmp_path: Path) -> None:
     skill_dir = tmp_path / "empty-triggers"
     skill_dir.mkdir(parents=True)

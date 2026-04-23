@@ -9,7 +9,6 @@ routing_gate: delegation
 session_start: preferred
 trigger_hints:
   - $team
-  - /team
   - team
   - team mode
   - agent team
