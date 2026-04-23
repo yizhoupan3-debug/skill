@@ -50,7 +50,6 @@ from framework_runtime.host_adapters import (
     CODEX_CLI_ADAPTER,
     CODEX_COMMON_ADAPTER,
     CODEX_DESKTOP_ADAPTER,
-    CODEX_DESKTOP_HOST_ADAPTER,
     GEMINI_CLI_ADAPTER,
     GENERIC_HOST_ADAPTER,
     get_host_adapter,
@@ -65,7 +64,6 @@ from framework_runtime.host_adapters import (
 )
 from framework_runtime.host_adapter_compatibility import (
     compatibility_snapshot,
-    build_codex_desktop_alias_retirement_status,
     build_upgrade_compatibility_matrix,
     compile_aionrs_companion_adapter,
     compile_aionui_host_adapter,
@@ -129,7 +127,7 @@ def test_run_framework_contract_artifacts_cli_emits_default_lane_without_rust_bu
     assert "framework_profile" in payload
     assert "cli_common_adapter" in payload
     assert "codex_dual_entry_parity_snapshot" in payload
-    assert "rust_profile_bundle" not in payload
+    assert "rust_profile_bundle" in payload
     assert Path(payload["framework_profile"]).is_file()
     assert Path(payload["cli_common_adapter"]).parent.name == "default"
 
@@ -167,13 +165,11 @@ def test_run_framework_contract_artifacts_cli_reuses_shared_route_adapter_for_ru
         rust_adapter: object | None,
         include_fallback_artifacts: bool,
         include_compatibility_inventory: bool,
-        include_legacy_alias_artifact: bool,
     ) -> dict[str, str]:
         captured["profile_id"] = profile.profile_id
         captured["rust_adapter"] = rust_adapter
         captured["include_fallback_artifacts"] = include_fallback_artifacts
         captured["include_compatibility_inventory"] = include_compatibility_inventory
-        captured["include_legacy_alias_artifact"] = include_legacy_alias_artifact
         marker_path = output_dir_arg / "marker.json"
         marker_path.parent.mkdir(parents=True, exist_ok=True)
         marker_path.write_text("{}", encoding="utf-8")
@@ -192,7 +188,6 @@ def test_run_framework_contract_artifacts_cli_reuses_shared_route_adapter_for_ru
             "--include-rust-bundle",
             "--include-fallback-artifacts",
             "--include-compatibility-inventory",
-            "--include-legacy-alias-artifact",
         ],
     )
 
@@ -204,7 +199,6 @@ def test_run_framework_contract_artifacts_cli_reuses_shared_route_adapter_for_ru
     assert captured["rust_adapter"] is fake_adapter
     assert captured["include_fallback_artifacts"] is True
     assert captured["include_compatibility_inventory"] is True
-    assert captured["include_legacy_alias_artifact"] is True
 
 
 def test_rust_route_adapter_rejects_stale_binary_when_sources_are_newer() -> None:
@@ -1576,16 +1570,8 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
     assert "aionrs_companion_adapter" not in snapshot
     assert "aionui_host_adapter" not in snapshot
     assert "codex_desktop_host_adapter" not in snapshot
-    assert "compatibility_lane" not in snapshot["codex_desktop_adapter"]
     assert snapshot["codex_cli_adapter"]["host_id"] == "codex-cli"
     compatibility_snapshot_with_alias = compatibility_snapshot(include_legacy_aliases=True)
-    assert "codex_desktop_host_adapter" not in compatibility_snapshot_with_alias
-    legacy_alias = compatibility_snapshot_with_alias["codex_desktop_adapter"]["compatibility_lane"][
-        "legacy_aliases"
-    ]["codex_desktop_host_adapter"]
-    assert legacy_alias["host_id"] == "codex-desktop"
-    assert legacy_alias["transport"] == "local-bridge"
-    assert legacy_alias["legacy_surface"] is True
     fallback_lane = compatibility_snapshot_with_alias["fallback_lane"]
     assert fallback_lane["default_host_peer_set"] == [
         "codex_desktop_adapter",
@@ -1607,7 +1593,6 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
             CODEX_COMMON_ADAPTER,
             GENERIC_HOST_ADAPTER,
             CODEX_DESKTOP_ADAPTER,
-            CODEX_DESKTOP_HOST_ADAPTER,
             CODEX_CLI_ADAPTER,
             CLAUDE_CODE_ADAPTER,
             GEMINI_CLI_ADAPTER,
@@ -1619,7 +1604,6 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
         "codex_common_adapter": True,
         "generic_host_adapter": False,
         "codex_desktop_adapter": True,
-        "codex_desktop_host_adapter": True,
         "codex_cli_adapter": True,
         "claude_code_adapter": True,
         "gemini_cli_adapter": True,
@@ -1796,7 +1780,6 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
     assert parity["desktop"]["adapter_id"] == "codex_desktop_adapter"
     assert parity["desktop"]["entrypoint_kind"] == "interactive"
     assert parity["desktop"]["shared_adapter"] == "cli_common_adapter"
-    assert parity["desktop"]["legacy_aliases"] == ["codex_desktop_host_adapter"]
     assert parity["cli"]["adapter_id"] == "codex_cli_adapter"
     assert parity["cli"]["entrypoint_kind"] == "headless"
     assert parity["cli"]["shared_adapter"] == "cli_common_adapter"
@@ -1817,8 +1800,6 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
         profile,
         include_legacy_aliases=True,
     )
-    assert compatibility_matrix_with_alias["codex_desktop_host_adapter"]["compatible"] is True
-    assert compatibility_matrix_with_alias["codex_desktop_host_adapter"]["legacy_surface"] is True
     assert compatibility_matrix_with_alias["aionrs_companion_adapter"]["compatible"] is True
     assert compatibility_matrix_with_alias["aionrs_companion_adapter"]["exposure_lane"] == (
         "fallback-only-explicit"
@@ -1844,7 +1825,6 @@ def test_host_adapter_lookup_defaults_to_canonical_registry() -> None:
     for adapter_id in (
         "aionrs_companion_adapter",
         "aionui_host_adapter",
-        "codex_desktop_host_adapter",
     ):
         try:
             get_host_adapter(adapter_id)
@@ -1853,8 +1833,6 @@ def test_host_adapter_lookup_defaults_to_canonical_registry() -> None:
         else:
             raise AssertionError("expected legacy surface lookup to require explicit opt-in")
 
-    legacy_alias = get_host_adapter("codex_desktop_host_adapter", include_legacy_aliases=True)
-    assert legacy_alias is CODEX_DESKTOP_HOST_ADAPTER
     legacy_companion = get_host_adapter("aionrs_companion_adapter", include_legacy_aliases=True)
     assert legacy_companion is AIONRS_COMPANION_ADAPTER
 
@@ -1863,7 +1841,6 @@ def test_host_adapter_lookup_defaults_to_canonical_registry() -> None:
     }
     assert "aionrs_companion_adapter" in expanded_adapter_ids
     assert "aionui_host_adapter" in expanded_adapter_ids
-    assert "codex_desktop_host_adapter" in expanded_adapter_ids
 
 
 def test_validate_adapter_compatibility_requires_opt_in_for_legacy_alias_strings() -> None:
@@ -1879,7 +1856,7 @@ def test_validate_adapter_compatibility_requires_opt_in_for_legacy_alias_strings
     try:
         validate_adapter_compatibility(
             profile,
-            ["aionrs_companion_adapter", "codex_desktop_host_adapter"],
+            ["aionrs_companion_adapter"],
         )
     except KeyError as exc:
         assert "include_legacy_aliases=True" in str(exc)
@@ -1888,37 +1865,12 @@ def test_validate_adapter_compatibility_requires_opt_in_for_legacy_alias_strings
 
     validation = validate_adapter_compatibility(
         profile,
-        ["aionrs_companion_adapter", "codex_desktop_host_adapter"],
+        ["aionrs_companion_adapter"],
         include_legacy_aliases=True,
     )
     assert validation == {
         "aionrs_companion_adapter": True,
-        "codex_desktop_host_adapter": True,
     }
-
-
-def test_codex_desktop_alias_retirement_status_tracks_parity_first_exit_gate() -> None:
-    status = build_codex_desktop_alias_retirement_status(
-        alias_inventory_summary={
-            "inventory_complete": True,
-            "primary_identity_risk_occurrences": 0,
-            "legacy_alias_shim_required": False,
-        }
-    )
-
-    assert status["canonical_adapter_id"] == "codex_desktop_adapter"
-    assert status["legacy_alias_id"] == "codex_desktop_host_adapter"
-    assert status["alias_lifecycle"] == "retired-alias-only"
-    assert status["alias_mode"] == "mirror-only"
-    assert status["primary_regression_artifact"] == "cli_family_parity_snapshot"
-    assert status["codex_dual_entry_parity_artifact"] == "codex_dual_entry_parity_snapshot"
-    assert status["secondary_inventory_artifact"] == "upgrade_compatibility_matrix"
-    assert status["emitter_contract"]["native_emits_alias_artifact"] is False
-    assert status["emitter_contract"]["rust_emits_alias_artifact"] is False
-    assert status["emitter_contract"]["legacy_alias_artifact_opt_in"] is True
-    assert status["retirement_gates"]["runtime_primary_identity_consumers_cleared"] is True
-    assert status["retirement_gates"]["legacy_alias_inventory_is_secondary"] is True
-    assert status["retirement_gates"]["legacy_alias_shim_ready_if_needed"] is True
 
 
 def test_legacy_codex_desktop_alias_compiler_drops_the_old_compatibility_escape_hatch() -> None:
@@ -2276,7 +2228,7 @@ def test_router_rs_profile_json_matches_outer_framework_contract() -> None:
     assert "codex_desktop_alias_retirement_status" not in payload
 
 
-def test_router_rs_profile_json_can_opt_in_legacy_alias_output() -> None:
+def test_router_rs_profile_json_ignores_removed_legacy_alias_flag() -> None:
     profile = build_framework_profile(
         profile_id="rust-profile-legacy",
         display_name="Rust Profile Legacy",
@@ -2297,7 +2249,6 @@ def test_router_rs_profile_json_can_opt_in_legacy_alias_output() -> None:
             [
                 *_router_rs_command(),
                 "--profile-json",
-                "--include-legacy-alias-artifact",
                 "--framework-profile",
                 str(profile_path),
             ],
@@ -2309,16 +2260,8 @@ def test_router_rs_profile_json_can_opt_in_legacy_alias_output() -> None:
 
     payload = json.loads(proc.stdout)
     assert "codex_desktop_host_adapter" not in payload
-    assert payload["compatibility_lane"]["codex_desktop_host_adapter"]["metadata"]["adapter_alias_of"] == (
-        "codex_desktop_adapter"
-    )
-    assert payload["compatibility_lane"]["codex_desktop_host_adapter"]["source_contract"][
-        "bridge_contract_source"
-    ] == "common_contract.workspace_bootstrap.bridges"
-    assert payload["compatibility_lane"]["codex_desktop_host_adapter"]["source_contract"]["alias_mode"] == (
-        "mirror-only"
-    )
-    assert payload["codex_desktop_alias_retirement_status"]["alias_lifecycle"] == "retired-alias-only"
+    assert "compatibility_lane" not in payload
+    assert "codex_desktop_alias_retirement_status" not in payload
 
 
 def test_router_rs_profile_json_resolves_host_capability_requirements_per_adapter() -> None:
@@ -2501,7 +2444,7 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     ] is False
 
 
-def test_router_rs_profile_artifacts_json_can_opt_in_continuity_alias_artifact() -> None:
+def test_router_rs_profile_artifacts_json_ignores_removed_legacy_alias_flag() -> None:
     profile = build_framework_profile(
         profile_id="rust-profile-artifacts-legacy",
         display_name="Rust Profile Artifacts Legacy",
@@ -2522,7 +2465,6 @@ def test_router_rs_profile_artifacts_json_can_opt_in_continuity_alias_artifact()
                 *_router_rs_command(),
                 "--profile-artifacts-json",
                 "--include-compatibility-inventory",
-                "--include-legacy-alias-artifact",
                 "--framework-profile",
                 str(profile_path),
             ],
@@ -2543,9 +2485,8 @@ def test_router_rs_profile_artifacts_json_can_opt_in_continuity_alias_artifact()
         "stream-json",
     ]
     assert "codex_desktop_host_adapter" not in payload
-    assert payload["codex_desktop_alias_retirement_status"]["alias_lifecycle"] == "retired-alias-only"
-    assert payload["codex_desktop_alias_retirement_status"]["emitter_contract"]["rust_emits_alias_artifact"] is False
-    assert payload["upgrade_compatibility_matrix"]["codex_desktop_host_adapter"]["compatible"] is True
+    assert "codex_desktop_alias_retirement_status" not in payload
+    assert "codex_desktop_host_adapter" not in payload["upgrade_compatibility_matrix"]
     assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["legacy_surface"] is True
 
 
@@ -2592,7 +2533,8 @@ def test_router_rs_profile_artifacts_json_can_include_compatibility_inventory() 
     )
     assert payload["upgrade_compatibility_matrix"]["codex_desktop_adapter"]["compatible"] is True
     assert "codex_desktop_host_adapter" not in payload["upgrade_compatibility_matrix"]
-    assert "aionrs_companion_adapter" not in payload["upgrade_compatibility_matrix"]
+    assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["compatible"] is True
+    assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["legacy_surface"] is True
 
 
 def test_ensure_capabilities_rejects_missing_capability() -> None:

@@ -46,12 +46,6 @@ def test_host_adapter_specs_are_materialized_from_runtime_registry() -> None:
         "plugin_hook_manifest_paths"
     ]
 
-    legacy_record = host_adapter_record("codex_desktop_host_adapter", include_legacy_aliases=True)
-    legacy_spec = get_host_adapter("codex_desktop_host_adapter", include_legacy_aliases=True)
-    assert legacy_spec.protocol_hints["canonical_adapter_id"] == legacy_record["protocol_hints"][
-        "canonical_adapter_id"
-    ]
-
 
 def test_runtime_registry_missing_file_fails_closed(
     monkeypatch: pytest.MonkeyPatch,

@@ -8,6 +8,9 @@ from .schemas import RunTaskResponse, UsageMetrics
 
 EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION = "router-rs-execute-request-v1"
 EXECUTION_KERNEL_METADATA_SCHEMA_VERSION = "router-rs-execution-kernel-metadata-v1"
+EXECUTION_KERNEL_METADATA_CONTRACT_SCHEMA_VERSION = (
+    "router-rs-execution-kernel-metadata-contract-v1"
+)
 EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY = "execution_kernel_fallback_reason"
 EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY = "execution_kernel_contract_mode"
 EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY = "execution_kernel_fallback_policy"
@@ -224,6 +227,8 @@ def _execution_kernel_metadata_contract() -> dict[str, Any]:
     """Return the fixed Rust-owned execution-kernel metadata contract."""
 
     return {
+        "schema_version": EXECUTION_KERNEL_METADATA_CONTRACT_SCHEMA_VERSION,
+        "authority": EXECUTION_KERNEL_AUTHORITY,
         "steady_state_fields": EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS,
         "runtime_fields": _normalize_execution_kernel_runtime_fields(None),
         "metadata_keys": {
@@ -254,6 +259,80 @@ def _execution_kernel_metadata_contract() -> dict[str, Any]:
             ),
         },
     }
+
+
+def normalize_execution_kernel_metadata_contract(
+    kernel_metadata_contract: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Validate the Rust-owned execution-kernel metadata contract payload."""
+
+    def _jsonish(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            return {str(key): _jsonish(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [_jsonish(item) for item in value]
+        return value
+
+    expected = _execution_kernel_metadata_contract()
+    if kernel_metadata_contract is None:
+        return expected
+    if not isinstance(kernel_metadata_contract, Mapping):
+        raise RuntimeError(
+            "runtime control plane execution descriptor returned an invalid "
+            "kernel_metadata_contract."
+        )
+
+    payload = dict(kernel_metadata_contract)
+    expected_pairs = {
+        "schema_version": expected["schema_version"],
+        "authority": expected["authority"],
+    }
+    for field, expected_value in expected_pairs.items():
+        if payload.get(field) != expected_value:
+            raise RuntimeError(
+                "runtime control plane execution descriptor returned an unexpected "
+                f"kernel_metadata_contract.{field}: {payload.get(field)!r}"
+            )
+
+    steady_state_fields = payload.get("steady_state_fields")
+    if list(steady_state_fields or []) != list(expected["steady_state_fields"]):
+        raise RuntimeError(
+            "runtime control plane execution descriptor returned an unexpected "
+            "kernel_metadata_contract.steady_state_fields."
+        )
+
+    runtime_fields_payload = payload.get("runtime_fields")
+    if not isinstance(runtime_fields_payload, Mapping):
+        raise RuntimeError(
+            "runtime control plane execution descriptor returned an invalid "
+            "kernel_metadata_contract.runtime_fields."
+        )
+    runtime_fields = _normalize_execution_kernel_runtime_fields(
+        runtime_fields_payload
+    )
+    if runtime_fields != expected["runtime_fields"]:
+        raise RuntimeError(
+            "runtime control plane execution descriptor returned an unexpected "
+            "kernel_metadata_contract.runtime_fields."
+        )
+
+    for section in ("metadata_keys", "defaults"):
+        section_payload = payload.get(section)
+        if not isinstance(section_payload, Mapping):
+            raise RuntimeError(
+                "runtime control plane execution descriptor returned an invalid "
+                f"kernel_metadata_contract.{section}."
+            )
+        if _jsonish(section_payload) != _jsonish(expected[section]):
+            raise RuntimeError(
+                "runtime control plane execution descriptor returned an unexpected "
+                f"kernel_metadata_contract.{section}."
+            )
+
+    normalized = dict(expected)
+    normalized["steady_state_fields"] = tuple(expected["steady_state_fields"])
+    normalized["runtime_fields"] = runtime_fields
+    return normalized
 
 
 def execution_kernel_steady_state_fields() -> tuple[str, ...]:

@@ -69,8 +69,6 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
         str(home_claude_refresh_path),
         "--home-claude-mcp-config-path",
         str(home_claude_mcp_config_path),
-        "--project-instructions-path",
-        str(Path(".codex") / "model_instructions.md"),
         "--bootstrap-output-dir",
         str(bootstrap_output_dir),
         "--skip-home-claude-skills-link",

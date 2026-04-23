@@ -17,6 +17,7 @@ const FRAMEWORK_START_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_START -->";
 const FRAMEWORK_END_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_END -->";
 const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v1";
 const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
+const RETIRED_CODEX_MODEL_INSTRUCTIONS_PATH: &str = ".codex/model_instructions.md";
 const DEFAULT_TUI_STATUS_ITEMS: [&str; 3] =
     ["model-with-reasoning", "context-remaining", "git-branch"];
 const DEFAULT_SHARED_PROJECT_MCP_SERVERS: [&str; 3] =
@@ -220,8 +221,6 @@ enum Commands {
         #[arg(long)]
         home_claude_mcp_config_path: PathBuf,
         #[arg(long)]
-        project_instructions_path: PathBuf,
-        #[arg(long)]
         bootstrap_output_dir: Option<PathBuf>,
         #[arg(long)]
         skip_browser_mcp: bool,
@@ -390,7 +389,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             home_claude_skills_path,
             home_claude_refresh_path,
             home_claude_mcp_config_path,
-            project_instructions_path,
             bootstrap_output_dir,
             skip_browser_mcp,
             skip_framework_mcp,
@@ -412,7 +410,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             &home_claude_skills_path,
             &home_claude_refresh_path,
             &home_claude_mcp_config_path,
-            &project_instructions_path,
             bootstrap_output_dir.as_deref(),
             !skip_browser_mcp,
             !skip_framework_mcp,
@@ -573,13 +570,11 @@ fn sync_template_file(
 }
 
 fn discover_matching_worktrees(root: &Path) -> (Vec<PathBuf>, Vec<String>) {
-    let root_head = read_git_stdout(root, &["rev-parse", "HEAD"]);
     let worktree_listing = read_git_stdout(root, &["worktree", "list", "--porcelain"]);
-    if root_head.is_none() || worktree_listing.is_none() {
+    if worktree_listing.is_none() {
         return (Vec::new(), Vec::new());
     }
 
-    let normalized_root_head = root_head.unwrap_or_default().trim().to_string();
     let mut current: BTreeMap<String, String> = BTreeMap::new();
     let mut worktrees: Vec<BTreeMap<String, String>> = Vec::new();
     for raw_line in worktree_listing.unwrap_or_default().lines() {
@@ -613,10 +608,6 @@ fn discover_matching_worktrees(root: &Path) -> (Vec<PathBuf>, Vec<String>) {
         }
         if !candidate.exists() {
             skipped.push(format!("{} (missing)", candidate.to_string_lossy()));
-            continue;
-        }
-        if entry.get("HEAD").map(|value| value.trim()) != Some(normalized_root_head.as_str()) {
-            skipped.push(format!("{} (head mismatch)", candidate.to_string_lossy()));
             continue;
         }
         matches.push(candidate);
@@ -802,7 +793,6 @@ fn install_native_integration(
     home_claude_skills_path: &Path,
     home_claude_refresh_path: &Path,
     home_claude_mcp_config_path: &Path,
-    project_instructions_path: &Path,
     bootstrap_output_dir: Option<&Path>,
     install_browser_mcp: bool,
     install_framework_mcp: bool,
@@ -906,7 +896,7 @@ fn install_native_integration(
         false
     };
     let framework_overlay_result = if retire_framework_overlay_file {
-        retire_overlay(&repo_root.join(project_instructions_path))?
+        retire_overlay(&repo_root.join(RETIRED_CODEX_MODEL_INSTRUCTIONS_PATH))?
     } else {
         Value::Null
     };
@@ -1370,7 +1360,8 @@ struct MigrationPlan {
 
 fn migration_plan_values(plans: &[MigrationPlan]) -> Value {
     Value::Array(
-        plans.iter()
+        plans
+            .iter()
             .map(|plan| {
                 json!({
                     "source": plan.source,
@@ -1393,7 +1384,10 @@ fn default_codex_root() -> PathBuf {
 }
 
 fn ops_memory_automation_root(repo_root: &Path) -> PathBuf {
-    repo_root.join("artifacts").join("ops").join("memory_automation")
+    repo_root
+        .join("artifacts")
+        .join("ops")
+        .join("memory_automation")
 }
 
 fn evidence_artifact_root(repo_root: &Path, task_id: Option<&str>) -> PathBuf {
@@ -1432,7 +1426,10 @@ fn render_memory_automation_snapshot(
         format!("- storage_root: {}", storage_root.display()),
         format!(
             "- total_mib: {}",
-            report.get("total_mib").and_then(Value::as_f64).unwrap_or(0.0)
+            report
+                .get("total_mib")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0)
         ),
         format!("- memory_changed: {}", !changed_files.is_empty()),
         format!(
@@ -1624,7 +1621,10 @@ fn destination_for_current_artifact(
 ) -> Option<PathBuf> {
     let current_root = repo_root.join("artifacts").join("current");
     let task_root = current_root.join(active_task_id);
-    if !path.exists() || (path.parent() != Some(current_root.as_path()) && path.parent() != Some(task_root.as_path())) {
+    if !path.exists()
+        || (path.parent() != Some(current_root.as_path())
+            && path.parent() != Some(task_root.as_path()))
+    {
         return None;
     }
     if CURRENT_ALLOWED_ARTIFACT_NAMES.contains(&path.file_name()?.to_str()?)
@@ -1662,7 +1662,11 @@ fn destination_for_current_artifact(
         } else {
             PathBuf::from(active_task_id).join(name)
         };
-        return Some(ops_memory_automation_root(repo_root).join("legacy-current").join(suffix));
+        return Some(
+            ops_memory_automation_root(repo_root)
+                .join("legacy-current")
+                .join(suffix),
+        );
     }
     if name.starts_with("tmp-") {
         return Some(if path.parent() == Some(current_root.as_path()) {
@@ -1692,7 +1696,8 @@ fn plan_current_artifact_clutter_migrations(
     let mut plans = Vec::new();
     for entry in fs::read_dir(&current_root).map_err(|err| err.to_string())? {
         let path = entry.map_err(|err| err.to_string())?.path();
-        if let Some(destination) = destination_for_current_artifact(repo_root, &path, active_task_id)
+        if let Some(destination) =
+            destination_for_current_artifact(repo_root, &path, active_task_id)
         {
             plans.push(MigrationPlan {
                 source: path.to_string_lossy().into_owned(),
@@ -1704,7 +1709,8 @@ fn plan_current_artifact_clutter_migrations(
     if task_root.is_dir() {
         for entry in fs::read_dir(&task_root).map_err(|err| err.to_string())? {
             let path = entry.map_err(|err| err.to_string())?.path();
-            if let Some(destination) = destination_for_current_artifact(repo_root, &path, active_task_id)
+            if let Some(destination) =
+                destination_for_current_artifact(repo_root, &path, active_task_id)
             {
                 plans.push(MigrationPlan {
                     source: path.to_string_lossy().into_owned(),
@@ -1724,7 +1730,10 @@ fn migrate_current_artifact_clutter(
     let plans = plan_current_artifact_clutter_migrations(repo_root, active_task_id)?;
     let mut moved = Vec::new();
     for plan in plans {
-        moved.push(move_path(Path::new(&plan.source), Path::new(&plan.destination))?);
+        moved.push(move_path(
+            Path::new(&plan.source),
+            Path::new(&plan.destination),
+        )?);
     }
     Ok(moved)
 }
@@ -1768,7 +1777,10 @@ fn migrate_legacy_artifact_roots(repo_root: &Path) -> Result<Vec<String>, String
     let plans = plan_legacy_artifact_root_migrations(repo_root)?;
     let mut moved = Vec::new();
     for plan in plans {
-        moved.push(move_path(Path::new(&plan.source), Path::new(&plan.destination))?);
+        moved.push(move_path(
+            Path::new(&plan.source),
+            Path::new(&plan.destination),
+        )?);
     }
     Ok(moved)
 }

@@ -36,16 +36,15 @@ rtk grep "RTK\\.md|rtk" .
 rtk git status
 rtk git diff --stat
 rtk cargo test
-rtk pytest
 rtk npm test
 ```
 
 When a direct RTK subcommand is not available or not needed, wrap the original command explicitly:
 
 ```bash
-rtk python3 scripts/check_skills.py --verify-sync
-rtk python3 scripts/check_skills.py --verify-codex-link
-rtk python3 scripts/sync_skills.py --apply
+rtk cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root "$PWD"
+rtk cargo test --manifest-path ./scripts/router-rs/Cargo.toml
+rtk npm test --prefix tools/browser-mcp
 ```
 
 ## Do not prefer RTK for
@@ -62,9 +61,9 @@ This repository already contains a project-scoped RTK filter file at [`/.rtk/fil
 
 Current local filters are targeted and narrow:
 
-- `python3 scripts/sync_skills.py --apply`
-- `python3 scripts/check_skills.py --verify-sync`
-- `python3 scripts/check_skills.py --verify-codex-link`
+- `cargo test`
+- `npm test`
+- `git diff`
 
 Do not assume every repo script has a custom RTK filter. If a command is uncommon, RTK may still help, but it may only provide generic compaction.
 

@@ -196,21 +196,24 @@ def test_auto_closeout_blocks_when_branch_has_unmerged_paths(tmp_path: Path) -> 
 
 def test_resolve_verification_command_wraps_rtk_for_noisy_commands() -> None:
     with patch("scripts.git_safety._rtk_available", return_value=True):
-        resolved, used_rtk = _resolve_verification_command("pytest -q tests/test_git_safety.py", prefer_rtk=True)
-
-    assert used_rtk is True
-    assert resolved[:2] == ["rtk", "pytest"]
-
-
-def test_resolve_verification_command_wraps_rtk_for_python_module_pytest() -> None:
-    with patch("scripts.git_safety._rtk_available", return_value=True):
         resolved, used_rtk = _resolve_verification_command(
-            "python3 -m pytest -q tests/test_git_safety.py",
+            "cargo test --manifest-path scripts/router-rs/Cargo.toml",
             prefer_rtk=True,
         )
 
     assert used_rtk is True
-    assert resolved[:4] == ["rtk", "python3", "-m", "pytest"]
+    assert resolved[:2] == ["rtk", "cargo"]
+
+
+def test_resolve_verification_command_does_not_wrap_python_module_commands() -> None:
+    with patch("scripts.git_safety._rtk_available", return_value=True):
+        resolved, used_rtk = _resolve_verification_command(
+            "python3 -m unittest tests.test_git_safety",
+            prefer_rtk=True,
+        )
+
+    assert used_rtk is False
+    assert resolved[:3] == ["python3", "-m", "unittest"]
 
 
 def test_expand_verify_commands_supports_presets() -> None:
@@ -219,11 +222,17 @@ def test_expand_verify_commands_supports_presets() -> None:
         presets=["gitx-smoke"],
     )
 
-    assert expanded[0]["command"].startswith("python3 -m pytest")
+    assert expanded[0]["command"] == "cargo test --manifest-path scripts/router-rs/Cargo.toml"
     assert expanded[0]["preset"] == "gitx-smoke"
-    assert expanded[1]["command"] == "python3 -m py_compile scripts/git_safety.py"
-    assert expanded[2]["command"] == "python3 -c \"print('extra')\""
-    assert expanded[2]["preset"] is None
+    assert expanded[1]["command"] == "python3 -c \"print('extra')\""
+    assert expanded[1]["preset"] is None
+
+
+def test_entrypoint_sync_preset_uses_literal_repo_root_argument() -> None:
+    expanded = _expand_verify_commands(commands=[], presets=["entrypoint-sync"])
+
+    assert expanded[0]["command"].endswith("--repo-root .")
+    assert "$PWD" not in expanded[0]["command"]
 
 
 def test_expand_verify_commands_deduplicates_same_command_across_presets() -> None:

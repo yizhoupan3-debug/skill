@@ -66,8 +66,6 @@ def _python_default_boundary_fixture(profile: FrameworkProfile) -> dict[str, obj
 
 def _router_rs_boundary_fixture(
     profile: FrameworkProfile,
-    *,
-    include_legacy_alias_artifact: bool,
 ) -> dict[str, object]:
     with tempfile.TemporaryDirectory() as tmpdir:
         profile_path = Path(tmpdir) / "framework_profile.json"
@@ -78,8 +76,6 @@ def _router_rs_boundary_fixture(
             "--framework-profile",
             str(profile_path),
         ]
-        if include_legacy_alias_artifact:
-            argv.insert(2, "--include-legacy-alias-artifact")
         proc = subprocess.run(
             argv,
             check=True,
@@ -89,7 +85,7 @@ def _router_rs_boundary_fixture(
         )
 
     payload = json.loads(proc.stdout)
-    boundaries: dict[str, object] = {
+    return {
         "default": {
             "cli_common_adapter": _extract_boundary(payload["cli_common_adapter"]),
             "codex_common_adapter": _extract_boundary(payload["codex_common_adapter"]),
@@ -97,16 +93,8 @@ def _router_rs_boundary_fixture(
             "codex_cli_adapter": _extract_boundary(payload["codex_cli_adapter"]),
             "claude_code_adapter": _extract_boundary(payload["claude_code_adapter"]),
             "gemini_cli_adapter": _extract_boundary(payload["gemini_cli_adapter"]),
-        },
-        "legacy_opt_in": {},
-    }
-    if include_legacy_alias_artifact:
-        boundaries["legacy_opt_in"] = {
-            "codex_desktop_host_adapter": _extract_boundary(
-                payload["compatibility_lane"]["codex_desktop_host_adapter"]
-            )
         }
-    return boundaries
+    }
 
 
 def test_framework_profile_field_boundary_fixture_matches_python_projection() -> None:
@@ -114,7 +102,4 @@ def test_framework_profile_field_boundary_fixture_matches_python_projection() ->
 
 
 def test_framework_profile_field_boundary_fixture_matches_router_rs_projection() -> None:
-    assert _router_rs_boundary_fixture(
-        _fixture_profile(),
-        include_legacy_alias_artifact=True,
-    ) == FIXTURE
+    assert _router_rs_boundary_fixture(_fixture_profile()) == FIXTURE

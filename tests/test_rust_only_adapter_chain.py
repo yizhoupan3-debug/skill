@@ -11,8 +11,11 @@ def test_retired_python_adapter_bridges_stay_removed() -> None:
         PROJECT_ROOT / "scripts" / "route.py",
         PROJECT_ROOT / "scripts" / "router_rs_runner.py",
         PROJECT_ROOT / "scripts" / "codex_omx_hook_bridge.py",
+        PROJECT_ROOT / "scripts" / "install_codex_framework_default.py",
+        PROJECT_ROOT / "scripts" / "runtime_background_cli.py",
         PROJECT_ROOT / "scripts" / "rust_binary_runner",
         PROJECT_ROOT / "scripts" / "rust_binary_runner.py",
+        PROJECT_ROOT / "configs" / "codex" / "model_instructions.md",
     )
 
     assert [path for path in retired_paths if path.exists()] == []

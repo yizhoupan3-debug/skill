@@ -120,10 +120,9 @@ const CLAUDE_PRE_TOOL_USE_BASH_RULES: [&str; 12] = [
     "*.codex/host_entrypoints_sync_manifest.json*",
     "*.codex/memory/CLAUDE_MEMORY.md*",
 ];
-const CLAUDE_QUALITY_PRE_TOOL_USE_RULES: [&str; 6] = [
+const CLAUDE_QUALITY_PRE_TOOL_USE_RULES: [&str; 5] = [
     "/framework_runtime/src/**",
     "/scripts/router-rs/src/**",
-    "/scripts/router-rs/src/host_integration.rs",
     "/scripts/install_skills.sh",
     "/tests/**",
     "/.claude/hooks/**",
@@ -316,7 +315,7 @@ const TERMINAL_VERIFICATION_STATUSES: [&str; 6] = [
 ];
 
 const CLAUDE_SETTINGS_SCHEMA_URL: &str = "https://json.schemastore.org/claude-code-settings.json";
-const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 24] = [
+const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 20] = [
     "Bash(ls)",
     "Bash(pwd)",
     "Bash(rg *)",
@@ -327,9 +326,6 @@ const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 24] = [
     "Bash(git show *)",
     "Bash(git rev-parse *)",
     "Bash(git ls-files *)",
-    "Bash(python3 scripts/check_skills.py --verify-sync)",
-    "Bash(python3 -m pytest *)",
-    "Bash(python3 -m compileall *)",
     "Bash(cargo test *)",
     "Bash(cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- *)",
     "Bash(./scripts/router-rs/target/release/router-rs *)",
@@ -337,7 +333,6 @@ const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 24] = [
     "Bash(*scripts/router-rs/target/release/router-rs *)",
     "Bash(*scripts/router-rs/target/debug/router-rs *)",
     "Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)",
-    "Bash(python3 scripts/runtime_background_cli.py *)",
     "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
     "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
     "Bash(bash ./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
@@ -574,67 +569,56 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
 }
 
 fn build_host_entrypoint_files(repo_root: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
-    let projection = build_claude_hook_projection();
     let mut files = BTreeMap::new();
-    files.insert(
-        "AGENT.md".to_string(),
-        required_projection_string(&projection, "agent_policy")?.into_bytes(),
-    );
+    files.insert("AGENT.md".to_string(), build_agent_policy().into_bytes());
     files.insert(
         "AGENTS.md".to_string(),
-        required_projection_string(&projection, "root_agents_proxy")?.into_bytes(),
+        build_root_agents_proxy().into_bytes(),
     );
     files.insert(
         "CLAUDE.md".to_string(),
-        required_projection_string(&projection, "root_claude_proxy")?.into_bytes(),
+        build_root_claude_proxy().into_bytes(),
     );
     files.insert(
         "GEMINI.md".to_string(),
-        required_projection_string(&projection, "root_gemini_proxy")?.into_bytes(),
+        build_root_gemini_proxy().into_bytes(),
     );
     files.insert(
         ".claude/agents/README.md".to_string(),
-        required_projection_string(&projection, "claude_agents_readme")?.into_bytes(),
+        build_claude_agents_readme().into_bytes(),
     );
-    let commands = projection
-        .get("claude_commands")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "Rust hook projection must include claude_commands object".to_string())?;
+    let commands = build_claude_commands();
     files.insert(
         ".claude/commands/refresh.md".to_string(),
-        required_projection_object_string(commands, "refresh")?.into_bytes(),
+        commands.refresh.into_bytes(),
     );
     files.insert(
         ".claude/commands/background_batch.md".to_string(),
-        required_projection_object_string(commands, "background_batch")?.into_bytes(),
+        commands.background_batch.into_bytes(),
     );
     files.insert(
         ".claude/commands/autopilot.md".to_string(),
-        required_projection_object_string(commands, "autopilot")?.into_bytes(),
+        commands.autopilot.into_bytes(),
     );
     files.insert(
         ".claude/commands/deepinterview.md".to_string(),
-        required_projection_object_string(commands, "deepinterview")?.into_bytes(),
+        commands.deepinterview.into_bytes(),
     );
     files.insert(
         ".claude/commands/team.md".to_string(),
-        required_projection_object_string(commands, "team")?.into_bytes(),
+        commands.team.into_bytes(),
     );
     files.insert(
         ".claude/commands/latex-compile-acceleration.md".to_string(),
-        required_projection_object_string(commands, "latex_compile_acceleration")?.into_bytes(),
+        commands.latex_compile_acceleration.into_bytes(),
     );
     files.insert(
         ".claude/hooks/README.md".to_string(),
-        required_projection_string(&projection, "hooks_readme")?.into_bytes(),
+        build_claude_hooks_readme().into_bytes(),
     );
     files.insert(
         ".codex/hooks.json".to_string(),
-        serialize_pretty_json_bytes(
-            projection.get("codex_hooks").ok_or_else(|| {
-                "Rust hook projection must include codex_hooks object".to_string()
-            })?,
-        )?,
+        serialize_pretty_json_bytes(&build_codex_hook_manifest())?,
     );
     files.insert(
         ".claude/settings.json".to_string(),
@@ -649,25 +633,6 @@ fn build_host_entrypoint_files(repo_root: &Path) -> Result<BTreeMap<String, Vec<
         serialize_pretty_json_bytes(&build_host_entrypoint_sync_manifest(&files))?,
     );
     Ok(files)
-}
-
-fn required_projection_string(projection: &Value, key: &str) -> Result<String, String> {
-    projection
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| format!("Rust hook projection must include {key} string"))
-}
-
-fn required_projection_object_string(
-    object: &serde_json::Map<String, Value>,
-    key: &str,
-) -> Result<String, String> {
-    object
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| format!("Rust hook projection must include claude_commands.{key} string"))
 }
 
 fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>) -> Value {
@@ -833,13 +798,11 @@ fn normalize_repo_root(path: &Path) -> Result<PathBuf, String> {
 }
 
 fn discover_matching_worktrees(root: &Path) -> (Vec<PathBuf>, Vec<String>) {
-    let root_head = read_git_stdout(root, &["rev-parse", "HEAD"]);
     let worktree_listing = read_git_stdout(root, &["worktree", "list", "--porcelain"]);
-    if root_head.is_none() || worktree_listing.is_none() {
+    if worktree_listing.is_none() {
         return (Vec::new(), Vec::new());
     }
 
-    let normalized_root_head = root_head.unwrap_or_default().trim().to_string();
     let mut current: BTreeMap<String, String> = BTreeMap::new();
     let mut worktrees = Vec::new();
     for raw_line in worktree_listing.unwrap_or_default().lines() {
@@ -873,10 +836,6 @@ fn discover_matching_worktrees(root: &Path) -> (Vec<PathBuf>, Vec<String>) {
         }
         if !candidate.exists() {
             skipped.push(format!("{} (missing)", candidate.to_string_lossy()));
-            continue;
-        }
-        if entry.get("HEAD").map(|value| value.trim()) != Some(normalized_root_head.as_str()) {
-            skipped.push(format!("{} (head mismatch)", candidate.to_string_lossy()));
             continue;
         }
         matches.push(candidate);
@@ -946,34 +905,258 @@ fn build_agent_policy() -> String {
 }
 
 fn build_root_agents_proxy() -> String {
-    include_str!("../../../AGENTS.md").to_string()
+    "# Codex Entry Proxy\n\nThis file exists because Codex discovers `AGENTS.md`.\n\n- Shared framework policy source of truth: [AGENT.md](AGENT.md)\n\nDo not fork routing, memory, or artifact policy in this file.\n".to_string()
 }
 
 fn build_root_claude_proxy() -> String {
-    include_str!("../../../CLAUDE.md").to_string()
+    format!(
+        "# Claude Code Entry Proxy\n\n\
+This file exists because Claude Code discovers `CLAUDE.md`.\n\n\
+Keep startup lean. Do not add `@...` imports here.\n\n\
+Treat `.claude/**` as host-shell glue, not repository truth.\n\
+The recovery projection lives at `.codex/memory/CLAUDE_MEMORY.md` for `/refresh`\n\
+or manual resume, not default startup injection.\n\n\
+Generated-first maintenance rule:\n\n\
+- Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then regenerate via `{HOST_ENTRYPOINT_SYNC_HINT}`.\n\
+- Host entrypoint sync runs directly through `router-rs`; do not reintroduce a Python wrapper in front of it.\n\
+- Treat those files as materialized outputs, not hand-authored truth.\n\
+- `.claude/agents/*.md` stays manually maintained unless a file says otherwise.\n\
+- Event-level lifecycle decisions live in `.claude/hooks/README.md`.\n"
+    )
 }
 
 fn build_root_gemini_proxy() -> String {
-    include_str!("../../../GEMINI.md").to_string()
+    "# Gemini CLI Entry Proxy\n\nThis file exists because Gemini CLI discovers `GEMINI.md`.\n\n- Shared framework policy source of truth: [AGENT.md](AGENT.md)\n- Gemini local settings root: [.gemini/settings.json](.gemini/settings.json)\n\nGemini-specific config belongs in `.gemini/`, but the shared routing, memory,\nand artifact rules still come from `AGENT.md`.\n".to_string()
 }
 
 fn build_claude_agents_readme() -> String {
-    include_str!("../../../.claude/agents/README.md").to_string()
+    concat!(
+        "# Claude Agents Directory\n\n",
+        "These project-scoped Claude Code subagents help Claude use this repository's\n",
+        "shared routing, execution, and host-projection system without duplicating it.\n",
+        "The policy source of truth is still `../../AGENT.md`.\n\n",
+        "Available agents:\n\n",
+        "- `framework-router.md`: read-only router for choosing the right repo skill,\n",
+        "  gate, and next files to inspect\n",
+        "- `skill-maintainer.md`: bounded editor for `skills/**` and nearby framework\n",
+        "  surfaces when the task already has a clear write scope\n",
+        "- `state-artifact-keeper.md`: bounded maintainer for `.supervisor_state.json`\n",
+        "  and the shared task-artifact contract\n",
+        "- `claude-host-maintainer.md`: bounded maintainer for `.claude/**`,\n",
+        "  `CLAUDE.md`, and Claude-host compatibility docs without forking shared policy\n\n",
+        "Design rules for these subagents:\n\n",
+        "- They must read `../../AGENT.md` first and treat it as authoritative.\n",
+        "- They should stay thin: route into existing repo skills and artifacts instead\n",
+        "  of restating the framework.\n",
+        "- They should keep outputs concise and integration-friendly for the parent\n",
+        "  agent.\n",
+        "- They should not widen scope beyond the surfaces named in their prompt.\n",
+    )
+    .to_string()
+}
+
+struct ClaudeCommands {
+    refresh: String,
+    background_batch: String,
+    autopilot: String,
+    deepinterview: String,
+    team: String,
+    latex_compile_acceleration: String,
+}
+
+fn build_claude_commands() -> ClaudeCommands {
+    ClaudeCommands {
+        refresh: build_claude_refresh_command(),
+        background_batch: build_claude_background_batch_command(),
+        autopilot: build_claude_alias_command("autopilot", "never", "skills/autopilot/SKILL.md"),
+        deepinterview: build_claude_alias_command(
+            "deepinterview",
+            "never",
+            "skills/deep-interview/SKILL.md",
+        ),
+        team: build_claude_alias_command(
+            "team",
+            "strong-orchestration-only",
+            "skills/team/SKILL.md",
+        ),
+        latex_compile_acceleration: build_claude_alias_command(
+            "latex-compile-acceleration",
+            "measurement-only",
+            "skills/latex-compile-acceleration/SKILL.md",
+        ),
+    }
 }
 
 fn build_claude_commands_projection() -> Value {
+    let commands = build_claude_commands();
     json!({
-        "refresh": include_str!("../../../.claude/commands/refresh.md"),
-        "background_batch": include_str!("../../../.claude/commands/background_batch.md"),
-        "autopilot": include_str!("../../../.claude/commands/autopilot.md"),
-        "deepinterview": include_str!("../../../.claude/commands/deepinterview.md"),
-        "team": include_str!("../../../.claude/commands/team.md"),
-        "latex_compile_acceleration": include_str!("../../../.claude/commands/latex-compile-acceleration.md"),
+        "refresh": commands.refresh,
+        "background_batch": commands.background_batch,
+        "autopilot": commands.autopilot,
+        "deepinterview": commands.deepinterview,
+        "team": commands.team,
+        "latex_compile_acceleration": commands.latex_compile_acceleration,
     })
 }
 
+fn claude_command_allowed_tools() -> &'static str {
+    "allowed-tools:\n  - Bash(git rev-parse *)\n  - Bash(./scripts/router-rs/target/release/router-rs *)\n  - Bash(./scripts/router-rs/target/debug/router-rs *)\n  - Bash(*scripts/router-rs/target/release/router-rs *)\n  - Bash(*scripts/router-rs/target/debug/router-rs *)\n  - Bash(cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- *)\n  - Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)"
+}
+
+fn router_release_command(args: &str) -> String {
+    format!(
+        "`PROJECT_DIR=\"${{CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; \"$PROJECT_DIR\"/scripts/router-rs/target/release/router-rs {args} --repo-root \"$PROJECT_DIR\"`"
+    )
+}
+
+fn router_debug_command(args: &str) -> String {
+    format!(
+        "`PROJECT_DIR=\"${{CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; \"$PROJECT_DIR\"/scripts/router-rs/target/debug/router-rs {args} --repo-root \"$PROJECT_DIR\"`"
+    )
+}
+
+fn router_cargo_command(args: &str) -> String {
+    format!(
+        "`PROJECT_DIR=\"${{CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; cargo run --manifest-path \"$PROJECT_DIR\"/scripts/router-rs/Cargo.toml --release -- {args} --repo-root \"$PROJECT_DIR\"`"
+    )
+}
+
+fn build_claude_refresh_command() -> String {
+    let args = "--framework-refresh-json --claude-hook-max-lines 4";
+    format!(
+        "---\n\
+description: 使用 Rust refresh 命令继续当前活跃任务，并复制下一轮执行提示。\n\
+{}\n\
+---\n\n\
+把 `/refresh` 当作当前仓库唯一显式的 continue / next 入口。\n\
+它会读取现有 continuity 真源，为当前活跃任务生成下一轮执行提示。\n\n\
+运行：\n\n\
+{}\n\n\
+如果 release 二进制不存在，用下面的命令重试：\n\n\
+{}\n\n\
+如果两个常驻二进制都不存在，用下面的命令自修复：\n\n\
+{}\n\n\
+然后严格回复：\n\
+`下一轮执行提示已准备好，并且已经复制到剪贴板。`\n",
+        claude_command_allowed_tools(),
+        router_release_command(args),
+        router_debug_command(args),
+        router_cargo_command(args),
+    )
+}
+
+fn build_claude_alias_command(alias: &str, implicit_policy: &str, skill_path: &str) -> String {
+    let args = format!(
+        "--framework-alias-json --framework-alias {alias} --framework-host-id claude-code --compact-output --claude-hook-max-lines 3"
+    );
+    format!(
+        "---\n\
+description: Enter the repo's Rust-owned {alias} lane.\n\
+{}\n\
+---\n\n\
+Treat `/{alias}` as a thin Rust-first alias.\n\
+This command now enters the repo through the resident Rust binary directly.\n\n\
+Run:\n\n\
+{}\n\n\
+If the release binary is missing, rerun the same command with:\n\n\
+{}\n\n\
+If both resident binaries are missing, self-heal with:\n\n\
+{}\n\n\
+Use `alias.state_machine` and `alias.entry_contract` as the working contract for this turn.\n\
+This alias only enters through explicit entrypoints: `/{alias}`, `${alias}`.\n\
+Implicit routing policy: `{implicit_policy}`.\n\
+Prefer the Rust alias payload over opening long docs or restating OMC background.\n\
+Only open `{skill_path}` if the alias payload is missing something you still need.\n\
+Keep execution inside the repo's native Rust/continuity lane.\n    ",
+        claude_command_allowed_tools(),
+        router_release_command(&args),
+        router_debug_command(&args),
+        router_cargo_command(&args),
+    )
+}
+
+fn build_claude_background_batch_command() -> String {
+    let state_args = "--background-state-json --background-state-input-json '<json>'";
+    let control_args = "--background-control-json --background-control-input-json '<json>'";
+    format!(
+        "---\n\
+description: Use the repo's Rust-owned background batch control and state surfaces.\n\
+{}\n\
+---\n\n\
+Use `router-rs` directly for durable background batch control. Do not call the legacy Python helper.\n\n\
+Common Rust entrypoints:\n\n\
+- Plan a batch lane group with background control:\n  {}\n\
+- Read one persisted group summary with background state:\n  {}\n\
+- List persisted group summaries with background state:\n  {}\n\n\
+Use operation `batch-plan` for control, and `parallel_group_summary` or `parallel_group_summaries` for state.\n\
+Always relay the JSON result and then summarize it briefly in plain Chinese.\n",
+        claude_command_allowed_tools(),
+        router_release_command(control_args),
+        router_release_command(state_args),
+        router_release_command(state_args),
+    )
+}
+
 fn build_claude_hooks_readme() -> String {
-    include_str!("../../../.claude/hooks/README.md").to_string()
+    format!(
+        "# Claude Hooks Directory\n\n\
+Claude Code project hooks live here.\n\n\
+Generated-first maintenance:\n\n\
+- Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then regenerate via `{HOST_ENTRYPOINT_SYNC_HINT}`.\n\
+- Host entrypoint sync runs directly through `router-rs`; do not put a Python wrapper back in front of it.\n\
+- Treat `.claude/settings.json` and this README as materialized outputs.\n\
+- Manual Claude host guidance belongs in `.claude/agents/*.md` unless noted.\n\
+- Codex uses `.codex/hooks.json` for a separate silent preflight guardrail\n  layer on `Edit` / `MultiEdit` / `Write` / `Bash`; do not mirror Claude\n  prompt hooks onto Codex.\n\n\
+Active hooks:\n\n\
+| Event | Runner | Purpose |\n\
+| --- | --- | --- |\n\
+| `UserPromptSubmit` | `router-rs --claude-host-hook-command user-prompt-submit` | Inject the repo-local shared memory and continuity truth on every real prompt, plus narrow execution-time hints when the current prompt clearly needs them. |\n\
+| `PreToolUse` | `router-rs --claude-host-hook-command pre-tool-use-quality` | Add a short path-aware implementation reminder before editing runtime, host-entrypoint sync, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |\n\
+| `PreToolUse` | `router-rs --claude-host-hook-command pre-tool-use` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |\n\
+| `PostToolUse` | `router-rs --claude-host-hook-command post-tool-audit` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |\n\
+| `SessionEnd` | `router-rs --claude-host-hook-command session-end` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |\n\
+| `ConfigChange` | `router-rs --claude-host-hook-command config-change` | Warn when generated Claude host files were edited directly instead of regenerated from source. |\n\
+| `StopFailure` | `router-rs --claude-host-hook-command stop-failure` | Emit a host-private hint for selected Claude stop failures without mutating shared continuity. |\n\n\
+Everything else stays intentionally uninstalled here so startup and tool turns remain lean.\n\
+`UserPromptSubmit` is installed here on purpose: this repo keeps memory truth under\n\
+`./.codex/memory/` plus continuity artifacts, so prompt-time injection is the\n\
+lowest-friction way to keep Claude aligned with repo-local state instead of stale\n\
+host-global recall.\n\
+Reply tone, \"讲人话\" rules, closeout shape, and broad implementation philosophy\n\
+still live in `AGENT.md`, not in hooks.\n\
+Static behavior rules belong in `AGENT.md` or `CLAUDE.md`; these hooks exist\n\
+for deterministic guardrails, lightweight execution-time context, and lifecycle\n\
+maintenance.\n\n\
+Project hook principles:\n\n\
+- Keep project hooks for repo-specific invariants only.\n\
+- Keep hooks fast, especially `PreToolUse`, because it runs inside the agent\n  loop.\n\
+- Use `matcher` first and `if` to narrow further, so hook handlers do not spawn\n  on unrelated tool calls and normal edits stay fast.\n\
+- Automation hooks should be additive and short: inject narrow repo context or\n  launch cheap follow-up work, not essay-length prompt rewrites.\n\
+- Keep durable implementation philosophy in `AGENT.md`; hook-time nudges should\n  stay concrete, local to the current path, and local to the current delta.\n\
+- Prefer async `PostToolUse` for cheap quality follow-up that should not block\n  the main turn.\n\
+- Put personal notifications and local approval shortcuts in `~/.claude/settings.json`\n  or `.claude/settings.local.json`, not in committed project settings.\n\
+- Use `\"$CLAUDE_PROJECT_DIR\"`-anchored paths in hook commands and treat hook\n  stdin JSON as untrusted input.\n\
+- Prefer `PreToolUse` deny over `PostToolUse` cleanup for protected files.\n\
+- Keep the generated-surface guard intentionally narrow so normal edits stay fast.\n\
+- Keep `SessionEnd` as the only writer hook here; the others are guards or alerts.\n\
+- When debugging config drift, verify the installed hook set from Claude\n  Code's `/hooks` menu before changing generated files.\n\n\
+Validation commands:\n\n\
+- `printf '{{\"tool_name\":\"Edit\",\"tool_input\":{{\"file_path\":\"scripts/router-rs/src/claude_hooks.rs\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use-quality --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: allow` payload with `additionalContext`.\n\
+- `printf '{{\"tool_name\":\"Edit\",\"tool_input\":{{\"file_path\":\"scripts/router-rs/src/claude_hooks.rs\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command post-tool-audit --repo-root \"$PWD\"`\n  Expected: stdout is empty for clean edits, or JSON with top-level `additionalContext` when the new delta still looks patchy, compatibility-heavy, or wasteful.\n\
+- `printf '{{\"tool_name\":\"Edit\",\"tool_input\":{{\"file_path\":\"scripts/router-rs/src/host_integration.rs\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use-quality --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: allow` payload with Rust/runtime-oriented `additionalContext`.\n\
+- `{HOST_ENTRYPOINT_SYNC_HINT}`\n  Expected: regenerate `AGENT.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/settings.json`, `.codex/hooks.json`, and matching worktree projections directly from Rust.\n\
+- `printf '{{\"tool_name\":\"MultiEdit\",\"tool_input\":{{\"file_path\":\".claude/settings.json\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: deny` payload.\n\
+- `printf '{{\"tool_name\":\"Bash\",\"tool_input\":{{\"command\":\"cp tmp .claude/settings.json\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: deny` payload for the targeted write.\n\
+- `printf '{{\"tool_name\":\"Bash\",\"tool_input\":{{\"command\":\"printf x > .claude/settings.json\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: deny` payload for shell redirection into a protected generated file.\n\
+- `printf '{{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"继续修复这个仓库的共享记忆和 runtime\"}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command user-prompt-submit --repo-root \"$PWD\"`\n  Expected: stdout returns JSON with `hookSpecificOutput.additionalContext` containing repo-local memory and continuity reminders.\n\
+- `CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command session-end --repo-root \"$PWD\"`\n  Expected: project-local memory bundle refresh plus projection refresh; may repair stale terminal resume state in `.supervisor_state.json`.\n\
+- `printf '{{\"hook_event_name\":\"ConfigChange\",\"source\":\"project_settings\",\"file_path\":\".claude/settings.json\"}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command config-change --repo-root \"$PWD\"`\n  Expected: audit-only stderr guidance about regenerating generated Claude host files; exit 0.\n\
+- `printf '{{\"hook_event_name\":\"StopFailure\",\"error\":\"server_error\"}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command stop-failure --repo-root \"$PWD\"`\n  Expected: host-private failure classification hint on stderr; exit 0.\n\
+- `./scripts/router-rs/target/debug/router-rs --claude-host-hook-command session-end --repo-root \"$PWD\" --claude-hook-max-lines 4`\n  Expected: silent lifecycle entrypoint for Claude host hooks; same consolidation and projection contract.\n\
+- `printf '{{\"hook_event_name\":\"ConfigChange\",\"source\":\"project_settings\",\"file_path\":\".claude/settings.json\"}}\n' | ./scripts/router-rs/target/debug/router-rs --claude-hook-audit-command config-change --repo-root \"$PWD\"`\n  Expected: JSON on stdout plus audit-only stderr guidance; exit 0.\n\
+- In Claude Code, run `/hooks`\n  Expected: the project shows `PreToolUse`, `PostToolUse`, `UserPromptSubmit`,\n  `SessionEnd`, `ConfigChange`, and `StopFailure` from `.claude/settings.json`.\n\n\
+Shared routing policy still comes from `../../AGENT.md`.\n"
+    )
 }
 
 fn build_codex_command_hook(event: &str, matcher: &str) -> Value {

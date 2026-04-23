@@ -66,12 +66,10 @@ support, freeze the shared execution-controller / delegation / supervisor-state
 control-plane artifacts, and freeze the live / dry-run execution-kernel shape
 without keeping any Python-owned steady-state blocker list alive.
 
-When Python emits the same first-class contract set through
-`emit_framework_contract_artifacts(...)`, it also writes
-`rust_python_artifact_parity_report.json`. That report treats the first-class
-Codex artifacts as the parity target, and `router-rs` now compiles
-`codex_desktop_alias_retirement_status.inventory_summary` directly from the
-same repo-side alias scan lane instead of leaving that summary Python-owned.
+`emit_framework_contract_artifacts(...)` now calls `router-rs` directly for the
+first-class contract set. The old `rust_python_artifact_parity_report.json`
+lane is retired: there is no second Python artifact truth to compare against.
+If a contract drifts, fix the Rust compiler or the thin Python call boundary.
 
 Rust may mirror Claude-specific hook-compatible host projection metadata in
 `claude_code_adapter`, but that mirror remains host-private contract data. It
@@ -367,7 +365,8 @@ Rust migration note:
 - Rust owns scoring, route picking, route-mode policy, and canonical route
   snapshot shaping through versioned route, snapshot, and diagnostic-report
   contracts
-- Python may continue hydrating full skill bodies and prompt previews
+- Python may continue hydrating full skill bodies where the runtime still needs
+  host-local text assembly
 - Python no longer owns a primary route-result lane, rollback lane, or parity
   diff vocabulary in the runtime contract
 
@@ -470,9 +469,9 @@ Invariants:
 Rust migration note:
 
 - Rust may own the context data model and middleware execution engine later
-- prompt-policy text assembly remains Python-owned for session preview,
-  middleware mutation, deterministic dry-run surfaces, and the explicit
-  compatibility fallback only
+- prompt-policy text assembly remains Python-owned only where explicitly called
+  out by the host runtime; it must not become a second profile/shared-contract
+  compiler
 - Rust-owned live execution ignores caller-supplied `prompt` /
   `prompt_preview` fields at the kernel boundary and shapes the live execute
   prompt internally instead

@@ -34,6 +34,7 @@ from framework_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
     EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
     execution_kernel_steady_state_fields,
+    normalize_execution_kernel_metadata_contract,
     resolve_execution_kernel_expectations,
     validate_execution_kernel_steady_state_metadata,
 )
@@ -226,8 +227,33 @@ def _runtime_execution_kernel_health(
             "runtime control plane execution descriptor is missing kernel fields: "
             + ", ".join(sorted(missing))
         )
+    metadata_contract = _runtime_execution_kernel_metadata_contract(service_descriptor)
     payload["resolved_binary"] = resolved_binary
-    return {field: payload[field] for field in (*_KERNEL_HEALTH_FIELDS, "resolved_binary")}
+    health = {field: payload[field] for field in (*_KERNEL_HEALTH_FIELDS, "resolved_binary")}
+    health["kernel_metadata_contract_schema_version"] = metadata_contract["schema_version"]
+    health["kernel_metadata_contract_authority"] = metadata_contract["authority"]
+    return health
+
+
+def _runtime_execution_kernel_metadata_contract(
+    service_descriptor: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if not isinstance(service_descriptor, Mapping):
+        raise RuntimeError("runtime control plane execution descriptor is missing.")
+    contract = service_descriptor.get("kernel_metadata_contract")
+    if contract is None:
+        raise RuntimeError(
+            "runtime control plane execution descriptor is missing "
+            "kernel_metadata_contract."
+        )
+    if contract is not None and not isinstance(contract, Mapping):
+        raise RuntimeError(
+            "runtime control plane execution descriptor returned an invalid "
+            "kernel_metadata_contract."
+        )
+    return normalize_execution_kernel_metadata_contract(
+        contract if isinstance(contract, Mapping) else None
+    )
 
 
 def _runtime_sandbox_lifecycle_contract(service_descriptor: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -1689,12 +1715,14 @@ class ExecutionEnvironmentService:
         cached = self._kernel_descriptor_snapshot
         if cached is not None:
             return {
+                "metadata_contract": dict(cached["metadata_contract"]),
                 "contract_by_mode": {
                     str(shape): dict(contract)
                     for shape, contract in dict(cached["contract_by_mode"]).items()
                 },
             }
 
+        metadata_contract = _runtime_execution_kernel_metadata_contract(self._service_descriptor)
         contract_by_mode: dict[str, dict[str, Any]] = {}
         for shape in (
             EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
@@ -1709,12 +1737,14 @@ class ExecutionEnvironmentService:
                 continue
             contract_by_mode[str(shape)] = dict(contract)
         cached = {
+            "metadata_contract": dict(metadata_contract),
             "contract_by_mode": {
                 str(shape): dict(contract) for shape, contract in contract_by_mode.items()
             },
         }
         self._kernel_descriptor_snapshot = cached
         return {
+            "metadata_contract": dict(cached["metadata_contract"]),
             "contract_by_mode": {
                 str(shape): dict(contract)
                 for shape, contract in dict(cached["contract_by_mode"]).items()
@@ -1818,6 +1848,11 @@ class ExecutionEnvironmentService:
             "runtime control plane execution descriptor is missing "
             f"kernel_contract_by_mode.{resolved_shape}."
         )
+
+    def describe_kernel_metadata_contract(self) -> dict[str, Any]:
+        """Return the Rust-owned metadata naming and runtime-field contract."""
+
+        return dict(self._execution_kernel_descriptor_snapshot()["metadata_contract"])
 
     def kernel_payload(
         self,

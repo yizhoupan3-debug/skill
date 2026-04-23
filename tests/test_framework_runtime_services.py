@@ -31,6 +31,7 @@ from framework_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION,
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
     EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+    normalize_execution_kernel_metadata_contract,
 )
 from framework_runtime.middleware import MiddlewareContext
 from framework_runtime.memory import FactMemoryStore
@@ -447,6 +448,7 @@ def test_execution_service_consumes_rust_like_execution_descriptor() -> None:
                 "execution_kernel_prompt_preview_owner": "rust-execution-cli",
             },
         },
+        "kernel_metadata_contract": normalize_execution_kernel_metadata_contract(None),
         "kernel_adapter_kind": "rust-execution-kernel-slice",
         "kernel_authority": "rust-execution-kernel-authority",
         "kernel_owner_family": "rust",
@@ -471,8 +473,39 @@ def test_execution_service_consumes_rust_like_execution_descriptor() -> None:
 
     assert live_contract["execution_kernel_response_shape"] == "live_primary"
     assert dry_run_contract["execution_kernel_response_shape"] == "dry_run"
+    assert health["kernel_metadata_contract_schema_version"] == (
+        "router-rs-execution-kernel-metadata-contract-v1"
+    )
     assert health["kernel_live_delegate_authority"] == "rust-execution-cli"
     assert health["resolved_binary"] == "/tmp/router-rs"
+
+
+def test_execution_service_rejects_malformed_kernel_metadata_contract() -> None:
+    service_descriptor = {
+        "authority": "rust-runtime-control-plane",
+        "role": "execution-kernel-control",
+        "projection": "rust-native-projection",
+        "delegate_kind": "rust-execution-kernel-slice",
+        "kernel_metadata_contract": {
+            **normalize_execution_kernel_metadata_contract(None),
+            "schema_version": "python-local-shadow-v1",
+        },
+    }
+
+    with pytest.raises(RuntimeError, match="kernel_metadata_contract.schema_version"):
+        runtime_services._runtime_execution_kernel_metadata_contract(service_descriptor)
+
+
+def test_execution_service_requires_rust_owned_kernel_metadata_contract() -> None:
+    service_descriptor = {
+        "authority": "rust-runtime-control-plane",
+        "role": "execution-kernel-control",
+        "projection": "rust-native-projection",
+        "delegate_kind": "rust-execution-kernel-slice",
+    }
+
+    with pytest.raises(RuntimeError, match="missing kernel_metadata_contract"):
+        runtime_services._runtime_execution_kernel_metadata_contract(service_descriptor)
 
 
 def test_execution_service_routes_sandbox_transitions_through_rust_control(
@@ -1265,6 +1298,7 @@ def test_execution_service_can_disable_native_live_fallback(tmp_path: Path) -> N
     dry_run_contract = execution_service.describe_kernel_contract(dry_run=True)
 
     assert health["kernel_contract_mode"] == "rust-live-primary"
+    assert health["kernel_metadata_contract_authority"] == "rust-execution-kernel-authority"
     assert contract["execution_kernel_metadata_schema_version"] == (
         "router-rs-execution-kernel-metadata-v1"
     )
@@ -1285,6 +1319,13 @@ def test_execution_service_can_disable_native_live_fallback(tmp_path: Path) -> N
     )
     assert dry_run_contract["execution_kernel_response_shape"] == "dry_run"
     assert dry_run_contract["execution_kernel_prompt_preview_owner"] == "rust-execution-cli"
+    assert execution_service.describe_kernel_metadata_contract()["runtime_fields"][
+        "live_primary_passthrough"
+    ] == (
+        "execution_mode",
+        "route_engine",
+        "diagnostic_route_mode",
+    )
 
     routing_result = router_service.route(
         task="帮我写一个 Rust CLI 工具",

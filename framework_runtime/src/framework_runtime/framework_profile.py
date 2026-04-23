@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from functools import cached_property
+from functools import lru_cache
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, Dict, Iterable, Mapping, MutableMapping, Sequence
 
 
@@ -64,6 +68,7 @@ CORE_CAPABILITIES = (
     "orchestration",
 )
 FRAMEWORK_NATIVE_ALIAS_SCHEMA_VERSION = "framework-native-aliases-v1"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _clone_json_like(value: Any) -> Any:
@@ -111,80 +116,51 @@ def build_framework_native_aliases(
 
 
 def normalize_framework_memory_mounts(memory_mounts: Sequence[Any]) -> list[Dict[str, Any]]:
-    normalized: list[Dict[str, Any]] = []
-    for mount in memory_mounts:
-        if isinstance(mount, Mapping):
-            payload = dict(_clone_json_like(mount))
-            payload.setdefault("mount_id", payload.get("id", "unnamed-memory-mount"))
-            normalized.append(payload)
-            continue
-        normalized.append(
-            {
-                "mount_id": str(mount),
-                "source": str(mount),
-                "bridge_kind": "framework-memory-mount",
-            }
-        )
-    return normalized
+    return _rust_shared_contract_surface(
+        {
+            "profile_id": "framework-runtime-projection",
+            "display_name": "Framework Runtime Projection",
+            "core_capabilities": list(CORE_CAPABILITIES),
+            "memory_mounts": _clone_json_like(memory_mounts),
+        }
+    )["memory_mounts"]
 
 
 def normalize_framework_mcp_servers(mcp_servers: Sequence[Any]) -> list[Dict[str, Any]]:
-    normalized: list[Dict[str, Any]] = []
-    for server in mcp_servers:
-        if isinstance(server, Mapping):
-            payload = dict(_clone_json_like(server))
-            payload.setdefault("server_id", payload.get("id", "unnamed-mcp-server"))
-            normalized.append(payload)
-            continue
-        normalized.append({"server_id": str(server)})
-    return normalized
+    return _rust_shared_contract_surface(
+        {
+            "profile_id": "framework-runtime-projection",
+            "display_name": "Framework Runtime Projection",
+            "core_capabilities": list(CORE_CAPABILITIES),
+            "mcp_servers": _clone_json_like(mcp_servers),
+        }
+    )["mcp_servers"]
 
 
 def build_framework_session_contract(session_policy: Mapping[str, Any]) -> Dict[str, Any]:
-    normalized = dict(_clone_json_like(session_policy))
-    return {
-        "mode": normalized.get("mode", "default"),
-        "approval_mode": normalized.get("approval_mode", "inherit"),
-        "history_policy": normalized.get("history_policy", "host-managed"),
-        "takeover": bool(normalized.get("takeover", False)),
-        "extras": {
-            key: value
-            for key, value in normalized.items()
-            if key not in {"mode", "approval_mode", "history_policy", "takeover"}
-        },
-    }
+    return _rust_shared_contract_surface(
+        {
+            "profile_id": "framework-runtime-projection",
+            "display_name": "Framework Runtime Projection",
+            "core_capabilities": list(CORE_CAPABILITIES),
+            "session_policy": _clone_json_like(session_policy),
+        }
+    )["session_contract"]
 
 
 def build_framework_workspace_bootstrap(
     workspace_bootstrap: Mapping[str, Any],
     memory_mounts: Sequence[Any],
 ) -> Dict[str, Any]:
-    normalized = dict(_clone_json_like(workspace_bootstrap))
-    bridges = dict(normalized.get("bridges", {}))
-    bridges.setdefault(
-        "skills",
-        normalized.get(
-            "skill_bridge",
-            {
-                "project_dir": ".codex/skills",
-                "user_dir": "~/.codex/skills",
-                "bridge_dir": ".aionrs/skills",
-            },
-        ),
-    )
-    bridges.setdefault(
-        "memory",
-        normalized.get(
-            "memory_bridge",
-            {
-                "bridge_dir": ".aionrs-memory-bridge",
-                "mounts": normalize_framework_memory_mounts(memory_mounts),
-            },
-        ),
-    )
-    compiled = dict(normalized)
-    compiled["bridges"] = bridges
-    return compiled
+    return _rust_shared_contract_surface(
+        {
+            "profile_id": "framework-runtime-projection",
+            "display_name": "Framework Runtime Projection",
+            "core_capabilities": list(CORE_CAPABILITIES),
+            "workspace_bootstrap": _clone_json_like(workspace_bootstrap),
+            "memory_mounts": _clone_json_like(memory_mounts),
+        }
+    )["workspace_bootstrap"]
 
 
 def extract_framework_workspace_bridges(workspace_bootstrap: Mapping[str, Any]) -> Dict[str, Any]:
@@ -192,6 +168,60 @@ def extract_framework_workspace_bridges(workspace_bootstrap: Mapping[str, Any]) 
     if not isinstance(bridges, Mapping):
         return {}
     return dict(_clone_json_like(bridges))
+
+
+def _rust_profile_cache_key(profile_payload: Mapping[str, Any]) -> str:
+    normalized = _clone_json_like(profile_payload)
+    metadata = normalized.get("metadata")
+    if isinstance(metadata, MutableMapping):
+        normalized["metadata"] = {
+            key: value
+            for key, value in metadata.items()
+            if key not in HOST_SPECIFIC_METADATA_KEYS
+        }
+    return json.dumps(
+        normalized,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+@lru_cache(maxsize=64)
+def _compile_rust_profile_bundle_cached(profile_payload: str) -> Dict[str, Any]:
+    from framework_runtime.rust_router import route_adapter
+
+    with NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as handle:
+        handle.write(profile_payload)
+        handle.flush()
+        profile_path = Path(handle.name)
+    try:
+        return route_adapter(codex_home=PROJECT_ROOT).compile_profile_bundle(profile_path)
+    finally:
+        profile_path.unlink(missing_ok=True)
+
+
+def _rust_profile_bundle(profile_payload: Mapping[str, Any]) -> Dict[str, Any]:
+    return _compile_rust_profile_bundle_cached(_rust_profile_cache_key(profile_payload))
+
+
+def _rust_shared_contract_surface(profile_payload: Mapping[str, Any]) -> Dict[str, Any]:
+    bundle = _rust_profile_bundle(profile_payload)
+    shared_contract = (
+        bundle.get("cli_common_adapter", {})
+        .get("shared_contract", {})
+        if isinstance(bundle.get("cli_common_adapter"), Mapping)
+        else {}
+    )
+    if not isinstance(shared_contract, Mapping):
+        raise RuntimeError("router-rs profile bundle missing cli_common_adapter.shared_contract")
+    missing = [field for field in FRAMEWORK_SHARED_CONTRACT_FIELDS if field not in shared_contract]
+    if missing:
+        raise RuntimeError(f"router-rs shared contract missing fields: {missing}")
+    return {
+        field: _clone_json_like(shared_contract[field])
+        for field in FRAMEWORK_SHARED_CONTRACT_FIELDS
+    }
 
 
 @dataclass(frozen=True)
@@ -228,20 +258,7 @@ class FrameworkProfile:
 
     @cached_property
     def _shared_contract_surface(self) -> Dict[str, Any]:
-        return {
-            "artifact_contract": _clone_json_like(self.artifact_contract),
-            "memory_mounts": normalize_framework_memory_mounts(self.memory_mounts),
-            "mcp_servers": normalize_framework_mcp_servers(self.mcp_servers),
-            "tool_policy": _clone_json_like(self.tool_policy),
-            "approval_policy": _clone_json_like(self.approval_policy),
-            "loadout_policy": _clone_json_like(self.loadout_policy),
-            "framework_surface_policy": _clone_json_like(self.framework_surface_policy),
-            "workspace_bootstrap": build_framework_workspace_bootstrap(
-                self.workspace_bootstrap,
-                self.memory_mounts,
-            ),
-            "session_contract": build_framework_session_contract(self.session_policy),
-        }
+        return _rust_shared_contract_surface(self.to_dict())
 
     def shared_contract_surface(self) -> Dict[str, Any]:
         return _clone_json_like(self._shared_contract_surface)

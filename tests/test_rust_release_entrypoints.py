@@ -11,9 +11,12 @@ def test_python_wrapper_scripts_stay_retired() -> None:
     retired_paths = (
         PROJECT_ROOT / "scripts" / "materialize_cli_host_entrypoints.py",
         PROJECT_ROOT / "scripts" / "install_codex_native_integration.py",
+        PROJECT_ROOT / "scripts" / "install_codex_framework_default.py",
         PROJECT_ROOT / "scripts" / "write_session_artifacts.py",
+        PROJECT_ROOT / "scripts" / "runtime_background_cli.py",
         PROJECT_ROOT / "scripts" / "rust_binary_runner.py",
         PROJECT_ROOT / "scripts" / "host_integration_runner.py",
+        PROJECT_ROOT / "configs" / "codex" / "model_instructions.md",
     )
 
     assert [path for path in retired_paths if path.exists()] == []
@@ -38,6 +41,15 @@ def test_installed_project_hooks_use_router_rs_only() -> None:
         assert not any("python3" in command for command in commands)
         assert not any(".py" in command for command in commands)
         assert not any("host-integration-rs" in command for command in commands)
+
+
+def test_repo_local_codex_framework_mcp_uses_rust_only_entrypoint() -> None:
+    source = (PROJECT_ROOT / ".codex" / "config.toml").read_text(encoding="utf-8")
+
+    assert "python3" not in source
+    assert "scripts.framework_mcp" not in source
+    assert "scripts/router-rs/Cargo.toml" in source
+    assert "--framework-mcp-stdio" in source
 
 
 def test_install_skills_uses_rust_only_entrypoints() -> None:

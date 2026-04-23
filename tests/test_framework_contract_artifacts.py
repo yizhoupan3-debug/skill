@@ -8,6 +8,8 @@ from typing import Any, Mapping
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_SRC = PROJECT_ROOT / "framework_runtime" / "src"
 RUST_ADAPTER_TIMEOUT_SECONDS = 120.0
@@ -187,7 +189,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "rust_supervisor_state_contract",
         "rust_execution_kernel_live_fallback_retirement_status",
         "rust_execution_kernel_live_response_serialization_contract",
-        "rust_python_artifact_parity_report",
     }
     assert expected_keys == set(paths)
     assert "codex_desktop_host_adapter" not in paths
@@ -347,7 +348,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert parity["shared_adapter_aliases"] == ["codex_common_adapter"]
     assert parity["desktop"]["adapter_id"] == "codex_desktop_adapter"
     assert parity["desktop"]["entrypoint_kind"] == "interactive"
-    assert parity["desktop"]["legacy_aliases"] == ["codex_desktop_host_adapter"]
     assert parity["cli"]["adapter_id"] == "codex_cli_adapter"
     assert parity["cli"]["entrypoint_kind"] == "headless"
     assert parity["controller_boundary"]["single_source_of_truth"] is True
@@ -634,7 +634,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     rust_parity = json.loads(
         Path(paths["rust_codex_dual_entry_parity_snapshot"]).read_text(encoding="utf-8")
     )
-    assert rust_parity["desktop"]["legacy_aliases"] == ["codex_desktop_host_adapter"]
     assert rust_parity["all_shared_contract_checks_pass"] is True
 
     rust_execution_controller = json.loads(
@@ -747,28 +746,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert fallback_retirement == rust_fallback_retirement
     assert response_serialization == rust_response_serialization
 
-    rust_parity_report = json.loads(
-        Path(paths["rust_python_artifact_parity_report"]).read_text(encoding="utf-8")
-    )
-    assert rust_parity_report["schema_version"] == "rust-python-artifact-parity-report-v1"
-    assert rust_parity_report["raw_all_artifacts_match"] is True
-    assert rust_parity_report["all_artifacts_match_after_normalization"] is True
-    assert rust_parity_report["artifacts"]["cli_common_adapter"]["normalized_match"] is True
-    assert rust_parity_report["artifacts"]["codex_cli_adapter"]["normalized_match"] is True
-    assert rust_parity_report["artifacts"]["claude_code_adapter"]["normalized_match"] is True
-    assert rust_parity_report["artifacts"]["cli_family_capability_discovery"]["normalized_match"] is True
-    assert rust_parity_report["artifacts"]["gemini_cli_adapter"]["normalized_match"] is True
-    assert rust_parity_report["artifacts"]["cli_family_parity_snapshot"]["normalized_match"] is True
-    assert rust_parity_report["artifacts"]["execution_controller_contract"]["raw_match"] is True
-    assert rust_parity_report["artifacts"]["delegation_contract"]["raw_match"] is True
-    assert rust_parity_report["artifacts"]["supervisor_state_contract"]["raw_match"] is True
-    assert rust_parity_report["artifacts"]["execution_kernel_live_fallback_retirement_status"][
-        "raw_match"
-    ] is True
-    assert rust_parity_report["artifacts"]["execution_kernel_live_response_serialization_contract"][
-        "raw_match"
-    ] is True
-    assert "codex_desktop_alias_retirement_status" not in rust_parity_report["artifacts"]
+    assert "rust_python_artifact_parity_report" not in paths
 
 
 def test_emit_framework_contract_artifacts_requires_explicit_opt_in_for_continuity_outputs(
@@ -781,26 +759,7 @@ def test_emit_framework_contract_artifacts_requires_explicit_opt_in_for_continui
         skill_bundle={"skills": ["router"]},
         session_policy={"mode": "bounded"},
     )
-    risky_inventory = {
-        "canonical_adapter_id": "codex_desktop_adapter",
-        "legacy_alias_id": "codex_desktop_host_adapter",
-        "scan_root": str(PROJECT_ROOT),
-        "summary": {
-            "inventory_complete": False,
-            "primary_identity_risk_occurrences": 3,
-            "legacy_alias_shim_required": True,
-        },
-        "references": [],
-    }
-
-    with patch.object(
-        profile_artifacts_module,
-        "build_codex_desktop_alias_inventory",
-        return_value=risky_inventory,
-    ) as alias_inventory_builder:
-        paths = emit_framework_contract_artifacts(tmp_path, profile=profile)
-
-    alias_inventory_builder.assert_not_called()
+    paths = emit_framework_contract_artifacts(tmp_path, profile=profile)
     assert "codex_desktop_host_adapter" not in paths
     assert "codex_desktop_alias_inventory" not in paths
     assert "codex_desktop_alias_retirement_status" not in paths
@@ -837,7 +796,7 @@ def test_emit_framework_contract_artifacts_keeps_codex_common_adapter_out_of_def
     assert projections["codex_common_adapter"]["bridge_contract_match"] is True
 
 
-def test_emit_framework_contract_artifacts_can_opt_in_fallback_host_outputs(
+def test_emit_framework_contract_artifacts_rejects_fallback_host_outputs(
     tmp_path: Path,
 ) -> None:
     profile = build_framework_profile(
@@ -848,40 +807,12 @@ def test_emit_framework_contract_artifacts_can_opt_in_fallback_host_outputs(
         session_policy={"mode": "bounded"},
     )
 
-    paths = emit_framework_contract_artifacts(
-        tmp_path,
-        profile=profile,
-        include_fallback_artifacts=True,
-    )
-
-    companion = json.loads(Path(paths["aionrs_companion_adapter"]).read_text(encoding="utf-8"))
-    assert Path(paths["aionrs_companion_adapter"]).parent.name == "fallback"
-    assert companion["companion_contract"]["fallbackSemantics"]["fallback_adapter"] == "codex_desktop_adapter"
-    assert companion["companion_contract"]["fallbackSemantics"]["default_host_peer_set"] == [
-        "codex_desktop_adapter",
-        "codex_cli_adapter",
-        "claude_code_adapter",
-        "gemini_cli_adapter",
-    ]
-    assert companion["legacy_boundary"]["exposure_lane"] == "fallback-only-explicit"
-    assert companion["legacy_boundary"]["default_host_peer_set_member"] is False
-
-    aionui = json.loads(Path(paths["aionui_host_adapter"]).read_text(encoding="utf-8"))
-    assert aionui["host_runtime_contract"]["preferred_backend"] == "aionrs_companion_adapter"
-    assert aionui["host_runtime_contract"]["fallback_semantics"]["default_host_peer_set"] == [
-        "codex_desktop_adapter",
-        "codex_cli_adapter",
-        "claude_code_adapter",
-        "gemini_cli_adapter",
-    ]
-    assert aionui["legacy_boundary"]["exposure_lane"] == "fallback-only-explicit"
-    assert aionui["legacy_boundary"]["default_host_peer_set_member"] is False
-
-    generic = json.loads(Path(paths["generic_host_adapter"]).read_text(encoding="utf-8"))
-    assert Path(paths["generic_host_adapter"]).parent.name == "fallback"
-    assert generic["metadata"]["adapter_id"] == "generic_host_adapter"
-    assert generic["metadata"]["host_id"] == "generic"
-    assert generic["capabilities"]["host"] == ["local_runtime", "artifact_contract", "memory_mounts"]
+    with pytest.raises(ValueError, match="fallback host artifacts are retired"):
+        emit_framework_contract_artifacts(
+            tmp_path,
+            profile=profile,
+            include_fallback_artifacts=True,
+        )
 
 
 def test_emit_framework_contract_artifacts_can_opt_in_compatibility_inventory(
@@ -912,8 +843,10 @@ def test_emit_framework_contract_artifacts_can_opt_in_compatibility_inventory(
     assert matrix["codex_cli_adapter"]["compatible"] is True
     assert matrix["claude_code_adapter"]["compatible"] is True
     assert matrix["gemini_cli_adapter"]["compatible"] is True
-    assert "aionrs_companion_adapter" not in matrix
-    assert "aionui_host_adapter" not in matrix
+    assert matrix["aionrs_companion_adapter"]["compatible"] is True
+    assert matrix["aionrs_companion_adapter"]["legacy_surface"] is True
+    assert matrix["aionui_host_adapter"]["compatible"] is True
+    assert matrix["aionui_host_adapter"]["legacy_surface"] is True
     assert "codex_desktop_host_adapter" not in matrix
 
 
@@ -1037,7 +970,7 @@ def test_framework_profile_artifact_bidirectional_shared_contract_consistency(tm
     assert report["all_bridge_contract_projections_match"] is True
 
 
-def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
+def test_emit_framework_contract_artifacts_can_opt_in_compatibility_inventory_outputs(
     tmp_path: Path,
 ) -> None:
     profile = build_framework_profile(
@@ -1053,24 +986,11 @@ def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
         profile=profile,
         rust_adapter=_rust_route_adapter(),
         include_compatibility_inventory=True,
-        include_legacy_alias_artifact=True,
     )
 
     assert "codex_desktop_host_adapter" not in paths
-    alias_inventory = json.loads(
-        Path(paths["codex_desktop_alias_inventory"]).read_text(encoding="utf-8")
-    )
-    assert alias_inventory["canonical_adapter_id"] == "codex_desktop_adapter"
-    assert alias_inventory["summary"]["inventory_complete"] is True
-    assert alias_inventory["summary"]["primary_identity_risk_occurrences"] == 0
-    assert alias_inventory["summary"]["legacy_alias_only_occurrences"] >= 0
-
-    alias_retirement = json.loads(
-        Path(paths["codex_desktop_alias_retirement_status"]).read_text(encoding="utf-8")
-    )
-    assert alias_retirement["legacy_alias_id"] == "codex_desktop_host_adapter"
-    assert alias_retirement["alias_lifecycle"] == "retired-alias-only"
-    assert alias_retirement["emitter_contract"]["legacy_alias_artifact_opt_in"] is True
+    assert "codex_desktop_alias_inventory" not in paths
+    assert "codex_desktop_alias_retirement_status" not in paths
     assert Path(paths["codex_common_adapter"]).parent.name == "continuity"
     assert json.loads(Path(paths["codex_common_adapter"]).read_text(encoding="utf-8")) == json.loads(
         Path(paths["rust_codex_common_adapter"]).read_text(encoding="utf-8")
@@ -1095,19 +1015,13 @@ def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
     ]["settings_paths"] == ["~/.gemini/settings.json"]
     matrix = json.loads(Path(paths["upgrade_compatibility_matrix"]).read_text(encoding="utf-8"))
     assert Path(paths["upgrade_compatibility_matrix"]).parent.name == "continuity"
-    assert matrix["codex_desktop_host_adapter"]["compatible"] is True
+    assert "codex_desktop_host_adapter" not in matrix
     rust_matrix = json.loads(
         Path(paths["rust_upgrade_compatibility_matrix"]).read_text(encoding="utf-8")
     )
-    assert rust_matrix["codex_desktop_host_adapter"]["compatible"] is True
+    assert "codex_desktop_host_adapter" not in rust_matrix
     assert rust_matrix["aionrs_companion_adapter"]["legacy_surface"] is True
     assert "rust_codex_desktop_host_adapter" not in paths
-    rust_alias_retirement = json.loads(
-        Path(paths["rust_codex_desktop_alias_retirement_status"]).read_text(encoding="utf-8")
-    )
-    assert rust_alias_retirement["canonical_adapter_id"] == "codex_desktop_adapter"
-    assert rust_alias_retirement["retirement_gates"]["runtime_primary_identity_consumers_cleared"] is True
-    assert rust_alias_retirement["emitter_contract"]["legacy_alias_artifact_opt_in"] is True
 
 
 def test_rust_route_adapter_can_compile_profile_bundle(tmp_path: Path) -> None:
@@ -1236,11 +1150,12 @@ def test_rust_route_adapter_can_compile_compatibility_inventory_artifact(tmp_pat
     assert payload["upgrade_compatibility_matrix"]["cli_common_adapter"]["compatible"] is True
     assert payload["upgrade_compatibility_matrix"]["codex_desktop_adapter"]["compatible"] is True
     assert payload["upgrade_compatibility_matrix"]["codex_cli_adapter"]["compatible"] is True
-    assert "aionrs_companion_adapter" not in payload["upgrade_compatibility_matrix"]
+    assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["compatible"] is True
+    assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["legacy_surface"] is True
     assert "codex_desktop_host_adapter" not in payload["upgrade_compatibility_matrix"]
 
 
-def test_rust_route_adapter_can_opt_in_continuity_alias_artifact(tmp_path: Path) -> None:
+def test_rust_route_adapter_compatibility_inventory_stays_alias_free(tmp_path: Path) -> None:
     profile = build_framework_profile(
         profile_id="rust-artifacts-profile-legacy",
         display_name="Rust Artifacts Profile Legacy",
@@ -1253,7 +1168,6 @@ def test_rust_route_adapter_can_opt_in_continuity_alias_artifact(tmp_path: Path)
 
     payload = _rust_route_adapter().compile_codex_profile_artifacts(
         profile_path,
-        include_legacy_alias_artifact=True,
         include_compatibility_inventory=True,
     )
 
@@ -1267,5 +1181,5 @@ def test_rust_route_adapter_can_opt_in_continuity_alias_artifact(tmp_path: Path)
         "stream-json",
     ]
     assert "codex_desktop_host_adapter" not in payload
-    assert payload["upgrade_compatibility_matrix"]["codex_desktop_host_adapter"]["compatible"] is True
+    assert "codex_desktop_host_adapter" not in payload["upgrade_compatibility_matrix"]
     assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["legacy_surface"] is True

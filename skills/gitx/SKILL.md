@@ -109,7 +109,7 @@ bridge_behavior: mobile_complete_once
    - 真正改 Git 状态的临界区仍保持串行，不要并发提交、并发 merge
    - 当前内置预设已经覆盖 `gitx-smoke`、`entrypoint-sync`、`rust-router`、`routing-eval`、`browser-runtime`
 6. 高输出验证默认优先走 repo 里的 RTK 规则：
-   - `pytest` / `python -m pytest` / `python -m compileall` / `cargo test` / `npm test` / `git diff` 这类噪声命令，允许自动加 `rtk`
+   - `cargo test` / `npm test` / `git diff` 这类噪声命令，允许自动加 `rtk`
    - 若需要原始输出，用 `--no-rtk`
 7. 低风险场景可以直接走：
    - `python3 scripts/git_safety.py auto-closeout`

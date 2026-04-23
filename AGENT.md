@@ -42,6 +42,11 @@ framework policy instead of forking per-host routing or memory rules.
   `SKILL.md` before acting.
 - `scripts/router-rs/` owns the Rust hook bridge, lifecycle commands, host-entrypoint
   projections, host-entrypoint sync, and generated-surface audits.
+- `scripts/router-rs/` also owns framework profile compilation, shared contract
+  normalization, workspace bootstrap defaults, host adapter projections, and
+  framework contract artifact emission. Python may call and validate these
+  Rust outputs, but must not maintain a second truth source, fallback emitter,
+  bridge default table, or Python/Rust parity lane.
 - Host entrypoint sync is Rust-owned:
   `cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root "$PWD"`.
 - `artifacts/current/<task_id>/`, `artifacts/current/task_registry.json`, and
@@ -73,10 +78,10 @@ framework policy instead of forking per-host routing or memory rules.
 
 - Verify the narrowest meaningful slice before handoff.
 - For shared policy, host entrypoint, routing, or hook changes, prefer this
-  order unless the task says otherwise: `python3 scripts/check_skills.py
-  --verify-sync`, targeted `python3 -m pytest ...`, `python3 -m compileall
-  ...`, and `cargo test --manifest-path ./scripts/router-rs/Cargo.toml` when
-  Rust hook or runtime code changed.
+  order unless the task says otherwise: Rust-owned sync through
+  `cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- ...`,
+  then targeted `cargo test --manifest-path ./scripts/router-rs/Cargo.toml`,
+  plus the narrow JS/TS test only when browser-mcp code changed.
 - If you skip a verification step that would normally matter, say so plainly in
   the closeout.
 
@@ -142,6 +147,9 @@ framework policy instead of forking per-host routing or memory rules.
   `.supervisor_state.json`.
 - Host-specific entry files are thin projections only; they must not fork
   routing, memory schema, or artifact rules.
+- Framework profile, shared contract, host adapter, bootstrap, bridge contract,
+  compatibility inventory, and contract artifacts are Rust-owned surfaces.
+  Do not reintroduce Python helper/bridge/compatibility code to produce them.
 - Complex tasks externalize state into `SESSION_SUMMARY.md`,
   `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`,
   `.supervisor_state.json`, and `artifacts/current/task_registry.json`.

@@ -81,7 +81,6 @@ CODEX_COMMON_ADAPTER_ID = "codex_common_adapter"
 CODEX_CLI_ADAPTER_ID = "codex_cli_adapter"
 CLAUDE_CODE_ADAPTER_ID = "claude_code_adapter"
 GEMINI_CLI_ADAPTER_ID = "gemini_cli_adapter"
-LEGACY_CODEX_DESKTOP_ADAPTER_ID = "codex_desktop_host_adapter"
 CLI_FAMILY_PARITY_ARTIFACT_ID = "cli_family_parity_snapshot"
 PARITY_BASELINE_ARTIFACT_ID = CLI_FAMILY_PARITY_ARTIFACT_ID
 COMPATIBILITY_INVENTORY_ARTIFACT_ID = "upgrade_compatibility_matrix"
@@ -206,24 +205,15 @@ def _normalize_host_adapter_payload_aliases(payload: Mapping[str, Any]) -> Dict[
 
 def _merge_rust_adapter_payload(
     rust_payload: Mapping[str, Any],
-    adapted_payload: Mapping[str, Any],
+    host_overrides: Mapping[str, Any] | None,
 ) -> Dict[str, Any]:
     payload = dict(_clone_json_like(rust_payload))
-    for key in _CANONICAL_HOST_ADAPTER_PAYLOAD_FIELDS:
-        if key == "metadata":
-            continue
-        if key in adapted_payload:
-            payload[key] = _clone_json_like(adapted_payload[key])
-    rust_metadata = payload.get("metadata", {})
-    adapted_metadata = adapted_payload.get("metadata", {})
-    if isinstance(rust_metadata, Mapping) and isinstance(adapted_metadata, Mapping):
-        payload["metadata"] = _merge_mapping(rust_metadata, adapted_metadata)
-    elif "metadata" in adapted_payload:
-        payload["metadata"] = _clone_json_like(adapted_metadata)
-    for key, value in adapted_payload.items():
-        if key in _CANONICAL_HOST_ADAPTER_PAYLOAD_FIELDS or key in payload:
-            continue
-        payload[key] = _clone_json_like(value)
+    if host_overrides:
+        public_overrides, host_private_overrides = _split_host_overrides(host_overrides)
+        if public_overrides:
+            payload = _merge_mapping(payload, public_overrides)
+        if host_private_overrides:
+            payload = _merge_mapping(payload, host_private_overrides)
     return _normalize_host_adapter_payload_aliases(payload)
 
 
@@ -234,14 +224,13 @@ def _compile_rust_owned_adapter(
     *,
     host_overrides: Mapping[str, Any] | None = None,
 ) -> AdaptedHostProfile:
-    adapted = adapt_framework_profile(profile, adapter_spec, host_overrides=host_overrides)
     payload = _merge_rust_adapter_payload(
         _compile_rust_codex_artifact(profile, artifact_id),
-        adapted.host_payload,
+        host_overrides,
     )
     return AdaptedHostProfile(
-        framework_profile=adapted.framework_profile,
-        adapter=adapted.adapter,
+        framework_profile=profile,
+        adapter=adapter_spec,
         host_payload=payload,
     )
 
@@ -559,30 +548,6 @@ CODEX_DESKTOP_ADAPTER = HostAdapterSpec(
     notes="Primary non-aionrs host path for preserving portable framework core.",
 )
 
-CODEX_DESKTOP_HOST_ADAPTER = HostAdapterSpec(
-    adapter_id=LEGACY_CODEX_DESKTOP_ADAPTER_ID,
-    host_id=CODEX_DESKTOP_ADAPTER.host_id,
-    transport=CODEX_DESKTOP_ADAPTER.transport,
-    required_capabilities=CODEX_DESKTOP_ADAPTER.required_capabilities,
-    optional_capabilities=CODEX_DESKTOP_ADAPTER.optional_capabilities,
-    host_capabilities=CODEX_DESKTOP_ADAPTER.host_capabilities,
-    emits_artifacts=CODEX_DESKTOP_ADAPTER.emits_artifacts,
-    supports_memory_mounts=CODEX_DESKTOP_ADAPTER.supports_memory_mounts,
-    supports_orchestration=CODEX_DESKTOP_ADAPTER.supports_orchestration,
-    upgrade_zone=CODEX_DESKTOP_ADAPTER.upgrade_zone,
-    thin_patch_surfaces=CODEX_DESKTOP_ADAPTER.thin_patch_surfaces,
-    fork_danger_surfaces=CODEX_DESKTOP_ADAPTER.fork_danger_surfaces,
-    protocol_hints={
-        **CODEX_DESKTOP_ADAPTER.protocol_hints,
-        "canonical_adapter_id": CODEX_DESKTOP_ADAPTER_ID,
-        "legacy_alias": True,
-        "legacy_surface": True,
-        "legacy_lane": "compatibility",
-        "default_host_peer_set_member": False,
-    },
-    notes="Compatibility alias for codex_desktop_adapter; preserves the legacy host-specific name.",
-)
-
 CODEX_CLI_ADAPTER = HostAdapterSpec(
     adapter_id=CODEX_CLI_ADAPTER_ID,
     host_id="codex-cli",
@@ -870,12 +835,20 @@ HOST_ADAPTERS: Dict[str, HostAdapterSpec] = {
 COMPATIBILITY_HOST_ADAPTERS: Dict[str, HostAdapterSpec] = {
     AIONRS_COMPANION_ADAPTER.adapter_id: AIONRS_COMPANION_ADAPTER,
     AIONUI_HOST_ADAPTER.adapter_id: AIONUI_HOST_ADAPTER,
-    CODEX_DESKTOP_HOST_ADAPTER.adapter_id: CODEX_DESKTOP_HOST_ADAPTER,
 }
 
 ALL_HOST_ADAPTERS: Dict[str, HostAdapterSpec] = {
     **HOST_ADAPTERS,
     **COMPATIBILITY_HOST_ADAPTERS,
+}
+
+RUST_OWNED_HOST_ADAPTER_ARTIFACTS = {
+    CLI_COMMON_ADAPTER_ID: CLI_COMMON_ADAPTER_ID,
+    CODEX_COMMON_ADAPTER_ID: CODEX_COMMON_ADAPTER_ID,
+    CODEX_DESKTOP_ADAPTER_ID: CODEX_DESKTOP_ADAPTER_ID,
+    CODEX_CLI_ADAPTER_ID: CODEX_CLI_ADAPTER_ID,
+    CLAUDE_CODE_ADAPTER_ID: CLAUDE_CODE_ADAPTER_ID,
+    GEMINI_CLI_ADAPTER_ID: GEMINI_CLI_ADAPTER_ID,
 }
 
 
@@ -917,6 +890,14 @@ def adapt_framework_profile(
         else adapter
     )
     ensure_capabilities(profile, adapter_spec.required_capabilities)
+    rust_artifact_id = RUST_OWNED_HOST_ADAPTER_ARTIFACTS.get(adapter_spec.adapter_id)
+    if rust_artifact_id is not None:
+        return _compile_rust_owned_adapter(
+            profile,
+            adapter_spec,
+            rust_artifact_id,
+            host_overrides=host_overrides,
+        )
     shared_contract_surface = profile.shared_contract_surface()
 
     payload = {

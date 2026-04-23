@@ -141,11 +141,6 @@ def build_framework_contract_artifacts_cli_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also write the secondary compatibility inventory artifact upgrade_compatibility_matrix.",
     )
-    parser.add_argument(
-        "--include-legacy-alias-artifact",
-        action="store_true",
-        help="Force legacy codex_desktop_host_adapter artifacts to be written alongside the parity-first defaults.",
-    )
     return parser
 
 
@@ -499,7 +494,6 @@ def run_framework_contract_artifacts_cli(
         rust_adapter=rust_adapter,
         include_fallback_artifacts=args.include_fallback_artifacts,
         include_compatibility_inventory=args.include_compatibility_inventory,
-        include_legacy_alias_artifact=args.include_legacy_alias_artifact,
     )
     print(json.dumps(paths, ensure_ascii=False, indent=2))
     return 0
@@ -1010,7 +1004,7 @@ class RustRouteAdapter:
         ]
         return self._run_hot_json_command(
             "compile_profile_bundle",
-            {"profile_path": str(profile_path), "include_legacy_alias_artifact": False},
+            {"profile_path": str(profile_path)},
             command,
             failure_label="profile compiler",
         )
@@ -1378,7 +1372,6 @@ class RustRouteAdapter:
         self,
         profile_path: Path,
         *,
-        include_legacy_alias_artifact: bool = False,
         include_compatibility_inventory: bool = False,
     ) -> dict[str, Any]:
         """Compile first-class Rust Codex contract/parity artifacts for one profile."""
@@ -1391,13 +1384,10 @@ class RustRouteAdapter:
         ]
         if include_compatibility_inventory:
             command.append("--include-compatibility-inventory")
-        if include_legacy_alias_artifact:
-            command.append("--include-legacy-alias-artifact")
         return self._run_hot_json_command(
             "compile_codex_profile_artifacts",
             {
                 "profile_path": str(profile_path),
-                "include_legacy_alias_artifact": include_legacy_alias_artifact,
                 "include_compatibility_inventory": include_compatibility_inventory,
             },
             command,

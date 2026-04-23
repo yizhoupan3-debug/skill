@@ -15,15 +15,11 @@ from framework_runtime.framework_profile import (
 from framework_runtime.host_adapters import (
     AIONRS_COMPANION_ADAPTER,
     AIONUI_HOST_ADAPTER,
-    CLI_FAMILY_PARITY_ARTIFACT_ID,
     CODEX_DESKTOP_ADAPTER_ID,
-    CODEX_DESKTOP_HOST_ADAPTER,
     COMPATIBILITY_HOST_ADAPTERS,
     COMPATIBILITY_INVENTORY_ARTIFACT_ID,
     DEFAULT_HOST_PEER_SET,
     HostAdapterSpec,
-    LEGACY_CODEX_DESKTOP_ADAPTER_ID,
-    PARITY_BASELINE_ARTIFACT_ID,
     AdaptedHostProfile,
     _clone_json_like,
     _compile_aionrs_config,
@@ -68,7 +64,6 @@ def compile_aionrs_companion_adapter(
             "requires_aionrs": True,
             "portable_core_preserved": list(CORE_CAPABILITIES),
             "fallback_adapter": CODEX_DESKTOP_ADAPTER_ID,
-            "legacy_fallback_aliases": [LEGACY_CODEX_DESKTOP_ADAPTER_ID],
             "default_host_peer_set": list(DEFAULT_HOST_PEER_SET),
         },
     }
@@ -147,55 +142,6 @@ def compile_aionui_host_adapter(
         host_payload=payload,
     )
 
-
-def build_codex_desktop_alias_retirement_status(
-    *,
-    alias_inventory_summary: Mapping[str, Any] | None = None,
-) -> Dict[str, Any]:
-    inventory_summary = (
-        _clone_json_like(alias_inventory_summary)
-        if alias_inventory_summary is not None
-        else {
-            "inventory_complete": False,
-            "primary_identity_risk_occurrences": None,
-            "legacy_alias_shim_required": None,
-        }
-    )
-    inventory_complete = bool(inventory_summary.get("inventory_complete", False))
-    primary_identity_risk_occurrences = inventory_summary.get("primary_identity_risk_occurrences")
-    legacy_alias_shim_required = inventory_summary.get("legacy_alias_shim_required")
-    runtime_primary_identity_consumers_cleared = (
-        primary_identity_risk_occurrences == 0 if inventory_complete else None
-    )
-
-    return {
-        "canonical_adapter_id": CODEX_DESKTOP_ADAPTER_ID,
-        "legacy_alias_id": LEGACY_CODEX_DESKTOP_ADAPTER_ID,
-        "alias_lifecycle": "retired-alias-only",
-        "alias_mode": "mirror-only",
-        "framework_truth": "framework_core",
-        "primary_regression_artifact": PARITY_BASELINE_ARTIFACT_ID,
-        "codex_dual_entry_parity_artifact": "codex_dual_entry_parity_snapshot",
-        "secondary_inventory_artifact": COMPATIBILITY_INVENTORY_ARTIFACT_ID,
-        "emitter_contract": {
-            "native_emits_alias_artifact": False,
-            "rust_emits_alias_artifact": False,
-            "drop_requires_joint_emitter_flip": True,
-            "legacy_alias_artifact_opt_in": True,
-            "alias_may_not_gain_new_host_semantics": True,
-        },
-        "retirement_gates": {
-            "canonical_desktop_identity_locked": True,
-            "parity_snapshot_is_primary_baseline": True,
-            "legacy_alias_inventory_is_secondary": True,
-            "runtime_primary_identity_consumers_cleared": runtime_primary_identity_consumers_cleared,
-            "legacy_alias_shim_required": legacy_alias_shim_required,
-            "legacy_alias_shim_ready_if_needed": False if legacy_alias_shim_required else True,
-        },
-        "inventory_summary": inventory_summary,
-    }
-
-
 def _build_compatibility_snapshot_entry(spec: HostAdapterSpec) -> Dict[str, Any]:
     return {
         "adapter_id": spec.adapter_id,
@@ -220,21 +166,10 @@ def compatibility_snapshot(*, include_legacy_aliases: bool = False) -> Dict[str,
     }.items():
         snapshot[adapter_id] = _build_compatibility_snapshot_entry(spec)
     if include_legacy_aliases:
-        desktop_snapshot = snapshot[CODEX_DESKTOP_ADAPTER_ID]
-        desktop_snapshot["compatibility_lane"] = {
-            "legacy_aliases": {
-                LEGACY_CODEX_DESKTOP_ADAPTER_ID: _build_compatibility_snapshot_entry(
-                    CODEX_DESKTOP_HOST_ADAPTER
-                )
-            },
-            "default_host_peer_set": list(DEFAULT_HOST_PEER_SET),
-            "explicit_opt_in_required": True,
-        }
         snapshot["fallback_lane"] = {
             "legacy_adapters": {
                 adapter_id: _build_compatibility_snapshot_entry(spec)
                 for adapter_id, spec in COMPATIBILITY_HOST_ADAPTERS.items()
-                if adapter_id != LEGACY_CODEX_DESKTOP_ADAPTER_ID
             },
             "default_host_peer_set": list(DEFAULT_HOST_PEER_SET),
             "explicit_opt_in_required": True,
