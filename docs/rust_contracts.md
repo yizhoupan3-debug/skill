@@ -9,7 +9,7 @@ It is the runtime-specific contract source of truth for:
 
 - `aionrs_fusion_docs/codex_dual_entry_rust_checklist.md`
 - `aionrs_fusion_docs/codex_dual_entry_next_phase_checklist.md`
-- `codex_agno_runtime`
+- `framework_runtime`
 - future Rust crates that replace Python hot paths
 - `docs/runtime_observability_contract.md`
 - `docs/runtime_sandbox_contract.md`
@@ -336,7 +336,7 @@ Purpose:
 
 Compatibility targets:
 
-- `codex_agno_runtime.router.SkillRouter.route()`
+- `framework_runtime.router.SkillRouter.route()`
 - `PrepareSessionResponse`
 - `RoutingResult`
 

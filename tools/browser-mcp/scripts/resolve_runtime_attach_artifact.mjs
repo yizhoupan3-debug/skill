@@ -17,15 +17,6 @@ const DEFAULT_SEARCH_ROOTS = [
     'artifacts',
     'scratch',
   ),
-  path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '..',
-    '..',
-    '..',
-    'codex_agno_runtime',
-    'artifacts',
-    'scratch',
-  ),
 ];
 
 function parseArgs(argv) {

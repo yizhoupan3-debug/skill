@@ -152,7 +152,7 @@ Metric invariants:
 ## Concrete Exporter Path
 
 The runtime now exposes a concrete exporter and metric-record helper surface at
-`codex_agno_runtime.observability`.
+`framework_runtime.observability`.
 
 - Public helper calls must delegate to `router-rs`; if the repo-local Rust lane
   is unavailable or returns drifted payloads, helpers fail closed instead of
