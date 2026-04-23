@@ -41,6 +41,8 @@ runtime_requirements:
     - pandas
     - requests
     - yfinance
+  rust:
+    - cargo
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
@@ -127,11 +129,17 @@ This skill does **not** own:
 
 ## Primary assets
 
+- Rust core: `/Users/joe/Documents/skill/rust_tools/financial_data_rs/`
 - Package: `/Users/joe/Documents/skill/skills/financial-data-fetching/financial_data/`
 - CLI: `/Users/joe/Documents/skill/skills/financial-data-fetching/scripts/financial_data_cli.py`
 - Probe script: `/Users/joe/Documents/skill/skills/financial-data-fetching/scripts/validate_financial_data_sources.py`
 - README: `/Users/joe/Documents/skill/skills/financial-data-fetching/README.md`
 - Example script: `/Users/joe/Documents/skill/skills/financial-data-fetching/examples/python_quickstart.py`
+
+## Runtime split
+
+- Rust owns the hot path: crypto / U.S. OHLCV fetch, retries, timeouts, concurrent probes, and backtest export.
+- Python remains the compatibility layer for fundamentals, holders, capital metrics, and China AKShare-backed surfaces.
 
 ## Verified no-token source map
 
@@ -143,13 +151,15 @@ This skill does **not** own:
   - Coinbase `BTC/USD`
 
 ### U.S. equities / ETFs
+- Rust Yahoo chart fetcher for:
+  - OHLCV (default hot path)
 - `yfinance` for:
   - OHLCV (flexible intervals and periods)
   - Financial statements (`get_income_stmt`, `get_balance_sheet`, `get_cashflow`)
   - Key metrics via `Ticker.info` (ROE, margins, EPS, debt ratios)
   - Shareholder data (`major_holders`, `institutional_holders`)
   - Capital metrics via `Ticker.info` (market cap, PE, PB, dividend yield, beta, etc.)
-- `Stooq` for public daily CSV fallback (OHLCV only)
+- `Stooq` as an environment-dependent daily fallback (currently apikey-gated in this workspace)
 - Default to these no-token sources unless the user explicitly asks for credential-gated providers
 
 ### China A-shares / indices

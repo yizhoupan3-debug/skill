@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Probe script to validate all financial data sources in the current environment."""
+"""Probe script that combines Rust-owned and Python-owned financial data sources."""
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from financial_data import MarketDataClient  # noqa: E402
+
+REPO_ROOT = ROOT.parents[1]
+RUST_MANIFEST = REPO_ROOT / "rust_tools/financial_data_rs/Cargo.toml"
 
 
 def summarize_time_series(result) -> dict[str, Any]:
@@ -45,7 +49,7 @@ def summarize_time_series(result) -> dict[str, Any]:
 
 
 def summarize_generic(result) -> dict[str, Any]:
-    """Summarize a non-OHLCV FetchResult (fundamentals, holders, capital)."""
+    """Summarize a non-OHLCV FetchResult."""
     return {
         **result.metadata(),
         "preview_columns": list(result.data.columns[:10]),
@@ -81,42 +85,59 @@ def run_probe(name: str, fn):
         return {"name": name, "ok": False, "details": {}, "error": repr(exc)}
 
 
+def run_rust_validate() -> list[dict[str, Any]]:
+    """Run Rust-owned probes and return their result list."""
+    cmd = [
+        "cargo",
+        "run",
+        "--quiet",
+        "--manifest-path",
+        str(RUST_MANIFEST),
+        "--",
+        "validate",
+    ]
+    completed = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if completed.returncode != 0:
+        return [
+            {
+                "name": "rust.validate",
+                "ok": False,
+                "details": {},
+                "error": completed.stderr.strip() or completed.stdout.strip() or f"cargo exited {completed.returncode}",
+            }
+        ]
+    payload = json.loads(completed.stdout)
+    return payload.get("results", [])
+
+
 def main() -> None:
     """Run all probes and output JSON report."""
     client = MarketDataClient()
-    probes = [
-        # ── Existing OHLCV probes ───────────────────────────────
-        ("crypto.binance.BTCUSDT.1h", lambda: client.fetch_ohlcv(market="crypto", exchange="binance", symbol="BTC/USDT", interval="1h", limit=5)),
-        ("crypto.kraken.BTCUSD.1h", lambda: client.fetch_ohlcv(market="crypto", exchange="kraken", symbol="BTC/USD", interval="1h", limit=5)),
-        ("crypto.coinbase.BTCUSD.1h", lambda: client.fetch_ohlcv(market="crypto", exchange="coinbase", symbol="BTC/USD", interval="1h", limit=5)),
-        ("us.yfinance.AAPL.1h", lambda: client.fetch_ohlcv(market="us", symbol="AAPL", interval="1h", period="5d", source="yfinance")),
-        ("us.stooq.AAPL.1d", lambda: client.fetch_ohlcv(market="us", symbol="AAPL", source="stooq")),
+
+    rust_results = run_rust_validate()
+    python_probes = [
         ("cn.index.000300.1d", lambda: client.fetch_ohlcv(market="cn-index", symbol="000300")),
         ("cn.index.000905.1d", lambda: client.fetch_ohlcv(market="cn-index", symbol="000905")),
         ("cn.constituents.000300", lambda: client.fetch_cn_index_constituents(index_code="000300")),
         ("cn.constituents.000905", lambda: client.fetch_cn_index_constituents(index_code="000905")),
         ("cn.weights.000300", lambda: client.fetch_cn_index_weights(index_code="000300")),
         ("cn.weights.000905", lambda: client.fetch_cn_index_weights(index_code="000905")),
-
-        # ── Fundamentals probes ─────────────────────────────────
         ("us.fundamentals.AAPL.key_metrics", lambda: client.fetch_fundamentals(market="us", symbol="AAPL", report="key_metrics")),
         ("us.fundamentals.AAPL.income", lambda: client.fetch_fundamentals(market="us", symbol="AAPL", report="income")),
         ("us.fundamentals.AAPL.balance", lambda: client.fetch_fundamentals(market="us", symbol="AAPL", report="balance")),
         ("cn.fundamentals.600519.key_metrics", lambda: client.fetch_fundamentals(market="cn", symbol="600519", report="key_metrics")),
         ("cn.fundamentals.600519.income", lambda: client.fetch_fundamentals(market="cn", symbol="600519", report="income")),
-
-        # ── Holders probes ──────────────────────────────────────
         ("us.holders.AAPL.major", lambda: client.fetch_holders(market="us", symbol="AAPL", holder_type="major")),
         ("us.holders.AAPL.institutional", lambda: client.fetch_holders(market="us", symbol="AAPL", holder_type="institutional")),
         ("cn.holders.600519.top10", lambda: client.fetch_holders(market="cn", symbol="600519", holder_type="top10")),
-
-        # ── Capital metrics probes ──────────────────────────────
         ("us.capital.AAPL", lambda: client.fetch_capital_metrics(market="us", symbol="AAPL")),
         ("cn.capital.600519", lambda: client.fetch_capital_metrics(market="cn", symbol="600519")),
     ]
-    results = [run_probe(name, fn) for name, fn in probes]
+    python_results = [run_probe(name, fn) for name, fn in python_probes]
+    results = sorted(rust_results + python_results, key=lambda item: item["name"])
+
     payload = {
-        "generated_at_utc": pd.Timestamp.utcnow().isoformat(),
+        "generated_at_utc": pd.Timestamp.now(tz="UTC").isoformat(),
         "summary": {
             "probe_count": len(results),
             "ok_count": sum(1 for item in results if item["ok"]),

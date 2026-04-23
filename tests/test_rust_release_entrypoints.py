@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 
@@ -13,18 +14,34 @@ def test_python_wrapper_scripts_stay_retired() -> None:
         PROJECT_ROOT / "scripts" / "write_session_artifacts.py",
         PROJECT_ROOT / "scripts" / "rust_binary_runner.py",
         PROJECT_ROOT / "scripts" / "host_integration_runner.py",
-        PROJECT_ROOT / "scripts" / "run_memory_automation.py",
-        PROJECT_ROOT / "scripts" / "consolidate_memory.py",
-        PROJECT_ROOT / "scripts" / "retrieve_memory.py",
-        PROJECT_ROOT / "scripts" / "memory_store.py",
     )
 
     assert [path for path in retired_paths if path.exists()] == []
 
 
+def test_installed_project_hooks_use_router_rs_only() -> None:
+    surfaces = (
+        PROJECT_ROOT / ".claude" / "settings.json",
+        PROJECT_ROOT / ".codex" / "hooks.json",
+    )
+
+    for surface in surfaces:
+        payload = json.loads(surface.read_text(encoding="utf-8"))
+        commands = [
+            hook["command"]
+            for entries in payload["hooks"].values()
+            for entry in entries
+            for hook in entry["hooks"]
+        ]
+        assert commands
+        assert all("router-rs" in command for command in commands)
+        assert not any("python3" in command for command in commands)
+        assert not any(".py" in command for command in commands)
+        assert not any("host-integration-rs" in command for command in commands)
+
+
 def test_install_skills_uses_rust_only_entrypoints() -> None:
     source = (PROJECT_ROOT / "scripts" / "install_skills.sh").read_text(encoding="utf-8")
-
     assert "python3" not in source
     assert "router-rs/Cargo.toml" in source
     assert "--host-integration" in source
@@ -46,6 +63,4 @@ def test_memory_automation_lives_in_rust_host_integration() -> None:
     )
 
     assert "RunMemoryAutomation" in source
-    assert "ConsolidateSharedMemory" in source
     assert "run_memory_automation(" in source
-    assert "consolidate_shared_memory(" in source

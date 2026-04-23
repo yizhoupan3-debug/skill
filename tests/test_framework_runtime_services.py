@@ -31,7 +31,6 @@ from framework_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION,
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
     EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
-    build_execution_kernel_live_response_serialization_contract_core,
 )
 from framework_runtime.middleware import MiddlewareContext
 from framework_runtime.memory import FactMemoryStore
@@ -160,8 +159,6 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     trace_health = trace_service.health()
     execution_health = execution_service.health()
     kernel_contract = execution_service.describe_kernel_contract()
-    metadata_bridge = execution_service.describe_kernel_metadata_bridge()
-
     assert router_service.health()["loaded_skill_count"] > 0
     assert router_service.health()["primary_authority"] == "rust"
     assert router_service.health()["route_result_engine"] == "rust"
@@ -170,7 +167,6 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert router_service.health()["strict_verification_required"] is False
     assert router_service.health()["default_route_mode"] == "rust"
     assert router_service.health()["control_plane_authority"] == "rust-route-core"
-    assert router_service.health()["python_runtime_role"] == "thin-projection"
     assert router_service.health()["rustification_status"]["runtime_primary_owner"] == "rust-control-plane"
     assert router_service.health()["route_policy"]["policy_schema_version"] == "router-rs-route-policy-v1"
     assert router_service.health()["route_policy"]["diagnostic_route_mode"] == "none"
@@ -179,19 +175,6 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert execution_health["kernel_live_backend_impl"] == "router-rs"
     assert execution_health["kernel_live_delegate_authority"] == "rust-execution-cli"
     assert kernel_contract["execution_kernel_delegate_impl"] == "router-rs"
-    assert metadata_bridge["defaults"]["live_primary_model_id_source"] == "aggregator-response.model"
-    assert metadata_bridge["metadata_keys"]["prompt_preview_owner"] == (
-        "execution_kernel_prompt_preview_owner"
-    )
-    assert metadata_bridge["runtime_fields"]["shared"] == (
-        "trace_event_count",
-        "trace_output_path",
-    )
-    assert metadata_bridge["runtime_fields"]["live_primary_passthrough"] == (
-        "execution_mode",
-        "route_engine",
-        "diagnostic_route_mode",
-    )
     assert (
         router_service.health()["rust_adapter"]["route_policy_schema_version"]
         == "router-rs-route-policy-v1"
@@ -208,23 +191,16 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert state_health["background_effect_host_contract"]["control_plane_delegate_kind"] == (
         "filesystem-state-store"
     )
-    assert state_health["background_effect_host_contract"]["python_host_role"] == "thin-projection"
     assert state_health["background_effect_host_contract"]["steady_state_owner"] == "rust-control-plane"
-    assert state_health["background_effect_host_contract"]["remaining_python_role"] == (
-        "compatibility-host"
-    )
     assert state_health["background_effect_host_contract"]["progression"]["runtime_primary_owner"] == (
         "rust-control-plane"
     )
     assert state_health["background_effect_host_contract"]["progression"][
         "runtime_primary_owner_authority"
     ] == "rust-runtime-control-plane"
-    assert state_health["background_effect_host_contract"]["progression"]["python_runtime_role"] == (
-        "compatibility-host"
-    )
     assert state_health["background_effect_host_contract"]["progression"][
-        "steady_state_python_allowed"
-    ] is False
+        "hot_path_projection_mode"
+    ] == "descriptor-driven"
     assert trace_health["checkpoint_backend_family"] == "filesystem"
     assert trace_health["trace_output_path"].endswith("TRACE_METADATA.json")
     assert trace_health["event_stream_path"].endswith("TRACE_EVENTS.jsonl")
@@ -234,8 +210,8 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert trace_health["control_plane_authority"] == "rust-runtime-control-plane"
     assert trace_health["control_plane_role"] == "trace-and-handoff"
     assert trace_health["replay_supported"] is True
-    assert trace_health["event_bridge_supported"] is True
-    assert trace_health["event_bridge_schema_version"] == "runtime-event-bridge-v1"
+    assert trace_health["event_stream_supported"] is True
+    assert trace_health["event_stream_schema_version"] == "runtime-event-stream-v1"
     assert trace_health["observability"]["ownership_lane"] == "rust-contract-lane"
     assert trace_health["observability"]["metric_catalog_version"] == "runtime-observability-metrics-v1"
     assert trace_health["observability"]["dashboard_schema_version"] == "runtime-observability-dashboard-v1"
@@ -248,23 +224,16 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert trace_health["background_effect_host_contract"]["control_plane_delegate_kind"] == (
         "filesystem-trace-store"
     )
-    assert trace_health["background_effect_host_contract"]["python_host_role"] == "thin-projection"
     assert trace_health["background_effect_host_contract"]["steady_state_owner"] == "rust-control-plane"
-    assert trace_health["background_effect_host_contract"]["remaining_python_role"] == (
-        "compatibility-host"
-    )
     assert trace_health["background_effect_host_contract"]["progression"]["runtime_primary_owner"] == (
         "rust-control-plane"
     )
     assert trace_health["background_effect_host_contract"]["progression"][
         "runtime_primary_owner_authority"
     ] == "rust-runtime-control-plane"
-    assert trace_health["background_effect_host_contract"]["progression"]["python_runtime_role"] == (
-        "compatibility-host"
-    )
     assert trace_health["background_effect_host_contract"]["progression"][
-        "steady_state_python_allowed"
-    ] is False
+        "hot_path_projection_mode"
+    ] == "descriptor-driven"
     assert memory_service.health()["memory_dir"].endswith("data/memory")
     assert memory_service.health()["control_plane_authority"] == "rust-runtime-control-plane"
     assert memory_service.health()["control_plane_role"] == "memory-lifecycle"
@@ -478,64 +447,6 @@ def test_execution_service_consumes_rust_like_execution_descriptor() -> None:
                 "execution_kernel_prompt_preview_owner": "rust-execution-cli",
             },
         },
-        "kernel_metadata_bridge": {
-            "steady_state_fields": [
-                "execution_kernel_metadata_schema_version",
-                "execution_kernel",
-                "execution_kernel_authority",
-                "execution_kernel_contract_mode",
-                "execution_kernel_fallback_policy",
-                "execution_kernel_in_process_replacement_complete",
-                "execution_kernel_delegate",
-                "execution_kernel_delegate_authority",
-                "execution_kernel_delegate_family",
-                "execution_kernel_delegate_impl",
-                "execution_kernel_live_primary",
-                "execution_kernel_live_primary_authority",
-                "execution_kernel_response_shape",
-                "execution_kernel_prompt_preview_owner",
-            ],
-            "metadata_keys": {
-                "metadata_schema_version": "execution_kernel_metadata_schema_version",
-                "contract_mode": "execution_kernel_contract_mode",
-                "fallback_policy": "execution_kernel_fallback_policy",
-                "response_shape": "execution_kernel_response_shape",
-                "prompt_preview_owner": "execution_kernel_prompt_preview_owner",
-                "model_id_source": "execution_kernel_model_id_source",
-            },
-            "defaults": {
-                "contract_mode": "rust-live-primary",
-                "fallback_policy": "infrastructure-only-explicit",
-                "prompt_preview_owner_by_mode": {
-                    "live_primary": "rust-execution-cli",
-                    "dry_run": "rust-execution-cli",
-                },
-                "live_primary_model_id_source": "aggregator-response.model",
-                "supported_response_shapes": ["live_primary", "dry_run"],
-            },
-            "runtime_fields": {
-                "shared": ["trace_event_count", "trace_output_path"],
-                "live_primary_required": [
-                    "run_id",
-                    "status",
-                    "execution_kernel_model_id_source",
-                    "trace_event_count",
-                    "trace_output_path",
-                ],
-                "live_primary_passthrough": [
-                    "execution_mode",
-                    "route_engine",
-                    "diagnostic_route_mode",
-                ],
-                "dry_run_required": [
-                    "reason",
-                    "execution_kernel_contract_mode",
-                    "execution_kernel_fallback_policy",
-                    "trace_event_count",
-                    "trace_output_path",
-                ],
-            },
-        },
         "kernel_adapter_kind": "rust-execution-kernel-slice",
         "kernel_authority": "rust-execution-kernel-authority",
         "kernel_owner_family": "rust",
@@ -556,23 +467,10 @@ def test_execution_service_consumes_rust_like_execution_descriptor() -> None:
 
     live_contract = runtime_services._runtime_execution_kernel_contract(service_descriptor)
     dry_run_contract = runtime_services._runtime_execution_kernel_contract(service_descriptor, dry_run=True)
-    metadata_bridge = runtime_services._runtime_execution_kernel_metadata_bridge(service_descriptor)
     health = runtime_services._runtime_execution_kernel_health(service_descriptor, resolved_binary="/tmp/router-rs")
 
     assert live_contract["execution_kernel_response_shape"] == "live_primary"
     assert dry_run_contract["execution_kernel_response_shape"] == "dry_run"
-    assert metadata_bridge is not None
-    assert metadata_bridge["defaults"]["live_primary_model_id_source"] == "aggregator-response.model"
-    assert metadata_bridge["defaults"]["supported_response_shapes"] == (
-        "live_primary",
-        "dry_run",
-    )
-    assert metadata_bridge["runtime_fields"]["shared"] == ("trace_event_count", "trace_output_path")
-    assert metadata_bridge["runtime_fields"]["live_primary_passthrough"] == (
-        "execution_mode",
-        "route_engine",
-        "diagnostic_route_mode",
-    )
     assert health["kernel_live_delegate_authority"] == "rust-execution-cli"
     assert health["resolved_binary"] == "/tmp/router-rs"
 
@@ -1277,8 +1175,8 @@ def test_execution_service_failure_isolation_keeps_other_sandboxes_healthy(tmp_p
     asyncio.run(_run())
 
 
-def test_execution_environment_service_live_mode_omits_python_prompt_preview(tmp_path: Path) -> None:
-    """Live execution should not pass Python prompt text through the kernel seam."""
+def test_execution_environment_service_live_mode_omits_native_prompt_preview(tmp_path: Path) -> None:
+    """Live execution should not pass native prompt text through the kernel seam."""
 
     settings = RuntimeSettings(
         codex_home=PROJECT_ROOT,
@@ -1304,7 +1202,7 @@ def test_execution_environment_service_live_mode_omits_python_prompt_preview(tmp
         session_id=routing_result.session_id,
         user_id="tester",
         routing_result=routing_result,
-        prompt="legacy-python-prompt",
+        prompt="legacy-native-prompt",
     )
     seen: dict[str, object] = {}
 
@@ -1345,7 +1243,7 @@ def test_execution_environment_service_live_mode_omits_python_prompt_preview(tmp
     asyncio.run(_run())
 
 
-def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> None:
+def test_execution_service_can_disable_native_live_fallback(tmp_path: Path) -> None:
     """Health contracts should expose Rust-only live mode without breaking dry-run."""
 
     settings = RuntimeSettings(
@@ -1491,7 +1389,7 @@ def test_execution_service_prefers_rust_live_metadata_when_present(tmp_path: Pat
         session_id=routing_result.session_id,
         user_id="tester",
         routing_result=routing_result,
-        prompt="legacy-python-prompt",
+        prompt="legacy-native-prompt",
     )
 
     def fake_execute(payload):
@@ -1584,7 +1482,7 @@ def test_execution_service_rejects_legacy_live_metadata_shape(tmp_path: Path) ->
         session_id=routing_result.session_id,
         user_id="tester",
         routing_result=routing_result,
-        prompt="legacy-python-prompt",
+        prompt="legacy-native-prompt",
     )
 
     def fake_execute(payload):
@@ -1646,8 +1544,8 @@ def test_execution_service_rejects_legacy_live_metadata_shape(tmp_path: Path) ->
     asyncio.run(_run())
 
 
-def test_execution_service_live_path_uses_router_rs_before_python_fallback(tmp_path: Path) -> None:
-    """Default live composition should hit router-rs directly with no Python fallback lane."""
+def test_execution_service_live_path_uses_router_rs_as_rust_primary(tmp_path: Path) -> None:
+    """Default live composition should hit router-rs directly with no native fallback lane."""
 
     settings = RuntimeSettings(
         codex_home=PROJECT_ROOT,
@@ -1673,7 +1571,7 @@ def test_execution_service_live_path_uses_router_rs_before_python_fallback(tmp_p
         session_id=routing_result.session_id,
         user_id="tester",
         routing_result=routing_result,
-        prompt="legacy-python-prompt",
+        prompt="legacy-native-prompt",
     )
     def fake_execute(payload):
         return {
@@ -1762,7 +1660,7 @@ def test_execution_service_live_path_propagates_router_rs_infrastructure_errors(
         session_id=routing_result.session_id,
         user_id="tester",
         routing_result=routing_result,
-        prompt="legacy-python-prompt",
+        prompt="legacy-native-prompt",
     )
     def failing_execute(_payload):
         raise RuntimeError("router-rs missing")
@@ -1828,7 +1726,7 @@ def test_execution_service_kernel_payload_prefers_rust_runtime_metadata(tmp_path
     assert payload["execution_kernel_response_shape"] == "live_primary"
 
 
-def test_execution_service_kernel_payload_rejects_python_runtime_identity_rename(
+def test_execution_service_kernel_payload_rejects_native_runtime_identity_rename(
     tmp_path: Path,
 ) -> None:
     """Kernel payload projection should keep the Rust-owned kernel identity contract authoritative."""
@@ -1847,11 +1745,11 @@ def test_execution_service_kernel_payload_rejects_python_runtime_identity_rename
         control_plane_descriptor=router_service.control_plane_descriptor,
     )
 
-    with pytest.raises(RuntimeError, match="execution_kernel='python-renamed-kernel'"):
+    with pytest.raises(RuntimeError, match="execution_kernel='native-renamed-kernel'"):
         execution_service.kernel_payload(
             dry_run=False,
             metadata={
-                "execution_kernel": "python-renamed-kernel",
+                "execution_kernel": "native-renamed-kernel",
                 "execution_kernel_authority": "rust-execution-kernel-authority",
                 "execution_kernel_contract_mode": "rust-live-primary",
                 "execution_kernel_fallback_policy": "infrastructure-only-explicit",
@@ -1869,8 +1767,8 @@ def test_execution_service_kernel_payload_rejects_python_runtime_identity_rename
         )
 
 
-def test_execution_service_kernel_payload_rejects_partial_python_override(tmp_path: Path) -> None:
-    """Kernel payload projection should fail closed on partial Python-owned metadata."""
+def test_execution_service_kernel_payload_rejects_partial_native_override(tmp_path: Path) -> None:
+    """Kernel payload projection should fail closed on partial native-owned metadata."""
 
     settings = RuntimeSettings(
         codex_home=PROJECT_ROOT,
@@ -1896,7 +1794,7 @@ def test_execution_service_kernel_payload_rejects_partial_python_override(tmp_pa
         )
 
 
-def test_execution_service_kernel_payload_rejects_partial_python_steady_state_metadata_without_fallback(
+def test_execution_service_kernel_payload_rejects_partial_native_steady_state_metadata_without_fallback(
     tmp_path: Path,
 ) -> None:
     settings = RuntimeSettings(
@@ -1930,7 +1828,7 @@ def test_execution_service_kernel_payload_rejects_partial_python_steady_state_me
     [
         (
             EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
-            "legacy-python-fallback",
+            "legacy-native-fallback",
         ),
         (
             EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
@@ -1938,15 +1836,15 @@ def test_execution_service_kernel_payload_rejects_partial_python_steady_state_me
         ),
         (
             EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
-            "python-agno-kernel-adapter",
+            "native-agno-kernel-adapter",
         ),
         (
             EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
-            "python-agno-kernel-adapter",
+            "native-agno-kernel-adapter",
         ),
     ],
 )
-def test_execution_service_kernel_payload_rejects_retired_python_fallback_metadata(
+def test_execution_service_kernel_payload_rejects_retired_native_fallback_metadata(
     tmp_path: Path,
     metadata_field: str,
     metadata_value: object,
@@ -2082,11 +1980,11 @@ def test_execution_environment_service_exposes_control_plane_contract_descriptor
     ]["public_response_model"] == "RunTaskResponse"
     assert descriptors["execution_kernel_live_response_serialization_contract"][
         "retirement_gates"
-    ]["compatibility_live_response_serialization_still_python_owned"] is False
+    ]["compatibility_live_response_serialization_still_native_owned"] is False
     assert descriptors["runtime_control_plane"]["authority"] == "rust-runtime-control-plane"
 
 
-def test_execution_environment_service_serialization_contract_follows_runtime_bridge(
+def test_execution_environment_service_serialization_contract_stays_rust_owned(
     tmp_path: Path,
 ) -> None:
     settings = RuntimeSettings(
@@ -2097,11 +1995,9 @@ def test_execution_environment_service_serialization_contract_follows_runtime_br
     )
     router_service = RouterService(settings)
     control_plane_descriptor = json.loads(json.dumps(router_service.control_plane_descriptor))
-    metadata_bridge = control_plane_descriptor["services"]["execution"]["kernel_metadata_bridge"]
-    metadata_bridge["runtime_fields"]["shared"].append("trace_generation")
-    metadata_bridge["runtime_fields"]["live_primary_required"].append("trace_generation")
-    metadata_bridge["runtime_fields"]["live_primary_passthrough"].append("trace_generation")
-    metadata_bridge["runtime_fields"]["dry_run_required"].append("trace_generation")
+    control_plane_descriptor["services"]["execution"]["kernel_contract_by_mode"]["live_primary"][
+        "trace_generation"
+    ] = 3
 
     execution_service = ExecutionEnvironmentService(
         settings,
@@ -2111,19 +2007,26 @@ def test_execution_environment_service_serialization_contract_follows_runtime_br
     )
 
     descriptors = execution_service.describe_control_plane_contracts()
-    expected = build_execution_kernel_live_response_serialization_contract_core(
-        metadata_bridge=metadata_bridge
-    )
 
     assert descriptors["execution_kernel_live_response_serialization_contract"][
         "runtime_response_metadata_fields"
-    ] == expected["runtime_response_metadata_fields"]
+    ]["shared"] == ["trace_event_count", "trace_output_path"]
     assert descriptors["execution_kernel_live_response_serialization_contract"][
         "current_response_shape_truth"
-    ] == expected["current_response_shape_truth"]
+    ]["live_primary"]["pass_through_metadata_fields"] == [
+        "execution_mode",
+        "route_engine",
+        "diagnostic_route_mode",
+    ]
+    assert (
+        "trace_generation"
+        not in descriptors["execution_kernel_live_response_serialization_contract"][
+            "runtime_response_metadata_fields"
+        ]["live_primary"]
+    )
 
 
-def test_execution_environment_service_fallback_retirement_follows_runtime_contracts(
+def test_execution_environment_service_fallback_retirement_stays_rust_owned(
     tmp_path: Path,
 ) -> None:
     settings = RuntimeSettings(
@@ -2158,18 +2061,10 @@ def test_execution_environment_service_fallback_retirement_follows_runtime_contr
     descriptors = execution_service.describe_control_plane_contracts()
     fallback_retirement = descriptors["execution_kernel_live_fallback_retirement_status"]
 
-    assert fallback_retirement["current_response_metadata_truth"]["live_delegate_family"] == (
-        "custom-live-family"
-    )
-    assert fallback_retirement["current_response_metadata_truth"]["live_delegate_impl"] == (
-        "custom-live-impl"
-    )
-    assert fallback_retirement["current_response_metadata_truth"]["dry_run_delegate_family"] == (
-        "custom-dry-run-family"
-    )
-    assert fallback_retirement["current_response_metadata_truth"]["dry_run_delegate_impl"] == (
-        "custom-dry-run-impl"
-    )
+    assert fallback_retirement["current_response_metadata_truth"]["live_delegate_family"] == "rust-cli"
+    assert fallback_retirement["current_response_metadata_truth"]["live_delegate_impl"] == "router-rs"
+    assert fallback_retirement["current_response_metadata_truth"]["dry_run_delegate_family"] == "rust-cli"
+    assert fallback_retirement["current_response_metadata_truth"]["dry_run_delegate_impl"] == "router-rs"
 
 
 def test_router_service_verify_mode_keeps_rust_primary_and_emits_diagnostic_evidence() -> None:
@@ -2287,7 +2182,7 @@ def test_router_service_rejects_unloaded_skill_from_rust_contract(monkeypatch: p
 
     monkeypatch.setattr(router_service._rust_adapter, "route_contract", lambda **_: contract)
 
-    with pytest.raises(RuntimeError, match="not loaded by the Python host"):
+    with pytest.raises(RuntimeError, match="not loaded by the host"):
         router_service.route(
             task="reject unknown rust skill",
             session_id="unknown-skill-session",
@@ -2469,7 +2364,7 @@ def test_trace_service_describes_host_facing_transport(tmp_path: Path) -> None:
     transport = trace_service.describe_transport(session_id="transport-session", job_id="job-transport")
 
     assert transport.transport_kind == "poll"
-    assert transport.transport_family == "host-facing-bridge"
+    assert transport.transport_family == "host-facing-transport"
     assert transport.endpoint_kind == "runtime_method"
     assert transport.remote_capable is True
     assert transport.remote_attach_supported is True
@@ -2487,7 +2382,7 @@ def test_trace_service_describes_host_facing_transport(tmp_path: Path) -> None:
     assert transport.describe_method == "describe_runtime_event_transport"
     assert transport.subscribe_method == "subscribe_runtime_events"
     assert transport.cleanup_method == "cleanup_runtime_events"
-    assert transport.cleanup_semantics == "bridge_cache_only"
+    assert transport.cleanup_semantics == "stream_cache_only"
     assert transport.cleanup_preserves_replay is True
     assert transport.replay_reseed_supported is True
     assert transport.latest_cursor is not None
@@ -2584,11 +2479,11 @@ def test_trace_service_describe_stream_artifacts_resolves_transport_once(
     assert handoff.transport.stream_id == transport.stream_id
 
 
-def test_trace_service_subscribe_prefers_rust_replay_over_bridge_reseed(
+def test_trace_service_subscribe_prefers_rust_replay_over_stream_reseed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """TraceService subscribe should use recorder replay directly instead of bridge reseed hot paths."""
+    """TraceService subscribe should use recorder replay directly instead of stream reseed hot paths."""
 
     settings = RuntimeSettings(
         codex_home=PROJECT_ROOT,
@@ -2617,14 +2512,14 @@ def test_trace_service_subscribe_prefers_rust_replay_over_bridge_reseed(
     )
 
     monkeypatch.setattr(
-        trace_service.event_bridge,
+        trace_service.event_stream,
         "seed",
-        lambda events: (_ for _ in ()).throw(AssertionError("bridge reseed hot path should stay unused")),
+        lambda events: (_ for _ in ()).throw(AssertionError("stream reseed hot path should stay unused")),
     )
     monkeypatch.setattr(
         JsonlTraceEventSink,
         "read_events",
-        lambda self: (_ for _ in ()).throw(AssertionError("python read_events hot path should stay unused")),
+        lambda self: (_ for _ in ()).throw(AssertionError("native read_events hot path should stay unused")),
     )
 
     first_window = trace_service.subscribe(session_id="subscribe-session", job_id="job-subscribe", limit=1)

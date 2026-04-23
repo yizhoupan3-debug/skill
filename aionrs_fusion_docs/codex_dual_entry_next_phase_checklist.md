@@ -169,8 +169,8 @@ contract emission lane；这里记录的是 dual-entry compatibility view 的收
 - [ ] 让 sandbox lifecycle 更接近 `runtime_sandbox_contract.md`
 - [x] 已引入 background `multitask_strategy` 的首个控制面切片
   (`reject` / `interrupt`)
-- [x] `scripts/route.py` 已收口成 Rust route/search transport shim，不再保留
-  平行 Python scorer 作为日常 CLI 路由权威
+- [x] 旧 `scripts/route.py` Python shim 已退休，route/search CLI 直接走
+  `router-rs`，不再保留平行 Python scorer 作为日常 CLI 路由权威
 - [x] background `interrupt` replacement 已引入 pending takeover reservation，
   先占下一个 session owner 再完成 preempt，减少 release-then-requeue race
 - [x] background admission 已不再依赖 `Semaphore._value`，而是改成显式 admitted

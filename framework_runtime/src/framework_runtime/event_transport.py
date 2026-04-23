@@ -112,7 +112,7 @@ class RuntimeEventAttachDescriptor(BaseModel):
             raise ValueError("External runtime event attach payload returned an invalid attach_descriptor.") from exc
 
 
-class ExternalRuntimeEventTransportAttachment(BaseModel):
+class ExternalRuntimeEventTransportAttachmentPayload(BaseModel):
     """Validated attach payload emitted by the Rust-owned external attach seam."""
 
     model_config = ConfigDict(extra="allow")
@@ -257,9 +257,9 @@ def _validated_attach_descriptor(payload: Mapping[str, Any]) -> dict[str, Any]:
     return RuntimeEventAttachDescriptor.from_payload(attach_descriptor).model_dump(mode="json")
 
 
-def _validate_attachment_payload(payload: Mapping[str, Any]) -> ExternalRuntimeEventTransportAttachment:
+def _validate_attachment_payload(payload: Mapping[str, Any]) -> ExternalRuntimeEventTransportAttachmentPayload:
     try:
-        return ExternalRuntimeEventTransportAttachment.model_validate(payload)
+        return ExternalRuntimeEventTransportAttachmentPayload.model_validate(payload)
     except ValidationError as exc:
         raise ValueError("External runtime event attach payload returned an invalid attachment payload.") from exc
 
@@ -278,7 +278,7 @@ def resolve_external_runtime_event_transport(
     binding_artifact_path: str | None = None,
     handoff_path: str | None = None,
     resume_manifest_path: str | None = None,
-) -> ExternalRuntimeEventTransportAttachment:
+) -> ExternalRuntimeEventTransportAttachmentPayload:
     """Resolve and validate the canonical attach payload for external runtime replay."""
 
     request = _build_external_runtime_attach_request(
@@ -348,7 +348,7 @@ def cleanup_external_runtime_event_transport(
     handoff_path: str | None = None,
     resume_manifest_path: str | None = None,
 ) -> ExternalRuntimeEventTransportCleanupResult:
-    """Cleanup the external runtime replay bridge through the canonical descriptor only."""
+    """Cleanup the external runtime replay transport through the canonical descriptor only."""
 
     attachment = resolve_external_runtime_event_transport(
         adapter=adapter,
@@ -371,8 +371,8 @@ def cleanup_external_runtime_event_transport(
     return _validate_cleanup_payload(payload)
 
 
-class ExternalRuntimeEventTransportBridge:
-    """Thin Python projection over the Rust-owned attached runtime transport lane."""
+class ExternalRuntimeEventTransportAttachment:
+    """Thin host projection over the Rust-owned attached runtime transport lane."""
 
     def __init__(
         self,
@@ -403,8 +403,8 @@ class ExternalRuntimeEventTransportBridge:
         binding_artifact_path: str | None = None,
         handoff_path: str | None = None,
         resume_manifest_path: str | None = None,
-    ) -> ExternalRuntimeEventTransportBridge:
-        """Resolve a process-external attach bridge from persisted artifacts."""
+    ) -> ExternalRuntimeEventTransportAttachment:
+        """Resolve a process-external transport attachment from persisted artifacts."""
 
         settings = RuntimeSettings()
         adapter = RustRouteAdapter(
@@ -421,7 +421,7 @@ class ExternalRuntimeEventTransportBridge:
         return cls(adapter=adapter, payload=payload)
 
     def describe(self) -> dict[str, Any]:
-        """Describe the resolved process-external attach bridge."""
+        """Describe the resolved process-external attach stream."""
 
         return _clone_json(self._payload)
 

@@ -66,7 +66,7 @@ Validation commands:
 - `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}
 ' | CLAUDE_PROJECT_DIR="$PWD" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command post-tool-audit --repo-root "$PWD"`
   Expected: stdout is empty for clean edits, or JSON with top-level `additionalContext` when the new delta still looks patchy, compatibility-heavy, or wasteful.
-- `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/host-integration-rs/src/main.rs"}}
+- `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/host_integration.rs"}}
 ' | CLAUDE_PROJECT_DIR="$PWD" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use-quality --repo-root "$PWD"`
   Expected: stdout returns a JSON `permissionDecision: allow` payload with Rust/runtime-oriented `additionalContext`.
 - `cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root "$PWD"`

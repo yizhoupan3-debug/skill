@@ -430,22 +430,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
     Ok(payload)
 }
 
-fn consolidate_shared_memory(repo_root: &Path) -> Result<Value, String> {
-    let payload = run_router_rs_json(
-        repo_root,
-        &[
-            "--claude-hook-command".to_string(),
-            "session-end".to_string(),
-            "--claude-hook-max-lines".to_string(),
-            "4".to_string(),
-        ],
-    )?;
-    payload
-        .get("consolidation")
-        .cloned()
-        .ok_or_else(|| "router-rs session-end payload missing consolidation object".to_string())
-}
-
 fn sync_host_entrypoints(
     template_root: &Path,
     repo_root: &Path,

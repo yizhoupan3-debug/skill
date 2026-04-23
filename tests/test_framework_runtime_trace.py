@@ -20,7 +20,7 @@ if str(RUNTIME_SRC) not in sys.path:
 
 from framework_runtime.checkpoint_store import FilesystemRuntimeCheckpointer, SQLiteRuntimeStorageBackend
 from framework_runtime.config import RuntimeSettings
-from framework_runtime.event_transport import ExternalRuntimeEventTransportBridge
+from framework_runtime.event_transport import ExternalRuntimeEventTransportAttachment
 from framework_runtime.middleware import (
     MemoryMiddleware,
     Middleware,
@@ -41,9 +41,9 @@ from framework_runtime.trace import (
     TRACE_COMPACTION_RESULT_SCHEMA_VERSION,
     TRACE_COMPACTION_SNAPSHOT_SCHEMA_VERSION,
     TRACE_EVENT_SINK_SCHEMA_VERSION,
-    TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
+    TRACE_EVENT_STREAM_SCHEMA_VERSION,
     TRACE_EVENT_HANDOFF_SCHEMA_VERSION,
-    InMemoryRuntimeEventBridge,
+    InMemoryRuntimeEventStream,
     JsonlTraceEventSink,
     RuntimeEventHandoff,
     RuntimeEventTransport,
@@ -202,13 +202,10 @@ def _build_rust_first_trace_control_plane_descriptor(
     return {
         "schema_version": "router-rs-runtime-control-plane-v1",
         "authority": "rust-runtime-control-plane",
-        "python_host_role": "thin-projection",
         "rustification_status": {
             "hot_path_projection_mode": "descriptor-driven",
-            "python_runtime_role": "compatibility-host",
             "runtime_primary_owner": "rust-control-plane",
             "runtime_primary_owner_authority": "rust-runtime-control-plane",
-            "steady_state_python_allowed": False,
         },
         "services": {
             "trace": {
@@ -230,7 +227,7 @@ def _build_rust_first_trace_control_plane_descriptor(
 
 
 def test_trace_service_health_exposes_background_effect_host_contract(tmp_path: Path) -> None:
-    """Trace health should expose the current rustification owner and residual Python role."""
+    """Trace health should expose the current Rust runtime owner."""
 
     settings = RuntimeSettings(
         codex_home=PROJECT_ROOT,
@@ -263,23 +260,20 @@ def test_trace_service_health_exposes_background_effect_host_contract(tmp_path: 
     assert contract["control_plane_projection"] == "rust-first-trace-projection"
     assert contract["control_plane_delegate_kind"] == "rust-trace-store"
     assert contract["runtime_control_plane_authority"] == "rust-runtime-control-plane"
-    assert contract["python_host_role"] == "thin-projection"
     assert contract["steady_state_owner"] == "rust-control-plane"
-    assert contract["remaining_python_role"] == "compatibility-host"
     assert contract["progression"]["runtime_primary_owner"] == "rust-control-plane"
     assert contract["progression"]["runtime_primary_owner_authority"] == "rust-runtime-control-plane"
-    assert contract["progression"]["python_runtime_role"] == "compatibility-host"
-    assert contract["progression"]["steady_state_python_allowed"] is False
+    assert contract["progression"]["hot_path_projection_mode"] == "descriptor-driven"
     recorder_contract = health["control_plane_contract"]["recorder"]
-    bridge_contract = health["control_plane_contract"]["bridge"]
+    stream_contract = health["control_plane_contract"]["stream"]
     assert recorder_contract["ownership_lane"] == "rust-contract-lane"
     assert recorder_contract["producer_owner"] == "rust-control-plane"
     assert recorder_contract["producer_authority"] == "rust-runtime-control-plane"
     assert recorder_contract["exporter_owner"] == "rust-control-plane"
     assert recorder_contract["exporter_authority"] == "rust-runtime-control-plane"
-    assert bridge_contract["ownership_lane"] == "rust-contract-lane"
-    assert bridge_contract["producer_owner"] == "rust-control-plane"
-    assert bridge_contract["exporter_owner"] == "rust-control-plane"
+    assert stream_contract["ownership_lane"] == "rust-contract-lane"
+    assert stream_contract["producer_owner"] == "rust-control-plane"
+    assert stream_contract["exporter_owner"] == "rust-control-plane"
     assert health["control_plane_contract"]["aligned"] is True
 
     trace_service.shutdown()
@@ -586,7 +580,7 @@ def test_trace_recorder_latest_cursor_prefers_rust_trace_io_on_filesystem(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Filesystem latest-cursor lookups should not fall back to Python full-stream reads."""
+    """Filesystem latest-cursor lookups should not fall back to native full-stream reads."""
 
     stream = tmp_path / "TRACE_EVENTS.jsonl"
     recorder = RuntimeTraceRecorder(event_stream_path=stream)
@@ -606,7 +600,7 @@ def test_trace_recorder_latest_cursor_prefers_rust_trace_io_on_filesystem(
     monkeypatch.setattr(
         JsonlTraceEventSink,
         "read_events",
-        lambda self: (_ for _ in ()).throw(AssertionError("python read_events hot path should stay unused")),
+        lambda self: (_ for _ in ()).throw(AssertionError("native read_events hot path should stay unused")),
     )
 
     latest_cursor = recorder.latest_cursor(session_id="session-rust-cursor", job_id="job-rust-cursor")
@@ -619,7 +613,7 @@ def test_trace_recorder_replay_prefers_rust_trace_io_on_filesystem(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Filesystem replay should go through router-rs instead of Python stream hydration."""
+    """Filesystem replay should go through router-rs instead of native stream hydration."""
 
     stream = tmp_path / "TRACE_EVENTS.jsonl"
     recorder = RuntimeTraceRecorder(event_stream_path=stream)
@@ -634,7 +628,7 @@ def test_trace_recorder_replay_prefers_rust_trace_io_on_filesystem(
     monkeypatch.setattr(
         JsonlTraceEventSink,
         "read_events",
-        lambda self: (_ for _ in ()).throw(AssertionError("python read_events hot path should stay unused")),
+        lambda self: (_ for _ in ()).throw(AssertionError("native read_events hot path should stay unused")),
     )
 
     replay = recorder.replay(session_id="session-rust-replay", job_id="job-rust-replay", limit=2)
@@ -667,7 +661,7 @@ def test_trace_recorder_replay_prefers_rust_trace_io_on_sqlite_backend(
     monkeypatch.setattr(
         JsonlTraceEventSink,
         "read_events",
-        lambda self: (_ for _ in ()).throw(AssertionError("python read_events hot path should stay unused")),
+        lambda self: (_ for _ in ()).throw(AssertionError("native read_events hot path should stay unused")),
     )
 
     latest_cursor = recorder.latest_cursor(session_id="session-sqlite-replay", job_id="job-sqlite-replay")
@@ -774,7 +768,7 @@ def test_trace_compaction_delta_append_prefers_rust_trace_io_on_filesystem(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Filesystem delta append should not fall back to the Python append helper."""
+    """Filesystem delta append should not fall back to the native append helper."""
 
     recorder = RuntimeTraceRecorder(
         output_path=tmp_path / "TRACE_METADATA.json",
@@ -793,7 +787,7 @@ def test_trace_compaction_delta_append_prefers_rust_trace_io_on_filesystem(
     monkeypatch.setattr(
         RuntimeTraceRecorder,
         "_append_text",
-        lambda self, path, payload: (_ for _ in ()).throw(AssertionError("python delta append should stay unused")),
+        lambda self, path, payload: (_ for _ in ()).throw(AssertionError("native delta append should stay unused")),
     )
 
     recorder.record(
@@ -814,7 +808,7 @@ def test_trace_compaction_recovery_prefers_rust_trace_io_on_filesystem(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Filesystem compaction recovery should use router-rs instead of Python delta loading."""
+    """Filesystem compaction recovery should use router-rs instead of native delta loading."""
 
     recorder = RuntimeTraceRecorder(
         output_path=tmp_path / "TRACE_METADATA.json",
@@ -845,7 +839,7 @@ def test_trace_compaction_recovery_prefers_rust_trace_io_on_filesystem(
     monkeypatch.setattr(
         RuntimeTraceRecorder,
         "_load_compaction_deltas",
-        lambda self, path: (_ for _ in ()).throw(AssertionError("python delta recovery should stay unused")),
+        lambda self, path: (_ for _ in ()).throw(AssertionError("native delta recovery should stay unused")),
     )
 
     recovery = recorder.recover_compacted_state(session_id="session-rust-recovery", job_id="job-rust-recovery")
@@ -859,7 +853,7 @@ def test_trace_compaction_recovery_prefers_rust_trace_io_on_sqlite_backend(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """SQLite compaction recovery should use the staged Rust contract instead of Python delta parsing."""
+    """SQLite compaction recovery should use the staged Rust contract instead of native delta parsing."""
 
     backend = SQLiteRuntimeStorageBackend(
         db_path=tmp_path / "runtime_checkpoint_store.sqlite3",
@@ -894,7 +888,7 @@ def test_trace_compaction_recovery_prefers_rust_trace_io_on_sqlite_backend(
     monkeypatch.setattr(
         RuntimeTraceRecorder,
         "_load_compaction_deltas",
-        lambda self, path: (_ for _ in ()).throw(AssertionError("python delta recovery should stay unused")),
+        lambda self, path: (_ for _ in ()).throw(AssertionError("native delta recovery should stay unused")),
     )
 
     recovery = recorder.recover_compacted_state(session_id="session-sqlite-recovery", job_id="job-sqlite-recovery")
@@ -953,16 +947,16 @@ def test_trace_compaction_returns_explicit_unsupported_result_when_backend_lacks
 
 
 def test_trace_contract_scoping_uses_rust_first_scope_fields(tmp_path: Path) -> None:
-    """Trace replay and cleanup should follow the Rust-owned scope contract, not hardcoded Python scope."""
+    """Trace replay and cleanup should follow the Rust-owned scope contract, not hardcoded native scope."""
 
     control_plane_descriptor = _build_rust_first_trace_control_plane_descriptor(
         stream_scope_fields=["session_id"],
         cleanup_scope_fields=["session_id"],
     )
-    bridge = InMemoryRuntimeEventBridge(control_plane_descriptor=control_plane_descriptor)
+    stream = InMemoryRuntimeEventStream(control_plane_descriptor=control_plane_descriptor)
     recorder = RuntimeTraceRecorder(
         event_stream_path=tmp_path / "TRACE_EVENTS.jsonl",
-        event_bridge=bridge,
+        event_stream=stream,
         control_plane_descriptor=control_plane_descriptor,
     )
     recorder.record(
@@ -987,17 +981,17 @@ def test_trace_contract_scoping_uses_rust_first_scope_fields(tmp_path: Path) -> 
     assert recorder.control_plane_descriptor().stream_scope_fields == ["session_id"]
     assert recorder.control_plane_descriptor().ownership_lane == "rust-contract-lane"
 
-    window = bridge.subscribe(session_id="session-contract", job_id="job-a")
+    window = stream.subscribe(session_id="session-contract", job_id="job-a")
     assert [event.job_id for event in window.events] == ["job-a", "job-b"]
 
-    bridge.cleanup(session_id="session-contract", job_id="job-a")
-    cleaned = bridge.subscribe(session_id="session-contract", heartbeat=True)
+    stream.cleanup(session_id="session-contract", job_id="job-a")
+    cleaned = stream.subscribe(session_id="session-contract", heartbeat=True)
     assert cleaned.events == []
     assert cleaned.heartbeat is not None
-    assert bridge.health()["stream_scope_fields"] == ["session_id"]
-    assert bridge.health()["cleanup_scope_fields"] == ["session_id"]
-    assert bridge.health()["ownership_lane"] == "rust-contract-lane"
-    assert bridge.health()["producer_owner"] == "rust-control-plane"
+    assert stream.health()["stream_scope_fields"] == ["session_id"]
+    assert stream.health()["cleanup_scope_fields"] == ["session_id"]
+    assert stream.health()["ownership_lane"] == "rust-contract-lane"
+    assert stream.health()["producer_owner"] == "rust-control-plane"
 
 
 def test_runtime_event_handoff_serializes_transport_and_replay_refs() -> None:
@@ -1051,11 +1045,11 @@ def test_runtime_event_handoff_serializes_transport_and_replay_refs() -> None:
     ]
 
 
-def test_in_memory_event_bridge_supports_last_event_id_heartbeat_and_cleanup() -> None:
-    """The bridge should support live subscribe, idle heartbeat, and explicit cleanup."""
+def test_in_memory_event_stream_supports_last_event_id_heartbeat_and_cleanup() -> None:
+    """The stream should support live subscribe, idle heartbeat, and explicit cleanup."""
 
-    bridge = InMemoryRuntimeEventBridge()
-    recorder = RuntimeTraceRecorder(event_bridge=bridge)
+    stream = InMemoryRuntimeEventStream()
+    recorder = RuntimeTraceRecorder(event_stream=stream)
     first = recorder.record(
         session_id="session-4",
         job_id="job-4",
@@ -1075,14 +1069,14 @@ def test_in_memory_event_bridge_supports_last_event_id_heartbeat_and_cleanup() -
         stage="background",
     )
 
-    first_window = bridge.subscribe(session_id="session-4", job_id="job-4", limit=1)
-    assert first_window.schema_version == TRACE_EVENT_BRIDGE_SCHEMA_VERSION
+    first_window = stream.subscribe(session_id="session-4", job_id="job-4", limit=1)
+    assert first_window.schema_version == TRACE_EVENT_STREAM_SCHEMA_VERSION
     assert len(first_window.events) == 1
     assert first_window.events[0].event_id == first.event_id
     assert first_window.has_more is True
     assert first_window.next_cursor is not None
 
-    second_window = bridge.subscribe(
+    second_window = stream.subscribe(
         session_id="session-4",
         job_id="job-4",
         after_event_id=first.event_id,
@@ -1091,7 +1085,7 @@ def test_in_memory_event_bridge_supports_last_event_id_heartbeat_and_cleanup() -
     assert [event.kind for event in second_window.events] == ["job.completed"]
     assert second_window.has_more is False
 
-    idle_window = bridge.subscribe(
+    idle_window = stream.subscribe(
         session_id="session-4",
         job_id="job-4",
         after_event_id=second_window.events[0].event_id,
@@ -1099,33 +1093,33 @@ def test_in_memory_event_bridge_supports_last_event_id_heartbeat_and_cleanup() -
     )
     assert idle_window.events == []
     assert idle_window.heartbeat is not None
-    assert idle_window.heartbeat.kind == "bridge.heartbeat"
+    assert idle_window.heartbeat.kind == "runtime.stream.heartbeat"
     assert idle_window.heartbeat.status == "idle"
 
-    bridge.seed(recorder.stream_events())
-    bridge.seed(recorder.stream_events())
-    reseeded = bridge.subscribe(session_id="session-4", limit=10)
+    stream.seed(recorder.stream_events())
+    stream.seed(recorder.stream_events())
+    reseeded = stream.subscribe(session_id="session-4", limit=10)
     event_ids = [event.event_id for event in reseeded.events]
     assert len(event_ids) == len(set(event_ids))
 
-    bridge.cleanup(session_id="session-4", job_id="job-4")
-    cleaned = bridge.subscribe(session_id="session-4", job_id="job-4", heartbeat=True)
+    stream.cleanup(session_id="session-4", job_id="job-4")
+    cleaned = stream.subscribe(session_id="session-4", job_id="job-4", heartbeat=True)
     assert cleaned.events == []
     assert cleaned.heartbeat is not None
-    assert bridge.health()["control_plane_projection"] == "rust-native-projection"
-    assert bridge.health()["transport_family"] == "artifact-handoff"
-    other_job = bridge.subscribe(session_id="session-4", job_id="job-5")
+    assert stream.health()["control_plane_projection"] == "rust-native-projection"
+    assert stream.health()["transport_family"] == "artifact-handoff"
+    other_job = stream.subscribe(session_id="session-4", job_id="job-5")
     assert [event.job_id for event in other_job.events] == ["job-5"]
 
     with pytest.raises(ValueError, match="Unknown event id"):
-        bridge.subscribe(session_id="session-4", after_event_id="evt_missing")
+        stream.subscribe(session_id="session-4", after_event_id="evt_missing")
 
 
-def test_external_runtime_transport_bridge_subscribe_prefers_rust_trace_io_on_filesystem(
+def test_external_runtime_transport_stream_subscribe_prefers_rust_trace_io_on_filesystem(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """External attach replay should route through router-rs instead of Python replay hydration."""
+    """External attach replay should route through router-rs instead of native replay hydration."""
 
     stream = tmp_path / "TRACE_EVENTS.jsonl"
     recorder = RuntimeTraceRecorder(event_stream_path=stream)
@@ -1162,17 +1156,17 @@ def test_external_runtime_transport_bridge_subscribe_prefers_rust_trace_io_on_fi
     monkeypatch.setattr(
         JsonlTraceEventSink,
         "read_events",
-        lambda self: (_ for _ in ()).throw(AssertionError("python read_events hot path should stay unused")),
+        lambda self: (_ for _ in ()).throw(AssertionError("native read_events hot path should stay unused")),
     )
 
-    bridge = ExternalRuntimeEventTransportBridge.attach(handoff_path=str(handoff_path))
-    replay = bridge.subscribe(limit=1)
+    stream = ExternalRuntimeEventTransportAttachment.attach(handoff_path=str(handoff_path))
+    replay = stream.subscribe(limit=1)
     assert replay.events[0].kind == "job.started"
-    resumed = bridge.subscribe(after_event_id=replay.events[0].event_id, limit=5)
+    resumed = stream.subscribe(after_event_id=replay.events[0].event_id, limit=5)
     assert [event.kind for event in resumed.events] == ["job.completed"]
 
 
-def test_external_runtime_transport_bridge_subscribe_prefers_rust_trace_io_on_sqlite_backend(
+def test_external_runtime_transport_stream_subscribe_prefers_rust_trace_io_on_sqlite_backend(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1217,20 +1211,20 @@ def test_external_runtime_transport_bridge_subscribe_prefers_rust_trace_io_on_sq
     monkeypatch.setattr(
         JsonlTraceEventSink,
         "read_events",
-        lambda self: (_ for _ in ()).throw(AssertionError("python read_events hot path should stay unused")),
+        lambda self: (_ for _ in ()).throw(AssertionError("native read_events hot path should stay unused")),
     )
 
-    bridge = ExternalRuntimeEventTransportBridge.attach(handoff_path=str(handoff_path))
-    replay = bridge.subscribe(limit=1)
+    stream = ExternalRuntimeEventTransportAttachment.attach(handoff_path=str(handoff_path))
+    replay = stream.subscribe(limit=1)
     assert replay.events[0].kind == "job.started"
-    resumed = bridge.subscribe(after_event_id=replay.events[0].event_id, limit=5)
+    resumed = stream.subscribe(after_event_id=replay.events[0].event_id, limit=5)
     assert [event.kind for event in resumed.events] == ["job.completed"]
 
 
-def test_external_runtime_transport_bridge_cleanup_uses_canonical_attach_descriptor_contract(
+def test_external_runtime_transport_stream_cleanup_uses_canonical_attach_descriptor_contract(
     tmp_path: Path,
 ) -> None:
-    """Cleanup should round-trip through the Rust attach contract, not a Python-only shim."""
+    """Cleanup should round-trip through the Rust attach contract, not a native-only shim."""
 
     stream = tmp_path / "TRACE_EVENTS.jsonl"
     recorder = RuntimeTraceRecorder(event_stream_path=stream)
@@ -1260,18 +1254,18 @@ def test_external_runtime_transport_bridge_cleanup_uses_canonical_attach_descrip
     )
     handoff_path.write_text(handoff.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
-    bridge = ExternalRuntimeEventTransportBridge.attach(handoff_path=str(handoff_path))
-    cleanup = bridge.cleanup()
+    stream = ExternalRuntimeEventTransportAttachment.attach(handoff_path=str(handoff_path))
+    cleanup = stream.cleanup()
 
-    assert cleanup["authority"] == bridge._adapter.attached_runtime_event_transport_authority
+    assert cleanup["authority"] == stream._adapter.attached_runtime_event_transport_authority
     assert cleanup["cleanup_method"] == "cleanup_attached_runtime_event_transport"
     assert cleanup["cleanup_semantics"] == "no_persisted_state"
     assert cleanup["cleanup_preserves_replay"] is True
-    assert cleanup["binding_artifact_path"] == bridge.describe().get("binding_artifact_path")
-    assert cleanup["trace_stream_path"] == bridge.describe().get("trace_stream_path")
+    assert cleanup["binding_artifact_path"] == stream.describe().get("binding_artifact_path")
+    assert cleanup["trace_stream_path"] == stream.describe().get("trace_stream_path")
 
 
-def test_external_runtime_transport_bridge_rejects_missing_trace_stream_on_binding_only_attach(
+def test_external_runtime_transport_stream_rejects_missing_trace_stream_on_binding_only_attach(
     tmp_path: Path,
 ) -> None:
     """Binding-only attach should fail closed when no replayable trace stream can be resolved."""
@@ -1291,4 +1285,4 @@ def test_external_runtime_transport_bridge_rejects_missing_trace_stream_on_bindi
     )
 
     with pytest.raises(ValueError, match="External runtime event replay requires"):
-        ExternalRuntimeEventTransportBridge.attach(binding_artifact_path=str(binding_path))
+        ExternalRuntimeEventTransportAttachment.attach(binding_artifact_path=str(binding_path))

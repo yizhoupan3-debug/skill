@@ -1,4 +1,4 @@
-"""Parity tests for the Python bridge and Rust router JSON output."""
+"""Parity tests for legacy route fixtures and Rust router JSON output."""
 
 from __future__ import annotations
 
@@ -141,7 +141,7 @@ def test_route_decision_contract_exposes_typed_decision() -> None:
     ("query", "selected_skill", "overlay_skill", "layer", "allow_overlay", "first_turn"),
     ROUTE_DECISION_KNOB_CASES,
 )
-def test_route_decision_contract_live_matches_python_for_knobbed_inputs(
+def test_route_decision_contract_live_matches_legacy_for_knobbed_inputs(
     query: str,
     selected_skill: str,
     overlay_skill: str | None,
@@ -149,7 +149,7 @@ def test_route_decision_contract_live_matches_python_for_knobbed_inputs(
     allow_overlay: bool,
     first_turn: bool,
 ) -> None:
-    python_decision = route_decision_contract(
+    legacy_decision = route_decision_contract(
         query,
         codex_home=PROJECT_ROOT,
         session_id="route-knob-live-parity",
@@ -163,7 +163,7 @@ def test_route_decision_contract_live_matches_python_for_knobbed_inputs(
         first_turn=first_turn,
     ).model_dump(mode="json")
 
-    assert rust_decision == python_decision
+    assert rust_decision == legacy_decision
     assert rust_decision["selected_skill"] == selected_skill
     assert rust_decision["overlay_skill"] == overlay_skill
     assert rust_decision["layer"] == layer
@@ -208,7 +208,7 @@ def test_route_contract_rejects_unknown_decision_schema_shape(
         return payload
 
     monkeypatch.setattr(adapter, "_run_hot_json_command", fake_run_hot_json_command)
-    with pytest.raises(RuntimeError, match="unknown decision schema"):
+    with pytest.raises(RuntimeError, match="invalid typed decision contract"):
         adapter.route_contract(
             query="这个仓库的修复你直接 gsd，推进到底，别停，主线程保持简短并给我验证证据",
             session_id="route-contract-unknown-schema",
@@ -228,7 +228,7 @@ def test_route_contract_rejects_unknown_decision_authority_shape(
         return payload
 
     monkeypatch.setattr(adapter, "_run_hot_json_command", fake_run_hot_json_command)
-    with pytest.raises(RuntimeError, match="unexpected authority marker"):
+    with pytest.raises(RuntimeError, match="invalid typed decision contract"):
         adapter.route_contract(
             query="这个仓库的修复你直接 gsd，推进到底，别停，主线程保持简短并给我验证证据",
             session_id="route-contract-unknown-authority",
@@ -403,7 +403,7 @@ def test_search_skill_matches_contract_rejects_rows_only_payload(
         },
     )
 
-    with pytest.raises(ValidationError, match="matches"):
+    with pytest.raises(RuntimeError, match="invalid typed search contract"):
         adapter.search_skill_matches_contract(query="typed first", limit=1)
 
 
@@ -426,6 +426,27 @@ def test_search_matches_contract_rejects_transport_rows_outside_adapter_boundary
                         "total_terms": 2,
                     }
                 ],
+            }
+        )
+
+
+def test_search_matches_contract_rejects_non_rust_contract_markers() -> None:
+    with pytest.raises(ValidationError, match="search_schema_version"):
+        SearchMatchesContract.model_validate(
+            {
+                "search_schema_version": "legacy-search-results-v1",
+                "authority": "rust-route-core",
+                "query": "typed first",
+                "matches": [],
+            }
+        )
+    with pytest.raises(ValidationError, match="authority"):
+        SearchMatchesContract.model_validate(
+            {
+                "search_schema_version": "router-rs-search-results-v1",
+                "authority": "legacy-route-core",
+                "query": "typed first",
+                "matches": [],
             }
         )
 
@@ -466,6 +487,28 @@ def test_search_skill_matches_contract_accepts_typed_matches_without_legacy_rows
 
     assert contract.matches[0].record.name == "iterative-optimizer"
     assert contract.matches[0].record.routing_layer == "L2"
+
+
+def test_route_decision_contract_rejects_non_rust_contract_markers() -> None:
+    payload = _fallback_route_contract_payload(adapter=_fixture_route_adapter())
+    payload["decision_schema_version"] = "legacy-route-decision-v1"
+    with pytest.raises(ValidationError, match="decision_schema_version"):
+        RouteDecisionContract.model_validate(payload)
+
+    payload = _fallback_route_contract_payload(adapter=_fixture_route_adapter())
+    payload["authority"] = "legacy-route-core"
+    with pytest.raises(ValidationError, match="authority"):
+        RouteDecisionContract.model_validate(payload)
+
+    payload = _fallback_route_contract_payload(adapter=_fixture_route_adapter())
+    payload["compile_authority"] = "legacy-route-compiler"
+    with pytest.raises(ValidationError, match="compile_authority"):
+        RouteDecisionContract.model_validate(payload)
+
+    payload = _fallback_route_contract_payload(adapter=_fixture_route_adapter())
+    payload["route_snapshot"]["engine"] = "legacy"
+    with pytest.raises(ValidationError, match="engine"):
+        RouteDecisionContract.model_validate(payload)
 
 
 def test_route_decision_contract_stays_typed_first_transport_payload(
@@ -664,7 +707,7 @@ def test_rust_route_adapter_trace_descriptor_methods_validate_schema_and_authori
             "stream_id": "stream::session-1",
             "session_id": "session-1",
             "job_id": None,
-            "transport_family": "host-facing-bridge",
+            "transport_family": "host-facing-transport",
             "transport_kind": "poll",
             "endpoint_kind": "runtime_method",
             "remote_capable": True,
@@ -680,7 +723,7 @@ def test_rust_route_adapter_trace_descriptor_methods_validate_schema_and_authori
             "binding_backend_family": "filesystem",
             "binding_artifact_path": "/tmp/runtime_event_transports/session-1__session-1.json",
             "resume_mode": "after_event_id",
-            "cleanup_semantics": "bridge_cache_only",
+            "cleanup_semantics": "stream_cache_only",
             "cleanup_preserves_replay": True,
             "replay_reseed_supported": True,
             "latest_cursor": {
@@ -1006,7 +1049,7 @@ ROUTE_FIXTURES = json.loads(ROUTE_FIXTURE_PATH.read_text(encoding="utf-8"))
 REAL_TASK_REPLAY_QUERIES = [
     "这是高负载跨文件任务，需要 sidecar delegation 并行处理",
     "帮我写一个 Rust CLI 工具",
-    "把这份 runtime checklist 落成代码，并保留 Python host 接口",
+    "把这份 runtime checklist 落成代码，并保留 host 接口",
     "review checklist 看这轮是否结束",
     "这个 skill 框架 owner gate overlay 边界重叠了，顺手把路由策略修一下并减少 token 消耗。",
     "帮我看 OpenAI Responses API 最新官方文档并说明怎么用。",
@@ -1022,7 +1065,7 @@ REAL_TASK_REPLAY_QUERIES = [
         ("github 深度 调研 issue PR 演化分析", 5),
     ],
 )
-def test_rust_search_contract_matches_python_search_results(query: str, limit: int) -> None:
+def test_rust_search_contract_matches_legacy_search_results(query: str, limit: int) -> None:
     """Verify the search consumer path stays typed-first with one Rust-owned match contract."""
 
     contract = route_adapter(
@@ -1043,14 +1086,14 @@ def test_rust_search_contract_matches_python_search_results(query: str, limit: i
     ROUTE_FIXTURES["cases"],
     ids=[case["name"] for case in ROUTE_FIXTURES["cases"]],
 )
-def test_rust_route_json_matches_python_route_decision(case: dict[str, object]) -> None:
-    """Verify final route decision parity between Python and Rust."""
+def test_rust_route_json_matches_legacy_route_decision(case: dict[str, object]) -> None:
+    """Verify final route decision parity between legacy and Rust."""
 
     query = str(case["query"])
     allow_overlay = bool(case.get("allow_overlay", True))
     first_turn = bool(case.get("first_turn", True))
 
-    python_decision = route_decision_contract(
+    legacy_decision = route_decision_contract(
         query,
         codex_home=PROJECT_ROOT,
         session_id="fixture-session",
@@ -1067,7 +1110,7 @@ def test_rust_route_json_matches_python_route_decision(case: dict[str, object]) 
     )
     rust_decision = rust_contract.model_dump(mode="json")
 
-    assert rust_decision == python_decision
+    assert rust_decision == legacy_decision
 
     expected = case["expected"]
     assert rust_contract.selected_skill == expected["selected_skill"]
@@ -1079,7 +1122,7 @@ def test_rust_route_json_matches_python_route_decision(case: dict[str, object]) 
 def test_real_task_replay_queries_match_shadow_diff_fields(query: str) -> None:
     """Real-task replay queries should keep the stable shadow diff vocabulary aligned."""
 
-    python_decision = route_decision_contract(
+    legacy_decision = route_decision_contract(
         query,
         codex_home=PROJECT_ROOT,
         session_id="shadow-replay-session",
@@ -1093,11 +1136,11 @@ def test_real_task_replay_queries_match_shadow_diff_fields(query: str) -> None:
         first_turn=True,
     ).model_dump(mode="json")
 
-    assert rust_decision["selected_skill"] == python_decision["selected_skill"]
-    assert rust_decision["overlay_skill"] == python_decision["overlay_skill"]
-    assert rust_decision["layer"] == python_decision["layer"]
-    assert rust_decision["route_snapshot"]["score_bucket"] == python_decision["route_snapshot"]["score_bucket"]
-    assert rust_decision["route_snapshot"]["reasons_class"] == python_decision["route_snapshot"]["reasons_class"]
+    assert rust_decision["selected_skill"] == legacy_decision["selected_skill"]
+    assert rust_decision["overlay_skill"] == legacy_decision["overlay_skill"]
+    assert rust_decision["layer"] == legacy_decision["layer"]
+    assert rust_decision["route_snapshot"]["score_bucket"] == legacy_decision["route_snapshot"]["score_bucket"]
+    assert rust_decision["route_snapshot"]["reasons_class"] == legacy_decision["route_snapshot"]["reasons_class"]
 
 
 @pytest.mark.parametrize(
@@ -1137,7 +1180,7 @@ def test_live_route_expectations_hold_for_framework_and_openai_queries(
 ) -> None:
     """Framework-review and OpenAI-doc queries should keep stable live routing."""
 
-    python_decision = route_decision_contract(
+    legacy_decision = route_decision_contract(
         query,
         codex_home=PROJECT_ROOT,
         session_id="live-expectation-session",
@@ -1151,7 +1194,7 @@ def test_live_route_expectations_hold_for_framework_and_openai_queries(
         first_turn=True,
     ).model_dump(mode="json")
 
-    assert rust_decision == python_decision
+    assert rust_decision == legacy_decision
     assert rust_decision["selected_skill"] == selected_skill
     assert rust_decision["overlay_skill"] == overlay_skill
 
@@ -1171,7 +1214,7 @@ def test_framework_aliases_only_route_from_explicit_entrypoints(
     query: str,
     selected_skill: str,
 ) -> None:
-    python_decision = route_decision_contract(
+    legacy_decision = route_decision_contract(
         query,
         codex_home=PROJECT_ROOT,
         session_id="explicit-framework-alias-session",
@@ -1185,7 +1228,7 @@ def test_framework_aliases_only_route_from_explicit_entrypoints(
         first_turn=True,
     ).model_dump(mode="json")
 
-    assert rust_decision == python_decision
+    assert rust_decision == legacy_decision
     assert rust_decision["selected_skill"] == selected_skill
     assert rust_decision["overlay_skill"] == "anti-laziness"
 
@@ -1202,7 +1245,7 @@ def test_framework_aliases_route_from_explicit_activation_phrases(
     query: str,
     selected_skill: str,
 ) -> None:
-    python_decision = route_decision_contract(
+    legacy_decision = route_decision_contract(
         query,
         codex_home=PROJECT_ROOT,
         session_id="explicit-framework-alias-activation-session",
@@ -1216,7 +1259,7 @@ def test_framework_aliases_route_from_explicit_activation_phrases(
         first_turn=True,
     ).model_dump(mode="json")
 
-    assert rust_decision == python_decision
+    assert rust_decision == legacy_decision
     assert rust_decision["selected_skill"] == selected_skill
     assert rust_decision["overlay_skill"] == "anti-laziness"
 
@@ -1229,7 +1272,7 @@ def test_team_short_activation_phrases_route_more_stably_in_codex(
     query: str,
     should_route_team: bool,
 ) -> None:
-    python_decision = route_decision_contract(
+    legacy_decision = route_decision_contract(
         query,
         codex_home=PROJECT_ROOT,
         session_id="implicit-framework-alias-session",
@@ -1243,7 +1286,7 @@ def test_team_short_activation_phrases_route_more_stably_in_codex(
         first_turn=True,
     ).model_dump(mode="json")
 
-    assert rust_decision == python_decision
+    assert rust_decision == legacy_decision
     if should_route_team:
         assert rust_decision["selected_skill"] == "team"
         assert rust_decision["overlay_skill"] == "anti-laziness"
@@ -1253,7 +1296,7 @@ def test_team_short_activation_phrases_route_more_stably_in_codex(
 
 def test_framework_alias_strong_orchestration_signals_can_route_team() -> None:
     query = "需要 team orchestration，worker lifecycle、integration、qa、cleanup 和 resume recovery 都由 supervisor 主线持续管理"
-    python_decision = route_decision_contract(
+    legacy_decision = route_decision_contract(
         query,
         codex_home=PROJECT_ROOT,
         session_id="strong-team-orchestration-session",
@@ -1267,7 +1310,7 @@ def test_framework_alias_strong_orchestration_signals_can_route_team() -> None:
         first_turn=True,
     ).model_dump(mode="json")
 
-    assert rust_decision == python_decision
+    assert rust_decision == legacy_decision
     assert rust_decision["selected_skill"] == "team"
 
 
@@ -1279,7 +1322,7 @@ def test_framework_alias_strong_orchestration_signals_can_route_team() -> None:
     ],
 )
 def test_framework_alias_strong_team_orchestration_signals_can_route_team_implicitly(query: str) -> None:
-    python_decision = route_decision_contract(
+    legacy_decision = route_decision_contract(
         query,
         codex_home=PROJECT_ROOT,
         session_id="implicit-team-route-session",
@@ -1293,7 +1336,7 @@ def test_framework_alias_strong_team_orchestration_signals_can_route_team_implic
         first_turn=True,
     ).model_dump(mode="json")
 
-    assert rust_decision == python_decision
+    assert rust_decision == legacy_decision
     assert rust_decision["selected_skill"] == "team"
 
 
@@ -1306,7 +1349,7 @@ def test_framework_alias_strong_team_orchestration_signals_can_route_team_implic
     ],
 )
 def test_bounded_multiagent_requests_prefer_subagent_over_team(query: str) -> None:
-    python_decision = route_decision_contract(
+    legacy_decision = route_decision_contract(
         query,
         codex_home=PROJECT_ROOT,
         session_id="bounded-subagent-route-session",
@@ -1320,7 +1363,7 @@ def test_bounded_multiagent_requests_prefer_subagent_over_team(query: str) -> No
         first_turn=True,
     ).model_dump(mode="json")
 
-    assert rust_decision == python_decision
+    assert rust_decision == legacy_decision
     assert rust_decision["selected_skill"] == "subagent-delegation"
     assert rust_decision["overlay_skill"] == "anti-laziness"
 
@@ -1380,7 +1423,7 @@ def test_route_policy_mode_matrix_stays_rust_authoritative(
 
 
 def test_rust_route_adapter_route_contract_returns_typed_rust_owned_contract() -> None:
-    """The Python host should consume a typed Rust route contract, not stitch raw fields ad hoc."""
+    """The host should consume a typed Rust route contract, not stitch raw fields ad hoc."""
 
     adapter = RustRouteAdapter(PROJECT_ROOT)
     contract = adapter.route_contract(
@@ -1577,7 +1620,7 @@ def test_route_report_contract_rejects_snapshot_dict_compatibility_inputs() -> N
 
 
 def test_route_report_contract_marks_mismatched_contract_fields() -> None:
-    """Rust route diagnostics should carry contract mismatches instead of relying on Python-side comparisons."""
+    """Rust route diagnostics should carry contract mismatches instead of relying on native-side comparisons."""
 
     adapter = RustRouteAdapter(PROJECT_ROOT)
     decision = route_decision_contract(
@@ -1633,7 +1676,7 @@ def test_route_report_contract_requires_snapshot_or_decision() -> None:
 
 
 def test_runtime_storage_contract_round_trips_sqlite_payload(tmp_path: Path) -> None:
-    """The Rust runtime-storage bridge should own SQLite payload IO end to end."""
+    """The Rust runtime-storage transport should own SQLite payload IO end to end."""
 
     adapter = RustRouteAdapter(PROJECT_ROOT)
     storage_root = tmp_path / "runtime-data"

@@ -11,8 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::framework_runtime::{
-    build_framework_memory_recall_envelope, build_framework_recap_projection,
-    build_framework_runtime_snapshot_envelope,
+    build_framework_recap_projection, build_framework_runtime_snapshot_envelope,
 };
 
 pub(crate) const CLAUDE_HOOK_SCHEMA_VERSION: &str = "router-rs-claude-hook-response-v1";
@@ -33,23 +32,6 @@ const STABLE_DOCUMENTS: [&str; 5] = [
     "decisions.md",
     "lessons.md",
     "runbooks.md",
-];
-const MEMORY_AUTOMATION_DEFAULT_TOP: usize = 8;
-const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 7] = [
-    "SESSION_SUMMARY.md",
-    "NEXT_ACTIONS.json",
-    "EVIDENCE_INDEX.json",
-    "TRACE_METADATA.json",
-    "active_task.json",
-    "focus_task.json",
-    "task_registry.json",
-];
-const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 5] = [
-    "SESSION_SUMMARY.md",
-    "NEXT_ACTIONS.json",
-    "EVIDENCE_INDEX.json",
-    "TRACE_METADATA.json",
-    ".supervisor_state.json",
 ];
 const GENERATED_PATHS: [&str; 3] = [
     ".claude/settings.json",

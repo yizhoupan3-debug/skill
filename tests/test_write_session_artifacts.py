@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -14,7 +15,70 @@ if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
 from framework_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
-from scripts.write_session_artifacts import write_artifacts
+
+
+def write_artifacts(
+    output_dir: Path,
+    *,
+    task: str,
+    phase: str,
+    status: str,
+    summary: str,
+    next_actions: list[str],
+    evidence: list[dict[str, object]],
+    task_id: str | None = None,
+    mirror_output_dir: Path | None = None,
+    repo_root: Path | None = None,
+    focus: bool = False,
+) -> dict[str, str]:
+    payload = {
+        "output_dir": str(output_dir),
+        "task": task,
+        "phase": phase,
+        "status": status,
+        "summary": summary,
+        "next_actions": next_actions,
+        "evidence": evidence,
+        "task_id": task_id,
+        "mirror_output_dir": str(mirror_output_dir) if mirror_output_dir is not None else None,
+        "repo_root": str(repo_root) if repo_root is not None else None,
+        "focus": focus,
+    }
+    debug_binary = PROJECT_ROOT / "scripts" / "router-rs" / "target" / "debug" / "router-rs"
+    if not debug_binary.is_file():
+        subprocess.run(
+            [
+                "cargo",
+                "build",
+                "--quiet",
+                "--manifest-path",
+                str(PROJECT_ROOT / "scripts" / "router-rs" / "Cargo.toml"),
+            ],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    completed = subprocess.run(
+        [
+            str(debug_binary),
+            "--framework-session-artifact-write-json",
+            "--framework-session-artifact-write-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ],
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    resolved = json.loads(completed.stdout)
+    assert isinstance(resolved, dict)
+    return {
+        "summary": resolved["summary"],
+        "next_actions": resolved["next_actions"],
+        "evidence": resolved["evidence"],
+        "task_id": resolved["task_id"],
+    }
 
 
 def _read_task_registry(repo_root: Path) -> dict[str, object]:

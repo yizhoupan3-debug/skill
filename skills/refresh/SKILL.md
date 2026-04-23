@@ -54,7 +54,7 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null |
 2. 然后严格回复：
 
 ```text
-下一轮执行提示已准备好，并且已经复制到剪贴板。
+下一轮执行 prompt 已准备好，并且已经复制到剪贴板。
 ```
 
 ### 可选 debug 模式

@@ -26,7 +26,7 @@ TRACE_EVENT_SINK_SCHEMA_VERSION = "runtime-trace-sink-v2"
 TRACE_REPLAY_CURSOR_SCHEMA_VERSION = "runtime-trace-cursor-v1"
 TRACE_REPLAY_CHUNK_SCHEMA_VERSION = "runtime-trace-replay-v1"
 TRACE_RESUME_MANIFEST_SCHEMA_VERSION = "runtime-resume-manifest-v1"
-TRACE_EVENT_BRIDGE_SCHEMA_VERSION = "runtime-event-bridge-v1"
+TRACE_EVENT_STREAM_SCHEMA_VERSION = "runtime-event-stream-v1"
 TRACE_EVENT_TRANSPORT_SCHEMA_VERSION = "runtime-event-transport-v1"
 TRACE_EVENT_HANDOFF_SCHEMA_VERSION = "runtime-event-handoff-v1"
 TRACE_CONTROL_PLANE_SCHEMA_VERSION = "runtime-trace-control-plane-v1"
@@ -145,7 +145,7 @@ def _json_object(payload: Any) -> dict[str, Any] | None:
 
 
 class TraceControlPlaneDescriptor(BaseModel):
-    """Rust-owned trace descriptor consumed by the Python compatibility host."""
+    """Rust-owned trace descriptor consumed by the host projection."""
 
     schema_version: str = TRACE_CONTROL_PLANE_SCHEMA_VERSION
     runtime_control_plane_schema_version: str | None = None
@@ -407,18 +407,18 @@ class TraceResumeManifest(BaseModel):
     updated_at: str = Field(default_factory=_now_iso)
 
 
-class RuntimeEventBridgeHeartbeat(BaseModel):
+class RuntimeEventStreamHeartbeat(BaseModel):
     """Ephemeral heartbeat payload for quiet stream windows."""
 
     ts: str = Field(default_factory=_now_iso)
-    kind: str = "bridge.heartbeat"
+    kind: str = "runtime.stream.heartbeat"
     status: str = "idle"
 
 
 class RuntimeEventStreamChunk(BaseModel):
-    """Live bridge delivery window for host adapters and local subscribers."""
+    """Live event stream delivery window for host adapters and local subscribers."""
 
-    schema_version: str = TRACE_EVENT_BRIDGE_SCHEMA_VERSION
+    schema_version: str = TRACE_EVENT_STREAM_SCHEMA_VERSION
     session_id: str
     job_id: str | None = None
     generation: int = 0
@@ -426,7 +426,7 @@ class RuntimeEventStreamChunk(BaseModel):
     next_cursor: TraceReplayCursor | None = None
     has_more: bool = False
     after_event_id: str | None = None
-    heartbeat: RuntimeEventBridgeHeartbeat | None = None
+    heartbeat: RuntimeEventStreamHeartbeat | None = None
 
 
 class RuntimeEventAttachTarget(BaseModel):
@@ -442,7 +442,7 @@ class RuntimeEventAttachTarget(BaseModel):
 
 
 class RuntimeEventReplayAnchor(BaseModel):
-    """Replay anchor contract a remote host can use without Python bridge state."""
+    """Replay anchor contract a remote host can use without host event stream state."""
 
     anchor_kind: str = "trace_replay_cursor"
     cursor_schema_version: str = TRACE_REPLAY_CURSOR_SCHEMA_VERSION
@@ -458,8 +458,8 @@ class RuntimeEventTransport(BaseModel):
     stream_id: str
     session_id: str
     job_id: str | None = None
-    bridge_kind: str = "runtime_event_bridge"
-    transport_family: str = "host-facing-bridge"
+    transport_contract_kind: str = "runtime_event_stream"
+    transport_family: str = "host-facing-transport"
     transport_kind: str = "poll"
     endpoint_kind: str = "runtime_method"
     ownership_lane: str = _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR["ownership_lane"]
@@ -484,10 +484,10 @@ class RuntimeEventTransport(BaseModel):
     binding_artifact_path: str | None = None
     resume_mode: str = "after_event_id"
     heartbeat_supported: bool = True
-    cleanup_semantics: str = "bridge_cache_only"
+    cleanup_semantics: str = "stream_cache_only"
     cleanup_preserves_replay: bool = True
     replay_reseed_supported: bool = True
-    chunk_schema_version: str = TRACE_EVENT_BRIDGE_SCHEMA_VERSION
+    chunk_schema_version: str = TRACE_EVENT_STREAM_SCHEMA_VERSION
     cursor_schema_version: str = TRACE_REPLAY_CURSOR_SCHEMA_VERSION
     latest_cursor: TraceReplayCursor | None = None
     replay_supported: bool = True
@@ -541,7 +541,7 @@ class RuntimeEventHandoff(BaseModel):
     transport: RuntimeEventTransport
 
     def model_post_init(self, __context: Any) -> None:
-        """Project a remote-resume handoff that survives bridge-cache cleanup."""
+        """Project a remote-resume handoff that survives stream-cache cleanup."""
 
         if self.attach_target is None:
             self.attach_target = self.transport.attach_target
@@ -569,13 +569,13 @@ class TraceEventSink(Protocol):
         """Load persisted trace events from the sink backend."""
 
 
-class RuntimeEventBridge(Protocol):
-    """Live event-bridge seam decoupling producers from consumers."""
+class RuntimeEventStream(Protocol):
+    """Live event-stream seam decoupling producers from consumers."""
 
     schema_version: str
 
     def seed(self, events: Iterable[TraceEvent]) -> None:
-        """Load existing events into the bridge cache."""
+        """Load existing events into the stream cache."""
 
     def publish(self, event: TraceEvent) -> None:
         """Publish one new live event."""
@@ -595,13 +595,13 @@ class RuntimeEventBridge(Protocol):
         """Release cached events globally or for one filtered stream."""
 
 
-class InMemoryRuntimeEventBridge:
-    """In-memory event bridge with Last-Event-ID-style resume semantics."""
+class InMemoryRuntimeEventStream:
+    """In-memory event stream with Last-Event-ID-style resume semantics."""
 
     def __init__(
         self,
         *,
-        schema_version: str = TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
+        schema_version: str = TRACE_EVENT_STREAM_SCHEMA_VERSION,
         control_plane_descriptor: Mapping[str, Any] | None = None,
     ) -> None:
         self.schema_version = schema_version
@@ -614,7 +614,7 @@ class InMemoryRuntimeEventBridge:
         )
 
     def seed(self, events: Iterable[TraceEvent]) -> None:
-        """Seed the bridge with persisted events without duplicating event ids."""
+        """Seed the stream with persisted events without duplicating event ids."""
 
         for event in events:
             if event.event_id in self._event_ids:
@@ -623,7 +623,7 @@ class InMemoryRuntimeEventBridge:
             self._events.append(event)
 
     def publish(self, event: TraceEvent) -> None:
-        """Publish one new live event to the bridge."""
+        """Publish one new live event to the stream."""
 
         self.seed([event])
 
@@ -663,7 +663,7 @@ class InMemoryRuntimeEventBridge:
                 event_id=tail.event_id,
                 cursor=tail.cursor,
             )
-        heartbeat_payload = RuntimeEventBridgeHeartbeat() if heartbeat and not window else None
+        heartbeat_payload = RuntimeEventStreamHeartbeat() if heartbeat and not window else None
         return RuntimeEventStreamChunk(
             session_id=session_id,
             job_id=job_id,
@@ -676,7 +676,7 @@ class InMemoryRuntimeEventBridge:
         )
 
     def cleanup(self, *, session_id: str | None = None, job_id: str | None = None) -> None:
-        """Release cached bridge events for one stream or clear the full cache."""
+        """Release cached stream events for one stream or clear the full cache."""
 
         if session_id is None and job_id is None:
             self._events = []
@@ -702,7 +702,7 @@ class InMemoryRuntimeEventBridge:
         event_stream_path: Path | None = None,
         trace_output_path: Path | None = None,
     ) -> None:
-        """Attach or refresh the Rust-owned trace projection used by the bridge."""
+        """Attach or refresh the Rust-owned trace projection used by the stream."""
 
         self._control_plane = _build_trace_control_plane_descriptor(
             control_plane_descriptor=control_plane_descriptor,
@@ -711,12 +711,12 @@ class InMemoryRuntimeEventBridge:
         )
 
     def control_plane_descriptor(self) -> TraceControlPlaneDescriptor:
-        """Return the bridge-facing control-plane descriptor."""
+        """Return the stream-facing control-plane descriptor."""
 
         return self._control_plane.model_copy()
 
     def health(self) -> dict[str, Any]:
-        """Return bridge-local health derived from the shared trace contract."""
+        """Return stream-local health derived from the shared trace contract."""
 
         descriptor = self.control_plane_descriptor()
         return {
@@ -843,7 +843,7 @@ class RuntimeTraceRecorder:
         metadata_schema_version: str = TRACE_METADATA_SCHEMA_VERSION,
         framework_version: str = TRACE_FRAMEWORK_VERSION,
         event_sink: TraceEventSink | None = None,
-        event_bridge: RuntimeEventBridge | None = None,
+        event_stream: RuntimeEventStream | None = None,
         event_stream_path: Path | None = None,
         storage_backend: "RuntimeStorageBackend | None" = None,
         control_plane_descriptor: Mapping[str, Any] | None = None,
@@ -854,7 +854,7 @@ class RuntimeTraceRecorder:
         self.metadata_schema_version = metadata_schema_version
         self.framework_version = framework_version
         self.event_sink = event_sink
-        self.event_bridge = event_bridge
+        self.event_stream = event_stream
         self.storage_backend = storage_backend
         self._rust_adapter = rust_adapter or RustRouteAdapter(default_codex_home())
         self._control_plane = _build_trace_control_plane_descriptor(
@@ -881,8 +881,8 @@ class RuntimeTraceRecorder:
         self._events: list[TraceEvent] = []
         self._generation = 0
         self._next_seq = 1
-        if isinstance(self.event_bridge, InMemoryRuntimeEventBridge):
-            self.event_bridge.bind_control_plane(
+        if isinstance(self.event_stream, InMemoryRuntimeEventStream):
+            self.event_stream.bind_control_plane(
                 control_plane_descriptor=control_plane_descriptor,
                 event_stream_path=event_stream_path,
                 trace_output_path=output_path,
@@ -926,8 +926,8 @@ class RuntimeTraceRecorder:
         self._next_seq += 1
         if self.event_sink is not None:
             self.event_sink.write_event(event)
-        if self.event_bridge is not None:
-            self.event_bridge.publish(event)
+        if self.event_stream is not None:
+            self.event_stream.publish(event)
         self._append_compaction_delta(event)
         return event
 
@@ -1047,7 +1047,7 @@ class RuntimeTraceRecorder:
         )
 
     def stream_events(self, *, session_id: str | None = None, job_id: str | None = None) -> list[TraceEvent]:
-        """Return replayable events with optional filtering for bridge seeding."""
+        """Return replayable events with optional filtering for stream seeding."""
 
         return self._filter_events(self._load_stream_events(), session_id=session_id, job_id=job_id)
 
@@ -1076,7 +1076,7 @@ class RuntimeTraceRecorder:
             next_cursor=replay.next_cursor,
             has_more=replay.has_more,
             after_event_id=after_event_id,
-            heartbeat=RuntimeEventBridgeHeartbeat() if heartbeat and not replay.events else None,
+            heartbeat=RuntimeEventStreamHeartbeat() if heartbeat and not replay.events else None,
         )
 
     def _supports_rust_trace_io(self) -> bool:
@@ -1598,9 +1598,9 @@ class RuntimeTraceRecorder:
         return {
             "generation": self._generation,
             "replay_supported": True,
-            "event_bridge_supported": self.event_bridge is not None,
-            "event_bridge_schema_version": (
-                self.event_bridge.schema_version if self.event_bridge is not None else None
+            "event_stream_supported": self.event_stream is not None,
+            "event_stream_schema_version": (
+                self.event_stream.schema_version if self.event_stream is not None else None
             ),
             "control_plane_authority": self._control_plane.authority,
             "control_plane_role": self._control_plane.role,

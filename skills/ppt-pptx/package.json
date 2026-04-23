@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "smoke:test": "python3 scripts/smoke_test.py"
+    "smoke:test": "node scripts/smoke_test.js"
   },
   "dependencies": {
     "fontkit": "^2.0.4",

@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
@@ -15,7 +15,6 @@ if [ ! -f dist/index.js ] || [ src/index.ts -nt dist/index.js ] || [ src/runtime
   npm run build >/dev/null
 fi
 
-typeset -a NODE_ARGS
 NODE_ARGS=()
 
 if [ -n "${BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH:-}" ]; then

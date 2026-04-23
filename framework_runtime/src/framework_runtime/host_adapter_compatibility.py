@@ -116,8 +116,8 @@ def compile_aionui_host_adapter(
         "artifact_contract": _clone_json_like(payload["artifact_contract"]),
         "memory_mounts": _clone_json_like(payload["memory_mounts"]),
         "workspace_bootstrap": _clone_json_like(payload["workspace_bootstrap"]),
-        "approval_bridge": _clone_json_like(companion_contract["toolApprovalMapping"]),
-        "event_bridge": _clone_json_like(companion_contract["eventTranslation"]),
+        "approval_transport": _clone_json_like(companion_contract["toolApprovalMapping"]),
+        "event_stream": _clone_json_like(companion_contract["eventTranslation"]),
         "event_transport": _default_event_transport(),
         "event_stream_binding": _default_event_stream_binding(),
         "fallback_semantics": {
@@ -178,7 +178,7 @@ def build_codex_desktop_alias_retirement_status(
         "codex_dual_entry_parity_artifact": "codex_dual_entry_parity_snapshot",
         "secondary_inventory_artifact": COMPATIBILITY_INVENTORY_ARTIFACT_ID,
         "emitter_contract": {
-            "python_emits_alias_artifact": False,
+            "native_emits_alias_artifact": False,
             "rust_emits_alias_artifact": False,
             "drop_requires_joint_emitter_flip": True,
             "legacy_alias_artifact_opt_in": True,

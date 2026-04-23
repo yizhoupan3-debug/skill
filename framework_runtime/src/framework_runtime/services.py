@@ -28,14 +28,12 @@ except ImportError:  # pragma: no cover - optional host probe dependency.
 from framework_runtime.checkpoint_store import RuntimeCheckpointer
 from framework_runtime.config import RuntimeSettings
 from framework_runtime.execution_kernel_contracts import (
-    EXECUTION_KERNEL_BRIDGE_AUTHORITY,
-    EXECUTION_KERNEL_BRIDGE_KIND,
+    EXECUTION_KERNEL_AUTHORITY,
+    EXECUTION_KERNEL_KIND,
     EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
     EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
     EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
     execution_kernel_steady_state_fields,
-    build_execution_kernel_live_response_serialization_contract_core,
-    normalize_execution_kernel_metadata_bridge,
     resolve_execution_kernel_expectations,
     validate_execution_kernel_steady_state_metadata,
 )
@@ -67,7 +65,7 @@ from framework_runtime.state import (
     BackgroundSessionTakeoverArbitration,
     SessionConflictError,
 )
-from framework_runtime.trace import InMemoryRuntimeEventBridge, RuntimeEventHandoff, RuntimeEventStreamChunk
+from framework_runtime.trace import InMemoryRuntimeEventStream, RuntimeEventHandoff, RuntimeEventStreamChunk
 from framework_runtime.trace import RuntimeEventTransport
 
 _KERNEL_HEALTH_FIELDS = (
@@ -204,31 +202,12 @@ def _runtime_execution_kernel_contract(
         contract = service_descriptor.get("kernel_contract")
     if not isinstance(contract, Mapping):
         raise RuntimeError("runtime control plane execution descriptor is missing kernel_contract.")
-    metadata_bridge = _runtime_execution_kernel_metadata_bridge(service_descriptor)
     return validate_execution_kernel_steady_state_metadata(
         metadata=contract,
-        execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
-        execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
+        execution_kernel=EXECUTION_KERNEL_KIND,
+        execution_kernel_authority=EXECUTION_KERNEL_AUTHORITY,
         response_shape=resolved_response_shape,
-        metadata_bridge=metadata_bridge,
     )
-
-
-def _runtime_execution_kernel_metadata_bridge(
-    service_descriptor: Mapping[str, Any] | None,
-) -> dict[str, Any] | None:
-    """Return the Rust-owned execution-kernel naming bridge when available."""
-
-    if not isinstance(service_descriptor, Mapping):
-        return None
-    bridge = service_descriptor.get("kernel_metadata_bridge")
-    if bridge is None:
-        return None
-    if not isinstance(bridge, Mapping):
-        raise RuntimeError(
-            "runtime control plane execution descriptor returned an invalid kernel_metadata_bridge."
-        )
-    return normalize_execution_kernel_metadata_bridge(dict(bridge))
 
 
 def _runtime_execution_kernel_health(
@@ -258,7 +237,7 @@ def _runtime_sandbox_lifecycle_contract(service_descriptor: Mapping[str, Any] | 
         "schema_version": "runtime-sandbox-lifecycle-v1",
         "authority": "rust-runtime-control-plane",
         "role": "sandbox-lifecycle-control",
-        "projection": "python-diagnosis-only-projection",
+        "projection": "host-diagnosis-only-projection",
         "delegate_kind": "rust-runtime-control-plane",
         "lifecycle_states": list(_DEFAULT_SANDBOX_LIFECYCLE_STATES),
         "allowed_transitions": [list(edge) for edge in sorted(_DEFAULT_SANDBOX_ALLOWED_TRANSITIONS)],
@@ -289,7 +268,7 @@ def _runtime_background_orchestration_contract(
         "schema_version": "runtime-background-orchestration-v1",
         "authority": "rust-runtime-control-plane",
         "role": "background-orchestration-control",
-        "projection": "python-diagnosis-only-projection",
+        "projection": "host-diagnosis-only-projection",
         "delegate_kind": "rust-background-control-policy",
         "policy_schema_version": "router-rs-background-control-v1",
         "queue_model": "bounded-async-host",
@@ -327,7 +306,7 @@ def _runtime_host_contract(control_plane_descriptor: Mapping[str, Any] | None) -
     payload = {
         "authority": "rust-runtime-control-plane",
         "role": "runtime-orchestration",
-        "projection": "python-diagnosis-only-projection",
+        "projection": "host-diagnosis-only-projection",
         "delegate_kind": "rust-runtime-control-plane",
         "startup_order": list(_DEFAULT_RUNTIME_STARTUP_ORDER),
         "shutdown_order": list(_DEFAULT_RUNTIME_SHUTDOWN_ORDER),
@@ -372,11 +351,6 @@ def _runtime_service_health_projection(
 def _runtime_rustification_health(control_plane_descriptor: Mapping[str, Any] | None) -> dict[str, Any]:
     runtime_host = _runtime_host_contract(control_plane_descriptor)
     return {
-        "python_host_role": (
-            control_plane_descriptor.get("python_host_role")
-            if isinstance(control_plane_descriptor, Mapping)
-            else None
-        ),
         "rustification_status": _runtime_control_plane_rustification_status(control_plane_descriptor),
         "rust_owned_service_count": runtime_host.get("rust_owned_service_count", 0),
     }
@@ -394,18 +368,15 @@ def _runtime_background_effect_host_contract(
     if isinstance(control_plane_descriptor, Mapping):
         runtime_control_plane_authority = control_plane_descriptor.get("authority")
         runtime_control_plane_schema_version = control_plane_descriptor.get("schema_version")
-        python_host_role = control_plane_descriptor.get("python_host_role")
     else:
         runtime_control_plane_authority = None
         runtime_control_plane_schema_version = None
-        python_host_role = None
     if not isinstance(service_descriptor, Mapping):
         service_descriptor = {}
     progression = {
         "runtime_primary_owner": rustification_status.get("runtime_primary_owner"),
         "runtime_primary_owner_authority": rustification_status.get("runtime_primary_owner_authority"),
-        "python_runtime_role": rustification_status.get("python_runtime_role"),
-        "steady_state_python_allowed": rustification_status.get("steady_state_python_allowed"),
+        "hot_path_projection_mode": rustification_status.get("hot_path_projection_mode"),
     }
     return {
         "service": service_name,
@@ -415,10 +386,8 @@ def _runtime_background_effect_host_contract(
         "control_plane_delegate_kind": service_descriptor.get("delegate_kind"),
         "runtime_control_plane_authority": runtime_control_plane_authority,
         "runtime_control_plane_schema_version": runtime_control_plane_schema_version,
-        "python_host_role": python_host_role,
         "steady_state_owner": progression["runtime_primary_owner"],
         "steady_state_owner_authority": progression["runtime_primary_owner_authority"],
-        "remaining_python_role": progression["python_runtime_role"],
         "progression": progression,
     }
 
@@ -1118,7 +1087,6 @@ class RouterService:
                 "route_result_engine": policy.route_result_engine,
                 "diagnostic_report_required": policy.diagnostic_report_required,
                 "strict_verification_required": policy.strict_verification_required,
-                "python_runtime_role": self.control_plane_descriptor.get("python_host_role"),
                 "rustification_status": _runtime_control_plane_rustification_status(self.control_plane_descriptor),
                 "route_policy": policy.model_dump(mode="json"),
                 "rust_adapter": self._rust_adapter_health_snapshot(),
@@ -1203,7 +1171,7 @@ class RouterService:
         skill = next((item for item in self.skills if item.name == skill_name), None)
         if skill is None:
             raise RuntimeError(
-                "Rust route decision referenced a skill that is not loaded by the Python host: "
+                "Rust route decision referenced a skill that is not loaded by the host: "
                 f"{skill_name!r} (session_id={decision.session_id!r})"
             )
         return skill
@@ -1365,10 +1333,10 @@ class TraceService:
         self.event_stream_path = paths.event_stream_path
         self.resume_manifest_path = paths.resume_manifest_path
         self.event_transport_dir = paths.event_transport_dir
-        self.event_bridge = InMemoryRuntimeEventBridge(control_plane_descriptor=control_plane_descriptor)
-        self.recorder = checkpointer.build_trace_recorder(event_bridge=self.event_bridge)
+        self.event_stream = InMemoryRuntimeEventStream(control_plane_descriptor=control_plane_descriptor)
+        self.recorder = checkpointer.build_trace_recorder(event_stream=self.event_stream)
         self._observability_health: dict[str, Any] | None = None
-        self.event_bridge.seed(self.recorder.stream_events())
+        self.event_stream.seed(self.recorder.stream_events())
 
     def refresh_control_plane(self, control_plane_descriptor: Mapping[str, Any] | None) -> None:
         self._control_plane_descriptor = dict(control_plane_descriptor or {})
@@ -1379,22 +1347,22 @@ class TraceService:
 
     def shutdown(self) -> None:
         """Trace service shutdown hook."""
-        self.event_bridge.cleanup()
+        self.event_stream.cleanup()
 
     def control_plane_contract(self) -> dict[str, Any]:
         """Return the Rust-first trace contract projected into the steady-state host."""
 
         recorder_contract = self.recorder.control_plane_descriptor().model_dump(mode="json")
-        bridge_contract = self.event_bridge.control_plane_descriptor().model_dump(mode="json")
+        stream_contract = self.event_stream.control_plane_descriptor().model_dump(mode="json")
         recorder_semantics = dict(recorder_contract)
-        bridge_semantics = dict(bridge_contract)
-        for payload in (recorder_semantics, bridge_semantics):
+        stream_semantics = dict(stream_contract)
+        for payload in (recorder_semantics, stream_semantics):
             payload.pop("event_stream_path", None)
             payload.pop("trace_output_path", None)
         return {
             "recorder": recorder_contract,
-            "bridge": bridge_contract,
-            "aligned": recorder_semantics == bridge_semantics,
+            "stream": stream_contract,
+            "aligned": recorder_semantics == stream_semantics,
         }
 
     def subscribe(
@@ -1406,7 +1374,7 @@ class TraceService:
         limit: int | None = None,
         heartbeat: bool = False,
     ) -> RuntimeEventStreamChunk:
-        """Return one event-bridge delivery window for a subscriber."""
+        """Return one event-stream delivery window for a subscriber."""
 
         return self.recorder.subscribe_chunk(
             session_id=session_id,
@@ -1417,9 +1385,9 @@ class TraceService:
         )
 
     def cleanup_stream(self, *, session_id: str | None = None, job_id: str | None = None) -> None:
-        """Release cached bridge events for one stream or for the whole service."""
+        """Release cached stream events for one stream or for the whole service."""
 
-        self.event_bridge.cleanup(session_id=session_id, job_id=job_id)
+        self.event_stream.cleanup(session_id=session_id, job_id=job_id)
 
     def describe_stream_artifacts(
         self,
@@ -1513,8 +1481,8 @@ class TraceService:
             "trace_event_schema_version": self.recorder.event_schema_version,
             "trace_metadata_schema_version": self.recorder.metadata_schema_version,
             "replay_supported": self.recorder.describe_stream()["replay_supported"],
-            "event_bridge_supported": True,
-            "event_bridge_schema_version": self.event_bridge.schema_version,
+            "event_stream_supported": True,
+            "event_stream_schema_version": self.event_stream.schema_version,
             "observability": self._observability_health_snapshot(),
             "background_effect_host_contract": _runtime_background_effect_host_contract(
                 self._control_plane_descriptor,
@@ -1696,128 +1664,12 @@ class ExecutionEnvironmentService:
         return payload
 
     def describe_control_plane_contracts(self) -> dict[str, Any]:
-        """Return control-plane-only descriptors for shared execution artifacts."""
+        """Return Rust-owned control-plane descriptors for shared execution artifacts."""
 
-        snapshot = self._execution_kernel_descriptor_snapshot()
         payload = self._rust_adapter.control_plane_contract_descriptors()
-        self._apply_runtime_execution_contract_projection(payload, snapshot=snapshot)
         if self.control_plane_descriptor:
             payload["runtime_control_plane"] = self.control_plane_descriptor
         return payload
-
-    def _apply_runtime_execution_contract_projection(
-        self,
-        payload: dict[str, Any],
-        *,
-        snapshot: Mapping[str, Any],
-    ) -> None:
-        """Project runtime-specific execution metadata onto Rust static descriptors."""
-
-        metadata_bridge = snapshot["metadata_bridge"]
-        contract_by_mode = snapshot["contract_by_mode"]
-        live_contract = contract_by_mode.get(EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY, {})
-        dry_run_contract = contract_by_mode.get(EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN, {})
-        live_expectations = resolve_execution_kernel_expectations(live_contract)
-        dry_run_expectations = resolve_execution_kernel_expectations(dry_run_contract or live_contract)
-
-        serialization_key = "execution_kernel_live_response_serialization_contract"
-        serialization_contract = dict(payload.get(serialization_key, {}))
-        serialization_contract.update(
-            build_execution_kernel_live_response_serialization_contract_core(
-                metadata_bridge=metadata_bridge
-            )
-        )
-        payload[serialization_key] = serialization_contract
-
-        retirement_key = "execution_kernel_live_fallback_retirement_status"
-        retirement_contract = dict(payload.get(retirement_key, {}))
-        live_primary = dict(retirement_contract.get("live_primary", {}))
-        live_primary.update(
-            {
-                "contract_mode": live_contract.get(
-                    "execution_kernel_contract_mode",
-                    "rust-live-primary",
-                ),
-                "adapter_kind": live_contract.get(
-                    "execution_kernel_live_primary",
-                    live_expectations["execution_kernel_delegate"],
-                ),
-                "authority": live_contract.get(
-                    "execution_kernel_live_primary_authority",
-                    live_expectations["execution_kernel_delegate_authority"],
-                ),
-                "family": live_contract.get(
-                    "execution_kernel_delegate_family",
-                    live_expectations["execution_kernel_delegate_family"],
-                ),
-                "impl": live_contract.get(
-                    "execution_kernel_delegate_impl",
-                    live_expectations["execution_kernel_delegate_impl"],
-                ),
-            }
-        )
-        retirement_contract["live_primary"] = live_primary
-
-        current_contract_truth = dict(retirement_contract.get("current_contract_truth", {}))
-        current_contract_truth.update(
-            {
-                "execution_kernel_contract_mode": live_contract.get(
-                    "execution_kernel_contract_mode",
-                    "rust-live-primary",
-                ),
-                "execution_kernel_in_process_replacement_complete": live_contract.get(
-                    "execution_kernel_in_process_replacement_complete",
-                    True,
-                ),
-                "dry_run_delegate_kind": dry_run_contract.get(
-                    "execution_kernel_delegate",
-                    dry_run_expectations["execution_kernel_delegate"],
-                ),
-                "dry_run_delegate_authority": dry_run_contract.get(
-                    "execution_kernel_delegate_authority",
-                    dry_run_expectations["execution_kernel_delegate_authority"],
-                ),
-                "live_primary_kind": live_contract.get(
-                    "execution_kernel_live_primary",
-                    live_expectations["execution_kernel_delegate"],
-                ),
-                "live_primary_authority": live_contract.get(
-                    "execution_kernel_live_primary_authority",
-                    live_expectations["execution_kernel_delegate_authority"],
-                ),
-                "live_prompt_preview_passthrough_disabled": (
-                    serialization_contract["current_response_shape_truth"]["live_primary"][
-                        "prompt_preview_source"
-                    ]
-                    == "rust-owned-live-prompt"
-                ),
-            }
-        )
-        retirement_contract["current_contract_truth"] = current_contract_truth
-
-        response_metadata_truth = dict(retirement_contract.get("current_response_metadata_truth", {}))
-        response_metadata_truth.update(
-            {
-                "live_delegate_family": live_contract.get(
-                    "execution_kernel_delegate_family",
-                    live_expectations["execution_kernel_delegate_family"],
-                ),
-                "live_delegate_impl": live_contract.get(
-                    "execution_kernel_delegate_impl",
-                    live_expectations["execution_kernel_delegate_impl"],
-                ),
-                "dry_run_delegate_family": dry_run_contract.get(
-                    "execution_kernel_delegate_family",
-                    dry_run_expectations["execution_kernel_delegate_family"],
-                ),
-                "dry_run_delegate_impl": dry_run_contract.get(
-                    "execution_kernel_delegate_impl",
-                    dry_run_expectations["execution_kernel_delegate_impl"],
-                ),
-            }
-        )
-        retirement_contract["current_response_metadata_truth"] = response_metadata_truth
-        payload[retirement_key] = retirement_contract
 
     def _rust_adapter_health_snapshot(self) -> dict[str, Any]:
         cached = self._rust_adapter_health
@@ -1837,18 +1689,12 @@ class ExecutionEnvironmentService:
         cached = self._kernel_descriptor_snapshot
         if cached is not None:
             return {
-                "metadata_bridge": (
-                    dict(cached["metadata_bridge"])
-                    if isinstance(cached.get("metadata_bridge"), dict)
-                    else None
-                ),
                 "contract_by_mode": {
                     str(shape): dict(contract)
                     for shape, contract in dict(cached["contract_by_mode"]).items()
                 },
             }
 
-        metadata_bridge = _runtime_execution_kernel_metadata_bridge(self._service_descriptor)
         contract_by_mode: dict[str, dict[str, Any]] = {}
         for shape in (
             EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
@@ -1863,18 +1709,12 @@ class ExecutionEnvironmentService:
                 continue
             contract_by_mode[str(shape)] = dict(contract)
         cached = {
-            "metadata_bridge": dict(metadata_bridge) if isinstance(metadata_bridge, dict) else None,
             "contract_by_mode": {
                 str(shape): dict(contract) for shape, contract in contract_by_mode.items()
             },
         }
         self._kernel_descriptor_snapshot = cached
         return {
-            "metadata_bridge": (
-                dict(cached["metadata_bridge"])
-                if isinstance(cached.get("metadata_bridge"), dict)
-                else None
-            ),
             "contract_by_mode": {
                 str(shape): dict(contract)
                 for shape, contract in dict(cached["contract_by_mode"]).items()
@@ -1899,10 +1739,9 @@ class ExecutionEnvironmentService:
         self,
         *,
         kernel_contract: Mapping[str, Any],
-        metadata_bridge: Mapping[str, Any] | None,
         metadata: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        contract_fields = execution_kernel_steady_state_fields(metadata_bridge)
+        contract_fields = execution_kernel_steady_state_fields()
         payload = dict(kernel_contract)
         if metadata is not None:
             raw_metadata_execution_kernel = metadata.get("execution_kernel")
@@ -1950,7 +1789,6 @@ class ExecutionEnvironmentService:
                             payload[EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY],
                         )
                     ),
-                    metadata_bridge=metadata_bridge,
                 )
                 for field in contract_fields:
                     payload[field] = validated_metadata[field]
@@ -1990,36 +1828,23 @@ class ExecutionEnvironmentService:
     ) -> dict[str, Any]:
         """Merge explicit execution metadata onto the stable kernel contract."""
 
-        snapshot = self._execution_kernel_descriptor_snapshot()
         return self._project_kernel_payload(
             kernel_contract=self.describe_kernel_contract(
                 dry_run=dry_run,
                 response_shape=response_shape,
             ),
-            metadata_bridge=snapshot["metadata_bridge"],
             metadata=metadata,
         )
-
-    def describe_kernel_metadata_bridge(self) -> dict[str, Any] | None:
-        """Return the normalized Rust-owned metadata bridge for kernel projection."""
-
-        snapshot = self._execution_kernel_descriptor_snapshot()
-        metadata_bridge = snapshot["metadata_bridge"]
-        if metadata_bridge is None:
-            return None
-        return dict(metadata_bridge)
 
     async def _execute_request_via_rust_adapter(
         self,
         request: ExecutionKernelRequest,
     ) -> RunTaskResponse:
-        snapshot = self._execution_kernel_descriptor_snapshot()
         kernel_contract = self.describe_kernel_contract(dry_run=request.dry_run)
         return await self._rust_adapter.execute_runtime_request(
             request,
             settings=self.settings,
             kernel_contract=kernel_contract,
-            metadata_bridge=snapshot["metadata_bridge"],
         )
 
 

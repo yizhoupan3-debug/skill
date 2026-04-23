@@ -8,9 +8,6 @@ from .schemas import RunTaskResponse, UsageMetrics
 
 EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION = "router-rs-execute-request-v1"
 EXECUTION_KERNEL_METADATA_SCHEMA_VERSION = "router-rs-execution-kernel-metadata-v1"
-EXECUTION_KERNEL_METADATA_BRIDGE_SCHEMA_VERSION = (
-    "router-rs-execution-kernel-metadata-bridge-v1"
-)
 EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY = "execution_kernel_fallback_reason"
 EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY = "execution_kernel_contract_mode"
 EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY = "execution_kernel_fallback_policy"
@@ -33,8 +30,8 @@ EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY = (
 )
 EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE = "rust-live-primary"
 EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY = "infrastructure-only-explicit"
-EXECUTION_KERNEL_BRIDGE_KIND = "rust-execution-kernel-slice"
-EXECUTION_KERNEL_BRIDGE_AUTHORITY = "rust-execution-kernel-authority"
+EXECUTION_KERNEL_KIND = "rust-execution-kernel-slice"
+EXECUTION_KERNEL_AUTHORITY = "rust-execution-kernel-authority"
 EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND = "router-rs"
 EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY = "rust-execution-cli"
 EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY = "rust-cli"
@@ -147,7 +144,7 @@ def _normalize_runtime_field_group(
         not isinstance(field, str) or not field.strip() for field in payload
     ):
         raise RuntimeError(
-            "execution-kernel metadata bridge returned an invalid runtime field group: "
+            "execution-kernel metadata contract returned an invalid runtime field group: "
             f"{name}={payload!r}"
         )
     return tuple(str(field) for field in payload)
@@ -199,10 +196,10 @@ def resolve_execution_kernel_expectations(
         return str(value)
 
     return {
-        "execution_kernel": _field("execution_kernel", EXECUTION_KERNEL_BRIDGE_KIND),
+        "execution_kernel": _field("execution_kernel", EXECUTION_KERNEL_KIND),
         "execution_kernel_authority": _field(
             "execution_kernel_authority",
-            EXECUTION_KERNEL_BRIDGE_AUTHORITY,
+            EXECUTION_KERNEL_AUTHORITY,
         ),
         "execution_kernel_delegate": _field(
             "execution_kernel_delegate",
@@ -223,162 +220,54 @@ def resolve_execution_kernel_expectations(
     }
 
 
-def normalize_execution_kernel_metadata_bridge(
-    metadata_bridge: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Resolve the Rust-owned metadata bridge, falling back to compatibility defaults."""
-
-    if metadata_bridge is None:
-        return {
-            "steady_state_fields": EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS,
-            "runtime_fields": _normalize_execution_kernel_runtime_fields(None),
-            "metadata_keys": {
-                "metadata_schema_version": (
-                    EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY
-                ),
-                "contract_mode": EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
-                "fallback_policy": EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
-                "response_shape": EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
-                "prompt_preview_owner": (
-                    EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY
-                ),
-                "model_id_source": EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY,
-            },
-            "defaults": {
-                "contract_mode": EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
-                "fallback_policy": EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
-                "prompt_preview_owner_by_mode": {
-                    EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY: (
-                        LIVE_PRIMARY_PROMPT_PREVIEW_OWNER
-                    ),
-                    EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN: DRY_RUN_PROMPT_PREVIEW_OWNER,
-                },
-                "live_primary_model_id_source": LIVE_PRIMARY_MODEL_ID_SOURCE,
-                "supported_response_shapes": (
-                    EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
-                    EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
-                ),
-            },
-        }
-
-    steady_state_fields = metadata_bridge.get("steady_state_fields")
-    if not isinstance(steady_state_fields, (list, tuple)) or any(
-        not isinstance(field, str) or not field.strip() for field in steady_state_fields
-    ):
-        raise RuntimeError("execution-kernel metadata bridge is missing steady_state_fields.")
-    metadata_keys_payload = metadata_bridge.get("metadata_keys")
-    if not isinstance(metadata_keys_payload, Mapping):
-        raise RuntimeError("execution-kernel metadata bridge is missing metadata_keys.")
-    defaults_payload = metadata_bridge.get("defaults")
-    if not isinstance(defaults_payload, Mapping):
-        raise RuntimeError("execution-kernel metadata bridge is missing defaults.")
-    runtime_fields_payload = metadata_bridge.get("runtime_fields")
-    if runtime_fields_payload is not None and not isinstance(runtime_fields_payload, Mapping):
-        raise RuntimeError("execution-kernel metadata bridge returned invalid runtime_fields.")
-    prompt_preview_owner_by_mode = defaults_payload.get("prompt_preview_owner_by_mode")
-    if not isinstance(prompt_preview_owner_by_mode, Mapping):
-        raise RuntimeError(
-            "execution-kernel metadata bridge is missing defaults.prompt_preview_owner_by_mode."
-        )
-
-    def _bridge_key(name: str, fallback: str) -> str:
-        value = metadata_keys_payload.get(name, fallback)
-        if not isinstance(value, str) or not value.strip():
-            raise RuntimeError(
-                f"execution-kernel metadata bridge returned an invalid metadata key: {name}={value!r}"
-            )
-        return value
-
-    def _bridge_default(name: str, fallback: str) -> str:
-        value = defaults_payload.get(name, fallback)
-        if not isinstance(value, str) or not value.strip():
-            raise RuntimeError(
-                f"execution-kernel metadata bridge returned an invalid default: {name}={value!r}"
-            )
-        return value
-
-    supported_response_shapes = defaults_payload.get("supported_response_shapes")
-    if not isinstance(supported_response_shapes, (list, tuple)) or any(
-        not isinstance(shape, str) or not shape.strip() for shape in supported_response_shapes
-    ):
-        raise RuntimeError(
-            "execution-kernel metadata bridge is missing defaults.supported_response_shapes."
-        )
-
-    normalized_prompt_owners: dict[str, str] = {}
-    for shape in supported_response_shapes:
-        owner = prompt_preview_owner_by_mode.get(shape)
-        if not isinstance(owner, str) or not owner.strip():
-            raise RuntimeError(
-                "execution-kernel metadata bridge returned an invalid prompt preview owner: "
-                f"{shape}={owner!r}"
-            )
-        normalized_prompt_owners[str(shape)] = owner
+def _execution_kernel_metadata_contract() -> dict[str, Any]:
+    """Return the fixed Rust-owned execution-kernel metadata contract."""
 
     return {
-        "steady_state_fields": tuple(str(field) for field in steady_state_fields),
-        "runtime_fields": _normalize_execution_kernel_runtime_fields(runtime_fields_payload),
+        "steady_state_fields": EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS,
+        "runtime_fields": _normalize_execution_kernel_runtime_fields(None),
         "metadata_keys": {
-            "metadata_schema_version": _bridge_key(
-                "metadata_schema_version",
-                EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY,
+            "metadata_schema_version": (
+                EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY
             ),
-            "contract_mode": _bridge_key(
-                "contract_mode",
-                EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
+            "contract_mode": EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
+            "fallback_policy": EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
+            "response_shape": EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
+            "prompt_preview_owner": (
+                EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY
             ),
-            "fallback_policy": _bridge_key(
-                "fallback_policy",
-                EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
-            ),
-            "response_shape": _bridge_key(
-                "response_shape",
-                EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
-            ),
-            "prompt_preview_owner": _bridge_key(
-                "prompt_preview_owner",
-                EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY,
-            ),
-            "model_id_source": _bridge_key(
-                "model_id_source",
-                EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY,
-            ),
+            "model_id_source": EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY,
         },
         "defaults": {
-            "contract_mode": _bridge_default(
-                "contract_mode",
-                EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
+            "contract_mode": EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
+            "fallback_policy": EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
+            "prompt_preview_owner_by_mode": {
+                EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY: (
+                    LIVE_PRIMARY_PROMPT_PREVIEW_OWNER
+                ),
+                EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN: DRY_RUN_PROMPT_PREVIEW_OWNER,
+            },
+            "live_primary_model_id_source": LIVE_PRIMARY_MODEL_ID_SOURCE,
+            "supported_response_shapes": (
+                EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
+                EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
             ),
-            "fallback_policy": _bridge_default(
-                "fallback_policy",
-                EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
-            ),
-            "prompt_preview_owner_by_mode": normalized_prompt_owners,
-            "live_primary_model_id_source": _bridge_default(
-                "live_primary_model_id_source",
-                LIVE_PRIMARY_MODEL_ID_SOURCE,
-            ),
-            "supported_response_shapes": tuple(str(shape) for shape in supported_response_shapes),
         },
     }
 
 
-def execution_kernel_steady_state_fields(
-    metadata_bridge: Mapping[str, Any] | None,
-) -> tuple[str, ...]:
-    """Return the canonical steady-state metadata field list for one bridge payload."""
+def execution_kernel_steady_state_fields() -> tuple[str, ...]:
+    """Return the canonical steady-state metadata field list."""
 
-    bridge = normalize_execution_kernel_metadata_bridge(metadata_bridge)
-    return tuple(str(field) for field in bridge["steady_state_fields"])
+    contract = _execution_kernel_metadata_contract()
+    return tuple(str(field) for field in contract["steady_state_fields"])
 
 
-def execution_kernel_runtime_metadata_fields(
-    metadata_bridge: Mapping[str, Any] | None,
-) -> dict[str, tuple[str, ...]]:
-    """Return the Rust-owned runtime metadata field groups for one bridge payload."""
+def execution_kernel_runtime_metadata_fields() -> dict[str, tuple[str, ...]]:
+    """Return the Rust-owned runtime metadata field groups."""
 
-    bridge = normalize_execution_kernel_metadata_bridge(metadata_bridge)
-    runtime_fields = bridge["runtime_fields"]
+    contract = _execution_kernel_metadata_contract()
+    runtime_fields = contract["runtime_fields"]
     return {
         str(name): tuple(str(field) for field in fields)
         for name, fields in dict(runtime_fields).items()
@@ -457,15 +346,13 @@ def build_execution_kernel_runtime_metadata(
     return metadata
 
 
-def build_execution_kernel_live_response_serialization_contract_core(
-    metadata_bridge: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
+def build_execution_kernel_live_response_serialization_contract_core() -> dict[str, Any]:
     """Return the shared execution-kernel response serialization contract core."""
 
-    bridge = normalize_execution_kernel_metadata_bridge(metadata_bridge)
-    defaults = dict(bridge["defaults"])
-    steady_state_fields = list(execution_kernel_steady_state_fields(bridge))
-    runtime_fields = execution_kernel_runtime_metadata_fields(bridge)
+    contract = _execution_kernel_metadata_contract()
+    defaults = dict(contract["defaults"])
+    steady_state_fields = list(execution_kernel_steady_state_fields())
+    runtime_fields = execution_kernel_runtime_metadata_fields()
     shared_runtime_fields = list(runtime_fields["shared"])
     live_primary_required_fields = [
         field for field in runtime_fields["live_primary_required"] if field not in runtime_fields["shared"]
@@ -551,7 +438,7 @@ def build_execution_kernel_live_response_serialization_contract_core(
         "retirement_gates": {
             "response_shape_contract_externalized": True,
             "live_primary_response_contract_externalized": True,
-            "compatibility_live_response_serialization_still_python_owned": False,
+            "compatibility_live_response_serialization_still_native_owned": False,
             "runtime_control_flow_change_required_for_removal": False,
         },
     }
@@ -564,14 +451,13 @@ def validate_execution_kernel_steady_state_metadata(
     execution_kernel_delegate: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
     execution_kernel_delegate_authority: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
     response_shape: str | None = None,
-    metadata_bridge: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate the steady-state execution-kernel metadata owned by Rust."""
 
-    bridge = normalize_execution_kernel_metadata_bridge(metadata_bridge)
-    steady_state_fields = tuple(bridge["steady_state_fields"])
-    metadata_keys = dict(bridge["metadata_keys"])
-    defaults = dict(bridge["defaults"])
+    contract = _execution_kernel_metadata_contract()
+    steady_state_fields = tuple(contract["steady_state_fields"])
+    metadata_keys = dict(contract["metadata_keys"])
+    defaults = dict(contract["defaults"])
     normalized = dict(metadata)
     missing = [field for field in steady_state_fields if field not in normalized]
     if missing:
@@ -648,13 +534,12 @@ def validate_router_rs_execution_metadata(
     execution_kernel_delegate_authority: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
     execution_kernel_delegate_family: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
     execution_kernel_delegate_impl: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
-    metadata_bridge: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate one Rust-owned execution response metadata payload."""
 
-    bridge = normalize_execution_kernel_metadata_bridge(metadata_bridge)
-    metadata_keys = dict(bridge["metadata_keys"])
-    defaults = dict(bridge["defaults"])
+    contract = _execution_kernel_metadata_contract()
+    metadata_keys = dict(contract["metadata_keys"])
+    defaults = dict(contract["defaults"])
     normalized = validate_execution_kernel_steady_state_metadata(
         metadata=metadata,
         execution_kernel=execution_kernel,
@@ -666,9 +551,8 @@ def validate_router_rs_execution_metadata(
             if live_run
             else EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
         ),
-        metadata_bridge=bridge,
     )
-    runtime_fields = execution_kernel_runtime_metadata_fields(bridge)
+    runtime_fields = execution_kernel_runtime_metadata_fields()
     required_fields = runtime_fields[
         "live_primary_required" if live_run else "dry_run_required"
     ]
@@ -711,7 +595,6 @@ def decode_router_rs_execution_response(
     execution_kernel_delegate_authority: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
     execution_kernel_delegate_family: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
     execution_kernel_delegate_impl: str = EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
-    metadata_bridge: Mapping[str, Any] | None = None,
 ) -> RunTaskResponse:
     """Decode one validated router-rs execute payload into ``RunTaskResponse``."""
 
@@ -727,7 +610,6 @@ def decode_router_rs_execution_response(
         execution_kernel_delegate_authority=execution_kernel_delegate_authority,
         execution_kernel_delegate_family=execution_kernel_delegate_family,
         execution_kernel_delegate_impl=execution_kernel_delegate_impl,
-        metadata_bridge=metadata_bridge,
     )
     return RunTaskResponse(
         session_id=str(payload["session_id"]),
