@@ -54,7 +54,9 @@ class ContextEngineer:
                 artifact_offload_decision=False,
             )
 
+        original_sections = [chunk.strip() for chunk in prompt.split("\n\n") if chunk.strip()]
         sections = self._dedupe_sections(prompt)
+        deduped = len(sections) != len(original_sections)
         if len(sections) <= 1:
             deduped_prompt = sections[0] if sections else prompt
             return self._truncate_contract(
@@ -62,11 +64,11 @@ class ContextEngineer:
                 token_limit,
                 input_tokens=input_tokens,
                 omitted_sections=0,
-                strategy="dedupe+truncate" if deduped_prompt != prompt else "truncate",
+                strategy="dedupe+truncate" if deduped else "truncate",
             )
         deduped_prompt = "\n\n".join(sections)
         deduped_tokens = estimate_tokens(deduped_prompt)
-        if deduped_tokens <= token_limit:
+        if deduped and deduped_tokens <= token_limit:
             return CompressionResult(
                 schema_version="runtime-compression-v1",
                 prompt=deduped_prompt,
@@ -84,7 +86,7 @@ class ContextEngineer:
                 token_limit,
                 input_tokens=input_tokens,
                 omitted_sections=0,
-                strategy="dedupe+truncate",
+                strategy="dedupe+truncate" if deduped else "truncate",
             )
 
         head = sections[:3]
@@ -104,7 +106,7 @@ class ContextEngineer:
                 input_token_estimate=input_tokens,
                 output_token_estimate=estimate_tokens(compressed),
                 omitted_sections=omitted,
-                strategy="dedupe+head-tail",
+                strategy="dedupe+head-tail" if deduped else "head-tail",
                 truncated=False,
                 artifact_offload_decision=False,
             )
@@ -113,7 +115,7 @@ class ContextEngineer:
             token_limit,
             input_tokens=input_tokens,
             omitted_sections=omitted,
-            strategy="dedupe+head-tail+truncate",
+            strategy="dedupe+head-tail+truncate" if deduped else "head-tail+truncate",
         )
 
     @staticmethod

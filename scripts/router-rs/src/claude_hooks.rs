@@ -197,6 +197,11 @@ const USER_PROMPT_HOOK_CONTEXT: &str =
     "Hook 额外检查：让 hook 增加自动化，而不是只做阻拦；优先短上下文、窄触发、低开销，并尽量用 matcher/if 避免无谓触发。";
 const USER_PROMPT_CLOSEOUT_CONTEXT: &str =
     "收尾提醒：完成任务时默认用很短的收尾，跟着当前任务态自然收尾；如果这轮已经结束，就直接说已收尾，不要把完成态重新当成当前任务。";
+const FALLBACK_SHARED_PROJECT_MCP_SERVERS: [&str; 3] = [
+    "browser-mcp",
+    "framework-mcp",
+    "openaiDeveloperDocs",
+];
 const USER_PROMPT_EXECUTION_INTENT_PREFIX: &str = "执行意图：";
 const USER_PROMPT_STATE_COMPACT_PREFIX: &str = "当前状态：";
 const USER_PROMPT_STATE_BUDGET_CHARS: usize = 120;
@@ -444,11 +449,10 @@ fn load_runtime_registry_shared_project_mcp_servers(repo_root: &Path) -> Vec<Str
     if !fallback_servers.is_empty() {
         return fallback_servers;
     }
-    vec![
-        "browser-mcp".to_string(),
-        "framework-mcp".to_string(),
-        "openaiDeveloperDocs".to_string(),
-    ]
+    FALLBACK_SHARED_PROJECT_MCP_SERVERS
+        .iter()
+        .map(|server| (*server).to_string())
+        .collect()
 }
 
 fn build_tool_path_hooks(rules: &[&str], command: &str, extras: Option<Value>) -> Vec<Value> {
@@ -2886,6 +2890,83 @@ mod tests {
         assert_eq!(telemetry["state_budget_chars"], Value::from(USER_PROMPT_COMPLEX_STATE_BUDGET_CHARS as u64));
         assert!(context.contains("执行意图："));
         assert!(context.contains("优先续跑当前执行链") || context.contains("先核对恢复锚点"));
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn claude_project_settings_fall_back_to_default_mcp_servers_when_repo_registry_is_missing() {
+        let repo_root = temp_repo_root("claude-settings-mcp-missing");
+        let settings = build_claude_project_settings(&repo_root);
+        let servers = settings["allowedMcpServers"]
+            .as_array()
+            .expect("allowed mcp servers");
+        let names = servers
+            .iter()
+            .filter_map(|row| row.get("serverName").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            vec!["browser-mcp", "framework-mcp", "openaiDeveloperDocs"]
+        );
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn claude_project_settings_fall_back_to_default_mcp_servers_when_repo_registry_is_empty() {
+        let repo_root = temp_repo_root("claude-settings-mcp-empty");
+        let registry_path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
+        fs::create_dir_all(registry_path.parent().expect("registry parent"))
+            .expect("create registry parent");
+        fs::write(
+            &registry_path,
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "framework-runtime-registry-v1",
+                "shared_project_mcp_servers": []
+            }))
+            .expect("serialize registry"),
+        )
+        .expect("write registry");
+
+        let settings = build_claude_project_settings(&repo_root);
+        let servers = settings["allowedMcpServers"]
+            .as_array()
+            .expect("allowed mcp servers");
+        let names = servers
+            .iter()
+            .filter_map(|row| row.get("serverName").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            vec!["browser-mcp", "framework-mcp", "openaiDeveloperDocs"]
+        );
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn claude_project_settings_use_repo_registry_mcp_servers_when_nonempty() {
+        let repo_root = temp_repo_root("claude-settings-mcp-repo");
+        let registry_path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
+        fs::create_dir_all(registry_path.parent().expect("registry parent"))
+            .expect("create registry parent");
+        fs::write(
+            &registry_path,
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "framework-runtime-registry-v1",
+                "shared_project_mcp_servers": ["framework-mcp"]
+            }))
+            .expect("serialize registry"),
+        )
+        .expect("write registry");
+
+        let settings = build_claude_project_settings(&repo_root);
+        let servers = settings["allowedMcpServers"]
+            .as_array()
+            .expect("allowed mcp servers");
+        let names = servers
+            .iter()
+            .filter_map(|row| row.get("serverName").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["framework-mcp"]);
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
