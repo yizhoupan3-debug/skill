@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,16 +18,50 @@ from scripts.framework_bridge import (
     build_evolution_proposals,
     export_framework_skills,
 )
-from scripts.memory_support import (
-    bootstrap_artifact_root,
-    build_task_id,
-    current_local_timestamp,
-    get_repo_root,
-    workspace_name_from_root,
-    write_json_if_changed,
-)
 
 BOOTSTRAP_FILENAME = "framework_default_bootstrap.json"
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _bootstrap_artifact_root(source_root: Path) -> Path:
+    return source_root / "artifacts" / "bootstrap"
+
+
+def _current_local_timestamp() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _safe_slug(value: str, fallback: str = "unknown") -> str:
+    import re
+
+    slug = re.sub(r"[^\w.-]+", "-", value, flags=re.UNICODE)
+    slug = re.sub(r"-{2,}", "-", slug).strip("._-")
+    return slug or fallback
+
+
+def _build_task_id(task: str, *, created_at: str | None = None) -> str:
+    import re
+
+    stamp = re.sub(r"[^0-9A-Za-z]+", "", (created_at or _current_local_timestamp()))
+    base = _safe_slug(task or "task")
+    return f"{base}-{stamp[-14:]}" if stamp else base
+
+
+def _workspace_name_from_root(repo_root: Path) -> str:
+    return repo_root.name
+
+
+def _write_json_if_changed(path: Path, payload: dict[str, Any] | list[Any]) -> bool:
+    content = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if existing == content:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return True
 
 
 def resolve_bootstrap_path(output_dir: Path) -> Path:
@@ -62,12 +97,12 @@ def run_default_bootstrap(
 ) -> dict[str, Any]:
     """Build and write the default framework bootstrap bundle."""
 
-    repo_root = (repo_root or get_repo_root()).resolve()
-    workspace = workspace or workspace_name_from_root(repo_root)
-    output_dir = (output_dir or bootstrap_artifact_root(repo_root)).resolve()
+    repo_root = (repo_root or _repo_root()).resolve()
+    workspace = workspace or _workspace_name_from_root(repo_root)
+    output_dir = (output_dir or _bootstrap_artifact_root(repo_root)).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     runtime = export_framework_skills()
-    memory = get_cached_route_adapter(get_repo_root()).framework_memory_recall(
+    memory = get_cached_route_adapter(_repo_root()).framework_memory_recall(
         repo_root=repo_root,
         query=query,
         top=top,
@@ -76,11 +111,11 @@ def run_default_bootstrap(
         artifact_source_dir=artifact_source_dir,
     )
     proposals = build_evolution_proposals()
-    created_at = current_local_timestamp()
+    created_at = _current_local_timestamp()
     continuity_decision = memory.get("continuity_decision", {})
     task_id = str(
         continuity_decision.get("task_id")
-        or build_task_id(query or workspace, created_at=created_at)
+        or _build_task_id(query or workspace, created_at=created_at)
     )
     primary_bootstrap_path = resolve_task_bootstrap_path(output_dir, task_id)
     mirror_bootstrap_path = resolve_bootstrap_path(output_dir)
@@ -103,8 +138,8 @@ def run_default_bootstrap(
             ),
         },
     }
-    write_json_if_changed(primary_bootstrap_path, payload)
-    write_json_if_changed(mirror_bootstrap_path, payload)
+    _write_json_if_changed(primary_bootstrap_path, payload)
+    _write_json_if_changed(mirror_bootstrap_path, payload)
     return {
         "bootstrap_path": str(primary_bootstrap_path),
         "paths": {
