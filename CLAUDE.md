@@ -10,9 +10,7 @@ or manual resume, not default startup injection.
 
 Generated-first maintenance rule:
 
-- Edit `scripts/materialize_cli_host_entrypoints.py` first for
-  `.claude/settings.json`, `.claude/commands/*.md`, `.claude/hooks/README.md`,
-  and `.claude/hooks/*.sh`.
+- Edit `scripts/materialize_cli_host_entrypoints.py` first for host-entrypoint rendering, and update `scripts/router-rs/` first for Claude hook rules and contracts.
 - Treat those files as materialized outputs, not hand-authored truth.
 - `.claude/agents/*.md` stays manually maintained unless a file says otherwise.
 - Event-level lifecycle decisions live in `.claude/hooks/README.md`.

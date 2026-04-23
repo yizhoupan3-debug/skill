@@ -205,9 +205,8 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert content.count("status_line = [") == 1
     assert home_codex_skills_path.is_symlink()
     assert home_codex_skills_path.resolve() == (repo_root / "skills").resolve()
-    assert home_claude_skills_path.is_symlink()
-    assert home_claude_skills_path.resolve() == (repo_root / "skills").resolve()
-    assert home_claude_refresh_path.read_text(encoding="utf-8") == CLAUDE_REFRESH_COMMAND
+    assert not home_claude_skills_path.exists()
+    assert not home_claude_refresh_path.exists()
     assert claude_mcp_payload["mcpServers"]["browser-mcp"]["command"] == "bash"
     assert claude_mcp_payload["mcpServers"]["browser-mcp"]["cwd"] == str(repo_root.resolve())
     assert claude_mcp_payload["mcpServers"]["framework-mcp"]["command"] == "python3"
@@ -234,9 +233,9 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert second["tui_status_line_changed"] is False
     assert first["home_codex_skills_link_changed"] is True
     assert second["home_codex_skills_link_changed"] is False
-    assert first["home_claude_skills_link_changed"] is True
+    assert first["home_claude_skills_link_changed"] is False
     assert second["home_claude_skills_link_changed"] is False
-    assert first["home_claude_refresh_changed"] is True
+    assert first["home_claude_refresh_changed"] is False
     assert second["home_claude_refresh_changed"] is False
     assert first["home_claude_mcp_config_changed"] is True
     assert second["home_claude_mcp_config_changed"] is False
@@ -346,6 +345,141 @@ def test_ensure_home_claude_refresh_command_is_idempotent(tmp_path: Path) -> Non
     assert command_path.read_text(encoding="utf-8") == CLAUDE_REFRESH_COMMAND
 
 
+def test_install_native_integration_skips_home_claude_refresh_by_default(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / ".codex").mkdir(parents=True)
+    (repo_root / ".codex" / "model_instructions.md").write_text("", encoding="utf-8")
+    (repo_root / "skills").mkdir(parents=True)
+    plugin_root = repo_root / "plugins" / "skill-framework-native" / ".codex-plugin"
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "plugin.json").write_text('{"name":"skill-framework-native"}\n', encoding="utf-8")
+    home_claude_refresh_path = tmp_path / "home" / ".claude" / "commands" / "refresh.md"
+
+    result = install_native_integration(
+        home_config_path=tmp_path / "home" / ".codex" / "config.toml",
+        home_codex_skills_path=tmp_path / "home" / ".codex" / "skills",
+        home_claude_skills_path=tmp_path / "home" / ".claude" / "skills",
+        home_claude_refresh_path=home_claude_refresh_path,
+        home_claude_mcp_config_path=tmp_path / "home" / ".claude.json",
+        repo_root=repo_root,
+        home_plugin_root=tmp_path / "home" / ".codex" / "plugins" / "skill-framework-native",
+        home_marketplace_path=tmp_path / "home" / ".agents" / "plugins" / "marketplace.json",
+        project_instructions_path=Path(".codex") / "model_instructions.md",
+    )
+
+    assert result["home_claude_refresh_changed"] is False
+    assert not home_claude_refresh_path.exists()
+
+
+def test_install_native_integration_skips_home_claude_skills_by_default(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / ".codex").mkdir(parents=True)
+    (repo_root / ".codex" / "model_instructions.md").write_text("", encoding="utf-8")
+    (repo_root / "skills").mkdir(parents=True)
+    plugin_root = repo_root / "plugins" / "skill-framework-native" / ".codex-plugin"
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "plugin.json").write_text('{"name":"skill-framework-native"}\n', encoding="utf-8")
+    home_claude_skills_path = tmp_path / "home" / ".claude" / "skills"
+
+    result = install_native_integration(
+        home_config_path=tmp_path / "home" / ".codex" / "config.toml",
+        home_codex_skills_path=tmp_path / "home" / ".codex" / "skills",
+        home_claude_skills_path=home_claude_skills_path,
+        home_claude_refresh_path=tmp_path / "home" / ".claude" / "commands" / "refresh.md",
+        home_claude_mcp_config_path=tmp_path / "home" / ".claude.json",
+        repo_root=repo_root,
+        home_plugin_root=tmp_path / "home" / ".codex" / "plugins" / "skill-framework-native",
+        home_marketplace_path=tmp_path / "home" / ".agents" / "plugins" / "marketplace.json",
+        project_instructions_path=Path(".codex") / "model_instructions.md",
+    )
+
+    assert result["home_claude_skills_link_changed"] is False
+    assert not home_claude_skills_path.exists()
+
+
+def test_install_native_integration_retires_duplicate_home_claude_skills_by_default(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / ".codex").mkdir(parents=True)
+    (repo_root / ".codex" / "model_instructions.md").write_text("", encoding="utf-8")
+    (repo_root / "skills").mkdir(parents=True)
+    plugin_root = repo_root / "plugins" / "skill-framework-native" / ".codex-plugin"
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "plugin.json").write_text('{"name":"skill-framework-native"}\n', encoding="utf-8")
+    home_claude_skills_path = tmp_path / "home" / ".claude" / "skills"
+    home_claude_skills_path.parent.mkdir(parents=True, exist_ok=True)
+    home_claude_skills_path.symlink_to(repo_root / "skills", target_is_directory=True)
+
+    result = install_native_integration(
+        home_config_path=tmp_path / "home" / ".codex" / "config.toml",
+        home_codex_skills_path=tmp_path / "home" / ".codex" / "skills",
+        home_claude_skills_path=home_claude_skills_path,
+        home_claude_refresh_path=tmp_path / "home" / ".claude" / "commands" / "refresh.md",
+        home_claude_mcp_config_path=tmp_path / "home" / ".claude.json",
+        repo_root=repo_root,
+        home_plugin_root=tmp_path / "home" / ".codex" / "plugins" / "skill-framework-native",
+        home_marketplace_path=tmp_path / "home" / ".agents" / "plugins" / "marketplace.json",
+        project_instructions_path=Path(".codex") / "model_instructions.md",
+    )
+
+    assert result["home_claude_skills_link_changed"] is True
+    assert not home_claude_skills_path.exists()
+
+
+def test_install_native_integration_can_enable_home_claude_refresh(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / ".codex").mkdir(parents=True)
+    (repo_root / ".codex" / "model_instructions.md").write_text("", encoding="utf-8")
+    (repo_root / "skills").mkdir(parents=True)
+    plugin_root = repo_root / "plugins" / "skill-framework-native" / ".codex-plugin"
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "plugin.json").write_text('{"name":"skill-framework-native"}\n', encoding="utf-8")
+    home_claude_refresh_path = tmp_path / "home" / ".claude" / "commands" / "refresh.md"
+
+    result = install_native_integration(
+        home_config_path=tmp_path / "home" / ".codex" / "config.toml",
+        home_codex_skills_path=tmp_path / "home" / ".codex" / "skills",
+        home_claude_skills_path=tmp_path / "home" / ".claude" / "skills",
+        home_claude_refresh_path=home_claude_refresh_path,
+        home_claude_mcp_config_path=tmp_path / "home" / ".claude.json",
+        repo_root=repo_root,
+        home_plugin_root=tmp_path / "home" / ".codex" / "plugins" / "skill-framework-native",
+        home_marketplace_path=tmp_path / "home" / ".agents" / "plugins" / "marketplace.json",
+        project_instructions_path=Path(".codex") / "model_instructions.md",
+        install_home_claude_refresh_command=True,
+    )
+
+    assert result["home_claude_refresh_changed"] is True
+    assert home_claude_refresh_path.read_text(encoding="utf-8") == CLAUDE_REFRESH_COMMAND
+
+
+def test_install_native_integration_can_enable_home_claude_skills(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / ".codex").mkdir(parents=True)
+    (repo_root / ".codex" / "model_instructions.md").write_text("", encoding="utf-8")
+    (repo_root / "skills").mkdir(parents=True)
+    plugin_root = repo_root / "plugins" / "skill-framework-native" / ".codex-plugin"
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "plugin.json").write_text('{"name":"skill-framework-native"}\n', encoding="utf-8")
+    home_claude_skills_path = tmp_path / "home" / ".claude" / "skills"
+
+    result = install_native_integration(
+        home_config_path=tmp_path / "home" / ".codex" / "config.toml",
+        home_codex_skills_path=tmp_path / "home" / ".codex" / "skills",
+        home_claude_skills_path=home_claude_skills_path,
+        home_claude_refresh_path=tmp_path / "home" / ".claude" / "commands" / "refresh.md",
+        home_claude_mcp_config_path=tmp_path / "home" / ".claude.json",
+        repo_root=repo_root,
+        home_plugin_root=tmp_path / "home" / ".codex" / "plugins" / "skill-framework-native",
+        home_marketplace_path=tmp_path / "home" / ".agents" / "plugins" / "marketplace.json",
+        project_instructions_path=Path(".codex") / "model_instructions.md",
+        install_home_claude_skills_link=True,
+    )
+
+    assert result["home_claude_skills_link_changed"] is True
+    assert home_claude_skills_path.is_symlink()
+    assert home_claude_skills_path.resolve() == (repo_root / "skills").resolve()
+
+
 def test_sync_directory_removes_stale_files_and_copies_updates(tmp_path: Path) -> None:
     source = tmp_path / "source"
     destination = tmp_path / "destination"
@@ -445,8 +579,7 @@ def test_install_skills_codex_command_routes_through_native_installer(tmp_path: 
     assert "[mcp_servers.openaiDeveloperDocs]" in content
     assert (home_root / ".codex" / "skills").is_symlink()
     assert (home_root / ".codex" / "skills").resolve() == repo_skills
-    assert (home_root / ".claude" / "skills").is_symlink()
-    assert (home_root / ".claude" / "skills").resolve() == repo_skills
+    assert not (home_root / ".claude" / "skills").exists()
     assert (home_root / ".codex" / "plugins" / "skill-framework-native" / "skills").is_symlink()
     assert (home_root / ".codex" / "plugins" / "skill-framework-native" / "skills").resolve() == repo_skills
     assert (tmp_path / "bootstrap" / "framework_default_bootstrap.json").is_file()
@@ -641,7 +774,7 @@ def test_install_skills_all_command_reports_codex_ready_and_links_other_hosts(tm
     assert "Done!" in completed.stdout
     assert "native integration ready" in status.stdout
     assert (home_root / ".codex" / "skills").is_symlink()
-    assert (home_root / ".claude" / "skills").is_symlink()
+    assert not (home_root / ".claude" / "skills").exists()
     assert (home_root / ".agents" / "skills").is_symlink()
     assert (home_root / ".gemini" / "skills").is_symlink()
 

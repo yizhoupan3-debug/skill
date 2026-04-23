@@ -12,7 +12,7 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.memory_support import build_task_id, write_active_task_pointer
+from scripts.memory_support import build_task_id, write_active_task_pointer, write_task_registry
 
 
 NEXT_ACTIONS_SCHEMA_VERSION = "next-actions-v2"
@@ -123,6 +123,7 @@ def write_artifacts(
     task_id: str | None = None,
     mirror_output_dir: Path | None = None,
     repo_root: Path | None = None,
+    focus: bool = False,
 ) -> dict[str, str]:
     """Write the three standard session artifact files into a directory.
 
@@ -140,7 +141,7 @@ def write_artifacts(
     """
 
     resolved_task_id = task_id or build_task_id(task)
-    primary_dir = output_dir / resolved_task_id if task_id else output_dir
+    primary_dir = output_dir / resolved_task_id if (task_id or repo_root is not None) else output_dir
     primary_dir.mkdir(parents=True, exist_ok=True)
 
     summary_path = primary_dir / "SESSION_SUMMARY.md"
@@ -151,7 +152,7 @@ def write_artifacts(
     write_next_actions(next_actions_path, next_actions)
     write_evidence_index(evidence_path, evidence)
 
-    if mirror_output_dir is not None:
+    if mirror_output_dir is not None and focus:
         mirror_output_dir.mkdir(parents=True, exist_ok=True)
         write_session_summary(
             mirror_output_dir / "SESSION_SUMMARY.md",
@@ -165,16 +166,34 @@ def write_artifacts(
 
     if repo_root is not None:
         repo_root.mkdir(parents=True, exist_ok=True)
-        write_session_summary(
-            repo_root / "SESSION_SUMMARY.md",
+        write_task_registry(
+            repo_root,
+            task_id=resolved_task_id,
             task=task,
             phase=phase,
             status=status,
-            summary=summary,
+            resume_allowed=None,
+            focus_task_id=resolved_task_id if focus else None,
         )
-        write_next_actions(repo_root / "NEXT_ACTIONS.json", next_actions)
-        write_evidence_index(repo_root / "EVIDENCE_INDEX.json", evidence)
-        write_active_task_pointer(repo_root, task_id=resolved_task_id, task=task)
+        if focus:
+            write_session_summary(
+                repo_root / "SESSION_SUMMARY.md",
+                task=task,
+                phase=phase,
+                status=status,
+                summary=summary,
+            )
+            write_next_actions(repo_root / "NEXT_ACTIONS.json", next_actions)
+            write_evidence_index(repo_root / "EVIDENCE_INDEX.json", evidence)
+            write_active_task_pointer(
+                repo_root,
+                task_id=resolved_task_id,
+                task=task,
+                phase=phase,
+                status=status,
+                resume_allowed=None,
+                focus=True,
+            )
 
     return {
         "summary": str(summary_path),
@@ -204,7 +223,8 @@ def main() -> int:
     parser.add_argument("--evidence", action="append", default=[], help="Repeatable evidence item using kind=path.")
     parser.add_argument("--task-id", default="", help="Optional task id for task-scoped artifact writes.")
     parser.add_argument("--mirror-output-dir", type=Path, default=None, help="Optional compatibility mirror output directory.")
-    parser.add_argument("--repo-root", type=Path, default=None, help="Optional repo root used to refresh the active-task pointer.")
+    parser.add_argument("--repo-root", type=Path, default=None, help="Optional repo root used to refresh the focus-task projection.")
+    parser.add_argument("--focus", action="store_true", help="Project this task into root and artifacts/current compatibility mirrors.")
     args = parser.parse_args()
 
     paths = write_artifacts(
@@ -218,6 +238,7 @@ def main() -> int:
         task_id=args.task_id or None,
         mirror_output_dir=args.mirror_output_dir,
         repo_root=args.repo_root,
+        focus=args.focus,
     )
     print(json.dumps(paths, ensure_ascii=False, indent=2))
     return 0

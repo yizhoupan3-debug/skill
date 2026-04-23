@@ -97,12 +97,38 @@ function addOptionalImage(slide, imagePath, sizingFactory, fallback = {}) {
   return false;
 }
 
+function resolveRustToolCommand(subcommand, args = []) {
+  if (process.env.PPT_PPTX_RUST_TOOL_BIN) {
+    return [process.env.PPT_PPTX_RUST_TOOL_BIN, subcommand, ...args];
+  }
+
+  const repoRoot = path.resolve(__dirname, "..", "..", "..");
+  for (const candidate of [
+    path.join(repoRoot, "rust_tools", "target", "release", "pptx_tool_rs"),
+    path.join(repoRoot, "rust_tools", "target", "debug", "pptx_tool_rs"),
+  ]) {
+    if (fs.existsSync(candidate)) {
+      return [candidate, subcommand, ...args];
+    }
+  }
+
+  if (process.env.PPT_PPTX_RUST_TOOL_MANIFEST) {
+    return ["cargo", "run", "--manifest-path", process.env.PPT_PPTX_RUST_TOOL_MANIFEST, "--", subcommand, ...args];
+  }
+
+  const manifest = path.join(repoRoot, "rust_tools", "pptx_tool_rs", "Cargo.toml");
+  if (fs.existsSync(manifest)) {
+    return ["cargo", "run", "--manifest-path", manifest, "--", subcommand, ...args];
+  }
+
+  throw new Error("Could not locate pptx_tool_rs binary or manifest");
+}
+
 function sanitizeGeneratedDeck(fileName) {
-  const script = path.resolve(process.cwd(), "sanitize_pptx.py");
-  if (!fs.existsSync(script)) return;
-  const completed = spawnSync("python3", [script, fileName], { stdio: "inherit" });
+  const [command, ...args] = resolveRustToolCommand("sanitize-pptx", [fileName]);
+  const completed = spawnSync(command, args, { stdio: "inherit" });
   if (completed.status !== 0) {
-    throw new Error(`sanitize_pptx.py failed for ${fileName}`);
+    throw new Error(`sanitize-pptx failed for ${fileName}`);
   }
 }
 

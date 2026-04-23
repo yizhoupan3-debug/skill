@@ -1100,6 +1100,8 @@ def test_live_route_expectations_hold_for_framework_and_openai_queries(
         ("$autopilot", "autopilot"),
         ("/deepinterview", "deepinterview"),
         ("$deepinterview", "deepinterview"),
+        ("/team", "team"),
+        ("$team", "team"),
     ],
 )
 def test_framework_aliases_only_route_from_explicit_entrypoints(
@@ -1585,6 +1587,29 @@ def test_rust_route_adapter_framework_alias_builds_compact_deepinterview_contrac
     assert "进入 deepinterview" in alias["entry_prompt"]
     assert "每轮只问一个问题" in alias["entry_prompt"]
     assert "review lanes ->" in alias["entry_prompt"]
+
+
+def test_rust_route_adapter_framework_alias_builds_compact_team_contract(
+    tmp_path: Path,
+) -> None:
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    _seed_framework_runtime_artifacts(tmp_path, terminal=False)
+
+    alias = adapter.framework_alias(repo_root=tmp_path, alias="team", max_lines=5)
+
+    assert alias["ok"] is True
+    assert alias["name"] == "team"
+    assert alias["host_entrypoint"] == "/team"
+    assert alias["canonical_owner"] == "execution-controller-coding"
+    assert alias["upstream_source"]["official_skill_path"] == "skills/team/SKILL.md"
+    assert "supervisor-owned-continuity" in alias["implementation_bar"]
+    assert alias["routing_hints"]["delegation_gate"] == "subagent-delegation"
+    assert "execution-controller-coding" in alias["routing_hints"]["execution_owners"]
+    assert alias["state_machine"]["handoff"]["rules"][1]["target"] == "subagent-delegation"
+    assert alias["entry_contract"]["route_rules"][0] == "主 owner -> `execution-controller-coding`"
+    assert "进入 team" in alias["entry_prompt"]
+    assert "team split gate -> `subagent-delegation`" in alias["entry_prompt"]
+    assert "共享 continuity 只允许 supervisor 持有" in alias["entry_prompt"]
 
 
 def test_rust_route_adapter_framework_alias_compact_mode_omits_heavy_metadata(

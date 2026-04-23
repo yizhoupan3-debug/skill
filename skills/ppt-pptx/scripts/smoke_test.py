@@ -8,7 +8,7 @@ Verifies:
 - outline -> deck.js -> deck.pptx
 - template -> deck.pptx
 - sample deck.js -> deck.pptx
-- render, overflow, font, and structure checks where applicable
+- Rust-first qa / office bridge / structure checks
 """
 
 from __future__ import annotations
@@ -50,8 +50,9 @@ def rust_tool_env() -> dict[str, str]:
     return env
 
 
-def officecli_available() -> bool:
-    return shutil.which("officecli") is not None
+def rust_tool_cmd(*args: str) -> list[str]:
+    env = rust_tool_env()
+    return [env["PPT_PPTX_RUST_TOOL_BIN"], *args]
 
 
 def run(
@@ -102,10 +103,12 @@ def count_pngs(path: Path) -> int:
 def officecli_doctor(workdir: Path) -> dict | None:
     if not officecli_available():
         return None
+    env = rust_tool_env()
     proc = run(
-        [sys.executable, str(SCRIPTS / "officecli_bridge.py"), "doctor", "deck.pptx", "--json"],
+        rust_tool_cmd("office", "doctor", "deck.pptx", "--json"),
         workdir,
         "officecli doctor",
+        env=env,
     )
     return json.loads(proc.stdout)
 
@@ -145,7 +148,7 @@ def scenario_outline(root: Path) -> dict:
         env=env,
     )
     hybrid = run(
-        [sys.executable, "hybrid_pipeline.py", "qa", "deck.pptx", "--rendered-dir", "rendered", "--json"],
+        rust_tool_cmd("qa", "deck.pptx", "--rendered-dir", "rendered", "--json"),
         workdir,
         "hybrid qa",
         env=env,
@@ -196,7 +199,7 @@ def scenario_template(root: Path) -> dict:
         env=env,
     )
     hybrid = run(
-        [sys.executable, "hybrid_pipeline.py", "qa", "deck.pptx", "--rendered-dir", "rendered", "--json"],
+        rust_tool_cmd("qa", "deck.pptx", "--rendered-dir", "rendered", "--json"),
         workdir,
         "hybrid qa",
         env=env,
@@ -237,7 +240,7 @@ def scenario_sample_deck(root: Path) -> dict:
         env=env,
     )
     hybrid = run(
-        [sys.executable, "hybrid_pipeline.py", "qa", "deck.pptx", "--rendered-dir", "rendered", "--json"],
+        rust_tool_cmd("qa", "deck.pptx", "--rendered-dir", "rendered", "--json"),
         workdir,
         "hybrid qa",
         env=env,

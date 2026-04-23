@@ -23,7 +23,7 @@ mod framework_runtime;
 mod session_supervisor;
 
 use background_state::handle_background_state_operation;
-use claude_hooks::{run_claude_audit_hook, run_claude_lifecycle_hook};
+use claude_hooks::{build_claude_hook_manifest, run_claude_audit_hook, run_claude_lifecycle_hook};
 use framework_profile::{
     build_codex_artifact_bundle, build_profile_bundle, build_profile_bundle_with_legacy_alias,
     load_framework_profile,
@@ -208,6 +208,8 @@ struct Cli {
     route_resolution_json: bool,
     #[arg(long)]
     runtime_storage_json: bool,
+    #[arg(long)]
+    claude_hook_manifest_json: bool,
     #[arg(long)]
     claude_hook_command: Option<String>,
     #[arg(long)]
@@ -1384,6 +1386,15 @@ fn main() -> Result<(), String> {
         println!(
             "{}",
             serde_json::to_string(&runtime_storage_operation(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.claude_hook_manifest_json {
+        println!(
+            "{}",
+            serde_json::to_string(&build_claude_hook_manifest())
                 .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());
@@ -6215,6 +6226,7 @@ fn framework_alias_explicit_entrypoints(slug: &str) -> &'static [&'static str] {
     match slug {
         "autopilot" => &["/autopilot", "$autopilot"],
         "deepinterview" => &["/deepinterview", "$deepinterview"],
+        "team" => &["/team", "$team"],
         _ => &[],
     }
 }
@@ -6369,9 +6381,9 @@ fn score_route_candidate<'a>(
             ],
         };
     }
-    if framework_alias_requires_explicit_call(&record.slug)
-        && !has_explicit_framework_alias_call(query_text, query_token_list, &record.slug)
-    {
+    let explicit_framework_alias = framework_alias_requires_explicit_call(&record.slug)
+        && has_explicit_framework_alias_call(query_text, query_token_list, &record.slug);
+    if framework_alias_requires_explicit_call(&record.slug) && !explicit_framework_alias {
         return RouteCandidate {
             record,
             score: 0.0,
@@ -6405,6 +6417,11 @@ fn score_route_candidate<'a>(
                     .to_string(),
             ],
         };
+    }
+
+    if explicit_framework_alias {
+        score += 1000.0;
+        reasons.push("Framework alias entrypoint matched explicitly.".to_string());
     }
 
     if !record.slug_lower.is_empty() && query_text.contains(&record.slug_lower) {
@@ -7877,6 +7894,88 @@ mod tests {
         assert!(prompt.contains("进入 deepinterview"));
         assert!(prompt.contains("每轮只问一个问题"));
         assert!(prompt.contains("review lanes ->"));
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_alias_builds_compact_team_payload() {
+        let repo_root = std::env::temp_dir().join(format!(
+            "router-rs-team-alias-fixture-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock before epoch")
+                .as_nanos()
+        ));
+        let task_root = repo_root
+            .join("artifacts")
+            .join("current")
+            .join("active-bootstrap-repair-20260418210000");
+        fs::create_dir_all(&task_root).expect("create task root");
+        fs::create_dir_all(repo_root.join("artifacts").join("current"))
+            .expect("create current root");
+        fs::write(
+            task_root.join("SESSION_SUMMARY.md"),
+            "- task: active bootstrap repair\n- phase: implementation\n- status: in_progress\n",
+        )
+        .expect("write session summary");
+        fs::write(
+            task_root.join("NEXT_ACTIONS.json"),
+            r#"{"next_actions":["Patch classifier","Run MCP regression tests"]}"#,
+        )
+        .expect("write next actions");
+        fs::write(task_root.join("EVIDENCE_INDEX.json"), r#"{"artifacts":[]}"#)
+            .expect("write evidence index");
+        fs::write(
+            task_root.join("TRACE_METADATA.json"),
+            r#"{"task":"active bootstrap repair","matched_skills":["execution-controller-coding"]}"#,
+        )
+        .expect("write trace metadata");
+        fs::write(
+            repo_root.join("artifacts").join("current").join("active_task.json"),
+            r#"{"task_id":"active-bootstrap-repair-20260418210000","task":"active bootstrap repair"}"#,
+        )
+        .expect("write active task");
+        fs::write(
+            repo_root.join(".supervisor_state.json"),
+            r#"{
+                "task_id":"active-bootstrap-repair-20260418210000",
+                "task_summary":"active bootstrap repair",
+                "active_phase":"implementation",
+                "verification":{"verification_status":"in_progress"},
+                "continuity":{"story_state":"active","resume_allowed":true},
+                "execution_contract":{"acceptance_criteria":["completed tasks never appear as current execution"]}
+            }"#,
+        )
+        .expect("write supervisor state");
+
+        let payload = build_framework_alias_envelope(&repo_root, "team", 5, false)
+            .expect("build alias payload");
+        let alias = payload
+            .get("alias")
+            .and_then(Value::as_object)
+            .expect("alias payload");
+        let prompt = alias
+            .get("entry_prompt")
+            .and_then(Value::as_str)
+            .expect("entry prompt");
+
+        assert_eq!(payload["schema_version"], json!(FRAMEWORK_ALIAS_SCHEMA_VERSION));
+        assert_eq!(alias["name"], json!("team"));
+        assert_eq!(alias["host_entrypoint"], json!("/team"));
+        assert_eq!(alias["compact"], json!(false));
+        assert_eq!(alias["canonical_owner"], json!("execution-controller-coding"));
+        assert_eq!(
+            alias["state_machine"]["handoff"]["rules"][1]["target"],
+            json!("subagent-delegation")
+        );
+        assert_eq!(
+            alias["entry_contract"]["route_rules"][0],
+            json!("主 owner -> `execution-controller-coding`")
+        );
+        assert!(prompt.contains("进入 team"));
+        assert!(prompt.contains("team split gate -> `subagent-delegation`"));
+        assert!(prompt.contains("共享 continuity 只允许 supervisor 持有"));
 
         let _ = fs::remove_dir_all(&repo_root);
     }

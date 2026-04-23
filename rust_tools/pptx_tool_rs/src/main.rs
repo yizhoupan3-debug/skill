@@ -41,6 +41,10 @@ enum Commands {
     SlidesTest(SlidesTestArgs),
     DetectFonts(DetectFontsArgs),
     SanitizePptx(SanitizePptxArgs),
+    Qa(QaArgs),
+    Intake(IntakeArgs),
+    BuildQa(BuildQaArgs),
+    Office(OfficeArgs),
 }
 
 #[derive(Args)]
@@ -137,6 +141,122 @@ struct SanitizePptxArgs {
     output: Option<String>,
 }
 
+#[derive(Args)]
+struct QaArgs {
+    deck: String,
+    #[arg(long, default_value = "rendered")]
+    rendered_dir: String,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+struct IntakeArgs {
+    deck: String,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+struct BuildQaArgs {
+    #[arg(long, default_value = ".")]
+    workdir: String,
+    #[arg(long, default_value = "deck.js")]
+    entry: String,
+    #[arg(long, default_value = "deck.pptx")]
+    deck: String,
+    #[arg(long, default_value = "rendered")]
+    rendered_dir: String,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+struct OfficeArgs {
+    #[command(subcommand)]
+    command: OfficeCommands,
+}
+
+#[derive(Subcommand)]
+enum OfficeCommands {
+    Probe(OfficeProbeArgs),
+    Doctor(OfficeDoctorArgs),
+    Outline(OfficeFileArgs),
+    Issues(OfficeFileArgs),
+    Validate(OfficeFileArgs),
+    Get(OfficeGetArgs),
+    Query(OfficeQueryArgs),
+    Watch(OfficeWatchArgs),
+    Batch(OfficeBatchArgs),
+}
+
+#[derive(Args)]
+struct OfficeProbeArgs {
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+struct OfficeDoctorArgs {
+    file: String,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+    #[arg(long, default_value_t = false)]
+    fail_on_issues: bool,
+    #[arg(long, default_value_t = false)]
+    fail_on_validation: bool,
+}
+
+#[derive(Args)]
+struct OfficeFileArgs {
+    file: String,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+struct OfficeGetArgs {
+    file: String,
+    #[arg(default_value = "/")]
+    path: String,
+    #[arg(long, default_value_t = 1)]
+    depth: i32,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+struct OfficeQueryArgs {
+    file: String,
+    selector: String,
+    #[arg(long)]
+    text: Option<String>,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+struct OfficeWatchArgs {
+    file: String,
+    #[arg(long, default_value_t = 18080)]
+    port: u16,
+    #[arg(long, default_value_t = false)]
+    browser: bool,
+}
+
+#[derive(Args)]
+struct OfficeBatchArgs {
+    file: String,
+    #[arg(long)]
+    input: Option<String>,
+    #[arg(long)]
+    commands: Option<String>,
+    #[arg(long, default_value_t = false)]
+    force: bool,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
 #[derive(Debug, Clone)]
 struct ZipBundle {
     files: HashMap<String, Vec<u8>>,
@@ -216,6 +336,58 @@ struct LayoutInfo {
     placeholders: Vec<LayoutPlaceholder>,
 }
 
+#[derive(Debug, Serialize)]
+struct QaRenderSummary {
+    rendered_dir: String,
+    png_count: usize,
+    paths: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct QaOverflowSummary {
+    ok: bool,
+    stdout: String,
+    stderr: String,
+}
+
+#[derive(Debug, Serialize)]
+struct QaSummary {
+    deck: String,
+    render: QaRenderSummary,
+    overflow_check: QaOverflowSummary,
+    font_check: Value,
+    officecli: Value,
+}
+
+#[derive(Debug, Serialize)]
+struct OfficeProbeSummary {
+    available: bool,
+    binary: Option<String>,
+    version: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct OfficeDoctorSummary {
+    officecli_version: Option<String>,
+    file: String,
+    outline: Value,
+    issues: Value,
+    validation: Value,
+}
+
+#[derive(Debug)]
+struct OfficeBinary {
+    path: PathBuf,
+    version: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum EmitFormat {
+    Json,
+    Text,
+}
+
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
@@ -226,9 +398,192 @@ fn main() -> Result<()> {
         Commands::SlidesTest(args) => slides_test_command(args)?,
         Commands::DetectFonts(args) => detect_fonts_command(args)?,
         Commands::SanitizePptx(args) => sanitize_pptx_command(args)?,
+        Commands::Qa(args) => qa_command(args)?,
+        Commands::Intake(args) => intake_command(args)?,
+        Commands::BuildQa(args) => build_qa_command(args)?,
+        Commands::Office(args) => office_command(args)?,
     }
     Ok(())
 }
+
+fn qa_command(args: QaArgs) -> Result<()> {
+    let payload = qa_summary(&args.deck, &args.rendered_dir)?;
+    emit_value(serde_json::to_value(payload)?, if args.json { EmitFormat::Json } else { EmitFormat::Text })
+}
+
+fn intake_command(args: IntakeArgs) -> Result<()> {
+    let structure = extract_structure_payload(&args.deck)?;
+    let officecli = office_doctor_value(&args.deck)?;
+    let payload = json!({
+        "deck": args.deck,
+        "structure": structure,
+        "officecli": officecli,
+    });
+    emit_value(payload, if args.json { EmitFormat::Json } else { EmitFormat::Text })
+}
+
+fn build_qa_command(args: BuildQaArgs) -> Result<()> {
+    let workdir = expand_path(&args.workdir);
+    let status = Command::new("node")
+        .arg(&args.entry)
+        .current_dir(&workdir)
+        .status()
+        .with_context(|| format!("failed to run node {}", args.entry))?;
+    if !status.success() {
+        bail!("node {} failed with status {:?}", args.entry, status.code());
+    }
+    let deck = workdir.join(&args.deck);
+    let rendered = workdir.join(&args.rendered_dir);
+    let payload = qa_summary(&deck.display().to_string(), &rendered.display().to_string())?;
+    emit_value(serde_json::to_value(payload)?, if args.json { EmitFormat::Json } else { EmitFormat::Text })
+}
+
+fn office_command(args: OfficeArgs) -> Result<()> {
+    match args.command {
+        OfficeCommands::Probe(args) => office_probe_command(args),
+        OfficeCommands::Doctor(args) => office_doctor_command(args),
+        OfficeCommands::Outline(args) => office_file_passthrough("view", &args.file, Some("outline"), args.json),
+        OfficeCommands::Issues(args) => office_file_passthrough("view", &args.file, Some("issues"), args.json),
+        OfficeCommands::Validate(args) => office_file_passthrough("validate", &args.file, None, args.json),
+        OfficeCommands::Get(args) => office_get_command(args),
+        OfficeCommands::Query(args) => office_query_command(args),
+        OfficeCommands::Watch(args) => office_watch_command(args),
+        OfficeCommands::Batch(args) => office_batch_command(args),
+    }
+}
+
+fn office_probe_command(args: OfficeProbeArgs) -> Result<()> {
+    let probe = detect_officecli();
+    let payload = OfficeProbeSummary {
+        available: probe.is_some(),
+        binary: probe.as_ref().map(|item| item.path.display().to_string()),
+        version: probe.and_then(|item| item.version),
+    };
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&payload)?);
+    } else if payload.available {
+        println!("officecli: {}", payload.binary.clone().unwrap_or_default());
+        println!("version: {}", payload.version.unwrap_or_else(|| "unknown".to_string()));
+    } else {
+        println!("officecli: missing");
+    }
+    Ok(())
+}
+
+fn office_doctor_command(args: OfficeDoctorArgs) -> Result<()> {
+    let payload = office_doctor_summary(&args.file)?;
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&payload)?);
+    } else {
+        print_office_doctor_summary(&payload);
+    }
+    if (args.fail_on_issues && payload.issues["count"].as_u64().unwrap_or(0) > 0)
+        || (args.fail_on_validation && !payload.validation["ok"].as_bool().unwrap_or(false))
+    {
+        bail!("office doctor checks failed")
+    }
+    Ok(())
+}
+
+fn office_file_passthrough(command: &str, file: &str, tail: Option<&str>, json_output: bool) -> Result<()> {
+    let office = require_officecli()?;
+    let mut args = vec![command.to_string(), file.to_string()];
+    if let Some(tail) = tail {
+        args.push(tail.to_string());
+    }
+    if json_output {
+        let payload = run_office_json(&office.path, &args)?;
+        println!("{}", serde_json::to_string_pretty(&payload)?);
+    } else {
+        let status = Command::new(&office.path).args(&args).status()?;
+        if !status.success() {
+            bail!("officecli command failed with status {:?}", status.code());
+        }
+    }
+    Ok(())
+}
+
+fn office_get_command(args: OfficeGetArgs) -> Result<()> {
+    let office = require_officecli()?;
+    let mut command = Command::new(&office.path);
+    command
+        .arg("get")
+        .arg(&args.file)
+        .arg(&args.path)
+        .arg("--depth")
+        .arg(args.depth.to_string());
+    if args.json {
+        command.arg("--json");
+    }
+    let status = command.status()?;
+    if !status.success() {
+        bail!("officecli get failed with status {:?}", status.code());
+    }
+    Ok(())
+}
+
+fn office_query_command(args: OfficeQueryArgs) -> Result<()> {
+    let office = require_officecli()?;
+    let mut command = Command::new(&office.path);
+    command.arg("query").arg(&args.file).arg(&args.selector);
+    if let Some(text) = args.text {
+        command.arg("--text").arg(text);
+    }
+    if args.json {
+        command.arg("--json");
+    }
+    let status = command.status()?;
+    if !status.success() {
+        bail!("officecli query failed with status {:?}", status.code());
+    }
+    Ok(())
+}
+
+fn office_watch_command(args: OfficeWatchArgs) -> Result<()> {
+    let office = require_officecli()?;
+    let status = Command::new(&office.path)
+        .arg("watch")
+        .arg(&args.file)
+        .arg("--port")
+        .arg(args.port.to_string())
+        .status()?;
+    if !status.success() {
+        bail!("officecli watch failed with status {:?}", status.code());
+    }
+    if args.browser {
+        let status = Command::new("open")
+            .arg(format!("http://127.0.0.1:{}", args.port))
+            .status()?;
+        if !status.success() {
+            bail!("failed to open browser with status {:?}", status.code());
+        }
+    }
+    Ok(())
+}
+
+fn office_batch_command(args: OfficeBatchArgs) -> Result<()> {
+    let office = require_officecli()?;
+    let mut command = Command::new(&office.path);
+    command.arg("batch").arg(&args.file);
+    if let Some(input) = args.input {
+        command.arg("--input").arg(input);
+    }
+    if let Some(commands) = args.commands {
+        command.arg("--commands").arg(commands);
+    }
+    if args.force {
+        command.arg("--force");
+    }
+    if args.json {
+        command.arg("--json");
+    }
+    let status = command.status()?;
+    if !status.success() {
+        bail!("officecli batch failed with status {:?}", status.code());
+    }
+    Ok(())
+}
+
 
 fn render_command(args: RenderArgs) -> Result<()> {
     let input = expand_path(&args.input_path);
@@ -237,16 +592,288 @@ fn render_command(args: RenderArgs) -> Result<()> {
         .as_deref()
         .map(expand_path)
         .unwrap_or_else(|| default_render_dir(&input));
-    let dpi = if has_extension(&input, "pdf") {
-        calc_dpi_via_pdf(&input, args.width, args.height)?
-    } else {
-        calc_dpi_via_ooxml(&input, args.width, args.height)?
-    };
-    let rendered = rasterize_to_pngs(&input, &output_dir, dpi)?;
+    let rendered = render_paths(&input, &output_dir, args.width, args.height)?;
     for path in rendered {
         println!("{}", path.display());
     }
     Ok(())
+}
+
+fn qa_summary(deck_path: &str, rendered_dir: &str) -> Result<QaSummary> {
+    let deck = expand_path(deck_path);
+    let rendered_dir_path = expand_path(rendered_dir);
+    let rendered = render_paths(&deck, &rendered_dir_path, 1600, 900)?;
+    let overflow = slide_overflow_summary(&deck)?;
+    let font_check = detect_fonts_payload(&deck)?;
+    let officecli = office_doctor_value(&deck.display().to_string())?;
+    Ok(QaSummary {
+        deck: deck.display().to_string(),
+        render: QaRenderSummary {
+            rendered_dir: rendered_dir_path.display().to_string(),
+            png_count: rendered.len(),
+            paths: rendered.iter().map(|path| path.display().to_string()).collect(),
+        },
+        overflow_check: overflow,
+        font_check,
+        officecli,
+    })
+}
+
+fn render_paths(input: &Path, output_dir: &Path, width: u32, height: u32) -> Result<Vec<PathBuf>> {
+    let dpi = if has_extension(input, "pdf") {
+        calc_dpi_via_pdf(input, width, height)?
+    } else {
+        calc_dpi_via_ooxml(input, width, height)?
+    };
+    rasterize_to_pngs(input, output_dir, dpi)
+}
+
+fn slide_overflow_summary(input: &Path) -> Result<QaOverflowSummary> {
+    let bundle = ZipBundle::from_path(input)?;
+    let structure = extract_pptx_structure(&bundle, input, false, None)?;
+    let slide_w = structure
+        .get("slide_width")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| anyhow!("missing slide_width"))?;
+    let slide_h = structure
+        .get("slide_height")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| anyhow!("missing slide_height"))?;
+    let slides = structure
+        .get("slides")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing slides"))?;
+    let mut failing = Vec::new();
+    for slide in slides {
+        let index = slide.get("index").and_then(Value::as_u64).unwrap_or(0) as usize + 1;
+        let mut overflow = false;
+        if let Some(elements) = slide.get("elements").and_then(Value::as_array) {
+            overflow = elements.iter().any(|item| element_overflows(item, slide_w, slide_h));
+        }
+        if overflow {
+            failing.push(index);
+        }
+    }
+    if failing.is_empty() {
+        return Ok(QaOverflowSummary {
+            ok: true,
+            stdout: "Test passed. No overflow detected.".to_string(),
+            stderr: String::new(),
+        });
+    }
+    Ok(QaOverflowSummary {
+        ok: false,
+        stdout: format!(
+            "ERROR: Slides with content overflowing original canvas (1-based indexing): {}",
+            failing.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ")
+        ),
+        stderr: String::new(),
+    })
+}
+
+fn detect_fonts_payload(input: &Path) -> Result<Value> {
+    let bundle = ZipBundle::from_path(input)?;
+    let requested = extract_requested_fonts_by_slide(&bundle)?;
+    let installed = build_font_synonym_map()?;
+    let resolved = match extract_resolved_fonts_from_odp(input) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("warning: resolved-font probe skipped: {err:#}");
+            BTreeSet::new()
+        }
+    };
+
+    let mut missing_overall = BTreeSet::new();
+    let mut substituted_overall = BTreeSet::new();
+    let mut missing_by_slide: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut substituted_by_slide: BTreeMap<String, Vec<String>> = BTreeMap::new();
+
+    for (slide_no, families) in &requested {
+        let mut slide_missing = BTreeSet::new();
+        let mut slide_substituted = BTreeSet::new();
+        for family in families {
+            let normalized = normalize_font_family_name(family);
+            if normalized.is_empty() {
+                continue;
+            }
+            let acceptable = expand_font_family_aliases(&installed, &normalized);
+            let is_installed = acceptable.iter().any(|alias| installed.contains_key(alias));
+            if !is_installed {
+                slide_missing.insert(family.clone());
+                missing_overall.insert(family.clone());
+                continue;
+            }
+            if !resolved.is_empty() && !acceptable.iter().any(|alias| resolved.contains(alias)) {
+                slide_substituted.insert(family.clone());
+                substituted_overall.insert(family.clone());
+            }
+        }
+        if !slide_missing.is_empty() {
+            missing_by_slide.insert(slide_no.to_string(), slide_missing.into_iter().collect());
+        }
+        if !slide_substituted.is_empty() {
+            substituted_by_slide.insert(slide_no.to_string(), slide_substituted.into_iter().collect());
+        }
+    }
+
+    Ok(json!({
+        "font_missing_overall": missing_overall.into_iter().collect::<Vec<_>>(),
+        "font_missing_by_slide": missing_by_slide,
+        "font_substituted_overall": substituted_overall.into_iter().collect::<Vec<_>>(),
+        "font_substituted_by_slide": substituted_by_slide,
+    }))
+}
+
+fn extract_structure_payload(input_path: &str) -> Result<Value> {
+    let input = expand_path(input_path);
+    let bundle = ZipBundle::from_path(&input)?;
+    extract_pptx_structure(&bundle, &input, false, None)
+}
+
+fn detect_officecli() -> Option<OfficeBinary> {
+    let path = which_path("officecli")?;
+    let version = Command::new(&path)
+        .arg("--version")
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+            } else {
+                None
+            }
+        })
+        .filter(|value| !value.is_empty());
+    Some(OfficeBinary { path, version })
+}
+
+fn require_officecli() -> Result<OfficeBinary> {
+    detect_officecli().ok_or_else(|| anyhow!("officecli not found. Install it first, then rerun this command."))
+}
+
+fn run_office_json(binary: &Path, args: &[String]) -> Result<Value> {
+    let output = Command::new(binary)
+        .args(args)
+        .arg("--json")
+        .output()
+        .with_context(|| format!("failed to run {}", binary.display()))?;
+    if !output.status.success() {
+        bail!(
+            "officecli command failed: {}\nstdout:\n{}\nstderr:\n{}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    serde_json::from_slice(&output.stdout)
+        .with_context(|| format!("officecli did not return valid JSON for args={args:?}"))
+}
+
+fn office_doctor_value(file: &str) -> Result<Value> {
+    Ok(serde_json::to_value(office_doctor_summary(file)?)?)
+}
+
+fn office_doctor_summary(file: &str) -> Result<OfficeDoctorSummary> {
+    let office = require_officecli()?;
+    let outline_payload = run_office_json(&office.path, &["view".to_string(), file.to_string(), "outline".to_string()])?;
+    let issues_payload = run_office_json(&office.path, &["view".to_string(), file.to_string(), "issues".to_string()])?;
+    let validate_payload = run_office_json(&office.path, &["validate".to_string(), file.to_string()])?;
+    summarize_office_doctor(file, outline_payload, issues_payload, validate_payload, office.version)
+}
+
+fn summarize_office_doctor(
+    file: &str,
+    outline_payload: Value,
+    issues_payload: Value,
+    validate_payload: Value,
+    version: Option<String>,
+) -> Result<OfficeDoctorSummary> {
+    let outline_data = outline_payload.get("data").cloned().unwrap_or_else(|| json!({}));
+    let issues_data = issues_payload.get("data").cloned().unwrap_or_else(|| json!({}));
+    let issue_list = issues_data
+        .get("Issues")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let validate_message = validate_payload
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let validation_ok = validate_message.to_lowercase().contains("0 validation error")
+        || (validate_payload.get("success").and_then(Value::as_bool) == Some(true)
+            && !validate_message.to_lowercase().contains("validation error"));
+    let overflow_count = issue_list
+        .iter()
+        .filter(|item| item.get("Message").and_then(Value::as_str).unwrap_or_default().to_lowercase().contains("overflow"))
+        .count();
+    let title_count = issue_list
+        .iter()
+        .filter(|item| item.get("Message").and_then(Value::as_str).unwrap_or_default().to_lowercase().contains("no title"))
+        .count();
+    Ok(OfficeDoctorSummary {
+        officecli_version: version,
+        file: file.to_string(),
+        outline: json!({
+            "total_slides": outline_data.get("totalSlides").cloned().unwrap_or(Value::Null),
+            "slides": outline_data.get("slides").cloned().unwrap_or_else(|| json!([])),
+        }),
+        issues: json!({
+            "count": issues_data
+                .get("Count")
+                .and_then(Value::as_u64)
+                .unwrap_or(issue_list.len() as u64),
+            "overflow_count": overflow_count,
+            "title_count": title_count,
+            "items": issue_list,
+        }),
+        validation: json!({
+            "ok": validation_ok,
+            "message": validate_message,
+        }),
+    })
+}
+
+fn print_office_doctor_summary(summary: &OfficeDoctorSummary) {
+    println!("officecli: {}", summary.officecli_version.clone().unwrap_or_else(|| "unknown".to_string()));
+    println!("file: {}", summary.file);
+    println!(
+        "slides: {}",
+        summary.outline.get("total_slides").and_then(Value::as_u64).unwrap_or(0)
+    );
+    println!(
+        "issues: total={} overflow={} missing_title={}",
+        summary.issues.get("count").and_then(Value::as_u64).unwrap_or(0),
+        summary.issues.get("overflow_count").and_then(Value::as_u64).unwrap_or(0),
+        summary.issues.get("title_count").and_then(Value::as_u64).unwrap_or(0)
+    );
+    println!(
+        "validation_ok: {}",
+        summary.validation.get("ok").and_then(Value::as_bool).unwrap_or(false)
+    );
+    if let Some(message) = summary.validation.get("message").and_then(Value::as_str) {
+        if !message.is_empty() {
+            println!("validation_message: {}", message);
+        }
+    }
+}
+
+fn emit_value(value: Value, _format: EmitFormat) -> Result<()> {
+    println!("{}", serde_json::to_string_pretty(&value)?);
+    Ok(())
+}
+
+fn which_path(binary: &str) -> Option<PathBuf> {
+    let output = Command::new("which").arg(binary).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if path.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(path))
+    }
 }
 
 fn extract_structure_command(args: ExtractStructureArgs) -> Result<()> {
@@ -1596,27 +2223,23 @@ fn extract_resolved_fonts_from_odp(input: &Path) -> Result<BTreeSet<String>> {
 }
 
 fn sanitize_presentation_xml(xml: &str) -> Result<String> {
-    let notes_master_re = Regex::new(r#"(?s)<p:notesMasterIdLst>.*?</p:notesMasterIdLst>"#)?;
-    let notes_sz_re = Regex::new(r#"<p:notesSz\b[^>]*/>"#)?;
-    let sld_sz_re = Regex::new(r#"<p:sldSz\b[^>]*/>"#)?;
+    let notes_master_re = Regex::new(
+        r#"(?s)<p:notesMasterIdLst(?:\s*/>|>.*?</p:notesMasterIdLst>)"#,
+    )?;
+    let sld_master_re = Regex::new(
+        r#"(?s)<p:sldMasterIdLst(?:\s*/>|>.*?</p:sldMasterIdLst>)"#,
+    )?;
 
     let notes_master = match notes_master_re.find(xml) {
         Some(value) => value.as_str().to_string(),
         None => return Ok(xml.to_string()),
     };
     let without_notes_master = notes_master_re.replace(xml, "").to_string();
-    if let Some(notes_sz) = notes_sz_re.find(&without_notes_master) {
+    if let Some(sld_master) = sld_master_re.find(&without_notes_master) {
         let mut rebuilt = String::with_capacity(without_notes_master.len() + notes_master.len());
-        rebuilt.push_str(&without_notes_master[..notes_sz.end()]);
+        rebuilt.push_str(&without_notes_master[..sld_master.end()]);
         rebuilt.push_str(&notes_master);
-        rebuilt.push_str(&without_notes_master[notes_sz.end()..]);
-        return Ok(rebuilt);
-    }
-    if let Some(sld_sz) = sld_sz_re.find(&without_notes_master) {
-        let mut rebuilt = String::with_capacity(without_notes_master.len() + notes_master.len());
-        rebuilt.push_str(&without_notes_master[..sld_sz.end()]);
-        rebuilt.push_str(&notes_master);
-        rebuilt.push_str(&without_notes_master[sld_sz.end()..]);
+        rebuilt.push_str(&without_notes_master[sld_master.end()..]);
         return Ok(rebuilt);
     }
     Ok(without_notes_master)
@@ -1649,9 +2272,10 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_presentation_xml_reorders_notes_master_after_notes_size() {
-        let input = r#"<p:presentation><p:sldIdLst/><p:notesMasterIdLst><p:notesMasterId r:id="rId4"/></p:notesMasterIdLst><p:sldSz cx="1" cy="2"/><p:notesSz cx="2" cy="1"/><p:defaultTextStyle/></p:presentation>"#;
+    fn sanitize_presentation_xml_reorders_notes_master_after_slide_master() {
+        let input = r#"<p:presentation><p:sldMasterIdLst/><p:sldIdLst/><p:notesMasterIdLst><p:notesMasterId r:id="rId4"/></p:notesMasterIdLst><p:sldSz cx="1" cy="2"/><p:notesSz cx="2" cy="1"/><p:defaultTextStyle/></p:presentation>"#;
         let output = sanitize_presentation_xml(input).unwrap();
-        assert!(output.contains(r#"<p:sldSz cx="1" cy="2"/><p:notesSz cx="2" cy="1"/><p:notesMasterIdLst>"#));
+        assert!(output.find("<p:sldMasterIdLst/>").unwrap() < output.find("<p:notesMasterIdLst>").unwrap());
+        assert!(output.find("<p:notesMasterIdLst>").unwrap() < output.find("<p:sldIdLst/>").unwrap());
     }
 }

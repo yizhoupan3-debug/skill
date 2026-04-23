@@ -20,6 +20,7 @@ from scripts.memory_support import (
     normalize_supervisor_state,
     normalize_trace_skills,
     repair_runtime_continuity_artifacts,
+    write_active_task_pointer,
 )
 
 
@@ -46,6 +47,9 @@ def _snapshot(
         mirror_root=current_root,
         task_root=current_root,
         active_task_id="demo-task",
+        focus_task_id="demo-task",
+        known_task_ids=["demo-task"],
+        recoverable_task_ids=[],
         snapshots=[],
         collected_at="2026-04-18T21:00:00+08:00",
     )
@@ -126,7 +130,13 @@ def test_memory_and_continuity_layout_descriptors_are_explicit(tmp_path: Path) -
         "/artifacts/current/SESSION_SUMMARY.md"
     )
     assert continuity["task_scoped_current"]["template"].endswith("/artifacts/current/<task_id>")
-    assert "task-scoped continuity" in continuity["sync_responsibility"]
+    assert continuity["task_scoped_current"]["focus_task_pointer"].endswith(
+        "/artifacts/current/focus_task.json"
+    )
+    assert continuity["task_scoped_current"]["task_registry"].endswith(
+        "/artifacts/current/task_registry.json"
+    )
+    assert "focus task" in continuity["sync_responsibility"]
 
 
 def test_format_repo_relative_path_handles_alias_roots_and_fallback(tmp_path: Path) -> None:
@@ -371,6 +381,106 @@ def test_load_runtime_snapshot_uses_repaired_supervisor_state_after_continuity_f
     assert snapshot.supervisor_state["continuity"]["resume_allowed"] is False
     assert continuity["state"] == "completed"
     assert continuity["inconsistency_reasons"] == []
+
+
+
+
+
+def test_write_active_task_pointer_only_updates_shared_pointers_for_focus_task(tmp_path: Path) -> None:
+    write_active_task_pointer(
+        tmp_path,
+        task_id="focus-task-20260423",
+        task="focus task",
+        phase="implementation",
+        status="in_progress",
+        resume_allowed=True,
+        focus=True,
+    )
+
+    write_active_task_pointer(
+        tmp_path,
+        task_id="background-task-20260423",
+        task="background task",
+        phase="implementation",
+        status="in_progress",
+        resume_allowed=True,
+        focus=False,
+    )
+
+    active_pointer = json.loads(
+        (tmp_path / "artifacts" / "current" / "active_task.json").read_text(encoding="utf-8")
+    )
+    focus_pointer = json.loads(
+        (tmp_path / "artifacts" / "current" / "focus_task.json").read_text(encoding="utf-8")
+    )
+    registry = json.loads(
+        (tmp_path / "artifacts" / "current" / "task_registry.json").read_text(encoding="utf-8")
+    )
+
+    assert active_pointer["task_id"] == "focus-task-20260423"
+    assert focus_pointer["task_id"] == "focus-task-20260423"
+    assert registry["focus_task_id"] == "focus-task-20260423"
+    assert sorted(row["task_id"] for row in registry["tasks"]) == [
+        "background-task-20260423",
+        "focus-task-20260423",
+    ]
+
+
+def test_load_runtime_snapshot_prefers_focus_pointer_and_collects_known_tasks(tmp_path: Path) -> None:
+    focus_task_id = "focus-task-20260423090000"
+    background_task_id = "background-task-20260423090500"
+    focus_root = tmp_path / "artifacts" / "current" / focus_task_id
+    background_root = tmp_path / "artifacts" / "current" / background_task_id
+    focus_root.mkdir(parents=True, exist_ok=True)
+    background_root.mkdir(parents=True, exist_ok=True)
+    (focus_root / "SESSION_SUMMARY.md").write_text("- task: focus task\n", encoding="utf-8")
+    (focus_root / "NEXT_ACTIONS.json").write_text('{"next_actions":["focus next"]}\n', encoding="utf-8")
+    (focus_root / "EVIDENCE_INDEX.json").write_text('{"artifacts":[]}\n', encoding="utf-8")
+    (focus_root / "TRACE_METADATA.json").write_text(
+        '{"matched_skills":["skill-framework-developer"]}\n', encoding="utf-8"
+    )
+    (background_root / "SESSION_SUMMARY.md").write_text("- task: background task\n", encoding="utf-8")
+    (tmp_path / "artifacts" / "current" / "focus_task.json").write_text(
+        '{"task_id":"focus-task-20260423090000","task":"focus task"}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "artifacts" / "current" / "task_registry.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "task-registry-v1",
+                "focus_task_id": focus_task_id,
+                "tasks": [
+                    {
+                        "task_id": background_task_id,
+                        "task": "background task",
+                        "resume_allowed": True,
+                    },
+                    {
+                        "task_id": focus_task_id,
+                        "task": "focus task",
+                        "resume_allowed": False,
+                    },
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".supervisor_state.json").write_text(
+        '{"task_summary":"focus task","active_phase":"implementation"}\n',
+        encoding="utf-8",
+    )
+
+    snapshot = load_runtime_snapshot(tmp_path, repair=False, include_contract_snapshots=False)
+
+    assert snapshot.active_task_id == focus_task_id
+    assert snapshot.focus_task_id == focus_task_id
+    assert snapshot.current_root == focus_root
+    assert snapshot.known_task_ids == [background_task_id, focus_task_id]
+    assert snapshot.recoverable_task_ids == [background_task_id]
+    assert snapshot.session_summary_text == "- task: focus task\n"
 
 
 

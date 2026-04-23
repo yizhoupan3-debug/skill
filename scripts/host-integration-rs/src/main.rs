@@ -605,7 +605,7 @@ fn install_native_integration(
     let home_claude_skills_link_changed = if install_home_claude_skills_link {
         ensure_home_skills_link(&repo_root, &home_claude_skills_path)?
     } else {
-        false
+        retire_home_skills_link(&repo_root, &home_claude_skills_path)?
     };
     let home_claude_refresh_changed = if install_home_claude_refresh_command {
         ensure_home_claude_refresh_command(
@@ -613,7 +613,10 @@ fn install_native_integration(
             &home_claude_refresh_path,
         )?
     } else {
-        false
+        retire_home_claude_refresh_command(
+            &template_root.join(".claude/commands/refresh.md"),
+            &home_claude_refresh_path,
+        )?
     };
     let home_claude_mcp_config_changed = if install_home_claude_mcp_sync {
         ensure_home_claude_mcp_servers(&repo_root, &home_claude_mcp_config_path)?
@@ -1091,12 +1094,45 @@ fn ensure_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool,
     ensure_directory_symlink(&source, target_path)
 }
 
+fn retire_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool, String> {
+    let source = repo_root.join(skill_bridge_source_rel(repo_root)?).canonicalize().map_err(|err| err.to_string())?;
+    let metadata = match fs::symlink_metadata(target_path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(err) => return Err(err.to_string()),
+    };
+    if !metadata.file_type().is_symlink() {
+        return Ok(false);
+    }
+    let resolved = target_path.canonicalize().map_err(|err| err.to_string())?;
+    if resolved != source {
+        return Ok(false);
+    }
+    remove_path(target_path).map_err(|err| err.to_string())?;
+    Ok(true)
+}
+
 fn ensure_home_claude_refresh_command(
     source_path: &Path,
     command_path: &Path,
 ) -> Result<bool, String> {
     let content = fs::read_to_string(source_path).map_err(|err| err.to_string())?;
     write_text_if_changed(command_path, &content)
+}
+
+fn retire_home_claude_refresh_command(
+    source_path: &Path,
+    command_path: &Path,
+) -> Result<bool, String> {
+    let Some(existing) = read_text_if_exists(command_path)? else {
+        return Ok(false);
+    };
+    let source = fs::read_to_string(source_path).map_err(|err| err.to_string())?;
+    if existing != source {
+        return Ok(false);
+    }
+    remove_path(command_path).map_err(|err| err.to_string())?;
+    Ok(true)
 }
 
 fn ensure_home_claude_mcp_servers(repo_root: &Path, config_path: &Path) -> Result<bool, String> {

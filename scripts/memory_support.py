@@ -27,6 +27,8 @@ CURRENT_ALLOWED_ARTIFACT_NAMES = {
     "EVIDENCE_INDEX.json",
     "TRACE_METADATA.json",
     "active_task.json",
+    "focus_task.json",
+    "task_registry.json",
 }
 TASK_ALLOWED_ARTIFACT_NAMES = {
     "SESSION_SUMMARY.md",
@@ -62,6 +64,9 @@ class RuntimeSnapshot:
     mirror_root: Path
     task_root: Path
     active_task_id: str
+    focus_task_id: str
+    known_task_ids: list[str]
+    recoverable_task_ids: list[str]
     snapshots: list[Path]
     collected_at: str
 
@@ -75,6 +80,8 @@ ARTIFACT_NAMES = {
 }
 CURRENT_ARTIFACT_DIR = "current"
 ACTIVE_TASK_POINTER_NAME = "active_task.json"
+FOCUS_TASK_POINTER_NAME = "focus_task.json"
+TASK_REGISTRY_NAME = "task_registry.json"
 NEXT_ACTIONS_SCHEMA_VERSION = "next-actions-v2"
 EVIDENCE_INDEX_SCHEMA_VERSION = "evidence-index-v2"
 TRACE_METADATA_SCHEMA_VERSION = "trace-metadata-v2"
@@ -174,6 +181,8 @@ def describe_continuity_layout(repo_root: Path) -> dict[str, Any]:
         "task_scoped_current": {
             "template": str(current_root / "<task_id>"),
             "active_task_pointer": str(current_root / ACTIVE_TASK_POINTER_NAME),
+            "focus_task_pointer": str(current_root / FOCUS_TASK_POINTER_NAME),
+            "task_registry": str(current_root / TASK_REGISTRY_NAME),
         },
         "root_task_mirror": {
             "supervisor_state": str(root / ARTIFACT_NAMES["supervisor_state"]),
@@ -196,8 +205,8 @@ def describe_continuity_layout(repo_root: Path) -> dict[str, Any]:
         },
         "sync_responsibility": (
             "Supervisor writes task-scoped continuity under artifacts/current/<task_id>/ "
-            "and keeps root plus artifacts/current compatibility mirrors aligned to the same task. "
-            "artifacts/current/ should contain only the active-task pointer, four mirror files, "
+            "and keeps root plus artifacts/current compatibility mirrors aligned to the focus task. "
+            "artifacts/current/ should contain only the active-task pointer, focus-task pointer, task registry, four mirror files, "
             "and task-scoped continuity directories; bootstrap, ops, evidence, and scratch belong elsewhere."
         ),
     }
@@ -390,6 +399,18 @@ def active_task_pointer_path(source_root: Path, artifact_root: Path | None = Non
     return current_artifact_root(source_root, artifact_root) / ACTIVE_TASK_POINTER_NAME
 
 
+def focus_task_pointer_path(source_root: Path, artifact_root: Path | None = None) -> Path:
+    """Return the path to the focus-task pointer file."""
+
+    return current_artifact_root(source_root, artifact_root) / FOCUS_TASK_POINTER_NAME
+
+
+def task_registry_path(source_root: Path, artifact_root: Path | None = None) -> Path:
+    """Return the path to the task registry file."""
+
+    return current_artifact_root(source_root, artifact_root) / TASK_REGISTRY_NAME
+
+
 def task_artifact_root(
     source_root: Path,
     task_id: str,
@@ -404,6 +425,46 @@ def read_active_task_pointer(source_root: Path, artifact_root: Path | None = Non
     """Read the active-task pointer if it exists."""
 
     return read_json_if_exists(active_task_pointer_path(source_root, artifact_root))
+
+
+def read_focus_task_pointer(source_root: Path, artifact_root: Path | None = None) -> dict[str, Any]:
+    """Read the focus-task pointer if it exists."""
+
+    pointer = read_json_if_exists(focus_task_pointer_path(source_root, artifact_root))
+    if pointer:
+        return pointer
+    return read_active_task_pointer(source_root, artifact_root)
+
+
+def read_task_registry(source_root: Path, artifact_root: Path | None = None) -> dict[str, Any]:
+    """Read the task registry if it exists."""
+
+    payload = read_json_if_exists(task_registry_path(source_root, artifact_root))
+    tasks = payload.get("tasks")
+    if not isinstance(tasks, list):
+        tasks = []
+    normalized_tasks: list[dict[str, Any]] = []
+    for item in tasks:
+        if not isinstance(item, dict):
+            continue
+        task_id = safe_slug(_text(item.get("task_id")), fallback="")
+        if not task_id:
+            continue
+        normalized_tasks.append(
+            {
+                "task_id": task_id,
+                "task": _text(item.get("task")) or task_id,
+                "updated_at": _text(item.get("updated_at")) or None,
+                "status": _text(item.get("status")) or None,
+                "phase": _text(item.get("phase")) or None,
+                "resume_allowed": _bool_or_none(item.get("resume_allowed")),
+            }
+        )
+    return {
+        "schema_version": payload.get("schema_version") or "task-registry-v1",
+        "focus_task_id": safe_slug(_text(payload.get("focus_task_id")), fallback="") or None,
+        "tasks": normalized_tasks,
+    }
 
 
 def build_task_id(task: str, *, created_at: str | None = None) -> str:
@@ -547,7 +608,74 @@ def refresh_memory_state_if_needed(snapshot: RuntimeSnapshot, memory_root: Path)
     }
 
 
-def write_active_task_pointer(
+def _task_registry_payload(
+    existing: dict[str, Any],
+    *,
+    task_id: str,
+    task: str,
+    phase: str | None = None,
+    status: str | None = None,
+    resume_allowed: bool | None = None,
+    updated_at: str | None = None,
+    focus_task_id: str | None = None,
+) -> dict[str, Any]:
+    """Merge one task row into the task registry payload."""
+
+    tasks = existing.get("tasks") if isinstance(existing, dict) else []
+    tasks = tasks if isinstance(tasks, list) else []
+    normalized_tasks: list[dict[str, Any]] = []
+    seen = False
+    canonical_task_id = safe_slug(task_id)
+    timestamp = updated_at or current_local_timestamp()
+    for item in tasks:
+        if not isinstance(item, dict):
+            continue
+        item_task_id = safe_slug(_text(item.get("task_id")), fallback="")
+        if not item_task_id:
+            continue
+        row = {
+            "task_id": item_task_id,
+            "task": _text(item.get("task")) or item_task_id,
+            "updated_at": _text(item.get("updated_at")) or None,
+            "status": _text(item.get("status")) or None,
+            "phase": _text(item.get("phase")) or None,
+            "resume_allowed": _bool_or_none(item.get("resume_allowed")),
+        }
+        if item_task_id == canonical_task_id:
+            row.update(
+                {
+                    "task": task,
+                    "updated_at": timestamp,
+                    "status": status or row["status"],
+                    "phase": phase or row["phase"],
+                    "resume_allowed": resume_allowed if resume_allowed is not None else row["resume_allowed"],
+                }
+            )
+            seen = True
+        normalized_tasks.append(row)
+    if not seen:
+        normalized_tasks.append(
+            {
+                "task_id": canonical_task_id,
+                "task": task,
+                "updated_at": timestamp,
+                "status": status or None,
+                "phase": phase or None,
+                "resume_allowed": resume_allowed,
+            }
+        )
+    normalized_tasks.sort(
+        key=lambda item: (_text(item.get("updated_at")) or "", item["task_id"]),
+        reverse=True,
+    )
+    return {
+        "schema_version": "task-registry-v1",
+        "focus_task_id": safe_slug(focus_task_id or _text(existing.get("focus_task_id")), fallback="") or None,
+        "tasks": normalized_tasks,
+    }
+
+
+def write_focus_task_pointer(
     source_root: Path,
     *,
     task_id: str,
@@ -555,14 +683,91 @@ def write_active_task_pointer(
     artifact_root: Path | None = None,
     updated_at: str | None = None,
 ) -> bool:
-    """Write the active-task pointer into artifacts/current."""
+    """Write the focus-task pointer into artifacts/current."""
 
     payload = {
         "task_id": safe_slug(task_id),
         "task": task,
         "updated_at": updated_at or current_local_timestamp(),
     }
-    return write_json_if_changed(active_task_pointer_path(source_root, artifact_root), payload)
+    return write_json_if_changed(focus_task_pointer_path(source_root, artifact_root), payload)
+
+
+def write_task_registry(
+    source_root: Path,
+    *,
+    task_id: str,
+    task: str,
+    artifact_root: Path | None = None,
+    phase: str | None = None,
+    status: str | None = None,
+    resume_allowed: bool | None = None,
+    updated_at: str | None = None,
+    focus_task_id: str | None = None,
+) -> bool:
+    """Upsert one task row into the workspace task registry."""
+
+    existing = read_task_registry(source_root, artifact_root)
+    payload = _task_registry_payload(
+        existing,
+        task_id=task_id,
+        task=task,
+        phase=phase,
+        status=status,
+        resume_allowed=resume_allowed,
+        updated_at=updated_at,
+        focus_task_id=focus_task_id,
+    )
+    return write_json_if_changed(task_registry_path(source_root, artifact_root), payload)
+
+
+def write_active_task_pointer(
+    source_root: Path,
+    *,
+    task_id: str,
+    task: str,
+    artifact_root: Path | None = None,
+    updated_at: str | None = None,
+    phase: str | None = None,
+    status: str | None = None,
+    resume_allowed: bool | None = None,
+    focus: bool = True,
+) -> bool:
+    """Write focus-task compatibility pointers and keep the task registry aligned."""
+
+    payload = {
+        "task_id": safe_slug(task_id),
+        "task": task,
+        "updated_at": updated_at or current_local_timestamp(),
+    }
+    changed = False
+    if focus:
+        changed = write_json_if_changed(active_task_pointer_path(source_root, artifact_root), payload)
+        changed = (
+            write_focus_task_pointer(
+                source_root,
+                task_id=task_id,
+                task=task,
+                artifact_root=artifact_root,
+                updated_at=payload["updated_at"],
+            )
+            or changed
+        )
+    changed = (
+        write_task_registry(
+            source_root,
+            task_id=task_id,
+            task=task,
+            artifact_root=artifact_root,
+            phase=phase,
+            status=status,
+            resume_allowed=resume_allowed,
+            updated_at=payload["updated_at"],
+            focus_task_id=task_id if focus else None,
+        )
+        or changed
+    )
+    return changed
 
 
 def _json_text(payload: dict[str, Any]) -> str:
@@ -845,7 +1050,10 @@ def repair_runtime_continuity_artifacts(
 
     task_root = task_artifact_root(root, task_id, artifact_root)
     pointer = read_active_task_pointer(root, artifact_root)
+    focus_pointer = read_focus_task_pointer(root, artifact_root)
+    registry = read_task_registry(root, artifact_root)
     pointer_task_id = safe_slug(_text(pointer.get("task_id")))
+    focus_task_id = safe_slug(_text(focus_pointer.get("task_id")))
     route = _fallback_route_from_supervisor(supervisor)
     phase = _text(supervisor.get("active_phase")) or "implementation"
     status = _synthesized_status(supervisor)
@@ -944,16 +1152,27 @@ def repair_runtime_continuity_artifacts(
     )
     for path, content in mirror_outputs.items():
         changed = write_text_if_changed(path, content) or changed
-    changed = write_active_task_pointer(root, task_id=task_id, task=task, artifact_root=artifact_root) or changed
+    changed = write_active_task_pointer(
+        root,
+        task_id=task_id,
+        task=task,
+        artifact_root=artifact_root,
+        phase=phase,
+        status=status,
+        resume_allowed=_bool_or_none(continuity.get("resume_allowed")),
+        focus=True,
+    ) or changed
     changed = write_json_if_changed(task_root / ARTIFACT_NAMES["supervisor_state"], supervisor) or changed
 
     return {
-        "repaired": changed or pointer_task_id != task_id,
+        "repaired": changed or pointer_task_id != task_id or focus_task_id != task_id,
         "task_id": task_id,
         "task": task,
         "task_root": str(task_root),
         "mirror_root": str(mirror_root),
         "pointer_task_id": pointer_task_id or None,
+        "focus_task_id": focus_task_id or task_id,
+        "known_task_ids": [row["task_id"] for row in read_task_registry(root, artifact_root).get("tasks", []) if isinstance(row, dict) and row.get("task_id")],
         "route_fallback": route,
         "repaired_paths": [str(path) for path in repaired_paths] + [str(path) for path in mirror_outputs],
         "supervisor_state": supervisor,
@@ -966,12 +1185,16 @@ def resolve_active_task_id(
     *,
     supervisor_state: dict[str, Any] | None = None,
 ) -> str:
-    """Resolve the active task id from supervisor state first, then pointer."""
+    """Resolve the active task id from supervisor state first, then focus/pointer."""
 
     state = normalize_supervisor_state(supervisor_state or {})
     direct = safe_slug(_text(state.get("task_id")), fallback="")
     if direct:
         return direct
+    focus = read_focus_task_pointer(source_root, artifact_root)
+    focus_task_id = safe_slug(_text(focus.get("task_id")), fallback="")
+    if focus_task_id:
+        return focus_task_id
     pointer = read_active_task_pointer(source_root, artifact_root)
     return safe_slug(_text(pointer.get("task_id")), fallback="")
 
@@ -1020,6 +1243,28 @@ def load_runtime_snapshot(
         artifact_root,
         supervisor_state=supervisor_state,
     )
+    focus_pointer = read_focus_task_pointer(source_root, artifact_root)
+    focus_task_id = safe_slug(_text(focus_pointer.get("task_id")), fallback="") or active_task_id
+    registry = read_task_registry(source_root, artifact_root)
+    known_task_ids = [
+        row["task_id"]
+        for row in registry.get("tasks", [])
+        if isinstance(row, dict) and _text(row.get("task_id"))
+    ]
+    for candidate_task_id in (active_task_id, focus_task_id):
+        if candidate_task_id and candidate_task_id not in known_task_ids:
+            known_task_ids.append(candidate_task_id)
+    recoverable_task_ids = [
+        row["task_id"]
+        for row in registry.get("tasks", [])
+        if isinstance(row, dict) and _bool_or_none(row.get("resume_allowed")) is True
+    ]
+    if (
+        active_task_id
+        and _bool_or_none((supervisor_state.get("continuity") or {}).get("resume_allowed")) is True
+        and active_task_id not in recoverable_task_ids
+    ):
+        recoverable_task_ids.append(active_task_id)
     task_root = task_artifact_root(source_root, active_task_id, artifact_root) if active_task_id else mirror_root
     pointer = read_active_task_pointer(source_root, artifact_root)
     pointer_task_id = safe_slug(_text(pointer.get("task_id")))
@@ -1052,6 +1297,9 @@ def load_runtime_snapshot(
         mirror_root=mirror_root,
         task_root=task_root,
         active_task_id=active_task_id,
+        focus_task_id=focus_task_id,
+        known_task_ids=known_task_ids,
+        recoverable_task_ids=recoverable_task_ids,
         snapshots=snapshots,
         collected_at=current_local_timestamp(),
     )

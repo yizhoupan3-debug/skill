@@ -1657,6 +1657,22 @@
       "bridge_behavior": "default",
       "artifact_outputs": []
     },
+    "team": {
+      "allowed_tools": [
+        "shell",
+        "git",
+        "python",
+        "cargo"
+      ],
+      "approval_required_tools": [
+        "destructive shell"
+      ],
+      "filesystem_scope": [],
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
+    },
     "test-engineering": {
       "allowed_tools": [
         "shell",

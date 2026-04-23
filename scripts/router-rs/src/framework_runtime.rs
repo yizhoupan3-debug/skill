@@ -16,6 +16,8 @@ pub const FRAMEWORK_RUNTIME_AUTHORITY: &str = "rust-framework-runtime-read-model
 
 const CURRENT_ARTIFACT_DIR: &str = "current";
 const ACTIVE_TASK_POINTER_NAME: &str = "active_task.json";
+const FOCUS_TASK_POINTER_NAME: &str = "focus_task.json";
+const TASK_REGISTRY_NAME: &str = "task_registry.json";
 const SESSION_SUMMARY_FILENAME: &str = "SESSION_SUMMARY.md";
 const NEXT_ACTIONS_FILENAME: &str = "NEXT_ACTIONS.json";
 const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
@@ -78,6 +80,10 @@ struct FrameworkRuntimeView {
     mirror_root: PathBuf,
     task_root: PathBuf,
     active_task_id: Option<String>,
+    focus_task_id: Option<String>,
+    known_task_ids: Vec<String>,
+    recoverable_task_ids: Vec<String>,
+    registered_tasks: Value,
     collected_at: String,
 }
 
@@ -122,6 +128,11 @@ pub fn build_framework_runtime_snapshot_envelope(repo_root: &Path) -> Result<Val
             "mirror_root": snapshot.mirror_root.display().to_string(),
             "task_root": snapshot.task_root.display().to_string(),
             "active_task_id": snapshot.active_task_id,
+            "focus_task_id": snapshot.focus_task_id,
+            "known_task_ids": snapshot.known_task_ids,
+            "recoverable_task_ids": snapshot.recoverable_task_ids,
+            "parallel_task_count": snapshot.known_task_ids.len(),
+            "registered_tasks": snapshot.registered_tasks,
             "collected_at": snapshot.collected_at,
             "session_summary_present": !snapshot.session_summary_text.trim().is_empty(),
             "next_action_count": continuity
@@ -266,12 +277,7 @@ pub fn build_framework_memory_recall_envelope(
     let sqlite_path = resolve_memory_sqlite_path(&memory_root)
         .map(|path| path.display().to_string())
         .unwrap_or_default();
-    let registered_tasks = json!({
-        "tasks": [],
-        "task_count": 0,
-        "truncated": false,
-        "overflow_count": 0,
-    });
+    let registered_tasks = snapshot.registered_tasks.clone();
     let workspace_name = workspace_name_from_root(repo_root);
     let bootstrap_task_id = if query_matches_active_task {
         snapshot.active_task_id.clone().unwrap_or_default()
@@ -401,6 +407,10 @@ pub fn build_framework_alias_envelope(
         }),
         "deepinterview" => json!({
             "review_lanes": alias_record_list(&alias_record, &["review_lanes"]),
+        }),
+        "team" => json!({
+            "delegation_gate": alias_record_text(&alias_record, &["delegation_gate"]),
+            "execution_owners": alias_record_list(&alias_record, &["execution_owners"]),
         }),
         _ => Value::Null,
     };
@@ -563,6 +573,36 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             ],
             "host_entrypoints": {"claude-code": "/deepinterview"}
         })),
+        "team" => Some(json!({
+            "canonical_owner": "execution-controller-coding",
+            "delegation_gate": "subagent-delegation",
+            "upstream_source": {
+                "repo": "https://github.com/Yeachan-Heo/oh-my-claudecode",
+                "tag": "v4.13.2",
+                "commit": "0ac52cdaa093d6c41763e47055e995adaa4f8987",
+                "official_skill_path": "skills/team/SKILL.md"
+            },
+            "official_workflow": {
+                "phases": ["scoping", "delegation", "execution", "integration", "qa", "cleanup"]
+            },
+            "implementation_bar": [
+                "worker-boundaries-required",
+                "verification-evidence-required",
+                "resume-and-recovery-required",
+                "supervisor-owned-continuity"
+            ],
+            "local_adaptations": [
+                "replace .omc team state with rust-session-supervisor and continuity artifacts",
+                "keep shared continuity supervisor-owned while workers emit lane-local outputs",
+                "bind worker lifecycle to host tmux and resume capabilities instead of OMC state directories"
+            ],
+            "execution_owners": [
+                "execution-controller-coding",
+                "subagent-delegation",
+                "execution-audit"
+            ],
+            "host_entrypoints": {"claude-code": "/team"}
+        })),
         _ => None,
     }
 }
@@ -654,6 +694,20 @@ fn build_framework_alias_entry_contract(
             }
             format!(
                 "进入 deepinterview。OMC {tag} 访谈流保留，但访谈状态与 handoff 都走本地 Rust/continuity。"
+            )
+        }
+        "team" => {
+            let owner = alias_record_text(alias_record, &["canonical_owner"]);
+            let delegation_gate = alias_record_text(alias_record, &["delegation_gate"]);
+            let execution_owners = alias_record_list(alias_record, &["execution_owners"]);
+            route_rules.push(format!("主 owner -> `{owner}`"));
+            route_rules.push(format!("team split gate -> `{delegation_gate}`"));
+            route_rules.push("共享 continuity 只允许 supervisor 持有".to_string());
+            if !execution_owners.is_empty() {
+                route_rules.push(format!("execution lanes -> {}", execution_owners.join(", ")));
+            }
+            format!(
+                "进入 team。OMC {tag} 团队编排流保留，但 worker 生命周期、恢复和 continuity 都走本地 Rust/supervisor。"
             )
         }
         _ => format!(
@@ -756,6 +810,8 @@ fn build_framework_alias_state_machine(
             "fresh_entry",
             if alias_name == "deepinterview" {
                 "start_interview"
+            } else if alias_name == "team" {
+                "start_team_supervision"
             } else {
                 "start_execution"
             },
@@ -791,6 +847,26 @@ fn build_framework_alias_state_machine(
                     "when": "clarity is high enough to execute",
                     "target": "autopilot",
                     "action": "handoff_to_execution",
+                }
+            ]
+        }),
+        "team" => json!({
+            "default_mode": "supervise-team-locally",
+            "rules": [
+                {
+                    "when": "task is still a single-lane change",
+                    "target": "execution-controller-coding",
+                    "action": "keep_local_ownership",
+                },
+                {
+                    "when": "bounded sidecars improve throughput",
+                    "target": alias_record_text(alias_record, &["delegation_gate"]),
+                    "action": "plan_worker_split",
+                },
+                {
+                    "when": "worker outputs are ready to merge",
+                    "target": "execution-audit",
+                    "action": "verify_and_close_loop",
                 }
             ]
         }),
@@ -932,24 +1008,56 @@ fn load_framework_runtime_view(
         &repo_root.join(SUPERVISOR_STATE_FILENAME),
     ));
     let pointer = read_json_if_exists(&mirror_root.join(ACTIVE_TASK_POINTER_NAME));
+    let focus_pointer = read_json_if_exists(&mirror_root.join(FOCUS_TASK_POINTER_NAME));
+    let (registered_tasks, mut known_task_ids, mut recoverable_task_ids) =
+        normalized_task_registry(&read_json_if_exists(&mirror_root.join(TASK_REGISTRY_NAME)));
+    let focus_task_id = {
+        let direct = safe_slug(&value_text(focus_pointer.get("task_id")));
+        if direct.is_empty() {
+            None
+        } else {
+            Some(direct)
+        }
+    };
     let active_task_id = {
         let direct = safe_slug(task_id_override.unwrap_or(""));
         if !direct.is_empty() {
             Some(direct)
         } else {
             let direct = safe_slug(&value_text(supervisor_state.get("task_id")));
-            if direct.is_empty() {
+            if !direct.is_empty() {
+                Some(direct)
+            } else if let Some(focus_task_id) = focus_task_id.clone() {
+                Some(focus_task_id)
+            } else {
                 let pointer_task_id = safe_slug(&value_text(pointer.get("task_id")));
                 if pointer_task_id.is_empty() {
                     None
                 } else {
                     Some(pointer_task_id)
                 }
-            } else {
-                Some(direct)
             }
         }
     };
+    if let Some(task_id) = active_task_id.clone() {
+        if !known_task_ids.iter().any(|existing| existing == &task_id) {
+            known_task_ids.push(task_id.clone());
+        }
+        if supervisor_state
+            .get("continuity")
+            .and_then(Value::as_object)
+            .and_then(|continuity| value_bool_or_none(continuity.get("resume_allowed")))
+            == Some(true)
+            && !recoverable_task_ids.iter().any(|existing| existing == &task_id)
+        {
+            recoverable_task_ids.push(task_id);
+        }
+    }
+    if let Some(task_id) = focus_task_id.clone() {
+        if !known_task_ids.iter().any(|existing| existing == &task_id) {
+            known_task_ids.push(task_id);
+        }
+    }
     let task_root = active_task_id
         .as_ref()
         .map(|task_id| mirror_root.join(task_id))
@@ -991,6 +1099,10 @@ fn load_framework_runtime_view(
         mirror_root,
         task_root,
         active_task_id,
+        focus_task_id,
+        known_task_ids,
+        recoverable_task_ids,
+        registered_tasks,
         collected_at: current_local_timestamp(),
     }
 }
@@ -2467,6 +2579,8 @@ fn describe_continuity_layout(repo_root: &Path, artifact_base: &Path) -> Value {
         "task_scoped_current": {
             "template": current_root.join("<task_id>").display().to_string(),
             "active_task_pointer": current_root.join(ACTIVE_TASK_POINTER_NAME).display().to_string(),
+            "focus_task_pointer": current_root.join(FOCUS_TASK_POINTER_NAME).display().to_string(),
+            "task_registry": current_root.join(TASK_REGISTRY_NAME).display().to_string(),
         },
         "root_task_mirror": {
             "supervisor_state": repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
@@ -2487,7 +2601,7 @@ fn describe_continuity_layout(repo_root: &Path, artifact_base: &Path) -> Value {
             "evidence": artifact_base.join("evidence").join("<task_id>").display().to_string(),
             "scratch": artifact_base.join("scratch").join("<run_id>").display().to_string(),
         },
-        "sync_responsibility": "Supervisor writes task-scoped continuity under artifacts/current/<task_id>/ and keeps root plus artifacts/current compatibility mirrors aligned to the same task. artifacts/current/ should contain only the active-task pointer, four mirror files, and task-scoped continuity directories; bootstrap, ops, evidence, and scratch belong elsewhere.",
+        "sync_responsibility": "Supervisor writes task-scoped continuity under artifacts/current/<task_id>/ and keeps root plus artifacts/current compatibility mirrors aligned to the focus task. artifacts/current/ should contain only the active-task pointer, focus-task pointer, task registry, four mirror files, and task-scoped continuity directories; bootstrap, ops, evidence, and scratch belong elsewhere.",
     })
 }
 
@@ -2949,6 +3063,65 @@ fn parse_session_summary(text: &str) -> Map<String, Value> {
         );
     }
     result
+}
+
+fn normalized_task_registry(payload: &Value) -> (Value, Vec<String>, Vec<String>) {
+    let focus_task_id = safe_slug(&value_text(payload.get("focus_task_id")));
+    let mut known_task_ids = Vec::new();
+    let mut recoverable_task_ids = Vec::new();
+    let mut tasks = Vec::new();
+    if let Some(items) = payload.get("tasks").and_then(Value::as_array) {
+        for item in items {
+            let Some(row) = item.as_object() else {
+                continue;
+            };
+            let task_id = safe_slug(&value_text(row.get("task_id")));
+            if task_id.is_empty() {
+                continue;
+            }
+            if !known_task_ids.iter().any(|existing| existing == &task_id) {
+                known_task_ids.push(task_id.clone());
+            }
+            if value_bool_or_none(row.get("resume_allowed")) == Some(true)
+                && !recoverable_task_ids.iter().any(|existing| existing == &task_id)
+            {
+                recoverable_task_ids.push(task_id.clone());
+            }
+            let task = value_text(row.get("task"));
+            let task_value = if task.is_empty() {
+                Value::String(task_id.clone())
+            } else {
+                Value::String(task)
+            };
+            tasks.push(json!({
+                "task_id": task_id,
+                "task": task_value,
+                "updated_at": nonempty_string(row.get("updated_at")),
+                "status": nonempty_string(row.get("status")),
+                "phase": nonempty_string(row.get("phase")),
+                "resume_allowed": value_bool_or_none(row.get("resume_allowed")),
+            }));
+        }
+    }
+    (
+        json!({
+            "schema_version": payload
+                .get("schema_version")
+                .cloned()
+                .unwrap_or_else(|| Value::String("task-registry-v1".to_string())),
+            "focus_task_id": if focus_task_id.is_empty() {
+                Value::Null
+            } else {
+                Value::String(focus_task_id)
+            },
+            "tasks": tasks,
+            "task_count": known_task_ids.len(),
+            "truncated": false,
+            "overflow_count": 0,
+        }),
+        known_task_ids,
+        recoverable_task_ids,
+    )
 }
 
 fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value>> {

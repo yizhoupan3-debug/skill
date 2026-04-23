@@ -40,8 +40,7 @@ framework policy instead of forking per-host routing or memory rules.
 
 - `skills/` holds the shared routing and workflow bodies; read the selected
   `SKILL.md` before acting.
-- `scripts/materialize_cli_host_entrypoints.py` is the source of truth for
-  `AGENT.md`, `CLAUDE.md`, `.claude/settings.json`, and `.claude/hooks/*.sh`.
+- `scripts/materialize_cli_host_entrypoints.py` renders shared host-entrypoint files and consumes the Rust Claude hook manifest from `scripts/router-rs/`.
 - `scripts/router-rs/` owns the Rust hook bridge, lifecycle commands, and
   generated-surface audits.
 - `artifacts/current/` plus `.supervisor_state.json` are the durable task-state
@@ -82,14 +81,16 @@ framework policy instead of forking per-host routing or memory rules.
 ## Task Closeout
 
 - Keep end-of-task user-facing closeouts in plain Chinese by default.
-- Default the closeout to one short paragraph that says what now works or what
-  effect was achieved, and what still needs to happen next.
+- Default the closeout to one short paragraph that covers exactly three points:
+  what was done, what effect was achieved, and what still needs to happen next
+  or that the work is finished.
 - Prefer user-visible effect over implementation narration in the default
   closeout.
 - If no further work is needed, say that directly instead of inventing follow-up
   tasks.
-- Do not default to changed-file inventories, changelog-style recaps, or
-  step-by-step implementation retellings in the final user-facing closeout.
+- Do not default to changed-file inventories, evidence lists, changelog-style
+  recaps, or step-by-step implementation retellings in the final user-facing
+  closeout.
 - Machine continuity artifacts such as `NEXT_ACTIONS.json`,
   `.supervisor_state.json`, and verification or blocker fields remain the
   recovery truth; do not mirror them verbatim into the user-facing closeout

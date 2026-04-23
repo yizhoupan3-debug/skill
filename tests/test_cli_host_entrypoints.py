@@ -169,7 +169,7 @@ def _run_router_rs_hook_manifest() -> dict[str, object]:
         binary_name="router-rs",
         release=True,
         allow_stale_fallback=False,
-        allow_cross_profile_fallback=True,
+        allow_cross_profile_fallback=False,
         cwd=PROJECT_ROOT,
     )
     completed = subprocess.run(
@@ -236,6 +236,40 @@ def test_router_rs_exports_claude_hook_manifest() -> None:
     }
 
 
+def test_router_rs_hook_manifest_resolution_stays_release_strict(
+    tmp_path: Path, monkeypatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_ensure_rust_binary(**kwargs):
+        captured.update(kwargs)
+        return tmp_path / "router-rs-release"
+
+    monkeypatch.setattr(sys.modules[__name__], "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(sys.modules[__name__], "ensure_rust_binary", fake_ensure_rust_binary)
+
+    def fake_run(cmd, **kwargs):
+        assert cmd == [str(tmp_path / "router-rs-release"), "--claude-hook-manifest-json"]
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout='{"schema_version":"router-rs-claude-hook-manifest-v1"}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    manifest = _run_router_rs_hook_manifest()
+
+    assert manifest["schema_version"] == "router-rs-claude-hook-manifest-v1"
+    assert captured["crate_root"] == tmp_path / "scripts" / "router-rs"
+    assert captured["binary_name"] == "router-rs"
+    assert captured["release"] is True
+    assert captured["allow_stale_fallback"] is False
+    assert captured["allow_cross_profile_fallback"] is False
+    assert captured["cwd"] == tmp_path
+
+
 def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxies(
     tmp_path: Path,
 ) -> None:
@@ -258,8 +292,8 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "## Verification Defaults" in agent_policy
     assert "## Task Closeout" in agent_policy
     assert "changed-file inventories" in agent_policy
-    assert "what now works or what" in agent_policy
-    assert "effect was achieved" in agent_policy
+    assert "evidence lists" in agent_policy
+    assert "what was done, what effect was achieved" in agent_policy
     assert "Explain things in plain language first" in agent_policy
     assert "Avoid internal runtime, routing, framework, or tool jargon" in agent_policy
     assert "Do not force personality" in agent_policy
@@ -509,10 +543,11 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         "`StopFailure` | `run.sh stop-failure`",
         "generated-surface guard",
         "intentionally uninstalled",
-        "live in `AGENT.md`, not in hooks",
+        "broad implementation philosophy still live in",
         "repo-specific invariants only",
         "Use `matcher` first and `if` to narrow further",
         "`UserPromptSubmit` is installed here on purpose",
+        "only add a one-line closeout reminder",
         "permissionDecision: deny",
     ):
         assert marker in hooks_readme
@@ -641,6 +676,7 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     user_prompt_payload = json.loads(user_prompt.stdout)
     assert user_prompt_payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     assert "repo-local shared memory" in user_prompt_payload["hookSpecificOutput"]["additionalContext"]
+    assert "完成任务时默认只用一小段收尾" in user_prompt_payload["hookSpecificOutput"]["additionalContext"]
     assert "热路径" in user_prompt_payload["hookSpecificOutput"]["additionalContext"]
 
     quality_context = subprocess.run(
@@ -849,8 +885,34 @@ def test_session_end_projection_includes_preferences(tmp_path: Path) -> None:
 
 
 def test_claude_statusline_renders_runtime_summary(tmp_path: Path) -> None:
+    focus_task_id = "validate-status-line-20260423010101"
+    task_root = tmp_path / "artifacts" / "current" / focus_task_id
+    _write_json(
+        tmp_path / "artifacts" / "current" / "active_task.json",
+        {"task_id": focus_task_id, "task": "Validate status line"},
+    )
+    _write_json(
+        tmp_path / "artifacts" / "current" / "focus_task.json",
+        {"task_id": focus_task_id, "task": "Validate status line"},
+    )
+    _write_json(
+        tmp_path / "artifacts" / "current" / "task_registry.json",
+        {
+            "schema_version": "task-registry-v1",
+            "focus_task_id": focus_task_id,
+            "tasks": [
+                {
+                    "task_id": focus_task_id,
+                    "task": "Validate status line",
+                    "phase": "integration",
+                    "status": "in_progress",
+                    "resume_allowed": True,
+                }
+            ],
+        },
+    )
     _write_text(
-        tmp_path / "SESSION_SUMMARY.md",
+        task_root / "SESSION_SUMMARY.md",
         "\n".join([
             "# SESSION_SUMMARY",
             "",
@@ -861,18 +923,22 @@ def test_claude_statusline_renders_runtime_summary(tmp_path: Path) -> None:
         + "\n",
     )
     _write_json(
-        tmp_path / "TRACE_METADATA.json",
+        task_root / "TRACE_METADATA.json",
         {
             "matched_skills": ["execution-controller-coding", "checklist-fixer"],
             "verification_status": "completed",
         },
     )
+    _write_json(task_root / "NEXT_ACTIONS.json", {"next_actions": ["Ship it"]})
+    _write_json(task_root / "EVIDENCE_INDEX.json", {"artifacts": []})
     _write_json(
         tmp_path / ".supervisor_state.json",
         {
-            "task_summary": "Fallback task",
-            "active_phase": "finalized",
-            "verification": {"verification_status": "completed"},
+            "task_id": focus_task_id,
+            "task_summary": "Validate status line",
+            "active_phase": "integration",
+            "verification": {"verification_status": "in_progress"},
+            "continuity": {"story_state": "active", "resume_allowed": True},
         },
     )
 
@@ -881,6 +947,8 @@ def test_claude_statusline_renders_runtime_summary(tmp_path: Path) -> None:
     assert "task=Validate status line" in statusline
     assert "integration/in_progress" in statusline
     assert "route=execution-controller-coding+1" in statusline
+    assert "others=0" in statusline
+    assert "resumable=0" in statusline
     assert "git=nogit" in statusline
 
 
@@ -888,7 +956,34 @@ def test_claude_statusline_prefers_task_scoped_runtime_over_stale_root_mirrors(t
     task_root = tmp_path / "artifacts" / "current" / "fresh-task-20260419013000"
     _write_json(
         tmp_path / "artifacts" / "current" / "active_task.json",
+        {"task_id": "stale-active-task-20260419012000", "task": "Stale active task"},
+    )
+    _write_json(
+        tmp_path / "artifacts" / "current" / "focus_task.json",
         {"task_id": "fresh-task-20260419013000", "task": "Fresh current task"},
+    )
+    _write_json(
+        tmp_path / "artifacts" / "current" / "task_registry.json",
+        {
+            "schema_version": "task-registry-v1",
+            "focus_task_id": "fresh-task-20260419013000",
+            "tasks": [
+                {
+                    "task_id": "fresh-task-20260419013000",
+                    "task": "Fresh current task",
+                    "phase": "integration",
+                    "status": "in_progress",
+                    "resume_allowed": True,
+                },
+                {
+                    "task_id": "background-task-20260419014000",
+                    "task": "Background follow-up",
+                    "phase": "implementation",
+                    "status": "in_progress",
+                    "resume_allowed": True,
+                },
+            ],
+        },
     )
     _write_text(
         task_root / "SESSION_SUMMARY.md",
@@ -932,9 +1027,11 @@ def test_claude_statusline_prefers_task_scoped_runtime_over_stale_root_mirrors(t
     _write_json(
         tmp_path / ".supervisor_state.json",
         {
+            "task_id": "fresh-task-20260419013000",
             "task_summary": "Fresh current task",
             "active_phase": "integration",
             "verification": {"verification_status": "in_progress"},
+            "continuity": {"story_state": "active", "resume_allowed": True},
         },
     )
 
@@ -943,6 +1040,8 @@ def test_claude_statusline_prefers_task_scoped_runtime_over_stale_root_mirrors(t
     assert "task=Fresh current task" in statusline
     assert "integration/in_progress" in statusline
     assert "route=execution-controller-coding+1" in statusline
+    assert "others=1" in statusline
+    assert "resumable=1" in statusline
     assert "Stale root task" not in statusline
 
 
