@@ -14,9 +14,12 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "framework_runtime" / "src"))
 
 from framework_runtime.rust_router import get_cached_route_adapter
-from scripts.memory_support import get_repo_root
 
 VALID_MODES = {"stable", "active", "history", "debug"}
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
 
 
 def render_context(
@@ -34,8 +37,8 @@ def render_context(
 
     if mode not in VALID_MODES:
         raise ValueError(f"Unsupported memory recall mode: {mode}")
-    root = (repo_root or get_repo_root()).resolve()
-    payload = get_cached_route_adapter(get_repo_root()).framework_memory_recall(
+    root = (repo_root or _repo_root()).resolve()
+    payload = get_cached_route_adapter(_repo_root()).framework_memory_recall(
         repo_root=root,
         query=topic,
         top=max_items,
@@ -76,7 +79,7 @@ def main() -> int:
         workspace=args.workspace,
         topic=args.topic,
         max_items=args.max_items,
-        repo_root=get_repo_root(),
+        repo_root=_repo_root(),
         mode=args.mode,
     )
     if args.json_output:
