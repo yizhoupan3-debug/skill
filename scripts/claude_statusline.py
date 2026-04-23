@@ -30,12 +30,16 @@ def _task_scoped_runtime_roots(repo_root: Path) -> list[Path]:
 
     current_root = repo_root / "artifacts" / "current"
     roots: list[Path] = []
-    pointer = _read_json(current_root / "active_task.json")
-    task_id = str(pointer.get("task_id") or "").strip()
-    if task_id:
+    seen: set[Path] = set()
+    for pointer_name in ("focus_task.json", "active_task.json"):
+        pointer = _read_json(current_root / pointer_name)
+        task_id = str(pointer.get("task_id") or "").strip()
+        if not task_id:
+            continue
         task_root = current_root / task_id
-        if task_root.is_dir():
+        if task_root.is_dir() and task_root not in seen:
             roots.append(task_root)
+            seen.add(task_root)
     if current_root.is_dir():
         roots.append(current_root)
     return roots
@@ -185,11 +189,25 @@ def render_statusline(repo_root: Path) -> str:
             if str(item).strip()
         ]
         next_count = len(next_actions_list)
+
+    focus_task_id = getattr(snapshot, "focus_task_id", "") or ""
+    known_task_ids = [
+        str(item).strip() for item in getattr(snapshot, "known_task_ids", []) if str(item).strip()
+    ]
+    recoverable_task_ids = [
+        str(item).strip()
+        for item in getattr(snapshot, "recoverable_task_ids", [])
+        if str(item).strip()
+    ]
+    other_known_count = max(len(known_task_ids) - (1 if focus_task_id else 0), 0)
+    other_recoverable_count = sum(1 for item in recoverable_task_ids if item != focus_task_id)
+
     short_task = _short_text(task, 24)
     hint = _decision_hint(blockers_list, next_actions_list, git_state=git_state, status=status)
     return (
         f"{branch} | {hint} | {phase}/{status} | "
-        f"task={short_task} | route={route} | nexts={next_count} | blockers={blockers} | git={git_state}"
+        f"task={short_task} | route={route} | nexts={next_count} | blockers={blockers} | "
+        f"others={other_known_count} | resumable={other_recoverable_count} | git={git_state}"
     )
 
 

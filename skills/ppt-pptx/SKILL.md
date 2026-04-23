@@ -20,12 +20,8 @@ trigger_hints:
   - 可复用 deck.js
   - PPT 源码工作流
 runtime_requirements:
-  python:
-    - numpy
-    - pdf2image
-    - pillow
-    - python-pptx
   commands:
+    - cargo
     - fc-list
     - gs
     - heif-convert
@@ -102,15 +98,15 @@ the full style guidance.
 
 Optional boost for rebuild / audit work:
 
-- use `scripts/officecli_bridge.py doctor` for outline + issues + validation in one pass
-- use `scripts/officecli_bridge.py get/query` when you need stable `shape[@id=...]` addressing from an old deck
-- use `scripts/officecli_bridge.py watch` for live HTML preview of an already-generated `.pptx`
+- use `pptx_tool_rs office doctor` for outline + issues + validation in one pass
+- use `pptx_tool_rs office get/query` when you need stable `shape[@id=...]` addressing from an old deck
+- use `pptx_tool_rs office watch` for live HTML preview of an already-generated `.pptx`
 
 Default mixed lane:
 
-- use `scripts/hybrid_pipeline.py build-qa` after `deck.js` authoring
-- use `scripts/hybrid_pipeline.py qa` for an existing generated deck
-- use `scripts/hybrid_pipeline.py intake` before rebuilding an old `.pptx`
+- use `pptx_tool_rs build-qa --workdir .` after `deck.js` authoring
+- use `pptx_tool_rs qa <deck.pptx> --rendered-dir rendered` for an existing generated deck
+- use `pptx_tool_rs intake <deck.pptx>` before rebuilding an old `.pptx`
 
 For the detailed source-first workflow, rebuild path for existing decks, notes /
 transitions guidance, and QA sequence, see [references/workflow.md](./references/workflow.md).

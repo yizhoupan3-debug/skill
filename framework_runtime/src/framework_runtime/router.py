@@ -67,6 +67,7 @@ SKILL_ALIAS_HINTS = {
 FRAMEWORK_ALIAS_EXPLICIT_ENTRYPOINTS = {
     "autopilot": {"/autopilot", "$autopilot"},
     "deepinterview": {"/deepinterview", "$deepinterview"},
+    "team": {"/team", "$team"},
 }
 PAPER_CONTEXT_SKILLS = {
     "paper-reviewer",
@@ -419,11 +420,12 @@ class SkillRouter:
                 score=0.0,
                 reasons=["Suppressed: meta-routing repair request should not be treated as a generic runtime-debugging gate."],
             )
-        if _framework_alias_requires_explicit_call(skill.name) and not _has_explicit_framework_alias_call(
+        explicit_framework_alias = _framework_alias_requires_explicit_call(skill.name) and _has_explicit_framework_alias_call(
             normalized_task,
             task_token_list,
             skill.name,
-        ):
+        )
+        if _framework_alias_requires_explicit_call(skill.name) and not explicit_framework_alias:
             return _build_scored_skill(
                 skill,
                 score=0.0,
@@ -443,6 +445,10 @@ class SkillRouter:
 
         if skill.name.startswith("skill-") and not any(hint in normalized_task for hint in ROUTING_META_HINTS):
             return _build_scored_skill(skill, score=0.0, reasons=[])
+
+        if explicit_framework_alias:
+            score += 1000
+            reasons.append("Framework alias entrypoint matched explicitly.")
 
         if _contains_phrase(task_token_list, skill.name):
             score += 100

@@ -101,14 +101,16 @@ framework policy instead of forking per-host routing or memory rules.
 ## Task Closeout
 
 - Keep end-of-task user-facing closeouts in plain Chinese by default.
-- Default the closeout to one short paragraph that says what now works or what
-  effect was achieved, and what still needs to happen next.
+- Default the closeout to one short paragraph that covers exactly three points:
+  what was done, what effect was achieved, and what still needs to happen next
+  or that the work is finished.
 - Prefer user-visible effect over implementation narration in the default
   closeout.
 - If no further work is needed, say that directly instead of inventing follow-up
   tasks.
-- Do not default to changed-file inventories, changelog-style recaps, or
-  step-by-step implementation retellings in the final user-facing closeout.
+- Do not default to changed-file inventories, evidence lists, changelog-style
+  recaps, or step-by-step implementation retellings in the final user-facing
+  closeout.
 - Machine continuity artifacts such as `NEXT_ACTIONS.json`,
   `.supervisor_state.json`, and verification or blocker fields remain the
   recovery truth; do not mirror them verbatim into the user-facing closeout
@@ -253,7 +255,7 @@ def _ensure_router_rs_binary() -> Path:
         binary_name="router-rs",
         release=True,
         allow_stale_fallback=False,
-        allow_cross_profile_fallback=True,
+        allow_cross_profile_fallback=False,
         cwd=project_root,
     )
 
@@ -505,7 +507,7 @@ Active hooks:
 
 | Event | Runner | Purpose |
 | --- | --- | --- |
-| `UserPromptSubmit` | `run.sh user-prompt-submit` | Inject the repo-local shared memory and continuity truth on every real prompt so Claude starts from the project’s own memory root instead of stale host-global recall. |
+| `UserPromptSubmit` | `run.sh user-prompt-submit` | Inject the repo-local shared memory and continuity truth on every real prompt, and only add a one-line closeout reminder on execution turns. |
 | `PreToolUse` | `run.sh pre-tool-use-quality` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |
 | `PreToolUse` | `run.sh pre-tool-use` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
 | `PostToolUse` | `run.sh post-tool-audit` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
@@ -518,7 +520,9 @@ Everything else stays intentionally uninstalled here so startup and tool turns r
 `./.codex/memory/` plus continuity artifacts, so prompt-time injection is the
 lowest-friction way to keep Claude aligned with repo-local state instead of stale
 host-global recall.
-Reply tone, "讲人话" rules, and closeout style live in `AGENT.md`, not in hooks.
+For execution turns it may add one short closeout reminder, but reply tone,
+"讲人话" rules, closeout shape, and broad implementation philosophy still live in
+`AGENT.md`, not in hooks.
 Static behavior rules belong in `AGENT.md` or `CLAUDE.md`; these hooks exist
 for deterministic guardrails, lightweight execution-time context, and lifecycle
 maintenance.

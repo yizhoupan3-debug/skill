@@ -124,6 +124,49 @@ _FALLBACK_FRAMEWORK_NATIVE_ALIASES = {
         "host_entrypoints": {"codex-cli": "$deepinterview", "claude-code": "/deepinterview"},
         "omc_dependency": False,
     },
+    "team": {
+        "canonical_owner": "execution-controller-coding",
+        "delegation_gate": "subagent-delegation",
+        "upstream_source": {
+            "repo": "https://github.com/Yeachan-Heo/oh-my-claudecode",
+            "tag": "v4.13.2",
+            "commit": "0ac52cdaa093d6c41763e47055e995adaa4f8987",
+            "official_skill_path": "skills/team/SKILL.md",
+        },
+        "omc_lineage": {
+            "source": "oh-my-claudecode",
+            "inherits_core_capabilities": True,
+            "implementation_mode": "match-and-exceed",
+        },
+        "official_workflow": {
+            "phases": [
+                "scoping",
+                "delegation",
+                "execution",
+                "integration",
+                "qa",
+                "cleanup",
+            ]
+        },
+        "implementation_bar": [
+            "worker-boundaries-required",
+            "verification-evidence-required",
+            "resume-and-recovery-required",
+            "supervisor-owned-continuity",
+        ],
+        "local_adaptations": [
+            "replace .omc team state with rust-session-supervisor and continuity artifacts",
+            "keep shared continuity supervisor-owned while workers emit lane-local outputs",
+            "bind worker lifecycle to host tmux and resume capabilities instead of OMC state directories",
+        ],
+        "execution_owners": [
+            "execution-controller-coding",
+            "subagent-delegation",
+            "execution-audit",
+        ],
+        "host_entrypoints": {"codex-cli": "$team", "claude-code": "/team"},
+        "omc_dependency": False,
+    },
 }
 _FALLBACK_OMC_RETIREMENT_CONTRACT = {
     "replaced_object": "oh-my-claudecode",
@@ -152,6 +195,15 @@ _FALLBACK_OMC_RETIREMENT_CONTRACT = {
                 "findings-first-with-severity-order",
                 "verification-evidence-required",
                 "fix-verify-loop-until-bounded-scope-clean",
+            ],
+        },
+        "team": {
+            "inherits_omc_core_capabilities": True,
+            "implementation_bar": [
+                "worker-boundaries-required",
+                "verification-evidence-required",
+                "resume-and-recovery-required",
+                "supervisor-owned-continuity",
             ],
         },
     },

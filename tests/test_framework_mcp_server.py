@@ -48,6 +48,16 @@ def _seed_runtime_artifacts(repo_root: Path, *, terminal: bool) -> None:
         next_actions = {
             "next_actions": ["Start a new standalone task before continuing related work"],
         }
+        focus_task_id = task_id
+        registry_tasks = [
+            {
+                "task_id": task_id,
+                "task": "checklist-series final closeout",
+                "phase": "finalized",
+                "status": "completed",
+                "resume_allowed": False,
+            }
+        ]
     else:
         summary_lines = [
             "- task: active bootstrap repair",
@@ -73,6 +83,16 @@ def _seed_runtime_artifacts(repo_root: Path, *, terminal: bool) -> None:
             "matched_skills": ["execution-controller-coding", "skill-framework-developer"],
         }
         next_actions = {"next_actions": ["Patch classifier", "Run MCP regression tests"]}
+        focus_task_id = task_id
+        registry_tasks = [
+            {
+                "task_id": task_id,
+                "task": "active bootstrap repair",
+                "phase": "implementation",
+                "status": "in_progress",
+                "resume_allowed": True,
+            }
+        ]
     _write_text(task_root / "SESSION_SUMMARY.md", "\n".join(summary_lines) + "\n")
     _write_json(task_root / "NEXT_ACTIONS.json", next_actions)
     _write_json(task_root / "EVIDENCE_INDEX.json", {"artifacts": []})
@@ -84,6 +104,18 @@ def _seed_runtime_artifacts(repo_root: Path, *, terminal: bool) -> None:
     _write_json(
         repo_root / "artifacts" / "current" / "active_task.json",
         {"task_id": task_id, "task": supervisor_state["task_summary"]},
+    )
+    _write_json(
+        repo_root / "artifacts" / "current" / "focus_task.json",
+        {"task_id": focus_task_id, "task": supervisor_state["task_summary"]},
+    )
+    _write_json(
+        repo_root / "artifacts" / "current" / "task_registry.json",
+        {
+            "schema_version": "task-registry-v1",
+            "focus_task_id": focus_task_id,
+            "tasks": registry_tasks,
+        },
     )
     _write_json(repo_root / ".supervisor_state.json", supervisor_state)
 
@@ -381,6 +413,11 @@ def test_skill_search_and_runtime_snapshot_are_actionable(tmp_path: Path) -> Non
     assert snapshot["paths"]["supervisor_state"].endswith(".supervisor_state.json")
     assert snapshot["continuity"]["state"] == "active"
     assert snapshot["continuity"]["current_execution"]["task"] == "active bootstrap repair"
+    assert snapshot["focus_task_id"] == "active-bootstrap-repair-20260418210000"
+    assert snapshot["known_task_ids"] == ["active-bootstrap-repair-20260418210000"]
+    assert snapshot["recoverable_task_ids"] == ["active-bootstrap-repair-20260418210000"]
+    assert snapshot["parallel_task_count"] == 1
+    assert snapshot["registered_tasks"]["task_count"] == 1
 
 
 def test_contract_summary_and_artifact_index_are_compact_and_actionable(tmp_path: Path) -> None:
@@ -425,6 +462,42 @@ def test_runtime_snapshot_falls_back_to_trace_skill_for_primary_owner(tmp_path: 
     assert snapshot["supervisor_state"]["primary_owner"] == "execution-controller-coding"
 
 
+def test_runtime_snapshot_surfaces_background_tasks_without_changing_current_execution(tmp_path: Path) -> None:
+    _seed_runtime_artifacts(tmp_path, terminal=False)
+    registry_path = tmp_path / "artifacts" / "current" / "task_registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    registry["tasks"].append(
+        {
+            "task_id": "background-lane-cleanup-20260418213000",
+            "task": "background lane cleanup",
+            "phase": "implementation",
+            "status": "in_progress",
+            "resume_allowed": True,
+        }
+    )
+    registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
+    snapshot = _tool_call(
+        server=server,
+        request_id=61,
+        name="framework_runtime_snapshot",
+        arguments={},
+    )
+
+    assert snapshot["focus_task_id"] == "active-bootstrap-repair-20260418210000"
+    assert snapshot["known_task_ids"] == [
+        "active-bootstrap-repair-20260418210000",
+        "background-lane-cleanup-20260418213000",
+    ]
+    assert snapshot["recoverable_task_ids"] == [
+        "active-bootstrap-repair-20260418210000",
+        "background-lane-cleanup-20260418213000",
+    ]
+    assert snapshot["parallel_task_count"] == 2
+    assert snapshot["continuity"]["current_execution"]["task"] == "active bootstrap repair"
+
+
 def test_runtime_snapshot_uses_rust_adapter(tmp_path: Path) -> None:
     _seed_runtime_artifacts(tmp_path, terminal=False)
     server = FrameworkMcpServer(repo_root=tmp_path, output_dir=tmp_path / "out")
@@ -435,6 +508,11 @@ def test_runtime_snapshot_uses_rust_adapter(tmp_path: Path) -> None:
         return {
             "ok": True,
             "workspace": tmp_path.name,
+            "focus_task_id": "focus-task-20260423",
+            "known_task_ids": ["focus-task-20260423", "background-task-20260423"],
+            "recoverable_task_ids": ["background-task-20260423"],
+            "parallel_task_count": 2,
+            "registered_tasks": {"task_count": 2, "tasks": []},
             "continuity": {"state": "active"},
             "paths": {"supervisor_state": str(tmp_path / ".supervisor_state.json")},
         }
@@ -450,6 +528,8 @@ def test_runtime_snapshot_uses_rust_adapter(tmp_path: Path) -> None:
 
     assert seen["repo_root"] == tmp_path
     assert snapshot["continuity"]["state"] == "active"
+    assert snapshot["parallel_task_count"] == 2
+    assert snapshot["focus_task_id"] == "focus-task-20260423"
 
 
 def test_contract_summary_surfaces_rust_adapter_failures(tmp_path: Path) -> None:

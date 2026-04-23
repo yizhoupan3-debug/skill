@@ -1,7 +1,7 @@
 {
   "ts": "2026-04-15T10:46:46.102903+00:00",
   "summary": {
-    "total_skills": 150,
+    "total_skills": 151,
     "critical_skills": 0,
     "avg_health": 96.6
   },
@@ -975,6 +975,13 @@
     "tdd-workflow": {
       "dynamic_score": 92.8,
       "static_score": 82.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "team": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
       "usage_30d": 0,
       "reroutes_30d": 0,
       "health_status": "Healthy"

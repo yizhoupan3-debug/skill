@@ -152,6 +152,18 @@ Before the first inner-loop cycle:
 3. If the claims are mostly high-overlap, pivot the question.
 4. If the claims are mixed, proceed but document the differentiation strategy.
 5. If the claims are mostly low-overlap, proceed and log the positioning decision.
+6. Treat the gate as a hard execution check: `record-run` must not proceed unless `novelty_gate.status == passed`.
+7. If one bounded pilot must run early, use an explicit override with a written reason so the deviation is auditable.
+
+## Hypothesis Lifecycle
+
+- `queued`: candidate branch waiting for activation.
+- `active`: the branch currently being prepared or extended.
+- `needs_reflection`: a run finished and the branch must be reflected on before the next run.
+- `parked`: the branch was pivoted away from, but can be reactivated later.
+- `concluded`: the branch is closed and should stay append-only.
+
+Only transition hypotheses through the controller so the state file, Markdown projections, and ledger stay aligned.
 
 ## Skill Routing
 
@@ -193,6 +205,7 @@ slices as follows before expensive runs.
 
 `{project}/`
 `research-state.yaml` central state
+`run-ledger.jsonl` append-only audit trail for runs, reflections, gate changes, and workspace syncs
 `CURRENT_CONTEXT.md` current working view with freshness guardrails
 `research-log.md` timeline
 `findings.md` narrative synthesis

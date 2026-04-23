@@ -4,7 +4,7 @@ Claude Code project hooks live here.
 
 Generated-first maintenance:
 
-- Edit `scripts/materialize_cli_host_entrypoints.py` first.
+- Edit `scripts/materialize_cli_host_entrypoints.py` for host-entrypoint rendering, and update `scripts/router-rs/` first for Claude hook rules and contracts.
 - Treat `.claude/settings.json`, this README, and `.claude/hooks/*.sh` as
   materialized outputs.
 - Manual Claude host guidance belongs in `.claude/agents/*.md` unless noted.
@@ -13,22 +13,24 @@ Generated-first maintenance:
 
 Active hooks:
 
-| Event | Script | Purpose |
+| Event | Runner | Purpose |
 | --- | --- | --- |
-| `UserPromptSubmit` | `user_prompt_submit.sh` | Inject the repo-local shared memory and continuity truth on every real prompt so Claude starts from the project’s own memory root instead of stale host-global recall. |
-| `PreToolUse` | `pre_tool_use_quality.sh` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |
-| `PreToolUse` | `pre_tool_use.sh` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
-| `PostToolUse` | `post_tool_use_audit.sh` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
-| `SessionEnd` | `session_end.sh` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |
-| `ConfigChange` | `config_change.sh` | Warn when generated Claude host files were edited directly instead of regenerated from source. |
-| `StopFailure` | `stop_failure.sh` | Emit a host-private hint for selected Claude stop failures without mutating shared continuity. |
+| `UserPromptSubmit` | `run.sh user-prompt-submit` | Inject the repo-local shared memory and continuity truth on every real prompt, and only add a one-line closeout reminder on execution turns. |
+| `PreToolUse` | `run.sh pre-tool-use-quality` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |
+| `PreToolUse` | `run.sh pre-tool-use` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
+| `PostToolUse` | `run.sh post-tool-audit` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
+| `SessionEnd` | `run.sh session-end` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |
+| `ConfigChange` | `run.sh config-change` | Warn when generated Claude host files were edited directly instead of regenerated from source. |
+| `StopFailure` | `run.sh stop-failure` | Emit a host-private hint for selected Claude stop failures without mutating shared continuity. |
 
 Everything else stays intentionally uninstalled here so startup and tool turns remain lean.
 `UserPromptSubmit` is installed here on purpose: this repo keeps memory truth under
 `./.codex/memory/` plus continuity artifacts, so prompt-time injection is the
 lowest-friction way to keep Claude aligned with repo-local state instead of stale
 host-global recall.
-Reply tone, "讲人话" rules, and closeout style live in `AGENT.md`, not in hooks.
+For execution turns it may add one short closeout reminder, but reply tone,
+"讲人话" rules, closeout shape, and broad implementation philosophy still live in
+`AGENT.md`, not in hooks.
 Static behavior rules belong in `AGENT.md` or `CLAUDE.md`; these hooks exist
 for deterministic guardrails, lightweight execution-time context, and lifecycle
 maintenance.
@@ -59,30 +61,30 @@ Project hook principles:
 Validation commands:
 
 - `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}
-' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use_quality.sh`
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh pre-tool-use-quality`
   Expected: stdout returns a JSON `permissionDecision: allow` payload with `additionalContext`.
 - `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}
-' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/post_tool_use_audit.sh`
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh post-tool-audit`
   Expected: stdout is empty for clean edits, or JSON with top-level `additionalContext` when the new delta still looks patchy, compatibility-heavy, or wasteful.
 - `printf '{"tool_name":"MultiEdit","tool_input":{"file_path":".claude/settings.json"}}
-' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use.sh`
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh pre-tool-use`
   Expected: stdout returns a JSON `permissionDecision: deny` payload.
 - `printf '{"tool_name":"Bash","tool_input":{"command":"cp tmp .claude/settings.json"}}
-' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use.sh`
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh pre-tool-use`
   Expected: stdout returns a JSON `permissionDecision: deny` payload for the targeted write.
 - `printf '{"tool_name":"Bash","tool_input":{"command":"printf x > .claude/settings.json"}}
-' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use.sh`
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh pre-tool-use`
   Expected: stdout returns a JSON `permissionDecision: deny` payload for shell redirection into a protected generated file.
 - `printf '{"hook_event_name":"UserPromptSubmit","prompt":"继续修复这个仓库的共享记忆和 runtime"}
-' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/user_prompt_submit.sh`
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh user-prompt-submit`
   Expected: stdout returns JSON with `hookSpecificOutput.additionalContext` containing repo-local memory and continuity reminders.
-- `CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/session_end.sh`
+- `CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh session-end`
   Expected: project-local memory bundle refresh plus projection refresh; may repair stale terminal resume state in `.supervisor_state.json`.
 - `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}
-' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/config_change.sh`
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh config-change`
   Expected: audit-only stderr guidance about regenerating generated Claude host files; exit 0.
 - `printf '{"hook_event_name":"StopFailure","error":"server_error"}
-' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/stop_failure.sh`
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh stop-failure`
   Expected: host-private failure classification hint on stderr; exit 0.
 - `./scripts/router-rs/target/debug/router-rs --claude-hook-command session-end --repo-root "$PWD" --claude-hook-max-lines 4`
   Expected: compatibility alias for `session-end`; same consolidation and projection contract.

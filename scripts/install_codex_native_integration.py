@@ -531,8 +531,8 @@ def install_native_integration(
     install_personal_plugin: bool = True,
     install_personal_marketplace_entry: bool = True,
     install_home_codex_skills_link: bool = True,
-    install_home_claude_skills_link: bool = True,
-    install_home_claude_refresh_command: bool = True,
+    install_home_claude_skills_link: bool = False,
+    install_home_claude_refresh_command: bool = False,
     install_home_claude_mcp_sync: bool = True,
     install_default_bootstrap: bool = True,
     bootstrap_output_dir: Path | None = None,
@@ -612,8 +612,8 @@ def main() -> int:
     parser.add_argument("--skip-personal-plugin", action="store_true")
     parser.add_argument("--skip-personal-marketplace", action="store_true")
     parser.add_argument("--skip-home-codex-skills-link", action="store_true")
-    parser.add_argument("--skip-home-claude-skills-link", action="store_true")
-    parser.add_argument("--skip-home-claude-refresh", action="store_true")
+    parser.add_argument("--home-claude-skills", action="store_true")
+    parser.add_argument("--home-claude-refresh", action="store_true")
     parser.add_argument("--skip-home-claude-mcp-sync", action="store_true")
     parser.add_argument("--skip-default-bootstrap", action="store_true")
     parser.add_argument("--json", action="store_true", dest="json_output")
@@ -635,8 +635,8 @@ def main() -> int:
         install_personal_plugin=not args.skip_personal_plugin,
         install_personal_marketplace_entry=not args.skip_personal_marketplace,
         install_home_codex_skills_link=not args.skip_home_codex_skills_link,
-        install_home_claude_skills_link=not args.skip_home_claude_skills_link,
-        install_home_claude_refresh_command=not args.skip_home_claude_refresh,
+        install_home_claude_skills_link=args.home_claude_skills,
+        install_home_claude_refresh_command=args.home_claude_refresh,
         install_home_claude_mcp_sync=not args.skip_home_claude_mcp_sync,
         install_default_bootstrap=not args.skip_default_bootstrap,
         bootstrap_output_dir=args.bootstrap_output_dir,

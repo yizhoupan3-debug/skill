@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
@@ -30,7 +31,7 @@ def test_init_workspace_creates_richer_autoresearch_scaffold(tmp_path: Path) -> 
 
     state = module.load_state(root / "research-state.yaml")
 
-    assert state["schema_version"] == 2
+    assert state["schema_version"] == 3
     assert state["stage"] == "bootstrap"
     assert state["mode"] == "full"
     assert state["novelty_gate"]["status"] == "pending"
@@ -463,3 +464,203 @@ def test_stale_state_bias_guard_prefers_reconcile_before_old_history(tmp_path: P
     assert "freshness: stale" in resume_text
     assert "history_bias_risk: high" in resume_text
     assert "treat `research-log.md` and older notes as background only" in context_text
+
+
+def test_record_run_requires_novelty_gate_or_override(tmp_path: Path) -> None:
+    module = _load_module()
+    root = module.init_workspace(
+        project="gate-project",
+        question="Can novelty gate block runs?",
+        base_dir=tmp_path,
+        mode="quick",
+    )
+    state = module.load_state(root / "research-state.yaml")
+    state = module.add_hypothesis(
+        state,
+        claim="A blocked hypothesis should not run before novelty review",
+        prediction="The controller rejects the run",
+        priority="high",
+        hypothesis_id="blocked-branch",
+    )
+
+    try:
+        module.record_run(
+            state,
+            hypothesis_id="blocked-branch",
+            outcome="exploratory",
+            summary="Should fail before the gate passes.",
+            metric_name=None,
+            metric_value=None,
+            command=None,
+            evidence_path=None,
+            workspace=root,
+        )
+    except SystemExit as exc:
+        assert "Novelty gate must pass" in str(exc)
+    else:
+        raise AssertionError("record_run should reject when novelty gate is pending")
+
+
+def test_record_run_override_adds_provenance_and_needs_reflection(tmp_path: Path) -> None:
+    module = _load_module()
+    root = module.init_workspace(
+        project="override-project",
+        question="Can override still leave an audit trail?",
+        base_dir=tmp_path,
+        mode="quick",
+    )
+    state = module.load_state(root / "research-state.yaml")
+    state = module.add_hypothesis(
+        state,
+        claim="Override path still records provenance",
+        prediction="The run captures git and env details",
+        priority="high",
+        hypothesis_id="override-branch",
+    )
+
+    updated = module.record_run(
+        state,
+        hypothesis_id="override-branch",
+        outcome="exploratory",
+        summary="Override run was recorded.",
+        metric_name="proxy",
+        metric_value="1",
+        command="python run.py",
+        evidence_path=None,
+        override_novelty_gate=True,
+        override_reason="Need one bounded pilot before final novelty positioning.",
+        workspace=root,
+    )
+    record = module.latest_run_for_hypothesis(updated, "override-branch")
+    hypothesis = module.find_hypothesis(updated, "override-branch")
+
+    assert record is not None
+    assert record["novelty_gate_override"] is True
+    assert record["override_reason"] == "Need one bounded pilot before final novelty positioning."
+    assert record["environment_fingerprint"]["python_version"]
+    assert "available" in record["git_provenance"]
+    assert hypothesis is not None
+    assert hypothesis["status"] == "needs_reflection"
+
+
+def test_resume_and_status_include_provenance_summaries() -> None:
+    module = _load_module()
+    state = module.default_state(
+        project="resume-project",
+        question="Does provenance show up in summaries?",
+        mode="quick",
+    )
+    state["novelty_gate"]["status"] = "passed"
+    state["environment"] = {
+        "python_version": "3.12.0",
+        "platform": "Darwin",
+        "machine": "arm64",
+        "yaml_available": True,
+        "workspace": "/tmp/demo",
+    }
+    state["git"] = {
+        "available": True,
+        "workspace": "/tmp/demo",
+        "head": "abcdef123456",
+        "branch": "main",
+        "dirty": True,
+        "tracked_changes": 2,
+        "untracked_changes": 1,
+    }
+    state = module.add_hypothesis(
+        state,
+        claim="Summary shows provenance",
+        prediction="Status and resume include git and env lines",
+        priority="high",
+        hypothesis_id="prov-branch",
+    )
+    state = module.record_run(
+        state,
+        hypothesis_id="prov-branch",
+        outcome="confirmatory",
+        summary="One run with provenance.",
+        metric_name=None,
+        metric_value=None,
+        command=None,
+        evidence_path=None,
+        workspace=None,
+    )
+    resume_text = module.format_resume(state)
+    status_text = module.format_status(state)
+
+    assert "git: abcdef1 main dirty tracked=2 untracked=1" in resume_text
+    assert "environment: python=3.12.0 platform=Darwin machine=arm64" in resume_text
+    assert "git: abcdef1 main dirty tracked=2 untracked=1" in status_text
+    assert "environment: python=3.12.0 platform=Darwin machine=arm64" in status_text
+    assert "latest_run_git:" in resume_text
+    assert "latest_run_env:" in resume_text
+
+
+def test_append_ledger_event_writes_jsonl(tmp_path: Path) -> None:
+    module = _load_module()
+    workspace = tmp_path / "ledger-project"
+    workspace.mkdir()
+
+    module.append_ledger_event(
+        workspace,
+        "run.recorded",
+        {"run_id": "run-001", "hypothesis_id": "h1"},
+    )
+
+    lines = (workspace / "run-ledger.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    payload = json.loads(lines[0])
+    assert payload["kind"] == "run.recorded"
+    assert payload["payload"]["run_id"] == "run-001"
+
+
+def test_migrate_state_promotes_active_branch_with_unreflected_run() -> None:
+    module = _load_module()
+    legacy_state = {
+        "schema_version": 2,
+        "project": "legacy-project",
+        "question": "Can migration infer reflection debt?",
+        "mode": "quick",
+        "status": "active",
+        "stage": "outer-loop",
+        "current_direction": None,
+        "active_hypothesis": "legacy-branch",
+        "novelty_gate": {"status": "passed", "claims": [], "claim_records": [], "draft_claims": []},
+        "hypotheses": [
+            {
+                "id": "legacy-branch",
+                "claim": "Legacy active branch",
+                "prediction": None,
+                "priority": "high",
+                "status": "active",
+                "created_at": "2026-04-01T00:00:00+00:00",
+            }
+        ],
+        "hypothesis_backlog": [],
+        "run_history": [
+            {
+                "run_id": "run-001",
+                "hypothesis_id": "legacy-branch",
+                "outcome": "exploratory",
+                "summary": "Old run waiting for reflection.",
+                "metric_name": None,
+                "metric_value": None,
+                "command": None,
+                "evidence_path": "experiments/legacy-branch/run-001.md",
+                "recorded_at": "2026-04-01T00:10:00+00:00",
+            }
+        ],
+        "evidence_index": [],
+        "blockers": [],
+        "decisions": [],
+        "next_actions": [],
+        "created_at": "2026-04-01T00:00:00+00:00",
+        "updated_at": "2026-04-01T00:10:00+00:00",
+    }
+
+    migrated = module.migrate_state(legacy_state)
+    hypothesis = module.find_hypothesis(migrated, "legacy-branch")
+
+    assert migrated["schema_version"] == 3
+    assert hypothesis is not None
+    assert hypothesis["status"] == "needs_reflection"

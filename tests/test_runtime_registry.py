@@ -141,6 +141,13 @@ def test_runtime_registry_exposes_framework_native_aliases_and_omc_retirement_co
     assert aliases["deepinterview"]["upstream_source"]["official_skill_path"] == "skills/deep-interview/SKILL.md"
     assert "one-question-at-a-time" in aliases["deepinterview"]["official_workflow"]["loop_rules"]
     assert "verification-evidence-required" in aliases["deepinterview"]["implementation_bar"]
+    assert aliases["team"]["canonical_owner"] == "execution-controller-coding"
+    assert aliases["team"]["host_entrypoints"]["codex-cli"] == "$team"
+    assert aliases["team"]["host_entrypoints"]["claude-code"] == "/team"
+    assert aliases["team"]["omc_lineage"]["inherits_core_capabilities"] is True
+    assert aliases["team"]["upstream_source"]["official_skill_path"] == "skills/team/SKILL.md"
+    assert "delegation" in aliases["team"]["official_workflow"]["phases"]
+    assert "supervisor-owned-continuity" in aliases["team"]["implementation_bar"]
 
     retirement = omc_retirement_contract()
     assert retirement["runtime_authority"] == "rust-session-supervisor"
@@ -150,6 +157,11 @@ def test_runtime_registry_exposes_framework_native_aliases_and_omc_retirement_co
     assert (
         "fix-verify-loop-until-bounded-scope-clean"
         in retirement["framework_native_alias_guarantees"]["deepinterview"]["implementation_bar"]
+    )
+    assert retirement["framework_native_alias_guarantees"]["team"]["inherits_omc_core_capabilities"] is True
+    assert (
+        "supervisor-owned-continuity"
+        in retirement["framework_native_alias_guarantees"]["team"]["implementation_bar"]
     )
 
 
@@ -169,4 +181,6 @@ def test_runtime_registry_host_records_expose_supervisor_capabilities() -> None:
         assert record["protocol_hints"]["session_supervisor_driver"] == expected_driver
 
     assert codex["protocol_hints"]["framework_alias_entrypoints"]["autopilot"] == "$autopilot"
+    assert codex["protocol_hints"]["framework_alias_entrypoints"]["team"] == "$team"
     assert claude["protocol_hints"]["framework_alias_entrypoints"]["deepinterview"] == "/deepinterview"
+    assert claude["protocol_hints"]["framework_alias_entrypoints"]["team"] == "/team"

@@ -32,16 +32,16 @@
     }
   },
   "summary": {
-    "total_skills": 150,
+    "total_skills": 151,
     "tier_counts": {
       "core": 20,
-      "optional": 128,
+      "optional": 129,
       "experimental": 2,
       "deprecated": 0
     },
     "activation_counts": {
       "default": 26,
-      "explicit_opt_in": 124,
+      "explicit_opt_in": 125,
       "disabled": 0
     }
   },
@@ -187,6 +187,7 @@
       "tailwind-pro",
       "tao-ci",
       "tdd-workflow",
+      "team",
       "test-engineering",
       "typescript-pro",
       "vercel-react-best-practices",
@@ -4357,6 +4358,34 @@
         "health": {
           "dynamic_score": 92.8,
           "static_score": 82.0,
+          "usage_30d": 0,
+          "reroutes_30d": 0,
+          "health_status": "Healthy"
+        },
+        "loadouts": []
+      }
+    },
+    "team": {
+      "tier": "optional",
+      "reasons": [
+        "gate:delegation"
+      ],
+      "surface": {
+        "activation_mode": "explicit_opt_in",
+        "default_surface_enabled": false,
+        "default_loadout_memberships": []
+      },
+      "signals": {
+        "layer": "L1",
+        "owner": "owner",
+        "gate": "delegation",
+        "priority": "P2",
+        "session_start": "preferred",
+        "source": "project",
+        "source_position": 3,
+        "health": {
+          "dynamic_score": 100.0,
+          "static_score": 100.0,
           "usage_30d": 0,
           "reroutes_30d": 0,
           "health_status": "Healthy"

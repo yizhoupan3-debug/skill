@@ -50,3 +50,9 @@ def run_rust_tool(subcommand: str, argv: list[str] | None = None) -> int:
     command = build_command(subcommand, argv or sys.argv[1:])
     completed = subprocess.run(command)
     return completed.returncode
+
+
+def run_forwarded_tool(subcommand: str, argv: list[str] | None = None) -> int:
+    command = build_command(subcommand, list(sys.argv[1:] if argv is None else argv))
+    completed = subprocess.run(command)
+    return completed.returncode

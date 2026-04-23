@@ -14,19 +14,11 @@ if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
 from framework_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
+from scripts.memory_support import read_task_registry
 from scripts.write_session_artifacts import write_artifacts
 
 
 def test_write_artifacts_creates_all_phase1_contract_files(tmp_path: Path) -> None:
-    """Verify artifact writer creates the three standard files.
-
-    Parameters:
-        tmp_path: Temporary pytest directory fixture.
-
-    Returns:
-        None.
-    """
-
     paths = write_artifacts(
         tmp_path,
         task="phase1 rollout",
@@ -56,7 +48,7 @@ def test_write_artifacts_creates_all_phase1_contract_files(tmp_path: Path) -> No
     assert evidence_payload["artifacts"][0]["kind"] == "report"
 
 
-def test_write_artifacts_supports_task_scoped_output_and_mirror(tmp_path: Path) -> None:
+def test_write_artifacts_supports_task_scoped_output_and_focus_mirror(tmp_path: Path) -> None:
     paths = write_artifacts(
         tmp_path / "artifacts" / "current",
         task="codex-first convergence",
@@ -67,6 +59,7 @@ def test_write_artifacts_supports_task_scoped_output_and_mirror(tmp_path: Path) 
         evidence=[],
         task_id="codex-first-convergence-20260418210000",
         mirror_output_dir=tmp_path / "artifacts" / "current",
+        focus=True,
     )
 
     assert Path(paths["summary"]).parent.name == "codex-first-convergence-20260418210000"
@@ -74,7 +67,32 @@ def test_write_artifacts_supports_task_scoped_output_and_mirror(tmp_path: Path) 
     assert paths["task_id"] == "codex-first-convergence-20260418210000"
 
 
-def test_write_artifacts_refreshes_active_task_pointer_when_repo_root_is_provided(tmp_path: Path) -> None:
+def test_write_artifacts_only_registers_background_tasks_without_focus_projection(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    output_dir = repo_root / "artifacts" / "current"
+
+    paths = write_artifacts(
+        output_dir,
+        task="background rollout",
+        phase="implementation",
+        status="in_progress",
+        summary="Keep this task out of shared mirrors.",
+        next_actions=["stay scoped"],
+        evidence=[],
+        repo_root=repo_root,
+    )
+
+    registry = read_task_registry(repo_root)
+
+    assert Path(paths["summary"]).parent.name == paths["task_id"]
+    assert registry["tasks"][0]["task_id"] == paths["task_id"]
+    assert registry["focus_task_id"] is None
+    assert not (repo_root / "artifacts" / "current" / "active_task.json").exists()
+    assert not (repo_root / "artifacts" / "current" / "focus_task.json").exists()
+    assert not (repo_root / "SESSION_SUMMARY.md").exists()
+
+
+def test_write_artifacts_refreshes_focus_projection_when_requested(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     output_dir = repo_root / "artifacts" / "current"
 
@@ -87,13 +105,19 @@ def test_write_artifacts_refreshes_active_task_pointer_when_repo_root_is_provide
         next_actions=["verify pointer"],
         evidence=[],
         repo_root=repo_root,
+        focus=True,
     )
 
     pointer_path = repo_root / "artifacts" / "current" / "active_task.json"
+    focus_path = repo_root / "artifacts" / "current" / "focus_task.json"
     assert pointer_path.exists()
+    assert focus_path.exists()
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    focus_pointer = json.loads(focus_path.read_text(encoding="utf-8"))
     assert pointer["task"] == "pointer refresh rollout"
     assert pointer["task_id"] == paths["task_id"]
+    assert focus_pointer["task_id"] == paths["task_id"]
+    assert Path(paths["summary"]).parent.name == paths["task_id"]
     assert (repo_root / "SESSION_SUMMARY.md").exists()
     assert (repo_root / "NEXT_ACTIONS.json").exists()
     assert (repo_root / "EVIDENCE_INDEX.json").exists()

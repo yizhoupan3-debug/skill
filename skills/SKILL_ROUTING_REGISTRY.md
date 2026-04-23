@@ -141,6 +141,7 @@
 | `tailwind-pro` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Produce Tailwind CSS configurations with design tokens, plugin hooks, and framew |
 | `tao-ci` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Draft professor-specific summer research outreach emails from workbook data |
 | `tdd-workflow` | Active | P2 | L1 | overlay | none | project | ✓ 92.8 | Run a Test-Driven Development workflow centered on the RED-GREEN-REFACTOR loop w |
+| `team` | Active | P2 | L1 | owner | delegation | project | ✓ 100.0 | Official OMC team workflow, localized onto this repo's Rust-first supervisor and |
 | `test-engineering` | Active | P2 | L1 | owner | none | project | ✓ 97.3 | Choose the right test layer, write maintainable tests, and stabilize flaky behav |
 | `typescript-pro` | Active | P1 | L4 | owner | none | project | ✓ 96.3 | Deliver type-safe TypeScript 5.x+ code. Enforces strict mode, encodes domain con |
 | `vercel-react-best-practices` | Active | P2 | L4 | overlay | none | project | ✓ 96.8 | Apply Vercel-style React/Next.js best practices for App Router, Server Component |

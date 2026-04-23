@@ -32,14 +32,48 @@ const STABLE_DOCUMENTS: [&str; 5] = [
     "lessons.md",
     "runbooks.md",
 ];
-const GENERATED_PATHS: [&str; 6] = [
+const GENERATED_PATHS: [&str; 3] = [
     ".claude/settings.json",
     ".claude/hooks/README.md",
-    ".claude/hooks/pre_tool_use.sh",
-    ".claude/hooks/session_end.sh",
-    ".claude/hooks/config_change.sh",
-    ".claude/hooks/stop_failure.sh",
+    ".claude/hooks/run.sh",
 ];
+const CLAUDE_PRE_TOOL_USE_RULES: [&str; 13] = [
+    "/AGENT.md",
+    "/AGENTS.md",
+    "/CLAUDE.md",
+    "/GEMINI.md",
+    "/.gemini/settings.json",
+    "/.claude/settings.json",
+    "/.claude/agents/README.md",
+    "/.claude/hooks/README.md",
+    "/.claude/hooks/*.sh",
+    "/.claude/commands/**",
+    "/.codex/hooks.json",
+    "/.codex/host_entrypoints_sync_manifest.json",
+    "/.codex/memory/CLAUDE_MEMORY.md",
+];
+const CLAUDE_PRE_TOOL_USE_BASH_RULES: [&str; 12] = [
+    "*AGENT.md*",
+    "*AGENTS.md*",
+    "*CLAUDE.md*",
+    "*GEMINI.md*",
+    "*.gemini/settings.json*",
+    "*.claude/settings.json*",
+    "*.claude/agents/README.md*",
+    "*.claude/hooks/*",
+    "*.claude/commands/*",
+    "*.codex/hooks.json*",
+    "*.codex/host_entrypoints_sync_manifest.json*",
+    "*.codex/memory/CLAUDE_MEMORY.md*",
+];
+const CLAUDE_QUALITY_PRE_TOOL_USE_RULES: [&str; 4] = [
+    "/framework_runtime/src/**",
+    "/scripts/router-rs/src/**",
+    "/tests/test_cli_host_entrypoints.py",
+    "/tests/test_codex_omx_hook_bridge.py",
+];
+const CLAUDE_STOP_FAILURE_MATCHER: &str =
+    "invalid_request|server_error|max_output_tokens|rate_limit|authentication_failed|billing_error|unknown";
 const PROTECTED_GENERATED_PATHS: [&str; 10] = [
     "AGENT.md",
     "AGENTS.md",
@@ -150,8 +184,6 @@ const USER_PROMPT_HOOK_TERMS: [&str; 6] = [
     "pretooluse",
     "userpromptsubmit",
 ];
-const USER_PROMPT_COMMON_CONTEXT: &str =
-    "实现要求：优先直接落目标行为，不要先叠兼容层、补丁分支、保底开关或 keep-old-and-add-new。";
 const USER_PROMPT_MEMORY_PRIORITY_CONTEXT: &str =
     "记忆真源：这个仓库优先使用 repo-local shared memory `./.codex/memory/`，不要把 Codex global memories 当成当前项目真相。";
 const USER_PROMPT_CONTINUITY_CONTEXT: &str =
@@ -162,6 +194,8 @@ const USER_PROMPT_COMPAT_CONTEXT: &str =
     "如果旧 compat/fallback/过渡逻辑已经没有真实必要，优先删掉而不是继续包一层。";
 const USER_PROMPT_HOOK_CONTEXT: &str =
     "Hook 额外检查：让 hook 增加自动化，而不是只做阻拦；优先短上下文、窄触发、低开销，并尽量用 matcher/if 避免无谓触发。";
+const USER_PROMPT_CLOSEOUT_CONTEXT: &str =
+    "完成任务时默认只用一小段收尾：说清做了什么、达成了什么效果、下一步是什么；如果已经结束，就直接说已收尾。";
 const QUALITY_RUST_CONTEXT: &str =
     "Rust 额外检查：盯住热循环里的分配、clone、String/Vec 复制和 serde_json 往返。";
 const QUALITY_PYTHON_CONTEXT: &str =
@@ -215,6 +249,129 @@ const TERMINAL_VERIFICATION_STATUSES: [&str; 6] = [
     "abandoned",
     "failed",
 ];
+
+pub fn build_claude_hook_manifest() -> Value {
+    let pre_tool_command = "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use";
+    let quality_command = "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality";
+    let post_tool_command = "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit";
+
+    let pre_tool_hooks = build_tool_path_hooks(&CLAUDE_PRE_TOOL_USE_RULES, pre_tool_command, None);
+    let pre_tool_bash_hooks = CLAUDE_PRE_TOOL_USE_BASH_RULES
+        .iter()
+        .map(|rule| {
+            json!({
+                "type": "command",
+                "if": format!("Bash({rule})"),
+                "command": pre_tool_command,
+            })
+        })
+        .collect::<Vec<_>>();
+    let quality_pre_tool_hooks =
+        build_tool_path_hooks(&CLAUDE_QUALITY_PRE_TOOL_USE_RULES, quality_command, None);
+    let post_tool_hooks = build_tool_path_hooks(
+        &CLAUDE_QUALITY_PRE_TOOL_USE_RULES,
+        post_tool_command,
+        Some(json!({"async": true, "timeout": 8})),
+    );
+
+    json!({
+        "schema_version": "router-rs-claude-hook-manifest-v1",
+        "authority": CLAUDE_HOOK_AUTHORITY,
+        "protected_paths": {
+            "edit_write": CLAUDE_PRE_TOOL_USE_RULES,
+            "bash": CLAUDE_PRE_TOOL_USE_BASH_RULES,
+            "quality": CLAUDE_QUALITY_PRE_TOOL_USE_RULES,
+            "generated_surfaces": GENERATED_PATHS,
+        },
+        "settings_hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": "Edit|MultiEdit|Write",
+                    "hooks": pre_tool_hooks,
+                },
+                {
+                    "matcher": "Bash",
+                    "hooks": pre_tool_bash_hooks,
+                },
+                {
+                    "matcher": "Edit|MultiEdit|Write",
+                    "hooks": quality_pre_tool_hooks,
+                }
+            ],
+            "PostToolUse": [
+                {
+                    "matcher": "Edit|MultiEdit|Write",
+                    "hooks": post_tool_hooks,
+                }
+            ],
+            "UserPromptSubmit": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh user-prompt-submit",
+                        }
+                    ]
+                }
+            ],
+            "SessionEnd": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh session-end",
+                        }
+                    ]
+                }
+            ],
+            "ConfigChange": [
+                {
+                    "matcher": "project_settings",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh config-change",
+                        }
+                    ]
+                }
+            ],
+            "StopFailure": [
+                {
+                    "matcher": CLAUDE_STOP_FAILURE_MATCHER,
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh stop-failure",
+                        }
+                    ]
+                }
+            ]
+        }
+    })
+}
+
+fn build_tool_path_hooks(rules: &[&str], command: &str, extras: Option<Value>) -> Vec<Value> {
+    let extra_object = extras.and_then(|value| value.as_object().cloned());
+    let mut hooks = Vec::new();
+    for rule in rules {
+        for tool_name in ["Edit", "MultiEdit", "Write"] {
+            let mut hook = Map::new();
+            hook.insert("type".to_string(), Value::String("command".to_string()));
+            hook.insert(
+                "if".to_string(),
+                Value::String(format!("{tool_name}({rule})")),
+            );
+            hook.insert("command".to_string(), Value::String(command.to_string()));
+            if let Some(extras) = &extra_object {
+                for (key, value) in extras {
+                    hook.insert(key.clone(), value.clone());
+                }
+            }
+            hooks.push(Value::Object(hook));
+        }
+    }
+    hooks
+}
 
 pub fn run_claude_lifecycle_hook(
     command: &str,
@@ -1182,8 +1339,24 @@ fn looks_like_coding_request(prompt_text: &str) -> bool {
     if prompt_text.trim().is_empty() {
         return false;
     }
-    if !markdown_path_mentions(prompt_text).is_empty()
+    let markdown_mentions = markdown_path_mentions(prompt_text);
+    let markdown_execution_mentions = markdown_mentions
+        .iter()
+        .filter(|path| {
+            matches!(
+                path.as_str(),
+                "AGENT.md"
+                    | "AGENTS.md"
+                    | "CLAUDE.md"
+                    | "GEMINI.md"
+                    | ".claude/hooks/README.md"
+                    | ".claude/agents/README.md"
+            )
+        })
+        .count();
+    if !markdown_mentions.is_empty()
         && prompt_path_mentions(prompt_text, false).is_empty()
+        && markdown_execution_mentions == 0
     {
         return false;
     }
@@ -1194,7 +1367,7 @@ fn looks_like_coding_request(prompt_text: &str) -> bool {
     let path_mentions = prompt_path_mentions(prompt_text, false).len();
     let non_code_edits = count_contains(&lowered, &USER_PROMPT_NON_CODE_EDIT_TERMS);
     let action_score = strong_actions * 2 + weak_actions;
-    let target_score = code_targets + path_mentions * 2;
+    let target_score = code_targets + path_mentions * 2 + markdown_execution_mentions * 2;
     if action_score == 0 || target_score == 0 {
         return false;
     }
@@ -1243,7 +1416,7 @@ fn build_user_prompt_context(repo_root: &Path, prompt_text: &str) -> Result<Stri
         return Ok(sections.join("\n\n"));
     }
     let lowered = prompt_text.to_lowercase();
-    let mut parts = vec![USER_PROMPT_COMMON_CONTEXT];
+    let mut parts = vec![USER_PROMPT_CLOSEOUT_CONTEXT];
     if count_contains(&lowered, &USER_PROMPT_PERF_TERMS) > 0 {
         parts.push(USER_PROMPT_PERF_CONTEXT);
     }
@@ -2311,6 +2484,7 @@ mod tests {
             .unwrap_or("");
         assert!(context.contains("repo-local shared memory"));
         assert!(context.contains(".supervisor_state.json"));
+        assert!(context.contains("完成任务时默认只用一小段收尾"));
         assert!(context.contains("热路径"));
         assert!(context.contains("fallback"));
         assert!(!context.contains("简化优先"));
@@ -2350,7 +2524,11 @@ mod tests {
                 .as_str()
                 .unwrap_or("");
             assert!(context.contains("repo-local shared memory"), "missing repo memory for {prompt}");
-            assert!(!context.contains("实现要求"), "unexpected code nudge for {prompt}");
+            assert!(!context.contains("实现要求"), "unexpected old code nudge for {prompt}");
+            assert!(
+                context.contains("完成任务时默认只用一小段收尾"),
+                "missing closeout reminder for {prompt}"
+            );
         }
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
@@ -2368,6 +2546,7 @@ mod tests {
             .unwrap_or("");
         assert!(context.contains("增加自动化"));
         assert!(context.contains("matcher/if"));
+        assert!(context.contains("完成任务时默认只用一小段收尾"));
         assert_eq!(context.matches("Hook 额外检查").count(), 1);
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }

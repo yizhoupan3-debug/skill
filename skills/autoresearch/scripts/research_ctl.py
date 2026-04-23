@@ -5,7 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
 import re
+import subprocess
+import sys
+import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,12 +21,22 @@ except ImportError:  # pragma: no cover - optional fallback
     yaml = None
 
 
+SCHEMA_VERSION = 3
 STAGE_BOOTSTRAP = "bootstrap"
 STAGE_INNER_LOOP = "inner-loop"
 STAGE_OUTER_LOOP = "outer-loop"
 STAGE_FINALIZE = "finalize"
 VALID_DIRECTIONS = {"DEEPEN", "BROADEN", "PIVOT", "CONCLUDE"}
 VALID_OUTCOMES = {"confirmatory", "exploratory", "failed", "ambiguous"}
+VALID_HYPOTHESIS_STATUSES = {"queued", "active", "needs_reflection", "parked", "concluded"}
+VALID_HYPOTHESIS_TRANSITIONS = {
+    None: VALID_HYPOTHESIS_STATUSES,
+    "queued": {"queued", "active", "parked", "concluded"},
+    "active": {"active", "needs_reflection", "parked", "concluded"},
+    "needs_reflection": {"needs_reflection", "active", "parked", "concluded"},
+    "parked": {"parked", "queued", "active", "concluded"},
+    "concluded": {"concluded"},
+}
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
 NOVELTY_OVERLAPS = {"low", "medium", "high"}
 NOVELTY_CONFIDENCE = {"low", "medium", "high"}
@@ -165,6 +179,192 @@ def default_run_record_path(hypothesis_id: str, run_id: str) -> str:
 def default_reflection_path(hypothesis_id: str, run_id: str | None) -> str:
     base = run_id or "reflection"
     return f"experiments/{hypothesis_id}/{base}-reflection.md"
+
+
+def ledger_path(workspace: Path) -> Path:
+    return workspace / "run-ledger.jsonl"
+
+
+def append_ledger_event(workspace: Path, kind: str, payload: dict[str, Any]) -> None:
+    event = {
+        "schema_version": "autoresearch-ledger-v1",
+        "event_id": f"evt_{uuid.uuid4().hex[:12]}",
+        "ts": now_iso(),
+        "kind": kind,
+        "workspace": str(workspace),
+        "project": workspace.name,
+        "payload": payload,
+    }
+    target = ledger_path(workspace)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True))
+        handle.write("\n")
+
+
+def _run_command(args: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        args,
+        cwd=cwd,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def capture_environment_fingerprint(workspace: Path | None = None) -> dict[str, Any]:
+    target = workspace.resolve() if workspace is not None else Path.cwd().resolve()
+    return {
+        "python_version": platform.python_version(),
+        "platform": platform.system(),
+        "machine": platform.machine() or "unknown",
+        "yaml_available": yaml is not None,
+        "workspace": str(target),
+    }
+
+
+def capture_git_provenance(workspace: Path | None = None) -> dict[str, Any]:
+    target = workspace.resolve() if workspace is not None else Path.cwd().resolve()
+    head = _run_command(["git", "rev-parse", "HEAD"], cwd=target)
+    if head.returncode != 0:
+        return {
+            "available": False,
+            "workspace": str(target),
+            "head": None,
+            "branch": None,
+            "dirty": None,
+            "tracked_changes": 0,
+            "untracked_changes": 0,
+        }
+    branch = _run_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=target)
+    status = _run_command(["git", "status", "--porcelain"], cwd=target)
+    tracked_changes = 0
+    untracked_changes = 0
+    dirty = False
+    for raw_line in status.stdout.splitlines():
+        if not raw_line.strip():
+            continue
+        dirty = True
+        if raw_line.startswith("??"):
+            untracked_changes += 1
+        else:
+            tracked_changes += 1
+    return {
+        "available": True,
+        "workspace": str(target),
+        "head": head.stdout.strip(),
+        "branch": branch.stdout.strip() or None,
+        "dirty": dirty,
+        "tracked_changes": tracked_changes,
+        "untracked_changes": untracked_changes,
+    }
+
+
+def summarize_environment_fingerprint(fingerprint: dict[str, Any] | None) -> str:
+    if not fingerprint:
+        return "python=- platform=-"
+    return (
+        f"python={fingerprint.get('python_version', '-')} "
+        f"platform={fingerprint.get('platform', '-')} "
+        f"machine={fingerprint.get('machine', '-')}"
+    )
+
+
+def summarize_git_provenance(provenance: dict[str, Any] | None) -> str:
+    if not provenance or not provenance.get("available"):
+        return "unavailable"
+    head = str(provenance.get("head") or "-")[:7]
+    branch = provenance.get("branch") or "-"
+    dirty = "dirty" if provenance.get("dirty") else "clean"
+    tracked = provenance.get("tracked_changes", 0)
+    untracked = provenance.get("untracked_changes", 0)
+    return f"{head} {branch} {dirty} tracked={tracked} untracked={untracked}"
+
+
+def assert_hypothesis_transition(previous: str | None, new: str, *, hypothesis_id: str) -> None:
+    if new not in VALID_HYPOTHESIS_STATUSES:
+        raise SystemExit(f"Invalid hypothesis status: {new}")
+    allowed = VALID_HYPOTHESIS_TRANSITIONS.get(previous, set())
+    if new not in allowed:
+        raise SystemExit(
+            f"Invalid hypothesis transition for {hypothesis_id}: {previous or 'none'} -> {new}"
+        )
+
+
+def transition_hypothesis(
+    state: dict[str, Any],
+    hypothesis: dict[str, Any],
+    new_status: str,
+    *,
+    reason: str | None = None,
+) -> None:
+    previous = hypothesis.get("status")
+    assert_hypothesis_transition(previous, new_status, hypothesis_id=str(hypothesis.get("id") or "?"))
+    hypothesis["status"] = new_status
+    hypothesis["status_reason"] = reason
+    hypothesis["status_updated_at"] = now_iso()
+    hypothesis_id = str(hypothesis.get("id") or "")
+    backlog = state.setdefault("hypothesis_backlog", [])
+    if new_status == "queued":
+        if hypothesis_id and hypothesis_id not in backlog:
+            backlog.append(hypothesis_id)
+    elif hypothesis_id in backlog:
+        backlog.remove(hypothesis_id)
+
+
+def assert_experiment_allowed(
+    state: dict[str, Any],
+    *,
+    override: bool = False,
+    override_reason: str | None = None,
+) -> None:
+    gate_status = state.get("novelty_gate", {}).get("status", "pending")
+    if gate_status == "passed":
+        return
+    if not override:
+        raise SystemExit(f"Novelty gate must pass before recording runs (current: {gate_status})")
+    if not override_reason or not override_reason.strip():
+        raise SystemExit("Novelty gate override requires --override-reason")
+
+
+def migrate_state(state: dict[str, Any]) -> dict[str, Any]:
+    migrated = deepcopy(state)
+    version = int(migrated.get("schema_version", 2) or 2)
+    if version >= SCHEMA_VERSION:
+        return migrated
+
+    hypotheses = migrated.get("hypotheses", [])
+    decisions = migrated.get("decisions", [])
+    run_history = migrated.get("run_history", [])
+    for hypothesis in hypotheses:
+        status = hypothesis.get("status") or "queued"
+        if status not in VALID_HYPOTHESIS_STATUSES:
+            status = "queued"
+        latest_run = next(
+            (item for item in reversed(run_history) if item.get("hypothesis_id") == hypothesis.get("id")),
+            None,
+        )
+        latest_decision = next(
+            (item for item in reversed(decisions) if item.get("hypothesis_id") == hypothesis.get("id")),
+            None,
+        )
+        if (
+            status == "active"
+            and latest_run is not None
+            and (latest_decision is None or latest_decision.get("run_id") != latest_run.get("run_id"))
+        ):
+            status = "needs_reflection"
+        hypothesis["status"] = status
+        hypothesis.setdefault("status_reason", None)
+        hypothesis.setdefault("status_updated_at", hypothesis.get("created_at") or migrated.get("updated_at") or now_iso())
+    for record in run_history:
+        record.setdefault("novelty_gate_status_at_run", None)
+        record.setdefault("novelty_gate_override", False)
+        record.setdefault("override_reason", None)
+        record.setdefault("environment_fingerprint", None)
+        record.setdefault("git_provenance", None)
+    migrated["schema_version"] = SCHEMA_VERSION
+    return migrated
 
 
 def format_hypothesis_card(hypothesis: dict[str, Any]) -> str:
@@ -1123,6 +1323,10 @@ def format_run_record(record: dict[str, Any]) -> str:
     metric_value = record.get("metric_value") or "value"
     command = record.get("command") or "_not recorded_"
     artifact_path = record.get("evidence_path") or "_not recorded_"
+    override_used = "yes" if record.get("novelty_gate_override") else "no"
+    override_reason = record.get("override_reason") or "_not used_"
+    environment = summarize_environment_fingerprint(record.get("environment_fingerprint"))
+    provenance = summarize_git_provenance(record.get("git_provenance"))
     return "\n".join(
         [
             "# Run Record",
@@ -1153,7 +1357,11 @@ def format_run_record(record: dict[str, Any]) -> str:
             "",
             f"- command: {command}",
             f"- artifact path: {artifact_path}",
-            "- code version: _fill commit hash or protocol version_",
+            f"- novelty gate at run: {record.get('novelty_gate_status_at_run') or '-'}",
+            f"- novelty override used: {override_used}",
+            f"- override reason: {override_reason}",
+            f"- environment: {environment}",
+            f"- git: {provenance}",
             "",
             "## Rules In / Rules Out",
             "",
@@ -1252,7 +1460,7 @@ def sync_workspace_files(workspace: Path, state: dict[str, Any]) -> None:
 def default_state(project: str, question: str, mode: str) -> dict[str, Any]:
     timestamp = now_iso()
     state = {
-        "schema_version": 2,
+        "schema_version": SCHEMA_VERSION,
         "project": project,
         "question": question,
         "mode": mode,
@@ -1275,6 +1483,8 @@ def default_state(project: str, question: str, mode: str) -> dict[str, Any]:
         "evidence_index": [],
         "blockers": [],
         "decisions": [],
+        "environment": None,
+        "git": None,
         "next_actions": [],
         "created_at": timestamp,
         "updated_at": timestamp,
@@ -1285,7 +1495,7 @@ def default_state(project: str, question: str, mode: str) -> dict[str, Any]:
 
 def ensure_state_defaults(state: dict[str, Any]) -> dict[str, Any]:
     hydrated = deepcopy(state)
-    hydrated.setdefault("schema_version", 2)
+    hydrated.setdefault("schema_version", SCHEMA_VERSION)
     hydrated.setdefault("status", "active")
     hydrated.setdefault("stage", STAGE_BOOTSTRAP)
     hydrated.setdefault("mode", "quick")
@@ -1308,9 +1518,23 @@ def ensure_state_defaults(state: dict[str, Any]) -> dict[str, Any]:
     hydrated.setdefault("evidence_index", [])
     hydrated.setdefault("blockers", [])
     hydrated.setdefault("decisions", [])
+    hydrated.setdefault("environment", None)
+    hydrated.setdefault("git", None)
     hydrated.setdefault("next_actions", [])
     hydrated.setdefault("created_at", now_iso())
     hydrated.setdefault("updated_at", hydrated["created_at"])
+    for hypothesis in hydrated["hypotheses"]:
+        status = hypothesis.get("status") or "queued"
+        if status not in VALID_HYPOTHESIS_STATUSES:
+            hypothesis["status"] = "queued"
+        hypothesis.setdefault("status_reason", None)
+        hypothesis.setdefault("status_updated_at", hypothesis.get("created_at") or hydrated["updated_at"])
+    for record in hydrated["run_history"]:
+        record.setdefault("novelty_gate_status_at_run", None)
+        record.setdefault("novelty_gate_override", False)
+        record.setdefault("override_reason", None)
+        record.setdefault("environment_fingerprint", None)
+        record.setdefault("git_provenance", None)
     return hydrated
 
 
@@ -1322,16 +1546,17 @@ def load_state(path: Path) -> dict[str, Any]:
         data = json.loads(raw)
     if not isinstance(data, dict):
         raise SystemExit(f"State file must be a mapping: {path}")
-    return ensure_state_defaults(data)
+    return ensure_state_defaults(migrate_state(data))
 
 
 def dump_state(path: Path, state: dict[str, Any]) -> None:
-    state_to_write = deepcopy(state)
+    state_to_write = ensure_state_defaults(state)
     novelty_gate = state_to_write.get("novelty_gate", {})
     if isinstance(novelty_gate, dict):
         novelty_gate.pop("search_plan", None)
         novelty_gate.pop("recommended_focus", None)
         novelty_gate.pop("brief", None)
+    state_to_write["schema_version"] = SCHEMA_VERSION
     state_to_write["updated_at"] = now_iso()
     state_to_write["next_actions"] = recommend_next_actions(state_to_write)
     if yaml is not None:
@@ -1578,14 +1803,16 @@ def add_hypothesis(
         "prediction": prediction,
         "priority": priority,
         "status": "queued",
+        "status_reason": None,
+        "status_updated_at": now_iso(),
         "created_at": now_iso(),
     }
     next_state["hypotheses"].append(entry)
-    next_state["hypothesis_backlog"].append(resolved_id)
+    if resolved_id not in next_state["hypothesis_backlog"]:
+        next_state["hypothesis_backlog"].append(resolved_id)
     if next_state.get("active_hypothesis") is None and next_state.get("novelty_gate", {}).get("status") == "passed":
         next_state["active_hypothesis"] = resolved_id
-        entry["status"] = "active"
-        next_state["hypothesis_backlog"].remove(resolved_id)
+        transition_hypothesis(next_state, entry, "active", reason="first active hypothesis after novelty gate passed")
     return next_state
 
 
@@ -1599,17 +1826,33 @@ def record_run(
     metric_value: str | None,
     command: str | None,
     evidence_path: str | None,
+    override_novelty_gate: bool = False,
+    override_reason: str | None = None,
+    workspace: Path | None = None,
 ) -> dict[str, Any]:
     next_state = ensure_state_defaults(state)
     hypothesis = find_hypothesis(next_state, hypothesis_id)
     if hypothesis is None:
         raise SystemExit(f"Unknown hypothesis: {hypothesis_id}")
+    assert_experiment_allowed(
+        next_state,
+        override=override_novelty_gate,
+        override_reason=override_reason,
+    )
+    current_status = hypothesis.get("status")
+    if current_status not in {"active", "queued"}:
+        raise SystemExit(
+            f"Hypothesis {hypothesis_id} must be active or queued before a run, current status: {current_status}"
+        )
+    if current_status == "queued":
+        transition_hypothesis(next_state, hypothesis, "active", reason="activated by first recorded run")
     run_id = next_run_id(next_state)
     next_state["stage"] = STAGE_OUTER_LOOP
     next_state["active_hypothesis"] = hypothesis_id
-    hypothesis["status"] = "active"
-    if hypothesis_id in next_state["hypothesis_backlog"]:
-        next_state["hypothesis_backlog"].remove(hypothesis_id)
+    environment = capture_environment_fingerprint(workspace) if workspace is not None else next_state.get("environment") or capture_environment_fingerprint(None)
+    provenance = capture_git_provenance(workspace) if workspace is not None else next_state.get("git") or capture_git_provenance(None)
+    next_state["environment"] = environment
+    next_state["git"] = provenance
     record = {
         "run_id": run_id,
         "hypothesis_id": hypothesis_id,
@@ -1619,17 +1862,22 @@ def record_run(
         "metric_value": metric_value,
         "command": command,
         "evidence_path": evidence_path or default_run_record_path(hypothesis_id, run_id),
+        "novelty_gate_status_at_run": next_state.get("novelty_gate", {}).get("status"),
+        "novelty_gate_override": override_novelty_gate,
+        "override_reason": override_reason,
+        "environment_fingerprint": environment,
+        "git_provenance": provenance,
         "recorded_at": now_iso(),
     }
     next_state["run_history"].append(record)
-    if evidence_path:
-        next_state["evidence_index"].append(
-            {
-                "run_id": run_id,
-                "path": evidence_path,
-                "added_at": now_iso(),
-            }
-        )
+    transition_hypothesis(next_state, hypothesis, "needs_reflection", reason=f"{run_id} recorded")
+    next_state["evidence_index"].append(
+        {
+            "run_id": run_id,
+            "path": record["evidence_path"],
+            "added_at": now_iso(),
+        }
+    )
     return next_state
 
 
@@ -1646,16 +1894,25 @@ def reflect(
     hypothesis = find_hypothesis(next_state, hypothesis_id)
     if hypothesis is None:
         raise SystemExit(f"Unknown hypothesis: {hypothesis_id}")
+    if hypothesis.get("status") != "needs_reflection":
+        raise SystemExit(
+            f"Hypothesis {hypothesis_id} must be in needs_reflection before reflect, current status: {hypothesis.get('status')}"
+        )
     latest_run = latest_run_for_hypothesis(next_state, hypothesis_id)
+    if latest_run is None:
+        raise SystemExit(f"Cannot reflect without a recorded run for {hypothesis_id}")
+    latest_decision = latest_decision_for_hypothesis(next_state, hypothesis_id)
+    if latest_decision is not None and latest_decision.get("run_id") == latest_run.get("run_id"):
+        raise SystemExit(f"Run {latest_run['run_id']} already has a reflection")
     decision = {
         "hypothesis_id": hypothesis_id,
-        "run_id": latest_run.get("run_id") if latest_run else None,
+        "run_id": latest_run.get("run_id"),
         "direction": direction,
         "reason": reason,
         "next_step": next_step,
         "note_path": default_reflection_path(
             hypothesis_id,
-            latest_run.get("run_id") if latest_run else None,
+            latest_run.get("run_id"),
         ),
         "recorded_at": now_iso(),
     }
@@ -1664,20 +1921,24 @@ def reflect(
     if direction == "CONCLUDE":
         next_state["status"] = "concluded"
         next_state["stage"] = STAGE_FINALIZE
-        hypothesis["status"] = "concluded"
+        transition_hypothesis(next_state, hypothesis, "concluded", reason=reason)
+    elif direction == "PIVOT":
+        next_state["stage"] = STAGE_INNER_LOOP
+        transition_hypothesis(next_state, hypothesis, "parked", reason=reason)
     else:
         next_state["stage"] = STAGE_INNER_LOOP
-        hypothesis["status"] = "active"
-        if direction == "PIVOT":
-            hypothesis["status"] = "parked"
+        transition_hypothesis(next_state, hypothesis, "active", reason=reason)
     if activate_hypothesis:
         target = find_hypothesis(next_state, activate_hypothesis)
         if target is None:
             raise SystemExit(f"Unknown activate_hypothesis: {activate_hypothesis}")
         next_state["active_hypothesis"] = activate_hypothesis
-        target["status"] = "active"
-        if activate_hypothesis in next_state["hypothesis_backlog"]:
-            next_state["hypothesis_backlog"].remove(activate_hypothesis)
+        if target.get("status") == "queued":
+            transition_hypothesis(next_state, target, "active", reason="activated after pivot")
+        elif target.get("status") == "parked":
+            transition_hypothesis(next_state, target, "active", reason="reactivated after pivot")
+    elif direction != "CONCLUDE":
+        next_state["active_hypothesis"] = hypothesis_id
     return next_state
 
 
@@ -1744,6 +2005,8 @@ def format_status(state: dict[str, Any]) -> str:
     runs = state.get("run_history", [])
     blockers = state.get("blockers", [])
     active = state.get("active_hypothesis") or "-"
+    git_summary = summarize_git_provenance(state.get("git"))
+    env_summary = summarize_environment_fingerprint(state.get("environment"))
     lines = [
         f"project: {state.get('project', '-')}",
         f"stage: {state.get('stage', '-')}",
@@ -1751,6 +2014,8 @@ def format_status(state: dict[str, Any]) -> str:
         f"mode: {state.get('mode', '-')}",
         f"active_hypothesis: {active}",
         f"novelty_gate: {state.get('novelty_gate', {}).get('status', '-')}",
+        f"git: {git_summary}",
+        f"environment: {env_summary}",
         f"hypotheses: {len(hypotheses)}",
         f"runs: {len(runs)}",
         f"blockers: {len(blockers)}",
@@ -1779,6 +2044,8 @@ def format_resume(state: dict[str, Any]) -> str:
         f"recommended_focus: {current_recommended_focus(state) or '-'}",
         f"novelty_brief_claim: {brief.get('claim_id') if brief else '-'}",
         f"active_hypothesis: {active_id or '-'}",
+        f"git: {summarize_git_provenance(state.get('git'))}",
+        f"environment: {summarize_environment_fingerprint(state.get('environment'))}",
     ]
     if active_id:
         hypothesis = find_hypothesis(state, active_id)
@@ -1787,6 +2054,8 @@ def format_resume(state: dict[str, Any]) -> str:
     if latest_run is not None:
         lines.append(f"latest_run: {latest_run['run_id']} ({latest_run['outcome']})")
         lines.append(f"latest_summary: {latest_run.get('summary', '-')}")
+        lines.append(f"latest_run_git: {summarize_git_provenance(latest_run.get('git_provenance'))}")
+        lines.append(f"latest_run_env: {summarize_environment_fingerprint(latest_run.get('environment_fingerprint'))}")
     if latest_decision is not None:
         lines.append(f"latest_direction: {latest_decision.get('direction', '-')}")
         lines.append(f"latest_reason: {latest_decision.get('reason', '-')}")
@@ -1861,6 +2130,8 @@ def parse_args() -> argparse.Namespace:
     run_parser.add_argument("--metric-value")
     run_parser.add_argument("--command", dest="entry_command")
     run_parser.add_argument("--evidence-path")
+    run_parser.add_argument("--override-novelty-gate", action="store_true")
+    run_parser.add_argument("--override-reason")
 
     reflect_parser = subparsers.add_parser("reflect", help="Record the next research direction.")
     reflect_parser.add_argument("--workspace", required=True)
@@ -1890,6 +2161,15 @@ def main() -> None:
             base_dir=args.dir,
             mode=args.mode,
         )
+        append_ledger_event(
+            root,
+            "workspace.initialized",
+            {
+                "project": args.project,
+                "question": args.question,
+                "mode": args.mode,
+            },
+        )
         print(f"Initialized autoresearch workspace at {root}")
         return
 
@@ -1897,6 +2177,8 @@ def main() -> None:
     state = load_state(state_path)
 
     if args.command == "status":
+        state["environment"] = capture_environment_fingerprint(workspace)
+        state["git"] = capture_git_provenance(workspace)
         print(format_status(state))
         return
 
@@ -1906,11 +2188,14 @@ def main() -> None:
         return
 
     if args.command == "resume":
+        state["environment"] = capture_environment_fingerprint(workspace)
+        state["git"] = capture_git_provenance(workspace)
         print(format_resume(state))
         return
 
     if args.command == "sync":
         sync_workspace_files(workspace, state)
+        append_ledger_event(workspace, "workspace.synced", {"runs": len(state.get("run_history", []))})
         print(f"Synchronized workspace files for {workspace}")
         return
 
@@ -1930,6 +2215,13 @@ def main() -> None:
                 f"question: {args.question or updated.get('question', '-')}",
             ],
         )
+        append_ledger_event(
+            workspace,
+            "novelty_gate.draft_claims",
+            {
+                "count": len(updated["novelty_gate"].get("draft_claims", [])),
+            },
+        )
         print(f"Generated draft claims for {workspace}")
         return
 
@@ -1944,6 +2236,11 @@ def main() -> None:
                 f"entries: {len(current_search_plan(updated))}",
                 "source priority: Semantic Scholar -> arXiv -> Google Scholar",
             ],
+        )
+        append_ledger_event(
+            workspace,
+            "novelty_gate.search_plan_refreshed",
+            {"entries": len(current_search_plan(updated))},
         )
         print(f"Refreshed novelty search plan for {workspace}")
         return
@@ -1960,6 +2257,11 @@ def main() -> None:
                 f"claim: {brief.get('claim_id') if brief else '_not set_'}",
                 "scope: top-priority novelty claim",
             ],
+        )
+        append_ledger_event(
+            workspace,
+            "novelty_gate.brief_refreshed",
+            {"claim_id": brief.get("claim_id") if brief else None},
         )
         print(f"Refreshed novelty brief for {workspace}")
         return
@@ -1987,6 +2289,16 @@ def main() -> None:
                 f"verdict: {args.verdict}",
             ],
         )
+        append_ledger_event(
+            workspace,
+            "novelty_gate.updated",
+            {
+                "claim_id": args.claim_id,
+                "claim": args.claim,
+                "overlap": args.overlap,
+                "verdict": args.verdict,
+            },
+        )
         print(f"Recorded novelty claim comparison for {workspace}")
         return
 
@@ -2010,6 +2322,15 @@ def main() -> None:
                     f"priority: {hypothesis['priority']}",
                 ],
             )
+            append_ledger_event(
+                workspace,
+                "hypothesis.added",
+                {
+                    "hypothesis_id": hypothesis["id"],
+                    "status": hypothesis.get("status"),
+                    "priority": hypothesis.get("priority"),
+                },
+            )
         print(f"Added hypothesis in {workspace}")
         return
 
@@ -2023,10 +2344,14 @@ def main() -> None:
             metric_value=args.metric_value,
             command=args.entry_command,
             evidence_path=args.evidence_path,
+            override_novelty_gate=args.override_novelty_gate,
+            override_reason=args.override_reason,
+            workspace=workspace,
         )
         dump_state(state_path, updated)
         sync_workspace_files(workspace, updated)
         record = latest_run_for_hypothesis(updated, args.hypothesis_id)
+        hypothesis = find_hypothesis(updated, args.hypothesis_id)
         if record is not None:
             append_research_log(
                 workspace,
@@ -2036,6 +2361,34 @@ def main() -> None:
                     f"outcome: {record['outcome']}",
                     f"summary: {record['summary']}",
                 ],
+            )
+            append_ledger_event(
+                workspace,
+                "run.recorded",
+                {
+                    "run_id": record["run_id"],
+                    "hypothesis_id": record["hypothesis_id"],
+                    "outcome": record["outcome"],
+                    "metric_name": record.get("metric_name"),
+                    "metric_value": record.get("metric_value"),
+                    "command": record.get("command"),
+                    "evidence_path": record.get("evidence_path"),
+                    "novelty_gate_status_at_run": record.get("novelty_gate_status_at_run"),
+                    "novelty_gate_override": record.get("novelty_gate_override"),
+                    "override_reason": record.get("override_reason"),
+                    "environment_fingerprint": record.get("environment_fingerprint"),
+                    "git_provenance": record.get("git_provenance"),
+                },
+            )
+        if hypothesis is not None:
+            append_ledger_event(
+                workspace,
+                "hypothesis.status_changed",
+                {
+                    "hypothesis_id": hypothesis["id"],
+                    "status": hypothesis.get("status"),
+                    "reason": hypothesis.get("status_reason"),
+                },
             )
         print(f"Recorded run for {args.hypothesis_id}")
         return
@@ -2052,6 +2405,7 @@ def main() -> None:
         dump_state(state_path, updated)
         sync_workspace_files(workspace, updated)
         decision = latest_decision_for_hypothesis(updated, args.hypothesis_id)
+        hypothesis = find_hypothesis(updated, args.hypothesis_id)
         if decision is not None:
             append_research_log(
                 workspace,
@@ -2061,6 +2415,26 @@ def main() -> None:
                     f"direction: {decision['direction']}",
                     f"reason: {decision['reason']}",
                 ],
+            )
+            append_ledger_event(
+                workspace,
+                "reflection.recorded",
+                {
+                    "hypothesis_id": decision["hypothesis_id"],
+                    "run_id": decision.get("run_id"),
+                    "direction": decision.get("direction"),
+                    "reason": decision.get("reason"),
+                },
+            )
+        if hypothesis is not None:
+            append_ledger_event(
+                workspace,
+                "hypothesis.status_changed",
+                {
+                    "hypothesis_id": hypothesis["id"],
+                    "status": hypothesis.get("status"),
+                    "reason": hypothesis.get("status_reason"),
+                },
             )
         print(f"Recorded reflection for {args.hypothesis_id}")
         return
@@ -2084,6 +2458,14 @@ def main() -> None:
                 f"status: {state['novelty_gate']['status']}",
                 f"decision: {state['novelty_gate'].get('decision') or '_not set_'}",
             ],
+        )
+        append_ledger_event(
+            workspace,
+            "novelty_gate.updated",
+            {
+                "status": state["novelty_gate"]["status"],
+                "decision": state["novelty_gate"].get("decision"),
+            },
         )
         print(f"Updated novelty gate for {workspace}")
         return

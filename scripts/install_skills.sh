@@ -25,7 +25,7 @@ PROJECT_INSTRUCTIONS_PATH="$REPO_ROOT/.codex/model_instructions.md"
 FRAMEWORK_START_MARKER="<!-- FRAMEWORK_DEFAULT_RUNTIME_START -->"
 
 # Supported tools and their skill paths
-TOOLS="codex claude agents gemini"
+TOOLS="codex agents gemini"
 
 get_tool_path() {
   case "$1" in
@@ -42,13 +42,13 @@ usage() {
   echo ""
   echo "Commands:"
   echo "  init          First-time setup (Codex native integration + other tool skill links)"
-  echo "  all           Install to all supported tools"
+  echo "  all           Install to supported non-Claude global hosts"
   echo "  ls            Show installation status"
   echo "  rm <tool>     Remove symlink for a specific tool"
   echo "  <tool>        Install to a specific tool"
   echo ""
-  echo "Supported tools: $TOOLS"
-  echo "Skills source: $SKILLS_ROOT"
+  echo "Supported tools: codex agents gemini"
+  echo "Claude Code uses repo-local .claude commands and project skills by default."
   echo "Codex default path: native integration installer + default bootstrap bundle"
 }
 
@@ -249,7 +249,6 @@ show_codex_status() {
   local marketplace_ok="false"
   local codex_skills_ok="false"
   local claude_skills_ok="false"
-  local refresh_ok="false"
   local claude_mcp_ok="false"
   local overlay_ok="false"
   local shared_skills_root
@@ -273,7 +272,7 @@ show_codex_status() {
   if skills_link_matches_source "$HOME_CODEX_SKILLS_PATH" "$shared_skills_root"; then
     codex_skills_ok="true"
   fi
-  if skills_link_matches_source "$HOME_CLAUDE_SKILLS_PATH" "$shared_skills_root"; then
+  if [ ! -e "$HOME_CLAUDE_SKILLS_PATH" ] || skills_link_matches_source "$HOME_CLAUDE_SKILLS_PATH" "$shared_skills_root"; then
     claude_skills_ok="true"
   fi
   if bootstrap_payload_matches_contract "$bootstrap_path"; then
@@ -291,9 +290,6 @@ show_codex_status() {
   if marketplace_has_framework_plugin "$HOME_MARKETPLACE_PATH"; then
     marketplace_ok="true"
   fi
-  if [ -f "$HOME_CLAUDE_REFRESH_PATH" ] && cmp -s "$HOME_CLAUDE_REFRESH_PATH" "$REPO_ROOT/.claude/commands/refresh.md"; then
-    refresh_ok="true"
-  fi
   if claude_mcp_has_shared_servers "$HOME_CLAUDE_MCP_CONFIG_PATH"; then
     claude_mcp_ok="true"
   fi
@@ -309,12 +305,11 @@ show_codex_status() {
     && [ "$marketplace_ok" = "true" ] \
     && [ "$codex_skills_ok" = "true" ] \
     && [ "$claude_skills_ok" = "true" ] \
-    && [ "$refresh_ok" = "true" ] \
     && [ "$claude_mcp_ok" = "true" ] \
     && [ "$overlay_ok" = "true" ]; then
     echo "  ✓ codex → native integration ready"
   else
-    echo "  ⚠ codex → native integration incomplete (config:$config_ok bootstrap:$bootstrap_ok plugin:$plugin_ok plugin_skills:$plugin_skills_ok plugin_mcp:$plugin_mcp_ok marketplace:$marketplace_ok codex_skills:$codex_skills_ok claude_skills:$claude_skills_ok refresh:$refresh_ok claude_mcp:$claude_mcp_ok overlay:$overlay_ok)"
+    echo "  ⚠ codex → native integration incomplete (config:$config_ok bootstrap:$bootstrap_ok plugin:$plugin_ok plugin_skills:$plugin_skills_ok plugin_mcp:$plugin_mcp_ok marketplace:$marketplace_ok codex_skills:$codex_skills_ok claude_skills:$claude_skills_ok claude_mcp:$claude_mcp_ok overlay:$overlay_ok)"
   fi
 }
 

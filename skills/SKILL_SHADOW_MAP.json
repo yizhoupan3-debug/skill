@@ -2270,6 +2270,22 @@
       "shadowed_by": [],
       "has_shadow": false
     },
+    "team": {
+      "winning_rule": "highest-position-wins",
+      "winner": {
+        "slug": "team",
+        "path": "skills/team",
+        "source": "project",
+        "source_position": 3,
+        "routing_layer": "L1",
+        "routing_owner": "owner",
+        "routing_gate": "delegation",
+        "session_start": "preferred"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
     "test-engineering": {
       "winning_rule": "highest-position-wins",
       "winner": {
