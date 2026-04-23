@@ -7,14 +7,14 @@ import tempfile
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
+RUNTIME_SRC = PROJECT_ROOT / "framework_runtime" / "src"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-from codex_agno_runtime.framework_profile import FrameworkProfile, build_framework_profile
-from codex_agno_runtime.host_adapters import (
+from framework_runtime.framework_profile import FrameworkProfile, build_framework_profile
+from framework_runtime.host_adapters import (
     compile_claude_code_adapter,
     compile_cli_common_adapter,
     compile_codex_cli_adapter,
@@ -22,7 +22,7 @@ from codex_agno_runtime.host_adapters import (
     compile_codex_desktop_adapter,
     compile_gemini_cli_adapter,
 )
-from codex_agno_runtime.rust_router import RustRouteAdapter
+from framework_runtime.rust_router import RustRouteAdapter
 
 FIXTURE_PATH = PROJECT_ROOT / "tests" / "framework_profile_field_boundary_fixture.json"
 FIXTURE = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))

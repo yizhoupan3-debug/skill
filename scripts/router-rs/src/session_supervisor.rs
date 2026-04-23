@@ -748,7 +748,7 @@ fn resolve_state_path(payload: &Value) -> Result<PathBuf, String> {
         return Ok(PathBuf::from(path));
     }
     let cwd = std::env::current_dir().map_err(|err| format!("read current_dir failed: {err}"))?;
-    Ok(cwd.join("codex_agno_runtime/data/session_supervisor_state.json"))
+    Ok(cwd.join("framework_runtime/data/session_supervisor_state.json"))
 }
 
 fn now_from_payload(payload: &Value) -> Result<String, String> {

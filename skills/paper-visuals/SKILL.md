@@ -38,7 +38,9 @@ source: local
 
 # Paper Visuals
 
-This skill owns **paper figure/table presentation quality**.
+This skill is the figure/table specialist lane behind `$paper-workbench`.
+
+It owns **paper figure/table presentation quality**.
 
 ## When to use
 
@@ -49,6 +51,7 @@ This skill owns **paper figure/table presentation quality**.
 
 ## Do not use
 
+- The user wants one front door for the manuscript task -> use `$paper-workbench`
 - The user wants whole-paper triage → use `$paper-reviewer`
 - The task is page-level PDF layout or float placement → use `$pdf` first
 - The task is code-first plotting-system redesign → use `$scientific-figure-plotting`

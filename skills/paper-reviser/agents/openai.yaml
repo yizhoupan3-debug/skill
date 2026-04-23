@@ -1,4 +1,4 @@
 interface:
   display_name: "Paper Reviser"
   short_description: "Revise a paper from review findings"
-  default_prompt: "Use $paper-reviser when the user wants the paper changed based on reviewer comments, review findings, or a decision to narrow scope. If the user explicitly names one dimension, revise only that slice. Honest fixes may include repair, narrowing, deletion, de-emphasis, or moving material to the appendix."
+  default_prompt: "Use $paper-reviser as the revision specialist lane behind $paper-workbench. Prefer it when the route is already revise-only and the paper should be changed now from findings, reviewer comments, or a fixed narrowing decision. Honest fixes may include repair, narrowing, deletion, de-emphasis, or moving material to the appendix."

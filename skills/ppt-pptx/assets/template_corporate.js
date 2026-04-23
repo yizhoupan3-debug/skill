@@ -9,6 +9,9 @@
  */
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
+const { spawnSync } = require("child_process");
 const PptxGenJS = require("pptxgenjs");
 const {
   imageSizingCrop,
@@ -44,6 +47,21 @@ const palette = {
   danger: "E53E3E",
 };
 
+pptx.defineSlideMaster({
+  title: "OFFICECLI_SEMANTIC",
+  background: { color: palette.bg },
+  objects: [
+    {
+      placeholder: {
+        options: {
+          name: "officecli_title",
+          type: "title",
+        },
+      },
+    },
+  ],
+});
+
 // ────────────────────────── Helpers ──────────────────────────
 
 /** Top header bar — branded navy strip */
@@ -55,6 +73,7 @@ function addHeaderBar(slide, title) {
   });
   slide.addText(title, {
     x: 0.6, y: 0.16, w: 7.0, h: 0.38,
+    placeholder: "officecli_title",
     ...getTypography("h3", { color: palette.textOnDark, bold: true }),
   });
 }
@@ -104,10 +123,19 @@ function addMetric(slide, x, y, value, label) {
   });
 }
 
+function sanitizeGeneratedDeck(fileName) {
+  const script = path.resolve(process.cwd(), "sanitize_pptx.py");
+  if (!fs.existsSync(script)) return;
+  const completed = spawnSync("python3", [script, fileName], { stdio: "inherit" });
+  if (completed.status !== 0) {
+    throw new Error(`sanitize_pptx.py failed for ${fileName}`);
+  }
+}
+
 // ────────────────────────── Demo Slides ──────────────────────────
 
 // Cover Slide
-const cover = pptx.addSlide();
+const cover = pptx.addSlide({ masterName: "OFFICECLI_SEMANTIC" });
 cover.background = { color: palette.primary };
 cover.addShape(pptx.ShapeType.rect, {
   x: 0, y: 5.8, w: 13.33, h: 1.7,
@@ -120,6 +148,7 @@ cover.addText("QUARTERLY BUSINESS REVIEW", {
 });
 cover.addText("2026 Q1 Strategic\nPerformance Report", {
   x: 0.9, y: 2.3, w: 9.0, h: 1.0,
+  placeholder: "officecli_title",
   ...getTypography("display", { color: palette.textOnDark, lineSpacing: 40 }),
 });
 cover.addText("Prepared by Strategy Team  |  March 2026", {
@@ -134,7 +163,7 @@ cover.addShape(pptx.ShapeType.rect, {
 warnIfSlideHasOverlaps(cover, pptx);
 
 // Metrics Slide
-const s1 = pptx.addSlide();
+const s1 = pptx.addSlide({ masterName: "OFFICECLI_SEMANTIC" });
 s1.background = { color: palette.bg };
 addHeaderBar(s1, "Key Performance Indicators");
 
@@ -155,5 +184,13 @@ warnIfSlideHasOverlaps(s1, pptx);
 warnIfSlideElementsOutOfBounds(s1, pptx);
 
 // Write
-pptx.writeFile({ fileName: "deck_corporate.pptx" });
-console.log("✅ Generated deck_corporate.pptx (corporate template demo)");
+async function writeDeck() {
+  await pptx.writeFile({ fileName: "deck_corporate.pptx" });
+  sanitizeGeneratedDeck("deck_corporate.pptx");
+  console.log("✅ Generated deck_corporate.pptx (corporate template demo)");
+}
+
+writeDeck().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

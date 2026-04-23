@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -184,8 +185,11 @@ def test_sync_workspace_materializes_hypothesis_run_and_reflection_files(tmp_pat
     assert "DEEPEN" in reflection.read_text(encoding="utf-8")
     novelty_gate = (root / "literature" / "NOVELTY_GATE.md").read_text(encoding="utf-8")
     findings = (root / "findings.md").read_text(encoding="utf-8")
+    current_context = (root / "CURRENT_CONTEXT.md").read_text(encoding="utf-8")
     assert "<!-- autoresearch:novelty:start -->" in novelty_gate
     assert "<!-- autoresearch:findings:start -->" in findings
+    assert "<!-- autoresearch:context:start -->" in current_context
+    assert "source of truth" in current_context
 
 
 def test_format_resume_returns_compact_handoff_summary() -> None:
@@ -221,12 +225,14 @@ def test_format_resume_returns_compact_handoff_summary() -> None:
         next_step="Retest on a second benchmark.",
         activate_hypothesis=None,
     )
-    state["novelty_gate"]["recommended_focus"] = "C1: Resume output should compress the critical context"
 
     resume_text = module.format_resume(state)
 
     assert "question: What should the next session know immediately?" in resume_text
-    assert "recommended_focus: C1: Resume output should compress the critical context" in resume_text
+    assert "freshness: fresh" in resume_text
+    assert "history_bias_risk: low" in resume_text
+    assert "recommended_focus: -" in resume_text
+    assert "novelty_brief_claim: -" in resume_text
     assert "active_hypothesis: resume-compact" in resume_text
     assert "latest_run: run-001 (confirmatory)" in resume_text
     assert "latest_direction: BROADEN" in resume_text
@@ -271,7 +277,7 @@ def test_compare_claim_updates_state_and_novelty_summary(tmp_path: Path) -> None
     assert "🟡 medium" in novelty_text
 
 
-def test_generate_search_plan_creates_query_ladder_and_search_plan_file(tmp_path: Path) -> None:
+def test_plan_search_refresh_creates_query_ladder_and_search_plan_file(tmp_path: Path) -> None:
     module = _load_module()
     root = module.init_workspace(
         project="search-plan-project",
@@ -292,22 +298,73 @@ def test_generate_search_plan_creates_query_ladder_and_search_plan_file(tmp_path
         verdict="defensible",
         claim_id="C1",
     )
-    state = module.generate_search_plan(state)
     module.dump_state(state_path, state)
     module.sync_workspace_files(root, state)
 
     reloaded = module.load_state(state_path)
-    search_plan = reloaded["novelty_gate"]["search_plan"]
+    search_plan = module.current_search_plan(reloaded)
     assert len(search_plan) == 1
     assert search_plan[0]["claim_id"] == "C1"
     assert any(query["label"] == "focused" for query in search_plan[0]["queries"])
     assert "Semantic Scholar" in search_plan[0]["sources"]
+    assert module.current_brief(reloaded)["claim_id"] == "C1"
 
     plan_text = (root / "literature" / "NOVELTY_SEARCH_PLAN.md").read_text(encoding="utf-8")
+    context_text = (root / "CURRENT_CONTEXT.md").read_text(encoding="utf-8")
     assert "<!-- autoresearch:search-plan:start -->" in plan_text
     assert "Query Ladder" in plan_text
     assert "Semantic Scholar -> arXiv -> Google Scholar" in plan_text
     assert "orchestration drift" in plan_text
+    assert "Active Novelty Brief" in context_text
+    assert "Decision Goal" in context_text or "decision goal" in context_text
+    assert "expected baselines" in context_text.lower()
+
+
+def test_plain_claims_do_not_become_active_focus_or_brief(tmp_path: Path) -> None:
+    module = _load_module()
+    root = module.init_workspace(
+        project="plain-claims-project",
+        question="Can plain stored claims mislead the next session?",
+        base_dir=tmp_path,
+        mode="quick",
+    )
+    state_path = root / "research-state.yaml"
+    state = module.load_state(state_path)
+    state["novelty_gate"]["status"] = "passed"
+    state["novelty_gate"]["claims"] = [
+        "Old unstructured claim that should not become the active focus automatically."
+    ]
+    module.dump_state(state_path, state)
+    module.sync_workspace_files(root, state)
+
+    reloaded = module.load_state(state_path)
+    resume_text = module.format_resume(reloaded)
+    context_text = (root / "CURRENT_CONTEXT.md").read_text(encoding="utf-8")
+
+    assert module.current_recommended_focus(reloaded) is None
+    assert module.current_search_plan(reloaded) == []
+    assert module.current_brief(reloaded) is None
+    assert "recommended_focus: -" in resume_text
+    assert "novelty_brief_claim: -" in resume_text
+    assert "recommended focus: -" in context_text
+
+
+def test_sync_workspace_removes_legacy_novelty_brief_file(tmp_path: Path) -> None:
+    module = _load_module()
+    root = module.init_workspace(
+        project="legacy-brief-project",
+        question="Can sync delete stale novelty brief files?",
+        base_dir=tmp_path,
+        mode="quick",
+    )
+    legacy_brief = root / "literature" / "NOVELTY_BRIEF.md"
+    legacy_brief.parent.mkdir(parents=True, exist_ok=True)
+    legacy_brief.write_text("# Legacy brief\n", encoding="utf-8")
+
+    state = module.load_state(root / "research-state.yaml")
+    module.sync_workspace_files(root, state)
+
+    assert not legacy_brief.exists()
 
 
 def test_draft_claims_from_question_generates_claims_and_search_plan(tmp_path: Path) -> None:
@@ -326,20 +383,24 @@ def test_draft_claims_from_question_generates_claims_and_search_plan(tmp_path: P
 
     reloaded = module.load_state(state_path)
     draft_claims = reloaded["novelty_gate"]["draft_claims"]
-    search_plan = reloaded["novelty_gate"]["search_plan"]
+    search_plan = module.current_search_plan(reloaded)
+    brief = module.current_brief(reloaded)
 
     assert len(draft_claims) == 4
     assert draft_claims[0]["recommended_order"] == 1
     assert draft_claims[0]["priority_label"] in {"first", "next", "later"}
     assert draft_claims[0]["priority_score"] >= draft_claims[-1]["priority_score"]
-    assert reloaded["novelty_gate"]["recommended_focus"].startswith(draft_claims[0]["claim_id"])
+    assert module.current_recommended_focus(reloaded).startswith(draft_claims[0]["claim_id"])
     assert len(search_plan) == 4
     assert search_plan[0]["recommended_order"] == 1
     assert search_plan[0]["claim_id"] == draft_claims[0]["claim_id"]
     assert any(query["label"] == "broad" for query in search_plan[0]["queries"])
+    assert brief["claim_id"] == draft_claims[0]["claim_id"]
+    assert len(brief["expected_baselines"]) >= 2
 
     claims_text = (root / "literature" / "NOVELTY_CLAIMS.md").read_text(encoding="utf-8")
     plan_text = (root / "literature" / "NOVELTY_SEARCH_PLAN.md").read_text(encoding="utf-8")
+    context_text = (root / "CURRENT_CONTEXT.md").read_text(encoding="utf-8")
     assert "<!-- autoresearch:claims:start -->" in claims_text
     assert "Managed Claim Extraction" in claims_text
     assert "recommended first claim" in claims_text
@@ -348,3 +409,57 @@ def test_draft_claims_from_question_generates_claims_and_search_plan(tmp_path: P
     assert "recommended first search target" in plan_text
     assert "priority:" in plan_text
     assert "deep research workflows" in plan_text
+    assert "verification standard" in context_text.lower()
+    assert "expected baselines" in context_text.lower()
+    assert draft_claims[0]["claim"] in context_text
+
+
+def test_stale_state_bias_guard_prefers_reconcile_before_old_history(tmp_path: Path) -> None:
+    module = _load_module()
+    root = module.init_workspace(
+        project="stale-project",
+        question="Can old logs bias the next action?",
+        base_dir=tmp_path,
+        mode="quick",
+    )
+    state_path = root / "research-state.yaml"
+    state = module.load_state(state_path)
+    stale_time = (datetime.now(timezone.utc) - timedelta(days=21)).replace(microsecond=0).isoformat()
+    state["updated_at"] = stale_time
+    state["run_history"] = [
+        {
+            "run_id": "run-001",
+            "hypothesis_id": "old-branch",
+            "outcome": "exploratory",
+            "summary": "Old run that should not dominate the current decision.",
+            "metric_name": None,
+            "metric_value": None,
+            "command": None,
+            "evidence_path": "experiments/old-branch/run-001.md",
+            "recorded_at": stale_time,
+        }
+    ]
+    state["decisions"] = [
+        {
+            "hypothesis_id": "old-branch",
+            "run_id": "run-001",
+            "direction": "DEEPEN",
+            "reason": "Old decision that should be background only.",
+            "next_step": "Keep going.",
+            "note_path": "experiments/old-branch/run-001-reflection.md",
+            "recorded_at": stale_time,
+        }
+    ]
+    module.dump_state(state_path, state)
+    stale_state = module.load_state(state_path)
+    stale_state["updated_at"] = stale_time
+    module.sync_workspace_files(root, stale_state)
+
+    actions = module.recommend_next_actions(stale_state)
+    resume_text = module.format_resume(stale_state)
+    context_text = (root / "CURRENT_CONTEXT.md").read_text(encoding="utf-8")
+
+    assert "先刷新当前上下文" in actions[0]
+    assert "freshness: stale" in resume_text
+    assert "history_bias_risk: high" in resume_text
+    assert "treat `research-log.md` and older notes as background only" in context_text

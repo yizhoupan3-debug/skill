@@ -106,6 +106,12 @@ Optional boost for rebuild / audit work:
 - use `scripts/officecli_bridge.py get/query` when you need stable `shape[@id=...]` addressing from an old deck
 - use `scripts/officecli_bridge.py watch` for live HTML preview of an already-generated `.pptx`
 
+Default mixed lane:
+
+- use `scripts/hybrid_pipeline.py build-qa` after `deck.js` authoring
+- use `scripts/hybrid_pipeline.py qa` for an existing generated deck
+- use `scripts/hybrid_pipeline.py intake` before rebuilding an old `.pptx`
+
 For the detailed source-first workflow, rebuild path for existing decks, notes /
 transitions guidance, and QA sequence, see [references/workflow.md](./references/workflow.md).
 

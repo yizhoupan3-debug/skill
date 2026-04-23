@@ -16,7 +16,7 @@ OUTPUT_PATH = ROOT / "configs" / "framework" / "FRAMEWORK_SURFACE_POLICY.json"
 
 KERNEL_AXES = ["routing", "memory", "continuity", "host_projection"]
 SOURCE_ROOTS = [
-    "codex_agno_runtime/src/",
+    "framework_runtime/src/",
     "scripts/",
     "skills/",
     "docs/",

@@ -1,7 +1,11 @@
 # Paper Gate Protocol
 
-This file defines the shared gate-chain contract used by `$paper-reviewer` and
-`$paper-reviser`.
+This file defines the shared gate-chain contract used by `$paper-workbench`,
+`$paper-reviewer`, and `$paper-reviser`.
+
+`$paper-workbench` is the default front door. The protocol still keeps the
+internal main chain and sidecar lanes explicit so no capability is lost when the
+front door is unified.
 
 ## 1. Root Artifact Layout
 

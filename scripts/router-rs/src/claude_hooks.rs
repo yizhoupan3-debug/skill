@@ -40,7 +40,7 @@ const GENERATED_PATHS: [&str; 6] = [
     ".claude/hooks/config_change.sh",
     ".claude/hooks/stop_failure.sh",
 ];
-const PROTECTED_GENERATED_PATHS: [&str; 9] = [
+const PROTECTED_GENERATED_PATHS: [&str; 10] = [
     "AGENT.md",
     "AGENTS.md",
     "CLAUDE.md",
@@ -48,6 +48,7 @@ const PROTECTED_GENERATED_PATHS: [&str; 9] = [
     ".gemini/settings.json",
     ".claude/settings.json",
     ".claude/agents/README.md",
+    ".codex/hooks.json",
     ".codex/host_entrypoints_sync_manifest.json",
     ".codex/memory/CLAUDE_MEMORY.md",
 ];
@@ -60,9 +61,9 @@ const PROTECTED_BASH_PATH_HINTS: [&str; 12] = [
     ".gemini/settings.json",
     ".claude/settings.json",
     ".claude/agents/README.md",
+    ".codex/hooks.json",
     ".claude/hooks/",
     ".claude/commands/",
-    ".claude/",
     ".codex/host_entrypoints_sync_manifest.json",
     ".codex/memory/CLAUDE_MEMORY.md",
 ];
@@ -151,6 +152,10 @@ const USER_PROMPT_HOOK_TERMS: [&str; 6] = [
 ];
 const USER_PROMPT_COMMON_CONTEXT: &str =
     "实现要求：优先直接落目标行为，不要先叠兼容层、补丁分支、保底开关或 keep-old-and-add-new。";
+const USER_PROMPT_MEMORY_PRIORITY_CONTEXT: &str =
+    "记忆真源：这个仓库优先使用 repo-local shared memory `./.codex/memory/`，不要把 Codex global memories 当成当前项目真相。";
+const USER_PROMPT_CONTINUITY_CONTEXT: &str =
+    "当前任务真源：`artifacts/current/<task_id>/` + `artifacts/current/active_task.json` + `.supervisor_state.json`。";
 const USER_PROMPT_PERF_CONTEXT: &str =
     "顺手看热路径上的重复 I/O、重复序列化、无谓 clone、临时对象和多余包装层。";
 const USER_PROMPT_COMPAT_CONTEXT: &str =
@@ -163,19 +168,19 @@ const QUALITY_PYTHON_CONTEXT: &str =
     "Python 额外检查：盯住重复解析、重复读文件、wrapper-on-wrapper 和兼容别名链。";
 const QUALITY_TEST_CONTEXT: &str = "测试额外检查：锁真实契约和回归点，不给补丁式旧行为续命。";
 const QUALITY_RUNTIME_PREFIXES: [&str; 2] = [
-    "codex_agno_runtime/src/codex_agno_runtime/",
+    "framework_runtime/src/framework_runtime/",
     "scripts/router-rs/src/",
 ];
 const QUALITY_HOOK_PREFIXES: [&str; 1] = [".claude/hooks/"];
 const QUALITY_TARGET_SUFFIXES: [&str; 3] = [".py", ".rs", ".sh"];
 const ASYNC_AUDIT_PREFIXES: [&str; 5] = [
-    "codex_agno_runtime/src/codex_agno_runtime/",
+    "framework_runtime/src/framework_runtime/",
     "scripts/router-rs/src/",
     "scripts/materialize_cli_host_entrypoints.py",
     "tests/",
     ".claude/hooks/",
 ];
-const SNAPSHOT_ROOT_DIRNAME: &str = "claude_hook_automation_snapshots";
+const CLAUDE_HOOK_SNAPSHOT_ROOT_DIRNAME: &str = "claude_hook_audit_snapshots";
 const SNAPSHOT_MAX_BYTES: u64 = 200_000;
 const COMPAT_SMELL_PATTERN: &str = r"\b(?:compat|compatibility|legacy|fallback|shim|patch|workaround|temporary|deprecated)\b|兼容|保底|补丁";
 const SHARED_CONTINUITY_PATHS: [&str; 5] = [
@@ -244,7 +249,7 @@ pub fn run_claude_audit_hook(command: &str, repo_root: &Path) -> Result<Value, S
     let canonical = canonical_audit_command(command)?;
     let payload = read_stdin_payload()?;
     match canonical {
-        "user-prompt-submit" => run_user_prompt_submit(&payload),
+        "user-prompt-submit" => run_user_prompt_submit(repo_root, &payload),
         "pre-tool-use" => run_pre_tool_use(repo_root, &payload),
         "pre-tool-use-quality" => run_pre_tool_use_quality(repo_root, &payload),
         "post-tool-audit" => run_post_tool_audit(repo_root, &payload),
@@ -838,15 +843,9 @@ fn run_config_change(repo_root: &Path, payload: &Value) -> Result<Value, String>
     }))
 }
 
-fn run_user_prompt_submit(payload: &Value) -> Result<Value, String> {
+fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Result<Value, String> {
     let prompt_text = extract_user_prompt_text(payload);
-    let Some(context) = build_user_prompt_context(&prompt_text) else {
-        return Ok(json!({
-            "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
-            "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
-            "command": "user-prompt-submit",
-        }));
-    };
+    let context = build_user_prompt_context(repo_root, &prompt_text)?;
     Ok(json!({
         "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
         "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
@@ -1217,9 +1216,31 @@ fn join_unique_context(parts: &[&str]) -> String {
     ordered.join(" ")
 }
 
-fn build_user_prompt_context(prompt_text: &str) -> Option<String> {
+fn user_prompt_memory_projection(repo_root: &Path, max_lines: usize) -> Result<String, String> {
+    let projection = build_claude_memory_projection(repo_root, max_lines)?;
+    let lines = projection
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim();
+            !trimmed.is_empty()
+                && trimmed != "# Claude Startup Projection"
+                && !trimmed.starts_with("_Generated from shared runtime artifacts")
+        })
+        .collect::<Vec<_>>();
+    Ok(lines.join("\n"))
+}
+
+fn build_user_prompt_context(repo_root: &Path, prompt_text: &str) -> Result<String, String> {
+    let mut sections = vec![
+        USER_PROMPT_MEMORY_PRIORITY_CONTEXT.to_string(),
+        USER_PROMPT_CONTINUITY_CONTEXT.to_string(),
+    ];
+    let projection = user_prompt_memory_projection(repo_root, 4)?;
+    if !projection.trim().is_empty() {
+        sections.push(projection);
+    }
     if !looks_like_coding_request(prompt_text) {
-        return None;
+        return Ok(sections.join("\n\n"));
     }
     let lowered = prompt_text.to_lowercase();
     let mut parts = vec![USER_PROMPT_COMMON_CONTEXT];
@@ -1236,7 +1257,8 @@ fn build_user_prompt_context(prompt_text: &str) -> Option<String> {
     if count_contains(&lowered, &USER_PROMPT_HOOK_TERMS) > 0 || path_hint_has_hook {
         parts.push(USER_PROMPT_HOOK_CONTEXT);
     }
-    Some(join_unique_context(&parts))
+    sections.push(join_unique_context(&parts));
+    Ok(sections.join("\n\n"))
 }
 
 fn is_quality_target_path(path: &str) -> bool {
@@ -1286,7 +1308,7 @@ fn quality_target_context(path: &str) -> Option<String> {
 }
 
 fn snapshot_root() -> PathBuf {
-    env::temp_dir().join(SNAPSHOT_ROOT_DIRNAME)
+    env::temp_dir().join(CLAUDE_HOOK_SNAPSHOT_ROOT_DIRNAME)
 }
 
 fn read_text_if_small(path: &Path) -> Option<String> {
@@ -2274,11 +2296,12 @@ mod tests {
 
     #[test]
     fn user_prompt_submit_emits_context_for_code_requests() {
+        let repo_root = temp_repo_root("user-prompt-submit-code");
         let payload = json!({
             "hook_event_name": "UserPromptSubmit",
             "prompt": "继续优化 runtime，去掉补丁式保底并顺手看内存和速度"
         });
-        let result = run_user_prompt_submit(&payload).expect("audit ok");
+        let result = run_user_prompt_submit(&repo_root, &payload).expect("audit ok");
         assert_eq!(
             result["hookSpecificOutput"]["hookEventName"],
             Value::String("UserPromptSubmit".to_string())
@@ -2286,23 +2309,34 @@ mod tests {
         let context = result["hookSpecificOutput"]["additionalContext"]
             .as_str()
             .unwrap_or("");
+        assert!(context.contains("repo-local shared memory"));
+        assert!(context.contains(".supervisor_state.json"));
         assert!(context.contains("热路径"));
         assert!(context.contains("fallback"));
         assert!(!context.contains("简化优先"));
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
     #[test]
-    fn user_prompt_submit_stays_silent_for_non_code_wording() {
+    fn user_prompt_submit_emits_repo_memory_for_non_code_wording() {
+        let repo_root = temp_repo_root("user-prompt-submit-non-code");
         let payload = json!({
             "hook_event_name": "UserPromptSubmit",
             "prompt": "把这个结论改得更像人话一点，顺手润色一下措辞"
         });
-        let result = run_user_prompt_submit(&payload).expect("audit ok");
-        assert!(result.get("hookSpecificOutput").is_none());
+        let result = run_user_prompt_submit(&repo_root, &payload).expect("audit ok");
+        let context = result["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or("");
+        assert!(context.contains("repo-local shared memory"));
+        assert!(context.contains("Task Snapshot"));
+        assert!(!context.contains("热路径"));
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
     #[test]
-    fn user_prompt_submit_stays_silent_for_markdown_doc_edits() {
+    fn user_prompt_submit_keeps_doc_edits_on_repo_memory_without_code_nudges() {
+        let repo_root = temp_repo_root("user-prompt-submit-doc");
         for prompt in [
             "优化 .claude/hooks/README.md，把说明写得更清楚",
             "继续优化 AGENT.md，把 simplify 原则再收紧一点",
@@ -2311,27 +2345,31 @@ mod tests {
                 "hook_event_name": "UserPromptSubmit",
                 "prompt": prompt,
             });
-            let result = run_user_prompt_submit(&payload).expect("audit ok");
-            assert!(
-                result.get("hookSpecificOutput").is_none(),
-                "prompt should stay silent: {prompt}"
-            );
+            let result = run_user_prompt_submit(&repo_root, &payload).expect("audit ok");
+            let context = result["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .unwrap_or("");
+            assert!(context.contains("repo-local shared memory"), "missing repo memory for {prompt}");
+            assert!(!context.contains("实现要求"), "unexpected code nudge for {prompt}");
         }
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
     #[test]
     fn user_prompt_submit_uses_hook_path_mentions_to_raise_precision() {
+        let repo_root = temp_repo_root("user-prompt-submit-hook");
         let payload = json!({
             "hook_event_name": "UserPromptSubmit",
             "prompt": "继续改 scripts/router-rs/src/claude_hooks.rs，把 hook 自动化做准一点，hook 触发要更窄"
         });
-        let result = run_user_prompt_submit(&payload).expect("audit ok");
+        let result = run_user_prompt_submit(&repo_root, &payload).expect("audit ok");
         let context = result["hookSpecificOutput"]["additionalContext"]
             .as_str()
             .unwrap_or("");
         assert!(context.contains("增加自动化"));
         assert!(context.contains("matcher/if"));
         assert_eq!(context.matches("Hook 额外检查").count(), 1);
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
     #[test]

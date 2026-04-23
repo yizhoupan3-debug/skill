@@ -15,14 +15,14 @@ if str(PROJECT_ROOT) not in sys.path:
 SCRIPTS_ROOT = PROJECT_ROOT / "scripts"
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
-RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
+RUNTIME_SRC = PROJECT_ROOT / "framework_runtime" / "src"
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-import codex_agno_runtime.rust_router as rust_router_module
+import framework_runtime.rust_router as rust_router_module
 
-from codex_agno_runtime.rust_router import RustRouteAdapter, route_adapter, route_decision_contract, search_skills
-from codex_agno_runtime.schemas import (
+from framework_runtime.rust_router import RustRouteAdapter, route_adapter, route_decision_contract, search_skills
+from framework_runtime.schemas import (
     RouteDecisionContract,
     RouteDecisionSnapshot,
     RouteDiagnosticReport,
@@ -1261,6 +1261,35 @@ def test_route_execution_policy_rejects_misaligned_rust_only_contract() -> None:
         )
 
 
+def test_route_resolution_contract_returns_typed_policy_and_shadow_report() -> None:
+    """The Rust route-resolution lane should return the policy and report together."""
+
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    decision = route_decision_contract(
+        "帮我写一个 Rust CLI 工具",
+        codex_home=PROJECT_ROOT,
+        session_id="route-resolution-contract-session",
+        allow_overlay=True,
+        first_turn=True,
+    )
+
+    policy, report = adapter.route_resolution_contract(
+        mode="shadow",
+        route_decision_contract=decision,
+    )
+
+    assert isinstance(policy, RouteExecutionPolicy)
+    assert policy.policy_schema_version == adapter.route_policy_schema_version
+    assert policy.mode == "shadow"
+    assert policy.diagnostic_route_mode == "shadow"
+    assert policy.diagnostic_report_required is True
+    assert report is not None
+    assert isinstance(report, RouteDiagnosticReport)
+    assert report.report_schema_version == adapter.route_report_schema_version
+    assert report.mode == "shadow"
+    assert report.route_snapshot == decision.route_snapshot
+
+
 def test_route_report_contract_exposes_schema_and_rust_owned_snapshot_evidence() -> None:
     """The Rust diagnostic report should expose the Rust-only evidence contract."""
 
@@ -1401,6 +1430,54 @@ def test_route_report_contract_requires_snapshot_or_decision() -> None:
         match="route_report_contract requires rust_route_snapshot or route_decision_contract",
     ):
         adapter.route_report_contract(mode="shadow")
+
+
+def test_runtime_storage_contract_round_trips_sqlite_payload(tmp_path: Path) -> None:
+    """The Rust runtime-storage bridge should own SQLite payload IO end to end."""
+
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    storage_root = tmp_path / "runtime-data"
+    db_path = storage_root / "runtime_checkpoint_store.sqlite3"
+    payload_path = storage_root / "runtime_background_jobs.json"
+
+    assert (
+        adapter.runtime_storage_exists(
+            path=payload_path,
+            backend_family="sqlite",
+            sqlite_db_path=db_path,
+            storage_root=storage_root,
+        )
+        is False
+    )
+    assert (
+        adapter.runtime_storage_write_text(
+            path=payload_path,
+            backend_family="sqlite",
+            sqlite_db_path=db_path,
+            storage_root=storage_root,
+            payload_text='{"jobs":[]}\n',
+        )
+        > 0
+    )
+    assert (
+        adapter.runtime_storage_append_text(
+            path=payload_path,
+            backend_family="sqlite",
+            sqlite_db_path=db_path,
+            storage_root=storage_root,
+            payload_text='{"jobs":[1]}\n',
+        )
+        > 0
+    )
+    assert (
+        adapter.runtime_storage_read_text(
+            path=payload_path,
+            backend_family="sqlite",
+            sqlite_db_path=db_path,
+            storage_root=storage_root,
+        )
+        == '{"jobs":[]}\n{"jobs":[1]}\n'
+    )
 
 
 def test_rust_route_adapter_framework_runtime_snapshot_reads_workspace_artifacts(

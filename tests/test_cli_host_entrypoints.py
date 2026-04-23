@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from codex_agno_runtime.runtime_registry import framework_native_aliases
+from framework_runtime.runtime_registry import framework_native_aliases
 from scripts.claude_statusline import render_statusline
 from scripts.materialize_cli_host_entrypoints import (
     CODEX_PROJECT_HOOKS,
@@ -128,6 +128,27 @@ def _run_router_rs_claude_audit(
     )
 
 
+def _relay_router_rs_claude_audit(command: str, repo_root: Path, payload: dict[str, object]) -> int:
+    result = _run_router_rs_claude_audit(command, repo_root, payload)
+    if result.stdout:
+        sys.stdout.write(result.stdout)
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+    return result.returncode
+
+
+def run_config_change(repo_root: Path, payload: dict[str, object]) -> int:
+    return _relay_router_rs_claude_audit("config-change", repo_root, payload)
+
+
+def run_pre_tool_use(repo_root: Path, payload: dict[str, object]) -> int:
+    return _relay_router_rs_claude_audit("pre-tool-use", repo_root, payload)
+
+
+def run_stop_failure(repo_root: Path, payload: dict[str, object]) -> int:
+    return _relay_router_rs_claude_audit("stop-failure", repo_root, payload)
+
+
 def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxies(
     tmp_path: Path,
 ) -> None:
@@ -213,23 +234,19 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     ]
     assert "statusLine" not in settings
     assert codex_hooks == CODEX_PROJECT_HOOKS
-    assert set(codex_hooks["hooks"]) == {"PreToolUse", "UserPromptSubmit"}
-    assert codex_hooks["hooks"]["PreToolUse"][0]["matcher"] == "Bash"
-    assert (
-        codex_hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-        == 'sh "$(git rev-parse --show-toplevel)/.claude/hooks/pre_tool_use.sh"'
-    )
-    assert (
-        codex_hooks["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
-        == 'sh "$(git rev-parse --show-toplevel)/.claude/hooks/user_prompt_submit.sh"'
-    )
+    assert codex_hooks["hooks"] == {}
     assert set(settings["hooks"]) == {
         "PreToolUse",
         "PostToolUse",
         "SessionEnd",
         "ConfigChange",
         "StopFailure",
+        "UserPromptSubmit",
     }
+    assert (
+        settings["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+        == "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/user_prompt_submit.sh"
+    )
     assert settings["hooks"]["PreToolUse"][0]["matcher"] == "Edit|MultiEdit|Write"
     assert settings["hooks"]["PreToolUse"][1]["matcher"] == "Bash"
     assert settings["hooks"]["PreToolUse"][2]["matcher"] == "Edit|MultiEdit|Write"
@@ -248,14 +265,14 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert not any(item["if"] == "Bash(*.claude/*)" for item in bash_hooks)
     quality_hooks = settings["hooks"]["PreToolUse"][2]["hooks"]
     assert any(item["if"] == "Edit(/scripts/router-rs/src/**)" for item in quality_hooks)
-    assert any(item["if"] == "Write(/codex_agno_runtime/src/**)" for item in quality_hooks)
+    assert any(item["if"] == "Write(/framework_runtime/src/**)" for item in quality_hooks)
     assert any(item["if"] == "Edit(/tests/test_cli_host_entrypoints.py)" for item in quality_hooks)
     assert not any(item["if"] == "Edit(/scripts/**)" for item in quality_hooks)
     assert not any(item["if"] == "Edit(/tests/**)" for item in quality_hooks)
     post_tool_hooks = settings["hooks"]["PostToolUse"][0]["hooks"]
     assert settings["hooks"]["PostToolUse"][0]["matcher"] == "Edit|MultiEdit|Write"
     assert any(item["if"] == "Edit(/scripts/router-rs/src/**)" for item in post_tool_hooks)
-    assert any(item["if"] == "Write(/codex_agno_runtime/src/**)" for item in post_tool_hooks)
+    assert any(item["if"] == "Write(/framework_runtime/src/**)" for item in post_tool_hooks)
     assert not any(item["if"] == "Edit(/scripts/**)" for item in post_tool_hooks)
     assert all(item["command"].endswith("/.claude/hooks/post_tool_use_audit.sh") for item in post_tool_hooks)
     assert all(item["async"] is True for item in post_tool_hooks)
@@ -409,7 +426,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         "live in `AGENT.md`, not in hooks",
         "repo-specific invariants only",
         "Use `matcher` first and `if` to narrow further",
-        "UserPromptSubmit` is intentionally not installed here",
+        "`UserPromptSubmit` is installed here on purpose",
         "permissionDecision: deny",
     ):
         assert marker in hooks_readme
@@ -573,6 +590,7 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert user_prompt.returncode == 0
     user_prompt_payload = json.loads(user_prompt.stdout)
     assert user_prompt_payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    assert "repo-local shared memory" in user_prompt_payload["hookSpecificOutput"]["additionalContext"]
     assert "热路径" in user_prompt_payload["hookSpecificOutput"]["additionalContext"]
 
     quality_context = subprocess.run(
@@ -586,8 +604,7 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert quality_context.returncode == 0
     quality_payload = json.loads(quality_context.stdout)
     assert quality_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
-    assert "Python 额外检查" in quality_payload["hookSpecificOutput"]["additionalContext"]
-    assert "Hook 额外检查" in quality_payload["hookSpecificOutput"]["additionalContext"]
+    assert "测试额外检查" in quality_payload["hookSpecificOutput"]["additionalContext"]
 
     allowed = subprocess.run(
         ["sh", str(tmp_path / ".claude" / "hooks" / "pre_tool_use.sh")],
@@ -652,40 +669,11 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert (tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md").is_file()
 
 
-def test_materialized_codex_hooks_share_claude_scripts(tmp_path: Path) -> None:
+def test_materialized_codex_hooks_are_disabled(tmp_path: Path) -> None:
     materialize_repo_host_entrypoints(tmp_path)
-    (tmp_path / "scripts").symlink_to(PROJECT_ROOT / "scripts", target_is_directory=True)
-    _seed_shared_memory(tmp_path)
-    _init_git_repo(tmp_path)
 
     hooks = json.loads((tmp_path / ".codex" / "hooks.json").read_text(encoding="utf-8"))
-    pre_tool_command = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-    user_prompt_command = hooks["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
-
-    blocked = subprocess.run(
-        ["sh", "-lc", pre_tool_command],
-        cwd=tmp_path,
-        input='{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"cp tmp .claude/settings.json"}}\n',
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-    blocked_payload = json.loads(blocked.stdout)
-    assert blocked_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert ".claude/settings.json" in blocked_payload["hookSpecificOutput"]["permissionDecisionReason"]
-
-    user_prompt = subprocess.run(
-        ["sh", "-lc", user_prompt_command],
-        cwd=tmp_path,
-        input='{"hook_event_name":"UserPromptSubmit","prompt":"继续优化 runtime，去掉补丁式保底并顺手看内存和速度"}\n',
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-    user_prompt_payload = json.loads(user_prompt.stdout)
-    assert user_prompt_payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert "热路径" in user_prompt_payload["hookSpecificOutput"]["additionalContext"]
-    assert not (tmp_path / ".codex" / "memory" / "MEMORY_AUTO.md").exists()
+    assert hooks == {"hooks": {}}
 
 
 def test_pre_tool_use_hook_uses_repo_local_audit_without_router_rs_bootstrap(tmp_path: Path) -> None:
@@ -922,8 +910,9 @@ def test_claude_statusline_prefers_supervisor_owned_actions_over_stale_sidecars(
     assert "legacy-skill" not in statusline
 
 
-def test_claude_hook_audit_reports_generated_surface_drift(tmp_path: Path, capsys) -> None:
-    result = run_config_change(
+def test_claude_hook_audit_reports_generated_surface_drift(tmp_path: Path) -> None:
+    result = _run_router_rs_claude_audit(
+        "config-change",
         tmp_path,
         {
             "source": "project_settings",
@@ -931,14 +920,16 @@ def test_claude_hook_audit_reports_generated_surface_drift(tmp_path: Path, capsy
         },
     )
 
-    captured = capsys.readouterr()
-    assert result == 0
-    assert "generated Claude host surfaces" in captured.err
-    assert "scripts/materialize_cli_host_entrypoints.py" in captured.err
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert "generated Claude host surfaces" in result.stderr
+    assert "scripts/materialize_cli_host_entrypoints.py" in result.stderr
+    assert any("generated Claude host surfaces" in notice for notice in payload["notices"])
 
 
-def test_claude_pre_tool_use_blocks_generated_host_surfaces(tmp_path: Path, capsys) -> None:
-    result = run_pre_tool_use(
+def test_claude_pre_tool_use_blocks_generated_host_surfaces(tmp_path: Path) -> None:
+    result = _run_router_rs_claude_audit(
+        "pre-tool-use",
         tmp_path,
         {
             "tool_name": "MultiEdit",
@@ -946,32 +937,34 @@ def test_claude_pre_tool_use_blocks_generated_host_surfaces(tmp_path: Path, caps
         },
     )
 
-    captured = capsys.readouterr()
-    assert result == 0
-    payload = json.loads(captured.out)
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "generated host surface" in payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert "materialize_cli_host_entrypoints.py" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
-def test_claude_pre_tool_use_blocks_generated_codex_hook_manifest(tmp_path: Path, capsys) -> None:
-    result = run_pre_tool_use(
+def test_claude_pre_tool_use_blocks_generated_codex_hook_manifest(tmp_path: Path) -> None:
+    result = _run_router_rs_claude_audit(
+        "pre-tool-use",
         tmp_path,
         {
             "tool_name": "Edit",
-            "tool_input": {"file_path": str(tmp_path / ".codex" / "hooks.json")},
+            "tool_input": {
+                "file_path": str(tmp_path / ".codex" / "host_entrypoints_sync_manifest.json")
+            },
         },
     )
 
-    captured = capsys.readouterr()
-    assert result == 0
-    payload = json.loads(captured.out)
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert ".codex/hooks.json" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert ".codex/host_entrypoints_sync_manifest.json" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
-def test_claude_pre_tool_use_allows_normal_workspace_files(tmp_path: Path, capsys) -> None:
-    result = run_pre_tool_use(
+def test_claude_pre_tool_use_allows_normal_workspace_files(tmp_path: Path) -> None:
+    result = _run_router_rs_claude_audit(
+        "pre-tool-use",
         tmp_path,
         {
             "tool_name": "Edit",
@@ -979,14 +972,16 @@ def test_claude_pre_tool_use_allows_normal_workspace_files(tmp_path: Path, capsy
         },
     )
 
-    captured = capsys.readouterr()
-    assert result == 0
-    assert captured.out == ""
-    assert captured.err == ""
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "allow"
+    assert payload.get("hookSpecificOutput") is None
+    assert result.stderr == ""
 
 
-def test_claude_pre_tool_use_allows_local_settings_overlay(tmp_path: Path, capsys) -> None:
-    result = run_pre_tool_use(
+def test_claude_pre_tool_use_allows_local_settings_overlay(tmp_path: Path) -> None:
+    result = _run_router_rs_claude_audit(
+        "pre-tool-use",
         tmp_path,
         {
             "tool_name": "Edit",
@@ -994,14 +989,16 @@ def test_claude_pre_tool_use_allows_local_settings_overlay(tmp_path: Path, capsy
         },
     )
 
-    captured = capsys.readouterr()
-    assert result == 0
-    assert captured.out == ""
-    assert captured.err == ""
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "allow"
+    assert payload.get("hookSpecificOutput") is None
+    assert result.stderr == ""
 
 
-def test_claude_pre_tool_use_allows_manual_claude_agent_docs(tmp_path: Path, capsys) -> None:
-    result = run_pre_tool_use(
+def test_claude_pre_tool_use_allows_manual_claude_agent_docs(tmp_path: Path) -> None:
+    result = _run_router_rs_claude_audit(
+        "pre-tool-use",
         tmp_path,
         {
             "tool_name": "Edit",
@@ -1009,14 +1006,16 @@ def test_claude_pre_tool_use_allows_manual_claude_agent_docs(tmp_path: Path, cap
         },
     )
 
-    captured = capsys.readouterr()
-    assert result == 0
-    assert captured.out == ""
-    assert captured.err == ""
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "allow"
+    assert payload.get("hookSpecificOutput") is None
+    assert result.stderr == ""
 
 
-def test_claude_pre_tool_use_blocks_targeted_bash_writes(tmp_path: Path, capsys) -> None:
-    result = run_pre_tool_use(
+def test_claude_pre_tool_use_blocks_targeted_bash_writes(tmp_path: Path) -> None:
+    result = _run_router_rs_claude_audit(
+        "pre-tool-use",
         tmp_path,
         {
             "tool_name": "Bash",
@@ -1024,18 +1023,17 @@ def test_claude_pre_tool_use_blocks_targeted_bash_writes(tmp_path: Path, capsys)
         },
     )
 
-    captured = capsys.readouterr()
-    assert result == 0
-    payload = json.loads(captured.out)
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert ".claude/settings.json" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_claude_pre_tool_use_blocks_shell_redirection_into_generated_files(
     tmp_path: Path,
-    capsys,
 ) -> None:
-    result = run_pre_tool_use(
+    result = _run_router_rs_claude_audit(
+        "pre-tool-use",
         tmp_path,
         {
             "tool_name": "Bash",
@@ -1043,18 +1041,17 @@ def test_claude_pre_tool_use_blocks_shell_redirection_into_generated_files(
         },
     )
 
-    captured = capsys.readouterr()
-    assert result == 0
-    payload = json.loads(captured.out)
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert ".claude/settings.json" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_claude_pre_tool_use_allows_reading_generated_files_after_unrelated_write(
     tmp_path: Path,
-    capsys,
 ) -> None:
-    result = run_pre_tool_use(
+    result = _run_router_rs_claude_audit(
+        "pre-tool-use",
         tmp_path,
         {
             "tool_name": "Bash",
@@ -1062,14 +1059,16 @@ def test_claude_pre_tool_use_allows_reading_generated_files_after_unrelated_writ
         },
     )
 
-    captured = capsys.readouterr()
-    assert result == 0
-    assert captured.out == ""
-    assert captured.err == ""
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "allow"
+    assert payload.get("hookSpecificOutput") is None
+    assert result.stderr == ""
 
 
-def test_claude_pre_tool_use_allows_bash_write_to_local_settings_overlay(tmp_path: Path, capsys) -> None:
-    result = run_pre_tool_use(
+def test_claude_pre_tool_use_allows_bash_write_to_local_settings_overlay(tmp_path: Path) -> None:
+    result = _run_router_rs_claude_audit(
+        "pre-tool-use",
         tmp_path,
         {
             "tool_name": "Bash",
@@ -1077,14 +1076,16 @@ def test_claude_pre_tool_use_allows_bash_write_to_local_settings_overlay(tmp_pat
         },
     )
 
-    captured = capsys.readouterr()
-    assert result == 0
-    assert captured.out == ""
-    assert captured.err == ""
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "allow"
+    assert payload.get("hookSpecificOutput") is None
+    assert result.stderr == ""
 
 
-def test_claude_hook_audit_reports_stop_failure_without_mutation(tmp_path: Path, capsys) -> None:
-    result = run_stop_failure(
+def test_claude_hook_audit_reports_stop_failure_without_mutation(tmp_path: Path) -> None:
+    result = _run_router_rs_claude_audit(
+        "stop-failure",
         tmp_path,
         {
             "error": "server_error",
@@ -1092,7 +1093,8 @@ def test_claude_hook_audit_reports_stop_failure_without_mutation(tmp_path: Path,
         },
     )
 
-    captured = capsys.readouterr()
-    assert result == 0
-    assert "server_error" in captured.err
-    assert "host-private projection drift" in captured.err
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["failure_type"] == "server_error"
+    assert "server_error" in result.stderr
+    assert "host-private projection drift" in result.stderr

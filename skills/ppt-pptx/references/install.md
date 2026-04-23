@@ -183,3 +183,11 @@ python3 scripts/officecli_bridge.py doctor deck.pptx --json
 python3 scripts/officecli_bridge.py outline deck.pptx --json
 python3 scripts/officecli_bridge.py watch deck.pptx --port 18080
 ```
+
+Recommended mixed-lane commands:
+
+```bash
+python3 scripts/hybrid_pipeline.py build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json
+python3 scripts/hybrid_pipeline.py qa deck.pptx --rendered-dir rendered --json
+python3 scripts/hybrid_pipeline.py intake old_deck.pptx --json
+```

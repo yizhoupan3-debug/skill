@@ -41,7 +41,8 @@ source: local
 This skill owns one narrow question: does the science hold up under review?
 
 In a full paper workflow, this skill is usually a specialist sidecar lane under
-`$paper-reviewer` or `$paper-reviser`, not the main orchestration lane.
+`$paper-workbench`, `$paper-reviewer`, or `$paper-reviser`, not the main
+orchestration lane.
 
 ## Use this when
 
@@ -52,6 +53,7 @@ In a full paper workflow, this skill is usually a specialist sidecar lane under
 
 ## Do not use
 
+- The user wants one front door for the manuscript task -> use `$paper-workbench`
 - The user wants the whole paper judged as a submission package -> use `$paper-reviewer`
 - The user wants direct manuscript edits across multiple surfaces -> use `$paper-reviser`
 - The user wants local prose polish -> use `$paper-writing`

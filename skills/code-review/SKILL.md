@@ -3,7 +3,8 @@ name: code-review
 description: |
   Review code with structured findings and optional quality scoring.
   Use when the user asks for code review, PR review, code-quality scoring, or an iterative
-  review→fix→re-score loop. Best for structured review, not coding-standard enforcement,
+  review→fix→re-score loop. Also use when the request is phrased as 代码 review、代码审核、
+  实现质量 review、回归风险检查, or findings / 严重程度排序. Best for structured review, not coding-standard enforcement,
   security audit, or architecture review.
 metadata:
   version: "1.1.0"
@@ -33,10 +34,16 @@ routing_gate: none
 session_start: n/a
 trigger_hints:
   - code review
+  - 代码 review
+  - 代码审核
   - PR review
   - framework-review
   - routing-review
   - 代码审查
+  - 实现质量
+  - 回归风险
+  - findings
+  - 严重程度
   - code-quality scoring
   - review→fix→re-score
   - an iterative review→fix→re-score loop
@@ -61,6 +68,7 @@ prioritized review comments, and optional scoring.
 - The user asks to review code, a PR, or a patch set
 - The user wants structured feedback instead of ad-hoc comments
 - The user wants a score or iterative review→fix→re-score loop
+- The user asks for findings ordered by severity, bug risk, or regression risk
 - Review rigor is needed on top of a domain owner skill
 
 ## Do not use

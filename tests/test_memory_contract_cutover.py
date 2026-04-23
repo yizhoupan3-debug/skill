@@ -11,7 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from scripts.consolidate_memory import archive_legacy_memory_bundle, persist_memory_bundle
 from scripts.default_bootstrap import run_default_bootstrap
 from scripts.memory_store import MemoryItem, MemoryStore
-from codex_agno_runtime.rust_router import RustRouteAdapter
+from framework_runtime.rust_router import RustRouteAdapter
 from scripts.memory_support import build_memory_state, load_runtime_snapshot
 from scripts.run_memory_automation import (
     migrate_current_artifact_clutter,

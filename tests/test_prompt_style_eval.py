@@ -6,15 +6,15 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
+RUNTIME_SRC = PROJECT_ROOT / "framework_runtime" / "src"
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-from codex_agno_runtime.prompt_builder import PromptBuilder
-from codex_agno_runtime.schemas import RoutingResult, SkillMetadata
+from framework_runtime.prompt_builder import PromptBuilder
+from framework_runtime.schemas import RoutingResult, SkillMetadata
 
 
 FIXTURE_PATH = PROJECT_ROOT / "tests" / "prompt_style_eval_cases.json"

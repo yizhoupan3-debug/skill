@@ -49,19 +49,19 @@
     "loadout_catalog_path": "skills/SKILL_LOADOUTS.json",
     "tier_counts": {
       "core": 20,
-      "optional": 127,
+      "optional": 128,
       "experimental": 2,
       "deprecated": 0
     },
     "activation_counts": {
       "default": 26,
-      "explicit_opt_in": 123,
+      "explicit_opt_in": 124,
       "disabled": 0
     }
   },
   "physical_boundaries": {
     "source_roots": [
-      "codex_agno_runtime/src/",
+      "framework_runtime/src/",
       "scripts/",
       "skills/",
       "docs/",

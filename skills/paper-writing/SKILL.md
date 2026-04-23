@@ -53,8 +53,8 @@ This skill owns local manuscript rewriting after the scientific boundary is
 already decided.
 
 In the protocol-backed workflow, this skill is usually a bounded sidecar lane
-for local text blocks after the main chain has already frozen the claim and
-evidence boundary.
+for local text blocks after `$paper-workbench` or `$paper-reviser` has already
+frozen the claim and evidence boundary.
 
 ## Use this when
 
@@ -65,6 +65,7 @@ evidence boundary.
 
 ## Do not use
 
+- The user wants one front door for a manuscript task -> use `$paper-workbench`
 - The user wants to know whether the paper stands up scientifically -> use `$paper-logic`
 - The user wants submission-facing judgment -> use `$paper-reviewer`
 - The user wants reviewer-comment execution, claim narrowing, or appendix routing -> use `$paper-reviser`

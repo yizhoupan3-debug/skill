@@ -465,14 +465,14 @@ Generated-first maintenance:
 - Treat `.claude/settings.json`, this README, and `.claude/hooks/*.sh` as
   materialized outputs.
 - Manual Claude host guidance belongs in `.claude/agents/*.md` unless noted.
-- Codex experimental hooks reuse `pre_tool_use.sh` and `user_prompt_submit.sh`
-  through `.codex/hooks.json`; keep the shared logic here instead of forking a
-  second host-only script set.
+- Codex repo hooks stay disabled here by default; keep shared hook logic scoped
+  to Claude unless the project explicitly re-enables a Codex-specific layer.
 
 Active hooks:
 
 | Event | Script | Purpose |
 | --- | --- | --- |
+| `UserPromptSubmit` | `user_prompt_submit.sh` | Inject the repo-local shared memory and continuity truth on every real prompt so Claude starts from the project’s own memory root instead of stale host-global recall. |
 | `PreToolUse` | `pre_tool_use_quality.sh` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |
 | `PreToolUse` | `pre_tool_use.sh` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
 | `PostToolUse` | `post_tool_use_audit.sh` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
@@ -481,8 +481,10 @@ Active hooks:
 | `StopFailure` | `stop_failure.sh` | Emit a host-private hint for selected Claude stop failures without mutating shared continuity. |
 
 Everything else stays intentionally uninstalled here so startup and tool turns remain lean.
-`UserPromptSubmit` is intentionally not installed here: broad per-turn prompt hooks cost
-more than they help once `PreToolUse` and `PostToolUse` are already narrow.
+`UserPromptSubmit` is installed here on purpose: this repo keeps memory truth under
+`./.codex/memory/` plus continuity artifacts, so prompt-time injection is the
+lowest-friction way to keep Claude aligned with repo-local state instead of stale
+host-global recall.
 Reply tone, "讲人话" rules, and closeout style live in `AGENT.md`, not in hooks.
 Static behavior rules belong in `AGENT.md` or `CLAUDE.md`; these hooks exist
 for deterministic guardrails, lightweight execution-time context, and lifecycle
@@ -523,6 +525,8 @@ Validation commands:
   Expected: stdout returns a JSON `permissionDecision: deny` payload for the targeted write.
 - `printf '{"tool_name":"Bash","tool_input":{"command":"printf x > .claude/settings.json"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use.sh`
   Expected: stdout returns a JSON `permissionDecision: deny` payload for shell redirection into a protected generated file.
+- `printf '{"hook_event_name":"UserPromptSubmit","prompt":"继续修复这个仓库的共享记忆和 runtime"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/user_prompt_submit.sh`
+  Expected: stdout returns JSON with `hookSpecificOutput.additionalContext` containing repo-local memory and continuity reminders.
 - `CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/session_end.sh`
   Expected: project-local memory bundle refresh plus projection refresh; may repair stale terminal resume state in `.supervisor_state.json`.
 - `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/config_change.sh`
@@ -640,7 +644,7 @@ def _build_claude_tool_path_hooks(
 
 
 CLAUDE_QUALITY_PRE_TOOL_USE_RULES = (
-    "/codex_agno_runtime/src/**",
+    "/framework_runtime/src/**",
     "/scripts/router-rs/src/**",
     "/tests/test_cli_host_entrypoints.py",
     "/tests/test_codex_omx_hook_bridge.py",
@@ -715,6 +719,16 @@ CLAUDE_PROJECT_SETTINGS = {
                 "hooks": _claude_quality_post_tool_use_hooks(),
             }
         ],
+        "UserPromptSubmit": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/user_prompt_submit.sh",
+                    }
+                ]
+            }
+        ],
         "SessionEnd": [
             {
                 "hooks": [
@@ -751,37 +765,7 @@ CLAUDE_PROJECT_SETTINGS = {
 }
 
 
-def _codex_shared_hook_command(script_name: str) -> str:
-    return f'sh "$(git rev-parse --show-toplevel)/.claude/hooks/{script_name}"'
-
-
-CODEX_PROJECT_HOOKS = {
-    "hooks": {
-        "PreToolUse": [
-            {
-                "matcher": "Bash",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": _codex_shared_hook_command("pre_tool_use.sh"),
-                        "statusMessage": "Checking generated host surfaces",
-                    }
-                ],
-            }
-        ],
-        "UserPromptSubmit": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": _codex_shared_hook_command("user_prompt_submit.sh"),
-                        "statusMessage": "Loading repo coding context",
-                    }
-                ]
-            }
-        ],
-    }
-}
+CODEX_PROJECT_HOOKS = {"hooks": {}}
 
 HOST_ENTRYPOINT_SYNC_MANIFEST_PATH = ".codex/host_entrypoints_sync_manifest.json"
 

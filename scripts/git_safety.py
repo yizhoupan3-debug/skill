@@ -72,7 +72,7 @@ VERIFY_PRESET_CONFIGS: dict[str, dict[str, Any]] = {
         ],
         "path_rules": (
             "scripts/router-rs/",
-            "codex_agno_runtime/src/codex_agno_runtime/rust_router.py",
+            "framework_runtime/src/framework_runtime/rust_router.py",
             "tests/test_route_cli_entrypoint.py",
             "tests/test_router_rs_runner.py",
         ),

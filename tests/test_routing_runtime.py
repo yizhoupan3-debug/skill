@@ -12,7 +12,7 @@ SCRIPTS_ROOT = PROJECT_ROOT / "scripts"
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
-from codex_agno_runtime.rust_router import search_skills
+from framework_runtime.rust_router import search_skills
 from scripts.sync_skills import extract_trigger_hints, normalize_health_manifest
 
 

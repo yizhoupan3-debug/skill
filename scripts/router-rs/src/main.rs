@@ -8,6 +8,7 @@ use serde_json::{json, Map, Value};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::fs::OpenOptions;
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -42,6 +43,7 @@ const SEARCH_RESULTS_SCHEMA_VERSION: &str = "router-rs-search-results-v1";
 const ROUTE_POLICY_SCHEMA_VERSION: &str = "router-rs-route-policy-v1";
 const ROUTE_SNAPSHOT_SCHEMA_VERSION: &str = "router-rs-route-snapshot-v1";
 const ROUTE_REPORT_SCHEMA_VERSION: &str = "router-rs-route-report-v2";
+const ROUTE_RESOLUTION_SCHEMA_VERSION: &str = "router-rs-route-resolution-v1";
 const ROUTE_AUTHORITY: &str = "rust-route-core";
 const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
 const EXECUTION_SCHEMA_VERSION: &str = "router-rs-execute-response-v1";
@@ -75,6 +77,8 @@ const TRANSPORT_BINDING_WRITE_SCHEMA_VERSION: &str = "router-rs-transport-bindin
 const TRANSPORT_BINDING_WRITE_AUTHORITY: &str = "rust-runtime-transport-binding-writer";
 const CHECKPOINT_MANIFEST_WRITE_SCHEMA_VERSION: &str = "router-rs-checkpoint-manifest-write-v1";
 const CHECKPOINT_MANIFEST_WRITE_AUTHORITY: &str = "rust-runtime-checkpoint-manifest-writer";
+const RUNTIME_STORAGE_SCHEMA_VERSION: &str = "router-rs-runtime-storage-v1";
+const RUNTIME_STORAGE_AUTHORITY: &str = "rust-runtime-storage";
 const ATTACHED_RUNTIME_EVENT_ATTACH_AUTHORITY: &str = "rust-runtime-attached-event-transport";
 const TRACE_STREAM_REPLAY_SCHEMA_VERSION: &str = "router-rs-trace-stream-replay-v1";
 const TRACE_STREAM_INSPECT_SCHEMA_VERSION: &str = "router-rs-trace-stream-inspect-v1";
@@ -201,6 +205,10 @@ struct Cli {
     #[arg(long)]
     route_report_json: bool,
     #[arg(long)]
+    route_resolution_json: bool,
+    #[arg(long)]
+    runtime_storage_json: bool,
+    #[arg(long)]
     claude_hook_command: Option<String>,
     #[arg(long)]
     claude_hook_audit_command: Option<String>,
@@ -262,6 +270,10 @@ struct Cli {
     trace_stream_inspect_input_json: Option<String>,
     #[arg(long)]
     write_trace_compaction_delta_input_json: Option<String>,
+    #[arg(long)]
+    route_resolution_input_json: Option<String>,
+    #[arg(long)]
+    runtime_storage_input_json: Option<String>,
     #[arg(long, default_value = "route-cli")]
     session_id: String,
     #[arg(long, default_value_t = true, action = ArgAction::Set, num_args = 1)]
@@ -401,6 +413,38 @@ struct RouteExecutionPolicyPayload {
     route_result_engine: String,
     diagnostic_report_required: bool,
     strict_verification_required: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RouteResolutionPayload {
+    schema_version: String,
+    authority: String,
+    policy: RouteExecutionPolicyPayload,
+    route_diagnostic_report: Option<RouteDiffReportPayload>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RuntimeStorageRequestPayload {
+    operation: String,
+    path: String,
+    backend_family: String,
+    sqlite_db_path: Option<String>,
+    storage_root: Option<String>,
+    payload_text: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RuntimeStorageResponsePayload {
+    schema_version: String,
+    authority: String,
+    operation: String,
+    path: String,
+    backend_family: String,
+    sqlite_db_path: Option<String>,
+    storage_root: Option<String>,
+    exists: bool,
+    payload_text: Option<String>,
+    bytes_written: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -820,6 +864,8 @@ fn main() -> Result<(), String> {
         args.profile_artifacts_json,
         args.routing_eval_json,
         args.route_report_json,
+        args.route_resolution_json,
+        args.runtime_storage_json,
         args.claude_hook_command.is_some(),
         args.claude_hook_audit_command.is_some(),
     ]
@@ -829,7 +875,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-alias-json, --route-report-json, --profile-json, --profile-artifacts-json, and --routing-eval-json"
+            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-alias-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --profile-json, --profile-artifacts-json, and --routing-eval-json"
                 .to_string(),
         );
     }
@@ -1307,6 +1353,42 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.route_resolution_json {
+        let payload = serde_json::from_str::<Value>(
+            args.route_resolution_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--route-resolution-input-json is required with --route-resolution-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse route resolution input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&dispatch_stdio_route_resolution(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.runtime_storage_json {
+        let payload = serde_json::from_str::<RuntimeStorageRequestPayload>(
+            args.runtime_storage_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--runtime-storage-input-json is required with --runtime-storage-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse runtime storage input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&runtime_storage_operation(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
     if let Some(command) = args.claude_hook_command.as_deref() {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
         println!(
@@ -1543,6 +1625,7 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
                 .map_err(|err| format!("serialize execute output failed: {err}"))
         }
         "route_report" => dispatch_stdio_route_report(payload),
+        "route_resolution" => dispatch_stdio_route_resolution(payload),
         "route_policy" => dispatch_stdio_route_policy(payload),
         "route_snapshot" => dispatch_stdio_route_snapshot(payload),
         "compile_profile_bundle" => dispatch_stdio_compile_profile_bundle(payload),
@@ -1591,6 +1674,12 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
         "subscribe_attached_runtime_events" => subscribe_attached_runtime_events(payload),
         "cleanup_attached_runtime_event_transport" => {
             cleanup_attached_runtime_event_transport(payload)
+        }
+        "runtime_storage" => {
+            let request = serde_json::from_value::<RuntimeStorageRequestPayload>(payload)
+                .map_err(|err| format!("parse runtime storage input failed: {err}"))?;
+            serde_json::to_value(runtime_storage_operation(request)?)
+                .map_err(|err| format!("serialize runtime storage output failed: {err}"))
         }
         "trace_stream_replay" => {
             let request = serde_json::from_value::<TraceStreamReplayRequestPayload>(payload)
@@ -1684,6 +1773,18 @@ fn dispatch_stdio_route_report(payload: Value) -> Result<Value, String> {
         route_decision.as_ref(),
     )?)
     .map_err(|err| format!("serialize route report output failed: {err}"))
+}
+
+fn dispatch_stdio_route_resolution(payload: Value) -> Result<Value, String> {
+    let mode = required_non_empty_string(&payload, "mode", "stdio route resolution")?;
+    let decision_value = payload
+        .get("route_decision")
+        .cloned()
+        .ok_or_else(|| "route_resolution requires route_decision".to_string())?;
+    let decision = serde_json::from_value::<RouteDecision>(decision_value)
+        .map_err(|err| format!("parse route resolution input failed: {err}"))?;
+    serde_json::to_value(build_route_resolution(&mode, &decision)?)
+        .map_err(|err| format!("serialize route resolution output failed: {err}"))
 }
 
 fn dispatch_stdio_route_policy(payload: Value) -> Result<Value, String> {
@@ -2488,7 +2589,7 @@ fn route_task(
 
     let selected = pick_owner(viable);
     let overlay = if allow_overlay {
-        pick_overlay(records, &query_token_list, &selected.record)
+        pick_overlay(records, &normalized_query, &query_token_list, &selected.record)
     } else {
         None
     };
@@ -2571,6 +2672,43 @@ fn build_route_diff_report(
         verified_contract_fields,
         contract_mismatch_fields,
         route_snapshot: rust_snapshot,
+    })
+}
+
+fn build_route_resolution(
+    mode: &str,
+    route_decision: &RouteDecision,
+) -> Result<RouteResolutionPayload, String> {
+    let policy = build_route_policy(mode)?;
+    let report = if policy.diagnostic_report_required {
+        Some(build_route_diff_report(
+            &policy.mode,
+            route_decision.route_snapshot.clone(),
+            Some(route_decision),
+        )?)
+    } else {
+        None
+    };
+    if policy.strict_verification_required
+        && report
+            .as_ref()
+            .map(|value| !value.verification_passed)
+            .unwrap_or(false)
+    {
+        let mismatch_fields = report
+            .as_ref()
+            .map(|value| value.contract_mismatch_fields.join(", "))
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "unknown".to_string());
+        return Err(format!(
+            "Rust verification route report detected contract drift: {mismatch_fields}."
+        ));
+    }
+    Ok(RouteResolutionPayload {
+        schema_version: ROUTE_RESOLUTION_SCHEMA_VERSION.to_string(),
+        authority: ROUTE_AUTHORITY.to_string(),
+        policy,
+        route_diagnostic_report: report,
     })
 }
 
@@ -4303,24 +4441,7 @@ fn write_json_payload(path: &Path, payload: &Value) -> Result<usize, String> {
         serde_json::to_string_pretty(payload)
             .map_err(|err| format!("serialize persisted payload failed: {err}"))?
     );
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "create parent directory for {} failed: {err}",
-                path.display()
-            )
-        })?;
-    }
-    let file_name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .ok_or_else(|| format!("persist path {} has no file name", path.display()))?;
-    let tmp_path = path.with_file_name(format!("{file_name}.tmp"));
-    fs::write(&tmp_path, serialized.as_bytes())
-        .map_err(|err| format!("write temp payload {} failed: {err}", tmp_path.display()))?;
-    fs::rename(&tmp_path, path)
-        .map_err(|err| format!("replace payload {} failed: {err}", path.display()))?;
-    Ok(serialized.len())
+    write_text_payload(path, &serialized)
 }
 
 fn write_transport_binding_payload(payload: Value) -> Result<Value, String> {
@@ -4350,6 +4471,27 @@ fn write_checkpoint_resume_manifest_payload(payload: Value) -> Result<Value, Str
         "path": path,
         "bytes_written": bytes_written,
     }))
+}
+
+fn write_text_payload(path: &Path, payload: &str) -> Result<usize, String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "create parent directory for {} failed: {err}",
+                path.display()
+            )
+        })?;
+    }
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| format!("persist path {} has no file name", path.display()))?;
+    let tmp_path = path.with_file_name(format!("{file_name}.tmp"));
+    fs::write(&tmp_path, payload.as_bytes())
+        .map_err(|err| format!("write temp payload {} failed: {err}", tmp_path.display()))?;
+    fs::rename(&tmp_path, path)
+        .map_err(|err| format!("replace payload {} failed: {err}", path.display()))?;
+    Ok(payload.len())
 }
 
 #[derive(Debug, Clone)]
@@ -4417,6 +4559,15 @@ fn sqlite_connection(path: &Path) -> Result<Connection, String> {
     })
 }
 
+fn ensure_runtime_storage_sqlite_schema(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS runtime_storage_payloads (payload_key TEXT PRIMARY KEY, payload_text TEXT NOT NULL)",
+        [],
+    )
+    .map_err(|err| format!("ensure sqlite runtime storage schema failed: {err}"))?;
+    Ok(())
+}
+
 fn sqlite_lookup_keys(path: &Path, storage_root: &Path) -> Result<(String, String), String> {
     let resolved_path = normalize_runtime_path(&path.display().to_string())?;
     let resolved_root = normalize_runtime_path(&storage_root.display().to_string())?;
@@ -4463,6 +4614,59 @@ fn sqlite_read_text(path: &Path, db_path: &Path, storage_root: &Path) -> Result<
         row.get::<_, String>(0)
     })
     .map_err(|err| format!("read sqlite payload failed for {}: {err}", path.display()))
+}
+
+fn sqlite_write_text(
+    path: &Path,
+    db_path: &Path,
+    storage_root: &Path,
+    payload_text: &str,
+    ) -> Result<(), String> {
+    let (stable_key, _) = sqlite_lookup_keys(path, storage_root)?;
+    if let Some(parent) = db_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "create sqlite parent directory for {} failed: {err}",
+                db_path.display()
+            )
+        })?;
+    }
+    let conn = sqlite_connection(db_path)?;
+    ensure_runtime_storage_sqlite_schema(&conn)?;
+    conn.execute(
+        "INSERT INTO runtime_storage_payloads (payload_key, payload_text) VALUES (?1, ?2)
+         ON CONFLICT(payload_key) DO UPDATE SET payload_text = excluded.payload_text",
+        params![stable_key, payload_text],
+    )
+    .map_err(|err| format!("write sqlite payload failed for {}: {err}", path.display()))?;
+    Ok(())
+}
+
+fn sqlite_append_text(
+    path: &Path,
+    db_path: &Path,
+    storage_root: &Path,
+    payload_text: &str,
+) -> Result<(), String> {
+    let (stable_key, _) = sqlite_lookup_keys(path, storage_root)?;
+    if let Some(parent) = db_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "create sqlite parent directory for {} failed: {err}",
+                db_path.display()
+            )
+        })?;
+    }
+    let conn = sqlite_connection(db_path)?;
+    ensure_runtime_storage_sqlite_schema(&conn)?;
+    conn.execute(
+        "INSERT INTO runtime_storage_payloads (payload_key, payload_text) VALUES (?1, ?2)
+         ON CONFLICT(payload_key) DO UPDATE
+         SET payload_text = runtime_storage_payloads.payload_text || excluded.payload_text",
+        params![stable_key, payload_text],
+    )
+    .map_err(|err| format!("append sqlite payload failed for {}: {err}", path.display()))?;
+    Ok(())
 }
 
 fn storage_artifact_exists(path: &Path, storage_backend: Option<&ResolvedStorageBackend>) -> bool {
@@ -4584,6 +4788,166 @@ fn resolve_storage_backend(paths: &[PathBuf]) -> Option<ResolvedStorageBackend> 
     }
 
     None
+}
+
+fn normalized_runtime_storage_backend_family(value: &str) -> String {
+    value.trim().to_lowercase().replace('-', "_")
+}
+
+fn resolve_runtime_storage_backend(
+    request: &RuntimeStorageRequestPayload,
+) -> Result<
+    (
+        ResolvedStorageBackend,
+        String,
+        Option<String>,
+        Option<String>,
+    ),
+    String,
+> {
+    let backend_family = normalized_runtime_storage_backend_family(&request.backend_family);
+    match backend_family.as_str() {
+        "filesystem" | "file" => Ok((
+            ResolvedStorageBackend::Filesystem,
+            "filesystem".to_string(),
+            None,
+            None,
+        )),
+        "sqlite" | "sqlite3" => {
+            let db_path = request
+                .sqlite_db_path
+                .as_ref()
+                .ok_or_else(|| "runtime_storage sqlite backend requires sqlite_db_path".to_string())
+                .and_then(|value| normalize_runtime_path(value))?;
+            let storage_root = match request.storage_root.clone() {
+                Some(value) => normalize_runtime_path(&value)?,
+                None => db_path
+                    .parent()
+                    .map(Path::to_path_buf)
+                    .ok_or_else(|| {
+                        format!(
+                            "runtime_storage sqlite db path {} must have a parent directory",
+                            db_path.display()
+                        )
+                    })?,
+            };
+            Ok((
+                ResolvedStorageBackend::Sqlite {
+                    db_path: db_path.clone(),
+                    storage_root: storage_root.clone(),
+                },
+                "sqlite".to_string(),
+                Some(db_path.display().to_string()),
+                Some(storage_root.display().to_string()),
+            ))
+        }
+        other => Err(format!(
+            "unsupported runtime_storage backend family: {other:?}"
+        )),
+    }
+}
+
+fn runtime_storage_operation(
+    request: RuntimeStorageRequestPayload,
+) -> Result<RuntimeStorageResponsePayload, String> {
+    let path = normalize_runtime_path(&request.path)?;
+    let (backend, backend_family, sqlite_db_path, storage_root) =
+        resolve_runtime_storage_backend(&request)?;
+    let operation = request.operation.trim().to_lowercase();
+    let payload_text = request.payload_text;
+
+    let (exists, resolved_payload_text, bytes_written) = match operation.as_str() {
+        "exists" => (storage_artifact_exists(&path, Some(&backend)), None, None),
+        "read_text" => {
+            let payload = storage_read_text(&path, Some(&backend))?;
+            (true, Some(payload), None)
+        }
+        "write_text" => {
+            let payload = payload_text.ok_or_else(|| {
+                "runtime_storage write_text requires payload_text".to_string()
+            })?;
+            match &backend {
+                ResolvedStorageBackend::Filesystem => {
+                    if let Some(parent) = path.parent() {
+                        fs::create_dir_all(parent).map_err(|err| {
+                            format!(
+                                "create runtime storage parent directory failed for {}: {err}",
+                                path.display()
+                            )
+                        })?;
+                    }
+                    fs::write(&path, payload.as_bytes()).map_err(|err| {
+                        format!("write runtime storage payload failed for {}: {err}", path.display())
+                    })?;
+                }
+                ResolvedStorageBackend::Sqlite {
+                    db_path,
+                    storage_root,
+                } => {
+                    sqlite_write_text(&path, db_path, storage_root, &payload)?;
+                }
+            }
+            (true, None, Some(payload.as_bytes().len()))
+        }
+        "append_text" => {
+            let payload = payload_text.ok_or_else(|| {
+                "runtime_storage append_text requires payload_text".to_string()
+            })?;
+            match &backend {
+                ResolvedStorageBackend::Filesystem => {
+                    if let Some(parent) = path.parent() {
+                        fs::create_dir_all(parent).map_err(|err| {
+                            format!(
+                                "create runtime storage parent directory failed for {}: {err}",
+                                path.display()
+                            )
+                        })?;
+                    }
+                    let mut file = OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&path)
+                        .map_err(|err| {
+                            format!(
+                                "open runtime storage payload for append failed for {}: {err}",
+                                path.display()
+                            )
+                        })?;
+                    file.write_all(payload.as_bytes()).map_err(|err| {
+                        format!(
+                            "append runtime storage payload failed for {}: {err}",
+                            path.display()
+                        )
+                    })?;
+                }
+                ResolvedStorageBackend::Sqlite {
+                    db_path,
+                    storage_root,
+                } => {
+                    sqlite_append_text(&path, db_path, storage_root, &payload)?;
+                }
+            }
+            (true, None, Some(payload.as_bytes().len()))
+        }
+        other => {
+            return Err(format!(
+                "unsupported runtime_storage operation: {other:?}"
+            ))
+        }
+    };
+
+    Ok(RuntimeStorageResponsePayload {
+        schema_version: RUNTIME_STORAGE_SCHEMA_VERSION.to_string(),
+        authority: RUNTIME_STORAGE_AUTHORITY.to_string(),
+        operation,
+        path: path.display().to_string(),
+        backend_family,
+        sqlite_db_path,
+        storage_root,
+        exists,
+        payload_text: resolved_payload_text,
+        bytes_written,
+    })
 }
 
 fn descriptor_mapping<'a>(
@@ -5868,7 +6232,12 @@ fn has_explicit_framework_alias_call(
 fn paper_skill_requires_context(slug: &str) -> bool {
     matches!(
         slug,
-        "paper-reviewer" | "paper-reviser" | "paper-writing" | "paper-logic" | "paper-visuals"
+        "paper-workbench"
+            | "paper-reviewer"
+            | "paper-reviser"
+            | "paper-writing"
+            | "paper-logic"
+            | "paper-visuals"
     )
 }
 
@@ -5891,6 +6260,41 @@ fn has_paper_context(query_text: &str, query_token_list: &[String]) -> bool {
     .any(|marker| {
         query_text.contains(&normalize_text(marker))
             || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_github_pr_context(query_text: &str, query_token_list: &[String]) -> bool {
+    ["github", "gh", "pull request", "pr"]
+        .iter()
+        .any(|marker| {
+            query_text.contains(&normalize_text(marker))
+                || text_matches_phrase(query_token_list, marker)
+        })
+}
+
+fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[String]) -> bool {
+    if !has_paper_context(query_text, query_token_list) {
+        return false;
+    }
+    let review_markers = [
+        "review",
+        "reviewer comments",
+        "review comments",
+        "审稿意见",
+        "评审意见",
+    ];
+    let revise_markers = [
+        "改论文",
+        "修改论文",
+        "改稿",
+        "修改稿",
+        "进入修改",
+        "直接改",
+    ];
+    review_markers.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker)) || text_matches_phrase(query_token_list, marker)
+    }) && revise_markers.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker)) || text_matches_phrase(query_token_list, marker)
     })
 }
 
@@ -5978,6 +6382,19 @@ fn score_route_candidate<'a>(
             score: 0.0,
             reasons: vec![
                 "Suppressed: paper skills require explicit paper or manuscript context."
+                    .to_string(),
+            ],
+        };
+    }
+    if matches!(record.slug.as_str(), "gh-address-comments" | "gh-pr-triage")
+        && has_paper_context(query_text, query_token_list)
+        && !has_github_pr_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: paper review or revision requests without explicit GitHub/PR context should stay on paper lanes."
                     .to_string(),
             ],
         };
@@ -6192,6 +6609,34 @@ fn score_route_candidate<'a>(
                     .to_string(),
             );
         }
+
+        let architecture_review_markers = [
+            "架构风险",
+            "系统 review",
+            "设计 review",
+            "architecture review",
+            "系统设计 review",
+        ];
+        if architecture_review_markers
+            .iter()
+            .any(|marker| query_text.contains(marker))
+        {
+            score += 24.0;
+            reasons.push(
+                "Architecture review boost applied: explicit architecture-risk review markers detected."
+                    .to_string(),
+            );
+        }
+    }
+
+    if record.slug == "paper-workbench"
+        && has_paper_review_revision_intent(query_text, query_token_list)
+    {
+        score += 28.0;
+        reasons.push(
+            "Paper workbench boost applied: review-driven manuscript revision intent detected."
+                .to_string(),
+        );
     }
 
     if is_overlay_record(record) && score > 0.0 {
@@ -6317,6 +6762,7 @@ fn route_candidate_cmp(left: &RouteCandidate<'_>, right: &RouteCandidate<'_>) ->
 
 fn pick_overlay(
     records: &[SkillRecord],
+    query_text: &str,
     query_tokens: &[String],
     selected_skill: &SkillRecord,
 ) -> Option<String> {
@@ -6358,6 +6804,28 @@ fn pick_overlay(
         ]
         .iter()
         .any(|marker| text_matches_phrase(query_tokens, marker))
+    {
+        if let Some(skill) = records.iter().find(|record| record.slug == "code-review") {
+            return Some(skill.slug.clone());
+        }
+    }
+
+    if selected_skill.slug == "architect-review"
+        && [
+            "代码 review",
+            "code review",
+            "代码审核",
+            "回归风险",
+            "findings",
+            "严重程度",
+            "实现质量",
+            "找 bug",
+            "correctness",
+            "pr review",
+            "pull request",
+        ]
+        .iter()
+        .any(|marker| query_text.contains(marker) || text_matches_phrase(query_tokens, marker))
     {
         if let Some(skill) = records.iter().find(|record| record.slug == "code-review") {
             return Some(skill.slug.clone());
@@ -7623,6 +8091,95 @@ mod tests {
             json!(ROUTE_SNAPSHOT_SCHEMA_VERSION)
         );
         assert_eq!(payload["route_snapshot"]["selected_skill"], json!("router"));
+    }
+
+    #[test]
+    fn runtime_storage_operation_round_trips_filesystem_payload() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("router-rs-runtime-storage-{nonce}.txt"));
+        let _ = fs::remove_file(&path);
+
+        let write = runtime_storage_operation(RuntimeStorageRequestPayload {
+            operation: "write_text".to_string(),
+            path: path.display().to_string(),
+            backend_family: "filesystem".to_string(),
+            sqlite_db_path: None,
+            storage_root: None,
+            payload_text: Some("alpha".to_string()),
+        })
+        .expect("write payload");
+        assert_eq!(write.schema_version, RUNTIME_STORAGE_SCHEMA_VERSION);
+        assert_eq!(write.authority, RUNTIME_STORAGE_AUTHORITY);
+        assert!(write.exists);
+        assert_eq!(write.bytes_written, Some(5));
+
+        let append = runtime_storage_operation(RuntimeStorageRequestPayload {
+            operation: "append_text".to_string(),
+            path: path.display().to_string(),
+            backend_family: "filesystem".to_string(),
+            sqlite_db_path: None,
+            storage_root: None,
+            payload_text: Some("-beta".to_string()),
+        })
+        .expect("append payload");
+        assert!(append.exists);
+        assert_eq!(append.bytes_written, Some(5));
+
+        let read = runtime_storage_operation(RuntimeStorageRequestPayload {
+            operation: "read_text".to_string(),
+            path: path.display().to_string(),
+            backend_family: "filesystem".to_string(),
+            sqlite_db_path: None,
+            storage_root: None,
+            payload_text: None,
+        })
+        .expect("read payload");
+        assert_eq!(read.payload_text.as_deref(), Some("alpha-beta"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn runtime_storage_operation_round_trips_sqlite_payload() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("router-rs-runtime-storage-root-{nonce}"));
+        let db_path = root.join("runtime_checkpoint_store.sqlite3");
+        let artifact_path = root.join("runtime-data").join("TRACE_RESUME_MANIFEST.json");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create sqlite root");
+
+        let write = runtime_storage_operation(RuntimeStorageRequestPayload {
+            operation: "write_text".to_string(),
+            path: artifact_path.display().to_string(),
+            backend_family: "sqlite".to_string(),
+            sqlite_db_path: Some(db_path.display().to_string()),
+            storage_root: Some(root.display().to_string()),
+            payload_text: Some("{\"status\":\"ok\"}".to_string()),
+        })
+        .expect("sqlite write payload");
+        assert_eq!(write.backend_family, "sqlite");
+        assert_eq!(write.sqlite_db_path.as_deref(), Some(db_path.display().to_string().as_str()));
+        assert_eq!(write.storage_root.as_deref(), Some(root.display().to_string().as_str()));
+        assert!(db_path.exists());
+
+        let read = runtime_storage_operation(RuntimeStorageRequestPayload {
+            operation: "read_text".to_string(),
+            path: artifact_path.display().to_string(),
+            backend_family: "sqlite".to_string(),
+            sqlite_db_path: Some(db_path.display().to_string()),
+            storage_root: Some(root.display().to_string()),
+            payload_text: None,
+        })
+        .expect("sqlite read payload");
+        assert_eq!(read.payload_text.as_deref(), Some("{\"status\":\"ok\"}"));
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

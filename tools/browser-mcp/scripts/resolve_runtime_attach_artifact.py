@@ -13,8 +13,9 @@ from typing import Iterable
 
 TRACE_RESUME_MANIFEST_SCHEMA_VERSION = "runtime-resume-manifest-v1"
 RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION = "runtime-event-transport-v1"
-DEFAULT_SEARCH_ROOT = (
-    Path(__file__).resolve().parents[3] / "codex_agno_runtime" / "artifacts" / "scratch"
+DEFAULT_SEARCH_ROOTS = (
+    Path(__file__).resolve().parents[3] / "framework_runtime" / "artifacts" / "scratch",
+    Path(__file__).resolve().parents[3] / "codex_agno_runtime" / "artifacts" / "scratch",
 )
 
 
@@ -173,9 +174,12 @@ def _iter_sqlite_candidates(search_root: Path) -> Iterable[AttachCandidate]:
                 yield candidate
 
 
-def resolve_runtime_attach_artifact(search_root: Path) -> str | None:
-    candidates = list(_iter_filesystem_candidates(search_root))
-    candidates.extend(_iter_sqlite_candidates(search_root))
+def resolve_runtime_attach_artifact(search_root: Path | tuple[Path, ...]) -> str | None:
+    search_roots = (search_root,) if isinstance(search_root, Path) else search_root
+    candidates: list[AttachCandidate] = []
+    for root in search_roots:
+        candidates.extend(_iter_filesystem_candidates(root))
+        candidates.extend(_iter_sqlite_candidates(root))
     if not candidates:
         return None
 
@@ -210,12 +214,17 @@ def main() -> int:
     parser.add_argument(
         "--search-root",
         type=Path,
-        default=DEFAULT_SEARCH_ROOT,
+        default=None,
         help="Root directory that contains runtime scratch artifacts.",
     )
     args = parser.parse_args()
 
-    attach_path = resolve_runtime_attach_artifact(args.search_root.resolve())
+    search_root: Path | tuple[Path, ...]
+    if args.search_root is None:
+        search_root = tuple(root.resolve() for root in DEFAULT_SEARCH_ROOTS)
+    else:
+        search_root = args.search_root.resolve()
+    attach_path = resolve_runtime_attach_artifact(search_root)
     if attach_path is None:
         return 1
     print(attach_path)

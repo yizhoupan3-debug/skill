@@ -184,7 +184,7 @@ def _prepare_repo_state(
 
 def test_launcher_prefers_explicit_attach_descriptor_env_over_auto_discovery(tmp_path: Path) -> None:
     repo_root = _prepare_repo(tmp_path)
-    scratch_root = repo_root / "codex_agno_runtime" / "artifacts" / "scratch"
+    scratch_root = repo_root / "framework_runtime" / "artifacts" / "scratch"
     _write_text(
         scratch_root / "older" / "TRACE_RESUME_MANIFEST.json",
         json.dumps(
@@ -242,7 +242,7 @@ def test_launcher_auto_discovers_sqlite_backed_attach_artifact(tmp_path: Path) -
     repo_root = _prepare_repo(tmp_path)
     db_path = (
         repo_root
-        / "codex_agno_runtime"
+        / "framework_runtime"
         / "artifacts"
         / "scratch"
         / "sqlite-run"
@@ -284,7 +284,7 @@ def test_launcher_auto_discovers_filesystem_resume_manifest_as_canonical_attach_
     repo_root = _prepare_repo(tmp_path)
     manifest_path = (
         repo_root
-        / "codex_agno_runtime"
+        / "framework_runtime"
         / "artifacts"
         / "scratch"
         / "run-a"
@@ -297,6 +297,37 @@ def test_launcher_auto_discovers_filesystem_resume_manifest_as_canonical_attach_
                 "schema_version": "runtime-resume-manifest-v1",
                 "event_transport_path": "/auto/discovered/runtime_event_transports/session__job.json",
                 "updated_at": "2026-04-23T00:10:00+00:00",
+            }
+        )
+        + "\n",
+    )
+
+    result = _run_launcher(repo_root, env={})
+
+    assert result["argv"] == [
+        "dist/index.js",
+        "--runtime-attach-artifact-path",
+        str(manifest_path.resolve()),
+    ]
+
+
+def test_launcher_auto_discovers_legacy_runtime_scratch_root_as_fallback(tmp_path: Path) -> None:
+    repo_root = _prepare_repo(tmp_path)
+    manifest_path = (
+        repo_root
+        / "codex_agno_runtime"
+        / "artifacts"
+        / "scratch"
+        / "legacy-run"
+        / "TRACE_RESUME_MANIFEST.json"
+    )
+    _write_text(
+        manifest_path,
+        json.dumps(
+            {
+                "schema_version": "runtime-resume-manifest-v1",
+                "event_transport_path": "/auto/discovered/runtime_event_transports/legacy.json",
+                "updated_at": "2026-04-23T00:11:00+00:00",
             }
         )
         + "\n",

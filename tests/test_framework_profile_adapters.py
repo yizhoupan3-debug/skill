@@ -12,23 +12,23 @@ from pathlib import Path
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
+RUNTIME_SRC = PROJECT_ROOT / "framework_runtime" / "src"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-import codex_agno_runtime.profile_artifacts as profile_artifacts_module
-import codex_agno_runtime.host_adapters as host_adapters_module
-import codex_agno_runtime.codex_artifact_contracts as codex_artifact_contracts_module
-from codex_agno_runtime.codex_artifact_contracts import (
+import framework_runtime.profile_artifacts as profile_artifacts_module
+import framework_runtime.host_adapters as host_adapters_module
+import framework_runtime.framework_artifact_contracts as codex_artifact_contracts_module
+from framework_runtime.framework_artifact_contracts import (
     build_cli_family_capability_discovery,
     build_cli_family_parity_snapshot,
     build_codex_dual_entry_parity_snapshot,
     build_cli_family_capability_discovery as rust_build_cli_family_capability_discovery,
     build_codex_dual_entry_parity_snapshot as rust_build_codex_dual_entry_parity_snapshot,
 )
-from codex_agno_runtime.control_plane_contracts import (
+from framework_runtime.control_plane_contracts import (
     build_control_plane_contract_descriptors,
     build_delegation_contract,
     build_execution_controller_contract,
@@ -36,7 +36,7 @@ from codex_agno_runtime.control_plane_contracts import (
     build_execution_kernel_live_response_serialization_contract,
     build_supervisor_state_contract,
 )
-from codex_agno_runtime.framework_profile import (
+from framework_runtime.framework_profile import (
     CORE_CAPABILITIES,
     FRAMEWORK_SHARED_CONTRACT_FIELDS,
     FRAMEWORK_SHARED_CONTRACT_SCHEMA_VERSION,
@@ -46,11 +46,11 @@ from codex_agno_runtime.framework_profile import (
     merge_profile_overrides,
     resolve_host_capability_requirements,
 )
-from codex_agno_runtime.execution_kernel_contracts import (
+from framework_runtime.execution_kernel_contracts import (
     RUNTIME_TRACE_METADATA_FIELDS,
     build_execution_kernel_live_response_serialization_contract_core,
 )
-from codex_agno_runtime.host_adapters import (
+from framework_runtime.host_adapters import (
     AIONRS_COMPANION_ADAPTER,
     AIONUI_HOST_ADAPTER,
     CLAUDE_CODE_ADAPTER,
@@ -71,7 +71,7 @@ from codex_agno_runtime.host_adapters import (
     compile_cli_common_adapter,
     compile_gemini_cli_adapter,
 )
-from codex_agno_runtime.host_adapter_compatibility import (
+from framework_runtime.host_adapter_compatibility import (
     compatibility_snapshot,
     build_codex_desktop_alias_retirement_status,
     build_upgrade_compatibility_matrix,
@@ -79,10 +79,10 @@ from codex_agno_runtime.host_adapter_compatibility import (
     compile_aionui_host_adapter,
     validate_adapter_compatibility,
 )
-from codex_agno_runtime.rust_router import RustRouteAdapter
-import codex_agno_runtime.rust_router as rust_router_module
-from codex_agno_runtime.runtime_registry import framework_native_aliases
-from codex_agno_runtime.trace import (
+from framework_runtime.rust_router import RustRouteAdapter
+import framework_runtime.rust_router as rust_router_module
+from framework_runtime.runtime_registry import framework_native_aliases
+from framework_runtime.trace import (
     TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
     TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
     TRACE_REPLAY_CURSOR_SCHEMA_VERSION,
@@ -1827,10 +1827,10 @@ def test_codex_desktop_alias_retirement_status_tracks_parity_first_exit_gate() -
 
 
 def test_legacy_codex_desktop_alias_compiler_drops_the_old_compatibility_escape_hatch() -> None:
-    root_package = importlib.import_module("codex_agno_runtime")
-    cli_family_surface = importlib.import_module("codex_agno_runtime.cli_family_contracts")
+    root_package = importlib.import_module("framework_runtime")
+    cli_family_surface = importlib.import_module("framework_runtime.cli_family_contracts")
     compatibility_module_path = (
-        PROJECT_ROOT / "codex_agno_runtime" / "src" / "codex_agno_runtime" / "compatibility.py"
+        PROJECT_ROOT / "framework_runtime" / "src" / "framework_runtime" / "compatibility.py"
     )
 
     assert (

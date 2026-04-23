@@ -9,6 +9,9 @@
  */
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
+const { spawnSync } = require("child_process");
 const PptxGenJS = require("pptxgenjs");
 const {
   imageSizingCrop,
@@ -48,6 +51,21 @@ const palette = {
   accentSoft: "EEF3FF",     // blue tint for highlight chips
 };
 
+pptx.defineSlideMaster({
+  title: "OFFICECLI_SEMANTIC",
+  background: { color: palette.stage },
+  objects: [
+    {
+      placeholder: {
+        options: {
+          name: "officecli_title",
+          type: "title",
+        },
+      },
+    },
+  ],
+});
+
 // ────────────────────────── Helpers ──────────────────────────
 /** Top overline label (light mode: dark text on light bg) */
 function addTopLabel(slide, text) {
@@ -86,7 +104,7 @@ function addLightPanel(slide, x, y, w, h) {
 /** Section title for light template */
 function addSectionTitle(slide, cn, en, x, y, w) {
   const cnW = Math.min(w * 0.72, 5.2);
-  slide.addText(cn, { x, y, w: cnW, h: 0.28, ...getSmartTypography("h2", cn, cnW, 0.28, { color: palette.text }) });
+  slide.addText(cn, { x, y, w: cnW, h: 0.28, placeholder: "officecli_title", ...getSmartTypography("h2", cn, cnW, 0.28, { color: palette.text }) });
   if (en) {
     slide.addText(en, { x, y: y + 0.38, w, h: 0.14, ...getSmartTypography("body2", en, w, 0.14, { color: palette.textMute, bold: true }) });
   }
@@ -97,9 +115,18 @@ function addSectionTitle(slide, cn, en, x, y, w) {
   });
 }
 
+function sanitizeGeneratedDeck(fileName) {
+  const script = path.resolve(process.cwd(), "sanitize_pptx.py");
+  if (!fs.existsSync(script)) return;
+  const completed = spawnSync("python3", [script, fileName], { stdio: "inherit" });
+  if (completed.status !== 0) {
+    throw new Error(`sanitize_pptx.py failed for ${fileName}`);
+  }
+}
+
 // ────────────────────────── Slides ──────────────────────────
 // Demo: Cover slide (light mode)
-const cover = pptx.addSlide();
+const cover = pptx.addSlide({ masterName: "OFFICECLI_SEMANTIC" });
 cover.background = { color: "FFFFFF" };
 cover.addShape(pptx.ShapeType.rect, {
   x: 0, y: 0, w: 0.06, h: 7.5,
@@ -111,6 +138,7 @@ cover.addText("RESEARCH REPORT", {
 });
 cover.addText("Academic Presentation\nTitle Goes Here", {
   x: 0.52, y: 2.1, w: 9.0, h: 0.8,
+  placeholder: "officecli_title",
   ...getTypography("display", { color: palette.text, lineSpacing: 36 }),
 });
 cover.addText("Subtitle or institution — 2026", {
@@ -122,7 +150,7 @@ cover.addText("01 / 08", { x: 12.2, y: 7.08, w: 0.8, h: 0.12, ...getTypography("
 warnIfSlideHasOverlaps(cover, pptx);
 
 // Demo: Content slide — multi-card (light mode)
-const slide0 = pptx.addSlide();
+const slide0 = pptx.addSlide({ masterName: "OFFICECLI_SEMANTIC" });
 slide0.background = { color: palette.stage };
 addTopLabel(slide0, "SECTION 01");
 addSectionTitle(slide0, "核心发现", "Key Findings", 0.9, 0.78, 5.0);
@@ -145,5 +173,13 @@ warnIfSlideHasOverlaps(slide0, pptx);
 warnIfSlideElementsOutOfBounds(slide0, pptx);
 
 // Write
-pptx.writeFile({ fileName: "deck_light.pptx" });
-console.log("✅ Generated deck_light.pptx (light academic template demo)");
+async function writeDeck() {
+  await pptx.writeFile({ fileName: "deck_light.pptx" });
+  sanitizeGeneratedDeck("deck_light.pptx");
+  console.log("✅ Generated deck_light.pptx (light academic template demo)");
+}
+
+writeDeck().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

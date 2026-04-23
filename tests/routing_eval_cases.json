@@ -150,23 +150,43 @@
       "first_turn": true
     },
     {
-      "id": "paper-reviewer-whole-paper-case",
+      "id": "paper-workbench-whole-paper-case",
       "category": "should-trigger",
       "task": "帮我审这篇 paper，判断现在能不能投，先做整篇严审。",
-      "focus_skill": "paper-reviewer",
-      "expected_owner": "paper-reviewer",
+      "focus_skill": "paper-workbench",
+      "expected_owner": "paper-workbench",
       "expected_overlay": null,
       "forbidden_owners": ["paper-reviser", "paper-writing", "paper-logic"],
       "first_turn": true
     },
     {
-      "id": "paper-reviser-review-comments-case",
+      "id": "paper-workbench-review-comments-case",
       "category": "should-trigger",
       "task": "根据 reviewer comments 修改论文，该删就删，该藏到附录就藏到附录。",
-      "focus_skill": "paper-reviser",
-      "expected_owner": "paper-reviser",
+      "focus_skill": "paper-workbench",
+      "expected_owner": "paper-workbench",
       "expected_overlay": null,
-      "forbidden_owners": ["paper-reviewer", "paper-writing"],
+      "forbidden_owners": ["paper-reviewer", "paper-reviser", "paper-writing"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-workbench-generic-review-revision-case",
+      "category": "wrong-owner-near-miss",
+      "task": "按 review 改论文。",
+      "focus_skill": "paper-workbench",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "forbidden_owners": ["architect-review", "gh-address-comments", "paper-reviewer"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-workbench-reviewer-comments-no-github-case",
+      "category": "wrong-owner-near-miss",
+      "task": "根据 reviewer comments 改论文。",
+      "focus_skill": "paper-workbench",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "forbidden_owners": ["gh-address-comments", "architect-review", "paper-reviewer"],
       "first_turn": true
     },
     {
@@ -180,23 +200,43 @@
       "first_turn": true
     },
     {
-      "id": "paper-reviewer-english-review-case",
-      "category": "wrong-owner-near-miss",
-      "task": "review 这篇 paper，告诉我现在能不能投。",
-      "focus_skill": "paper-reviewer",
-      "expected_owner": "paper-reviewer",
+      "id": "humanizer-sentence-audit-case",
+      "category": "should-trigger",
+      "task": "不要直接改写，先逐句评估这段话的 AIGC 痕迹，并判断哪些句子不需要改、哪些需要自然话改写、哪些需要完全重写。",
+      "focus_skill": "humanizer",
+      "expected_owner": "humanizer",
       "expected_overlay": null,
-      "forbidden_owners": ["architect-review"],
+      "forbidden_owners": ["paper-writing", "prompt-engineer"],
       "first_turn": true
     },
     {
-      "id": "paper-reviewer-paper-review-phrase-case",
+      "id": "humanizer-audit-then-patch-case",
       "category": "wrong-owner-near-miss",
-      "task": "paper review 一下这篇稿子，先给我整篇判断。",
+      "task": "先判断哪些句子 AI 味最重，再只改这些句子，不要整段重写。",
+      "focus_skill": "humanizer",
+      "expected_owner": "humanizer",
+      "expected_overlay": null,
+      "forbidden_owners": ["paper-writing"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-reviewer-explicit-lane-case",
+      "category": "wrong-owner-near-miss",
+      "task": "用 $paper-reviewer 只做整篇严审，不进入修改。",
       "focus_skill": "paper-reviewer",
       "expected_owner": "paper-reviewer",
       "expected_overlay": null,
-      "forbidden_owners": ["architect-review"],
+      "forbidden_owners": ["paper-workbench", "architect-review"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-reviser-explicit-lane-case",
+      "category": "wrong-owner-near-miss",
+      "task": "用 $paper-reviser 只进改稿 lane，不要再审。",
+      "focus_skill": "paper-reviser",
+      "expected_owner": "paper-reviser",
+      "expected_overlay": null,
+      "forbidden_owners": ["paper-workbench", "paper-reviewer"],
       "first_turn": true
     },
     {
@@ -207,6 +247,56 @@
       "expected_owner": "architect-review",
       "expected_overlay": null,
       "forbidden_owners": ["paper-reviser", "paper-reviewer"],
+      "first_turn": true
+    },
+    {
+      "id": "architect-review-repo-risk-audit-case",
+      "category": "wrong-owner-near-miss",
+      "task": "全面审核这个仓库的实现质量和架构风险。",
+      "focus_skill": "architect-review",
+      "expected_owner": "architect-review",
+      "expected_overlay": "code-review",
+      "forbidden_owners": ["idea-to-plan", "paper-reviewer", "paper-reviser"],
+      "first_turn": true
+    },
+    {
+      "id": "code-review-overlay-generic-implementation-review-case",
+      "category": "wrong-owner-near-miss",
+      "task": "帮我做代码 review，找 bug 和回归风险。",
+      "focus_skill": "code-review",
+      "expected_owner": "architect-review",
+      "expected_overlay": "code-review",
+      "forbidden_owners": ["paper-reviewer", "paper-reviser"],
+      "first_turn": true
+    },
+    {
+      "id": "code-review-overlay-findings-severity-case",
+      "category": "wrong-owner-near-miss",
+      "task": "全面review这个仓库，找 bug 并按严重程度给 findings。",
+      "focus_skill": "code-review",
+      "expected_owner": "architect-review",
+      "expected_overlay": "code-review",
+      "forbidden_owners": ["paper-reviewer", "paper-reviser", "idea-to-plan"],
+      "first_turn": true
+    },
+    {
+      "id": "gh-address-comments-pr-review-comments-case",
+      "category": "wrong-owner-near-miss",
+      "task": "处理这个 PR 的 review comments，并把没回的线程清掉。",
+      "focus_skill": "gh-address-comments",
+      "expected_owner": "gh-address-comments",
+      "expected_overlay": "code-review",
+      "forbidden_owners": ["paper-workbench", "architect-review"],
+      "first_turn": true
+    },
+    {
+      "id": "gh-pr-triage-review-summary-case",
+      "category": "wrong-owner-near-miss",
+      "task": "给我一个 PR review summary，看 reviewers 主要卡在哪。",
+      "focus_skill": "gh-pr-triage",
+      "expected_owner": "gh-pr-triage",
+      "expected_overlay": "code-review",
+      "forbidden_owners": ["paper-workbench", "architect-review"],
       "first_turn": true
     },
     {

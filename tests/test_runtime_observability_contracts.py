@@ -9,14 +9,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
+RUNTIME_SRC = PROJECT_ROOT / "framework_runtime" / "src"
 RUST_ADAPTER_TIMEOUT_SECONDS = 120.0
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-from codex_agno_runtime.observability import (
+from framework_runtime.observability import (
     RUNTIME_OBSERVABILITY_DASHBOARD_DIMENSIONS,
     RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION,
     RUNTIME_OBSERVABILITY_METRIC_SPECS,
@@ -26,8 +26,8 @@ from codex_agno_runtime.observability import (
     runtime_observability_metric_catalog,
     runtime_observability_dashboard_schema,
 )
-from codex_agno_runtime.paths import default_codex_home
-from codex_agno_runtime.rust_router import RustRouteAdapter
+from framework_runtime.paths import default_codex_home
+from framework_runtime.rust_router import RustRouteAdapter
 
 CONTRACT_PATH = PROJECT_ROOT / "docs" / "runtime_observability_contract.md"
 CONTRACT_TEXT = CONTRACT_PATH.read_text(encoding="utf-8")
@@ -237,7 +237,7 @@ def test_metrics_catalog_and_dashboard_schema_are_stable() -> None:
 
 def test_concrete_observability_helpers_match_the_contract() -> None:
     adapter = RustRouteAdapter(default_codex_home(), timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS)
-    with patch("codex_agno_runtime.observability._observability_rust_adapter", return_value=adapter):
+    with patch("framework_runtime.observability._observability_rust_adapter", return_value=adapter):
         exporter = build_runtime_observability_exporter_descriptor()
         assert exporter["ownership_lane"] == "rust-contract-lane"
         assert exporter["producer_owner"] == "rust-control-plane"
@@ -314,7 +314,7 @@ def test_metric_catalog_helper_freezes_machine_readable_metrics_path() -> None:
 
 def test_observability_helpers_delegate_to_rust_contract_lane() -> None:
     adapter = RustRouteAdapter(default_codex_home(), timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS)
-    with patch("codex_agno_runtime.observability._observability_rust_adapter", return_value=adapter):
+    with patch("framework_runtime.observability._observability_rust_adapter", return_value=adapter):
         exporter = build_runtime_observability_exporter_descriptor()
         assert exporter == adapter.runtime_observability_exporter_descriptor()
 
@@ -368,7 +368,7 @@ def test_observability_helpers_fallback_to_python_when_rust_lane_is_unavailable(
             raise RuntimeError("rust observability lane unavailable")
 
     with patch(
-        "codex_agno_runtime.observability._observability_rust_adapter",
+        "framework_runtime.observability._observability_rust_adapter",
         return_value=_BrokenRustObservabilityAdapter(),
     ):
         exporter = build_runtime_observability_exporter_descriptor()

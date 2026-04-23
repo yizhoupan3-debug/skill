@@ -85,6 +85,7 @@ def copy_common_python_tools(dest: Path) -> None:
         "slides_test.py",
         "detect_font.py",
         "extract_pptx_structure.py",
+        "sanitize_pptx.py",
     ]:
         shutil.copy2(SCRIPTS / name, dest / name)
 
@@ -117,6 +118,8 @@ def scenario_outline(root: Path) -> dict:
     shutil.copy2(SCRIPTS / "outline_to_deck.js", workdir / "outline_to_deck.js")
     shutil.copytree(ASSETS / "pptxgenjs_helpers", workdir / "pptxgenjs_helpers")
     copy_common_python_tools(workdir)
+    shutil.copy2(SCRIPTS / "officecli_bridge.py", workdir / "officecli_bridge.py")
+    shutil.copy2(SCRIPTS / "hybrid_pipeline.py", workdir / "hybrid_pipeline.py")
     npm_bootstrap(workdir)
     env = rust_tool_env()
 
@@ -141,6 +144,13 @@ def scenario_outline(root: Path) -> dict:
         "extract_structure",
         env=env,
     )
+    hybrid = run(
+        [sys.executable, "hybrid_pipeline.py", "qa", "deck.pptx", "--rendered-dir", "rendered", "--json"],
+        workdir,
+        "hybrid qa",
+        env=env,
+    )
+    hybrid_payload = json.loads(hybrid.stdout)
 
     result = {
         "name": "outline_flow",
@@ -148,6 +158,7 @@ def scenario_outline(root: Path) -> dict:
         "deck_exists": (workdir / "deck.pptx").exists(),
         "rendered_pngs": count_pngs(workdir / "rendered"),
         "structure_json": (workdir / "structure.json").exists(),
+        "hybrid_render_pngs": hybrid_payload["render"]["png_count"],
     }
     doctor = officecli_doctor(workdir)
     if doctor:
@@ -165,6 +176,8 @@ def scenario_template(root: Path) -> dict:
     shutil.copy2(ASSETS / "deck.template.js", workdir / "deck.js")
     shutil.copytree(ASSETS / "pptxgenjs_helpers", workdir / "pptxgenjs_helpers")
     copy_common_python_tools(workdir)
+    shutil.copy2(SCRIPTS / "officecli_bridge.py", workdir / "officecli_bridge.py")
+    shutil.copy2(SCRIPTS / "hybrid_pipeline.py", workdir / "hybrid_pipeline.py")
     npm_bootstrap(workdir)
     env = rust_tool_env()
 
@@ -182,12 +195,20 @@ def scenario_template(root: Path) -> dict:
         "detect_font",
         env=env,
     )
+    hybrid = run(
+        [sys.executable, "hybrid_pipeline.py", "qa", "deck.pptx", "--rendered-dir", "rendered", "--json"],
+        workdir,
+        "hybrid qa",
+        env=env,
+    )
+    hybrid_payload = json.loads(hybrid.stdout)
 
     result = {
         "name": "template_flow",
         "workdir": str(workdir),
         "deck_exists": (workdir / "deck.pptx").exists(),
         "rendered_pngs": count_pngs(workdir / "rendered"),
+        "hybrid_render_pngs": hybrid_payload["render"]["png_count"],
     }
     doctor = officecli_doctor(workdir)
     if doctor:
@@ -202,8 +223,9 @@ def scenario_sample_deck(root: Path) -> dict:
 
     shutil.copy2(ROOT / "deck.js", workdir / "deck.js")
     shutil.copytree(ASSETS / "pptxgenjs_helpers", workdir / "pptxgenjs_helpers")
-    shutil.copy2(SCRIPTS / "rust_bridge.py", workdir / "rust_bridge.py")
-    shutil.copy2(SCRIPTS / "render_slides.py", workdir / "render_slides.py")
+    copy_common_python_tools(workdir)
+    shutil.copy2(SCRIPTS / "officecli_bridge.py", workdir / "officecli_bridge.py")
+    shutil.copy2(SCRIPTS / "hybrid_pipeline.py", workdir / "hybrid_pipeline.py")
     npm_bootstrap(workdir)
     env = rust_tool_env()
 
@@ -214,12 +236,20 @@ def scenario_sample_deck(root: Path) -> dict:
         "render_slides",
         env=env,
     )
+    hybrid = run(
+        [sys.executable, "hybrid_pipeline.py", "qa", "deck.pptx", "--rendered-dir", "rendered", "--json"],
+        workdir,
+        "hybrid qa",
+        env=env,
+    )
+    hybrid_payload = json.loads(hybrid.stdout)
 
     result = {
         "name": "sample_deck_flow",
         "workdir": str(workdir),
         "deck_exists": (workdir / "deck.pptx").exists(),
         "rendered_pngs": count_pngs(workdir / "rendered"),
+        "hybrid_render_pngs": hybrid_payload["render"]["png_count"],
     }
     doctor = officecli_doctor(workdir)
     if doctor:
