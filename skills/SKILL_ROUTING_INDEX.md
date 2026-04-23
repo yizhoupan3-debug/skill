@@ -19,7 +19,7 @@
 | CI 失败 / GitHub Actions 报红 | `gh-fix-ci` | Triage failing GitHub Actions PR checks with `gh` and `s |
 | Sentry 告警 / 线上异常 | `sentry` | Inspect Sentry issues, events, releases, environments, a |
 | 根因未知的 bug / 失败 / 报错 | `systematic-debugging` | Investigate unknown failures before fixing |
-| 需要并行 sidecar / 多代理拆分 | `subagent-delegation` | Decide whether to split a complex task across sidecars o |
+| 需要并行 sidecar / 多代理拆分 | `subagent-delegation` | Decide whether a complex task should stay local, use bou |
 | PDF / DOCX / 表格产物 | `pdf` | Read, create, edit, repair, and review PDFs when renderi |
 | 浏览器实操取证 / 页面交互 | `playwright` | Use a real browser when live evidence or page interactio |
 | 截图 / 页面 / 图表可视核查 | `visual-review` | Review screenshots, rendered pages, charts, and UI artif |

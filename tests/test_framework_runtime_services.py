@@ -66,10 +66,13 @@ _MINIMAL_SUPERVISOR_STATE = {
     "controller": "execution-controller-coding",
     "active_phase": "completed",
     "delegation": {
+        "routing_decision": "local",
+        "orchestration_mode": "local-supervisor",
         "delegation_plan_created": True,
         "spawn_attempted": False,
         "fallback_mode": "local-supervisor",
         "delegated_sidecars": [],
+        "delegated_lanes": [],
     },
     "verification": {
         "verification_status": "completed",
@@ -433,6 +436,147 @@ def test_execution_service_health_reuses_cached_control_plane_contracts(
 
     assert first["control_plane_contracts"] == second["control_plane_contracts"]
     assert count == 1
+
+
+def test_execution_service_consumes_rust_like_execution_descriptor() -> None:
+    service_descriptor = {
+        "authority": "rust-runtime-control-plane",
+        "role": "execution-kernel-control",
+        "projection": "python-thin-projection",
+        "delegate_kind": "rust-execution-kernel-slice",
+        "kernel_contract_by_mode": {
+            "live_primary": {
+                "schema_version": "router-rs-execution-kernel-metadata-v1",
+                "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
+                "execution_kernel": "rust-execution-kernel-slice",
+                "execution_kernel_authority": "rust-execution-kernel-authority",
+                "execution_kernel_contract_mode": "rust-live-primary",
+                "execution_kernel_fallback_policy": "infrastructure-only-explicit",
+                "execution_kernel_in_process_replacement_complete": True,
+                "execution_kernel_delegate": "router-rs",
+                "execution_kernel_delegate_authority": "rust-execution-cli",
+                "execution_kernel_delegate_family": "rust-cli",
+                "execution_kernel_delegate_impl": "router-rs",
+                "execution_kernel_live_primary": "router-rs",
+                "execution_kernel_live_primary_authority": "rust-execution-cli",
+                "execution_kernel_response_shape": "live_primary",
+                "execution_kernel_prompt_preview_owner": "rust-execution-cli",
+            },
+            "dry_run": {
+                "schema_version": "router-rs-execution-kernel-metadata-v1",
+                "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
+                "execution_kernel": "rust-execution-kernel-slice",
+                "execution_kernel_authority": "rust-execution-kernel-authority",
+                "execution_kernel_contract_mode": "rust-live-primary",
+                "execution_kernel_fallback_policy": "infrastructure-only-explicit",
+                "execution_kernel_in_process_replacement_complete": True,
+                "execution_kernel_delegate": "router-rs",
+                "execution_kernel_delegate_authority": "rust-execution-cli",
+                "execution_kernel_delegate_family": "rust-cli",
+                "execution_kernel_delegate_impl": "router-rs",
+                "execution_kernel_live_primary": "router-rs",
+                "execution_kernel_live_primary_authority": "rust-execution-cli",
+                "execution_kernel_response_shape": "dry_run",
+                "execution_kernel_prompt_preview_owner": "rust-execution-cli",
+            },
+        },
+        "kernel_metadata_bridge": {
+            "steady_state_fields": [
+                "execution_kernel_metadata_schema_version",
+                "execution_kernel",
+                "execution_kernel_authority",
+                "execution_kernel_contract_mode",
+                "execution_kernel_fallback_policy",
+                "execution_kernel_in_process_replacement_complete",
+                "execution_kernel_delegate",
+                "execution_kernel_delegate_authority",
+                "execution_kernel_delegate_family",
+                "execution_kernel_delegate_impl",
+                "execution_kernel_live_primary",
+                "execution_kernel_live_primary_authority",
+                "execution_kernel_response_shape",
+                "execution_kernel_prompt_preview_owner",
+            ],
+            "metadata_keys": {
+                "metadata_schema_version": "execution_kernel_metadata_schema_version",
+                "contract_mode": "execution_kernel_contract_mode",
+                "fallback_policy": "execution_kernel_fallback_policy",
+                "response_shape": "execution_kernel_response_shape",
+                "prompt_preview_owner": "execution_kernel_prompt_preview_owner",
+                "model_id_source": "execution_kernel_model_id_source",
+            },
+            "defaults": {
+                "contract_mode": "rust-live-primary",
+                "fallback_policy": "infrastructure-only-explicit",
+                "prompt_preview_owner_by_mode": {
+                    "live_primary": "rust-execution-cli",
+                    "dry_run": "rust-execution-cli",
+                },
+                "live_primary_model_id_source": "aggregator-response.model",
+                "supported_response_shapes": ["live_primary", "dry_run"],
+            },
+            "runtime_fields": {
+                "shared": ["trace_event_count", "trace_output_path"],
+                "live_primary_required": [
+                    "run_id",
+                    "status",
+                    "execution_kernel_model_id_source",
+                    "trace_event_count",
+                    "trace_output_path",
+                ],
+                "live_primary_passthrough": [
+                    "execution_mode",
+                    "route_engine",
+                    "diagnostic_route_mode",
+                ],
+                "dry_run_required": [
+                    "reason",
+                    "execution_kernel_contract_mode",
+                    "execution_kernel_fallback_policy",
+                    "trace_event_count",
+                    "trace_output_path",
+                ],
+            },
+        },
+        "kernel_adapter_kind": "rust-execution-kernel-slice",
+        "kernel_authority": "rust-execution-kernel-authority",
+        "kernel_owner_family": "rust",
+        "kernel_owner_impl": "execution-kernel-slice",
+        "kernel_contract_mode": "rust-live-primary",
+        "kernel_replace_ready": True,
+        "kernel_in_process_replacement_complete": True,
+        "kernel_live_backend_family": "rust-cli",
+        "kernel_live_backend_impl": "router-rs",
+        "kernel_live_delegate_kind": "router-rs",
+        "kernel_live_delegate_authority": "rust-execution-cli",
+        "kernel_live_delegate_family": "rust-cli",
+        "kernel_live_delegate_impl": "router-rs",
+        "kernel_live_delegate_mode": "live_primary",
+        "kernel_mode_support": ["dry_run", "live"],
+        "execution_schema_version": "router-rs-execution-kernel-metadata-v1",
+    }
+
+    live_contract = runtime_services._runtime_execution_kernel_contract(service_descriptor)
+    dry_run_contract = runtime_services._runtime_execution_kernel_contract(service_descriptor, dry_run=True)
+    metadata_bridge = runtime_services._runtime_execution_kernel_metadata_bridge(service_descriptor)
+    health = runtime_services._runtime_execution_kernel_health(service_descriptor, resolved_binary="/tmp/router-rs")
+
+    assert live_contract["execution_kernel_response_shape"] == "live_primary"
+    assert dry_run_contract["execution_kernel_response_shape"] == "dry_run"
+    assert metadata_bridge is not None
+    assert metadata_bridge["defaults"]["live_primary_model_id_source"] == "aggregator-response.model"
+    assert metadata_bridge["defaults"]["supported_response_shapes"] == (
+        "live_primary",
+        "dry_run",
+    )
+    assert metadata_bridge["runtime_fields"]["shared"] == ("trace_event_count", "trace_output_path")
+    assert metadata_bridge["runtime_fields"]["live_primary_passthrough"] == (
+        "execution_mode",
+        "route_engine",
+        "diagnostic_route_mode",
+    )
+    assert health["kernel_live_delegate_authority"] == "rust-execution-cli"
+    assert health["resolved_binary"] == "/tmp/router-rs"
 
 
 def test_execution_service_routes_sandbox_transitions_through_rust_control(
@@ -1877,15 +2021,45 @@ def test_execution_environment_service_exposes_control_plane_contract_descriptor
     assert descriptors["execution_controller_contract"]["boundaries"][
         "runtime_branching_changes_required"
     ] is False
-    assert descriptors["delegation_contract"]["status_contract"] == "delegation_contract_v1"
+    assert descriptors["delegation_contract"]["status_contract"] == "delegation_contract_v3"
     assert descriptors["delegation_contract"]["gate"]["gate_skill"] == "subagent-delegation"
+    assert descriptors["delegation_contract"]["gate"]["gate_type"] == "multi_agent_routing"
+    assert descriptors["delegation_contract"]["gate"]["route_outcomes"] == ["local", "subagent", "team"]
+    assert descriptors["delegation_contract"]["gate"]["team_route_skill"] == "team"
     assert descriptors["delegation_contract"]["local_supervisor_mode"][
         "allowed_when_runtime_blocks_spawning"
     ] is True
+    assert descriptors["delegation_contract"]["delegation_state_fields"] == [
+        "routing_decision",
+        "orchestration_mode",
+        "delegation_plan_created",
+        "spawn_attempted",
+        "spawn_block_reason",
+        "fallback_mode",
+        "delegated_sidecars",
+        "delegated_lanes",
+    ]
+    assert descriptors["delegation_contract"]["lane_contract_fields"] == [
+        "lane_id",
+        "lane_owner",
+        "bounded_write_scope",
+        "expected_output",
+        "integration_status",
+        "verification_status",
+        "recovery_anchor",
+    ]
     assert descriptors["supervisor_state_contract"]["status_contract"] == (
-        "supervisor_state_contract_v2"
+        "supervisor_state_contract_v3"
     )
     assert descriptors["supervisor_state_contract"]["state_artifact_path"] == ".supervisor_state.json"
+    assert descriptors["supervisor_state_contract"]["schema_expectations"]["team_state_fields"] == [
+        "delegation_planned",
+        "spawn_pending",
+        "spawn_blocked",
+        "integration_pending",
+        "resume_required",
+        "cleanup_pending",
+    ]
     assert descriptors["supervisor_state_contract"]["compatibility_rules"][
         "no_shadow_replacement_artifact"
     ] is True

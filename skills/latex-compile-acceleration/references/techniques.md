@@ -155,6 +155,60 @@ Use these heuristics unless the repo already has a strong house style:
 - **Multi-chapter book, chapters are independent** → `make -jN` parallel builds
 - **CI cold start / GitHub Actions** → `setup-texlive-action` + cache + minimal scheme
 
+## Parallelization rules
+
+### Good fits for multi-agent analysis or parallel compile lanes
+
+Use bounded lanes only when the boundary is explicit and one lane does not need to write another lane's aux state:
+
+- `\include`-based chapters that can be compiled independently for measurement or preview
+- `subfiles` / `standalone` repositories where subdocuments are already first-class compile units
+- TikZ / PGFPlots externalization where each figure becomes a cacheable unit
+- CI pipelines that intentionally shard chapter groups or subdocuments
+- read-only analysis lanes such as timing/log analysis, structure audit, and cache-strategy review
+
+### Bad fits for parallelization
+
+Do not push parallel compile just because the repo is large. Reject or down-rank it when the bottleneck is mostly:
+
+- package-heavy preamble loading
+- bibliography, index, glossary, or cross-reference convergence
+- a single monolithic document with shared aux churn
+- a watch loop where orchestration overhead is larger than the saved compile time
+- unclear output ownership for `build/`, `aux/`, cache directories, or generated figure files
+
+### Single-writer rule
+
+If multiple lanes are used, only one integrator should own the final recommendation and any shared continuity surface. Compile lanes should either:
+
+- stay read-only, or
+- write lane-local outputs only
+
+Never let multiple lanes concurrently write the same aux tree unless the repo already has explicit isolation per chapter / figure / shard.
+
+### Cache invalidation boundaries
+
+Before trusting any speedup, verify invalidation after:
+
+- **preamble change** → regenerate `.fmt` files and usually invalidate externalized figures that depend on changed macros/styles
+- **bibliography change** → rerun bibtex/biber flow and confirm ref convergence on a full serial build
+- **figure-source change** → rebuild only the affected externalized figure units, then confirm inclusion in the main document
+- **chapter split change** → re-check `\includeonly`, subfile glue, and CI shard boundaries
+- **CI environment change** → confirm cache keys invalidate when TeX packages / engine version / build recipe changes
+
+### Watch loop vs CI priority
+
+Treat local watch optimization and CI optimization as different problems:
+
+- for **local watch loops**, prefer lower-latency tactics such as `latexmk -pvc`, draft mode, externalization, and preamble precompilation
+- for **CI cold start**, prefer cacheability, reproducibility, and shard clarity such as Tectonic cache, minimal TeX Live installs, and explicit shard boundaries
+
+If the user asks for both, optimize the dominant pain first instead of mixing local and CI tactics into one unreadable stack.
+
+### Rust control-plane boundary
+
+Rust is a good fit for durable lane orchestration, batch summaries, and host-native alias entrypoints. It is **not** the place to hard-code LaTeX bottleneck diagnosis itself. Keep tactic choice in the skill layer and use Rust only to coordinate how analysis/compile lanes run and resume.
+
 ## Stability and error recovery
 
 ### Interaction modes

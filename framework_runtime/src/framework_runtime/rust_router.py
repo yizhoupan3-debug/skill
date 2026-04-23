@@ -1231,7 +1231,7 @@ class RustRouteAdapter:
             )
         return recall
 
-    def framework_refresh(self, *, repo_root: Path, max_lines: int = 4) -> dict[str, Any]:
+    def framework_refresh(self, *, repo_root: Path, max_lines: int = 4, verbose: bool = False) -> dict[str, Any]:
         """Build and copy the compact Rust-owned refresh prompt."""
 
         args = [
@@ -1241,6 +1241,8 @@ class RustRouteAdapter:
             "--claude-hook-max-lines",
             str(max_lines),
         ]
+        if verbose:
+            args.append("--framework-refresh-verbose")
         payload = self._run_json_command(
             [*self._binary_command(), *args],
             failure_label="framework refresh compiler",

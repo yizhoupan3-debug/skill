@@ -22,4 +22,5 @@ def test_refresh_skill_stays_available_for_codex_global_entry() -> None:
         in content
     )
     assert "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。" in content
+    assert "--framework-refresh-verbose" in content
     assert "manual next-turn execution prompt" not in content

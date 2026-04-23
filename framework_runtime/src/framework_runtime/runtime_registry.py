@@ -78,11 +78,48 @@ _FALLBACK_FRAMEWORK_NATIVE_ALIASES = {
             "keep deepinterview handoff as the first-class clarification gate for vague requests",
         ],
         "execution_owners": [
+            "execution-controller-coding",
             "plan-to-code",
             "subagent-delegation",
             "execution-audit",
         ],
+        "decision_contract": {
+            "execute_when": [
+                "task is concrete enough to implement",
+                "acceptance criteria are already bounded",
+                "next actions are specific enough to continue",
+            ],
+            "clarify_when": [
+                "task is still ambiguous",
+                "user intent would materially change the implementation",
+            ],
+            "debug_when": [
+                "root cause is still unknown",
+                "the same failure pattern repeats without a validated explanation",
+            ],
+            "resume_when": [
+                "continuity state is active and recovery anchors are present",
+            ],
+            "refresh_when": [
+                "continuity state is stale",
+            ],
+            "repair_when": [
+                "continuity state is inconsistent",
+            ],
+            "start_new_task_when": [
+                "current continuity is completed and should stay historical",
+            ],
+            "verify_when": [
+                "implementation changed but evidence is still missing",
+                "verification status is not yet passed or completed",
+            ],
+        },
         "host_entrypoints": {"codex-cli": "$autopilot", "claude-code": "/autopilot"},
+        "interaction_invariants": {
+            "requires_explicit_entrypoint": True,
+            "explicit_entrypoints": ["/autopilot", "$autopilot"],
+            "implicit_route_policy": "never",
+        },
         "omc_dependency": False,
     },
     "deepinterview": {
@@ -124,11 +161,29 @@ _FALLBACK_FRAMEWORK_NATIVE_ALIASES = {
             "execution-audit",
         ],
         "host_entrypoints": {"codex-cli": "$deepinterview", "claude-code": "/deepinterview"},
+        "interaction_invariants": {
+            "requires_explicit_entrypoint": True,
+            "explicit_entrypoints": ["/deepinterview", "$deepinterview"],
+            "implicit_route_policy": "never",
+        },
         "omc_dependency": False,
     },
     "team": {
         "canonical_owner": "execution-controller-coding",
         "delegation_gate": "subagent-delegation",
+        "auto_route_allowed": True,
+        "route_mode": "team-orchestration",
+        "selection_signals": {
+            "prefer_when": [
+                "multi-phase execution needs explicit worker lifecycle management",
+                "supervisor-owned continuity and lane-local outputs are required",
+                "integration, qa, cleanup, or resume/recovery are first-class workflow phases",
+            ],
+            "avoid_when": [
+                "task is a small tightly coupled local change",
+                "bounded sidecars are enough and orchestration overhead would dominate",
+            ],
+        },
         "upstream_source": {
             "repo": "https://github.com/Yeachan-Heo/oh-my-claudecode",
             "tag": "v4.13.2",
@@ -148,7 +203,25 @@ _FALLBACK_FRAMEWORK_NATIVE_ALIASES = {
                 "integration",
                 "qa",
                 "cleanup",
-            ]
+            ],
+            "transition_states": [
+                "delegation-planned",
+                "spawn-pending",
+                "spawn-blocked",
+                "worker-output-ready",
+                "integration-pending",
+                "resume-required",
+            ],
+            "recovery_states": [
+                "worker-failed-recoverable",
+                "stale-continuity",
+                "inconsistent-continuity",
+            ],
+            "terminal_states": [
+                "cleanup-completed",
+                "completed",
+                "failed-terminal",
+            ],
         },
         "implementation_bar": [
             "worker-boundaries-required",
@@ -166,10 +239,149 @@ _FALLBACK_FRAMEWORK_NATIVE_ALIASES = {
             "subagent-delegation",
             "execution-audit",
         ],
+        "supervisor_contract": {
+            "shared_continuity_owner": "supervisor",
+            "integration_owner": "supervisor",
+            "verification_owner": "supervisor",
+            "worker_write_scope": "lane-local-delta-only",
+            "resume_requires_recovery_anchor": True,
+        },
+        "lane_contract": {
+            "required_fields": [
+                "lane_id",
+                "lane_owner",
+                "goal",
+                "bounded_scope",
+                "forbidden_scope",
+                "expected_output",
+                "integration_status",
+                "verification_status",
+                "recovery_anchor",
+            ],
+            "integration_statuses": [
+                "planned",
+                "running",
+                "output-ready",
+                "integrated",
+                "blocked",
+            ],
+            "verification_statuses": [
+                "not-started",
+                "pending",
+                "passed",
+                "failed",
+            ],
+        },
+        "worker_lifecycle": {
+            "states": [
+                "planned",
+                "spawn-pending",
+                "running",
+                "stalled",
+                "failed-recoverable",
+                "failed-terminal",
+                "completed-unintegrated",
+                "integrated",
+            ],
+            "resume_state": "failed-recoverable",
+            "fallback_mode": "local-supervisor-queue",
+        },
+        "recovery_contract": {
+            "continuity_states": [
+                "active",
+                "stale",
+                "inconsistent",
+            ],
+            "requires_resume_judgment": [
+                "spawn-blocked",
+                "worker-failed-recoverable",
+                "stale-continuity",
+                "inconsistent-continuity",
+            ],
+            "required_artifacts": [
+                "SESSION_SUMMARY.md",
+                "NEXT_ACTIONS.json",
+                "EVIDENCE_INDEX.json",
+                "TRACE_METADATA.json",
+                ".supervisor_state.json",
+            ],
+        },
+        "verification_contract": {
+            "integration_requires_local_judgment": True,
+            "verification_evidence_required_before_cleanup": True,
+        },
         "host_entrypoints": {"codex-cli": "$team", "claude-code": "/team"},
+        "interaction_invariants": {
+            "requires_explicit_entrypoint": True,
+            "explicit_entrypoints": ["/team", "$team"],
+            "implicit_route_policy": "strong-orchestration-only",
+            "implicit_route_signals": [
+                "team orchestration",
+                "worker lifecycle",
+                "integration+qa+cleanup",
+                "resume/recovery supervisor",
+            ],
+        },
+        "omc_dependency": False,
+    },
+    "latex-compile-acceleration": {
+        "canonical_owner": "latex-compile-acceleration",
+        "delegation_gate": "subagent-delegation",
+        "upstream_source": {
+            "official_skill_path": "skills/latex-compile-acceleration/SKILL.md",
+        },
+        "official_workflow": {
+            "phases": [
+                "measurement",
+                "bottleneck-classification",
+                "lane-planning",
+                "execution",
+                "verification",
+            ],
+            "lane_defaults": [
+                "measurement",
+                "structure-audit",
+                "engine-cache-strategy",
+                "verification-plan",
+            ],
+        },
+        "implementation_bar": [
+            "measurement-first",
+            "parallelism-gate-required",
+            "single-writer-aux-boundary",
+            "verification-evidence-required",
+        ],
+        "local_adaptations": [
+            "use Rust control-plane only for durable lane orchestration and host alias projection",
+            "keep LaTeX bottleneck diagnosis and tactic choice in the skill layer",
+            "preserve a serial full-build fallback for final verification",
+        ],
+        "lane_contract": {
+            "analysis_lanes": [
+                "measurement",
+                "structure-audit",
+                "engine-cache-strategy",
+                "verification-plan",
+            ],
+            "parallelism_gate": [
+                "independent compile units must be explicit",
+                "shared aux ownership must stay single-writer",
+                "bibliography and ref convergence cannot be parallelized blindly",
+            ],
+        },
+        "host_entrypoints": {
+            "codex-cli": "$latex-compile-acceleration",
+            "claude-code": "/latex-compile-acceleration",
+        },
+        "interaction_invariants": {
+            "requires_explicit_entrypoint": True,
+            "explicit_entrypoints": ["/latex-compile-acceleration", "$latex-compile-acceleration"],
+            "implicit_route_policy": "measurement-only",
+        },
         "omc_dependency": False,
     },
 }
+
 _FALLBACK_OMC_RETIREMENT_CONTRACT = {
     "replaced_object": "oh-my-claudecode",
     "runtime_authority": "rust-session-supervisor",
@@ -206,6 +418,15 @@ _FALLBACK_OMC_RETIREMENT_CONTRACT = {
                 "verification-evidence-required",
                 "resume-and-recovery-required",
                 "supervisor-owned-continuity",
+            ],
+        },
+        "latex-compile-acceleration": {
+            "inherits_omc_core_capabilities": False,
+            "implementation_bar": [
+                "measurement-first",
+                "parallelism-gate-required",
+                "single-writer-aux-boundary",
+                "verification-evidence-required",
             ],
         },
     },
@@ -401,6 +622,8 @@ def shared_project_mcp_servers(*, repo_root: Path | None = None) -> tuple[str, .
     rows = payload.get("shared_project_mcp_servers")
     if not isinstance(rows, list):
         raise ValueError("Runtime registry shared_project_mcp_servers must be a list.")
+    if not rows:
+        return _FALLBACK_SHARED_PROJECT_MCP_SERVERS
     return tuple(str(row) for row in rows)
 
 

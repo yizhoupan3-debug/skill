@@ -191,6 +191,8 @@ struct Cli {
     #[arg(long)]
     framework_refresh_json: bool,
     #[arg(long)]
+    framework_refresh_verbose: bool,
+    #[arg(long)]
     framework_alias_json: bool,
     #[arg(long)]
     framework_alias: Option<String>,
@@ -1241,8 +1243,11 @@ fn main() -> Result<(), String> {
 
     if args.framework_refresh_json {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
-        let refresh_payload =
-            build_framework_refresh_payload(&repo_root, args.claude_hook_max_lines)?;
+        let refresh_payload = build_framework_refresh_payload(
+            &repo_root,
+            args.claude_hook_max_lines,
+            args.framework_refresh_verbose,
+        )?;
         let prompt = refresh_payload
             .get("prompt")
             .and_then(Value::as_str)
@@ -6227,6 +6232,10 @@ fn framework_alias_explicit_entrypoints(slug: &str) -> &'static [&'static str] {
         "autopilot" => &["/autopilot", "$autopilot"],
         "deepinterview" => &["/deepinterview", "$deepinterview"],
         "team" => &["/team", "$team"],
+        "latex-compile-acceleration" => &[
+            "/latex-compile-acceleration",
+            "$latex-compile-acceleration",
+        ],
         _ => &[],
     }
 }
@@ -6246,6 +6255,43 @@ fn has_explicit_framework_alias_call(
             query_text.contains(&normalize_text(entrypoint))
                 || query_token_list.iter().any(|token| token == entrypoint)
         })
+}
+
+fn has_team_orchestration_context(query_text: &str, query_token_list: &[String]) -> bool {
+    let orchestration_markers = [
+        "team orchestration",
+        "worker lifecycle",
+        "worker 生命周期",
+        "multi agent execution",
+        "多 agent 执行",
+        "团队编排",
+        "supervisor",
+        "supervisor 主线",
+        "supervisor-owned continuity",
+        "共享 continuity",
+    ];
+    let lifecycle_markers = [
+        "multi-phase",
+        "多阶段",
+        "integration",
+        "集成",
+        "qa",
+        "cleanup",
+        "resume",
+        "恢复续跑",
+        "恢复锚点",
+        "recovery anchor",
+        "lane-local",
+        "worker output",
+        "worker 输出",
+    ];
+    let matched_orchestration = orchestration_markers.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker)) || text_matches_phrase(query_token_list, marker)
+    });
+    let matched_lifecycle = lifecycle_markers.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker)) || text_matches_phrase(query_token_list, marker)
+    });
+    matched_orchestration && matched_lifecycle
 }
 
 fn paper_skill_requires_context(slug: &str) -> bool {
@@ -6383,12 +6429,18 @@ fn score_route_candidate<'a>(
     }
     let explicit_framework_alias = framework_alias_requires_explicit_call(&record.slug)
         && has_explicit_framework_alias_call(query_text, query_token_list, &record.slug);
-    if framework_alias_requires_explicit_call(&record.slug) && !explicit_framework_alias {
+    let implicit_team_route = record.slug == "team"
+        && !explicit_framework_alias
+        && has_team_orchestration_context(query_text, query_token_list);
+    if framework_alias_requires_explicit_call(&record.slug)
+        && !explicit_framework_alias
+        && !implicit_team_route
+    {
         return RouteCandidate {
             record,
             score: 0.0,
             reasons: vec![
-                "Suppressed: framework alias skills only route from explicit /alias or $alias entrypoints."
+                "Suppressed: framework alias skills only route from explicit /alias or $alias entrypoints unless strong team-orchestration signals are present."
                     .to_string(),
             ],
         };
@@ -6422,6 +6474,12 @@ fn score_route_candidate<'a>(
     if explicit_framework_alias {
         score += 1000.0;
         reasons.push("Framework alias entrypoint matched explicitly.".to_string());
+    } else if implicit_team_route {
+        score += 120.0;
+        reasons.push(
+            "Implicit framework alias route allowed: strong team-orchestration signals detected."
+                .to_string(),
+        );
     }
 
     if !record.slug_lower.is_empty() && query_text.contains(&record.slug_lower) {
@@ -6555,6 +6613,7 @@ fn score_route_candidate<'a>(
         ]
         .iter()
         .any(|marker| query_text.contains(*marker));
+        let team_orchestration = has_team_orchestration_context(query_text, query_token_list);
         let controller_markers = [
             "高负载",
             "跨文件",
@@ -6579,6 +6638,29 @@ fn score_route_candidate<'a>(
             score *= 0.45;
             reasons.push(
                 "Delegation-gate suppression applied: gsd posture keeps the immediate blocker local."
+                    .to_string(),
+            );
+        }
+        if team_orchestration && !explicit_delegation {
+            score *= 0.4;
+            reasons.push(
+                "Delegation-gate suppression applied: full team orchestration signals dominate bounded sidecars."
+                    .to_string(),
+            );
+        }
+    }
+
+    if record.slug == "team" && score > 0.0 && !explicit_framework_alias {
+        if implicit_team_route {
+            score += 32.0;
+            reasons.push(
+                "Team-orchestration boost applied: multi-phase supervisor workflow detected."
+                    .to_string(),
+            );
+        } else {
+            score *= 0.25;
+            reasons.push(
+                "Team suppression applied: team needs explicit entry or strong orchestration signals."
                     .to_string(),
             );
         }
@@ -7710,7 +7792,7 @@ mod tests {
         let clipboard_path = repo_root.join("clipboard.txt");
         std::env::set_var("ROUTER_RS_CLIPBOARD_PATH", &clipboard_path);
         let refresh =
-            build_framework_refresh_payload(&repo_root, 6).expect("build refresh payload");
+            build_framework_refresh_payload(&repo_root, 6, false).expect("build refresh payload");
         let prompt = refresh
             .get("prompt")
             .and_then(Value::as_str)
@@ -7803,7 +7885,16 @@ mod tests {
         assert!(prompt.contains("路由："));
         assert_eq!(
             alias["state_machine"]["current_state"],
-            json!("resume_active")
+            json!("resume_active_needs_verification")
+        );
+        assert_eq!(
+            alias["state_machine"]["recommended_action"],
+            json!("verify_before_done")
+        );
+        assert_eq!(alias["state_machine"]["evidence_missing"], json!(true));
+        assert_eq!(
+            alias["entry_contract"]["context"]["execution_readiness"],
+            json!("needs_verification")
         );
         assert_eq!(
             alias["entry_contract"]["route_rules"][0],
@@ -7974,8 +8065,94 @@ mod tests {
             json!("主 owner -> `execution-controller-coding`")
         );
         assert!(prompt.contains("进入 team"));
-        assert!(prompt.contains("team split gate -> `subagent-delegation`"));
-        assert!(prompt.contains("共享 continuity 只允许 supervisor 持有"));
+        assert!(prompt.contains("bounded subagent lane -> `subagent-delegation`"));
+        assert!(prompt.contains("worker write scope -> `lane-local-delta-only`"));
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_alias_builds_compact_latex_compile_acceleration_payload() {
+        let repo_root = std::env::temp_dir().join(format!(
+            "router-rs-latex-alias-fixture-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock before epoch")
+                .as_nanos()
+        ));
+        let task_root = repo_root
+            .join("artifacts")
+            .join("current")
+            .join("active-latex-optimization-20260418210000");
+        fs::create_dir_all(&task_root).expect("create task root");
+        fs::create_dir_all(repo_root.join("artifacts").join("current"))
+            .expect("create current root");
+        fs::write(
+            task_root.join("SESSION_SUMMARY.md"),
+            "- task: active latex optimization\n- phase: measurement\n- status: in_progress\n",
+        )
+        .expect("write session summary");
+        fs::write(
+            task_root.join("NEXT_ACTIONS.json"),
+            r#"{"next_actions":["Measure clean build","Classify bibliography bottleneck"]}"#,
+        )
+        .expect("write next actions");
+        fs::write(task_root.join("EVIDENCE_INDEX.json"), r#"{"artifacts":[]}"#)
+            .expect("write evidence index");
+        fs::write(
+            task_root.join("TRACE_METADATA.json"),
+            r#"{"task":"active latex optimization","matched_skills":["latex-compile-acceleration"]}"#,
+        )
+        .expect("write trace metadata");
+        fs::write(
+            repo_root.join("artifacts").join("current").join("active_task.json"),
+            r#"{"task_id":"active-latex-optimization-20260418210000","task":"active latex optimization"}"#,
+        )
+        .expect("write active task");
+        fs::write(
+            repo_root.join(".supervisor_state.json"),
+            r#"{
+                "task_id":"active-latex-optimization-20260418210000",
+                "task_summary":"active latex optimization",
+                "active_phase":"measurement",
+                "verification":{"verification_status":"not_started"},
+                "continuity":{"story_state":"active","resume_allowed":true},
+                "execution_contract":{"acceptance_criteria":["full build remains reproducible"]}
+            }"#,
+        )
+        .expect("write supervisor state");
+
+        let payload = build_framework_alias_envelope(&repo_root, "latex-compile-acceleration", 5, false)
+            .expect("build alias payload");
+        let alias = payload
+            .get("alias")
+            .and_then(Value::as_object)
+            .expect("alias payload");
+        let prompt = alias
+            .get("entry_prompt")
+            .and_then(Value::as_str)
+            .expect("entry prompt");
+
+        assert_eq!(payload["schema_version"], json!(FRAMEWORK_ALIAS_SCHEMA_VERSION));
+        assert_eq!(alias["name"], json!("latex-compile-acceleration"));
+        assert_eq!(alias["host_entrypoint"], json!("/latex-compile-acceleration"));
+        assert_eq!(alias["compact"], json!(false));
+        assert_eq!(alias["canonical_owner"], json!("latex-compile-acceleration"));
+        assert_eq!(
+            alias["state_machine"]["handoff"]["default_mode"],
+            json!("measure-first-latex-optimization")
+        );
+        assert_eq!(
+            alias["state_machine"]["handoff"]["rules"][1]["target"],
+            json!("subagent-delegation")
+        );
+        assert_eq!(
+            alias["entry_contract"]["route_rules"][0],
+            json!("主 owner -> `latex-compile-acceleration`")
+        );
+        assert!(prompt.contains("进入 latex-compile-acceleration"));
+        assert!(prompt.contains("先做测量与瓶颈分类"));
+        assert!(prompt.contains("parallelism gate ->"));
 
         let _ = fs::remove_dir_all(&repo_root);
     }
@@ -8042,6 +8219,11 @@ mod tests {
         assert!(alias.get("entry_prompt").is_none());
         assert!(alias.get("entry_prompt_token_estimate").is_none());
         assert!(alias.get("upstream_source").is_none());
+        assert_eq!(alias["state_machine"]["evidence_missing"], json!(true));
+        assert_eq!(
+            alias["entry_contract"]["context"]["execution_readiness"],
+            json!("needs_verification")
+        );
         assert_eq!(
             alias["state_machine"]["required_anchors"],
             json!([

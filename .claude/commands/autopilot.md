@@ -26,6 +26,8 @@ If both resident binaries are missing, self-heal with:
 `PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias autopilot --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
 
 Use `alias.state_machine` and `alias.entry_contract` as the working contract for this turn.
+This alias only enters through explicit entrypoints: `/autopilot`, `$autopilot`.
+Implicit routing policy: `never`.
 Prefer the Rust alias payload over opening long docs or restating OMC background.
 Only open `skills/autopilot/SKILL.md` if the alias payload is missing something you still need.
 Keep execution inside the repo's native Rust/continuity lane.

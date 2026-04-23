@@ -369,6 +369,54 @@ def test_runtime_supervisor_projection_summarizes_top_level_verification_status_
         }
 
 
+def test_runtime_health_respects_rust_like_runtime_host_descriptor(tmp_path: Path) -> None:
+    runtime = CodexAgnoRuntime(
+        RuntimeSettings(
+            codex_home=PROJECT_ROOT,
+            data_dir=tmp_path / "runtime-data",
+            trace_output_path=tmp_path / "TRACE_METADATA.json",
+            live_model_override=False,
+        )
+    )
+    runtime._apply_control_plane_descriptor(
+        {
+            **runtime.control_plane_descriptor,
+            "runtime_host": {
+                "authority": "rust-runtime-control-plane",
+                "role": "runtime-orchestration",
+                "projection": "python-diagnosis-only-projection",
+                "delegate_kind": "rust-runtime-control-plane",
+                "startup_order": ["router", "trace", "state", "memory", "execution", "background"],
+                "shutdown_order": ["background", "execution", "memory", "state", "trace", "router"],
+                "health_sections": ["router", "trace", "execution_environment"],
+            },
+        }
+    )
+
+    health = runtime.health()
+
+    assert health["runtime_host"]["startup_order"] == [
+        "router",
+        "trace",
+        "state",
+        "memory",
+        "execution",
+        "background",
+    ]
+    assert health["runtime_host"]["shutdown_order"] == [
+        "background",
+        "execution",
+        "memory",
+        "state",
+        "trace",
+        "router",
+    ]
+    assert set(health) >= {"control_plane", "runtime_host", "rustification", "router", "trace", "execution_environment"}
+    assert "state" not in health
+    assert "memory" not in health
+    assert "background" not in health
+
+
 def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) -> None:
     """Runtime should treat the execution service as the single kernel entry point."""
 

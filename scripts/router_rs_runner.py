@@ -79,6 +79,7 @@ def _parse_hot_request(argv: list[str], *, binary_path: Path) -> HotRequest | No
             payload={
                 "repo_root": str(repo_root),
                 "max_lines": max_lines,
+                "verbose": "--framework-refresh-verbose" in argv,
             },
             socket_path=_socket_path(binary_path, repo_root),
         )
@@ -187,6 +188,7 @@ def _dispatch_hot_request(request: HotRequest, *, adapter: RustRouteAdapter) -> 
         refresh_payload = adapter.framework_refresh(
             repo_root=repo_root,
             max_lines=int(request.payload.get("max_lines", 4)),
+            verbose=bool(request.payload.get("verbose", False)),
         )
         return {
             "schema_version": adapter.framework_refresh_schema_version,

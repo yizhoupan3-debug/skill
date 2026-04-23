@@ -1884,6 +1884,35 @@ fn complete_cli_host_projection(
     completed
 }
 
+fn build_host_alias_entrypoints(host_key: &str) -> Value {
+    let registry_path = repo_scan_root()
+        .join("configs")
+        .join("framework")
+        .join("RUNTIME_REGISTRY.json");
+    let aliases = fs::read_to_string(&registry_path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+        .and_then(|payload| payload.get("framework_native_aliases").cloned())
+        .and_then(|aliases| aliases.as_object().cloned());
+    let mut entrypoints = Map::new();
+    if let Some(aliases) = aliases {
+        let mut alias_names = aliases.keys().cloned().collect::<Vec<_>>();
+        alias_names.sort();
+        for alias_name in alias_names {
+            let Some(entrypoint) = aliases
+                .get(&alias_name)
+                .and_then(|record| record.get("host_entrypoints"))
+                .and_then(|host_entrypoints| host_entrypoints.get(host_key))
+                .and_then(Value::as_str)
+            else {
+                continue;
+            };
+            entrypoints.insert(alias_name, Value::String(entrypoint.to_string()));
+        }
+    }
+    Value::Object(entrypoints)
+}
+
 fn build_codex_host_projection() -> Map<String, Value> {
     let mut projection = Map::new();
     projection.insert(
@@ -1911,7 +1940,7 @@ fn build_codex_host_projection() -> Map<String, Value> {
     );
     projection.insert(
         "framework_alias_entrypoints".to_string(),
-        json!({"autopilot": "$autopilot", "deepinterview": "$deepinterview", "team": "$team"}),
+        build_host_alias_entrypoints("codex-cli"),
     );
     projection
 }
@@ -2137,7 +2166,7 @@ fn build_claude_host_projection() -> Map<String, Value> {
     );
     projection.insert(
         "framework_alias_entrypoints".to_string(),
-        json!({"autopilot": "/autopilot", "deepinterview": "/deepinterview", "team": "/team"}),
+        build_host_alias_entrypoints("claude-code"),
     );
     projection
 }
@@ -3212,10 +3241,18 @@ fn build_delegation_contract() -> Map<String, Value> {
     );
     gate.insert(
         "gate_type".to_string(),
-        Value::String("delegation".to_string()),
+        Value::String("multi_agent_routing".to_string()),
     );
     gate.insert("decision_before_spawn".to_string(), Value::Bool(true));
     gate.insert("spawn_is_optional".to_string(), Value::Bool(true));
+    gate.insert(
+        "route_outcomes".to_string(),
+        json!(["local", "subagent", "team"]),
+    );
+    gate.insert(
+        "team_route_skill".to_string(),
+        Value::String("team".to_string()),
+    );
 
     let mut local_supervisor_mode = Map::new();
     local_supervisor_mode.insert(
@@ -3240,6 +3277,20 @@ fn build_delegation_contract() -> Map<String, Value> {
         Value::Bool(true),
     );
 
+    let mut team_contract = Map::new();
+    team_contract.insert(
+        "supervisor_owned_continuity".to_string(),
+        Value::Bool(true),
+    );
+    team_contract.insert(
+        "integration_and_qa_stay_supervisor_led".to_string(),
+        Value::Bool(true),
+    );
+    team_contract.insert(
+        "resume_and_recovery_are_first_class".to_string(),
+        Value::Bool(true),
+    );
+
     let mut payload = Map::new();
     payload.insert(
         "framework_truth".to_string(),
@@ -3251,7 +3302,7 @@ fn build_delegation_contract() -> Map<String, Value> {
     );
     payload.insert(
         "status_contract".to_string(),
-        Value::String("delegation_contract_v1".to_string()),
+        Value::String("delegation_contract_v3".to_string()),
     );
     payload.insert(
         "artifact_role".to_string(),
@@ -3265,16 +3316,44 @@ fn build_delegation_contract() -> Map<String, Value> {
     payload.insert(
         "delegation_state_fields".to_string(),
         json!([
+            "routing_decision",
+            "orchestration_mode",
             "delegation_plan_created",
             "spawn_attempted",
             "spawn_block_reason",
             "fallback_mode",
-            "delegated_sidecars"
+            "delegated_sidecars",
+            "delegated_lanes"
+        ]),
+    );
+    payload.insert(
+        "lane_contract_fields".to_string(),
+        json!([
+            "lane_id",
+            "lane_owner",
+            "bounded_write_scope",
+            "expected_output",
+            "integration_status",
+            "verification_status",
+            "recovery_anchor"
+        ]),
+    );
+    payload.insert(
+        "retry_resume_fields".to_string(),
+        json!([
+            "retry_policy",
+            "resume_policy",
+            "escalation_path",
+            "integration_preconditions"
         ]),
     );
     payload.insert(
         "sidecar_contract".to_string(),
         Value::Object(sidecar_contract),
+    );
+    payload.insert(
+        "team_contract".to_string(),
+        Value::Object(team_contract),
     );
     payload.insert(
         "non_goals".to_string(),
@@ -3330,16 +3409,43 @@ fn build_supervisor_state_contract() -> Map<String, Value> {
     schema_expectations.insert(
         "workers_fields".to_string(),
         json!([
+            "planned",
             "running",
             "completed_unintegrated",
             "integrated",
-            "failed",
+            "failed_recoverable",
+            "failed_terminal",
             "stalled"
         ]),
     );
     schema_expectations.insert(
         "verification_fields".to_string(),
         json!(["verification_status", "last_verification_summary"]),
+    );
+    schema_expectations.insert(
+        "team_state_fields".to_string(),
+        json!([
+            "delegation_planned",
+            "spawn_pending",
+            "spawn_blocked",
+            "integration_pending",
+            "resume_required",
+            "cleanup_pending"
+        ]),
+    );
+    schema_expectations.insert(
+        "lane_fields".to_string(),
+        json!([
+            "lane_id",
+            "lane_owner",
+            "goal",
+            "bounded_scope",
+            "forbidden_scope",
+            "expected_output",
+            "integration_status",
+            "verification_status",
+            "recovery_anchor"
+        ]),
     );
 
     let mut cross_artifact_alignment = Map::new();
@@ -3350,6 +3456,10 @@ fn build_supervisor_state_contract() -> Map<String, Value> {
     cross_artifact_alignment.insert("phase_must_be_resumable".to_string(), Value::Bool(true));
     cross_artifact_alignment.insert(
         "delegation_structure_must_be_explicit".to_string(),
+        Value::Bool(true),
+    );
+    cross_artifact_alignment.insert(
+        "lane_outputs_must_remain_lane_local_until_integrated".to_string(),
         Value::Bool(true),
     );
 
@@ -3375,7 +3485,7 @@ fn build_supervisor_state_contract() -> Map<String, Value> {
     );
     payload.insert(
         "status_contract".to_string(),
-        Value::String("supervisor_state_contract_v2".to_string()),
+        Value::String("supervisor_state_contract_v3".to_string()),
     );
     payload.insert(
         "artifact_role".to_string(),

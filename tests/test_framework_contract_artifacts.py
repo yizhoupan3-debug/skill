@@ -363,14 +363,41 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert execution_controller["boundaries"]["runtime_branching_changes_required"] is False
 
     delegation = json.loads(Path(paths["delegation_contract"]).read_text(encoding="utf-8"))
-    assert delegation["status_contract"] == "delegation_contract_v1"
+    assert delegation["status_contract"] == "delegation_contract_v3"
+    assert delegation["gate"]["gate_type"] == "multi_agent_routing"
     assert delegation["gate"]["decision_before_spawn"] is True
+    assert delegation["gate"]["route_outcomes"] == ["local", "subagent", "team"]
+    assert delegation["gate"]["team_route_skill"] == "team"
     assert delegation["local_supervisor_mode"]["preserves_output_contracts"] is True
+    assert delegation["lane_contract_fields"] == [
+        "lane_id",
+        "lane_owner",
+        "bounded_write_scope",
+        "expected_output",
+        "integration_status",
+        "verification_status",
+        "recovery_anchor",
+    ]
+    assert delegation["delegation_state_fields"] == [
+        "routing_decision",
+        "orchestration_mode",
+        "delegation_plan_created",
+        "spawn_attempted",
+        "spawn_block_reason",
+        "fallback_mode",
+        "delegated_sidecars",
+        "delegated_lanes",
+    ]
+    assert delegation["team_contract"] == {
+        "supervisor_owned_continuity": True,
+        "integration_and_qa_stay_supervisor_led": True,
+        "resume_and_recovery_are_first_class": True,
+    }
 
     supervisor_state = json.loads(
         Path(paths["supervisor_state_contract"]).read_text(encoding="utf-8")
     )
-    assert supervisor_state["status_contract"] == "supervisor_state_contract_v2"
+    assert supervisor_state["status_contract"] == "supervisor_state_contract_v3"
     assert supervisor_state["schema_expectations"]["execution_contract_fields"] == [
         "goal",
         "scope",
@@ -378,7 +405,16 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "acceptance_criteria",
         "evidence_required",
     ]
+    assert supervisor_state["schema_expectations"]["team_state_fields"] == [
+        "delegation_planned",
+        "spawn_pending",
+        "spawn_blocked",
+        "integration_pending",
+        "resume_required",
+        "cleanup_pending",
+    ]
     assert supervisor_state["cross_artifact_alignment"]["delegation_structure_must_be_explicit"] is True
+    assert supervisor_state["cross_artifact_alignment"]["lane_outputs_must_remain_lane_local_until_integrated"] is True
 
     fallback_retirement = json.loads(
         Path(paths["execution_kernel_live_fallback_retirement_status"]).read_text(encoding="utf-8")
@@ -605,14 +641,49 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     rust_delegation = json.loads(
         Path(paths["rust_delegation_contract"]).read_text(encoding="utf-8")
     )
-    assert rust_delegation["status_contract"] == "delegation_contract_v1"
+    assert rust_delegation["status_contract"] == "delegation_contract_v3"
+    assert rust_delegation["gate"]["gate_type"] == "multi_agent_routing"
+    assert rust_delegation["gate"]["route_outcomes"] == ["local", "subagent", "team"]
+    assert rust_delegation["gate"]["team_route_skill"] == "team"
     assert rust_delegation["local_supervisor_mode"]["allowed_when_runtime_blocks_spawning"] is True
+    assert rust_delegation["lane_contract_fields"] == [
+        "lane_id",
+        "lane_owner",
+        "bounded_write_scope",
+        "expected_output",
+        "integration_status",
+        "verification_status",
+        "recovery_anchor",
+    ]
+    assert rust_delegation["delegation_state_fields"] == [
+        "routing_decision",
+        "orchestration_mode",
+        "delegation_plan_created",
+        "spawn_attempted",
+        "spawn_block_reason",
+        "fallback_mode",
+        "delegated_sidecars",
+        "delegated_lanes",
+    ]
+    assert rust_delegation["team_contract"] == {
+        "supervisor_owned_continuity": True,
+        "integration_and_qa_stay_supervisor_led": True,
+        "resume_and_recovery_are_first_class": True,
+    }
 
     rust_supervisor = json.loads(
         Path(paths["rust_supervisor_state_contract"]).read_text(encoding="utf-8")
     )
-    assert rust_supervisor["status_contract"] == "supervisor_state_contract_v2"
+    assert rust_supervisor["status_contract"] == "supervisor_state_contract_v3"
     assert rust_supervisor["compatibility_rules"]["rust_may_validate_or_emit"] is True
+    assert rust_supervisor["schema_expectations"]["team_state_fields"] == [
+        "delegation_planned",
+        "spawn_pending",
+        "spawn_blocked",
+        "integration_pending",
+        "resume_required",
+        "cleanup_pending",
+    ]
 
     rust_fallback_retirement = json.loads(
         Path(paths["rust_execution_kernel_live_fallback_retirement_status"]).read_text(
