@@ -61,7 +61,9 @@ clear.
 
 ## Do not use
 
+- The user wants a structured generation prompt for their own UI request -> use `$design-prompt-enhancer`
 - The user already wants direct UI redesign or implementation -> use `$frontend-design`
+- The user wants to extract a reusable `DESIGN.md` from their own existing product surfaces -> use `$design-md`
 - The request is specifically about Framer Motion, transitions, or micro-interactions -> use `$motion-design`
 - The task is CSS layout, tokens, responsive rules, or Tailwind mechanics -> use `$css-pro` or `$tailwind-pro`
 - The task depends on screenshots or visible artifact evidence -> use `$visual-review`
@@ -81,6 +83,8 @@ clear.
    - `risky`: likely to become imitation or conflict with the target product
 4. Produce a borrow / avoid / adapt decision map.
 5. Hand off to the narrowest downstream owner:
+   - `$design-prompt-enhancer` for structured generation prompts after the reference frame is settled
+   - `$design-md` for synthesizing the target product's own design source of truth
    - `$frontend-design` for visual direction
    - `$motion-design` for motion expression
    - `$css-pro` or `$tailwind-pro` for tokenization / layout implementation

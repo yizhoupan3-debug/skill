@@ -50,9 +50,6 @@ from codex_agno_runtime.services import (
     RouterService,
     StateService,
     TraceService,
-    project_execution_kernel_payload,
-    _runtime_execution_kernel_contract,
-    _runtime_execution_kernel_metadata_bridge,
     _runtime_host_contract,
 )
 from codex_agno_runtime.utils import build_session_id
@@ -418,10 +415,7 @@ class CodexAgnoRuntime:
     ) -> str | None:
         """Build one explicit Rust-owned dry-run preview without mutating the route result."""
 
-        kernel_contract = _runtime_execution_kernel_contract(
-            self.execution_service._service_descriptor,
-            dry_run=True,
-        )
+        kernel_contract = self.execution_service.describe_kernel_contract(dry_run=True)
         return preview_router_rs_request_prompt(
             ExecutionKernelRequest(
                 task=task,
@@ -434,9 +428,7 @@ class CodexAgnoRuntime:
             settings=self.settings,
             rust_adapter=self.rust_adapter,
             kernel_contract=kernel_contract,
-            metadata_bridge=_runtime_execution_kernel_metadata_bridge(
-                self.execution_service._service_descriptor
-            ),
+            metadata_bridge=self.execution_service.describe_kernel_metadata_bridge(),
         )
 
     def _prepare_session(
@@ -488,8 +480,7 @@ class CodexAgnoRuntime:
                 allow_overlay=request.allow_overlay,
             )
         )
-        kernel_contract = _runtime_execution_kernel_contract(
-            self.execution_service._service_descriptor,
+        kernel_contract = self.execution_service.describe_kernel_contract(
             dry_run=execution_is_dry_run,
         )
         self._trace.record(
@@ -500,8 +491,7 @@ class CodexAgnoRuntime:
             payload={
                 "skill": routing_result.selected_skill.name,
                 "live_run": not execution_is_dry_run,
-                **project_execution_kernel_payload(
-                    self.execution_service._service_descriptor,
+                **self.execution_service.kernel_payload(
                     dry_run=execution_is_dry_run,
                     metadata=kernel_contract,
                 ),
@@ -553,8 +543,7 @@ class CodexAgnoRuntime:
             payload={
                 "live_run": not execution_is_dry_run,
                 "mode": "dry-run" if execution_is_dry_run else "live",
-                **project_execution_kernel_payload(
-                    self.execution_service._service_descriptor,
+                **self.execution_service.kernel_payload(
                     dry_run=execution_is_dry_run,
                     metadata=result.metadata,
                 ),

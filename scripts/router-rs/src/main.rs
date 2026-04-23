@@ -29,11 +29,13 @@ use framework_profile::{
 };
 use framework_runtime::{
     build_framework_alias_envelope, build_framework_contract_summary_envelope,
-    build_framework_memory_recall_envelope, build_framework_recap_envelope,
-    build_framework_refresh_payload, build_framework_runtime_snapshot_envelope,
-    resolve_repo_root_arg,
+    build_framework_memory_recall_envelope, build_framework_refresh_payload,
+    build_framework_runtime_snapshot_envelope, resolve_repo_root_arg,
 };
 use session_supervisor::handle_session_supervisor_operation;
+
+#[cfg(test)]
+use framework_runtime::FRAMEWORK_ALIAS_SCHEMA_VERSION;
 
 const ROUTE_DECISION_SCHEMA_VERSION: &str = "router-rs-route-decision-v1";
 const SEARCH_RESULTS_SCHEMA_VERSION: &str = "router-rs-search-results-v1";
@@ -70,7 +72,6 @@ const TRACE_DESCRIPTOR_AUTHORITY: &str = "rust-runtime-trace-descriptor";
 const CHECKPOINT_RESUME_MANIFEST_SCHEMA_VERSION: &str = "router-rs-checkpoint-resume-manifest-v1";
 const CHECKPOINT_RESUME_MANIFEST_AUTHORITY: &str = "rust-runtime-checkpoint-manifest";
 const FRAMEWORK_REFRESH_SCHEMA_VERSION: &str = "router-rs-framework-refresh-v1";
-const FRAMEWORK_ALIAS_SCHEMA_VERSION: &str = "router-rs-framework-alias-v1";
 const FRAMEWORK_REFRESH_CONFIRMATION: &str = "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。";
 const TRANSPORT_BINDING_WRITE_SCHEMA_VERSION: &str = "router-rs-transport-binding-write-v1";
 const TRANSPORT_BINDING_WRITE_AUTHORITY: &str = "rust-runtime-transport-binding-writer";
@@ -186,8 +187,6 @@ struct Cli {
     #[arg(long)]
     framework_memory_recall_json: bool,
     #[arg(long)]
-    framework_recap_json: bool,
-    #[arg(long)]
     framework_refresh_json: bool,
     #[arg(long)]
     framework_alias_json: bool,
@@ -217,6 +216,8 @@ struct Cli {
     framework_task_id: Option<String>,
     #[arg(long)]
     include_legacy_alias_artifact: bool,
+    #[arg(long)]
+    include_compatibility_inventory: bool,
     #[arg(long)]
     route_mode: Option<String>,
     #[arg(long)]
@@ -278,6 +279,9 @@ struct SkillRecord {
     summary: String,
     health: f64,
     slug_lower: String,
+    owner_lower: String,
+    gate_lower: String,
+    session_start_lower: String,
     summary_lower: String,
     trigger_hints_lower: String,
     fuzzy_tokens: Vec<String>,
@@ -309,8 +313,8 @@ struct SearchResultsPayload {
 }
 
 #[derive(Debug, Clone)]
-struct RouteCandidate {
-    record: SkillRecord,
+struct RouteCandidate<'a> {
+    record: &'a SkillRecord,
     score: f64,
     reasons: Vec<String>,
 }
@@ -646,6 +650,9 @@ impl SkillRecord {
             health,
         } = raw;
         let slug_lower = normalize_text(&slug);
+        let owner_lower = normalize_text(&owner);
+        let gate_lower = normalize_text(&gate);
+        let session_start_lower = normalize_text(&session_start);
         let summary_lower = normalize_text(&summary);
         let trigger_hints_lower = normalize_text(&trigger_hints.join(" "));
         let mut fuzzy_source = String::with_capacity(
@@ -675,6 +682,9 @@ impl SkillRecord {
             summary,
             health,
             slug_lower,
+            owner_lower,
+            gate_lower,
+            session_start_lower,
             summary_lower,
             trigger_hints_lower,
             fuzzy_tokens: tokenize_query(&fuzzy_source),
@@ -731,7 +741,6 @@ fn main() -> Result<(), String> {
         args.framework_runtime_snapshot_json,
         args.framework_contract_summary_json,
         args.framework_memory_recall_json,
-        args.framework_recap_json,
         args.framework_refresh_json,
         args.framework_alias_json,
         args.profile_json,
@@ -746,7 +755,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-recap-json, --framework-refresh-json, --framework-alias-json, --route-report-json, --profile-json, and --profile-artifacts-json"
+            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-alias-json, --route-report-json, --profile-json, and --profile-artifacts-json"
                 .to_string(),
         );
     }
@@ -1108,19 +1117,6 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
-    if args.framework_recap_json {
-        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_framework_recap_envelope(
-                &repo_root,
-                args.claude_hook_max_lines,
-            )?)
-            .map_err(|err| format!("serialize output failed: {err}"))?
-        );
-        return Ok(());
-    }
-
     if args.framework_refresh_json {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
         let refresh_payload =
@@ -1193,7 +1189,11 @@ fn main() -> Result<(), String> {
             "--framework-profile is required with --profile-artifacts-json".to_string()
         })?;
         let profile = load_framework_profile(profile_path)?;
-        let artifacts = build_codex_artifact_bundle(&profile, args.include_legacy_alias_artifact)?;
+        let artifacts = build_codex_artifact_bundle(
+            &profile,
+            args.include_legacy_alias_artifact,
+            args.include_compatibility_inventory,
+        )?;
         println!(
             "{}",
             serde_json::to_string(&artifacts)
@@ -1511,7 +1511,6 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
         "framework_runtime_snapshot" => dispatch_stdio_framework_runtime_snapshot(payload),
         "framework_contract_summary" => dispatch_stdio_framework_contract_summary(payload),
         "framework_memory_recall" => dispatch_stdio_framework_memory_recall(payload),
-        "framework_recap" => dispatch_stdio_framework_recap(payload),
         "framework_alias" => dispatch_stdio_framework_alias(payload),
         _ => Err(format!("unsupported stdio operation: {op}")),
     }
@@ -1663,20 +1662,6 @@ fn dispatch_stdio_framework_memory_recall(payload: Value) -> Result<Value, Strin
     .map_err(|err| format!("serialize framework memory recall output failed: {err}"))
 }
 
-fn dispatch_stdio_framework_recap(payload: Value) -> Result<Value, String> {
-    let repo_root = required_non_empty_string(&payload, "repo_root", "stdio framework recap")?;
-    let max_lines = payload
-        .get("max_lines")
-        .and_then(Value::as_u64)
-        .map(|value| value as usize)
-        .unwrap_or(6);
-    serde_json::to_value(build_framework_recap_envelope(
-        Path::new(&repo_root),
-        max_lines,
-    )?)
-    .map_err(|err| format!("serialize framework recap output failed: {err}"))
-}
-
 fn dispatch_stdio_framework_alias(payload: Value) -> Result<Value, String> {
     let repo_root = required_non_empty_string(&payload, "repo_root", "stdio framework alias")?;
     let alias_name = required_non_empty_string(&payload, "alias", "stdio framework alias")?;
@@ -1721,8 +1706,16 @@ fn dispatch_stdio_compile_codex_profile_artifacts(payload: Value) -> Result<Valu
         .get("include_legacy_alias_artifact")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let include_compatibility_inventory = payload
+        .get("include_compatibility_inventory")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let profile = load_framework_profile(Path::new(&profile_path))?;
-    let artifacts = build_codex_artifact_bundle(&profile, include_legacy_alias_artifact)?;
+    let artifacts = build_codex_artifact_bundle(
+        &profile,
+        include_legacy_alias_artifact,
+        include_compatibility_inventory,
+    )?;
     serde_json::to_value(artifacts)
         .map_err(|err| format!("serialize codex profile artifacts output failed: {err}"))
 }
@@ -2140,12 +2133,11 @@ fn split_phrases(text: &str) -> Vec<String> {
 }
 
 fn is_overlay_record(record: &SkillRecord) -> bool {
-    normalize_text(&record.owner) == "overlay"
-        || OVERLAY_ONLY_SKILLS.iter().any(|slug| slug == &record.slug)
+    record.owner_lower == "overlay" || OVERLAY_ONLY_SKILLS.iter().any(|slug| slug == &record.slug)
 }
 
 fn can_be_primary_owner(record: &SkillRecord) -> bool {
-    !matches!(normalize_text(&record.owner).as_str(), "gate" | "overlay")
+    !matches!(record.owner_lower.as_str(), "gate" | "overlay")
 }
 
 fn phrase_token_matches(task_token: &str, phrase_token: &str) -> bool {
@@ -3322,6 +3314,7 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     lines.push("- Lead with the answer or result.".to_string());
     lines.push("- Use plain Chinese unless the user asks otherwise.".to_string());
     lines.push("- Be brief, clear, and friendly.".to_string());
+    lines.push("- Explain things in plain language first.".to_string());
     lines.push(
         "- Keep the default reply to one short paragraph unless a list is truly needed."
             .to_string(),
@@ -3331,6 +3324,7 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
         "- If a technical term is necessary, explain it in simple words the first time."
             .to_string(),
     );
+    lines.push("- Do not force personality or performative style by default.".to_string());
     if !payload.reasons.is_empty() {
         lines.push("Task cues:".to_string());
         for reason in &payload.reasons {
@@ -5642,6 +5636,31 @@ fn gsd_execution_markers() -> [&'static str; 6] {
     ]
 }
 
+fn framework_alias_explicit_entrypoints(slug: &str) -> &'static [&'static str] {
+    match slug {
+        "autopilot" => &["/autopilot", "$autopilot"],
+        "deepinterview" => &["/deepinterview", "$deepinterview"],
+        _ => &[],
+    }
+}
+
+fn framework_alias_requires_explicit_call(slug: &str) -> bool {
+    !framework_alias_explicit_entrypoints(slug).is_empty()
+}
+
+fn has_explicit_framework_alias_call(
+    query_text: &str,
+    query_token_list: &[String],
+    slug: &str,
+) -> bool {
+    framework_alias_explicit_entrypoints(slug)
+        .iter()
+        .any(|entrypoint| {
+            query_text.contains(&normalize_text(entrypoint))
+                || query_token_list.iter().any(|token| token == entrypoint)
+        })
+}
+
 fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, String> {
     let normalized_mode = mode.trim().to_ascii_lowercase();
     let base = RouteExecutionPolicyPayload {
@@ -5686,22 +5705,34 @@ fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, String>
     Ok(policy)
 }
 
-fn score_route_candidate(
-    record: &SkillRecord,
+fn score_route_candidate<'a>(
+    record: &'a SkillRecord,
     query_text: &str,
     query_token_list: &[String],
     query_tokens: &HashSet<String>,
     first_turn: bool,
-) -> RouteCandidate {
+) -> RouteCandidate<'a> {
     let mut score = 0.0f64;
     let mut reasons = Vec::new();
 
     if record.slug == "systematic-debugging" && is_meta_routing_task(query_text) {
         return RouteCandidate {
-            record: record.clone(),
+            record,
             score: 0.0,
             reasons: vec![
                 "Suppressed: meta-routing repair request should not be treated as a generic runtime-debugging gate."
+                    .to_string(),
+            ],
+        };
+    }
+    if framework_alias_requires_explicit_call(&record.slug)
+        && !has_explicit_framework_alias_call(query_text, query_token_list, &record.slug)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: framework alias skills only route from explicit /alias or $alias entrypoints."
                     .to_string(),
             ],
         };
@@ -5780,17 +5811,16 @@ fn score_route_candidate(
     }
 
     if first_turn && score > 0.0 {
-        let session_start = normalize_text(&record.session_start);
-        if session_start == "required" {
+        if record.session_start_lower == "required" {
             score += 8.0;
             reasons.push("Session-start required boost applied (+8).".to_string());
-        } else if session_start == "preferred" {
+        } else if record.session_start_lower == "preferred" {
             score += 3.0;
             reasons.push("Session-start preferred boost applied (+3).".to_string());
         }
     }
 
-    if normalize_text(&record.owner) == "gate" && score > 0.0 {
+    if record.owner_lower == "gate" && score > 0.0 {
         score += 2.0;
     }
 
@@ -5885,7 +5915,7 @@ fn score_route_candidate(
             .any(|marker| query_text.contains(marker))
         {
             return RouteCandidate {
-                record: record.clone(),
+                record,
                 score: 0.0,
                 reasons: vec![
                     "Suppressed: visual-review requires visible evidence, not a generic review token."
@@ -5904,7 +5934,7 @@ fn score_route_candidate(
     }
 
     RouteCandidate {
-        record: record.clone(),
+        record,
         score,
         reasons,
     }
@@ -5930,12 +5960,11 @@ fn fallback_owner(records: &[SkillRecord]) -> Result<&SkillRecord, String> {
         .ok_or_else(|| "No skill records available for fallback owner.".to_string())
 }
 
-fn pick_owner(candidates: Vec<RouteCandidate>) -> RouteCandidate {
+fn pick_owner<'a>(candidates: Vec<RouteCandidate<'a>>) -> RouteCandidate<'a> {
     let mut gate_candidates = candidates
         .iter()
         .filter(|candidate| {
-            normalize_text(&candidate.record.owner) == "gate"
-                || normalize_text(&candidate.record.gate) != "none"
+            candidate.record.owner_lower == "gate" || candidate.record.gate_lower != "none"
         })
         .cloned()
         .collect::<Vec<_>>();
@@ -6006,7 +6035,7 @@ fn pick_owner(candidates: Vec<RouteCandidate>) -> RouteCandidate {
     fallback_pool.remove(0)
 }
 
-fn route_candidate_cmp(left: &RouteCandidate, right: &RouteCandidate) -> Ordering {
+fn route_candidate_cmp(left: &RouteCandidate<'_>, right: &RouteCandidate<'_>) -> Ordering {
     right
         .score
         .partial_cmp(&left.score)
@@ -6025,7 +6054,7 @@ fn pick_overlay(
     let auto_anti_laziness = matches!(selected_skill.layer.as_str(), "L-1" | "L0" | "L1");
     let anti_laziness = records.iter().find(|record| record.slug == "anti-laziness");
 
-    let mut ordered = records.to_vec();
+    let mut ordered = records.iter().collect::<Vec<_>>();
     ordered.sort_by(|left, right| {
         layer_rank(&left.layer)
             .cmp(&layer_rank(&right.layer))
@@ -6037,7 +6066,7 @@ fn pick_overlay(
         if record.slug == selected_skill.slug {
             continue;
         }
-        if !is_overlay_record(&record) {
+        if !is_overlay_record(record) {
             continue;
         }
         let explicit_name_match = text_matches_phrase(query_tokens, &record.slug_lower);
@@ -7014,6 +7043,283 @@ mod tests {
         assert_eq!(
             alias["entry_contract"]["route_rules"][0],
             json!("模糊需求 -> `idea-to-plan`")
+        );
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_alias_builds_compact_deepinterview_payload() {
+        let repo_root = std::env::temp_dir().join(format!(
+            "router-rs-deepinterview-alias-fixture-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock before epoch")
+                .as_nanos()
+        ));
+        let task_root = repo_root
+            .join("artifacts")
+            .join("current")
+            .join("active-bootstrap-repair-20260418210000");
+        fs::create_dir_all(&task_root).expect("create task root");
+        fs::create_dir_all(repo_root.join("artifacts").join("current"))
+            .expect("create current root");
+        fs::write(
+            task_root.join("SESSION_SUMMARY.md"),
+            "- task: active bootstrap repair\n- phase: implementation\n- status: in_progress\n",
+        )
+        .expect("write session summary");
+        fs::write(
+            task_root.join("NEXT_ACTIONS.json"),
+            r#"{"next_actions":["Patch classifier","Run MCP regression tests"]}"#,
+        )
+        .expect("write next actions");
+        fs::write(task_root.join("EVIDENCE_INDEX.json"), r#"{"artifacts":[]}"#)
+            .expect("write evidence index");
+        fs::write(
+            task_root.join("TRACE_METADATA.json"),
+            r#"{"task":"active bootstrap repair","matched_skills":["code-review"]}"#,
+        )
+        .expect("write trace metadata");
+        fs::write(
+            repo_root.join("artifacts").join("current").join("active_task.json"),
+            r#"{"task_id":"active-bootstrap-repair-20260418210000","task":"active bootstrap repair"}"#,
+        )
+        .expect("write active task");
+        fs::write(
+            repo_root.join(".supervisor_state.json"),
+            r#"{
+                "task_id":"active-bootstrap-repair-20260418210000",
+                "task_summary":"active bootstrap repair",
+                "active_phase":"implementation",
+                "verification":{"verification_status":"in_progress"},
+                "continuity":{"story_state":"active","resume_allowed":true},
+                "execution_contract":{"acceptance_criteria":["completed tasks never appear as current execution"]}
+            }"#,
+        )
+        .expect("write supervisor state");
+
+        let payload = build_framework_alias_envelope(&repo_root, "deepinterview", 5, false)
+            .expect("build alias payload");
+        let alias = payload
+            .get("alias")
+            .and_then(Value::as_object)
+            .expect("alias payload");
+        let prompt = alias
+            .get("entry_prompt")
+            .and_then(Value::as_str)
+            .expect("entry prompt");
+
+        assert_eq!(
+            payload["schema_version"],
+            json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
+        );
+        assert_eq!(alias["name"], json!("deepinterview"));
+        assert_eq!(alias["host_entrypoint"], json!("/deepinterview"));
+        assert_eq!(alias["compact"], json!(false));
+        assert_eq!(alias["canonical_owner"], json!("code-review"));
+        assert_eq!(
+            alias["state_machine"]["handoff"]["rules"][1]["target"],
+            json!("autopilot")
+        );
+        assert_eq!(
+            alias["entry_contract"]["route_rules"][0],
+            json!("主 owner -> `code-review`")
+        );
+        assert!(prompt.contains("进入 deepinterview"));
+        assert!(prompt.contains("每轮只问一个问题"));
+        assert!(prompt.contains("review lanes ->"));
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_alias_compact_payload_omits_duplicate_prompt_fields() {
+        let repo_root = std::env::temp_dir().join(format!(
+            "router-rs-compact-alias-fixture-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock before epoch")
+                .as_nanos()
+        ));
+        let task_root = repo_root
+            .join("artifacts")
+            .join("current")
+            .join("active-bootstrap-repair-20260418210000");
+        fs::create_dir_all(&task_root).expect("create task root");
+        fs::create_dir_all(repo_root.join("artifacts").join("current"))
+            .expect("create current root");
+        fs::write(
+            task_root.join("SESSION_SUMMARY.md"),
+            "- task: active bootstrap repair\n- phase: implementation\n- status: in_progress\n",
+        )
+        .expect("write session summary");
+        fs::write(
+            task_root.join("NEXT_ACTIONS.json"),
+            r#"{"next_actions":["Patch classifier","Run MCP regression tests"]}"#,
+        )
+        .expect("write next actions");
+        fs::write(task_root.join("EVIDENCE_INDEX.json"), r#"{"artifacts":[]}"#)
+            .expect("write evidence index");
+        fs::write(
+            task_root.join("TRACE_METADATA.json"),
+            r#"{"task":"active bootstrap repair","matched_skills":["execution-controller-coding"]}"#,
+        )
+        .expect("write trace metadata");
+        fs::write(
+            repo_root.join("artifacts").join("current").join("active_task.json"),
+            r#"{"task_id":"active-bootstrap-repair-20260418210000","task":"active bootstrap repair"}"#,
+        )
+        .expect("write active task");
+        fs::write(
+            repo_root.join(".supervisor_state.json"),
+            r#"{
+                "task_id":"active-bootstrap-repair-20260418210000",
+                "task_summary":"active bootstrap repair",
+                "active_phase":"implementation",
+                "verification":{"verification_status":"in_progress"},
+                "continuity":{"story_state":"active","resume_allowed":true},
+                "execution_contract":{"acceptance_criteria":["completed tasks never appear as current execution"]}
+            }"#,
+        )
+        .expect("write supervisor state");
+
+        let payload = build_framework_alias_envelope(&repo_root, "autopilot", 3, true)
+            .expect("build alias payload");
+        let alias = payload
+            .get("alias")
+            .and_then(Value::as_object)
+            .expect("alias payload");
+
+        assert_eq!(alias["compact"], json!(true));
+        assert!(alias.get("entry_prompt").is_none());
+        assert!(alias.get("entry_prompt_token_estimate").is_none());
+        assert!(alias.get("upstream_source").is_none());
+        assert_eq!(
+            alias["state_machine"]["required_anchors"],
+            json!([
+                "SESSION_SUMMARY",
+                "NEXT_ACTIONS",
+                "TRACE_METADATA",
+                "SUPERVISOR_STATE"
+            ])
+        );
+        assert!(alias["state_machine"]["resume"].get("task").is_none());
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_memory_recall_with_artifact_override_keeps_repo_supervisor_anchor() {
+        let repo_root = std::env::temp_dir().join(format!(
+            "router-rs-memory-override-fixture-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock before epoch")
+                .as_nanos()
+        ));
+        let isolated_artifacts = repo_root.join("isolated-artifacts");
+        let isolated_task_id = "isolated-task-20260418220000";
+        let repo_task_root = repo_root
+            .join("artifacts")
+            .join("current")
+            .join("repo-task-20260418210000");
+        let isolated_task_root = isolated_artifacts.join("current").join(isolated_task_id);
+        fs::create_dir_all(&repo_task_root).expect("create repo task root");
+        fs::create_dir_all(&isolated_task_root).expect("create isolated task root");
+        fs::create_dir_all(repo_root.join(".codex").join("memory")).expect("create memory root");
+        fs::write(
+            repo_task_root.join("SESSION_SUMMARY.md"),
+            "- task: repo default task\n- phase: implementation\n- status: in_progress\n",
+        )
+        .expect("write repo session summary");
+        fs::write(
+            repo_task_root.join("NEXT_ACTIONS.json"),
+            r#"{"next_actions":["Continue repo default task"]}"#,
+        )
+        .expect("write repo next actions");
+        fs::write(
+            repo_task_root.join("EVIDENCE_INDEX.json"),
+            r#"{"artifacts":[]}"#,
+        )
+        .expect("write repo evidence index");
+        fs::write(
+            repo_task_root.join("TRACE_METADATA.json"),
+            r#"{"task":"repo default task","matched_skills":["execution-controller-coding"]}"#,
+        )
+        .expect("write repo trace metadata");
+        fs::write(
+            isolated_task_root.join("SESSION_SUMMARY.md"),
+            "- task: isolated active task\n- phase: implementation\n- status: in_progress\n",
+        )
+        .expect("write isolated session summary");
+        fs::write(
+            isolated_task_root.join("NEXT_ACTIONS.json"),
+            r#"{"next_actions":["Continue isolated active task"]}"#,
+        )
+        .expect("write isolated next actions");
+        fs::write(
+            isolated_task_root.join("EVIDENCE_INDEX.json"),
+            r#"{"artifacts":[]}"#,
+        )
+        .expect("write isolated evidence index");
+        fs::write(
+            isolated_task_root.join("TRACE_METADATA.json"),
+            r#"{"task":"isolated active task","matched_skills":["execution-controller-coding"]}"#,
+        )
+        .expect("write isolated trace metadata");
+        fs::write(
+            repo_root.join(".codex").join("memory").join("MEMORY.md"),
+            "# 项目长期记忆\n",
+        )
+        .expect("write memory");
+        fs::write(
+            repo_root.join(".supervisor_state.json"),
+            format!(
+                r#"{{
+                "task_id":"{isolated_task_id}",
+                "task_summary":"isolated active task",
+                "active_phase":"implementation",
+                "verification":{{"verification_status":"in_progress"}},
+                "continuity":{{"story_state":"active","resume_allowed":true}}
+            }}"#
+            ),
+        )
+        .expect("write supervisor state");
+
+        let payload = build_framework_memory_recall_envelope(
+            &repo_root,
+            "isolated active task",
+            8,
+            "active",
+            None,
+            Some(&isolated_artifacts),
+            Some(isolated_task_id),
+        )
+        .expect("build memory recall");
+        let memory_recall = payload
+            .get("memory_recall")
+            .and_then(Value::as_object)
+            .expect("memory recall payload");
+
+        assert_eq!(
+            memory_recall["continuity"]["task"],
+            json!("isolated active task")
+        );
+        assert_eq!(
+            memory_recall["continuity"]["paths"]["supervisor_state"],
+            json!(repo_root
+                .join(".supervisor_state.json")
+                .display()
+                .to_string())
+        );
+        assert_eq!(
+            memory_recall["source_artifacts"]["artifact_lanes"]["bootstrap"],
+            json!(isolated_artifacts
+                .join("bootstrap")
+                .join("<task_id>")
+                .display()
+                .to_string())
         );
 
         let _ = fs::remove_dir_all(&repo_root);

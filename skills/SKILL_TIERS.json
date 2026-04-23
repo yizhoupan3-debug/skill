@@ -32,16 +32,16 @@
     }
   },
   "summary": {
-    "total_skills": 146,
+    "total_skills": 150,
     "tier_counts": {
       "core": 20,
-      "optional": 124,
+      "optional": 128,
       "experimental": 2,
       "deprecated": 0
     },
     "activation_counts": {
       "default": 26,
-      "explicit_opt_in": 120,
+      "explicit_opt_in": 124,
       "disabled": 0
     }
   },
@@ -102,6 +102,10 @@
       "datastore-cache-queue",
       "deepinterview",
       "dependency-migration",
+      "design-md",
+      "design-output-auditor",
+      "design-prompt-enhancer",
+      "design-workflow-protocol",
       "docker",
       "documentation-engineering",
       "email-template",
@@ -1258,6 +1262,118 @@
         "owner": "gate",
         "gate": "none",
         "priority": "P2",
+        "session_start": "n/a",
+        "source": "project",
+        "source_position": 3,
+        "health": {
+          "dynamic_score": 100.0,
+          "static_score": 100.0,
+          "usage_30d": 0,
+          "reroutes_30d": 0,
+          "health_status": "Healthy"
+        },
+        "loadouts": []
+      }
+    },
+    "design-md": {
+      "tier": "optional",
+      "reasons": [
+        "specialist-opt-in"
+      ],
+      "surface": {
+        "activation_mode": "explicit_opt_in",
+        "default_surface_enabled": false,
+        "default_loadout_memberships": []
+      },
+      "signals": {
+        "layer": "L3",
+        "owner": "owner",
+        "gate": "none",
+        "priority": "P1",
+        "session_start": "n/a",
+        "source": "project",
+        "source_position": 3,
+        "health": {
+          "dynamic_score": 100.0,
+          "static_score": 100.0,
+          "usage_30d": 0,
+          "reroutes_30d": 0,
+          "health_status": "Healthy"
+        },
+        "loadouts": []
+      }
+    },
+    "design-output-auditor": {
+      "tier": "optional",
+      "reasons": [
+        "specialist-opt-in"
+      ],
+      "surface": {
+        "activation_mode": "explicit_opt_in",
+        "default_surface_enabled": false,
+        "default_loadout_memberships": []
+      },
+      "signals": {
+        "layer": "L3",
+        "owner": "owner",
+        "gate": "none",
+        "priority": "P1",
+        "session_start": "n/a",
+        "source": "project",
+        "source_position": 3,
+        "health": {
+          "dynamic_score": 100.0,
+          "static_score": 100.0,
+          "usage_30d": 0,
+          "reroutes_30d": 0,
+          "health_status": "Healthy"
+        },
+        "loadouts": []
+      }
+    },
+    "design-prompt-enhancer": {
+      "tier": "optional",
+      "reasons": [
+        "specialist-opt-in"
+      ],
+      "surface": {
+        "activation_mode": "explicit_opt_in",
+        "default_surface_enabled": false,
+        "default_loadout_memberships": []
+      },
+      "signals": {
+        "layer": "L3",
+        "owner": "owner",
+        "gate": "none",
+        "priority": "P1",
+        "session_start": "n/a",
+        "source": "project",
+        "source_position": 3,
+        "health": {
+          "dynamic_score": 100.0,
+          "static_score": 100.0,
+          "usage_30d": 0,
+          "reroutes_30d": 0,
+          "health_status": "Healthy"
+        },
+        "loadouts": []
+      }
+    },
+    "design-workflow-protocol": {
+      "tier": "optional",
+      "reasons": [
+        "specialist-opt-in"
+      ],
+      "surface": {
+        "activation_mode": "explicit_opt_in",
+        "default_surface_enabled": false,
+        "default_loadout_memberships": []
+      },
+      "signals": {
+        "layer": "L3",
+        "owner": "owner",
+        "gate": "none",
+        "priority": "P1",
         "session_start": "n/a",
         "source": "project",
         "source_position": 3,

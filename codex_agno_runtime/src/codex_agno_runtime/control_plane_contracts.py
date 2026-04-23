@@ -6,6 +6,8 @@ from typing import Any, Dict
 
 from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+    EXECUTION_KERNEL_PUBLIC_RUNTIME_CONTRACT_FIELDS,
+    EXECUTION_KERNEL_PUBLIC_RUNTIME_RESPONSE_METADATA_FIELDS,
     build_execution_kernel_live_response_serialization_contract_core,
 )
 from codex_agno_runtime.host_adapters import (
@@ -239,18 +241,10 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
             "stop_rule": "request surface already removed from runtime settings and steady-state artifacts",
         },
         "public_runtime_contract_fields": [
-            "execution_kernel",
-            "execution_kernel_authority",
-            "execution_kernel_contract_mode",
-            "execution_kernel_in_process_replacement_complete",
-            "execution_kernel_delegate",
-            "execution_kernel_delegate_authority",
-            "execution_kernel_live_primary",
-            "execution_kernel_live_primary_authority",
+            *EXECUTION_KERNEL_PUBLIC_RUNTIME_CONTRACT_FIELDS
         ],
         "public_runtime_response_metadata_fields": [
-            "execution_kernel_delegate_family",
-            "execution_kernel_delegate_impl",
+            *EXECUTION_KERNEL_PUBLIC_RUNTIME_RESPONSE_METADATA_FIELDS
         ],
         "retired_runtime_response_metadata_fields": [
             EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,

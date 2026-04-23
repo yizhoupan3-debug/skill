@@ -21,6 +21,7 @@ from codex_agno_runtime.execution_kernel import (
     RouterRsInfrastructureError,
     build_router_rs_execution_request_payload,
     decode_router_rs_execution_payload,
+    decode_router_rs_execution_payload_with_contract,
     execute_router_rs_request,
     preview_router_rs_request_prompt,
 )
@@ -700,7 +701,7 @@ def test_router_rs_execution_kernel_rejects_retired_python_fallback_metadata(
         asyncio.run(execute_router_rs_request(_request(), settings=settings, rust_adapter=adapter))
 
 
-def test_decode_router_rs_execution_payload_prefers_rust_response_metadata_without_contract() -> None:
+def test_decode_router_rs_execution_payload_rejects_runtime_renaming_without_contract() -> None:
     payload = {
         "session_id": "kernel-contract-session",
         "user_id": "tester",
@@ -735,7 +736,56 @@ def test_decode_router_rs_execution_payload_prefers_rust_response_metadata_witho
         ),
     }
 
-    response = decode_router_rs_execution_payload(payload)
+    with pytest.raises(RuntimeError, match="execution_kernel='rust-runtime-owned-kernel'"):
+        decode_router_rs_execution_payload(payload)
+
+
+def test_decode_router_rs_execution_payload_can_follow_explicit_kernel_contract() -> None:
+    payload = {
+        "session_id": "kernel-contract-session",
+        "user_id": "tester",
+        "skill": "plan-to-code",
+        "overlay": "rust-pro",
+        "live_run": True,
+        "content": "router-rs content",
+        "usage": {
+            "input_tokens": 21,
+            "output_tokens": 13,
+            "total_tokens": 34,
+            "mode": "live",
+        },
+        "prompt_preview": "Rust-owned live prompt",
+        "model_id": "gpt-5.4",
+        "metadata": _steady_state_kernel_metadata(
+            execution_kernel="rust-runtime-owned-kernel",
+            execution_kernel_authority="rust-runtime-owned-authority",
+            execution_kernel_delegate="router-rs-live",
+            execution_kernel_delegate_authority="rust-runtime-live-authority",
+            execution_kernel_delegate_family="rust-direct-live",
+            execution_kernel_delegate_impl="router-rs-http",
+            execution_kernel_live_primary="router-rs-live-primary",
+            execution_kernel_live_primary_authority="rust-primary-authority",
+            run_id="run-1",
+            status="completed",
+            trace_event_count=9,
+            trace_output_path="/tmp/TRACE_METADATA.json",
+            execution_mode="live",
+            route_engine="rust",
+            diagnostic_route_mode="none",
+        ),
+    }
+
+    response = decode_router_rs_execution_payload_with_contract(
+        payload,
+        kernel_contract={
+            "execution_kernel": "rust-runtime-owned-kernel",
+            "execution_kernel_authority": "rust-runtime-owned-authority",
+            "execution_kernel_delegate": "router-rs-live",
+            "execution_kernel_delegate_authority": "rust-runtime-live-authority",
+            "execution_kernel_delegate_family": "rust-direct-live",
+            "execution_kernel_delegate_impl": "router-rs-http",
+        },
+    )
 
     assert response.metadata["execution_kernel"] == "rust-runtime-owned-kernel"
     assert response.metadata["execution_kernel_authority"] == "rust-runtime-owned-authority"

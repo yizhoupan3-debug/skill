@@ -540,6 +540,66 @@
         "source_position": 3
       }
     },
+    "design-md": {
+      "has_shadow": false,
+      "shadowed": [],
+      "shadowed_by": [],
+      "winner": {
+        "path": "skills/design-md",
+        "routing_gate": "none",
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "session_start": "n/a",
+        "slug": "design-md",
+        "source": "project",
+        "source_position": 3
+      }
+    },
+    "design-output-auditor": {
+      "has_shadow": false,
+      "shadowed": [],
+      "shadowed_by": [],
+      "winner": {
+        "path": "skills/design-output-auditor",
+        "routing_gate": "none",
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "session_start": "n/a",
+        "slug": "design-output-auditor",
+        "source": "project",
+        "source_position": 3
+      }
+    },
+    "design-prompt-enhancer": {
+      "has_shadow": false,
+      "shadowed": [],
+      "shadowed_by": [],
+      "winner": {
+        "path": "skills/design-prompt-enhancer",
+        "routing_gate": "none",
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "session_start": "n/a",
+        "slug": "design-prompt-enhancer",
+        "source": "project",
+        "source_position": 3
+      }
+    },
+    "design-workflow-protocol": {
+      "has_shadow": false,
+      "shadowed": [],
+      "shadowed_by": [],
+      "winner": {
+        "path": "skills/design-workflow-protocol",
+        "routing_gate": "none",
+        "routing_layer": "L3",
+        "routing_owner": "owner",
+        "session_start": "n/a",
+        "slug": "design-workflow-protocol",
+        "source": "project",
+        "source_position": 3
+      }
+    },
     "doc": {
       "has_shadow": false,
       "shadowed": [],

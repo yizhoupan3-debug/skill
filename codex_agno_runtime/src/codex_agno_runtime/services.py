@@ -38,12 +38,13 @@ from codex_agno_runtime.execution_kernel import (
 from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_BRIDGE_AUTHORITY,
     EXECUTION_KERNEL_BRIDGE_KIND,
-    EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
-    EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
     EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
     EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
+    EXECUTION_KERNEL_RESPONSE_SHAPE_RETIRED,
     EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
-    EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
+    execution_kernel_steady_state_fields,
+    normalize_execution_kernel_metadata_bridge,
+    resolve_execution_kernel_expectations,
     validate_execution_kernel_steady_state_metadata,
 )
 from codex_agno_runtime.control_plane_contracts import build_control_plane_contract_descriptors
@@ -238,116 +239,7 @@ def _runtime_execution_kernel_metadata_bridge(
         raise RuntimeError(
             "runtime control plane execution descriptor returned an invalid kernel_metadata_bridge."
         )
-    return dict(bridge)
-
-
-def _runtime_execution_kernel_contract_fields(
-    service_descriptor: Mapping[str, Any] | None,
-) -> tuple[str, ...]:
-    """Return the Rust-owned steady-state contract fields for Python projection."""
-
-    bridge = _runtime_execution_kernel_metadata_bridge(service_descriptor)
-    if bridge is None:
-        return EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS
-    fields = bridge.get("steady_state_fields")
-    if not isinstance(fields, (list, tuple)) or any(
-        not isinstance(field, str) or not field.strip() for field in fields
-    ):
-        raise RuntimeError(
-            "runtime control plane execution descriptor is missing kernel_metadata_bridge.steady_state_fields."
-        )
-    return tuple(str(field) for field in fields)
-
-
-def project_execution_kernel_payload(
-    service_descriptor: Mapping[str, Any] | None,
-    *,
-    dry_run: bool = False,
-    response_shape: str | None = None,
-    metadata: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Merge explicit execution metadata onto the Rust-owned kernel contract."""
-
-    metadata_bridge = _runtime_execution_kernel_metadata_bridge(service_descriptor)
-    contract_fields = _runtime_execution_kernel_contract_fields(service_descriptor)
-    payload = dict(
-        _runtime_execution_kernel_contract(
-            service_descriptor,
-            dry_run=dry_run,
-            response_shape=response_shape,
-        )
-    )
-    if metadata is not None:
-        raw_metadata_execution_kernel = metadata.get("execution_kernel")
-        raw_metadata_execution_kernel_authority = metadata.get("execution_kernel_authority")
-        if (raw_metadata_execution_kernel is None) != (
-            raw_metadata_execution_kernel_authority is None
-        ):
-            provided_field = (
-                "execution_kernel"
-                if raw_metadata_execution_kernel is not None
-                else "execution_kernel_authority"
-            )
-            provided_value = (
-                raw_metadata_execution_kernel
-                if raw_metadata_execution_kernel is not None
-                else raw_metadata_execution_kernel_authority
-            )
-            raise RuntimeError(
-                "execution-kernel steady-state metadata returned an unexpected value: "
-                f"{provided_field}={provided_value!r}"
-            )
-        metadata_execution_kernel = (
-            raw_metadata_execution_kernel
-            if raw_metadata_execution_kernel is not None
-            else payload.get("execution_kernel")
-        )
-        metadata_execution_kernel_authority = (
-            raw_metadata_execution_kernel_authority
-            if raw_metadata_execution_kernel_authority is not None
-            else payload.get("execution_kernel_authority")
-        )
-        steady_state_fields = tuple(field for field in contract_fields if field in metadata)
-        if steady_state_fields:
-            missing_fields = [field for field in contract_fields if field not in metadata]
-            if missing_fields:
-                raise RuntimeError(
-                    "execution-kernel projection metadata is missing steady-state fields: "
-                    + ", ".join(sorted(missing_fields))
-                )
-        if steady_state_fields:
-            validated_execution_kernel = str(metadata_execution_kernel)
-            validated_execution_kernel_authority = str(metadata_execution_kernel_authority)
-            validated_metadata = validate_execution_kernel_steady_state_metadata(
-                metadata=metadata,
-                execution_kernel=validated_execution_kernel,
-                execution_kernel_authority=validated_execution_kernel_authority,
-                execution_kernel_delegate=str(
-                    metadata.get(
-                        "execution_kernel_delegate",
-                        EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
-                    )
-                ),
-                execution_kernel_delegate_authority=str(
-                    metadata.get(
-                        "execution_kernel_delegate_authority",
-                        EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
-                    )
-                ),
-                response_shape=str(
-                    metadata.get(
-                        EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
-                        payload[EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY],
-                    )
-                ),
-                metadata_bridge=metadata_bridge,
-            )
-            for field in contract_fields:
-                payload[field] = validated_metadata[field]
-        for key, value in metadata.items():
-            if key not in contract_fields:
-                payload[key] = value
-    return {key: value for key, value in payload.items() if value is not None}
+    return normalize_execution_kernel_metadata_bridge(dict(bridge))
 
 
 def _runtime_execution_kernel_health(
@@ -1651,12 +1543,14 @@ class ExecutionEnvironmentService:
         self.background_job_timeout_seconds = background_job_timeout_seconds
         self._rust_adapter_health: dict[str, Any] | None = None
         self._control_plane_contracts: dict[str, Any] | None = None
+        self._kernel_descriptor_snapshot: dict[str, Any] | None = None
 
     def refresh_control_plane(self, control_plane_descriptor: Mapping[str, Any] | None) -> None:
         self.control_plane_descriptor = dict(control_plane_descriptor or {})
         self._service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "execution")
         self.sandbox.refresh_control_plane(control_plane_descriptor)
         self._control_plane_contracts = None
+        self._kernel_descriptor_snapshot = None
 
     def startup(self) -> None:
         """Execution-environment startup hook."""
@@ -1770,6 +1664,133 @@ class ExecutionEnvironmentService:
             self._control_plane_contracts = cached
         return dict(cached)
 
+    def _execution_kernel_descriptor_snapshot(self) -> dict[str, Any]:
+        cached = self._kernel_descriptor_snapshot
+        if cached is not None:
+            return {
+                "metadata_bridge": (
+                    dict(cached["metadata_bridge"])
+                    if isinstance(cached.get("metadata_bridge"), dict)
+                    else None
+                ),
+                "contract_by_mode": {
+                    str(shape): dict(contract)
+                    for shape, contract in dict(cached["contract_by_mode"]).items()
+                },
+            }
+
+        metadata_bridge = _runtime_execution_kernel_metadata_bridge(self._service_descriptor)
+        contract_by_mode: dict[str, dict[str, Any]] = {}
+        for shape in (
+            EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
+            EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
+            EXECUTION_KERNEL_RESPONSE_SHAPE_RETIRED,
+        ):
+            try:
+                contract = _runtime_execution_kernel_contract(
+                    self._service_descriptor,
+                    response_shape=shape,
+                )
+            except RuntimeError:
+                continue
+            contract_by_mode[str(shape)] = dict(contract)
+        cached = {
+            "metadata_bridge": dict(metadata_bridge) if isinstance(metadata_bridge, dict) else None,
+            "contract_by_mode": {
+                str(shape): dict(contract) for shape, contract in contract_by_mode.items()
+            },
+        }
+        self._kernel_descriptor_snapshot = cached
+        return {
+            "metadata_bridge": (
+                dict(cached["metadata_bridge"])
+                if isinstance(cached.get("metadata_bridge"), dict)
+                else None
+            ),
+            "contract_by_mode": {
+                str(shape): dict(contract)
+                for shape, contract in dict(cached["contract_by_mode"]).items()
+            },
+        }
+
+    def _resolved_execution_kernel_response_shape(
+        self,
+        *,
+        dry_run: bool = False,
+        response_shape: str | None = None,
+    ) -> str:
+        if response_shape is not None:
+            return str(response_shape)
+        return (
+            EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
+            if dry_run
+            else EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
+        )
+
+    def _project_kernel_payload(
+        self,
+        *,
+        kernel_contract: Mapping[str, Any],
+        metadata_bridge: Mapping[str, Any] | None,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        contract_fields = execution_kernel_steady_state_fields(metadata_bridge)
+        payload = dict(kernel_contract)
+        if metadata is not None:
+            raw_metadata_execution_kernel = metadata.get("execution_kernel")
+            raw_metadata_execution_kernel_authority = metadata.get("execution_kernel_authority")
+            if (raw_metadata_execution_kernel is None) != (
+                raw_metadata_execution_kernel_authority is None
+            ):
+                provided_field = (
+                    "execution_kernel"
+                    if raw_metadata_execution_kernel is not None
+                    else "execution_kernel_authority"
+                )
+                provided_value = (
+                    raw_metadata_execution_kernel
+                    if raw_metadata_execution_kernel is not None
+                    else raw_metadata_execution_kernel_authority
+                )
+                raise RuntimeError(
+                    "execution-kernel steady-state metadata returned an unexpected value: "
+                    f"{provided_field}={provided_value!r}"
+                )
+            steady_state_fields = tuple(field for field in contract_fields if field in metadata)
+            if steady_state_fields:
+                missing_fields = [field for field in contract_fields if field not in metadata]
+                if missing_fields:
+                    raise RuntimeError(
+                        "execution-kernel projection metadata is missing steady-state fields: "
+                        + ", ".join(sorted(missing_fields))
+                    )
+            if steady_state_fields:
+                # Steady-state kernel identity remains Rust-contract-owned; runtime metadata
+                # may vary on family/impl details, but it may not rename the kernel itself.
+                expectations = resolve_execution_kernel_expectations(kernel_contract)
+                validated_metadata = validate_execution_kernel_steady_state_metadata(
+                    metadata=metadata,
+                    execution_kernel=expectations["execution_kernel"],
+                    execution_kernel_authority=expectations["execution_kernel_authority"],
+                    execution_kernel_delegate=expectations["execution_kernel_delegate"],
+                    execution_kernel_delegate_authority=expectations[
+                        "execution_kernel_delegate_authority"
+                    ],
+                    response_shape=str(
+                        metadata.get(
+                            EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
+                            payload[EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY],
+                        )
+                    ),
+                    metadata_bridge=metadata_bridge,
+                )
+                for field in contract_fields:
+                    payload[field] = validated_metadata[field]
+            for key, value in metadata.items():
+                if key not in contract_fields:
+                    payload[key] = value
+        return {key: value for key, value in payload.items() if value is not None}
+
     def describe_kernel_contract(
         self,
         *,
@@ -1778,10 +1799,18 @@ class ExecutionEnvironmentService:
     ) -> dict[str, Any]:
         """Return the stable kernel-owner descriptor used by runtime surfaces."""
 
-        return _runtime_execution_kernel_contract(
-            self._service_descriptor,
+        resolved_shape = self._resolved_execution_kernel_response_shape(
             dry_run=dry_run,
             response_shape=response_shape,
+        )
+        snapshot = self._execution_kernel_descriptor_snapshot()
+        contract_by_mode = dict(snapshot["contract_by_mode"])
+        contract = contract_by_mode.get(resolved_shape)
+        if isinstance(contract, dict):
+            return dict(contract)
+        raise RuntimeError(
+            "runtime control plane execution descriptor is missing "
+            f"kernel_contract_by_mode.{resolved_shape}."
         )
 
     def kernel_payload(
@@ -1793,12 +1822,24 @@ class ExecutionEnvironmentService:
     ) -> dict[str, Any]:
         """Merge explicit execution metadata onto the stable kernel contract."""
 
-        return project_execution_kernel_payload(
-            self._service_descriptor,
-            dry_run=dry_run,
-            response_shape=response_shape,
+        snapshot = self._execution_kernel_descriptor_snapshot()
+        return self._project_kernel_payload(
+            kernel_contract=self.describe_kernel_contract(
+                dry_run=dry_run,
+                response_shape=response_shape,
+            ),
+            metadata_bridge=snapshot["metadata_bridge"],
             metadata=metadata,
         )
+
+    def describe_kernel_metadata_bridge(self) -> dict[str, Any] | None:
+        """Return the normalized Rust-owned metadata bridge for kernel projection."""
+
+        snapshot = self._execution_kernel_descriptor_snapshot()
+        metadata_bridge = snapshot["metadata_bridge"]
+        if metadata_bridge is None:
+            return None
+        return dict(metadata_bridge)
 
     async def _execute_request_via_rust_adapter(
         self,
@@ -1810,7 +1851,7 @@ class ExecutionEnvironmentService:
             settings=self.settings,
             rust_adapter=self._rust_adapter,
             kernel_contract=kernel_contract,
-            metadata_bridge=_runtime_execution_kernel_metadata_bridge(self._service_descriptor),
+            metadata_bridge=self.describe_kernel_metadata_bridge(),
         )
 
 
@@ -2672,8 +2713,7 @@ class BackgroundRuntimeHost:
                             "attempt": running.attempt,
                             "background_policy_authority": self._background_control_authority,
                             **self._background_trace_context(running),
-                            **project_execution_kernel_payload(
-                                self.execution_service._service_descriptor,
+                            **self.execution_service.kernel_payload(
                                 dry_run=bool(request.dry_run),
                             ),
                         },
@@ -2755,8 +2795,7 @@ class BackgroundRuntimeHost:
                             "status": "completed",
                             "attempt": completed.attempt,
                             **self._background_trace_context(completed),
-                            **project_execution_kernel_payload(
-                                self.execution_service._service_descriptor,
+                            **self.execution_service.kernel_payload(
                                 dry_run=not result.live_run,
                                 metadata=result.metadata,
                             ),

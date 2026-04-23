@@ -5,6 +5,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const REQUIRED_CORE_CAPABILITIES: [&str; 4] = ["runtime", "memory", "artifact", "orchestration"];
+const COMMON_FORK_DANGER_SURFACES: [&str; 5] = [
+    "aionrs_session_protocol",
+    "aionrs_event_grammar",
+    "aionrs_resume_semantics",
+    "aionrs_tool_approval_semantics",
+    "aionrs_provider_plumbing",
+];
 const COMMON_PARITY_FIELDS: [&str; 12] = [
     "artifact_contract",
     "memory_mounts",
@@ -98,6 +105,41 @@ const CLI_FAMILY_HOST_CAPABILITIES: [&str; 9] = [
     "workspace_bootstrap",
     "session_contract",
 ];
+const AIONRS_COMPANION_HOST_CAPABILITIES: [&str; 8] = [
+    "streaming_events",
+    "tool_approval",
+    "session_mode",
+    "dynamic_config",
+    "mcp_config",
+    "workspace_bootstrap",
+    "skill_bridge",
+    "memory_bridge",
+];
+const AIONUI_HOST_CAPABILITIES: [&str; 5] = [
+    "conversation_bootstrap",
+    "tool_approval_ui",
+    "event_stream_binding",
+    "workspace_sync",
+    "team_mode_sync",
+];
+const GENERIC_HOST_CAPABILITIES: [&str; 3] =
+    ["local_runtime", "artifact_contract", "memory_mounts"];
+const NO_OPTIONAL_CAPABILITIES: [&str; 0] = [];
+const AIONRS_OPTIONAL_CAPABILITIES: [&str; 2] = ["memory", "orchestration"];
+const AIONUI_OPTIONAL_CAPABILITIES: [&str; 1] = ["orchestration"];
+const NO_THIN_PATCH_SURFACES: [&str; 0] = [];
+const CLI_METADATA_THIN_PATCH_SURFACES: [&str; 1] = ["cli_metadata_injection"];
+const DESKTOP_THIN_PATCH_SURFACES: [&str; 1] = ["desktop_metadata_injection"];
+const CLAUDE_THIN_PATCH_SURFACES: [&str; 2] =
+    ["cli_metadata_injection", "settings_bridge_projection"];
+const GEMINI_THIN_PATCH_SURFACES: [&str; 2] =
+    ["cli_metadata_injection", "settings_bridge_projection"];
+const AIONRS_THIN_PATCH_SURFACES: [&str; 3] = [
+    "startup_wrapper",
+    "default_config_injection",
+    "bridge_cleanup_strategy",
+];
+const AIONUI_THIN_PATCH_SURFACES: [&str; 2] = ["host_metadata_injection", "bridge_path_cleanup"];
 const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
     "adapter_id",
     "adapter_alias_of",
@@ -166,6 +208,22 @@ struct AdapterDescriptor<'a> {
     host_id: &'a str,
     transport: &'a str,
     host_capabilities: &'a [&'a str],
+}
+
+#[derive(Clone, Copy)]
+struct CompatibilityAdapterSpec<'a> {
+    adapter_id: &'a str,
+    host_id: &'a str,
+    transport: &'a str,
+    required_capabilities: &'a [&'a str],
+    optional_capabilities: &'a [&'a str],
+    host_capabilities: &'a [&'a str],
+    thin_patch_surfaces: &'a [&'a str],
+    works_without_aionrs: bool,
+    legacy_surface: bool,
+    legacy_lane: Option<&'a str>,
+    default_host_peer_set_member: bool,
+    requires_aionrs: bool,
 }
 
 struct AdapterBuildContext<'a> {
@@ -540,6 +598,7 @@ pub fn build_profile_bundle_with_legacy_alias(
 pub fn build_codex_artifact_bundle(
     profile: &FrameworkProfileContract,
     include_legacy_alias_artifact: bool,
+    include_compatibility_inventory: bool,
 ) -> Result<Map<String, Value>, String> {
     let bundle = build_profile_bundle_with_legacy_alias(profile, include_legacy_alias_artifact)?;
     let mut artifacts = Map::new();
@@ -558,12 +617,6 @@ pub fn build_codex_artifact_bundle(
         bundle.claude_code_adapter,
     );
     artifacts.insert("gemini_cli_adapter".to_string(), bundle.gemini_cli_adapter);
-    if let Some(legacy_alias) = bundle
-        .compatibility_lane
-        .map(|compatibility_lane| compatibility_lane.codex_desktop_host_adapter)
-    {
-        artifacts.insert("codex_desktop_host_adapter".to_string(), legacy_alias);
-    }
     artifacts.insert(
         "cli_family_capability_discovery".to_string(),
         bundle.cli_family_capability_discovery,
@@ -588,6 +641,15 @@ pub fn build_codex_artifact_bundle(
             codex_desktop_alias_retirement_status,
         );
     }
+    if include_compatibility_inventory {
+        artifacts.insert(
+            "upgrade_compatibility_matrix".to_string(),
+            Value::Object(build_upgrade_compatibility_matrix(
+                Some(profile),
+                include_legacy_alias_artifact,
+            )),
+        );
+    }
     artifacts.insert(
         EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID.to_string(),
         bundle.execution_controller_contract,
@@ -609,6 +671,296 @@ pub fn build_codex_artifact_bundle(
         bundle.execution_kernel_live_response_serialization_contract,
     );
     Ok(artifacts)
+}
+
+fn compatibility_specs(include_legacy_aliases: bool) -> Vec<CompatibilityAdapterSpec<'static>> {
+    let mut specs = vec![
+        CompatibilityAdapterSpec {
+            adapter_id: CLI_COMMON_ADAPTER_ID,
+            host_id: "cli-family-shared",
+            transport: "host-neutral-contract",
+            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
+            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
+            host_capabilities: &CLI_FAMILY_HOST_CAPABILITIES,
+            thin_patch_surfaces: &NO_THIN_PATCH_SURFACES,
+            works_without_aionrs: false,
+            legacy_surface: false,
+            legacy_lane: None,
+            default_host_peer_set_member: false,
+            requires_aionrs: false,
+        },
+        CompatibilityAdapterSpec {
+            adapter_id: CODEX_COMMON_ADAPTER_ID,
+            host_id: "codex-shared",
+            transport: "host-neutral-contract",
+            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
+            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
+            host_capabilities: &CLI_FAMILY_HOST_CAPABILITIES,
+            thin_patch_surfaces: &NO_THIN_PATCH_SURFACES,
+            works_without_aionrs: false,
+            legacy_surface: false,
+            legacy_lane: None,
+            default_host_peer_set_member: false,
+            requires_aionrs: false,
+        },
+        CompatibilityAdapterSpec {
+            adapter_id: CODEX_DESKTOP_ADAPTER_ID,
+            host_id: "codex-desktop",
+            transport: "local-bridge",
+            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
+            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
+            host_capabilities: &CODEX_DESKTOP_HOST_CAPABILITIES,
+            thin_patch_surfaces: &DESKTOP_THIN_PATCH_SURFACES,
+            works_without_aionrs: true,
+            legacy_surface: false,
+            legacy_lane: None,
+            default_host_peer_set_member: true,
+            requires_aionrs: false,
+        },
+        CompatibilityAdapterSpec {
+            adapter_id: CODEX_CLI_ADAPTER_ID,
+            host_id: "codex-cli",
+            transport: "headless-exec",
+            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
+            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
+            host_capabilities: &CODEX_CLI_HOST_CAPABILITIES,
+            thin_patch_surfaces: &CLI_METADATA_THIN_PATCH_SURFACES,
+            works_without_aionrs: true,
+            legacy_surface: false,
+            legacy_lane: None,
+            default_host_peer_set_member: true,
+            requires_aionrs: false,
+        },
+        CompatibilityAdapterSpec {
+            adapter_id: CLAUDE_CODE_ADAPTER_ID,
+            host_id: "claude-code",
+            transport: "headless-exec",
+            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
+            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
+            host_capabilities: &CLAUDE_CODE_HOST_CAPABILITIES,
+            thin_patch_surfaces: &CLAUDE_THIN_PATCH_SURFACES,
+            works_without_aionrs: true,
+            legacy_surface: false,
+            legacy_lane: None,
+            default_host_peer_set_member: true,
+            requires_aionrs: false,
+        },
+        CompatibilityAdapterSpec {
+            adapter_id: GEMINI_CLI_ADAPTER_ID,
+            host_id: "gemini-cli",
+            transport: "headless-exec",
+            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
+            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
+            host_capabilities: &GEMINI_CLI_HOST_CAPABILITIES,
+            thin_patch_surfaces: &GEMINI_THIN_PATCH_SURFACES,
+            works_without_aionrs: true,
+            legacy_surface: false,
+            legacy_lane: None,
+            default_host_peer_set_member: true,
+            requires_aionrs: false,
+        },
+        CompatibilityAdapterSpec {
+            adapter_id: "generic_host_adapter",
+            host_id: "generic",
+            transport: "inproc",
+            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
+            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
+            host_capabilities: &GENERIC_HOST_CAPABILITIES,
+            thin_patch_surfaces: &NO_THIN_PATCH_SURFACES,
+            works_without_aionrs: true,
+            legacy_surface: false,
+            legacy_lane: None,
+            default_host_peer_set_member: false,
+            requires_aionrs: false,
+        },
+    ];
+    if include_legacy_aliases {
+        specs.extend([
+            CompatibilityAdapterSpec {
+                adapter_id: LEGACY_CODEX_DESKTOP_ADAPTER_ID,
+                host_id: "codex-desktop",
+                transport: "local-bridge",
+                required_capabilities: &REQUIRED_CORE_CAPABILITIES,
+                optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
+                host_capabilities: &CODEX_DESKTOP_HOST_CAPABILITIES,
+                thin_patch_surfaces: &DESKTOP_THIN_PATCH_SURFACES,
+                works_without_aionrs: true,
+                legacy_surface: true,
+                legacy_lane: Some("compatibility"),
+                default_host_peer_set_member: false,
+                requires_aionrs: false,
+            },
+            CompatibilityAdapterSpec {
+                adapter_id: "aionrs_companion_adapter",
+                host_id: "aionrs-companion",
+                transport: "stdio-jsonl",
+                required_capabilities: &["runtime", "artifact"],
+                optional_capabilities: &AIONRS_OPTIONAL_CAPABILITIES,
+                host_capabilities: &AIONRS_COMPANION_HOST_CAPABILITIES,
+                thin_patch_surfaces: &AIONRS_THIN_PATCH_SURFACES,
+                works_without_aionrs: false,
+                legacy_surface: true,
+                legacy_lane: Some("fallback"),
+                default_host_peer_set_member: false,
+                requires_aionrs: true,
+            },
+            CompatibilityAdapterSpec {
+                adapter_id: "aionui_host_adapter",
+                host_id: "aionui",
+                transport: "bridge-contract",
+                required_capabilities: &["runtime", "artifact", "memory"],
+                optional_capabilities: &AIONUI_OPTIONAL_CAPABILITIES,
+                host_capabilities: &AIONUI_HOST_CAPABILITIES,
+                thin_patch_surfaces: &AIONUI_THIN_PATCH_SURFACES,
+                works_without_aionrs: false,
+                legacy_surface: true,
+                legacy_lane: Some("fallback"),
+                default_host_peer_set_member: false,
+                requires_aionrs: false,
+            },
+        ]);
+    }
+    specs
+}
+
+fn compatibility_upstream_safe_zone(spec: CompatibilityAdapterSpec<'_>) -> Value {
+    let mut entries = vec![
+        Value::String("framework_profile_compilation".to_string()),
+        Value::String("artifact_contract_projection".to_string()),
+    ];
+    if spec.works_without_aionrs {
+        entries.push(Value::String("works_without_aionrs".to_string()));
+    }
+    if spec.legacy_surface {
+        entries.push(Value::String("legacy_surface".to_string()));
+    }
+    if let Some(legacy_lane) = spec.legacy_lane {
+        entries.push(Value::String("legacy_lane".to_string()));
+        if legacy_lane == "compatibility" {
+            entries.push(Value::String("canonical_adapter_id".to_string()));
+        }
+    }
+    if !spec.default_host_peer_set_member {
+        entries.push(Value::String("default_host_peer_set_member".to_string()));
+    }
+    Value::Array(entries)
+}
+
+fn adapter_compatibility_value(
+    profile: Option<&FrameworkProfileContract>,
+    spec: CompatibilityAdapterSpec<'_>,
+) -> Value {
+    let Some(profile) = profile else {
+        return Value::Null;
+    };
+    let capability_set = profile
+        .core_capabilities
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+    let required_capabilities_ok = spec
+        .required_capabilities
+        .iter()
+        .all(|capability| capability_set.contains(*capability));
+    let resolved_host_requirements =
+        resolve_host_capability_requirements(profile, spec.host_id, spec.adapter_id);
+    let required_host_capabilities = resolved_host_requirements
+        .get("required_host_capabilities")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let available_host_capabilities = spec
+        .host_capabilities
+        .iter()
+        .copied()
+        .collect::<HashSet<_>>();
+    let required_host_capabilities_ok = required_host_capabilities
+        .iter()
+        .filter_map(Value::as_str)
+        .all(|capability| available_host_capabilities.contains(capability));
+    Value::Bool(required_capabilities_ok && required_host_capabilities_ok)
+}
+
+fn build_upgrade_compatibility_matrix(
+    profile: Option<&FrameworkProfileContract>,
+    include_legacy_aliases: bool,
+) -> Map<String, Value> {
+    let mut matrix = Map::new();
+    for spec in compatibility_specs(include_legacy_aliases) {
+        let required_capabilities = spec
+            .required_capabilities
+            .iter()
+            .copied()
+            .collect::<HashSet<_>>();
+        let optional_capabilities = spec
+            .optional_capabilities
+            .iter()
+            .copied()
+            .collect::<HashSet<_>>();
+        let exposure_lane = if spec.legacy_surface {
+            format!(
+                "{}-only-explicit",
+                spec.legacy_lane.unwrap_or("compatibility")
+            )
+        } else {
+            "default-peer-set".to_string()
+        };
+        matrix.insert(
+            spec.adapter_id.to_string(),
+            value_object([
+                ("adapter_id", Value::String(spec.adapter_id.to_string())),
+                ("host_id", Value::String(spec.host_id.to_string())),
+                ("transport", Value::String(spec.transport.to_string())),
+                ("requires_aionrs", Value::Bool(spec.requires_aionrs)),
+                (
+                    "works_without_aionrs",
+                    Value::Bool(spec.works_without_aionrs),
+                ),
+                (
+                    "core_runtime",
+                    Value::Bool(
+                        required_capabilities.contains("runtime")
+                            || optional_capabilities.contains("runtime"),
+                    ),
+                ),
+                (
+                    "memory",
+                    Value::Bool(
+                        required_capabilities.contains("memory")
+                            || optional_capabilities.contains("memory"),
+                    ),
+                ),
+                (
+                    "artifact",
+                    Value::Bool(
+                        required_capabilities.contains("artifact")
+                            || optional_capabilities.contains("artifact"),
+                    ),
+                ),
+                (
+                    "orchestration",
+                    Value::Bool(
+                        required_capabilities.contains("orchestration")
+                            || optional_capabilities.contains("orchestration"),
+                    ),
+                ),
+                ("upstream_safe_zone", compatibility_upstream_safe_zone(spec)),
+                ("thin_patch_zone", string_array(spec.thin_patch_surfaces)),
+                (
+                    "fork_danger_zone",
+                    string_array(&COMMON_FORK_DANGER_SURFACES),
+                ),
+                ("legacy_surface", Value::Bool(spec.legacy_surface)),
+                ("exposure_lane", Value::String(exposure_lane)),
+                (
+                    "default_host_peer_set_member",
+                    Value::Bool(spec.default_host_peer_set_member),
+                ),
+                ("compatible", adapter_compatibility_value(profile, spec)),
+            ]),
+        );
+    }
+    matrix
 }
 
 fn validate_framework_profile(profile: &FrameworkProfileContract) -> Result<(), String> {
@@ -1010,10 +1362,6 @@ fn build_codex_parity_contract() -> Map<String, Value> {
     contract.insert(
         "cli_common_adapter".to_string(),
         Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-    );
-    contract.insert(
-        "legacy_codex_common_adapter".to_string(),
-        Value::String(CODEX_COMMON_ADAPTER_ID.to_string()),
     );
     contract
 }
@@ -3955,9 +4303,6 @@ fn classify_alias_reference(path: &Path) -> (&'static str, &'static str) {
     if file_name == "runtime_registry.py" {
         return ("runtime_registry_contract", "compatibility_only");
     }
-    if file_name == "compatibility.py" {
-        return ("compatibility_escape_hatch", "compatibility_only");
-    }
     if file_name == "write_framework_contract_artifacts.py" {
         return ("compatibility_emitter_cli", "compatibility_only");
     }
@@ -4095,6 +4440,13 @@ mod tests {
                 "claude_code_adapter",
                 "gemini_cli_adapter"
             ])
+        );
+        assert!(
+            bundle.codex_common_adapter["parity_contract"]
+                .as_object()
+                .expect("parity contract object")
+                .get("legacy_codex_common_adapter")
+                .is_none()
         );
         assert_eq!(
             bundle.claude_code_adapter["host_projection"]["context_files"],
@@ -4490,8 +4842,8 @@ mod tests {
 
     #[test]
     fn codex_artifact_bundle_exposes_first_class_outputs() {
-        let artifacts =
-            build_codex_artifact_bundle(&sample_profile(), false).expect("artifacts should build");
+        let artifacts = build_codex_artifact_bundle(&sample_profile(), false, false)
+            .expect("artifacts should build");
         assert_eq!(artifacts.len(), 14);
         assert_eq!(
             artifacts["cli_common_adapter"]["controller_boundary"]["shared_adapter"],
@@ -4625,8 +4977,8 @@ mod tests {
 
     #[test]
     fn codex_artifact_bundle_can_opt_in_continuity_alias_artifact() {
-        let artifacts =
-            build_codex_artifact_bundle(&sample_profile(), true).expect("artifacts should build");
+        let artifacts = build_codex_artifact_bundle(&sample_profile(), true, false)
+            .expect("artifacts should build");
         assert!(artifacts.contains_key("codex_desktop_alias_retirement_status"));
         assert_eq!(
             artifacts["cli_common_adapter"]["controller_boundary"]["cli_family_entrypoints"],
@@ -4720,8 +5072,9 @@ mod tests {
                 ["current_contract_truth"]["live_primary_model_id_source"],
             Value::String("aggregator-response.model".to_string())
         );
+        assert!(!artifacts.contains_key("codex_desktop_host_adapter"));
         assert_eq!(
-            artifacts["codex_desktop_host_adapter"]["metadata"]["adapter_alias_of"],
+            artifacts["codex_desktop_alias_retirement_status"]["canonical_adapter_id"],
             Value::String("codex_desktop_adapter".to_string())
         );
     }

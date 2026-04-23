@@ -13,6 +13,14 @@ Before using this catalog for implementation-facing redesign, check whether the 
 
 If yes, route to `$design-agent` first. That gate should decide what is truly borrowable, what needs adaptation, and whether the next owner is `frontend-design`, `motion-design`, or `css-pro`.
 
+If the user instead says things like:
+
+- "先抽成 DESIGN.md"
+- "先把现有界面的设计语言沉淀下来"
+- "先统一这套产品的设计系统，再继续做页面"
+
+route to `$design-md` first. That owner should capture the current product's house style into a reusable source-of-truth before redesign starts.
+
 ## Aesthetic Directions
 
 ### Minimalist

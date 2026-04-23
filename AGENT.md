@@ -21,15 +21,29 @@ framework policy instead of forking per-host routing or memory rules.
   implementation and use that definition to drive execution.
 - Ask before destructive actions, external publishing, or account-impacting work.
 
+## Repo Landmarks
+
+- `skills/` holds the shared routing and workflow bodies; read the selected
+  `SKILL.md` before acting.
+- `scripts/materialize_cli_host_entrypoints.py` is the source of truth for
+  `AGENT.md`, `CLAUDE.md`, `.claude/settings.json`, and `.claude/hooks/*.sh`.
+- `scripts/router-rs/` owns the Rust hook bridge, lifecycle commands, and
+  generated-surface audits.
+- `artifacts/current/` plus `.supervisor_state.json` are the durable task-state
+  surfaces; do not treat chat text as the only recovery source.
+
 ## Communication Style
 
 - Lead with the answer or result, not status reports, greetings, or self-talk.
 - Use plain Chinese and everyday words by default.
+- Explain things in plain language first; give internal terms only if they help.
 - Avoid internal runtime, routing, framework, or tool jargon unless the user
   explicitly asks for it.
 - If a technical term is necessary, explain it in simple words the first time.
 - Keep the default reply to one short paragraph; use lists only when the content
   is genuinely list-shaped.
+- Do not force personality, performative style, jokes, or deliberate roughness
+  by default; sounding natural matters more than sounding theatrical.
 - Keep the tone calm, friendly, and practical.
 
 ## Output Compaction
@@ -39,11 +53,24 @@ framework policy instead of forking per-host routing or memory rules.
 - Treat `RTK.md` as repo-local operator guidance only; shared routing and
   policy truth still lives in this file plus the generated routing artifacts.
 
+## Verification Defaults
+
+- Verify the narrowest meaningful slice before handoff.
+- For shared policy, host entrypoint, routing, or hook changes, prefer this
+  order unless the task says otherwise: `python3 scripts/check_skills.py
+  --verify-sync`, targeted `python3 -m pytest ...`, `python3 -m compileall
+  ...`, and `cargo test --manifest-path ./scripts/router-rs/Cargo.toml` when
+  Rust hook or runtime code changed.
+- If you skip a verification step that would normally matter, say so plainly in
+  the closeout.
+
 ## Task Closeout
 
 - Keep end-of-task user-facing closeouts in plain Chinese by default.
 - Default the closeout to one short paragraph that says what now works or what
   effect was achieved, and what still needs to happen next.
+- Prefer user-visible effect over implementation narration in the default
+  closeout.
 - If no further work is needed, say that directly instead of inventing follow-up
   tasks.
 - Do not default to changed-file inventories, changelog-style recaps, or
@@ -52,6 +79,25 @@ framework policy instead of forking per-host routing or memory rules.
   `.supervisor_state.json`, and verification or blocker fields remain the
   recovery truth; do not mirror them verbatim into the user-facing closeout
   unless they materially affect the user's next decision.
+
+## Policy Placement
+
+- Put durable response policy in this file: answer-first phrasing, plain-language
+  explanation, tone, closeout shape, and routing posture.
+- Put deterministic runtime safeguards and narrow execution-time coding nudges
+  in hooks: generated-surface protection, lifecycle refresh, environment
+  reloads, failure alerts, and cheap repo-specific implementation reminders.
+- Keep user-specific notifications, personal approvals, and machine-local
+  preferences in `~/.claude/settings.json` or `.claude/settings.local.json`,
+  not in committed project hooks.
+- Do not use hooks to inject personality, carry general writing policy, or
+  rewrite broad prompts when `AGENT.md` or `CLAUDE.md` can express the rule
+  directly.
+- Keep this file compact and factual. If a rule turns into a long workflow,
+  move the procedure into `skills/`, `code_review.md`, or another task-specific
+  doc and reference it instead of bloating this file.
+- Add or tighten durable rules only after repeated real mistakes or verified
+  friction.
 
 ## Turn-Start Routing
 

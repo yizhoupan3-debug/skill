@@ -9,45 +9,57 @@ Generated-first maintenance:
   materialized outputs.
 - Manual Claude host guidance belongs in `.claude/agents/*.md` unless noted.
 
-Lifecycle matrix:
+Active hooks:
 
-| Event | Status | Script | Bridge command | Write boundary | Notes |
-| --- | --- | --- | --- | --- | --- |
-| `SessionStart` | disabled | `session_start.sh` | `session-start` | host projection only | Keep startup lean; do not auto-refresh projection at session start. Use manually only if needed. |
-| `Stop` | disabled | `stop.sh` | `session-stop` | host projection only | Avoid per-turn background refresh; keep this script only for manual recovery. |
-| `PreCompact` | disabled | `pre_compact.sh` | `pre-compact` | host projection only | Keep compaction cheap; do not auto-refresh before compaction. |
-| `SubagentStop` | disabled | `subagent_stop.sh` | `subagent-stop` | host projection only | Avoid sidecar-completion refresh churn; keep this script only for manual recovery. |
-| `SessionEnd` | enabled | `session_end.sh` | `session-end` | project-local memory bundle plus host projection | Consolidates shared memory bundle, refreshes projection, and may repair stale terminal resume state in `.supervisor_state.json`. |
-| `ConfigChange` | enabled | `config_change.sh` | n/a | host-private audit only | Audit project-level generated-surface drift and remind maintainers to regenerate from source. Never auto-repairs or rewrites shared continuity. |
-| `StopFailure` | enabled | `stop_failure.sh` | n/a | host-private alert only | Classify Claude stop failures and point maintainers back to host projection drift or hook inspection. Never rewrites shared continuity. |
-| `InstructionsLoaded` | document-disable | n/a | n/a | none | Keep startup lean; the Claude projection stays on disk for `/refresh` or manual recovery instead of default auto-import. |
-| `PostToolUse` | document-disable | n/a | n/a | none | High-frequency tool hook would require payload-aware hidden side effects, which violates the thin projection goal. |
-| `UserPromptSubmit` | disabled | n/a | n/a | none | Avoid hidden prompt mutation; this repo prefers artifact-driven context. |
-| `Notification` | disabled | n/a | n/a | none | Informational only; not part of projection or continuity refresh. |
+| Event | Script | Purpose |
+| --- | --- | --- |
+| `UserPromptSubmit` | `user_prompt_submit.sh` | Inject a short coding-only implementation bias before Claude starts planning: direct implementation first, then performance/memory/fallback cleanup. |
+| `PreToolUse` | `pre_tool_use_quality.sh` | Add a short implementation-quality reminder before editing runtime, hook, or test code so code is written with direct implementation and hot-path hygiene in mind. |
+| `PreToolUse` | `pre_tool_use.sh` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
+| `SessionEnd` | `session_end.sh` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |
+| `ConfigChange` | `config_change.sh` | Warn when generated Claude host files were edited directly instead of regenerated from source. |
+| `StopFailure` | `stop_failure.sh` | Emit a host-private hint for selected Claude stop failures without mutating shared continuity. |
 
-Hook responsibilities:
+Everything else stays intentionally uninstalled here so startup and tool turns remain lean.
+Reply tone, "讲人话" rules, and closeout style live in `AGENT.md`, not in hooks.
+Static behavior rules belong in `AGENT.md` or `CLAUDE.md`; these hooks exist
+for deterministic guardrails, lightweight execution-time context, and lifecycle
+maintenance.
 
-- `session_end.sh`: consolidate shared memory, then refresh the Claude memory projection.
-- `config_change.sh`: audit project settings changes on generated Claude surfaces without blocking or auto-repair.
-- `stop_failure.sh`: emit a host-private failure hint for selected Claude stop failure classes.
+Project hook principles:
 
-Manual-only maintenance scripts:
-
-- `session_start.sh`: one-off projection refresh when you explicitly want to rebuild recovery context.
-- `stop.sh`: one-off projection refresh after a turn if you are debugging projection drift.
-- `pre_compact.sh`: one-off projection refresh before compaction if you are testing that lane.
-- `subagent_stop.sh`: one-off projection refresh after sidecar completion if you are debugging that lane.
+- Keep project hooks for repo-specific invariants only.
+- Keep hooks fast, especially `PreToolUse`, because it runs inside the agent
+  loop.
+- Automation hooks should be additive and short: inject narrow repo context or
+  launch cheap follow-up work, not essay-length prompt rewrites.
+- Put personal notifications and local approval shortcuts in `~/.claude/settings.json`
+  or `.claude/settings.local.json`, not in committed project settings.
+- Use `"$CLAUDE_PROJECT_DIR"`-anchored paths in hook commands and treat hook
+  stdin JSON as untrusted input.
+- Prefer `PreToolUse` deny over `PostToolUse` cleanup for protected files.
+- Keep the generated-surface guard intentionally narrow so normal edits stay fast.
+- Keep `SessionEnd` as the only writer hook here; the others are guards or alerts.
+- When debugging config drift, verify the installed hook set from Claude
+  Code's `/hooks` menu before changing generated files.
 
 Validation commands:
 
-- `CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/session_start.sh`
-  Expected: `.codex/memory/CLAUDE_MEMORY.md` is refreshed and the command exits 0.
-- `CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/stop.sh`
-  Expected: lightweight projection refresh only; no consolidation side effects.
-- `CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_compact.sh`
-  Expected: projection refresh only before compaction; no consolidation side effects.
-- `CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/subagent_stop.sh`
-  Expected: projection refresh only after subagent completion; no supervisor-state takeover.
+- `printf '{"hook_event_name":"UserPromptSubmit","prompt":"继续优化这个 runtime，去掉补丁式保底并顺手看下内存和速度"}
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/user_prompt_submit.sh`
+  Expected: stdout emits a short coding-only context paragraph.
+- `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use_quality.sh`
+  Expected: stdout returns a JSON `permissionDecision: allow` payload with `additionalContext`.
+- `printf '{"tool_name":"MultiEdit","tool_input":{"file_path":".claude/settings.json"}}
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use.sh`
+  Expected: stdout returns a JSON `permissionDecision: deny` payload.
+- `printf '{"tool_name":"Bash","tool_input":{"command":"cp tmp .claude/settings.json"}}
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use.sh`
+  Expected: stdout returns a JSON `permissionDecision: deny` payload for the targeted write.
+- `printf '{"tool_name":"Bash","tool_input":{"command":"printf x > .claude/settings.json"}}
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use.sh`
+  Expected: stdout returns a JSON `permissionDecision: deny` payload for shell redirection into a protected generated file.
 - `CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/session_end.sh`
   Expected: project-local memory bundle refresh plus projection refresh; may repair stale terminal resume state in `.supervisor_state.json`.
 - `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}
@@ -56,12 +68,13 @@ Validation commands:
 - `printf '{"hook_event_name":"StopFailure","error":"server_error"}
 ' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/stop_failure.sh`
   Expected: host-private failure classification hint on stderr; exit 0.
-- `python3 scripts/router_rs_runner.py --claude-hook-command session-start --repo-root "$PWD" --claude-hook-max-lines 4`
-  Expected: JSON result with `canonical_command`, `contract`, and `projection`.
-- `python3 scripts/router_rs_runner.py --claude-hook-command session-end --repo-root "$PWD" --claude-hook-max-lines 4`
+- `./scripts/router-rs/target/debug/router-rs --claude-hook-command session-end --repo-root "$PWD" --claude-hook-max-lines 4`
   Expected: compatibility alias for `session-end`; same consolidation and projection contract.
 - `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}
-' | python3 scripts/router_rs_runner.py --claude-hook-audit-command config-change --repo-root "$PWD"`
+' | ./scripts/router-rs/target/debug/router-rs --claude-hook-audit-command config-change --repo-root "$PWD"`
   Expected: JSON on stdout plus audit-only stderr guidance; exit 0.
+- In Claude Code, run `/hooks`
+  Expected: the project shows only `PreToolUse`, `SessionEnd`, `ConfigChange`,
+  and `StopFailure` from `.claude/settings.json`.
 
 Shared routing policy still comes from `../../AGENT.md`.

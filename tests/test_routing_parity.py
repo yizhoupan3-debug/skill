@@ -1038,6 +1038,16 @@ def test_real_task_replay_queries_match_shadow_diff_fields(query: str) -> None:
             "openai-docs",
             "anti-laziness",
         ),
+        (
+            "请直接 autopilot 这轮修复，推进到底",
+            "execution-controller-coding",
+            "anti-laziness",
+        ),
+        (
+            "请 deepinterview 这轮 review",
+            "architect-review",
+            None,
+        ),
     ],
 )
 def test_live_route_expectations_hold_for_framework_and_openai_queries(
@@ -1064,6 +1074,38 @@ def test_live_route_expectations_hold_for_framework_and_openai_queries(
     assert rust_decision == python_decision
     assert rust_decision["selected_skill"] == selected_skill
     assert rust_decision["overlay_skill"] == overlay_skill
+
+
+@pytest.mark.parametrize(
+    ("query", "selected_skill"),
+    [
+        ("/autopilot", "autopilot"),
+        ("$autopilot", "autopilot"),
+        ("/deepinterview", "deepinterview"),
+        ("$deepinterview", "deepinterview"),
+    ],
+)
+def test_framework_aliases_only_route_from_explicit_entrypoints(
+    query: str,
+    selected_skill: str,
+) -> None:
+    python_decision = route_decision_contract(
+        query,
+        codex_home=PROJECT_ROOT,
+        session_id="explicit-framework-alias-session",
+        allow_overlay=True,
+        first_turn=True,
+    ).model_dump(mode="json")
+    rust_decision = _live_route_adapter().route_contract(
+        query=query,
+        session_id="explicit-framework-alias-session",
+        allow_overlay=True,
+        first_turn=True,
+    ).model_dump(mode="json")
+
+    assert rust_decision == python_decision
+    assert rust_decision["selected_skill"] == selected_skill
+    assert rust_decision["overlay_skill"] == "anti-laziness"
 
 
 @pytest.mark.parametrize(
@@ -1266,8 +1308,8 @@ def test_route_report_verify_mode_requires_strict_verification() -> None:
     assert report.contract_mismatch_fields == []
 
 
-def test_route_report_contract_accepts_snapshot_dict_for_compatibility_callers() -> None:
-    """Compatibility callers can still pass a dict while the adapter validates into the typed contract."""
+def test_route_report_contract_rejects_snapshot_dict_compatibility_inputs() -> None:
+    """Raw dict snapshots should be rejected instead of guessed into the typed route contract."""
 
     adapter = RustRouteAdapter(PROJECT_ROOT)
     baseline = route_decision_contract(
@@ -1278,16 +1320,14 @@ def test_route_report_contract_accepts_snapshot_dict_for_compatibility_callers()
         first_turn=True,
     ).model_dump(mode="json")["route_snapshot"]
 
-    report = adapter.route_report_contract(
-        mode="shadow",
-        rust_route_snapshot=baseline,
-    )
-
-    assert isinstance(report, RouteDiagnosticReport)
-    assert report.mode == "shadow"
-    assert report.verified_contract_fields == []
-    assert report.contract_mismatch_fields == []
-    assert report.route_snapshot.selected_skill == baseline["selected_skill"]
+    with pytest.raises(
+        TypeError,
+        match="route_report_contract requires RouteDecisionSnapshot for rust_route_snapshot",
+    ):
+        adapter.route_report_contract(
+            mode="shadow",
+            rust_route_snapshot=baseline,
+        )
 
 
 def test_route_report_contract_marks_mismatched_contract_fields() -> None:
@@ -1300,8 +1340,7 @@ def test_route_report_contract_marks_mismatched_contract_fields() -> None:
         session_id="route-report-mismatch-session",
         allow_overlay=True,
         first_turn=True,
-    ).model_dump(mode="json")
-    decision["selected_skill"] = "wrong-skill"
+    ).model_copy(update={"selected_skill": "wrong-skill"})
 
     report = adapter.route_report_contract(
         mode="verify",
@@ -1376,29 +1415,6 @@ def test_rust_route_adapter_framework_contract_summary_handles_completed_snapsho
     assert summary["goal"] is None
     assert summary["next_actions"] == []
     assert summary["recent_completed_execution"]["task"] == "checklist-series final closeout"
-
-
-def test_rust_route_adapter_framework_recap_builds_projection_and_prompt(
-    tmp_path: Path,
-) -> None:
-    adapter = RustRouteAdapter(PROJECT_ROOT)
-    _seed_framework_runtime_artifacts(tmp_path, terminal=False)
-    (tmp_path / ".codex" / "memory").mkdir(parents=True, exist_ok=True)
-    (tmp_path / ".codex" / "memory" / "MEMORY.md").write_text(
-        "# 项目长期记忆\n\n## Active Patterns\n\n- AP-1: Externalize task state\n",
-        encoding="utf-8",
-    )
-
-    recap = adapter.framework_recap(repo_root=tmp_path, max_lines=4)
-
-    assert recap["ok"] is True
-    assert recap["continuity_state"] == "active"
-    assert "## Task Snapshot" in recap["projection"]
-    assert "AP-1: Externalize task state" in recap["projection"]
-    assert "默认用中文；先给答案；默认只回一小段。" in recap["projection"]
-    assert "不要扩大任务范围，不要把历史记忆当现状。" in recap["projection"]
-    assert "继续当前仓库的工作。先阅读并使用这些恢复锚点：" in recap["workflow_prompt"]
-    assert "必须先做的下一步：" in recap["workflow_prompt"]
 
 
 def test_rust_route_adapter_framework_refresh_builds_compact_prompt_and_copies_to_file(
@@ -1486,12 +1502,20 @@ def test_rust_route_adapter_framework_alias_compact_mode_omits_heavy_metadata(
     alias = adapter.framework_alias(repo_root=tmp_path, alias="autopilot", max_lines=3, compact=True)
 
     assert alias["compact"] is True
-    assert alias["entry_prompt_token_estimate"] > 0
+    assert "entry_prompt" not in alias
+    assert "entry_prompt_token_estimate" not in alias
     assert "upstream_source" not in alias
     assert "official_workflow" not in alias
     assert "local_adaptations" not in alias
     assert alias["host_entrypoint"] == "/autopilot"
     assert alias["state_machine"]["resume"]["mode"] == "continue-current-task"
+    assert alias["state_machine"]["required_anchors"] == [
+        "SESSION_SUMMARY",
+        "NEXT_ACTIONS",
+        "TRACE_METADATA",
+        "SUPERVISOR_STATE",
+    ]
+    assert "task" not in alias["state_machine"]["resume"]
     assert alias["entry_contract"]["skill_fallback_path"] == "skills/autopilot/SKILL.md"
 
 

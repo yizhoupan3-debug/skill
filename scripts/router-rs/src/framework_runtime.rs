@@ -11,7 +11,6 @@ pub const FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION: &str =
 pub const FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION: &str =
     "router-rs-framework-contract-summary-v1";
 pub const FRAMEWORK_MEMORY_RECALL_SCHEMA_VERSION: &str = "router-rs-framework-memory-recall-v1";
-pub const FRAMEWORK_RECAP_SCHEMA_VERSION: &str = "router-rs-framework-recap-v1";
 pub const FRAMEWORK_ALIAS_SCHEMA_VERSION: &str = "router-rs-framework-alias-v1";
 pub const FRAMEWORK_RUNTIME_AUTHORITY: &str = "rust-framework-runtime-read-model";
 
@@ -339,46 +338,6 @@ pub fn build_framework_memory_recall_envelope(
     }))
 }
 
-pub fn build_framework_recap_envelope(repo_root: &Path, max_lines: usize) -> Result<Value, String> {
-    let snapshot = load_framework_runtime_view(repo_root, None, None);
-    let continuity = classify_runtime_continuity(&snapshot);
-    let contract = supervisor_contract(&snapshot.supervisor_state);
-    let stable_documents = read_stable_memory_documents(repo_root);
-    let projection = render_framework_recap_projection(
-        repo_root,
-        &snapshot,
-        &continuity,
-        &stable_documents,
-        max_lines,
-    );
-    let project_memory_bundle = render_project_memory_bundle(&stable_documents);
-    let workflow_prompt =
-        render_framework_workflow_prompt(&snapshot, &continuity, &contract, max_lines);
-    Ok(json!({
-        "schema_version": FRAMEWORK_RECAP_SCHEMA_VERSION,
-        "authority": FRAMEWORK_RUNTIME_AUTHORITY,
-        "recap": {
-            "ok": true,
-            "workspace": workspace_name_from_root(repo_root),
-            "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
-            "task": continuity.get("task").cloned().unwrap_or(Value::Null),
-            "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
-            "status": continuity.get("status").cloned().unwrap_or(Value::Null),
-            "max_lines": max_lines,
-            "projection": projection,
-            "project_memory_bundle": project_memory_bundle,
-            "workflow_prompt": workflow_prompt,
-            "projection_path": repo_root
-                .join(".codex")
-                .join("memory")
-                .join("CLAUDE_MEMORY.md")
-                .display()
-                .to_string(),
-            "continuity": continuity,
-        }
-    }))
-}
-
 pub fn build_framework_recap_projection(
     repo_root: &Path,
     max_lines: usize,
@@ -459,8 +418,8 @@ pub fn build_framework_alias_envelope(
         &continuity,
         &skill_path,
         max_lines,
+        compact,
     );
-    let entry_prompt = render_framework_alias_prompt(&entry_contract);
     let alias_payload = if compact {
         json!({
             "ok": true,
@@ -478,11 +437,10 @@ pub fn build_framework_alias_envelope(
             },
             "state_machine": state_machine,
             "entry_contract": entry_contract,
-            "entry_prompt": entry_prompt,
-            "entry_prompt_token_estimate": estimate_token_count(&entry_prompt),
             "compact": true,
         })
     } else {
+        let entry_prompt = render_framework_alias_prompt(&entry_contract);
         json!({
             "ok": true,
             "name": alias_name,
@@ -729,6 +687,7 @@ fn build_framework_alias_state_machine(
     continuity: &Value,
     skill_path: &str,
     max_lines: usize,
+    compact: bool,
 ) -> Value {
     let state = value_text(continuity.get("state"));
     let task = value_text(continuity.get("task"));
@@ -747,12 +706,21 @@ fn build_framework_alias_state_machine(
         .get("paths")
         .and_then(Value::as_object)
         .map(|paths| {
-            stable_line_items(vec![
-                value_text(paths.get("session_summary")),
-                value_text(paths.get("next_actions")),
-                value_text(paths.get("trace_metadata")),
-                value_text(paths.get("supervisor_state")),
-            ])
+            if compact {
+                stable_line_items(vec![
+                    path_anchor_label(paths.get("session_summary")),
+                    path_anchor_label(paths.get("next_actions")),
+                    path_anchor_label(paths.get("trace_metadata")),
+                    path_anchor_label(paths.get("supervisor_state")),
+                ])
+            } else {
+                stable_line_items(vec![
+                    value_text(paths.get("session_summary")),
+                    value_text(paths.get("next_actions")),
+                    value_text(paths.get("trace_metadata")),
+                    value_text(paths.get("supervisor_state")),
+                ])
+            }
         })
         .unwrap_or_default();
     let (current_state, recommended_action, resume_mode, resume_reason) = match state.as_str() {
@@ -831,23 +799,58 @@ fn build_framework_alias_state_machine(
             "rules": []
         }),
     };
+    let mut resume = Map::new();
+    resume.insert("allowed".to_string(), Value::Bool(can_resume));
+    resume.insert("mode".to_string(), Value::String(resume_mode.to_string()));
+    resume.insert(
+        "reason".to_string(),
+        Value::String(resume_reason.to_string()),
+    );
+    if !compact {
+        resume.insert(
+            "task".to_string(),
+            if task.is_empty() {
+                Value::Null
+            } else {
+                Value::String(task)
+            },
+        );
+        resume.insert(
+            "phase".to_string(),
+            if phase.is_empty() {
+                Value::Null
+            } else {
+                Value::String(phase)
+            },
+        );
+        resume.insert(
+            "status".to_string(),
+            if status.is_empty() {
+                Value::Null
+            } else {
+                Value::String(status)
+            },
+        );
+    }
     json!({
         "schema_version": "framework-alias-state-machine-v1",
         "current_state": current_state,
         "recommended_action": recommended_action,
-        "resume": {
-            "allowed": can_resume,
-            "mode": resume_mode,
-            "reason": resume_reason,
-            "task": if task.is_empty() { Value::Null } else { Value::String(task) },
-            "phase": if phase.is_empty() { Value::Null } else { Value::String(phase) },
-            "status": if status.is_empty() { Value::Null } else { Value::String(status) },
-        },
+        "resume": Value::Object(resume),
         "handoff": handoff,
         "next_steps": if state == "active" { next_steps } else { recovery_hints },
         "required_anchors": required_anchors,
         "skill_fallback_path": if skill_path.is_empty() { Value::Null } else { Value::String(skill_path.to_string()) },
     })
+}
+
+fn path_anchor_label(path: Option<&Value>) -> String {
+    let text = value_text(path);
+    Path::new(&text)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .map(|value| value.trim_start_matches('.').to_ascii_uppercase())
+        .unwrap_or_default()
 }
 
 fn render_framework_alias_prompt(entry_contract: &Value) -> String {
@@ -1393,213 +1396,6 @@ fn render_framework_recap_projection(
         + "\n"
 }
 
-fn render_framework_workflow_prompt(
-    _snapshot: &FrameworkRuntimeView,
-    continuity: &Value,
-    contract: &Map<String, Value>,
-    max_lines: usize,
-) -> String {
-    let state = value_text(continuity.get("state"));
-    let task = value_text(continuity.get("task"));
-    let phase = value_text(continuity.get("phase"));
-    let status = {
-        let raw = value_text(continuity.get("status"));
-        if raw.is_empty() {
-            state.clone()
-        } else {
-            raw
-        }
-    };
-    let route = value_string_list(continuity.get("route"));
-    let paths_map = continuity
-        .get("paths")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let current = continuity
-        .get("current_execution")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let completed = continuity
-        .get("recent_completed_execution")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let recovery_hints = value_string_list(continuity.get("recovery_hints"));
-    let continuity_next_actions = value_string_list(continuity.get("next_actions"));
-    let continuity_blockers = value_string_list(continuity.get("blockers"));
-    let remaining_tasks = if state == "active" && !current.is_empty() {
-        stable_line_items(
-            contract
-                .get("scope")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .chain(
-                    contract
-                        .get("acceptance_criteria")
-                        .and_then(Value::as_array)
-                        .into_iter()
-                        .flatten(),
-                )
-                .map(|item| value_text(Some(item)))
-                .filter(|item| !item.is_empty())
-                .collect(),
-        )
-    } else if state == "completed" && !completed.is_empty() {
-        value_string_list(completed.get("follow_up_notes"))
-    } else if state == "inconsistent" {
-        value_string_list(continuity.get("inconsistency_reasons"))
-    } else {
-        recovery_hints.clone()
-    };
-    let next_steps = if state == "active" && !current.is_empty() {
-        let mut items = vec!["先核对恢复锚点与当前代码状态".to_string()];
-        items.extend(continuity_next_actions.clone());
-        stable_line_items(items)
-    } else if state == "completed" && !completed.is_empty() {
-        let mut items =
-            vec!["如果要继续相关工作，先新开独立任务，不要直接续接已完成任务".to_string()];
-        items.extend(recovery_hints.clone());
-        stable_line_items(items)
-    } else if state == "stale" {
-        let mut items = vec!["先重读恢复锚点并重建新鲜任务上下文".to_string()];
-        if continuity_next_actions.is_empty() {
-            items.extend(recovery_hints.clone());
-        } else {
-            items.extend(continuity_next_actions.clone());
-        }
-        stable_line_items(items)
-    } else if state == "inconsistent" {
-        let mut items =
-            vec!["先对齐 SESSION_SUMMARY、TRACE_METADATA 和 SUPERVISOR_STATE".to_string()];
-        items.extend(recovery_hints.clone());
-        stable_line_items(items)
-    } else {
-        let mut items = vec!["先补齐缺失锚点并确认任务状态".to_string()];
-        if continuity_next_actions.is_empty() {
-            items.extend(recovery_hints.clone());
-        } else {
-            items.extend(continuity_next_actions.clone());
-        }
-        stable_line_items(items)
-    };
-    let blockers = if state == "active" {
-        continuity_blockers.clone()
-    } else if state == "completed" {
-        Vec::new()
-    } else {
-        continuity_blockers.clone()
-    };
-    let anchors = stable_line_items(vec![
-        value_text(paths_map.get("session_summary"))
-            .chars()
-            .next()
-            .map(|_| {
-                format!(
-                    "SESSION_SUMMARY: {}",
-                    value_text(paths_map.get("session_summary"))
-                )
-            })
-            .unwrap_or_default(),
-        value_text(paths_map.get("next_actions"))
-            .chars()
-            .next()
-            .map(|_| {
-                format!(
-                    "NEXT_ACTIONS: {}",
-                    value_text(paths_map.get("next_actions"))
-                )
-            })
-            .unwrap_or_default(),
-        value_text(paths_map.get("trace_metadata"))
-            .chars()
-            .next()
-            .map(|_| {
-                format!(
-                    "TRACE_METADATA: {}",
-                    value_text(paths_map.get("trace_metadata"))
-                )
-            })
-            .unwrap_or_default(),
-        value_text(paths_map.get("supervisor_state"))
-            .chars()
-            .next()
-            .map(|_| {
-                format!(
-                    "SUPERVISOR_STATE: {}",
-                    value_text(paths_map.get("supervisor_state"))
-                )
-            })
-            .unwrap_or_default(),
-    ]);
-
-    let mut lines = vec!["继续当前仓库的工作。先阅读并使用这些恢复锚点：".to_string()];
-    lines.extend(anchors.iter().map(|anchor| format!("- {anchor}")));
-    lines.extend([
-        "".to_string(),
-        "当前上下文：".to_string(),
-        format!("- task: {}", if task.is_empty() { "未记录" } else { &task }),
-        format!(
-            "- phase: {}",
-            if phase.is_empty() {
-                "未记录"
-            } else {
-                &phase
-            }
-        ),
-        format!(
-            "- status: {}",
-            if status.is_empty() {
-                "missing"
-            } else {
-                &status
-            }
-        ),
-        format!(
-            "- continuity_state: {}",
-            if state.is_empty() { "missing" } else { &state }
-        ),
-    ]);
-    if !route.is_empty() {
-        lines.push(format!("- route: {}", join_lines(&route)));
-    }
-    if !remaining_tasks.is_empty() {
-        lines.push("".to_string());
-        lines.push("待完成事项：".to_string());
-        lines.extend(
-            remaining_tasks
-                .into_iter()
-                .take(max_lines)
-                .map(|item| format!("- {item}")),
-        );
-    }
-    if !next_steps.is_empty() {
-        lines.push("".to_string());
-        lines.push("必须先做的下一步：".to_string());
-        lines.extend(
-            next_steps
-                .into_iter()
-                .take(max_lines)
-                .map(|item| format!("- {item}")),
-        );
-    }
-    if !blockers.is_empty() {
-        lines.push("".to_string());
-        lines.push("阻塞：".to_string());
-        lines.extend(
-            blockers
-                .into_iter()
-                .take(max_lines)
-                .map(|item| format!("- {item}")),
-        );
-    }
-    lines.push("".to_string());
-    lines.push("执行要求：参考prompt设置的串并行分工，直接开始执行！".to_string());
-    lines.join("\n") + "\n"
-}
-
 fn render_framework_refresh_prompt(
     continuity: &Value,
     contract: &Map<String, Value>,
@@ -1914,23 +1710,6 @@ fn stable_document_text(stable_documents: &[(String, String)], file_name: &str) 
         .iter()
         .find_map(|(name, text)| (name == file_name).then(|| text.clone()))
         .unwrap_or_default()
-}
-
-fn render_project_memory_bundle(stable_documents: &[(String, String)]) -> String {
-    if stable_documents.is_empty() {
-        return String::new();
-    }
-    if stable_documents.len() == 1 && stable_documents[0].0 == "MEMORY.md" {
-        return stable_documents[0].1.clone();
-    }
-    let mut lines = vec!["# Project Memory Bundle".to_string(), "".to_string()];
-    for (name, text) in stable_documents {
-        lines.push(format!("## {name}"));
-        lines.push(String::new());
-        lines.push(text.trim().to_string());
-        lines.push(String::new());
-    }
-    lines.join("\n").trim().to_string()
 }
 
 fn render_framework_memory_context(
@@ -2614,7 +2393,7 @@ fn default_runbooks() -> String {
         "- 需要迁移旧 artifact 布局时显式执行：python3 scripts/run_memory_automation.py --workspace <workspace> --apply-artifact-migrations",
         "- 合并稳定记忆：python3 scripts/consolidate_memory.py --workspace <workspace>",
         "- 召回上下文：python3 scripts/retrieve_memory.py --workspace <workspace> --mode stable|active|history|debug --topic <关键词>",
-        "- 生命周期收口：python3 scripts/router_rs_runner.py --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4",
+        "- 生命周期收口：./scripts/router-rs/target/release/router-rs --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4",
         "- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。",
         "",
     ]

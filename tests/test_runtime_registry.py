@@ -87,6 +87,28 @@ def test_runtime_registry_falls_back_when_generated_file_is_missing(
     )
 
 
+def test_runtime_registry_missing_file_uses_embedded_snapshot_before_host_adapter_bridge(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    missing_registry = tmp_path / "configs" / "framework" / "RUNTIME_REGISTRY.json"
+    monkeypatch.setattr(runtime_registry, "_DEFAULT_REGISTRY_PATH", missing_registry)
+
+    def _unexpected_last_resort() -> tuple[dict[str, object], ...]:
+        raise AssertionError("runtime registry fallback should not re-materialize host adapters")
+
+    monkeypatch.setattr(
+        runtime_registry,
+        "_last_resort_fallback_host_adapter_rows",
+        _unexpected_last_resort,
+    )
+
+    legacy_ids = [row["adapter_id"] for row in host_adapter_records(include_legacy_aliases=True)]
+
+    assert "codex_desktop_host_adapter" in legacy_ids
+    assert "claude_code_adapter" in legacy_ids
+
+
 def test_runtime_registry_fallback_preserves_default_visibility_boundary(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

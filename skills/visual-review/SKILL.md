@@ -71,6 +71,14 @@ not assumptions about code or off-screen state.
 - The user mainly needs code changes, text rewriting, or architecture advice without image-grounded judgment
 - A browser interaction is still needed to obtain evidence first → use `$playwright` before this skill
 
+## Downstream routing note
+
+After this gate establishes visible evidence, route to a narrower owner when the real question is not just "what is visible" but:
+
+- design-system fidelity / style drift / AI-slop acceptance -> `$design-output-auditor`
+- redesign direction -> `$frontend-design`
+- implementation debugging -> the relevant runtime owner
+
 ## Priority Routing Rule
 
 If the user provides a visual artifact and the task depends on what is visibly present, check this skill before defaulting to generic frontend, document, or design advice.

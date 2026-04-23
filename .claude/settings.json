@@ -23,6 +23,228 @@
         "matcher": "project_settings"
       }
     ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Edit(/AGENT.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "MultiEdit(/AGENT.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Write(/AGENT.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Edit(/AGENTS.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "MultiEdit(/AGENTS.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Write(/AGENTS.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Edit(/CLAUDE.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "MultiEdit(/CLAUDE.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Write(/CLAUDE.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Edit(/GEMINI.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "MultiEdit(/GEMINI.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Write(/GEMINI.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Edit(/.gemini/settings.json)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "MultiEdit(/.gemini/settings.json)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Write(/.gemini/settings.json)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Edit(/.claude/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "MultiEdit(/.claude/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Write(/.claude/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Edit(/.codex/host_entrypoints_sync_manifest.json)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "MultiEdit(/.codex/host_entrypoints_sync_manifest.json)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Write(/.codex/host_entrypoints_sync_manifest.json)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Edit(/.codex/memory/CLAUDE_MEMORY.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "MultiEdit(/.codex/memory/CLAUDE_MEMORY.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Write(/.codex/memory/CLAUDE_MEMORY.md)",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|MultiEdit|Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Bash(*AGENT.md*)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Bash(*AGENTS.md*)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Bash(*CLAUDE.md*)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Bash(*GEMINI.md*)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Bash(*.gemini/settings.json*)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Bash(*.claude/*)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Bash(*.codex/host_entrypoints_sync_manifest.json*)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Bash(*.codex/memory/CLAUDE_MEMORY.md*)",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "Edit(/codex_agno_runtime/src/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "MultiEdit(/codex_agno_runtime/src/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "Write(/codex_agno_runtime/src/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "Edit(/scripts/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "MultiEdit(/scripts/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "Write(/scripts/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "Edit(/tests/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "MultiEdit(/tests/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "Write(/tests/**)",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|MultiEdit|Write"
+      }
+    ],
     "SessionEnd": [
       {
         "hooks": [
@@ -43,6 +265,16 @@
         ],
         "matcher": "invalid_request|server_error|max_output_tokens|rate_limit|authentication_failed|billing_error|unknown"
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/user_prompt_submit.sh",
+            "type": "command"
+          }
+        ]
+      }
     ]
   },
   "permissions": {
@@ -62,7 +294,13 @@
       "Bash(python3 -m pytest *)",
       "Bash(python3 -m compileall *)",
       "Bash(cargo test *)",
-      "Bash(python3 scripts/router_rs_runner.py *)",
+      "Bash(git rev-parse *)",
+      "Bash(cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- *)",
+      "Bash(./scripts/router-rs/target/release/router-rs *)",
+      "Bash(./scripts/router-rs/target/debug/router-rs *)",
+      "Bash(*scripts/router-rs/target/release/router-rs *)",
+      "Bash(*scripts/router-rs/target/debug/router-rs *)",
+      "Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)",
       "Bash(python3 scripts/runtime_background_cli.py *)",
       "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
       "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",

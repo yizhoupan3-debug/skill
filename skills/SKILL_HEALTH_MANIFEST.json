@@ -1,9 +1,9 @@
 {
   "ts": "2026-04-15T10:46:46.102903+00:00",
   "summary": {
-    "total_skills": 146,
+    "total_skills": 150,
     "critical_skills": 0,
-    "avg_health": 96.5
+    "avg_health": 96.6
   },
   "skills": {
     "plugin-creator": {
@@ -287,6 +287,34 @@
       "health_status": "Healthy"
     },
     "design-agent": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "design-md": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "design-output-auditor": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "design-prompt-enhancer": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "design-workflow-protocol": {
       "dynamic_score": 100.0,
       "static_score": 100.0,
       "usage_30d": 0,

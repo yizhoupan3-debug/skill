@@ -156,6 +156,9 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
 
     state_health = state_service.health()
     trace_health = trace_service.health()
+    execution_health = execution_service.health()
+    kernel_contract = execution_service.describe_kernel_contract()
+    metadata_bridge = execution_service.describe_kernel_metadata_bridge()
 
     assert router_service.health()["loaded_skill_count"] > 0
     assert router_service.health()["primary_authority"] == "rust"
@@ -171,31 +174,12 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert router_service.health()["route_policy"]["diagnostic_route_mode"] == "none"
     assert router_service.health()["rust_adapter"]["route_authority"] == "rust-route-core"
     assert router_service.health()["rust_adapter"]["compile_authority"] == "rust-route-compiler"
-    assert (
-        router_service.control_plane_descriptor["services"]["execution"]["kernel_live_backend_impl"]
-        == "router-rs"
-    )
-    assert (
-        router_service.control_plane_descriptor["services"]["execution"]["kernel_live_delegate_authority"]
-        == "rust-execution-cli"
-    )
-    assert (
-        router_service.control_plane_descriptor["services"]["execution"]["kernel_contract"][
-            "execution_kernel_delegate_impl"
-        ]
-        == "router-rs"
-    )
-    assert (
-        router_service.control_plane_descriptor["services"]["execution"]["kernel_metadata_bridge"][
-            "defaults"
-        ]["live_primary_model_id_source"]
-        == "aggregator-response.model"
-    )
-    assert (
-        router_service.control_plane_descriptor["services"]["execution"]["kernel_metadata_bridge"][
-            "metadata_keys"
-        ]["prompt_preview_owner"]
-        == "execution_kernel_prompt_preview_owner"
+    assert execution_health["kernel_live_backend_impl"] == "router-rs"
+    assert execution_health["kernel_live_delegate_authority"] == "rust-execution-cli"
+    assert kernel_contract["execution_kernel_delegate_impl"] == "router-rs"
+    assert metadata_bridge["defaults"]["live_primary_model_id_source"] == "aggregator-response.model"
+    assert metadata_bridge["metadata_keys"]["prompt_preview_owner"] == (
+        "execution_kernel_prompt_preview_owner"
     )
     assert (
         router_service.health()["rust_adapter"]["route_policy_schema_version"]
@@ -1780,6 +1764,51 @@ def test_execution_service_kernel_payload_prefers_rust_runtime_metadata(tmp_path
     assert payload["execution_kernel_live_fallback_mode"] == "disabled"
     assert "execution_kernel_live_fallback" not in payload
     assert "execution_kernel_live_fallback_authority" not in payload
+
+
+def test_execution_service_kernel_payload_rejects_python_runtime_identity_rename(
+    tmp_path: Path,
+) -> None:
+    """Kernel payload projection should keep the Rust-owned kernel identity contract authoritative."""
+
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=True,
+    )
+    router_service = RouterService(settings)
+    execution_service = ExecutionEnvironmentService(
+        settings,
+        max_background_jobs=4,
+        background_job_timeout_seconds=30.0,
+        control_plane_descriptor=router_service.control_plane_descriptor,
+    )
+
+    with pytest.raises(RuntimeError, match="execution_kernel='python-renamed-kernel'"):
+        execution_service.kernel_payload(
+            dry_run=False,
+            metadata={
+                "execution_kernel": "python-renamed-kernel",
+                "execution_kernel_authority": "rust-execution-kernel-authority",
+                "execution_kernel_contract_mode": "rust-live-primary",
+                "execution_kernel_fallback_policy": "infrastructure-only-explicit",
+                "execution_kernel_in_process_replacement_complete": True,
+                "execution_kernel_delegate": "router-rs",
+                "execution_kernel_delegate_authority": "rust-execution-cli",
+                "execution_kernel_delegate_family": "custom-live-family",
+                "execution_kernel_delegate_impl": "custom-live-impl",
+                "execution_kernel_live_primary": "router-rs-live-primary",
+                "execution_kernel_live_primary_authority": "custom-live-authority",
+                "execution_kernel_live_fallback": None,
+                "execution_kernel_live_fallback_authority": None,
+                "execution_kernel_live_fallback_enabled": False,
+                "execution_kernel_live_fallback_mode": "disabled",
+                "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
+                "execution_kernel_response_shape": "live_primary",
+                "execution_kernel_prompt_preview_owner": "rust-execution-cli",
+            },
+        )
 
 
 def test_execution_service_kernel_payload_rejects_partial_python_override(tmp_path: Path) -> None:

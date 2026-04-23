@@ -50,7 +50,7 @@ Use these examples to keep the skill grounded in **style naturalization**, not d
 **After:**
 > We built the search feature because our support team was drowning — 200 tickets a week, most asking the same five questions. Six months later, ticket volume dropped 40%. The AI part? It's a keyword matcher with some ranking. Not glamorous, but it works.
 
-**Patterns fixed:** promotional language (#4), AI vocabulary (#7 — "leverages", "seamless", "cutting-edge"), generic positive conclusion (#24), sycophantic tone (#21). Applied: soul injection (first person, specific numbers, honest assessment).
+**Patterns fixed:** promotional language (#4), AI vocabulary (#7 — "leverages", "seamless", "cutting-edge"), generic positive conclusion (#24), sycophantic tone (#21). Applied: first person, specific numbers, honest assessment.
 
 ---
 
@@ -114,7 +114,7 @@ Use these examples to keep the skill grounded in **style naturalization**, not d
 >
 > 局限性也很明确：在小样本条件下（<500 条），性能下降约 8%，需要进一步优化采样策略。
 
-**修复的模式:** 意义膨胀"重要的理论意义和实践价值"；空泛判断"显著成效"、"填补空白"、"广阔前景" → 具体数据。增加了局限性承认（灵魂注入：承认复杂性）
+**修复的模式:** 意义膨胀"重要的理论意义和实践价值"；空泛判断"显著成效"、"填补空白"、"广阔前景" → 具体数据。增加了局限性承认（自然口吻：承认复杂性）
 
 ---
 
@@ -128,7 +128,7 @@ Use these examples to keep the skill grounded in **style naturalization**, not d
 >
 > 后来做毕设选了 NLP 方向，原因很直接：导师手上有标注好的医疗数据，我可以直接上手跑实验。做了半年之后发现，最难的不是模型调参，而是理解医生到底想从文本里提取什么信息。这个经历让我意识到，技术问题的核心往往不在技术本身。
 
-**修复的模式:** 八股结构"浓厚的兴趣和坚定的热情"、"培养了…的能力"三连、"坚信…将改变世界" → 具体经历。应用灵魂注入：第一人称叙事、允许否定（"不喜欢"）、具体场景和转折
+**修复的模式:** 八股结构"浓厚的兴趣和坚定的热情"、"培养了…的能力"三连、"坚信…将改变世界" → 具体经历。应用自然口吻：第一人称叙事、允许否定（"不喜欢"）、具体场景和转折
 
 ---
 
