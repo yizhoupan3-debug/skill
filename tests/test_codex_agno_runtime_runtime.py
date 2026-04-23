@@ -222,9 +222,6 @@ def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> 
             assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
             assert response.metadata["execution_kernel_live_primary"] == "router-rs"
             assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-            assert response.metadata["execution_kernel_live_fallback"] is None
-            assert response.metadata["execution_kernel_live_fallback_authority"] is None
-            assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
             assert response.metadata["trace_generation"] == 0
             assert response.metadata["trace_latest_seq"] >= 6
             assert response.metadata["trace_resume_cursor"]["seq"] >= 6
@@ -402,8 +399,6 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
             prompt_preview="Rust-owned dry-run prompt",
             metadata={
                 **expected_kernel_metadata,
-                "execution_kernel_live_fallback": None,
-                "execution_kernel_live_fallback_authority": None,
                 "trace_event_count": trace_event_count,
                 "trace_output_path": trace_output_path,
             },
@@ -422,7 +417,10 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
         assert response.content == "delegated"
         assert seen["dry_run"] is True
         assert isinstance(seen["prompt"], str)
-        assert seen["prompt"] == ""
+        if seen["prompt"]:
+            assert "[Sub-Agent Limits] Hard limit:" in seen["prompt"]
+            assert "programmatically enforce these limits." in seen["prompt"]
+        assert "Help with the user's request directly." not in seen["prompt"]
         assert seen["trace_event_count"] >= 4
         assert seen["trace_output_path"] == str(trace_path)
         assert response.prompt_preview == "Rust-owned dry-run prompt"
@@ -434,9 +432,6 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
         assert response.metadata["execution_kernel_delegate_impl"] == expected_kernel_metadata["execution_kernel_delegate_impl"]
         assert response.metadata["execution_kernel_live_primary"] == expected_kernel_metadata["execution_kernel_live_primary"]
         assert response.metadata["execution_kernel_live_primary_authority"] == expected_kernel_metadata["execution_kernel_live_primary_authority"]
-        assert response.metadata["execution_kernel_live_fallback"] is None
-        assert response.metadata["execution_kernel_live_fallback_authority"] is None
-        assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
         assert response.metadata["trace_event_schema_version"] == TRACE_EVENT_SCHEMA_VERSION
 
     asyncio.run(_run())
@@ -481,10 +476,6 @@ def test_runtime_live_path_tolerates_empty_python_prompt_context(tmp_path: Path)
                 "execution_kernel_delegate_impl": "router-rs",
                 "execution_kernel_live_primary": "router-rs",
                 "execution_kernel_live_primary_authority": "rust-execution-cli",
-                "execution_kernel_live_fallback": None,
-                "execution_kernel_live_fallback_authority": None,
-                "execution_kernel_live_fallback_enabled": False,
-                "execution_kernel_live_fallback_mode": "disabled",
                 "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
                 "execution_kernel_response_shape": "live_primary",
                 "execution_kernel_prompt_preview_owner": "rust-execution-cli",
@@ -512,7 +503,6 @@ def test_runtime_live_path_tolerates_empty_python_prompt_context(tmp_path: Path)
         assert response.metadata["execution_kernel_delegate_authority"] == "rust-execution-cli"
         assert response.metadata["execution_kernel_live_primary"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-        assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
 
     asyncio.run(_run())
 
@@ -546,10 +536,6 @@ def test_runtime_dry_run_keeps_working_when_live_fallback_is_disabled(tmp_path: 
         assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-        assert response.metadata["execution_kernel_live_fallback_enabled"] is False
-        assert response.metadata["execution_kernel_live_fallback"] is None
-        assert response.metadata["execution_kernel_live_fallback_authority"] is None
-        assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
 
     asyncio.run(_run())
 

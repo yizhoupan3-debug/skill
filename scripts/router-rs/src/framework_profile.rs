@@ -3780,10 +3780,6 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         Value::String("execution_kernel_live_primary_authority".to_string()),
         Value::String("execution_kernel_response_shape".to_string()),
         Value::String("execution_kernel_prompt_preview_owner".to_string()),
-        Value::String("execution_kernel_live_fallback".to_string()),
-        Value::String("execution_kernel_live_fallback_authority".to_string()),
-        Value::String("execution_kernel_live_fallback_enabled".to_string()),
-        Value::String("execution_kernel_live_fallback_mode".to_string()),
     ];
     let mut live_primary_required_metadata_fields = steady_state_kernel_fields.clone();
     live_primary_required_metadata_fields.extend(vec![

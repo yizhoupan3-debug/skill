@@ -2258,7 +2258,14 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     }
     assert payload["cli_common_adapter"]["controller_boundary"]["shared_adapter"] == "cli_common_adapter"
     assert payload["codex_common_adapter"]["controller_boundary"]["framework_truth"] == "framework_core"
+    assert payload["codex_common_adapter"]["metadata"]["adapter_alias_of"] == "cli_common_adapter"
+    assert payload["codex_common_adapter"]["metadata"]["canonical_adapter_id"] == "cli_common_adapter"
+    assert payload["codex_common_adapter"]["parity_contract"]["compatibility_aliases"] == [
+        "codex_common_adapter"
+    ]
     assert "legacy_codex_common_adapter" not in payload["codex_common_adapter"]["parity_contract"]
+    assert "upgrade_compatibility_matrix" not in payload
+    assert "codex_desktop_alias_retirement_status" not in payload
     assert payload["codex_desktop_adapter"]["entrypoint_contract"]["entrypoint_kind"] == "interactive"
     assert payload["codex_desktop_adapter"]["bridge_contract"] == (
         payload["codex_desktop_adapter"]["common_contract"]["workspace_bootstrap"]["bridges"]
@@ -2413,8 +2420,18 @@ def test_router_rs_profile_artifacts_json_can_include_compatibility_inventory() 
         )
 
     payload = json.loads(proc.stdout)
+    assert "codex_desktop_alias_retirement_status" not in payload
     assert payload["upgrade_compatibility_matrix"]["cli_common_adapter"]["compatible"] is True
+    assert payload["upgrade_compatibility_matrix"]["codex_common_adapter"]["compatible"] is True
+    assert payload["upgrade_compatibility_matrix"]["codex_common_adapter"]["legacy_surface"] is False
+    assert (
+        payload["upgrade_compatibility_matrix"]["codex_common_adapter"][
+            "default_host_peer_set_member"
+        ]
+        is False
+    )
     assert payload["upgrade_compatibility_matrix"]["codex_desktop_adapter"]["compatible"] is True
+    assert "codex_desktop_host_adapter" not in payload["upgrade_compatibility_matrix"]
     assert "aionrs_companion_adapter" not in payload["upgrade_compatibility_matrix"]
 
 

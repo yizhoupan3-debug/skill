@@ -340,8 +340,6 @@ def test_background_runtime_sandbox_events_keep_background_job_id(tmp_path: Path
             usage=UsageMetrics(input_tokens=3, output_tokens=2, total_tokens=5, mode="dry_run"),
             metadata={
                 **runtime.execution_service.kernel_payload(dry_run=True),
-                "execution_kernel_live_fallback": None,
-                "execution_kernel_live_fallback_authority": None,
             },
         )
 

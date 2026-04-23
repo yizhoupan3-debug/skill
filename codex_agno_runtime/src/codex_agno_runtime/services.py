@@ -50,7 +50,6 @@ from codex_agno_runtime.control_plane_contracts import build_control_plane_contr
 from codex_agno_runtime.memory import FactMemoryStore
 from codex_agno_runtime.middleware import MiddlewareContext
 from codex_agno_runtime.observability import build_runtime_observability_health_snapshot
-from codex_agno_runtime.prompt_builder import PromptBuilder
 from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.schemas import (
     BackgroundBatchEnqueueResponse,
@@ -89,12 +88,6 @@ _KERNEL_HEALTH_FIELDS = (
     "kernel_live_delegate_family",
     "kernel_live_delegate_impl",
     "kernel_live_delegate_mode",
-    "kernel_live_fallback_kind",
-    "kernel_live_fallback_authority",
-    "kernel_live_fallback_family",
-    "kernel_live_fallback_impl",
-    "kernel_live_fallback_enabled",
-    "kernel_live_fallback_mode",
     "kernel_mode_support",
     "execution_schema_version",
 )
@@ -1000,7 +993,6 @@ class RouterService:
     def __init__(self, settings: RuntimeSettings, *, rust_adapter: RustRouteAdapter | None = None) -> None:
         self.settings = settings
         self.loader = SkillLoader(settings.codex_home / "skills")
-        self.prompt_builder = PromptBuilder(loader=self.loader)
         self._rust_adapter = rust_adapter or RustRouteAdapter(
             settings.codex_home,
             timeout_seconds=settings.rust_router_timeout_seconds,

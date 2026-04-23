@@ -47,7 +47,6 @@ from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
     LIVE_PRIMARY_MODEL_ID_SOURCE,
     LIVE_PRIMARY_PROMPT_PREVIEW_OWNER,
-    build_execution_kernel_dry_run_response,
     build_execution_kernel_live_response_serialization_contract_core,
     build_execution_kernel_runtime_metadata,
     build_trace_runtime_metadata,
@@ -217,7 +216,7 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
     )
     assert (
         response.metadata[EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY]
-        == LIVE_PRIMARY_PROMPT_PREVIEW_OWNER
+        == "rust-execution-cli"
     )
     assert (
         response.metadata[EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY]
@@ -452,56 +451,6 @@ def test_execution_kernel_contract_helpers_stay_rust_primary() -> None:
     assert validated_contract["execution_kernel_response_shape"] == (
         EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
     )
-
-
-def test_execution_kernel_dry_run_response_stays_rust_primary() -> None:
-    dry_run_response = build_execution_kernel_dry_run_response(
-        session_id="kernel-contract-session",
-        user_id="tester",
-        skill="plan-to-code",
-        overlay="rust-pro",
-        content="[dry-run] response",
-        prompt_preview="Keep execution Rust-first.",
-        input_tokens=12,
-        output_tokens=34,
-        execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
-        execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
-        trace_event_count=9,
-        trace_output_path="/tmp/TRACE_METADATA.json",
-        extra_metadata={
-            EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY: EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
-            EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY: (
-                EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
-            ),
-        },
-    )
-
-    assert dry_run_response.live_run is False
-    assert dry_run_response.usage.mode == "estimated"
-    assert dry_run_response.metadata["execution_kernel"] == EXECUTION_KERNEL_BRIDGE_KIND
-    assert dry_run_response.metadata["execution_kernel_authority"] == EXECUTION_KERNEL_BRIDGE_AUTHORITY
-    assert (
-        dry_run_response.metadata[EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY]
-        == EXECUTION_KERNEL_METADATA_SCHEMA_VERSION
-    )
-    assert dry_run_response.metadata["reason"] == (
-        "Live model execution is disabled; returned a deterministic dry-run payload."
-    )
-    assert dry_run_response.metadata[EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY] == (
-        EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE
-    )
-    assert dry_run_response.metadata[EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY] == (
-        EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY
-    )
-    assert (
-        dry_run_response.metadata[EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY]
-        == EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
-    )
-    assert (
-        dry_run_response.metadata[EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY]
-        == "rust-execution-cli"
-    )
-
 
 @pytest.mark.parametrize(
     ("metadata_field", "metadata_value"),

@@ -290,11 +290,6 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert execution_service.health()["kernel_live_delegate_authority"] == "rust-execution-cli"
     assert execution_service.health()["kernel_live_delegate_family"] == "rust-cli"
     assert execution_service.health()["kernel_live_delegate_impl"] == "router-rs"
-    assert execution_service.health()["kernel_live_fallback_kind"] is None
-    assert execution_service.health()["kernel_live_fallback_authority"] is None
-    assert execution_service.health()["kernel_live_fallback_family"] is None
-    assert execution_service.health()["kernel_live_fallback_impl"] is None
-    assert execution_service.health()["kernel_live_fallback_mode"] == "disabled"
     assert execution_service.health()["kernel_mode_support"] == ["dry_run", "live"]
     assert execution_service.health()["control_plane_contracts"]["execution_controller_contract"]["controller"][
         "primary_owner"
@@ -782,9 +777,6 @@ def test_execution_environment_service_routes_through_kernel_adapter(tmp_path: P
         assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-        assert response.metadata["execution_kernel_live_fallback"] is None
-        assert response.metadata["execution_kernel_live_fallback_authority"] is None
-        assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
         assert "execution_kernel_fallback_reason" not in response.metadata
         assert response.metadata["trace_event_count"] == 7
 
@@ -1223,16 +1215,6 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
     dry_run_contract = execution_service.describe_kernel_contract(dry_run=True)
 
     assert health["kernel_contract_mode"] == "rust-live-primary"
-    assert health["kernel_live_fallback_enabled"] is False
-    assert health["kernel_live_fallback_kind"] is None
-    assert health["kernel_live_fallback_authority"] is None
-    assert health["kernel_live_fallback_family"] is None
-    assert health["kernel_live_fallback_impl"] is None
-    assert health["kernel_live_fallback_mode"] == "disabled"
-    assert contract["execution_kernel_live_fallback_enabled"] is False
-    assert contract["execution_kernel_live_fallback"] is None
-    assert contract["execution_kernel_live_fallback_authority"] is None
-    assert contract["execution_kernel_live_fallback_mode"] == "disabled"
     assert contract["execution_kernel_metadata_schema_version"] == (
         "router-rs-execution-kernel-metadata-v1"
     )
@@ -1253,10 +1235,6 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
     )
     assert dry_run_contract["execution_kernel_response_shape"] == "dry_run"
     assert dry_run_contract["execution_kernel_prompt_preview_owner"] == "rust-execution-cli"
-    assert dry_run_contract["execution_kernel_live_fallback_enabled"] is False
-    assert dry_run_contract["execution_kernel_live_fallback"] is None
-    assert dry_run_contract["execution_kernel_live_fallback_authority"] is None
-    assert dry_run_contract["execution_kernel_live_fallback_mode"] == "disabled"
 
     routing_result = router_service.route(
         task="帮我写一个 Rust CLI 工具",
@@ -1298,10 +1276,6 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
                 "execution_kernel_delegate_impl": "router-rs",
                 "execution_kernel_live_primary": "router-rs",
                 "execution_kernel_live_primary_authority": "rust-execution-cli",
-                "execution_kernel_live_fallback": None,
-                "execution_kernel_live_fallback_authority": None,
-                "execution_kernel_live_fallback_enabled": False,
-                "execution_kernel_live_fallback_mode": "disabled",
                 "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
                 "execution_kernel_response_shape": "dry_run",
                 "execution_kernel_prompt_preview_owner": "rust-execution-cli",
@@ -1334,10 +1308,6 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
         assert response.metadata["execution_kernel_delegate_impl"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-        assert response.metadata["execution_kernel_live_fallback"] is None
-        assert response.metadata["execution_kernel_live_fallback_authority"] is None
-        assert response.metadata["execution_kernel_live_fallback_enabled"] is False
-        assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
         assert "execution_kernel_fallback_reason" not in response.metadata
 
     asyncio.run(_run())
@@ -1402,10 +1372,6 @@ def test_execution_service_prefers_rust_live_metadata_when_present(tmp_path: Pat
                 "execution_kernel_delegate_impl": "router-rs-http",
                 "execution_kernel_live_primary": "router-rs-live-primary",
                 "execution_kernel_live_primary_authority": "rust-primary-authority",
-                "execution_kernel_live_fallback": None,
-                "execution_kernel_live_fallback_authority": None,
-                "execution_kernel_live_fallback_enabled": False,
-                "execution_kernel_live_fallback_mode": "disabled",
                 "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
                 "execution_kernel_response_shape": "live_primary",
                 "execution_kernel_prompt_preview_owner": "rust-execution-cli",
@@ -1435,10 +1401,6 @@ def test_execution_service_prefers_rust_live_metadata_when_present(tmp_path: Pat
         assert response.metadata["execution_kernel_delegate_impl"] == "router-rs-http"
         assert response.metadata["execution_kernel_live_primary"] == "router-rs-live-primary"
         assert response.metadata["execution_kernel_live_primary_authority"] == "rust-primary-authority"
-        assert response.metadata["execution_kernel_live_fallback"] is None
-        assert response.metadata["execution_kernel_live_fallback_authority"] is None
-        assert response.metadata["execution_kernel_live_fallback_enabled"] is False
-        assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
 
     asyncio.run(_run())
 
@@ -1503,10 +1465,6 @@ def test_execution_service_rejects_legacy_live_metadata_shape(tmp_path: Path) ->
                 "execution_kernel_delegate_impl": "router-rs-http",
                 "execution_kernel_live_primary": "router-rs-live-primary",
                 "execution_kernel_live_primary_authority": "rust-primary-authority",
-                "execution_kernel_live_fallback": None,
-                "execution_kernel_live_fallback_authority": None,
-                "execution_kernel_live_fallback_enabled": False,
-                "execution_kernel_live_fallback_mode": "disabled",
                 "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
                 "execution_kernel_response_shape": "live_primary",
                 "execution_kernel_prompt_preview_owner": "rust-execution-cli",
@@ -1595,10 +1553,6 @@ def test_execution_service_live_path_uses_router_rs_before_python_fallback(tmp_p
                 "execution_kernel_delegate_impl": "router-rs",
                 "execution_kernel_live_primary": "router-rs",
                 "execution_kernel_live_primary_authority": "rust-execution-cli",
-                "execution_kernel_live_fallback": None,
-                "execution_kernel_live_fallback_authority": None,
-                "execution_kernel_live_fallback_enabled": False,
-                "execution_kernel_live_fallback_mode": "disabled",
                 "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
                 "execution_kernel_response_shape": "live_primary",
                 "execution_kernel_prompt_preview_owner": "rust-execution-cli",
@@ -1625,9 +1579,6 @@ def test_execution_service_live_path_uses_router_rs_before_python_fallback(tmp_p
         assert response.metadata["execution_kernel_delegate_authority"] == "rust-execution-cli"
         assert response.metadata["execution_kernel_live_primary"] == "router-rs"
         assert response.metadata["execution_kernel_live_primary_authority"] == "rust-execution-cli"
-        assert response.metadata["execution_kernel_live_fallback"] is None
-        assert response.metadata["execution_kernel_live_fallback_authority"] is None
-        assert response.metadata["execution_kernel_live_fallback_mode"] == "disabled"
 
     asyncio.run(_run())
 
@@ -1709,10 +1660,6 @@ def test_execution_service_kernel_payload_prefers_rust_runtime_metadata(tmp_path
             "execution_kernel_delegate_impl": "custom-live-impl",
             "execution_kernel_live_primary": "router-rs-live-primary",
             "execution_kernel_live_primary_authority": "custom-live-authority",
-            "execution_kernel_live_fallback": None,
-            "execution_kernel_live_fallback_authority": None,
-            "execution_kernel_live_fallback_enabled": False,
-            "execution_kernel_live_fallback_mode": "disabled",
             "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
             "execution_kernel_response_shape": "live_primary",
             "execution_kernel_prompt_preview_owner": "rust-execution-cli",
@@ -1727,10 +1674,6 @@ def test_execution_service_kernel_payload_prefers_rust_runtime_metadata(tmp_path
     assert payload["execution_kernel_live_primary"] == "router-rs-live-primary"
     assert payload["execution_kernel_live_primary_authority"] == "custom-live-authority"
     assert payload["execution_kernel_response_shape"] == "live_primary"
-    assert payload["execution_kernel_live_fallback_enabled"] is False
-    assert payload["execution_kernel_live_fallback_mode"] == "disabled"
-    assert "execution_kernel_live_fallback" not in payload
-    assert "execution_kernel_live_fallback_authority" not in payload
 
 
 def test_execution_service_kernel_payload_rejects_python_runtime_identity_rename(
@@ -1767,10 +1710,6 @@ def test_execution_service_kernel_payload_rejects_python_runtime_identity_rename
                 "execution_kernel_delegate_impl": "custom-live-impl",
                 "execution_kernel_live_primary": "router-rs-live-primary",
                 "execution_kernel_live_primary_authority": "custom-live-authority",
-                "execution_kernel_live_fallback": None,
-                "execution_kernel_live_fallback_authority": None,
-                "execution_kernel_live_fallback_enabled": False,
-                "execution_kernel_live_fallback_mode": "disabled",
                 "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
                 "execution_kernel_response_shape": "live_primary",
                 "execution_kernel_prompt_preview_owner": "rust-execution-cli",
@@ -1892,10 +1831,6 @@ def test_execution_service_kernel_payload_rejects_retired_python_fallback_metada
                 "execution_kernel_delegate_impl": "custom-live-impl",
                 "execution_kernel_live_primary": "router-rs-live-primary",
                 "execution_kernel_live_primary_authority": "custom-live-authority",
-                "execution_kernel_live_fallback": None,
-                "execution_kernel_live_fallback_authority": None,
-                "execution_kernel_live_fallback_enabled": False,
-                "execution_kernel_live_fallback_mode": "disabled",
                 "execution_kernel_metadata_schema_version": "router-rs-execution-kernel-metadata-v1",
                 "execution_kernel_response_shape": "live_primary",
                 "execution_kernel_prompt_preview_owner": "rust-execution-cli",

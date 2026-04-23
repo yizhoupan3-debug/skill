@@ -28,7 +28,6 @@ from codex_agno_runtime.middleware import (
     MemoryMiddleware,
     MiddlewareChain,
     MiddlewareContext,
-    SkillInjectionMiddleware,
     SubagentLimitMiddleware,
 )
 from codex_agno_runtime.rust_router import RustRouteAdapter
@@ -118,7 +117,6 @@ class CodexAgnoRuntime:
         )
 
         self.loader = self.router_service.loader
-        self.prompt_builder = self.router_service.prompt_builder
         self.skills = self.router_service.skills
         self.router = None
         self._job_store = self.state_service.store
@@ -297,7 +295,6 @@ class CodexAgnoRuntime:
 
         s = self.settings
         middlewares = [
-            SkillInjectionMiddleware(self.prompt_builder),
             MemoryMiddleware(self._memory_store) if s.memory_enabled else None,
             ContextCompressionMiddleware(
                 budget_tokens=s.context_budget_tokens,
@@ -508,7 +505,6 @@ class CodexAgnoRuntime:
             execution_kernel_delegate_authority=kernel_contract.get("execution_kernel_delegate_authority"),
         )
         ctx.metadata["dry_run"] = execution_is_dry_run
-        ctx.metadata["python_prompt_required"] = False
 
         async def _core_agent_fn(mw_ctx: MiddlewareContext) -> RunTaskResponse:
             return await self.execution_service.execute(

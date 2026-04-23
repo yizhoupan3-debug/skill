@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import hashlib
 import json
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -83,11 +85,12 @@ PERF_TERMS = ("加速", "性能", "内存", "热区", "热路径", "performance"
 COMPAT_TERMS = ("保底", "补丁", "兼容", "fallback", "shim", "wrapper", "patch")
 HOOK_TERMS = ("hook", "hooks", "agent.md", "claude.md", "pretooluse", "userpromptsubmit")
 COMMON_CONTEXT = "实现要求：优先直接落目标行为，不要先叠兼容层、补丁分支、保底开关或 keep-old-and-add-new。"
+SIMPLIFY_CONTEXT = "简化优先：先判断能不能删、合并、内联或收窄；如果两种实现都能完成需求，选层级更少、分支更少、拷贝更少的。"
 PERF_CONTEXT = "顺手看热路径上的重复 I/O、重复序列化、无谓 clone、临时对象和多余包装层。"
 COMPAT_CONTEXT = "如果旧兼容/过渡逻辑已经没有真实必要，优先删掉而不是继续包一层。"
 RUST_CONTEXT = "Rust 额外检查：盯住热循环里的分配、clone、String/Vec 复制和 serde_json 往返。"
 PYTHON_CONTEXT = "Python 额外检查：盯住重复解析、重复读文件、wrapper-on-wrapper 和兼容别名链。"
-HOOK_CONTEXT = "Hook 额外检查：让 hook 增加自动化，而不是只做阻拦；优先短上下文、窄触发、低开销。"
+HOOK_CONTEXT = "Hook 额外检查：让 hook 增加自动化，而不是只做阻拦；优先短上下文、窄触发、低开销，并尽量用 matcher/if 避免无谓触发。"
 TEST_CONTEXT = "测试额外检查：锁真实契约和回归点，不给补丁式旧行为续命。"
 RUNTIME_PREFIXES = (
     "codex_agno_runtime/src/codex_agno_runtime/",
@@ -108,6 +111,18 @@ ASYNC_AUDIT_PREFIXES = (
 COMPAT_SMELL_RE = re.compile(
     r"\b(?:compat|compatibility|legacy|fallback|shim|patch|workaround|temporary|deprecated)\b|兼容|保底|补丁"
 )
+SNAPSHOT_ROOT = Path(tempfile.gettempdir()) / "claude_hook_automation_snapshots"
+
+
+def _join_unique_context(parts: list[str]) -> str:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for part in parts:
+        if not part or part in seen:
+            continue
+        seen.add(part)
+        ordered.append(part)
+    return " ".join(ordered)
 
 
 def _read_payload() -> dict[str, Any]:
@@ -197,7 +212,7 @@ def _prompt_context(prompt_text: str) -> str | None:
     if not _looks_like_coding_request(prompt_text):
         return None
     lowered = prompt_text.lower()
-    parts = [COMMON_CONTEXT]
+    parts = [COMMON_CONTEXT, SIMPLIFY_CONTEXT]
     if any(token in prompt_text or token in lowered for token in PERF_TERMS):
         parts.append(PERF_CONTEXT)
     if any(token in prompt_text or token in lowered for token in COMPAT_TERMS):
@@ -207,7 +222,7 @@ def _prompt_context(prompt_text: str) -> str | None:
     path_hints = _extract_path_hints(prompt_text)
     if any("hook" in hint.lower() for hint in path_hints):
         parts.append(HOOK_CONTEXT)
-    return " ".join(parts)
+    return _join_unique_context(parts)
 
 
 def run_user_prompt_submit(_repo_root: Path, payload: dict[str, Any]) -> int:
@@ -232,7 +247,7 @@ def run_user_prompt_submit(_repo_root: Path, payload: dict[str, Any]) -> int:
 def _quality_target_context(path: str) -> str | None:
     if not path.endswith(QUALITY_TARGET_SUFFIXES):
         return None
-    parts = [COMMON_CONTEXT]
+    parts = [COMMON_CONTEXT, SIMPLIFY_CONTEXT]
     is_runtime = any(path.startswith(prefix) for prefix in RUNTIME_PREFIXES)
     is_hook = any(path.startswith(prefix) for prefix in HOOK_PREFIXES) or "hook" in path
     is_test = path.startswith("tests/")
@@ -248,7 +263,7 @@ def _quality_target_context(path: str) -> str | None:
         parts.append(HOOK_CONTEXT)
     if is_test:
         parts.append(TEST_CONTEXT)
-    return " ".join(parts)
+    return _join_unique_context(parts)
 
 
 def _read_text_if_small(path: Path, max_bytes: int = 200_000) -> str:
@@ -258,6 +273,45 @@ def _read_text_if_small(path: Path, max_bytes: int = 200_000) -> str:
         return path.read_text(encoding="utf-8")
     except Exception:
         return ""
+
+
+def _snapshot_path(repo_root: Path, path: str) -> Path:
+    key = hashlib.sha256(f"{repo_root.resolve()}::{path}".encode("utf-8")).hexdigest()
+    return SNAPSHOT_ROOT / key[:2] / f"{key}.json"
+
+
+def _store_pre_edit_snapshot(repo_root: Path, path: str) -> None:
+    target = repo_root / path
+    payload: dict[str, Any]
+    if target.is_file():
+        text = _read_text_if_small(target)
+        if not text and target.stat().st_size > 200_000:
+            return
+        payload = {"exists": True, "text": text}
+    else:
+        payload = {"exists": False, "text": ""}
+    snapshot = _snapshot_path(repo_root, path)
+    snapshot.parent.mkdir(parents=True, exist_ok=True)
+    snapshot.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
+def _pop_pre_edit_snapshot(repo_root: Path, path: str) -> tuple[str, str] | None:
+    snapshot = _snapshot_path(repo_root, path)
+    if not snapshot.is_file():
+        return None
+    try:
+        payload = json.loads(snapshot.read_text(encoding="utf-8"))
+    except Exception:
+        snapshot.unlink(missing_ok=True)
+        return None
+    snapshot.unlink(missing_ok=True)
+    if not isinstance(payload, dict):
+        return None
+    before = payload.get("text", "")
+    if not isinstance(before, str):
+        before = ""
+    mode = "pre_tool_snapshot_added_lines" if payload.get("exists") else "pre_tool_snapshot_new_file"
+    return before, mode
 
 
 def _compat_smell_count(text: str) -> int:
@@ -310,6 +364,15 @@ def _extract_audit_delta(repo_root: Path, path: str, payload: dict[str, Any]) ->
     if not isinstance(tool_input, dict):
         return "", "none"
 
+    snapshot = _pop_pre_edit_snapshot(repo_root, path)
+    if snapshot is not None:
+        before_text, mode = snapshot
+        after_text = _read_text_if_small(repo_root / path)
+        if not after_text and (repo_root / path).exists() and (repo_root / path).stat().st_size > 200_000:
+            return "", "snapshot_skip_large_after"
+        added = _added_lines(before_text, after_text)
+        return added, mode if added else f"{mode}_no_added_lines"
+
     if tool_name == "Edit":
         new_string = tool_input.get("new_string")
         if isinstance(new_string, str) and new_string.strip():
@@ -350,7 +413,7 @@ def _build_async_audit_context(path: str, text: str, source_mode: str) -> str | 
             parts.append(
                 f"`{path}` 的新增片段有实现复查信号：{source_label}, compat={compat_hits}, clone={clone_hits}, serde={serde_hits}, string_copy={string_hits}。"
             )
-            parts.append("如果这轮还在继续，优先判断能否直接删过渡逻辑，并压缩热路径里的 clone 和序列化往返。")
+            parts.append("如果这轮还在继续，优先通过删除、合并、内联或收窄解决；先删过渡逻辑，再压缩热路径里的 clone 和序列化往返。")
     elif path.endswith(".py"):
         json_hits = text.count("json.loads(") + text.count("json.dumps(")
         io_hits = text.count(".read_text(") + text.count(".read_bytes(") + text.count(".write_text(")
@@ -359,19 +422,19 @@ def _build_async_audit_context(path: str, text: str, source_mode: str) -> str | 
             parts.append(
                 f"`{path}` 的新增片段有实现复查信号：{source_label}, compat={compat_hits}, json_roundtrip={json_hits}, file_io={io_hits}。"
             )
-            parts.append("优先判断能否删兼容/补丁分支，并减少重复解析、重复读写和 wrapper-on-wrapper。")
+            parts.append("优先通过删除、合并、内联或收窄解决；先删兼容/补丁分支，再减少重复解析、重复读写和 wrapper-on-wrapper。")
         elif "hook" in lowered_path and compat_hits >= 1:
             parts.append(
                 f"`{path}` 的新增片段仍带有明显的 hook 过渡信号：{source_label}, compat={compat_hits}, helper_defs={wrapper_hits}。"
             )
-            parts.append("确认这层是在增加自动化，而不是只多加一道阻拦或中转包装。")
+            parts.append("确认这层是在增加自动化，而不是只多加一道阻拦或中转包装；能删、能并、能收窄就别再包一层。")
     elif path.endswith(".sh"):
         deny_hits = text.count("permissionDecision")
         if "hook" in lowered_path and (compat_hits >= 1 or deny_hits >= 1):
             parts.append(
                 f"`{path}` 的新增片段有 hook 复查信号：{source_label}, compat={compat_hits}, deny_rules={deny_hits}。"
             )
-            parts.append("确认这层仍然是短路径、低开销、加自动化，不是在继续堆阻拦脚本。")
+            parts.append("确认这层仍然是短路径、低开销、加自动化；能删规则、合并判断、收窄 matcher/if，就不要继续堆阻拦脚本。")
 
     if not parts:
         return None
@@ -390,6 +453,7 @@ def run_post_tool_audit(repo_root: Path, payload: dict[str, Any]) -> int:
         _relative_candidate(path, repo_root)
         for path in _iter_payload_paths(payload)
     }
+    first_context: str | None = None
     for path in sorted(rel_paths):
         if not _is_async_audit_target(path) or not path.endswith(QUALITY_TARGET_SUFFIXES):
             continue
@@ -397,21 +461,22 @@ def run_post_tool_audit(repo_root: Path, payload: dict[str, Any]) -> int:
         if not delta_text.strip():
             continue
         context = _build_async_audit_context(path, delta_text, source_mode)
-        if not context:
-            continue
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PostToolUse",
-                        "additionalContext": context,
-                    },
-                    "additionalContext": context,
-                },
-                ensure_ascii=False,
-            )
-        )
+        if context and first_context is None:
+            first_context = context
+    if not first_context:
         return 0
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": first_context,
+                },
+                "additionalContext": first_context,
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 
@@ -424,6 +489,8 @@ def run_pre_tool_use_quality(repo_root: Path, payload: dict[str, Any]) -> int:
         for path in _iter_payload_paths(payload)
     }
     for path in sorted(rel_paths):
+        if _is_async_audit_target(path) and path.endswith(QUALITY_TARGET_SUFFIXES):
+            _store_pre_edit_snapshot(repo_root, path)
         context = _quality_target_context(path)
         if not context:
             continue
