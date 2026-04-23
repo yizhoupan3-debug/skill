@@ -478,8 +478,8 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR"'
         in refresh_command
     )
-    assert "reply with exactly" in refresh_command
-    assert "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。" in refresh_command
+    assert "然后严格回复" in refresh_command
+    assert "下一轮执行提示已准备好，并且已经复制到剪贴板。" in refresh_command
     assert "summary" not in refresh_command.lower()
     assert "clear" not in refresh_command.lower()
     assert "- Bash(git rev-parse *)" in refresh_command
