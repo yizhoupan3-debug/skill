@@ -24,6 +24,8 @@ UPSTREAM_SAFE_ZONE = "upstream-safe-zone"
 THIN_PATCH_ZONE = "thin-patch-zone"
 FORK_DANGER_ZONE = "fork-danger-zone"
 _HOST_PRIVATE_OVERRIDE_KEY = "host_private"
+HOST_ADAPTER_PAYLOAD_KEY = "host_adapter_payload"
+LEGACY_HOST_PROJECTION_KEY = "host_projection"
 
 COMMON_FORK_DANGER_SURFACES = (
     "aionrs_session_protocol",
@@ -186,6 +188,26 @@ def _merge_mapping(base: Mapping[str, Any], override: Mapping[str, Any]) -> Dict
     return merged
 
 
+def _normalize_host_adapter_payload_aliases(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    """Keep the new host-adapter payload key and the legacy alias in sync."""
+
+    normalized = dict(_clone_json_like(payload))
+    adapter_payload = normalized.get(HOST_ADAPTER_PAYLOAD_KEY)
+    legacy_projection = normalized.get(LEGACY_HOST_PROJECTION_KEY)
+
+    if isinstance(adapter_payload, Mapping) and isinstance(legacy_projection, Mapping):
+        merged = _merge_mapping(legacy_projection, adapter_payload)
+        normalized[HOST_ADAPTER_PAYLOAD_KEY] = _clone_json_like(merged)
+        normalized[LEGACY_HOST_PROJECTION_KEY] = _clone_json_like(merged)
+        return normalized
+    if isinstance(adapter_payload, Mapping):
+        normalized[LEGACY_HOST_PROJECTION_KEY] = _clone_json_like(adapter_payload)
+        return normalized
+    if isinstance(legacy_projection, Mapping):
+        normalized[HOST_ADAPTER_PAYLOAD_KEY] = _clone_json_like(legacy_projection)
+    return normalized
+
+
 def _merge_rust_adapter_payload(
     rust_payload: Mapping[str, Any],
     adapted_payload: Mapping[str, Any],
@@ -206,7 +228,7 @@ def _merge_rust_adapter_payload(
         if key in _CANONICAL_HOST_ADAPTER_PAYLOAD_FIELDS or key in payload:
             continue
         payload[key] = _clone_json_like(value)
-    return payload
+    return _normalize_host_adapter_payload_aliases(payload)
 
 
 def _compile_rust_owned_adapter(
@@ -945,6 +967,7 @@ def adapt_framework_profile(
             payload = _merge_mapping(payload, public_overrides)
         if host_private_overrides:
             payload = _merge_mapping(payload, host_private_overrides)
+    payload = _normalize_host_adapter_payload_aliases(payload)
     return AdaptedHostProfile(
         framework_profile=profile,
         adapter=adapter_spec,

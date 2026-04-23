@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from subprocess import CalledProcessError
 from tempfile import TemporaryDirectory
 from typing import Any
 
@@ -270,13 +271,37 @@ def _ensure_router_rs_binary() -> Path:
 
 def _load_router_rs_json_output(*args: str) -> dict[str, Any]:
     binary_path = _ensure_router_rs_binary()
-    completed = __import__("subprocess").run(
-        [str(binary_path), *args],
-        cwd=Path(__file__).resolve().parents[1],
-        check=True,
-        text=True,
-        capture_output=True,
-    )
+    project_root = Path(__file__).resolve().parents[1]
+    command = [str(binary_path), *args]
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=project_root,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except CalledProcessError as exc:
+        # Host entrypoint regeneration is a bootstrap path. If the existing
+        # release binary is behaviorally stale despite mtimes, rebuild and run
+        # through cargo once instead of failing the entire sync chain.
+        retry = subprocess.run(
+            [
+                "cargo",
+                "run",
+                "--quiet",
+                "--manifest-path",
+                str(project_root / "scripts" / "router-rs" / "Cargo.toml"),
+                "--release",
+                "--",
+                *args,
+            ],
+            cwd=project_root,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        completed = retry
     payload = json.loads(completed.stdout)
     if not isinstance(payload, dict):
         raise ValueError("router-rs output must be a JSON object")
@@ -293,6 +318,11 @@ def _load_claude_project_settings(repo_root: Path) -> dict[str, Any]:
         "--repo-root",
         str(repo_root),
     )
+
+
+def _load_claude_hook_projection() -> dict[str, Any]:
+    return _load_router_rs_json_output("--claude-hook-projection-json")
+
 
 CLAUDE_PROJECT_DIR_SNIPPET = 'PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"'
 CLAUDE_ROUTER_RS_ALLOWED_TOOLS = """allowed-tools:
@@ -462,15 +492,15 @@ This command now enters the repo through the resident Rust binary directly.
 
 Run:
 
-`{project_dir_snippet}; "$PROJECT_DIR"/scripts/router-rs/target/release/router-rs --framework-alias-json --framework-alias {alias_name} --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
+`{project_dir_snippet}; "$PROJECT_DIR"/scripts/router-rs/target/release/router-rs --framework-alias-json --framework-alias {alias_name} --framework-host-id claude-code --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
 
 If the release binary is missing, rerun the same command with:
 
-`{project_dir_snippet}; "$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs --framework-alias-json --framework-alias {alias_name} --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
+`{project_dir_snippet}; "$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs --framework-alias-json --framework-alias {alias_name} --framework-host-id claude-code --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
 
 If both resident binaries are missing, self-heal with:
 
-`{project_dir_snippet}; cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias {alias_name} --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
+`{project_dir_snippet}; cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias {alias_name} --framework-host-id claude-code --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
 
 Use `alias.state_machine` and `alias.entry_contract` as the working contract for this turn.
 This alias only enters through explicit entrypoints: {explicit_entrypoint_text}.
@@ -715,25 +745,88 @@ esac
 """
 
 
-CODEX_PROJECT_HOOKS = {"hooks": {}}
+def _codex_hook_bridge_command(event: str) -> str:
+    return (
+        'CODEX_PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; '
+        'ROUTER_RS_RELEASE_BIN="$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs"; '
+        'ROUTER_RS_DEBUG_BIN="$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs"; '
+        'ROUTER_RS_CRATE_ROOT="$CODEX_PROJECT_ROOT/scripts/router-rs"; '
+        'router_rs_is_fresh() { '
+        'bin_path="$1"; '
+        '[ -x "$bin_path" ] || return 1; '
+        '[ "$ROUTER_RS_CRATE_ROOT/Cargo.toml" -nt "$bin_path" ] && return 1; '
+        'find "$ROUTER_RS_CRATE_ROOT/src" -type f -newer "$bin_path" | grep -q . && return 1; '
+        'return 0; '
+        '}; '
+        'run_router_rs() { '
+        'if router_rs_is_fresh "$ROUTER_RS_RELEASE_BIN"; then "$ROUTER_RS_RELEASE_BIN" "$@"; return; fi; '
+        'if router_rs_is_fresh "$ROUTER_RS_DEBUG_BIN"; then "$ROUTER_RS_DEBUG_BIN" "$@"; return; fi; '
+        'if [ -x "$ROUTER_RS_RELEASE_BIN" ]; then "$ROUTER_RS_RELEASE_BIN" "$@"; return; fi; '
+        'if [ -x "$ROUTER_RS_DEBUG_BIN" ]; then "$ROUTER_RS_DEBUG_BIN" "$@"; return; fi; '
+        'echo "Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN" >&2; '
+        'exit 1; '
+        '}; '
+        f'run_router_rs --codex-hook-command {event} --repo-root "$CODEX_PROJECT_ROOT"'
+    )
+
+
+CODEX_PROJECT_HOOKS = {
+    "hooks": {
+        # Keep Codex hooks quiet by default. The current Codex runtime surfaces
+        # UserPromptSubmit `systemMessage` as a visible warning and does not yet
+        # honor `suppressOutput`, so we only install silent Bash guardrails here.
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": _codex_hook_bridge_command("pre-tool-use"),
+                        "timeout": 8,
+                    }
+                ],
+            }
+        ],
+        "PermissionRequest": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": _codex_hook_bridge_command("permission-request"),
+                        "timeout": 8,
+                    }
+                ],
+            }
+        ],
+    }
+}
 
 HOST_ENTRYPOINT_SYNC_MANIFEST_PATH = ".codex/host_entrypoints_sync_manifest.json"
 
-HOST_ENTRYPOINT_TEXT_FILES = {
-    "AGENT.md": SHARED_AGENT_POLICY,
-    "AGENTS.md": ROOT_AGENTS_PROXY,
-    "CLAUDE.md": ROOT_CLAUDE_PROXY,
-    "GEMINI.md": ROOT_GEMINI_PROXY,
-    ".claude/agents/README.md": CLAUDE_AGENTS_README,
-    ".claude/commands/refresh.md": CLAUDE_REFRESH_COMMAND,
-    ".claude/commands/background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
-    ".claude/commands/autopilot.md": CLAUDE_AUTOPILOT_COMMAND,
-    ".claude/commands/deepinterview.md": CLAUDE_DEEPINTERVIEW_COMMAND,
-    ".claude/commands/team.md": CLAUDE_TEAM_COMMAND,
-    ".claude/commands/latex-compile-acceleration.md": CLAUDE_LATEX_COMPILE_ACCELERATION_COMMAND,
-    ".claude/hooks/README.md": CLAUDE_HOOKS_README,
-    ".claude/hooks/run.sh": CLAUDE_HOOK_RUNNER,
-}
+
+def _host_entrypoint_text_files() -> dict[str, str]:
+    hook_projection = _load_claude_hook_projection()
+    hooks_readme = hook_projection.get("hooks_readme")
+    hook_runner = hook_projection.get("hook_runner")
+    if not isinstance(hooks_readme, str) or not isinstance(hook_runner, str):
+        raise ValueError("Rust hook projection must include hooks_readme and hook_runner strings")
+    return {
+        "AGENT.md": SHARED_AGENT_POLICY,
+        "AGENTS.md": ROOT_AGENTS_PROXY,
+        "CLAUDE.md": ROOT_CLAUDE_PROXY,
+        "GEMINI.md": ROOT_GEMINI_PROXY,
+        ".claude/agents/README.md": CLAUDE_AGENTS_README,
+        ".claude/commands/refresh.md": CLAUDE_REFRESH_COMMAND,
+        ".claude/commands/background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
+        ".claude/commands/autopilot.md": CLAUDE_AUTOPILOT_COMMAND,
+        ".claude/commands/deepinterview.md": CLAUDE_DEEPINTERVIEW_COMMAND,
+        ".claude/commands/team.md": CLAUDE_TEAM_COMMAND,
+        ".claude/commands/latex-compile-acceleration.md": CLAUDE_LATEX_COMPILE_ACCELERATION_COMMAND,
+        ".claude/hooks/README.md": hooks_readme,
+        ".claude/hooks/run.sh": hook_runner,
+    }
+
 
 HOST_ENTRYPOINT_STATIC_JSON_FILES = {
     ".codex/hooks.json": CODEX_PROJECT_HOOKS,
@@ -762,7 +855,21 @@ FULL_SYNC_MANAGED_DIRECTORIES = (
     ".codex",
 )
 
-PARTIAL_SYNC_TEXT_FILES = tuple(sorted(HOST_ENTRYPOINT_TEXT_FILES))
+PARTIAL_SYNC_TEXT_FILES = (
+    "AGENT.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    ".claude/agents/README.md",
+    ".claude/commands/autopilot.md",
+    ".claude/commands/background_batch.md",
+    ".claude/commands/deepinterview.md",
+    ".claude/commands/latex-compile-acceleration.md",
+    ".claude/commands/refresh.md",
+    ".claude/commands/team.md",
+    ".claude/hooks/README.md",
+    ".claude/hooks/run.sh",
+)
 
 PARTIAL_SYNC_MANAGED_DIRECTORIES = FULL_SYNC_MANAGED_DIRECTORIES
 
@@ -805,7 +912,7 @@ def _build_host_entrypoint_sync_manifest() -> dict[str, Any]:
     return {
         "schema_version": "host-entrypoints-sync-manifest-v1",
         "full_sync": {
-            "text_files": sorted(HOST_ENTRYPOINT_TEXT_FILES),
+            "text_files": sorted(_host_entrypoint_text_files()),
             "json_files": sorted(HOST_ENTRYPOINT_JSON_RELATIVE_PATHS),
             "managed_directories": list(FULL_SYNC_MANAGED_DIRECTORIES),
             "retired_paths": list(RETIRED_HOST_ENTRYPOINT_PATHS),
@@ -820,7 +927,7 @@ def _build_host_entrypoint_sync_manifest() -> dict[str, Any]:
 
 
 def _write_host_entrypoint_template(template_root: Path, *, repo_root: Path) -> None:
-    for relative_path, content in HOST_ENTRYPOINT_TEXT_FILES.items():
+    for relative_path, content in _host_entrypoint_text_files().items():
         _write_text(template_root / relative_path, content)
     for relative_path, payload in _host_entrypoint_json_files(repo_root).items():
         _write_json(template_root / relative_path, payload)

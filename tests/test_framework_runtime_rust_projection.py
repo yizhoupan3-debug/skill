@@ -11,7 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-from framework_runtime.middleware import MiddlewareContext, SkillInjectionMiddleware
+from framework_runtime.middleware import ContextCompressionMiddleware, MiddlewareContext, SkillInjectionMiddleware
 from framework_runtime.prompt_builder import PromptBuilder
 from framework_runtime.router import SkillRouter
 from framework_runtime.schemas import RouteDecisionContract, RouteDecisionSnapshot, RoutingResult, SkillMetadata
@@ -248,6 +248,22 @@ def test_prompt_builder_uses_skill_body_without_extra_idea_to_plan_contract() ->
     assert "Planning contract:" not in prompt
     assert "READ-ONLY planning route" not in prompt
     assert "<proposed_plan>" not in prompt
+
+
+def test_context_compression_middleware_uses_shared_token_estimator() -> None:
+    middleware = ContextCompressionMiddleware(budget_tokens=4, threshold=0.75)
+    ctx = MiddlewareContext(
+        task="直接做代码",
+        session_id="session-compression",
+        user_id="user-compression",
+        routing_result=_routing_result(),
+        prompt="alpha beta gamma delta",
+    )
+
+    updated = asyncio.run(middleware.before_agent(ctx))
+
+    assert updated.prompt != "alpha beta gamma delta"
+    assert "[Context compression]" in updated.prompt
 
 
 def test_skill_injection_middleware_prefers_route_preview() -> None:

@@ -1078,10 +1078,10 @@
           "path": "skills/.system/imagegen",
           "source": "system",
           "source_position": 0,
-          "routing_layer": "L1",
+          "routing_layer": "L0",
           "routing_owner": "owner",
           "routing_gate": "none",
-          "session_start": "n/a"
+          "session_start": "preferred"
         }
       ],
       "shadowed_by": [
@@ -1411,10 +1411,10 @@
           "path": "skills/.system/openai-docs",
           "source": "system",
           "source_position": 0,
-          "routing_layer": "L1",
-          "routing_owner": "gate",
-          "routing_gate": "source",
-          "session_start": "required"
+          "routing_layer": "L0",
+          "routing_owner": "source",
+          "routing_gate": "official-docs",
+          "session_start": "preferred"
         }
       ],
       "shadowed_by": [
@@ -1621,10 +1621,10 @@
         "path": "skills/.system/plugin-creator",
         "source": "system",
         "source_position": 0,
-        "routing_layer": "L1",
+        "routing_layer": "L0",
         "routing_owner": "owner",
         "routing_gate": "none",
-        "session_start": "n/a"
+        "session_start": "preferred"
       },
       "shadowed": [],
       "shadowed_by": [],
@@ -1941,10 +1941,10 @@
         "path": "skills/.system/skill-creator",
         "source": "system",
         "source_position": 0,
-        "routing_layer": "L1",
+        "routing_layer": "L0",
         "routing_owner": "owner",
         "routing_gate": "none",
-        "session_start": "n/a"
+        "session_start": "preferred"
       },
       "shadowed": [],
       "shadowed_by": [],
@@ -1989,10 +1989,10 @@
         "path": "skills/.system/skill-installer",
         "source": "system",
         "source_position": 0,
-        "routing_layer": "L1",
+        "routing_layer": "L0",
         "routing_owner": "owner",
         "routing_gate": "none",
-        "session_start": "n/a"
+        "session_start": "preferred"
       },
       "shadowed": [],
       "shadowed_by": [],

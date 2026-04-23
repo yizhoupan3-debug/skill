@@ -70,6 +70,23 @@ FRAMEWORK_ALIAS_EXPLICIT_ENTRYPOINTS = {
     "deepinterview": {"/deepinterview", "$deepinterview"},
     "team": {"/team", "$team"},
 }
+FRAMEWORK_ALIAS_ACTIVATION_LABELS = {
+    "autopilot": ("autopilot", "auto-pilot", "auto pilot"),
+    "deepinterview": ("deepinterview", "deep-interview", "deep interview"),
+    "team": ("team",),
+}
+FRAMEWORK_ALIAS_ACTIVATION_PREFIXES = (
+    "进入",
+    "切到",
+    "切换到",
+    "用",
+    "使用",
+    "开启",
+    "start",
+    "enter",
+    "use",
+    "switch to",
+)
 PAPER_CONTEXT_SKILLS = {
     "paper-reviewer",
     "paper-reviser",
@@ -151,12 +168,33 @@ def _framework_alias_requires_explicit_call(skill_name: str) -> bool:
     return skill_name in FRAMEWORK_ALIAS_EXPLICIT_ENTRYPOINTS
 
 
+def _has_explicit_entrypoint_term(normalized_task: str, entrypoint: str) -> bool:
+    boundary_trim = "()[]{}<>,.!?，。：；\"'`"
+    return any(part.strip(boundary_trim) == entrypoint for part in normalized_task.split())
+
+
+def _has_framework_alias_activation_phrase(
+    normalized_task: str,
+    task_tokens: list[str],
+    skill_name: str,
+) -> bool:
+    labels = FRAMEWORK_ALIAS_ACTIVATION_LABELS.get(skill_name, ())
+    return any(
+        _contains_phrase(task_tokens, f"{prefix} {label}")
+        or _contains_phrase(task_tokens, f"{prefix}{label}")
+        or f"{normalize_text(prefix)} {normalize_text(label)}" in normalized_task
+        or f"{normalize_text(prefix)}{normalize_text(label)}" in normalized_task
+        for prefix in FRAMEWORK_ALIAS_ACTIVATION_PREFIXES
+        for label in labels
+    )
+
+
 def _has_explicit_framework_alias_call(normalized_task: str, task_tokens: list[str], skill_name: str) -> bool:
     entrypoints = FRAMEWORK_ALIAS_EXPLICIT_ENTRYPOINTS.get(skill_name, set())
     return any(
-        normalize_text(entrypoint) in normalized_task or entrypoint in task_tokens
+        _has_explicit_entrypoint_term(normalized_task, normalize_text(entrypoint))
         for entrypoint in entrypoints
-    )
+    ) or _has_framework_alias_activation_phrase(normalized_task, task_tokens, skill_name)
 
 
 def _paper_skill_requires_context(skill_name: str) -> bool:

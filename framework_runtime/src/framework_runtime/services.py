@@ -1424,21 +1424,46 @@ class TraceService:
 
         self.event_bridge.cleanup(session_id=session_id, job_id=job_id)
 
-    def describe_transport(self, *, session_id: str, job_id: str | None = None) -> RuntimeEventTransport:
-        """Describe the host-facing transport binding for one runtime stream."""
+    def describe_stream_artifacts(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None = None,
+    ) -> tuple[RuntimeEventTransport, RuntimeEventHandoff]:
+        """Resolve transport and handoff together to avoid duplicate hot-path round-trips."""
 
+        latest_cursor = self.recorder.latest_cursor(session_id=session_id, job_id=job_id)
         transport = self.checkpointer.resolve_transport_manifest(
             session_id=session_id,
             job_id=job_id,
-            latest_cursor=self.recorder.latest_cursor(session_id=session_id, job_id=job_id),
+            latest_cursor=latest_cursor,
         )
         self.checkpointer.write_transport_binding(transport)
+        handoff = self.checkpointer.resolve_handoff_manifest(
+            session_id=session_id,
+            job_id=job_id,
+            transport=transport,
+        )
+        return transport, handoff
+
+    def describe_transport(self, *, session_id: str, job_id: str | None = None) -> RuntimeEventTransport:
+        """Describe the host-facing transport binding for one runtime stream."""
+
+        transport, _ = self.describe_stream_artifacts(session_id=session_id, job_id=job_id)
         return transport
 
-    def describe_handoff(self, *, session_id: str, job_id: str | None = None) -> RuntimeEventHandoff:
+    def describe_handoff(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None = None,
+        transport: RuntimeEventTransport | None = None,
+    ) -> RuntimeEventHandoff:
         """Describe the durable handoff surface for one runtime event stream."""
 
-        transport = self.describe_transport(session_id=session_id, job_id=job_id)
+        if transport is None:
+            _, handoff = self.describe_stream_artifacts(session_id=session_id, job_id=job_id)
+            return handoff
         return self.checkpointer.resolve_handoff_manifest(
             session_id=session_id,
             job_id=job_id,
@@ -1454,10 +1479,12 @@ class TraceService:
         artifact_paths: list[str],
         parallel_group: dict[str, Any] | None = None,
         supervisor_projection: dict[str, Any] | None = None,
+        transport: RuntimeEventTransport | None = None,
     ) -> None:
         """Persist the runtime resume checkpoint through the configured backend."""
 
-        transport = self.describe_transport(session_id=session_id, job_id=job_id)
+        if transport is None:
+            transport = self.describe_transport(session_id=session_id, job_id=job_id)
         resolved_artifact_paths = list(artifact_paths)
         if transport.binding_artifact_path is not None and transport.binding_artifact_path not in resolved_artifact_paths:
             resolved_artifact_paths.append(transport.binding_artifact_path)
@@ -2311,20 +2338,27 @@ class BackgroundRuntimeHost:
         lane_ids = batch_plan.get("lane_ids")
         if not isinstance(lane_ids, list) or len(lane_ids) != len(requests):
             raise RuntimeError("Rust background control returned an invalid batch lane plan.")
-        statuses: list[BackgroundRunStatus] = []
-        for request, lane_id_value in zip(requests, lane_ids):
-            lane_id = str(lane_id_value)
-            status = await self.enqueue_job(
-                request.model_copy(
-                    update={
-                        "parallel_group_id": resolved_group_id,
-                        "lane_id": lane_id,
-                    }
-                ),
-                session_id_resolver=session_id_resolver,
-                run_task=run_task,
+        planned_requests = [
+            request.model_copy(
+                update={
+                    "parallel_group_id": resolved_group_id,
+                    "lane_id": str(lane_id_value),
+                }
             )
-            statuses.append(status)
+            for request, lane_id_value in zip(requests, lane_ids)
+        ]
+        statuses = list(
+            await asyncio.gather(
+                *(
+                    self.enqueue_job(
+                        planned_request,
+                        session_id_resolver=session_id_resolver,
+                        run_task=run_task,
+                    )
+                    for planned_request in planned_requests
+                )
+            )
+        )
         summary = self.parallel_group_summary(resolved_group_id)
         if summary is None:
             raise RuntimeError(f"Background parallel group {resolved_group_id!r} was not persisted.")

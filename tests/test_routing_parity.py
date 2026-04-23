@@ -247,7 +247,7 @@ def test_route_contract_rejects_unknown_decision_authority_shape(
         )
 
 
-def test_background_state_uses_cold_json_runner_without_hot_retry(
+def test_background_state_uses_hot_json_runner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     adapter = _fixture_route_adapter()
@@ -263,15 +263,19 @@ def test_background_state_uses_cold_json_runner_without_hot_retry(
 
     def fake_run_hot_json_command(*args, **kwargs):
         calls["hot_runner_calls"] += 1
-        raise AssertionError("background_state should not use hot retry path")
+        return {
+            "schema_version": adapter.background_state_store_schema_version,
+            "authority": adapter.background_state_store_authority,
+            "status": "ok",
+        }
 
     monkeypatch.setattr(adapter, "_run_json_command", fake_run_json_command)
     monkeypatch.setattr(adapter, "_run_hot_json_command", fake_run_hot_json_command)
 
     payload = adapter.background_state({"operation": "set", "key": "job-1", "value": {"status": "queued"}})
 
-    assert calls["json_runner_calls"] == 1
-    assert calls["hot_runner_calls"] == 0
+    assert calls["json_runner_calls"] == 0
+    assert calls["hot_runner_calls"] == 1
     assert payload["schema_version"] == adapter.background_state_store_schema_version
     assert payload["authority"] == adapter.background_state_store_authority
 
@@ -1102,13 +1106,13 @@ def test_real_task_replay_queries_match_shadow_diff_fields(query: str) -> None:
         ),
         (
             "请直接 autopilot 这轮修复，推进到底",
-            "execution-controller-coding",
+            "autopilot",
             "anti-laziness",
         ),
         (
             "请 deepinterview 这轮 review",
-            "architect-review",
-            None,
+            "deepinterview",
+            "anti-laziness",
         ),
     ],
 )
@@ -1172,8 +1176,45 @@ def test_framework_aliases_only_route_from_explicit_entrypoints(
     assert rust_decision["overlay_skill"] == "anti-laziness"
 
 
-@pytest.mark.parametrize("query", ["team mode", "agent team", "worker orchestration"])
-def test_framework_alias_plaintext_hints_do_not_route_team(query: str) -> None:
+@pytest.mark.parametrize(
+    ("query", "selected_skill"),
+    [
+        ("进入 autopilot", "autopilot"),
+        ("使用 deepinterview", "deepinterview"),
+        ("切到 team", "team"),
+    ],
+)
+def test_framework_aliases_route_from_explicit_activation_phrases(
+    query: str,
+    selected_skill: str,
+) -> None:
+    python_decision = route_decision_contract(
+        query,
+        codex_home=PROJECT_ROOT,
+        session_id="explicit-framework-alias-activation-session",
+        allow_overlay=True,
+        first_turn=True,
+    ).model_dump(mode="json")
+    rust_decision = _live_route_adapter().route_contract(
+        query=query,
+        session_id="explicit-framework-alias-activation-session",
+        allow_overlay=True,
+        first_turn=True,
+    ).model_dump(mode="json")
+
+    assert rust_decision == python_decision
+    assert rust_decision["selected_skill"] == selected_skill
+    assert rust_decision["overlay_skill"] == "anti-laziness"
+
+
+@pytest.mark.parametrize(
+    ("query", "should_route_team"),
+    [("team mode", True), ("agent team", True), ("worker orchestration", False)],
+)
+def test_team_short_activation_phrases_route_more_stably_in_codex(
+    query: str,
+    should_route_team: bool,
+) -> None:
     python_decision = route_decision_contract(
         query,
         codex_home=PROJECT_ROOT,
@@ -1189,7 +1230,11 @@ def test_framework_alias_plaintext_hints_do_not_route_team(query: str) -> None:
     ).model_dump(mode="json")
 
     assert rust_decision == python_decision
-    assert rust_decision["selected_skill"] != "team"
+    if should_route_team:
+        assert rust_decision["selected_skill"] == "team"
+        assert rust_decision["overlay_skill"] == "anti-laziness"
+    else:
+        assert rust_decision["selected_skill"] != "team"
 
 
 def test_framework_alias_strong_orchestration_signals_can_route_team() -> None:
@@ -1695,7 +1740,7 @@ def test_rust_route_adapter_framework_alias_builds_compact_autopilot_contract(
 
     assert alias["ok"] is True
     assert alias["name"] == "autopilot"
-    assert alias["host_entrypoint"] == "/autopilot"
+    assert alias["host_entrypoint"] == "$autopilot"
     assert alias["canonical_owner"] == "execution-controller-coding"
     assert alias["upstream_source"]["tag"] == "v4.13.2"
     assert "root-cause-first-when-unknown" in alias["implementation_bar"]
@@ -1727,7 +1772,7 @@ def test_rust_route_adapter_framework_alias_builds_compact_deepinterview_contrac
 
     assert alias["ok"] is True
     assert alias["name"] == "deepinterview"
-    assert alias["host_entrypoint"] == "/deepinterview"
+    assert alias["host_entrypoint"] == "$deepinterview"
     assert alias["canonical_owner"] == "code-review"
     assert alias["upstream_source"]["official_skill_path"] == "skills/deep-interview/SKILL.md"
     assert "findings-first-with-severity-order" in alias["implementation_bar"]
@@ -1752,7 +1797,7 @@ def test_rust_route_adapter_framework_alias_builds_compact_team_contract(
 
     assert alias["ok"] is True
     assert alias["name"] == "team"
-    assert alias["host_entrypoint"] == "/team"
+    assert alias["host_entrypoint"] == "$team"
     assert alias["canonical_owner"] == "execution-controller-coding"
     assert alias["upstream_source"]["official_skill_path"] == "skills/team/SKILL.md"
     assert "supervisor-owned-continuity" in alias["implementation_bar"]
@@ -1809,7 +1854,7 @@ def test_rust_route_adapter_framework_alias_compact_mode_omits_heavy_metadata(
     assert "upstream_source" not in alias
     assert "official_workflow" not in alias
     assert "local_adaptations" not in alias
-    assert alias["host_entrypoint"] == "/autopilot"
+    assert alias["host_entrypoint"] == "$autopilot"
     assert alias["state_machine"]["resume"]["mode"] == "continue-current-task"
     assert alias["state_machine"]["evidence_missing"] is True
     assert alias["entry_contract"]["context"]["execution_readiness"] == "needs_verification"
@@ -1821,6 +1866,24 @@ def test_rust_route_adapter_framework_alias_compact_mode_omits_heavy_metadata(
     ]
     assert "task" not in alias["state_machine"]["resume"]
     assert alias["entry_contract"]["skill_fallback_path"] == "skills/autopilot/SKILL.md"
+    assert alias["entry_contract"]["decision_contract"] is None
+
+
+def test_rust_route_adapter_framework_alias_supports_claude_host_entrypoints(
+    tmp_path: Path,
+) -> None:
+    adapter = RustRouteAdapter(PROJECT_ROOT)
+    _seed_framework_runtime_artifacts(tmp_path, terminal=False)
+
+    alias = adapter.framework_alias(
+        repo_root=tmp_path,
+        alias="autopilot",
+        max_lines=3,
+        compact=True,
+        host_id="claude-code",
+    )
+
+    assert alias["host_entrypoint"] == "/autopilot"
 
 
 def test_rust_route_adapter_framework_runtime_snapshot_prefers_supervisor_owned_continuity(

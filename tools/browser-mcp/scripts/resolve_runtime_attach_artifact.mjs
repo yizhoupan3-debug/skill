@@ -78,6 +78,9 @@ function buildBindingCandidate(payload, { sourcePath, fallbackAttachPath, recenc
   if (payload.schema_version !== RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION) {
     return null;
   }
+  if (payload.binding_backend_family !== 'sqlite') {
+    return null;
+  }
   const explicitAttachPath =
     typeof payload.binding_artifact_path === 'string' ? payload.binding_artifact_path.trim() : '';
   const attachPath = explicitAttachPath || (typeof fallbackAttachPath === 'string' ? fallbackAttachPath.trim() : '');

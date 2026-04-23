@@ -1285,6 +1285,7 @@ class RustRouteAdapter:
         alias: str,
         max_lines: int = 4,
         compact: bool = False,
+        host_id: str = "codex-cli",
     ) -> dict[str, Any]:
         """Build the compact Rust-owned alias contract for framework-native aliases."""
 
@@ -1292,6 +1293,8 @@ class RustRouteAdapter:
             "--framework-alias-json",
             "--framework-alias",
             alias,
+            "--framework-host-id",
+            host_id,
             "--repo-root",
             str(repo_root),
             "--claude-hook-max-lines",
@@ -1306,6 +1309,7 @@ class RustRouteAdapter:
                 "alias": alias,
                 "max_lines": max_lines,
                 "compact": compact,
+                "host_id": host_id,
             },
             [*self._binary_command(), *args],
             failure_label="framework alias compiler",
@@ -1505,7 +1509,9 @@ class RustRouteAdapter:
             "--background-state-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        resolved = self._run_json_command(
+        resolved = self._run_hot_json_command(
+            "background_state",
+            payload,
             [*self._binary_command(), *args],
             failure_label="background state compiler",
         )

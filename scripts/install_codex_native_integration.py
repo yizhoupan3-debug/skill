@@ -44,9 +44,8 @@ CONFIG_SCHEMA_HEADER = "#:schema https://developers.openai.com/codex/config-sche
 OPENAI_DEVELOPER_DOCS_MCP_URL = "https://developers.openai.com/mcp"
 DEFAULT_TUI_STATUS_ITEMS = (
     "model-with-reasoning",
+    "context-remaining",
     "git-branch",
-    "context-used",
-    "fast-mode",
 )
 PERSONAL_PLUGIN_LIVE_PROJECTION_EXCLUDES = frozenset({"skills", ".mcp.json"})
 FRAMEWORK_SERVER_PATTERN = re.compile(r"(?ms)^\[mcp_servers\.framework-mcp\]\n.*?(?=^\[|\Z)")

@@ -403,12 +403,13 @@ pub fn build_framework_alias_envelope(
     alias_name: &str,
     max_lines: usize,
     compact: bool,
+    host_id: Option<&str>,
 ) -> Result<Value, String> {
     let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
     let alias_record = load_framework_alias_record(repo_root, alias_name)?;
-    let host_entrypoint = alias_record_text(&alias_record, &["host_entrypoints", "claude-code"]);
+    let host_entrypoint = resolve_alias_host_entrypoint(&alias_record, host_id);
     let canonical_owner = alias_record_text(&alias_record, &["canonical_owner"]);
     let upstream = alias_value_at_path(&alias_record, &["upstream_source"])
         .cloned()
@@ -455,6 +456,7 @@ pub fn build_framework_alias_envelope(
         &contract,
         &skill_path,
         max_lines,
+        compact,
     );
     let state_machine = build_framework_alias_state_machine(
         alias_name,
@@ -523,6 +525,30 @@ pub fn build_framework_alias_envelope(
         "authority": FRAMEWORK_RUNTIME_AUTHORITY,
         "alias": alias_payload
     }))
+}
+
+fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) -> String {
+    let requested_host = host_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("codex-cli");
+    let host_entrypoints = alias_value_at_path(alias_record, &["host_entrypoints"])
+        .and_then(Value::as_object);
+    if let Some(entrypoint) = host_entrypoints
+        .and_then(|entrypoints| entrypoints.get(requested_host))
+        .and_then(Value::as_str)
+    {
+        return entrypoint.to_string();
+    }
+    for fallback_host in ["codex-cli", "claude-code"] {
+        if let Some(entrypoint) = host_entrypoints
+            .and_then(|entrypoints| entrypoints.get(fallback_host))
+            .and_then(Value::as_str)
+        {
+            return entrypoint.to_string();
+        }
+    }
+    String::new()
 }
 
 fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Value, String> {
@@ -609,7 +635,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                     "verification status is not yet passed or completed"
                 ]
             },
-            "host_entrypoints": {"claude-code": "/autopilot"},
+            "host_entrypoints": {"codex-cli": "$autopilot", "claude-code": "/autopilot"},
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
                 "explicit_entrypoints": ["/autopilot", "$autopilot"],
@@ -649,7 +675,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "test-engineering",
                 "execution-audit"
             ],
-            "host_entrypoints": {"claude-code": "/deepinterview"},
+            "host_entrypoints": {"codex-cli": "$deepinterview", "claude-code": "/deepinterview"},
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
                 "explicit_entrypoints": ["/deepinterview", "$deepinterview"],
@@ -767,7 +793,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "integration_requires_local_judgment": true,
                 "verification_evidence_required_before_cleanup": true
             },
-            "host_entrypoints": {"claude-code": "/team"},
+            "host_entrypoints": {"codex-cli": "$team", "claude-code": "/team"},
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
                 "explicit_entrypoints": ["/team", "$team"],
@@ -809,7 +835,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                     "bibliography and ref convergence cannot be parallelized blindly"
                 ]
             },
-            "host_entrypoints": {"claude-code": "/latex-compile-acceleration"},
+            "host_entrypoints": {"codex-cli": "$latex-compile-acceleration", "claude-code": "/latex-compile-acceleration"},
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
                 "explicit_entrypoints": ["/latex-compile-acceleration", "$latex-compile-acceleration"],
@@ -937,6 +963,16 @@ fn compact_alias_next_actions(continuity: &Value, max_lines: usize) -> Vec<Strin
         .collect()
 }
 
+fn compact_alias_route_rules(route_rules: Vec<String>, compact: bool) -> Vec<String> {
+    let limit = if compact { 3 } else { route_rules.len() };
+    route_rules.into_iter().take(limit).collect()
+}
+
+fn compact_alias_guardrails(guardrails: Vec<String>, compact: bool) -> Vec<String> {
+    let limit = if compact { 2 } else { guardrails.len() };
+    guardrails.into_iter().take(limit).collect()
+}
+
 fn build_framework_alias_entry_contract(
     alias_name: &str,
     alias_record: &Value,
@@ -944,6 +980,7 @@ fn build_framework_alias_entry_contract(
     contract: &Map<String, Value>,
     skill_path: &str,
     max_lines: usize,
+    compact: bool,
 ) -> Value {
     let tag = alias_record_text(alias_record, &["upstream_source", "tag"]);
     let task = value_text(continuity.get("task"));
@@ -956,9 +993,13 @@ fn build_framework_alias_entry_contract(
         .take(max_lines.max(1).min(2))
         .collect::<Vec<_>>();
     let implementation_bar = alias_record_list(alias_record, &["implementation_bar"]);
-    let decision_contract = alias_value_at_path(alias_record, &["decision_contract"])
-        .cloned()
-        .unwrap_or(Value::Null);
+    let decision_contract = if compact {
+        Value::Null
+    } else {
+        alias_value_at_path(alias_record, &["decision_contract"])
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
     let blockers = value_string_list(continuity.get("blockers"));
     let verification_status = value_text(continuity.get("verification_status"));
     let evidence_missing = continuity
@@ -1102,10 +1143,14 @@ fn build_framework_alias_entry_contract(
         ),
     };
 
-    let guardrails = implementation_bar
-        .into_iter()
-        .take(max_lines.max(1).min(3))
-        .collect::<Vec<_>>();
+    let guardrails = compact_alias_guardrails(
+        implementation_bar
+            .into_iter()
+            .take(max_lines.max(1).min(3))
+            .collect::<Vec<_>>(),
+        compact,
+    );
+    let route_rules = compact_alias_route_rules(route_rules, compact);
     json!({
         "summary": summary,
         "context": {

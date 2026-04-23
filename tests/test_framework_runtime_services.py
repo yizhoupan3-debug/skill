@@ -2527,6 +2527,62 @@ def test_trace_service_describes_host_facing_transport(tmp_path: Path) -> None:
     assert handoff.transport.binding_artifact_path == transport.binding_artifact_path
 
 
+def test_trace_service_describe_stream_artifacts_resolves_transport_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transport and handoff should share one transport resolution in the hot path."""
+
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "TRACE_METADATA.json",
+        live_model_override=False,
+        route_engine_mode="rust",
+    )
+    checkpointer = FilesystemRuntimeCheckpointer(
+        data_dir=settings.resolved_data_dir,
+        trace_output_path=settings.resolved_trace_output_path,
+    )
+    router_service = RouterService(settings)
+    trace_service = TraceService(checkpointer, control_plane_descriptor=router_service.control_plane_descriptor)
+    trace_service.recorder.record(
+        session_id="artifact-session",
+        job_id="job-artifact",
+        kind="job.started",
+        stage="background",
+    )
+
+    calls = {"transport": 0, "handoff": 0, "write": 0}
+    original_resolve_transport = checkpointer.resolve_transport_manifest
+    original_resolve_handoff = checkpointer.resolve_handoff_manifest
+    original_write_transport = checkpointer.write_transport_binding
+
+    def counted_resolve_transport(*, session_id: str, job_id: str | None, latest_cursor):
+        calls["transport"] += 1
+        return original_resolve_transport(session_id=session_id, job_id=job_id, latest_cursor=latest_cursor)
+
+    def counted_resolve_handoff(*, session_id: str, job_id: str | None, transport):
+        calls["handoff"] += 1
+        return original_resolve_handoff(session_id=session_id, job_id=job_id, transport=transport)
+
+    def counted_write_transport(transport):
+        calls["write"] += 1
+        return original_write_transport(transport)
+
+    monkeypatch.setattr(checkpointer, "resolve_transport_manifest", counted_resolve_transport)
+    monkeypatch.setattr(checkpointer, "resolve_handoff_manifest", counted_resolve_handoff)
+    monkeypatch.setattr(checkpointer, "write_transport_binding", counted_write_transport)
+
+    transport, handoff = trace_service.describe_stream_artifacts(
+        session_id="artifact-session",
+        job_id="job-artifact",
+    )
+
+    assert calls == {"transport": 1, "handoff": 1, "write": 1}
+    assert handoff.transport.stream_id == transport.stream_id
+
+
 def test_trace_service_subscribe_prefers_rust_replay_over_bridge_reseed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

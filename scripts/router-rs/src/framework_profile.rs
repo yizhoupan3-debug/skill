@@ -140,6 +140,8 @@ const AIONRS_THIN_PATCH_SURFACES: [&str; 3] = [
     "bridge_cleanup_strategy",
 ];
 const AIONUI_THIN_PATCH_SURFACES: [&str; 2] = ["host_metadata_injection", "bridge_path_cleanup"];
+const HOST_ADAPTER_PAYLOAD_KEY: &str = "host_adapter_payload";
+const LEGACY_HOST_PROJECTION_KEY: &str = "host_projection";
 const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
     "adapter_id",
     "adapter_alias_of",
@@ -1787,12 +1789,15 @@ fn build_cli_family_host_adapter(
             None,
         )),
     );
+    let host_adapter_payload =
+        complete_cli_host_projection(descriptor.host_id, inputs.host_projection.clone());
     payload.insert(
-        "host_projection".to_string(),
-        Value::Object(complete_cli_host_projection(
-            descriptor.host_id,
-            inputs.host_projection.clone(),
-        )),
+        HOST_ADAPTER_PAYLOAD_KEY.to_string(),
+        Value::Object(host_adapter_payload.clone()),
+    );
+    payload.insert(
+        LEGACY_HOST_PROJECTION_KEY.to_string(),
+        Value::Object(host_adapter_payload),
     );
     payload.insert(
         "fallback_semantics".to_string(),
@@ -1882,6 +1887,14 @@ fn complete_cli_host_projection(
         completed.insert(key, value);
     }
     completed
+}
+
+fn adapter_host_payload<'a>(adapter: &'a Map<String, Value>) -> Result<&'a Map<String, Value>, String> {
+    adapter
+        .get(HOST_ADAPTER_PAYLOAD_KEY)
+        .and_then(Value::as_object)
+        .or_else(|| adapter.get(LEGACY_HOST_PROJECTION_KEY).and_then(Value::as_object))
+        .ok_or_else(|| format!("cli adapter missing {HOST_ADAPTER_PAYLOAD_KEY}"))
 }
 
 fn build_host_alias_entrypoints(host_key: &str) -> Value {
@@ -2676,10 +2689,8 @@ fn build_cli_family_capability_discovery_entry(
         .get("execution_surface")
         .and_then(Value::as_object)
         .ok_or_else(|| format!("{} missing execution_surface", descriptor.adapter_id))?;
-    let host_projection = adapter
-        .get("host_projection")
-        .and_then(Value::as_object)
-        .ok_or_else(|| format!("{} missing host_projection", descriptor.adapter_id))?;
+    let host_projection = adapter_host_payload(adapter)
+        .map_err(|_| format!("{} missing {}", descriptor.adapter_id, HOST_ADAPTER_PAYLOAD_KEY))?;
     let resolved_host_requirements =
         resolve_host_capability_requirements(profile, descriptor.host_id, descriptor.adapter_id);
     let required_host_capabilities = resolved_host_requirements
@@ -2872,10 +2883,7 @@ fn build_cli_family_snapshot_entry(adapter: &Map<String, Value>) -> Result<Value
         .get("execution_surface")
         .and_then(Value::as_object)
         .ok_or_else(|| "cli adapter missing execution_surface".to_string())?;
-    let host_projection = adapter
-        .get("host_projection")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "cli adapter missing host_projection".to_string())?;
+    let host_projection = adapter_host_payload(adapter)?;
 
     Ok(value_object([
         (
@@ -4434,8 +4442,16 @@ mod tests {
             .get("legacy_codex_common_adapter")
             .is_none());
         assert_eq!(
+            bundle.claude_code_adapter["host_adapter_payload"],
+            bundle.claude_code_adapter["host_projection"]
+        );
+        assert_eq!(
             bundle.claude_code_adapter["host_projection"]["context_files"],
             json!(["CLAUDE.md", "CLAUDE.local.md"])
+        );
+        assert_eq!(
+            bundle.gemini_cli_adapter["host_adapter_payload"],
+            bundle.gemini_cli_adapter["host_projection"]
         );
         assert_eq!(
             bundle.gemini_cli_adapter["host_projection"]["structured_output_modes"],
@@ -4827,8 +4843,16 @@ mod tests {
             Value::String("cli_common_adapter".to_string())
         );
         assert_eq!(
+            artifacts["claude_code_adapter"]["host_adapter_payload"],
+            artifacts["claude_code_adapter"]["host_projection"]
+        );
+        assert_eq!(
             artifacts["claude_code_adapter"]["host_projection"]["context_files"],
             json!(["CLAUDE.md", "CLAUDE.local.md"])
+        );
+        assert_eq!(
+            artifacts["gemini_cli_adapter"]["host_adapter_payload"],
+            artifacts["gemini_cli_adapter"]["host_projection"]
         );
         assert_eq!(
             artifacts["gemini_cli_adapter"]["host_projection"]["structured_output_modes"],
@@ -4979,6 +5003,10 @@ mod tests {
         assert_eq!(
             artifacts["codex_desktop_alias_retirement_status"]["primary_regression_artifact"],
             Value::String("cli_family_parity_snapshot".to_string())
+        );
+        assert_eq!(
+            artifacts["claude_code_adapter"]["host_adapter_payload"],
+            artifacts["claude_code_adapter"]["host_projection"]
         );
         assert_eq!(
             artifacts["claude_code_adapter"]["host_projection"]["settings_paths"],

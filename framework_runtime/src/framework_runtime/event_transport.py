@@ -77,7 +77,7 @@ class _RuntimeEventAttachDescriptorCapabilities(BaseModel):
 
 
 class RuntimeEventAttachDescriptor(BaseModel):
-    """Single source-of-truth schema for process-external runtime attach descriptors."""
+    """Typed projection for process-external runtime attach descriptors."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -97,58 +97,12 @@ class RuntimeEventAttachDescriptor(BaseModel):
     resolved_artifacts: _RuntimeEventAttachDescriptorArtifacts | None = None
     resolution: _RuntimeEventAttachDescriptorArtifacts | None = None
 
-    def _assert_contract(self) -> None:
-        """Fail closed when callers mutate descriptor vocabulary away from the Rust-owned contract."""
-
-        expected_scalars = {
-            "attach_mode": RUNTIME_EVENT_ATTACH_MODE,
-            "source_transport_method": RUNTIME_EVENT_ATTACH_SOURCE_TRANSPORT_METHOD,
-            "source_handoff_method": RUNTIME_EVENT_ATTACH_SOURCE_HANDOFF_METHOD,
-            "attach_method": RUNTIME_EVENT_ATTACH_METHOD,
-            "subscribe_method": RUNTIME_EVENT_ATTACH_SUBSCRIBE_METHOD,
-            "cleanup_method": RUNTIME_EVENT_ATTACH_CLEANUP_METHOD,
-            "resume_mode": RUNTIME_EVENT_ATTACH_RESUME_MODE,
-        }
-        for field_name, expected_value in expected_scalars.items():
-            value = getattr(self, field_name)
-            if value is not None and value != expected_value:
-                raise ValueError(
-                    "External runtime event attach descriptor must use "
-                    f"{field_name}={expected_value!r}."
-                )
-        if self.attach_capabilities is None:
-            return
-        if (
-            self.attach_capabilities.artifact_replay is not None
-            and self.attach_capabilities.artifact_replay is not True
-        ):
-            raise ValueError(
-                "External runtime event attach descriptor must advertise "
-                "attach_capabilities.artifact_replay=True."
-            )
-        if (
-            self.attach_capabilities.cleanup_preserves_replay is not None
-            and self.attach_capabilities.cleanup_preserves_replay is not True
-        ):
-            raise ValueError(
-                "External runtime event attach descriptor must advertise "
-                "attach_capabilities.cleanup_preserves_replay=True."
-            )
-        if (
-            self.attach_capabilities.live_remote_stream is not None
-            and self.attach_capabilities.live_remote_stream is not False
-        ):
-            raise ValueError(
-                "External runtime event attach descriptor must advertise "
-                "attach_capabilities.live_remote_stream=False."
-            )
-
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> "RuntimeEventAttachDescriptor":
         """Validate and normalize a raw attach descriptor payload."""
 
         try:
-            descriptor = cls.model_validate(payload)
+            return cls.model_validate(payload)
         except ValidationError as exc:
             errors = exc.errors()
             if any(err.get("loc") == ("schema_version",) for err in errors):
@@ -156,8 +110,6 @@ class RuntimeEventAttachDescriptor(BaseModel):
                     "External runtime event attach payload returned an unknown attach_descriptor schema_version."
                 ) from exc
             raise ValueError("External runtime event attach payload returned an invalid attach_descriptor.") from exc
-        descriptor._assert_contract()
-        return descriptor
 
 
 class ExternalRuntimeEventTransportAttachment(BaseModel):
@@ -257,7 +209,7 @@ def _normalize_attach_descriptor(
 ) -> dict[str, Any] | None:
     if attach_descriptor is None:
         return None
-    return RuntimeEventAttachDescriptor.from_payload(attach_descriptor).model_dump(mode="json")
+    return dict(attach_descriptor)
 
 
 def _build_external_runtime_attach_request(
@@ -307,61 +259,9 @@ def _validated_attach_descriptor(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 def _validate_attachment_payload(payload: Mapping[str, Any]) -> ExternalRuntimeEventTransportAttachment:
     try:
-        attachment = ExternalRuntimeEventTransportAttachment.model_validate(payload)
+        return ExternalRuntimeEventTransportAttachment.model_validate(payload)
     except ValidationError as exc:
         raise ValueError("External runtime event attach payload returned an invalid attachment payload.") from exc
-    descriptor = attachment.attach_descriptor.model_dump(mode="json")
-    _assert_matching_value(
-        field_name="attach_mode",
-        requested=descriptor.get("attach_mode"),
-        canonical=attachment.attach_mode,
-        path_like=False,
-    )
-    _assert_matching_value(
-        field_name="artifact_backend_family",
-        requested=descriptor.get("artifact_backend_family"),
-        canonical=attachment.artifact_backend_family,
-        path_like=False,
-    )
-    _assert_matching_value(
-        field_name="resume_mode",
-        requested=descriptor.get("resume_mode"),
-        canonical=attachment.resume_mode,
-        path_like=False,
-    )
-    _assert_matching_value(
-        field_name="cleanup_semantics",
-        requested=descriptor.get("cleanup_semantics"),
-        canonical=attachment.cleanup_semantics,
-        path_like=False,
-    )
-    resolved_artifacts = descriptor.get("resolved_artifacts")
-    if isinstance(resolved_artifacts, Mapping):
-        _assert_matching_value(
-            field_name="resolved_artifacts.binding_artifact_path",
-            requested=resolved_artifacts.get("binding_artifact_path"),
-            canonical=attachment.binding_artifact_path,
-            path_like=True,
-        )
-        _assert_matching_value(
-            field_name="resolved_artifacts.handoff_path",
-            requested=resolved_artifacts.get("handoff_path"),
-            canonical=attachment.handoff_path,
-            path_like=True,
-        )
-        _assert_matching_value(
-            field_name="resolved_artifacts.resume_manifest_path",
-            requested=resolved_artifacts.get("resume_manifest_path"),
-            canonical=attachment.resume_manifest_path,
-            path_like=True,
-        )
-        _assert_matching_value(
-            field_name="resolved_artifacts.trace_stream_path",
-            requested=resolved_artifacts.get("trace_stream_path"),
-            canonical=attachment.trace_stream_path,
-            path_like=True,
-        )
-    return attachment
 
 
 def _validate_cleanup_payload(payload: Mapping[str, Any]) -> ExternalRuntimeEventTransportCleanupResult:
@@ -381,9 +281,8 @@ def resolve_external_runtime_event_transport(
 ) -> ExternalRuntimeEventTransportAttachment:
     """Resolve and validate the canonical attach payload for external runtime replay."""
 
-    requested_descriptor = _normalize_attach_descriptor(attach_descriptor)
     request = _build_external_runtime_attach_request(
-        attach_descriptor=requested_descriptor,
+        attach_descriptor=_normalize_attach_descriptor(attach_descriptor),
         binding_artifact_path=binding_artifact_path,
         handoff_path=handoff_path,
         resume_manifest_path=resume_manifest_path,
@@ -396,11 +295,10 @@ def resolve_external_runtime_event_transport(
             raise attach_error from exc
         raise
     attachment = _validate_attachment_payload(payload)
-    canonical_descriptor = attachment.attach_descriptor.model_dump(mode="json")
-    if requested_descriptor is not None:
+    if attach_descriptor is not None:
         _assert_descriptor_matches_canonical(
-            requested_descriptor=requested_descriptor,
-            canonical_descriptor=canonical_descriptor,
+            requested_descriptor=attach_descriptor,
+            canonical_descriptor=attachment.attach_descriptor.model_dump(mode="json"),
         )
     return attachment
 
@@ -470,20 +368,7 @@ def cleanup_external_runtime_event_transport(
         if attach_error is not None:
             raise attach_error from exc
         raise
-    cleanup = _validate_cleanup_payload(payload)
-    _assert_matching_value(
-        field_name="binding_artifact_path",
-        requested=cleanup.binding_artifact_path,
-        canonical=attachment.binding_artifact_path,
-        path_like=True,
-    )
-    _assert_matching_value(
-        field_name="trace_stream_path",
-        requested=cleanup.trace_stream_path,
-        canonical=attachment.trace_stream_path,
-        path_like=True,
-    )
-    return cleanup
+    return _validate_cleanup_payload(payload)
 
 
 class ExternalRuntimeEventTransportBridge:

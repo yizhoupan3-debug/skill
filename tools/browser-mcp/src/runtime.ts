@@ -125,6 +125,11 @@ interface RouterRsStdioResponse<T> {
   error?: string;
 }
 
+interface RouterRsCommand {
+  command: string;
+  args: string[];
+}
+
 interface LoadedRuntimeAttachDescriptor {
   descriptor: RuntimeAttachDescriptor;
   inputArtifactKind: RuntimeAttachArtifactKind | null;
@@ -164,12 +169,8 @@ function truncateText(text: string, maxChars: number): string {
   return text.length <= maxChars ? text : `${text.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
-let resolvedRouterRsCommand: { command: string; args: string[] } | null = null;
-let routerRsStdioClient: RouterRsStdioClient | null = null;
-
-process.once('exit', () => {
-  routerRsStdioClient?.close();
-});
+let resolvedRouterRsCommand: RouterRsCommand | null = null;
+let routerRsStdioClientPool: RouterRsStdioClientPool | null = null;
 
 class RouterRsStdioClient {
   private process: ChildProcessWithoutNullStreams | null = null;
@@ -184,7 +185,10 @@ class RouterRsStdioClient {
       }
     | null = null;
 
-  constructor(private readonly command: string) {}
+  constructor(
+    private readonly command: string,
+    private readonly args: string[] = [],
+  ) {}
 
   async request<T>(operation: string, payload: object): Promise<T> {
     const run = async (): Promise<T> => {
@@ -230,7 +234,7 @@ class RouterRsStdioClient {
     if (this.process && this.process.exitCode === null && !this.process.killed) {
       return this.process;
     }
-    const proc = spawn(this.command, ['--stdio-json'], {
+    const proc = spawn(this.command, this.args, {
       stdio: 'pipe',
     });
     proc.stdout.setEncoding('utf8');
@@ -307,15 +311,83 @@ class RouterRsStdioClient {
   }
 }
 
-async function resolveRouterRsCommand(): Promise<{ command: string; args: string[] }> {
+class RouterRsStdioClientPool {
+  private readonly clients: RouterRsStdioClient[];
+  private nextClientIndex = 0;
+
+  constructor(
+    command: RouterRsCommand,
+    size: number,
+  ) {
+    const resolvedSize = Math.max(1, size);
+    this.clients = Array.from(
+      { length: resolvedSize },
+      () => new RouterRsStdioClient(command.command, command.args),
+    );
+  }
+
+  public request<T>(operation: string, payload: object): Promise<T> {
+    return this.acquireClient().request<T>(operation, payload);
+  }
+
+  public close(): void {
+    for (const client of this.clients) {
+      client.close();
+    }
+  }
+
+  private acquireClient(): RouterRsStdioClient {
+    const client = this.clients[this.nextClientIndex]!;
+    this.nextClientIndex = (this.nextClientIndex + 1) % this.clients.length;
+    return client;
+  }
+}
+
+function resolveRouterRsPoolSize(): number {
+  const raw =
+    process.env.BROWSER_MCP_ROUTER_STDIO_POOL_SIZE ??
+    process.env.CODEX_ROUTER_STDIO_POOL_SIZE;
+  if (!raw) {
+    return 4;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 4;
+  }
+  return parsed;
+}
+
+function closeRouterRsProcessState(): void {
+  routerRsStdioClientPool?.close();
+  routerRsStdioClientPool = null;
+  resolvedRouterRsCommand = null;
+}
+
+process.once('exit', () => {
+  closeRouterRsProcessState();
+});
+
+export function resetRouterRsProcessStateForTests(): void {
+  closeRouterRsProcessState();
+}
+
+async function resolveRouterRsCommand(): Promise<RouterRsCommand> {
   if (resolvedRouterRsCommand) {
+    return resolvedRouterRsCommand;
+  }
+  const overrideCommand = process.env.BROWSER_MCP_ROUTER_RS_COMMAND?.trim();
+  if (overrideCommand) {
+    resolvedRouterRsCommand = {
+      command: overrideCommand,
+      args: ['--stdio-json'],
+    };
     return resolvedRouterRsCommand;
   }
   for (const candidatePath of [ROUTER_RS_RELEASE_BIN, ROUTER_RS_DEBUG_BIN]) {
     try {
       const candidateStat = await stat(candidatePath);
       if (candidateStat.isFile()) {
-        resolvedRouterRsCommand = { command: candidatePath, args: [] };
+        resolvedRouterRsCommand = { command: candidatePath, args: ['--stdio-json'] };
         return resolvedRouterRsCommand;
       }
     } catch {
@@ -331,8 +403,11 @@ async function resolveRouterRsCommand(): Promise<{ command: string; args: string
 async function runRouterRsJson<T>(operation: string, payload: object): Promise<T> {
   const command = await resolveRouterRsCommand();
   try {
-    routerRsStdioClient ??= new RouterRsStdioClient(command.command);
-    return await routerRsStdioClient.request<T>(operation, payload);
+    routerRsStdioClientPool ??= new RouterRsStdioClientPool(
+      command,
+      resolveRouterRsPoolSize(),
+    );
+    return await routerRsStdioClientPool.request<T>(operation, payload);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'router-rs trace command failed';
@@ -1363,6 +1438,21 @@ export class BrowserRuntime {
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error('runtime attach artifact returned an unknown schema');
+    }
+    const parsedObject = parsed as Record<string, unknown>;
+    const parsedSchemaVersion =
+      typeof parsedObject.schema_version === 'string' ? parsedObject.schema_version : null;
+    if (
+      parsedSchemaVersion === RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION ||
+      parsedSchemaVersion === RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION ||
+      parsedSchemaVersion === TRACE_RESUME_MANIFEST_SCHEMA_VERSION
+    ) {
+      const hydratedFromExistingFile = await this.tryHydrateRuntimeAttachDescriptorFromArtifactPath(
+        resolvedArtifactPath,
+      );
+      if (hydratedFromExistingFile) {
+        return hydratedFromExistingFile;
+      }
     }
 
     const descriptorCandidate = await this.canonicalizeAttachDescriptorIfPossible(

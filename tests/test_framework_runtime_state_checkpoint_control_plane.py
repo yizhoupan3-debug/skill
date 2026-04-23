@@ -292,6 +292,73 @@ def test_checkpointer_uses_rust_writers_only_for_filesystem_backend(monkeypatch,
     assert json.loads(checkpointer.describe_paths().resume_manifest_path.read_text(encoding="utf-8"))["via"] == "rust"
 
 
+def test_filesystem_backend_fails_closed_when_rust_writers_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Filesystem-backed persistence should stop instead of falling back to Python writes."""
+
+    checkpointer = FilesystemRuntimeCheckpointer(
+        data_dir=tmp_path / "runtime-data",
+        trace_output_path=tmp_path / "runtime-data" / "TRACE_METADATA.json",
+        control_plane_descriptor=CONTROL_PLANE_DESCRIPTOR,
+    )
+    transport = RuntimeEventTransport(
+        stream_id="stream::session-1",
+        session_id="session-1",
+        job_id="job-1",
+        binding_backend_family="filesystem",
+    )
+
+    monkeypatch.setattr(
+        checkpointer._rust_adapter,
+        "write_transport_binding",
+        lambda payload: (_ for _ in ()).throw(RuntimeError("transport writer drift")),
+    )
+    with pytest.raises(RuntimeError, match="transport writer drift"):
+        checkpointer.write_transport_binding(transport)
+
+    binding_path = checkpointer.transport_binding_path(session_id="session-1", job_id="job-1")
+    assert binding_path is not None
+    assert not binding_path.exists()
+
+    def fake_write_transport_binding(payload: dict[str, object]) -> dict[str, object]:
+        path = Path(str(payload["path"]))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"path": str(path), "via": "rust"}) + "\n", encoding="utf-8")
+        return {
+            "schema_version": checkpointer._rust_adapter.transport_binding_write_schema_version,
+            "authority": checkpointer._rust_adapter.transport_binding_write_authority,
+            "path": str(path),
+            "bytes_written": path.stat().st_size,
+        }
+
+    monkeypatch.setattr(checkpointer._rust_adapter, "write_transport_binding", fake_write_transport_binding)
+    binding_path = checkpointer.write_transport_binding(transport)
+    assert binding_path is not None
+    assert binding_path.exists()
+
+    monkeypatch.setattr(
+        checkpointer._rust_adapter,
+        "write_checkpoint_resume_manifest",
+        lambda payload: (_ for _ in ()).throw(RuntimeError("manifest writer drift")),
+    )
+    with pytest.raises(RuntimeError, match="manifest writer drift"):
+        checkpointer.checkpoint(
+            session_id="session-1",
+            job_id="job-1",
+            status="completed",
+            generation=1,
+            latest_cursor=None,
+            event_transport_path=str(binding_path),
+            artifact_paths=[str(binding_path)],
+        )
+
+    resume_manifest_path = checkpointer.describe_paths().resume_manifest_path
+    assert resume_manifest_path is not None
+    assert not resume_manifest_path.exists()
+
+
 def test_background_state_uses_non_filesystem_backend_family(tmp_path: Path) -> None:
     """Background state should persist through the backend seam without filesystem writes."""
 

@@ -17,11 +17,10 @@ const FRAMEWORK_START_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_START -->";
 const FRAMEWORK_END_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_END -->";
 const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v1";
 const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
-const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
+const DEFAULT_TUI_STATUS_ITEMS: [&str; 3] = [
     "model-with-reasoning",
+    "context-remaining",
     "git-branch",
-    "context-used",
-    "fast-mode",
 ];
 const DEFAULT_SHARED_PROJECT_MCP_SERVERS: [&str; 3] =
     ["browser-mcp", "framework-mcp", "openaiDeveloperDocs"];

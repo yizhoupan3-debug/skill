@@ -237,6 +237,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     ]
 
     claude = json.loads(Path(paths["claude_code_adapter"]).read_text(encoding="utf-8"))
+    assert claude["host_adapter_payload"] == claude["host_projection"]
     assert claude["host_projection"]["context_files"] == [
         "CLAUDE.md",
         "CLAUDE.local.md",
@@ -299,6 +300,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert claude["host_projection"]["checkpointing_supported"] is True
 
     gemini = json.loads(Path(paths["gemini_cli_adapter"]).read_text(encoding="utf-8"))
+    assert gemini["host_adapter_payload"] == gemini["host_projection"]
     assert gemini["host_projection"]["structured_output_modes"] == ["json", "stream-json"]
 
     cli_discovery = json.loads(

@@ -22,7 +22,9 @@ import framework_runtime.runtime as runtime_module
 from framework_runtime.config import RuntimeSettings
 from framework_runtime.runtime import CodexAgnoRuntime
 from framework_runtime.schemas import (
+    BackgroundParallelGroupSummary,
     BackgroundRunRequest,
+    BackgroundRunStatus,
     PrepareSessionRequest,
     RunTaskRequest,
     RunTaskResponse,
@@ -542,6 +544,42 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
         assert response.metadata["trace_event_schema_version"] == TRACE_EVENT_SCHEMA_VERSION
 
     asyncio.run(_run())
+
+
+def test_runtime_write_resume_manifest_reuses_resolved_transport(tmp_path: Path) -> None:
+    """Resume-manifest writes should not re-resolve transport when a fresh binding already exists."""
+
+    trace_path = tmp_path / "TRACE_METADATA.json"
+    runtime = CodexAgnoRuntime(
+        RuntimeSettings(
+            codex_home=PROJECT_ROOT,
+            data_dir=tmp_path / "runtime-data",
+            trace_output_path=trace_path,
+            live_model_override=False,
+        )
+    )
+    runtime._trace.record(
+        session_id="reuse-transport-session",
+        kind="job.started",
+        stage="background",
+    )
+    transport = runtime.trace_service.describe_transport(session_id="reuse-transport-session")
+
+    runtime.trace_service.describe_transport = lambda **_: (_ for _ in ()).throw(  # type: ignore[method-assign]
+        AssertionError("transport should be reused instead of re-resolved")
+    )
+
+    runtime._write_resume_manifest(
+        session_id="reuse-transport-session",
+        job_id=None,
+        status="dry_run",
+        artifact_paths=[],
+        transport=transport,
+    )
+
+    resume_manifest_path = trace_path.with_name("TRACE_RESUME_MANIFEST.json")
+    resume_manifest = json.loads(resume_manifest_path.read_text(encoding="utf-8"))
+    assert resume_manifest["event_transport_path"] == transport.binding_artifact_path
 
 
 def test_runtime_live_path_tolerates_empty_python_prompt_context(tmp_path: Path) -> None:
@@ -2023,6 +2061,104 @@ def test_runtime_background_batch_rejects_misaligned_parallel_group_ids(tmp_path
                     ),
                 ]
             )
+
+    asyncio.run(_run())
+
+
+def test_runtime_background_batch_enqueues_lanes_concurrently(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Parallel batch admission should not serialize independent lane enqueue operations."""
+
+    settings = RuntimeSettings(
+        codex_home=PROJECT_ROOT,
+        data_dir=tmp_path / "runtime-data",
+        live_model_override=False,
+    )
+    runtime = CodexAgnoRuntime(settings)
+    host = runtime.background_service
+
+    active_enqueues = 0
+    max_active_enqueues = 0
+    concurrency_lock = asyncio.Lock()
+    captured_statuses: dict[str, BackgroundRunStatus] = {}
+
+    async def fake_enqueue_job(
+        request: BackgroundRunRequest,
+        *,
+        session_id_resolver,
+        run_task,
+    ) -> BackgroundRunStatus:
+        nonlocal active_enqueues, max_active_enqueues
+        async with concurrency_lock:
+            active_enqueues += 1
+            max_active_enqueues = max(max_active_enqueues, active_enqueues)
+        await asyncio.sleep(0.05)
+        resolved_session_id = session_id_resolver(request)
+        status = BackgroundRunStatus(
+            job_id=f"job-{request.lane_id}",
+            session_id=resolved_session_id,
+            status="queued",
+            parallel_group_id=request.parallel_group_id,
+            lane_id=request.lane_id,
+            parent_job_id=request.parent_job_id,
+        )
+        captured_statuses[status.job_id] = status
+        async with concurrency_lock:
+            active_enqueues -= 1
+        return status
+
+    def fake_parallel_group_summary(parallel_group_id: str) -> BackgroundParallelGroupSummary:
+        statuses = sorted(captured_statuses.values(), key=lambda item: item.job_id)
+        return BackgroundParallelGroupSummary(
+            parallel_group_id=parallel_group_id,
+            job_ids=[status.job_id for status in statuses],
+            session_ids=sorted(
+                {
+                    status.session_id
+                    for status in statuses
+                    if status.session_id is not None
+                }
+            ),
+            lane_ids=sorted(
+                {
+                    status.lane_id
+                    for status in statuses
+                    if status.lane_id is not None
+                }
+            ),
+            parent_job_ids=sorted(
+                {
+                    status.parent_job_id
+                    for status in statuses
+                    if status.parent_job_id is not None
+                }
+            ),
+            status_counts={"queued": len(statuses)},
+            active_job_count=len(statuses),
+            terminal_job_count=0,
+            total_job_count=len(statuses),
+            latest_updated_at=max(
+                (status.updated_at for status in statuses),
+                default=None,
+            ),
+        )
+
+    monkeypatch.setattr(host, "enqueue_job", fake_enqueue_job)
+    monkeypatch.setattr(host, "parallel_group_summary", fake_parallel_group_summary)
+
+    async def _run() -> None:
+        batch = await host.enqueue_batch(
+            [
+                BackgroundRunRequest(task="lane-a", user_id="tester", session_id="batch-a", dry_run=True),
+                BackgroundRunRequest(task="lane-b", user_id="tester", session_id="batch-b", dry_run=True),
+            ],
+            session_id_resolver=lambda request: request.session_id or "batch-session",
+            run_task=runtime.run_task,
+        )
+
+        assert batch.parallel_group_id.startswith("pgroup_")
+        assert [status.lane_id for status in batch.statuses] == ["lane-1", "lane-2"]
+        assert max_active_enqueues == 2
+        assert batch.summary.total_job_count == 2
 
     asyncio.run(_run())
 

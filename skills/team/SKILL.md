@@ -48,31 +48,32 @@ approval_required_tools:
 
 # team
 
-`team` 现在按 OMC 官方 `v4.13.2` 的 `team` 能力意图来跑，再做本地 Rust 化和仓内落地。它不是沿用 `.omc` 团队状态目录的兼容壳，而是把“任务拆分、worker 生命周期、恢复续跑、结果收口”统一接到本仓的 Rust supervisor、continuity artifacts 和宿主原生 worker 管理能力上。
+`team` 继承 OMC `v4.13.2` 的团队编排意图，但在本仓直接落到 Rust supervisor、continuity artifacts 和宿主原生 worker 管理，不再依赖 `.omc` 团队状态。
 
-每轮对话开始 / first-turn / conversation start 时，如果用户明确进入 `/team` 或当前任务已经天然是 supervisor-led 的多 worker 编排，就应该直接按 `team` 契约进入，而不是先退化成普通单线程执行。
+显式入口：
+- Codex：`$team`
+- Claude：`/team`
 
 ## Upstream Baseline
 
 - 官方来源：`oh-my-claudecode` `v4.13.2`
 - 对应能力：`team`
-- 继承的核心目标：scoping -> delegation -> execution -> integration -> qa -> cleanup
+- 主流程：scoping -> delegation -> execution -> integration -> qa -> cleanup
 
 ## When to use
 
-- 每轮对话开始 / first-turn / conversation start，而且当前任务已经满足 team orchestration 的强信号
-- 用户明确要 `/team` 或 `$team`
-- 或者当前任务已经满足 team orchestration 的强信号：多阶段执行、worker 生命周期管理、integration / QA / cleanup、resume / recovery 都是主流程的一部分
-- 当前任务需要多个 bounded worker / sidecar 并行推进，而且 supervisor 必须持续管理拆分、执行、集成、验收
-- 需要 worker 生命周期和恢复锚点都可追踪，而不是一次性并发后失控
-- 用户想保留多 agent / team 的执行体验，但底层必须是本仓的 Rust-first runtime
+- 每轮对话开始 / first-turn / conversation start，如果用户明确要进入 `$team` / `/team`，先按 team 入口检查
+- 用户明确要 `$team` / `/team`
+- 当前任务天然就是 supervisor-led 的多 worker 编排
+- worker 生命周期、integration、QA、cleanup、resume/recovery 都是主流程
+- 需要多个 bounded worker 持续并行推进，且 supervisor 不能失去控制
 
 ## Do not use
 
-- 任务其实是单线程小修，不需要 team orchestration
-- 只是设计多 agent 架构，不是要在当前仓库里进入 team 执行态
-- 只是要决定是否拆 bounded subagents，但 orchestration 本身还不是任务主线；这类场景优先走 `$subagent-delegation`
-- 多个 worker 会互相重叠写同一份 continuity 主文件
+- 单线程小修
+- 只是设计多 agent 架构，不是现在进入 team 执行态
+- 只是判断要不要拆 bounded subagents，这时优先 [`$subagent-delegation`](/Users/joe/Documents/skill/skills/subagent-delegation/SKILL.md)
+- 多个 worker 会共写同一份主 continuity
 
 ## Canonical owner
 
@@ -84,37 +85,28 @@ approval_required_tools:
 
 ## Official Workflow
 
-- canonical lifecycle / worker / recovery state truth lives in `configs/framework/RUNTIME_REGISTRY.json` and the shared control-plane contracts.
-- `team` still follows the OMC intent of `scoping -> delegation -> execution -> integration -> qa -> cleanup`.
-- Rust `alias.state_machine` and `alias.entry_contract` are the executable projection for the current turn.
+- 生命周期和恢复状态真相在 `configs/framework/RUNTIME_REGISTRY.json` 与共享 control-plane contracts。
+- 当前轮的可执行投影以 Rust `alias.state_machine` 和 `alias.entry_contract` 为准。
 
-## Local Replacements
+## Local runtime
 
-- 不再写 `.omc/state/team*.json` 或其他 OMC team 状态目录。
-- worker 生命周期改由 Rust `session-supervisor`、宿主 tmux worker 管理和 resume 机制承接。
-- continuity 仍写入：
-  - `artifacts/current/<task_id>/bootstrap/`
-  - `artifacts/current/<task_id>/evidence/`
-  - `SESSION_SUMMARY.md`
-  - `NEXT_ACTIONS.json`
-  - `EVIDENCE_INDEX.json`
-  - `TRACE_METADATA.json`
-  - `.supervisor_state.json`
-- shared continuity 只允许 supervisor 主线程持有，worker 只返回 lane-local 输出或 delta。
+- 不再写 `.omc/state/team*.json`。
+- worker 生命周期由 Rust `session-supervisor`、宿主 worker 管理、resume 机制承接。
+- continuity 真相仍写到 `artifacts/current/<task_id>/...`、`SESSION_SUMMARY.md`、`NEXT_ACTIONS.json`、`EVIDENCE_INDEX.json`、`TRACE_METADATA.json`、`.supervisor_state.json`。
+- shared continuity 只允许 supervisor 主线程持有；worker 只返回 lane-local 输出或 delta。
 
 ## Instructions
 
-1. 先定主线程与 worker 的边界，再决定是否真实派发。
-2. shared continuity 只允许 supervisor 写，worker 不准直接共写主 continuity 文件。
-3. 如果 runtime policy 不允许派发，保留同样的 team 结构并退化成 local-supervisor 队列，而不是放弃 team 逻辑。
-4. 需要拆分时，`$subagent-delegation` 负责 bounded subagent lane；当生命周期、integration、QA、cleanup、resume/recovery 需要 supervisor 持续主导时，保持在 `team` 主线。
-5. 集成后必须补验证证据，没有验证证据不宣布 team 收口完成。
-6. 如果 worker 失败或中断，必须保留恢复锚点并优先续跑，不把中断当完成。
+1. 先定 supervisor 与 worker 边界，再决定是否派发。
+2. shared continuity 只允许 supervisor 写。
+3. runtime policy 不允许派发时，退化成 local-supervisor 队列，不放弃 team 逻辑。
+4. bounded subagent lane 交给 [`$subagent-delegation`](/Users/joe/Documents/skill/skills/subagent-delegation/SKILL.md)；需要 supervisor 持续主导时留在 `team` 主线。
+5. 集成后必须补验证证据，没有证据不宣布收口。
+6. worker 失败或中断时，保留恢复锚点并优先续跑。
 
 ## Constraints
 
-- 这是“复用官方实现再本地化”，不是继续依赖 `.omc` 团队状态。
-- 用本仓共享 skill、artifact contract、host worker 管理和 Rust supervisor 来解释行为。
-- 不把 Claude / Codex 某个宿主的私有 team 行为写成 framework 真相。
-- 用户看到的是稳定的原生 `team` 能力，不是外部兼容层。
-- 必须做到“承接 OMC 核心能力，但实现标准更强”，至少强制 worker 边界、恢复续跑、supervisor 单写 continuity、验证收口。
+- 这是官方能力的本地化，不是继续依赖 `.omc` 团队状态。
+- 用本仓 skill、artifact contract、host worker 管理、Rust supervisor 来解释行为。
+- 不把 Claude / Codex 的私有 team 行为写成 framework 真相。
+- 用户看到的是原生 `team`，不是外部兼容层。

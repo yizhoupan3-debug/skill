@@ -154,9 +154,9 @@ Metric invariants:
 The runtime now exposes a concrete exporter and metric-record helper surface at
 `codex_agno_runtime.observability`.
 
-- Public helper calls should delegate to `router-rs` whenever the repo-local
-  Rust lane is available; Python stays as a thin projection and compatibility
-  fallback only.
+- Public helper calls must delegate to `router-rs`; if the repo-local Rust lane
+  is unavailable or returns drifted payloads, helpers fail closed instead of
+  rebuilding observability payloads in Python.
 - `build_runtime_observability_exporter_descriptor()` freezes the Rust-owned
   exporter lane and ties it to the JSONL sink plus replay/handoff schema
   versions used by the trace lane.
