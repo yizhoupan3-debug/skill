@@ -9,7 +9,6 @@ routing_gate: delegation
 session_start: preferred
 trigger_hints:
   - $autopilot
-  - /autopilot
   - autopilot
   - auto pilot
   - auto-pilot

@@ -6,7 +6,6 @@ routing_owner: owner
 routing_gate: none
 session_start: n/a
 trigger_hints:
-  - /refresh
   - $refresh
   - refresh
   - 下一轮执行 prompt

@@ -6,6 +6,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from scripts.host_integration_rs import run_host_integration_rs
+
 RUNTIME_REGISTRY_SCHEMA_VERSION = "framework-runtime-registry-v1"
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_REGISTRY_PATH = _REPO_ROOT / "configs" / "framework" / "RUNTIME_REGISTRY.json"
@@ -227,14 +229,32 @@ def _registry_candidates(repo_root: Path | None = None) -> tuple[Path, ...]:
     return tuple(dict.fromkeys(candidate.resolve() for candidate in candidates))
 
 
+def _validate_runtime_registry_payload(payload: dict[str, Any], *, source: str) -> dict[str, Any]:
+    schema_version = payload.get("schema_version")
+    if schema_version != RUNTIME_REGISTRY_SCHEMA_VERSION:
+        raise ValueError(f"Unsupported runtime registry schema_version: {schema_version!r} at {source}")
+    return payload
+
+
 def _read_runtime_registry_payload(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     payload = json.loads(path.read_text(encoding="utf-8"))
-    schema_version = payload.get("schema_version")
-    if schema_version != RUNTIME_REGISTRY_SCHEMA_VERSION:
-        raise ValueError(f"Unsupported runtime registry schema_version: {schema_version!r} at {path}")
-    return payload
+    return _validate_runtime_registry_payload(payload, source=str(path))
+
+
+def _rust_runtime_registry_payload(repo_root: Path | None = None) -> dict[str, Any] | None:
+    registry_path = _repo_runtime_registry_path(repo_root)
+    if registry_path is None:
+        return None
+    payload = run_host_integration_rs(
+        "export-runtime-registry",
+        "--repo-root",
+        str(registry_path.parents[2]),
+    )
+    if not isinstance(payload, dict):
+        raise ValueError("Rust runtime registry export must be a JSON object.")
+    return _validate_runtime_registry_payload(payload, source="rust-host-integration")
 
 
 def _last_resort_fallback_host_adapter_rows() -> tuple[dict[str, Any], ...]:
@@ -279,7 +299,17 @@ def _load_runtime_registry_cached(cache_key: tuple[str, ...]) -> dict[str, Any]:
     )
 
 
+def _repo_runtime_registry_path(repo_root: Path | None) -> Path | None:
+    if repo_root is None:
+        return None
+    path = repo_root.resolve() / "configs" / "framework" / "RUNTIME_REGISTRY.json"
+    return path if path.is_file() else None
+
+
 def _load_runtime_registry_or_none(repo_root: Path | None = None) -> dict[str, Any] | None:
+    repo_payload = _rust_runtime_registry_payload(repo_root)
+    if repo_payload is not None:
+        return deepcopy(repo_payload)
     cache_key = tuple(str(path) for path in _registry_candidates(repo_root))
     try:
         return deepcopy(_load_runtime_registry_cached(cache_key))
@@ -310,6 +340,9 @@ def runtime_registry_path(repo_root: Path | None = None) -> Path:
 
 
 def load_runtime_registry(repo_root: Path | None = None) -> dict[str, Any]:
+    repo_payload = _rust_runtime_registry_payload(repo_root)
+    if repo_payload is not None:
+        return deepcopy(repo_payload)
     cache_key = tuple(str(path) for path in _registry_candidates(repo_root))
     return deepcopy(_load_runtime_registry_cached(cache_key))
 

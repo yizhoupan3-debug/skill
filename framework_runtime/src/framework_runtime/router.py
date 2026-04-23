@@ -6,7 +6,8 @@ from collections import defaultdict
 import re
 from typing import Any, Mapping
 
-from framework_runtime.schemas import RoutingResult, ScoredSkill, SkillMetadata
+from framework_runtime.rust_router import RustRouteAdapter
+from framework_runtime.schemas import RouteDecisionSnapshot, RoutingResult, ScoredSkill, SkillMetadata
 from framework_runtime.utils import normalize_text, tokenize
 
 
@@ -217,10 +218,12 @@ class SkillRouter:
         skills: list[SkillMetadata],
         *,
         control_plane_descriptor: Mapping[str, Any] | None = None,
+        rust_adapter: RustRouteAdapter | None = None,
     ) -> None:
         self.skills = skills
         self.control_plane_descriptor = dict(control_plane_descriptor) if isinstance(control_plane_descriptor, Mapping) else {}
         self._service_descriptor = _router_service_descriptor(control_plane_descriptor)
+        self._rust_adapter = rust_adapter
 
     def projection_descriptor(self) -> dict[str, Any]:
         """Describe the Python router as a Rust-control-plane projection."""
@@ -237,6 +240,60 @@ class SkillRouter:
         }
 
     def route(self, task: str, session_id: str, allow_overlay: bool = True, first_turn: bool = True) -> RoutingResult:
+        if self._rust_adapter is not None:
+            return self._route_via_rust(
+                task=task,
+                session_id=session_id,
+                allow_overlay=allow_overlay,
+                first_turn=first_turn,
+            )
+        return self._route_via_python(
+            task=task,
+            session_id=session_id,
+            allow_overlay=allow_overlay,
+            first_turn=first_turn,
+        )
+
+    def _route_via_rust(
+        self,
+        *,
+        task: str,
+        session_id: str,
+        allow_overlay: bool,
+        first_turn: bool,
+    ) -> RoutingResult:
+        decision = self._rust_adapter.route_contract(
+            query=task,
+            session_id=session_id,
+            allow_overlay=allow_overlay,
+            first_turn=first_turn,
+        )
+        selected = self._resolve_skill(decision.selected_skill)
+        overlay = self._resolve_skill(decision.overlay_skill) if decision.overlay_skill else None
+        reasons = [str(reason) for reason in decision.reasons]
+        projection = self.projection_descriptor()
+        if projection["compatibility_only"]:
+            reasons.append("Python router executed only as a thin compatibility projection under the Rust control plane.")
+        return RoutingResult(
+            task=decision.task,
+            session_id=decision.session_id,
+            selected_skill=_skill_payload(selected),
+            overlay_skill=_skill_payload(overlay),
+            score=float(decision.score),
+            layer=decision.layer,
+            reasons=reasons,
+            route_snapshot=RouteDecisionSnapshot.model_validate(decision.route_snapshot.model_dump(mode="json")),
+            route_engine="rust",
+        )
+
+    def _route_via_python(
+        self,
+        *,
+        task: str,
+        session_id: str,
+        allow_overlay: bool,
+        first_turn: bool,
+    ) -> RoutingResult:
         scored_candidates = [self._score_skill(skill, task, first_turn) for skill in self.skills]
         viable_candidates = [candidate for candidate in scored_candidates if candidate.score > 0]
         projection = self.projection_descriptor()
@@ -278,6 +335,14 @@ class SkillRouter:
             reasons=reasons,
             route_engine="python",
         )
+
+    def _resolve_skill(self, skill_name: str | None) -> SkillMetadata | None:
+        if not skill_name:
+            return None
+        for skill in self.skills:
+            if skill.name == skill_name:
+                return skill
+        raise RuntimeError(f"Rust router selected unknown skill {skill_name!r} for Python compatibility projection.")
 
     def _pick_owner(self, by_layer: dict[str, list[ScoredSkill]]) -> ScoredSkill:
         # Rule 2, 3, 4, 5: Check source gates, artifact gates, evidence gates, delegation gate BEFORE owners.

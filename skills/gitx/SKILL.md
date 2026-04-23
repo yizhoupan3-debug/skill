@@ -12,7 +12,6 @@ session_start: n/a
 short_description: Run the safe Git review-fix-tidy-commit-merge-push workflow end to end.
 trigger_hints:
   - $gitx
-  - /gitx
   - gitx
   - git 一条龙
   - review 修复 整理 提交 推送

@@ -15,14 +15,12 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from framework_runtime.runtime_registry import primary_plugin_record, workspace_bootstrap_defaults
-
 from scripts.default_bootstrap import resolve_bootstrap_path, run_default_bootstrap
 from scripts.materialize_cli_host_entrypoints import (
     CLAUDE_REFRESH_COMMAND,
     write_host_entrypoint_template,
 )
-from scripts.host_integration_rs import run_host_integration_rs
+from scripts.host_integration_rs import export_runtime_registry, run_host_integration_rs
 from scripts.memory_support import (
     bootstrap_artifact_root,
     get_repo_root,
@@ -40,7 +38,8 @@ HOME_CLAUDE_REFRESH_PATH = Path.home() / ".claude" / "commands" / "refresh.md"
 HOME_CLAUDE_MCP_CONFIG_PATH = Path.home() / ".claude.json"
 PROJECT_INSTRUCTIONS_PATH = Path(".codex") / "model_instructions.md"
 REPO_MARKETPLACE_PATH = Path(".agents") / "plugins" / "marketplace.json"
-PLUGIN_NAME = str(primary_plugin_record().get("plugin_name", "skill-framework-native"))
+PLUGIN_NAME = "skill-framework-native"
+DEFAULT_PLUGIN_CATEGORY = "Developer Tools"
 CONFIG_SCHEMA_HEADER = "#:schema https://developers.openai.com/codex/config-schema.json\n"
 OPENAI_DEVELOPER_DOCS_MCP_URL = "https://developers.openai.com/mcp"
 DEFAULT_TUI_STATUS_ITEMS = (
@@ -90,6 +89,30 @@ def _upsert_named_toml_block(content: str, *, block: str, pattern: re.Pattern[st
         replacement = block + "\n"
         return content[: match.start()] + replacement + content[match.end() :]
     return content.rstrip() + ("\n\n" if content.strip() else "") + block + "\n"
+
+
+def _runtime_registry_payload(repo_root: Path | None = None) -> dict[str, Any]:
+    payload = export_runtime_registry(repo_root)
+    if not isinstance(payload, dict):
+        raise ValueError("Rust runtime registry export must be a JSON object.")
+    return payload
+
+
+def _primary_plugin_record(repo_root: Path | None = None) -> dict[str, Any]:
+    records = _runtime_registry_payload(repo_root).get("plugins")
+    if not isinstance(records, list) or not records:
+        raise ValueError("Runtime registry must define at least one plugin record.")
+    record = records[0]
+    if not isinstance(record, dict):
+        raise ValueError("Runtime registry plugin record must be an object.")
+    return record
+
+
+def _workspace_bootstrap_defaults(repo_root: Path | None = None) -> dict[str, Any]:
+    defaults = _runtime_registry_payload(repo_root).get("workspace_bootstrap_defaults")
+    if not isinstance(defaults, dict):
+        raise ValueError("Runtime registry workspace_bootstrap_defaults must be an object.")
+    return defaults
 
 
 def ensure_default_bootstrap_bundle(
@@ -282,7 +305,7 @@ def ensure_tui_status_line(
 def skill_bridge_source_path(repo_root: Path) -> Path:
     """Return the canonical shared skill source for this repository."""
 
-    skill_bridge = workspace_bootstrap_defaults(repo_root=repo_root).get("skill_bridge", {})
+    skill_bridge = _workspace_bootstrap_defaults(repo_root).get("skill_bridge", {})
     source_rel = str(skill_bridge.get("source_rel", "skills"))
     return (repo_root / source_rel).resolve()
 
@@ -430,7 +453,7 @@ def ensure_personal_plugin_live_projection(
 ) -> bool:
     """Install the home plugin as a thin live projection onto repo-owned skills/runtime."""
 
-    source_rel = str(primary_plugin_record(repo_root=repo_root).get("source_rel", f"plugins/{PLUGIN_NAME}"))
+    source_rel = str(_primary_plugin_record(repo_root).get("source_rel", f"plugins/{PLUGIN_NAME}"))
     source = repo_root / source_rel
     changed = sync_directory(source, plugin_root, skip_names=PERSONAL_PLUGIN_LIVE_PROJECTION_EXCLUDES)
     changed = _ensure_directory_symlink(skill_bridge_source_path(repo_root), target_path=plugin_root / "skills") or changed
@@ -448,10 +471,8 @@ def build_personal_marketplace_payload(
 ) -> dict[str, Any]:
     """Build a personal marketplace payload that exposes the framework plugin."""
 
-    resolved_plugin_name = plugin_name or str(primary_plugin_record().get("marketplace_name", PLUGIN_NAME))
-    resolved_category = plugin_category or str(
-        primary_plugin_record().get("marketplace_category", "Developer Tools")
-    )
+    resolved_plugin_name = plugin_name or PLUGIN_NAME
+    resolved_category = plugin_category or DEFAULT_PLUGIN_CATEGORY
     payload = existing_marketplace.copy() if isinstance(existing_marketplace, dict) else {}
     payload["name"] = payload.get("name") or "skill-personal-marketplace"
     interface = payload.get("interface")
@@ -502,13 +523,13 @@ def install_personal_marketplace(
     """Ensure the user's personal plugin marketplace exposes the framework plugin."""
 
     existing = read_json_if_exists(marketplace_path)
-    plugin_record = primary_plugin_record(repo_root=repo_root)
+    plugin_record = _primary_plugin_record(repo_root)
     payload = build_personal_marketplace_payload(
         plugin_root,
         marketplace_root=marketplace_path.resolve().parents[2],
         existing_marketplace=existing,
         plugin_name=str(plugin_record.get("marketplace_name", plugin_record.get("plugin_name", PLUGIN_NAME))),
-        plugin_category=str(plugin_record.get("marketplace_category", "Developer Tools")),
+        plugin_category=str(plugin_record.get("marketplace_category", DEFAULT_PLUGIN_CATEGORY)),
     )
     return write_json_if_changed(marketplace_path, payload)
 

@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from framework_runtime.runtime_registry import framework_native_aliases
+from scripts.host_integration_rs import export_runtime_registry
 from scripts.claude_statusline import render_statusline
 from scripts.materialize_cli_host_entrypoints import (
     CODEX_PROJECT_HOOKS,
@@ -29,6 +29,13 @@ from scripts.materialize_cli_host_entrypoints import (
 )
 from scripts.rust_binary_runner import ensure_rust_binary
 from scripts.sync_skills import write_generated_files
+
+
+def _framework_native_aliases() -> dict[str, object]:
+    payload = export_runtime_registry(PROJECT_ROOT)
+    aliases = payload.get("framework_native_aliases")
+    assert isinstance(aliases, dict)
+    return aliases
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -277,7 +284,7 @@ def test_router_rs_hook_manifest_resolution_stays_release_strict(
 def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxies(
     tmp_path: Path,
 ) -> None:
-    aliases = framework_native_aliases()
+    aliases = _framework_native_aliases()
     result = materialize_repo_host_entrypoints(tmp_path)
 
     assert "AGENT.md" in result["written"]
@@ -681,12 +688,18 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     user_prompt_payload = json.loads(user_prompt.stdout)
     assert user_prompt_payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     context = user_prompt_payload["hookSpecificOutput"]["additionalContext"]
+    telemetry = user_prompt_payload["contextTelemetry"]
     assert "repo-local shared memory" in context
     assert "当前状态：" in context
     assert "完成任务时默认只用一小段收尾" in context
     assert "热路径" in context
     assert "Task Snapshot" not in context
     assert len(context) <= 420
+    assert telemetry["budget_chars"] == 420
+    assert telemetry["trimmed"] is False
+    assert "memory-truth" in telemetry["lanes"]
+    assert "continuity-truth" in telemetry["lanes"]
+    assert "state-compact" in telemetry["lanes"]
 
     quality_context = subprocess.run(
         ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "pre-tool-use-quality"],
@@ -928,6 +941,9 @@ def test_session_end_projection_includes_preferences(tmp_path: Path) -> None:
 
     projection = (tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md").read_text(encoding="utf-8")
     assert "Prefer direct answers" in projection
+    assert "artifacts/current/active_task.json" in projection
+    assert "->" not in projection
+    assert len(projection.splitlines()) <= 24
 
 
 def test_claude_statusline_renders_runtime_summary(tmp_path: Path) -> None:

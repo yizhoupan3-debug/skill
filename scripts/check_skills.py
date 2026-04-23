@@ -577,6 +577,14 @@ def validate_skill_document(document: SkillDocument) -> SkillReport:
         report.errors.append(f"{CANONICAL_TRIGGER_HINT_FIELD} must be a list of strings")
     elif not normalize_string_list(trigger_hints):
         report.errors.append(f"{CANONICAL_TRIGGER_HINT_FIELD} must be a non-empty list of strings")
+    else:
+        normalized_trigger_hints = normalize_string_list(trigger_hints)
+        slash_hints = [hint for hint in normalized_trigger_hints if hint.startswith("/")]
+        if slash_hints:
+            report.errors.append(
+                "trigger_hints must not include slash commands; Claude slash exposure is owned by .claude/commands: "
+                + ", ".join(slash_hints)
+            )
 
     for legacy_field in LEGACY_TRIGGER_HINT_FIELDS:
         legacy_value = metadata.get(legacy_field)
