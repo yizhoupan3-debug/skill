@@ -1880,19 +1880,45 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
         "evidence_required",
     ]
 
-    assert delegation["status_contract"] == "delegation_contract_v1"
+    assert delegation["status_contract"] == "delegation_contract_v3"
     assert delegation["gate"]["gate_skill"] == "subagent-delegation"
+    assert delegation["gate"]["gate_type"] == "multi_agent_routing"
     assert delegation["gate"]["decision_before_spawn"] is True
+    assert delegation["gate"]["route_outcomes"] == ["local", "subagent", "team"]
+    assert delegation["gate"]["team_route_skill"] == "team"
     assert delegation["local_supervisor_mode"]["preserves_sidecar_boundaries"] is True
     assert delegation["delegation_state_fields"] == [
+        "routing_decision",
+        "orchestration_mode",
         "delegation_plan_created",
         "spawn_attempted",
         "spawn_block_reason",
         "fallback_mode",
         "delegated_sidecars",
+        "delegated_lanes",
     ]
+    assert delegation["lane_contract_fields"] == [
+        "lane_id",
+        "lane_owner",
+        "bounded_write_scope",
+        "expected_output",
+        "integration_status",
+        "verification_status",
+        "recovery_anchor",
+    ]
+    assert delegation["retry_resume_fields"] == [
+        "retry_policy",
+        "resume_policy",
+        "escalation_path",
+        "integration_preconditions",
+    ]
+    assert delegation["team_contract"] == {
+        "supervisor_owned_continuity": True,
+        "integration_and_qa_stay_supervisor_led": True,
+        "resume_and_recovery_are_first_class": True,
+    }
 
-    assert supervisor["status_contract"] == "supervisor_state_contract_v2"
+    assert supervisor["status_contract"] == "supervisor_state_contract_v3"
     assert supervisor["state_artifact_path"] == ".supervisor_state.json"
     assert supervisor["schema_expectations"]["top_level_fields"] == [
         "schema_version",
@@ -1909,6 +1935,26 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
         "open_blockers",
         "next_actions",
     ]
+    assert supervisor["schema_expectations"]["team_state_fields"] == [
+        "delegation_planned",
+        "spawn_pending",
+        "spawn_blocked",
+        "integration_pending",
+        "resume_required",
+        "cleanup_pending",
+    ]
+    assert supervisor["schema_expectations"]["lane_fields"] == [
+        "lane_id",
+        "lane_owner",
+        "goal",
+        "bounded_scope",
+        "forbidden_scope",
+        "expected_output",
+        "integration_status",
+        "verification_status",
+        "recovery_anchor",
+    ]
+    assert supervisor["cross_artifact_alignment"]["lane_outputs_must_remain_lane_local_until_integrated"] is True
     assert supervisor["compatibility_rules"]["rust_may_validate_or_emit"] is True
     assert supervisor["compatibility_rules"]["no_shadow_replacement_artifact"] is True
 

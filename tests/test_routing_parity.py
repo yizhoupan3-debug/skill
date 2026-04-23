@@ -1147,6 +1147,52 @@ def test_framework_alias_plaintext_hints_do_not_route_team(query: str) -> None:
     assert rust_decision["selected_skill"] != "team"
 
 
+def test_framework_alias_strong_orchestration_signals_can_route_team() -> None:
+    query = "需要 team orchestration，worker lifecycle、integration、qa、cleanup 和 resume recovery 都由 supervisor 主线持续管理"
+    python_decision = route_decision_contract(
+        query,
+        codex_home=PROJECT_ROOT,
+        session_id="strong-team-orchestration-session",
+        allow_overlay=True,
+        first_turn=True,
+    ).model_dump(mode="json")
+    rust_decision = _live_route_adapter().route_contract(
+        query=query,
+        session_id="strong-team-orchestration-session",
+        allow_overlay=True,
+        first_turn=True,
+    ).model_dump(mode="json")
+
+    assert rust_decision == python_decision
+    assert rust_decision["selected_skill"] == "team"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "需要多阶段 supervisor orchestration，worker lifecycle、integration、qa、cleanup 都要保留",
+        "这个任务要 team orchestration，supervisor-owned continuity 和 resume recovery 都要覆盖",
+    ],
+)
+def test_framework_alias_strong_team_orchestration_signals_can_route_team_implicitly(query: str) -> None:
+    python_decision = route_decision_contract(
+        query,
+        codex_home=PROJECT_ROOT,
+        session_id="implicit-team-route-session",
+        allow_overlay=True,
+        first_turn=True,
+    ).model_dump(mode="json")
+    rust_decision = _live_route_adapter().route_contract(
+        query=query,
+        session_id="implicit-team-route-session",
+        allow_overlay=True,
+        first_turn=True,
+    ).model_dump(mode="json")
+
+    assert rust_decision == python_decision
+    assert rust_decision["selected_skill"] == "team"
+
+
 @pytest.mark.parametrize(
     ("mode", "expected"),
     [
@@ -1576,8 +1622,14 @@ def test_rust_route_adapter_framework_alias_builds_compact_autopilot_contract(
     assert alias["upstream_source"]["tag"] == "v4.13.2"
     assert "root-cause-first-when-unknown" in alias["implementation_bar"]
     assert alias["routing_hints"]["reroute_when_ambiguous"] == "idea-to-plan"
-    assert alias["state_machine"]["current_state"] == "resume_active"
-    assert alias["state_machine"]["recommended_action"] == "resume_current_task"
+    assert alias["interaction_invariants"]["requires_explicit_entrypoint"] is True
+    assert alias["interaction_invariants"]["explicit_entrypoints"] == ["/autopilot", "$autopilot"]
+    assert alias["interaction_invariants"]["implicit_route_policy"] == "never"
+    assert alias["state_machine"]["current_state"] == "resume_active_needs_verification"
+    assert alias["state_machine"]["recommended_action"] == "verify_before_done"
+    assert alias["state_machine"]["evidence_missing"] is True
+    assert alias["entry_contract"]["context"]["execution_readiness"] == "needs_verification"
+    assert alias["entry_contract"]["decision_contract"]["verify_when"][0] == "implementation changed but evidence is still missing"
     assert alias["entry_contract"]["route_rules"][0] == "模糊需求 -> `idea-to-plan`"
     assert "进入 autopilot" in alias["entry_prompt"]
     assert "本地 Rust" in alias["entry_prompt"]
@@ -1602,6 +1654,9 @@ def test_rust_route_adapter_framework_alias_builds_compact_deepinterview_contrac
     assert alias["upstream_source"]["official_skill_path"] == "skills/deep-interview/SKILL.md"
     assert "findings-first-with-severity-order" in alias["implementation_bar"]
     assert "architect-review" in alias["routing_hints"]["review_lanes"]
+    assert alias["interaction_invariants"]["requires_explicit_entrypoint"] is True
+    assert alias["interaction_invariants"]["explicit_entrypoints"] == ["/deepinterview", "$deepinterview"]
+    assert alias["interaction_invariants"]["implicit_route_policy"] == "never"
     assert alias["state_machine"]["handoff"]["rules"][1]["target"] == "autopilot"
     assert alias["entry_contract"]["route_rules"][0] == "主 owner -> `code-review`"
     assert "进入 deepinterview" in alias["entry_prompt"]
@@ -1624,12 +1679,39 @@ def test_rust_route_adapter_framework_alias_builds_compact_team_contract(
     assert alias["upstream_source"]["official_skill_path"] == "skills/team/SKILL.md"
     assert "supervisor-owned-continuity" in alias["implementation_bar"]
     assert alias["routing_hints"]["delegation_gate"] == "subagent-delegation"
+    assert alias["interaction_invariants"]["requires_explicit_entrypoint"] is True
+    assert alias["interaction_invariants"]["explicit_entrypoints"] == ["/team", "$team"]
+    assert alias["interaction_invariants"]["implicit_route_policy"] == "strong-orchestration-only"
+    assert "worker lifecycle" in alias["interaction_invariants"]["implicit_route_signals"]
+    assert alias["routing_hints"]["auto_route_allowed"] is True
+    assert alias["routing_hints"]["route_mode"] == "team-orchestration"
+    assert "team orchestration" in alias["interaction_invariants"]["implicit_route_signals"]
+    assert "integration+qa+cleanup" in alias["interaction_invariants"]["implicit_route_signals"]
     assert "execution-controller-coding" in alias["routing_hints"]["execution_owners"]
+    assert "spawn-blocked" in alias["routing_hints"]["transition_states"]
+    assert "failed-recoverable" in alias["routing_hints"]["worker_lifecycle"]
     assert alias["state_machine"]["handoff"]["rules"][1]["target"] == "subagent-delegation"
+    assert alias["state_machine"]["handoff"]["rules"][1]["action"] == "use_bounded_subagent_lane"
+    assert alias["state_machine"]["handoff"]["rules"][2]["target"] == "team"
     assert alias["entry_contract"]["route_rules"][0] == "主 owner -> `execution-controller-coding`"
+    assert any(rule == "worker write scope -> `lane-local-delta-only`" for rule in alias["entry_contract"]["route_rules"])
+    assert any(rule.startswith("lane contract -> lane_id") for rule in alias["entry_contract"]["route_rules"])
     assert "进入 team" in alias["entry_prompt"]
-    assert "team split gate -> `subagent-delegation`" in alias["entry_prompt"]
-    assert "共享 continuity 只允许 supervisor 持有" in alias["entry_prompt"]
+    assert "full orchestration route -> `team`" in alias["entry_prompt"]
+    assert "bounded subagent lane -> `subagent-delegation`" in alias["entry_prompt"]
+    assert "worker write scope -> `lane-local-delta-only`" in alias["entry_prompt"]
+    assert alias["state_machine"]["current_state"] in {
+        "scoping-active",
+        "delegation-planned",
+        "worker-running",
+        "integration-pending",
+        "qa-in-progress",
+        "cleanup-pending",
+        "fresh-entry",
+        "stale-continuity",
+        "inconsistent-continuity",
+        "cleanup-completed",
+    }
 
 
 def test_rust_route_adapter_framework_alias_compact_mode_omits_heavy_metadata(
@@ -1641,6 +1723,9 @@ def test_rust_route_adapter_framework_alias_compact_mode_omits_heavy_metadata(
     alias = adapter.framework_alias(repo_root=tmp_path, alias="autopilot", max_lines=3, compact=True)
 
     assert alias["compact"] is True
+    assert alias["interaction_invariants"]["requires_explicit_entrypoint"] is True
+    assert alias["interaction_invariants"]["explicit_entrypoints"] == ["/autopilot", "$autopilot"]
+    assert alias["interaction_invariants"]["implicit_route_policy"] == "never"
     assert "entry_prompt" not in alias
     assert "entry_prompt_token_estimate" not in alias
     assert "upstream_source" not in alias
@@ -1648,6 +1733,8 @@ def test_rust_route_adapter_framework_alias_compact_mode_omits_heavy_metadata(
     assert "local_adaptations" not in alias
     assert alias["host_entrypoint"] == "/autopilot"
     assert alias["state_machine"]["resume"]["mode"] == "continue-current-task"
+    assert alias["state_machine"]["evidence_missing"] is True
+    assert alias["entry_contract"]["context"]["execution_readiness"] == "needs_verification"
     assert alias["state_machine"]["required_anchors"] == [
         "SESSION_SUMMARY",
         "NEXT_ACTIONS",

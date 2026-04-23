@@ -122,19 +122,67 @@ compile concerns are settled.
 
 ## Minimal workflow
 
-1. Detect the bottleneck shape: local vs CI, clean vs warm vs watch loop, engine, hotspots, and error pattern.
-2. Choose the narrowest speed lever first: `latexmk`, `\includeonly`, externalization, preamble precompilation, draft mode, TeXpresso, or Tectonic cache.
-3. For stability issues: check interaction mode, clean aux files, review log with `!` search.
-4. Keep one full-build fallback path for sign-off.
-5. Verify clean/warm/watch timings plus references, bibliography, cache invalidation, and error recovery behavior.
+1. Measure first: separate **clean build**, **warm build**, and **edit → preview / watch** timings before proposing changes.
+2. Classify the main bottleneck: preamble/package load, bibliography / cross-reference convergence, TikZ / PGFPlots, chapter structure, CI cold start, or error-recovery churn.
+3. Choose the narrowest lever that matches that bottleneck: `latexmk`, `\includeonly`, externalization, preamble precompilation, draft mode, TeXpresso, Tectonic cache, or CI shard/cache work.
+4. Open the parallelism gate only when compile units are genuinely independent.
+5. Keep one full-build fallback path for sign-off.
+6. Verify clean/warm/watch timings plus references, bibliography, cache invalidation, and error recovery behavior.
+
+## Parallelism gate
+
+Recommend multi-agent analysis or parallel compile lanes only when the repo has a clear boundary such as:
+
+- independent `\include` chapters
+- `subfiles` / `standalone` subdocuments
+- externalized figure units
+- CI shards with explicit document splits
+- read-only analysis lanes that do not co-edit shared continuity or aux state
+
+Do **not** recommend parallelism as the default answer when the main bottleneck is:
+
+- package-heavy preamble load
+- bibliography / index / cross-reference convergence
+- shared aux output with unclear write ownership
+- a single small document where orchestration overhead dominates
+
+## Default lane model
+
+When the task is large enough for orchestration, use a bounded multi-lane split:
+
+- **lane A — measurement**: collect build timings, log hotspots, and bottleneck attribution
+- **lane B — structure audit**: inspect `\include`, `subfiles`, `standalone`, and figure externalization boundaries
+- **lane C — engine/cache strategy**: evaluate `latexmk`, Tectonic, preamble precompilation, draft mode, and CI cache/shard options
+- **lane D — verification plan**: define clean/warm/watch validation, invalidation checks, and rollback/full-build fallback
+
+Keep final recommendation synthesis with one integrator. Parallel lanes may emit lane-local findings, but they should not concurrently write shared continuity or shared TeX aux outputs.
+
+## Rust control-plane fit
+
+Use Rust-native control-plane components only for orchestration concerns such as:
+
+- durable background batches
+- lane fan-out / fan-in
+- group summaries
+- host alias projection
+- resumable execution state
+
+Keep LaTeX optimization judgment in the skill layer. Rust should orchestrate **how** work is scheduled and resumed, not hard-code **which** TeX tactic is correct.
+
+## Hard constraints
+
+- Never recommend blind parallel compilation before measuring bottlenecks.
+- Never allow multiple lanes to write the same aux/output state unless ownership is explicit.
+- Never present Rust-ification as the default fix for ordinary local compile slowness.
+- Always keep a serial full-build path for final verification.
 
 ## Framework fit
 
 Default Detect → Plan → Execute → Verify mapping:
 
-- **findings**: current bottlenecks such as slow watch loops, heavy TikZ, cold CI, package-heavy preamble, or recurring compile errors
-- **execution items**: chosen interventions such as `latexmk`, externalization, partial compile, preamble precompilation, draft mode, CI caching, or stability fixes
-- **verification**: clean/warm/watch timing checks, convergence of refs/bib, cache invalidation, error recovery, and CI cold/warm timing checks
+- **findings**: current bottlenecks such as slow watch loops, heavy TikZ, cold CI, package-heavy preamble, bibliography/ref convergence, or recurring compile errors
+- **execution items**: chosen interventions such as `latexmk`, externalization, partial compile, preamble precompilation, draft mode, CI caching, bounded lane splits, or stability fixes
+- **verification**: clean/warm/watch timing checks, convergence of refs/bib, cache invalidation, error recovery, CI cold/warm timing checks, and confirmation that any proposed parallel lane split respects single-writer boundaries
 
 ## Resource Guide
 

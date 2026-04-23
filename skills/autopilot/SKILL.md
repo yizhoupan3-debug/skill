@@ -106,12 +106,14 @@ approval_required_tools:
 1. 按官方 `autopilot` 的 6 段流程推进，不跳过中间的 spec、计划、QA、validation。
 2. 如果任务仍模糊，先走 [`$deepinterview`](/Users/joe/Documents/skill/skills/deepinterview/SKILL.md) 做澄清，不要硬扩需求。
 3. 如果根因未知，先走 [`$systematic-debugging`](/Users/joe/Documents/skill/skills/systematic-debugging/SKILL.md)，再回到执行主线。
-4. 对清晰、低风险、可逆的本地步骤自动继续推进。
-5. 需要并行拆分时，使用 [`$subagent-delegation`](/Users/joe/Documents/skill/skills/subagent-delegation/SKILL.md)。
-6. 进入强验收时，加入 [`$execution-audit`](/Users/joe/Documents/skill/skills/execution-audit/SKILL.md)。
-7. 没有验证证据，不宣布完成。
-8. 如果执行被打断、限流或挂起，必须保留恢复锚点并优先续跑，不把中断当完成。
-9. 如果同一错误连续重复，必须上升为根因问题处理，而不是机械重试。
+4. 只有在 task、acceptance、next actions 已经足够具体时，才直接留在 [`$execution-controller-coding`](/Users/joe/Documents/skill/skills/execution-controller-coding/SKILL.md) 主线继续执行。
+5. 如果 continuity 是 stale，先 refresh continuity；如果 continuity 是 inconsistent，先 repair continuity；如果任务已经 completed，就新开 bounded task，不复活历史执行。
+6. 对清晰、低风险、可逆的本地步骤自动继续推进。
+7. 需要并行拆分时，使用 [`$subagent-delegation`](/Users/joe/Documents/skill/skills/subagent-delegation/SKILL.md)。
+8. 进入强验收时，加入 [`$execution-audit`](/Users/joe/Documents/skill/skills/execution-audit/SKILL.md)。
+9. 没有验证证据，不宣布完成；缺 evidence 时优先补 QA / Validation，而不是直接写 closeout。
+10. 如果执行被打断、限流或挂起，必须保留恢复锚点并优先续跑，不把中断当完成。
+11. 如果同一错误连续重复，必须上升为根因问题处理，而不是机械重试。
 
 ## Constraints
 

@@ -363,11 +363,29 @@ pub fn build_framework_recap_projection(
 pub fn build_framework_refresh_payload(
     repo_root: &Path,
     max_lines: usize,
+    verbose: bool,
 ) -> Result<Value, String> {
     let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
     let prompt = render_framework_refresh_prompt(&continuity, &contract, max_lines);
+    let debug = if verbose {
+        json!({
+            "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
+            "verification_status": continuity.get("verification_status").cloned().unwrap_or(Value::Null),
+            "missing_recovery_anchors": continuity
+                .get("missing_recovery_anchors")
+                .cloned()
+                .unwrap_or_else(|| Value::Array(Vec::new())),
+            "recovery_hints": continuity
+                .get("recovery_hints")
+                .cloned()
+                .unwrap_or_else(|| Value::Array(Vec::new())),
+            "paths": continuity.get("paths").cloned().unwrap_or(Value::Null),
+        })
+    } else {
+        Value::Null
+    };
     Ok(json!({
         "ok": true,
         "workspace": workspace_name_from_root(repo_root),
@@ -376,6 +394,7 @@ pub fn build_framework_refresh_payload(
         "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
         "status": continuity.get("status").cloned().unwrap_or(Value::Null),
         "prompt": prompt,
+        "debug": debug,
     }))
 }
 
@@ -400,6 +419,9 @@ pub fn build_framework_alias_envelope(
     let skill_path = alias_record_text(&alias_record, &["upstream_source", "official_skill_path"]);
     let implementation_bar = alias_record_list(&alias_record, &["implementation_bar"]);
     let local_adaptations = alias_record_list(&alias_record, &["local_adaptations"]);
+    let interaction_invariants = alias_value_at_path(&alias_record, &["interaction_invariants"])
+        .cloned()
+        .unwrap_or(Value::Null);
     let routing_hints = match alias_name {
         "autopilot" => json!({
             "reroute_when_ambiguous": alias_record_text(&alias_record, &["reroute_when_ambiguous"]),
@@ -411,6 +433,18 @@ pub fn build_framework_alias_envelope(
         "team" => json!({
             "delegation_gate": alias_record_text(&alias_record, &["delegation_gate"]),
             "execution_owners": alias_record_list(&alias_record, &["execution_owners"]),
+            "auto_route_allowed": alias_record_bool(&alias_record, &["auto_route_allowed"]).unwrap_or(false),
+            "route_mode": alias_record_text(&alias_record, &["route_mode"]),
+            "selection_signals": alias_value_at_path(&alias_record, &["selection_signals"])
+                .cloned()
+                .unwrap_or(Value::Null),
+            "transition_states": alias_record_list(&alias_record, &["official_workflow", "transition_states"]),
+            "worker_lifecycle": alias_record_list(&alias_record, &["worker_lifecycle", "states"]),
+        }),
+        "latex-compile-acceleration" => json!({
+            "delegation_gate": alias_record_text(&alias_record, &["delegation_gate"]),
+            "analysis_lanes": alias_record_list(&alias_record, &["official_workflow", "lane_defaults"]),
+            "parallelism_gate": alias_record_list(&alias_record, &["lane_contract", "parallelism_gate"]),
         }),
         _ => Value::Null,
     };
@@ -437,6 +471,7 @@ pub fn build_framework_alias_envelope(
             "host_entrypoint": if host_entrypoint.is_empty() { Value::Null } else { Value::String(host_entrypoint) },
             "canonical_owner": if canonical_owner.is_empty() { Value::Null } else { Value::String(canonical_owner) },
             "routing_hints": routing_hints,
+            "interaction_invariants": interaction_invariants,
             "continuity": {
                 "state": continuity.get("state").cloned().unwrap_or(Value::Null),
                 "can_resume": continuity.get("can_resume").cloned().unwrap_or(Value::Bool(false)),
@@ -462,6 +497,7 @@ pub fn build_framework_alias_envelope(
             "implementation_bar": implementation_bar,
             "local_adaptations": local_adaptations,
             "routing_hints": routing_hints,
+            "interaction_invariants": interaction_invariants,
             "continuity": {
                 "state": continuity.get("state").cloned().unwrap_or(Value::Null),
                 "can_resume": continuity.get("can_resume").cloned().unwrap_or(Value::Bool(false)),
@@ -536,7 +572,49 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "replace .omc specs and plans with artifacts/current task-local bootstrap outputs",
                 "keep deepinterview handoff as the first-class clarification gate for vague requests"
             ],
-            "host_entrypoints": {"claude-code": "/autopilot"}
+            "execution_owners": [
+                "execution-controller-coding",
+                "plan-to-code",
+                "subagent-delegation",
+                "execution-audit"
+            ],
+            "decision_contract": {
+                "execute_when": [
+                    "task is concrete enough to implement",
+                    "acceptance criteria are already bounded",
+                    "next actions are specific enough to continue"
+                ],
+                "clarify_when": [
+                    "task is still ambiguous",
+                    "user intent would materially change the implementation"
+                ],
+                "debug_when": [
+                    "root cause is still unknown",
+                    "the same failure pattern repeats without a validated explanation"
+                ],
+                "resume_when": [
+                    "continuity state is active and recovery anchors are present"
+                ],
+                "refresh_when": [
+                    "continuity state is stale"
+                ],
+                "repair_when": [
+                    "continuity state is inconsistent"
+                ],
+                "start_new_task_when": [
+                    "current continuity is completed and should stay historical"
+                ],
+                "verify_when": [
+                    "implementation changed but evidence is still missing",
+                    "verification status is not yet passed or completed"
+                ]
+            },
+            "host_entrypoints": {"claude-code": "/autopilot"},
+            "interaction_invariants": {
+                "requires_explicit_entrypoint": true,
+                "explicit_entrypoints": ["/autopilot", "$autopilot"],
+                "implicit_route_policy": "never"
+            }
         })),
         "deepinterview" => Some(json!({
             "canonical_owner": "code-review",
@@ -571,11 +649,29 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "test-engineering",
                 "execution-audit"
             ],
-            "host_entrypoints": {"claude-code": "/deepinterview"}
+            "host_entrypoints": {"claude-code": "/deepinterview"},
+            "interaction_invariants": {
+                "requires_explicit_entrypoint": true,
+                "explicit_entrypoints": ["/deepinterview", "$deepinterview"],
+                "implicit_route_policy": "never"
+            }
         })),
         "team" => Some(json!({
             "canonical_owner": "execution-controller-coding",
             "delegation_gate": "subagent-delegation",
+            "auto_route_allowed": true,
+            "route_mode": "team-orchestration",
+            "selection_signals": {
+                "prefer_when": [
+                    "multi-phase execution needs explicit worker lifecycle management",
+                    "supervisor-owned continuity and lane-local outputs are required",
+                    "integration, qa, cleanup, or resume/recovery are first-class workflow phases"
+                ],
+                "avoid_when": [
+                    "task is a small tightly coupled local change",
+                    "bounded sidecars are enough and orchestration overhead would dominate"
+                ]
+            },
             "upstream_source": {
                 "repo": "https://github.com/Yeachan-Heo/oh-my-claudecode",
                 "tag": "v4.13.2",
@@ -583,7 +679,21 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "official_skill_path": "skills/team/SKILL.md"
             },
             "official_workflow": {
-                "phases": ["scoping", "delegation", "execution", "integration", "qa", "cleanup"]
+                "phases": ["scoping", "delegation", "execution", "integration", "qa", "cleanup"],
+                "transition_states": [
+                    "delegation-planned",
+                    "spawn-pending",
+                    "spawn-blocked",
+                    "worker-output-ready",
+                    "integration-pending",
+                    "resume-required"
+                ],
+                "recovery_states": [
+                    "worker-failed-recoverable",
+                    "stale-continuity",
+                    "inconsistent-continuity"
+                ],
+                "terminal_states": ["cleanup-completed", "completed", "failed-terminal"]
             },
             "implementation_bar": [
                 "worker-boundaries-required",
@@ -601,7 +711,110 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "subagent-delegation",
                 "execution-audit"
             ],
-            "host_entrypoints": {"claude-code": "/team"}
+            "supervisor_contract": {
+                "shared_continuity_owner": "supervisor",
+                "integration_owner": "supervisor",
+                "verification_owner": "supervisor",
+                "worker_write_scope": "lane-local-delta-only",
+                "resume_requires_recovery_anchor": true
+            },
+            "lane_contract": {
+                "required_fields": [
+                    "lane_id",
+                    "lane_owner",
+                    "goal",
+                    "bounded_scope",
+                    "forbidden_scope",
+                    "expected_output",
+                    "integration_status",
+                    "verification_status",
+                    "recovery_anchor"
+                ],
+                "integration_statuses": ["planned", "running", "output-ready", "integrated", "blocked"],
+                "verification_statuses": ["not-started", "pending", "passed", "failed"]
+            },
+            "worker_lifecycle": {
+                "states": [
+                    "planned",
+                    "spawn-pending",
+                    "running",
+                    "stalled",
+                    "failed-recoverable",
+                    "failed-terminal",
+                    "completed-unintegrated",
+                    "integrated"
+                ],
+                "resume_state": "failed-recoverable",
+                "fallback_mode": "local-supervisor-queue"
+            },
+            "recovery_contract": {
+                "continuity_states": ["active", "stale", "inconsistent"],
+                "requires_resume_judgment": [
+                    "spawn-blocked",
+                    "worker-failed-recoverable",
+                    "stale-continuity",
+                    "inconsistent-continuity"
+                ],
+                "required_artifacts": [
+                    "SESSION_SUMMARY.md",
+                    "NEXT_ACTIONS.json",
+                    "EVIDENCE_INDEX.json",
+                    "TRACE_METADATA.json",
+                    ".supervisor_state.json"
+                ]
+            },
+            "verification_contract": {
+                "integration_requires_local_judgment": true,
+                "verification_evidence_required_before_cleanup": true
+            },
+            "host_entrypoints": {"claude-code": "/team"},
+            "interaction_invariants": {
+                "requires_explicit_entrypoint": true,
+                "explicit_entrypoints": ["/team", "$team"],
+                "implicit_route_policy": "strong-orchestration-only",
+                "implicit_route_signals": [
+                    "team orchestration",
+                    "worker lifecycle",
+                    "integration+qa+cleanup",
+                    "resume/recovery supervisor"
+                ]
+            }
+        })),
+        "latex-compile-acceleration" => Some(json!({
+            "canonical_owner": "latex-compile-acceleration",
+            "delegation_gate": "subagent-delegation",
+            "upstream_source": {
+                "official_skill_path": "skills/latex-compile-acceleration/SKILL.md"
+            },
+            "official_workflow": {
+                "phases": ["measurement", "bottleneck-classification", "lane-planning", "execution", "verification"],
+                "lane_defaults": ["measurement", "structure-audit", "engine-cache-strategy", "verification-plan"]
+            },
+            "implementation_bar": [
+                "measurement-first",
+                "parallelism-gate-required",
+                "single-writer-aux-boundary",
+                "verification-evidence-required"
+            ],
+            "local_adaptations": [
+                "use Rust control-plane only for durable lane orchestration and host alias projection",
+                "keep LaTeX bottleneck diagnosis and tactic choice in the skill layer",
+                "preserve a serial full-build fallback for final verification"
+            ],
+            "lane_contract": {
+                "analysis_lanes": ["measurement", "structure-audit", "engine-cache-strategy", "verification-plan"],
+                "parallelism_gate": [
+                    "independent compile units must be explicit",
+                    "shared aux ownership must stay single-writer",
+                    "bibliography and ref convergence cannot be parallelized blindly"
+                ]
+            },
+            "host_entrypoints": {"claude-code": "/latex-compile-acceleration"},
+            "interaction_invariants": {
+                "requires_explicit_entrypoint": true,
+                "explicit_entrypoints": ["/latex-compile-acceleration", "$latex-compile-acceleration"],
+                "implicit_route_policy": "measurement-only"
+            }
         })),
         _ => None,
     }
@@ -630,6 +843,80 @@ fn alias_record_list(value: &Value, path: &[&str]) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn alias_record_bool(value: &Value, path: &[&str]) -> Option<bool> {
+    alias_value_at_path(value, path).and_then(Value::as_bool)
+}
+
+fn team_current_state(continuity: &Value) -> String {
+    let state = value_text(continuity.get("state"));
+    let phase = value_text(continuity.get("phase"));
+    let status = value_text(continuity.get("status"));
+
+    if state == "stale" {
+        return "stale-continuity".to_string();
+    }
+    if state == "inconsistent" {
+        return "inconsistent-continuity".to_string();
+    }
+    if status == "completed" {
+        return "cleanup-completed".to_string();
+    }
+    match phase.as_str() {
+        "delegation" => "delegation-planned".to_string(),
+        "execution" => "worker-running".to_string(),
+        "integration" => "integration-pending".to_string(),
+        "qa" => "qa-in-progress".to_string(),
+        "cleanup" => "cleanup-pending".to_string(),
+        _ if state == "active" => "scoping-active".to_string(),
+        _ => "fresh-entry".to_string(),
+    }
+}
+
+fn team_resume_action(current_state: &str) -> (&'static str, &'static str, &'static str) {
+    match current_state {
+        "stale-continuity" => (
+            "resume_requires_refresh",
+            "refresh_continuity_then_resume",
+            "refresh-continuity",
+        ),
+        "inconsistent-continuity" => (
+            "resume_requires_repair",
+            "repair_continuity_then_resume",
+            "repair-continuity",
+        ),
+        "delegation-planned" => (
+            "resume_team_delegation",
+            "review_worker_split_and_admit_or_fallback",
+            "continue-current-task",
+        ),
+        "worker-running" => (
+            "resume_team_execution",
+            "review_lane_progress_and_integrate_when_ready",
+            "continue-current-task",
+        ),
+        "integration-pending" => (
+            "resume_team_integration",
+            "integrate_lane_outputs_then_verify",
+            "continue-current-task",
+        ),
+        "qa-in-progress" => (
+            "resume_team_qa",
+            "verify_integrated_result_and_close_loop",
+            "continue-current-task",
+        ),
+        "cleanup-completed" => (
+            "resume_blocked_completed",
+            "start_new_task",
+            "start-new-task",
+        ),
+        _ => (
+            "fresh_team_entry",
+            "start_team_supervision",
+            "fresh-start",
+        ),
+    }
 }
 
 fn compact_alias_next_actions(continuity: &Value, max_lines: usize) -> Vec<String> {
@@ -669,6 +956,56 @@ fn build_framework_alias_entry_contract(
         .take(max_lines.max(1).min(2))
         .collect::<Vec<_>>();
     let implementation_bar = alias_record_list(alias_record, &["implementation_bar"]);
+    let decision_contract = alias_value_at_path(alias_record, &["decision_contract"])
+        .cloned()
+        .unwrap_or(Value::Null);
+    let blockers = value_string_list(continuity.get("blockers"));
+    let verification_status = value_text(continuity.get("verification_status"));
+    let evidence_missing = continuity
+        .get("evidence_missing")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let missing_recovery_anchors = value_string_list(continuity.get("missing_recovery_anchors"));
+    let execution_ready = alias_name == "autopilot"
+        && continuity_state == "active"
+        && !task.is_empty()
+        && !next_actions.is_empty()
+        && missing_recovery_anchors.is_empty();
+    let needs_recovery = alias_name == "autopilot"
+        && matches!(continuity_state.as_str(), "stale" | "inconsistent");
+    let needs_verification = alias_name == "autopilot"
+        && evidence_missing
+        && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES);
+    let needs_debugging = alias_name == "autopilot"
+        && !blockers.is_empty()
+        && blockers.iter().any(|item| {
+            let lowered = item.to_ascii_lowercase();
+            lowered.contains("unknown")
+                || lowered.contains("root cause")
+                || lowered.contains("根因")
+                || lowered.contains("重复")
+        });
+    let needs_clarification = alias_name == "autopilot"
+        && continuity_state == "missing"
+        && task.is_empty()
+        && next_actions.is_empty();
+    let execution_readiness = if alias_name == "autopilot" {
+        if needs_recovery {
+            "needs_recovery"
+        } else if needs_verification {
+            "needs_verification"
+        } else if needs_debugging {
+            "needs_debugging"
+        } else if needs_clarification {
+            "needs_clarification"
+        } else if execution_ready {
+            "ready_to_execute"
+        } else {
+            "continue_autopilot"
+        }
+    } else {
+        "use-alias-default"
+    };
     let mut route_rules = Vec::new();
     let summary = match alias_name {
         "autopilot" => {
@@ -678,6 +1015,15 @@ fn build_framework_alias_entry_contract(
             route_rules.push(format!("模糊需求 -> `{ambiguous}`"));
             route_rules.push(format!("根因未知 -> `{root_cause}`"));
             route_rules.push(format!("其他情况 -> `{owner}`"));
+            if evidence_missing {
+                route_rules.push("缺少验证证据 -> 先补 QA / Validation，再决定是否 closeout".to_string());
+            }
+            if !missing_recovery_anchors.is_empty() {
+                route_rules.push(format!(
+                    "恢复锚点缺失 -> 先补 {}",
+                    missing_recovery_anchors.join(", ")
+                ));
+            }
             format!(
                 "进入 autopilot。OMC {tag} 执行流保留，但状态、恢复和续跑都走本地 Rust/continuity。"
             )
@@ -700,15 +1046,56 @@ fn build_framework_alias_entry_contract(
             let owner = alias_record_text(alias_record, &["canonical_owner"]);
             let delegation_gate = alias_record_text(alias_record, &["delegation_gate"]);
             let execution_owners = alias_record_list(alias_record, &["execution_owners"]);
+            let transition_states = alias_record_list(alias_record, &["official_workflow", "transition_states"]);
+            let recovery_states = alias_record_list(alias_record, &["official_workflow", "recovery_states"]);
+            let lane_fields = alias_record_list(alias_record, &["lane_contract", "required_fields"]);
+            let supervisor_write_scope =
+                alias_record_text(alias_record, &["supervisor_contract", "worker_write_scope"]);
+            let requires_recovery_anchor = alias_record_bool(
+                alias_record,
+                &["supervisor_contract", "resume_requires_recovery_anchor"],
+            )
+            .unwrap_or(false);
             route_rules.push(format!("主 owner -> `{owner}`"));
             route_rules.push(format!("team split gate -> `{delegation_gate}`"));
-            route_rules.push("共享 continuity 只允许 supervisor 持有".to_string());
+            route_rules.push(format!("bounded subagent lane -> `{delegation_gate}`"));
+            route_rules.push("full orchestration route -> `team`".to_string());
+            route_rules.push(format!("worker write scope -> `{supervisor_write_scope}`"));
+            if requires_recovery_anchor {
+                route_rules.push("恢复续跑必须保留 recovery anchor".to_string());
+            }
             if !execution_owners.is_empty() {
                 route_rules.push(format!("execution lanes -> {}", execution_owners.join(", ")));
             }
+            if !transition_states.is_empty() {
+                route_rules.push(format!("transition states -> {}", transition_states.join(", ")));
+            }
+            if !recovery_states.is_empty() {
+                route_rules.push(format!("recovery states -> {}", recovery_states.join(", ")));
+            }
+            if !lane_fields.is_empty() {
+                route_rules.push(format!("lane contract -> {}", lane_fields.join(", ")));
+            }
             format!(
-                "进入 team。OMC {tag} 团队编排流保留，但 worker 生命周期、恢复和 continuity 都走本地 Rust/supervisor。"
+                "进入 team。OMC {tag} 团队编排流保留，但 worker 生命周期、lane 合同、恢复和 continuity 都走本地 Rust/supervisor。"
             )
+        }
+        "latex-compile-acceleration" => {
+            let owner = alias_record_text(alias_record, &["canonical_owner"]);
+            let delegation_gate = alias_record_text(alias_record, &["delegation_gate"]);
+            let lane_defaults = alias_record_list(alias_record, &["official_workflow", "lane_defaults"]);
+            let parallelism_gate = alias_record_list(alias_record, &["lane_contract", "parallelism_gate"]);
+            route_rules.push(format!("主 owner -> `{owner}`"));
+            route_rules.push(format!("bounded analysis lanes -> `{delegation_gate}`"));
+            route_rules.push("先测量 clean / warm / watch，再决定是否并行".to_string());
+            route_rules.push("bibliography / refs / shared aux 默认保持串行".to_string());
+            if !lane_defaults.is_empty() {
+                route_rules.push(format!("default lanes -> {}", lane_defaults.join(", ")));
+            }
+            if !parallelism_gate.is_empty() {
+                route_rules.push(format!("parallelism gate -> {}", parallelism_gate.join("; ")));
+            }
+            "进入 latex-compile-acceleration。先做测量与瓶颈分类，只在编译单元边界明确时才进入并行 lane，并保留串行 full-build 作为最终验证。".to_string()
         }
         _ => format!(
             "进入 {alias_name}。优先使用本地 Rust/continuity alias 载荷，不要回退成长文说明。"
@@ -726,9 +1113,12 @@ fn build_framework_alias_entry_contract(
             "task": if task.is_empty() { Value::Null } else { Value::String(task) },
             "phase": if phase.is_empty() { Value::Null } else { Value::String(phase) },
             "status": if status.is_empty() { Value::Null } else { Value::String(status) },
+            "verification_status": if verification_status.is_empty() { Value::Null } else { Value::String(verification_status) },
+            "execution_readiness": Value::String(execution_readiness.to_string()),
         },
         "route_rules": route_rules,
         "guardrails": guardrails,
+        "decision_contract": decision_contract,
         "acceptance": acceptance,
         "next_actions": next_actions,
         "skill_fallback_path": if skill_path.is_empty() { Value::Null } else { Value::String(skill_path.to_string()) },
@@ -751,6 +1141,12 @@ fn build_framework_alias_state_machine(
         .get("can_resume")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let evidence_missing = continuity
+        .get("evidence_missing")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let verification_status = value_text(continuity.get("verification_status"));
+    let missing_recovery_anchors = value_string_list(continuity.get("missing_recovery_anchors"));
     let next_steps = compact_alias_next_actions(continuity, max_lines);
     let recovery_hints = value_string_list(continuity.get("recovery_hints"))
         .into_iter()
@@ -777,47 +1173,111 @@ fn build_framework_alias_state_machine(
             }
         })
         .unwrap_or_default();
-    let (current_state, recommended_action, resume_mode, resume_reason) = match state.as_str() {
-        "active" => (
-            "resume_active",
-            if alias_name == "deepinterview" {
-                "resume_interview"
-            } else {
-                "resume_current_task"
-            },
-            "continue-current-task",
-            "live continuity is active",
-        ),
-        "completed" => (
-            "resume_blocked_completed",
-            "start_new_task",
-            "start-new-task",
-            "completed work should stay historical; start a new bounded task",
-        ),
-        "stale" => (
-            "resume_requires_refresh",
-            "refresh_continuity_then_resume",
-            "refresh-continuity",
-            "stale continuity cannot be resumed directly",
-        ),
-        "inconsistent" => (
-            "resume_requires_repair",
-            "repair_continuity_then_resume",
-            "repair-continuity",
-            "continuity artifacts disagree and must be repaired first",
-        ),
-        _ => (
-            "fresh_entry",
-            if alias_name == "deepinterview" {
-                "start_interview"
-            } else if alias_name == "team" {
-                "start_team_supervision"
-            } else {
-                "start_execution"
-            },
-            "fresh-start",
-            "no active continuity is available; enter as a fresh task",
-        ),
+    let (current_state, recommended_action, resume_mode, resume_reason) = if alias_name == "team" {
+        let current_state = team_current_state(continuity);
+        let (_resume_state, action, mode) = team_resume_action(&current_state);
+        let reason = match current_state.as_str() {
+            "delegation-planned" => "worker split exists but still needs supervisor admission or fallback",
+            "worker-running" => "active worker lanes require supervision before integration",
+            "integration-pending" => "lane outputs are ready but not yet integrated",
+            "qa-in-progress" => "integrated result still needs verification evidence",
+            "cleanup-completed" => "completed team execution should stay historical; start a new bounded task",
+            "stale-continuity" => "stale continuity cannot be resumed directly",
+            "inconsistent-continuity" => "continuity artifacts disagree and must be repaired first",
+            _ => "no active continuity is available; enter as a fresh team task",
+        };
+        (
+            current_state,
+            action.to_string(),
+            mode.to_string(),
+            reason.to_string(),
+        )
+    } else if alias_name == "autopilot" {
+        match state.as_str() {
+            "active" if evidence_missing && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES) => (
+                "resume_active_needs_verification".to_string(),
+                "verify_before_done".to_string(),
+                "continue-current-task".to_string(),
+                "implementation is active but verification evidence is still missing".to_string(),
+            ),
+            "active" if !missing_recovery_anchors.is_empty() => (
+                "resume_active_missing_anchors".to_string(),
+                "repair_recovery_anchors_then_resume".to_string(),
+                "repair-continuity".to_string(),
+                "active continuity is missing required recovery anchors".to_string(),
+            ),
+            "active" => (
+                "resume_active".to_string(),
+                "resume_current_task".to_string(),
+                "continue-current-task".to_string(),
+                "live continuity is active".to_string(),
+            ),
+            "completed" => (
+                "resume_blocked_completed".to_string(),
+                "start_new_task".to_string(),
+                "start-new-task".to_string(),
+                "completed work should stay historical; start a new bounded task".to_string(),
+            ),
+            "stale" => (
+                "resume_requires_refresh".to_string(),
+                "refresh_continuity_then_resume".to_string(),
+                "refresh-continuity".to_string(),
+                "stale continuity cannot be resumed directly".to_string(),
+            ),
+            "inconsistent" => (
+                "resume_requires_repair".to_string(),
+                "repair_continuity_then_resume".to_string(),
+                "repair-continuity".to_string(),
+                "continuity artifacts disagree and must be repaired first".to_string(),
+            ),
+            _ => (
+                "fresh_entry".to_string(),
+                "start_execution".to_string(),
+                "fresh-start".to_string(),
+                "no active continuity is available; enter as a fresh task".to_string(),
+            ),
+        }
+    } else {
+        match state.as_str() {
+            "active" => (
+                "resume_active".to_string(),
+                if alias_name == "deepinterview" {
+                    "resume_interview".to_string()
+                } else {
+                    "resume_current_task".to_string()
+                },
+                "continue-current-task".to_string(),
+                "live continuity is active".to_string(),
+            ),
+            "completed" => (
+                "resume_blocked_completed".to_string(),
+                "start_new_task".to_string(),
+                "start-new-task".to_string(),
+                "completed work should stay historical; start a new bounded task".to_string(),
+            ),
+            "stale" => (
+                "resume_requires_refresh".to_string(),
+                "refresh_continuity_then_resume".to_string(),
+                "refresh-continuity".to_string(),
+                "stale continuity cannot be resumed directly".to_string(),
+            ),
+            "inconsistent" => (
+                "resume_requires_repair".to_string(),
+                "repair_continuity_then_resume".to_string(),
+                "repair-continuity".to_string(),
+                "continuity artifacts disagree and must be repaired first".to_string(),
+            ),
+            _ => (
+                "fresh_entry".to_string(),
+                if alias_name == "deepinterview" {
+                    "start_interview".to_string()
+                } else {
+                    "start_execution".to_string()
+                },
+                "fresh-start".to_string(),
+                "no active continuity is available; enter as a fresh task".to_string(),
+            ),
+        }
     };
     let handoff = match alias_name {
         "autopilot" => json!({
@@ -859,14 +1319,44 @@ fn build_framework_alias_state_machine(
                     "action": "keep_local_ownership",
                 },
                 {
-                    "when": "bounded sidecars improve throughput",
+                    "when": "bounded sidecars improve throughput without full orchestration overhead",
                     "target": alias_record_text(alias_record, &["delegation_gate"]),
-                    "action": "plan_worker_split",
+                    "action": "use_bounded_subagent_lane",
+                },
+                {
+                    "when": "worker lifecycle, integration, qa, or resume/recovery must stay supervisor-led",
+                    "target": "team",
+                    "action": "keep_team_orchestration",
                 },
                 {
                     "when": "worker outputs are ready to merge",
                     "target": "execution-audit",
                     "action": "verify_and_close_loop",
+                }
+            ]
+        }),
+        "latex-compile-acceleration" => json!({
+            "default_mode": "measure-first-latex-optimization",
+            "rules": [
+                {
+                    "when": "bottleneck is still unknown",
+                    "target": "latex-compile-acceleration",
+                    "action": "measure_clean_warm_watch_first",
+                },
+                {
+                    "when": "independent compile units are explicit and aux ownership stays single-writer",
+                    "target": alias_record_text(alias_record, &["delegation_gate"]),
+                    "action": "use_bounded_analysis_or_compile_lanes",
+                },
+                {
+                    "when": "bibliography, references, or shared aux convergence dominate",
+                    "target": "latex-compile-acceleration",
+                    "action": "keep_serial_convergence_path",
+                },
+                {
+                    "when": "candidate optimization is ready to sign off",
+                    "target": "execution-audit",
+                    "action": "verify_full_build_and_invalidation",
                 }
             ]
         }),
@@ -878,6 +1368,18 @@ fn build_framework_alias_state_machine(
     let mut resume = Map::new();
     resume.insert("allowed".to_string(), Value::Bool(can_resume));
     resume.insert("mode".to_string(), Value::String(resume_mode.to_string()));
+    if alias_name == "autopilot" {
+        resume.insert(
+            "missing_recovery_anchors".to_string(),
+            Value::Array(
+                missing_recovery_anchors
+                    .iter()
+                    .cloned()
+                    .map(Value::String)
+                    .collect(),
+            ),
+        );
+    }
     resume.insert(
         "reason".to_string(),
         Value::String(resume_reason.to_string()),
@@ -912,6 +1414,8 @@ fn build_framework_alias_state_machine(
         "schema_version": "framework-alias-state-machine-v1",
         "current_state": current_state,
         "recommended_action": recommended_action,
+        "verification_status": if verification_status.is_empty() { Value::Null } else { Value::String(verification_status) },
+        "evidence_missing": evidence_missing,
         "resume": Value::Object(resume),
         "handoff": handoff,
         "next_steps": if state == "active" { next_steps } else { recovery_hints },
@@ -1196,6 +1700,31 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
     let forbidden_scope = value_string_list(contract.get("forbidden_scope"));
     let acceptance_criteria = value_string_list(contract.get("acceptance_criteria"));
     let evidence_required = value_string_list(contract.get("evidence_required"));
+    let evidence_count = normalize_evidence_index(&snapshot.evidence_index).len();
+    let evidence_missing = evidence_count == 0
+        && (!evidence_required.is_empty() || !acceptance_criteria.is_empty());
+    let missing_recovery_anchors = stable_line_items(vec![
+        if snapshot.session_summary_text.trim().is_empty() {
+            "SESSION_SUMMARY".to_string()
+        } else {
+            String::new()
+        },
+        if !object_has_any_signal(&snapshot.next_actions) {
+            "NEXT_ACTIONS".to_string()
+        } else {
+            String::new()
+        },
+        if !object_has_any_signal(&snapshot.trace_metadata) {
+            "TRACE_METADATA".to_string()
+        } else {
+            String::new()
+        },
+        if supervisor.is_empty() {
+            "SUPERVISOR_STATE".to_string()
+        } else {
+            String::new()
+        },
+    ]);
     let terminal_reasons = stable_line_items(vec![
         terminal_reason("summary phase is terminal", &summary_phase, TERMINAL_PHASES),
         terminal_reason(
@@ -1374,6 +1903,10 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
         "route": route,
         "next_actions": next_actions,
         "blockers": blockers,
+        "evidence_count": evidence_count,
+        "evidence_missing": evidence_missing,
+        "verification_status": if verification_status.is_empty() { Value::Null } else { Value::String(verification_status.clone()) },
+        "missing_recovery_anchors": missing_recovery_anchors,
         "current_execution": if state == "active" && !task.is_empty() { current_execution } else { Value::Null },
         "recent_completed_execution": if state == "completed" && !task.is_empty() { recent_completed_execution } else { Value::Null },
         "stale_reasons": stale_reasons,

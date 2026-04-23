@@ -18,6 +18,7 @@ from scripts.materialize_cli_host_entrypoints import (
     CLAUDE_AUTOPILOT_COMMAND,
     CLAUDE_BACKGROUND_BATCH_COMMAND,
     CLAUDE_DEEPINTERVIEW_COMMAND,
+    CLAUDE_LATEX_COMPILE_ACCELERATION_COMMAND,
     CLAUDE_PROJECT_DIR_SNIPPET,
     CLAUDE_REFRESH_COMMAND,
     CLAUDE_ROUTER_RS_MANIFEST_PATH,
@@ -247,6 +248,15 @@ def test_router_rs_exports_claude_hook_manifest() -> None:
     }
 
 
+def test_materialized_claude_settings_hooks_match_rust_manifest(tmp_path: Path) -> None:
+    manifest = _run_router_rs_hook_manifest()
+    materialize_repo_host_entrypoints(tmp_path)
+
+    settings = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
+
+    assert settings["hooks"] == manifest["settings_hooks"]
+
+
 def test_router_rs_hook_manifest_resolution_stays_release_strict(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -420,6 +430,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert (tmp_path / ".claude" / "commands" / "autopilot.md").is_file()
     assert (tmp_path / ".claude" / "commands" / "deepinterview.md").is_file()
     assert (tmp_path / ".claude" / "commands" / "team.md").is_file()
+    assert (tmp_path / ".claude" / "commands" / "latex-compile-acceleration.md").is_file()
     assert (tmp_path / ".claude" / "hooks" / "run.sh").is_file()
     hook_runner_script = (tmp_path / ".claude" / "hooks" / "run.sh").read_text(encoding="utf-8")
     assert "run_router_rs" in hook_runner_script
@@ -445,11 +456,15 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     team_command = (
         tmp_path / ".claude" / "commands" / "team.md"
     ).read_text(encoding="utf-8")
+    latex_compile_acceleration_command = (
+        tmp_path / ".claude" / "commands" / "latex-compile-acceleration.md"
+    ).read_text(encoding="utf-8")
     assert refresh_command == CLAUDE_REFRESH_COMMAND
     assert background_batch_command == CLAUDE_BACKGROUND_BATCH_COMMAND
     assert autopilot_command == CLAUDE_AUTOPILOT_COMMAND
     assert deepinterview_command == CLAUDE_DEEPINTERVIEW_COMMAND
     assert team_command == CLAUDE_TEAM_COMMAND
+    assert latex_compile_acceleration_command == CLAUDE_LATEX_COMPILE_ACCELERATION_COMMAND
     assert CLAUDE_PROJECT_DIR_SNIPPET in refresh_command
     assert (
         '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR"'
@@ -492,6 +507,8 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "resident Rust binary directly" in autopilot_command
     assert "alias.state_machine" in autopilot_command
     assert "alias.entry_contract" in autopilot_command
+    assert "explicit entrypoints: `/autopilot`, `$autopilot`" in autopilot_command
+    assert "Implicit routing policy: `never`" in autopilot_command
     assert CLAUDE_PROJECT_DIR_SNIPPET in autopilot_command
     assert '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs' in autopilot_command
     assert '"$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs' in autopilot_command
@@ -511,6 +528,8 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "resident Rust binary directly" in deepinterview_command
     assert "alias.state_machine" in deepinterview_command
     assert "alias.entry_contract" in deepinterview_command
+    assert "explicit entrypoints: `/deepinterview`, `$deepinterview`" in deepinterview_command
+    assert "Implicit routing policy: `never`" in deepinterview_command
     assert CLAUDE_PROJECT_DIR_SNIPPET in deepinterview_command
     assert '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs' in deepinterview_command
     assert '"$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs' in deepinterview_command
@@ -530,6 +549,8 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "resident Rust binary directly" in team_command
     assert "alias.state_machine" in team_command
     assert "alias.entry_contract" in team_command
+    assert "explicit entrypoints: `/team`, `$team`" in team_command
+    assert "Implicit routing policy: `strong-orchestration-only`" in team_command
     assert CLAUDE_PROJECT_DIR_SNIPPET in team_command
     assert '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs' in team_command
     assert '"$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs' in team_command
@@ -540,6 +561,28 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "python3 scripts/router_rs_runner.py" not in team_command
     assert aliases["team"]["upstream_source"]["official_skill_path"] in team_command
     assert "Only open" in team_command
+    assert "thin Rust-first alias" in latex_compile_acceleration_command
+    assert aliases["latex-compile-acceleration"]["host_entrypoints"]["claude-code"] in latex_compile_acceleration_command
+    assert "--framework-alias-json" in latex_compile_acceleration_command
+    assert "--framework-alias latex-compile-acceleration" in latex_compile_acceleration_command
+    assert "--compact-output" in latex_compile_acceleration_command
+    assert "--claude-hook-max-lines 3" in latex_compile_acceleration_command
+    assert "resident Rust binary directly" in latex_compile_acceleration_command
+    assert "alias.state_machine" in latex_compile_acceleration_command
+    assert "alias.entry_contract" in latex_compile_acceleration_command
+    assert "explicit entrypoints: `/latex-compile-acceleration`, `$latex-compile-acceleration`" in latex_compile_acceleration_command
+    assert "Implicit routing policy: `measurement-only`" in latex_compile_acceleration_command
+    assert CLAUDE_PROJECT_DIR_SNIPPET in latex_compile_acceleration_command
+    assert '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs' in latex_compile_acceleration_command
+    assert '"$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs' in latex_compile_acceleration_command
+    assert (
+        'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias latex-compile-acceleration --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"'
+        in latex_compile_acceleration_command
+    )
+    assert "python3 scripts/router_rs_runner.py" not in latex_compile_acceleration_command
+    assert aliases["latex-compile-acceleration"]["upstream_source"]["official_skill_path"] in latex_compile_acceleration_command
+    assert "Only open" in latex_compile_acceleration_command
+    assert "Otherwise run" not in latex_compile_acceleration_command
     assert "Otherwise run" not in autopilot_command
     assert "Otherwise run" not in deepinterview_command
     assert "Otherwise run" not in team_command
@@ -568,6 +611,26 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert not (tmp_path / ".claude" / "hooks" / "stop.sh").exists()
     assert not (tmp_path / ".claude" / "hooks" / "pre_compact.sh").exists()
     assert not (tmp_path / ".claude" / "hooks" / "subagent_stop.sh").exists()
+
+
+def test_materialized_claude_hook_runner_covers_current_rust_commands(tmp_path: Path) -> None:
+    materialize_repo_host_entrypoints(tmp_path)
+    hook_runner_script = (tmp_path / ".claude" / "hooks" / "run.sh").read_text(encoding="utf-8")
+
+    for command_name, expected_fragment in (
+        ("session-end", 'run_router_rs --claude-hook-command session-end --repo-root "$PROJECT_DIR" >/dev/null'),
+        ("config-change", 'config-change|stop-failure)'),
+        ("stop-failure", 'config-change|stop-failure)'),
+        ("pre-tool-use", 'run_router_rs --claude-hook-audit-command pre-tool-use --repo-root "$PROJECT_DIR"'),
+        ("user-prompt-submit", 'run_router_rs --claude-hook-audit-command "$command_name" --repo-root "$PROJECT_DIR"'),
+        ("pre-tool-use-quality", 'pre-tool-use-quality|post-tool-audit)'),
+        ("post-tool-audit", 'pre-tool-use-quality|post-tool-audit)'),
+    ):
+        assert command_name in hook_runner_script
+        assert expected_fragment in hook_runner_script
+
+    for retired_command in ("session-start", "stop", "pre-compact", "subagent-stop"):
+        assert f'  {retired_command})' not in hook_runner_script
 
 
 def test_materialize_repo_host_entrypoints_is_idempotent(tmp_path: Path) -> None:
@@ -696,6 +759,7 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert "Task Snapshot" not in context
     assert len(context) <= 420
     assert telemetry["budget_chars"] == 420
+    assert telemetry["state_budget_chars"] == 120
     assert telemetry["trimmed"] is False
     assert "memory-truth" in telemetry["lanes"]
     assert "continuity-truth" in telemetry["lanes"]

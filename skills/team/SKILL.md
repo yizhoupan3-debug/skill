@@ -50,6 +50,8 @@ approval_required_tools:
 
 `team` 现在按 OMC 官方 `v4.13.2` 的 `team` 能力意图来跑，再做本地 Rust 化和仓内落地。它不是沿用 `.omc` 团队状态目录的兼容壳，而是把“任务拆分、worker 生命周期、恢复续跑、结果收口”统一接到本仓的 Rust supervisor、continuity artifacts 和宿主原生 worker 管理能力上。
 
+每轮对话开始 / first-turn / conversation start 时，如果用户明确进入 `/team` 或当前任务已经天然是 supervisor-led 的多 worker 编排，就应该直接按 `team` 契约进入，而不是先退化成普通单线程执行。
+
 ## Upstream Baseline
 
 - 官方来源：`oh-my-claudecode` `v4.13.2`
@@ -58,9 +60,10 @@ approval_required_tools:
 
 ## When to use
 
-- 每轮对话开始 / first-turn / conversation start，而且用户明确要 `/team` 或 `$team`
-- 当前任务需要多个 bounded worker / sidecar 并行推进
-- 需要把拆分、执行、集成、验收压进同一条 supervisor 主线
+- 每轮对话开始 / first-turn / conversation start，而且当前任务已经满足 team orchestration 的强信号
+- 用户明确要 `/team` 或 `$team`
+- 或者当前任务已经满足 team orchestration 的强信号：多阶段执行、worker 生命周期管理、integration / QA / cleanup、resume / recovery 都是主流程的一部分
+- 当前任务需要多个 bounded worker / sidecar 并行推进，而且 supervisor 必须持续管理拆分、执行、集成、验收
 - 需要 worker 生命周期和恢复锚点都可追踪，而不是一次性并发后失控
 - 用户想保留多 agent / team 的执行体验，但底层必须是本仓的 Rust-first runtime
 
@@ -68,7 +71,7 @@ approval_required_tools:
 
 - 任务其实是单线程小修，不需要 team orchestration
 - 只是设计多 agent 架构，不是要在当前仓库里进入 team 执行态
-- 只是要决定是否拆 sidecar，但还没进入 team 运行主线
+- 只是要决定是否拆 bounded subagents，但 orchestration 本身还不是任务主线；这类场景优先走 `$subagent-delegation`
 - 多个 worker 会互相重叠写同一份 continuity 主文件
 
 ## Canonical owner
@@ -81,18 +84,9 @@ approval_required_tools:
 
 ## Official Workflow
 
-1. `Scoping`
-   - 先确定什么必须留在 supervisor 主线程，什么可以拆成 bounded worker。
-2. `Delegation`
-   - 先定义 worker 边界、输入输出和 forbidden scope，再决定是否真实派发。
-3. `Execution`
-   - worker 按 lane 执行，主线程保留 orchestration 和关键判断。
-4. `Integration`
-   - 回收各 worker 输出，统一合并结果和证据。
-5. `QA`
-   - 对集成结果做构建、测试、回归和必要修复。
-6. `Cleanup`
-   - 清理运行态残留，只保留 continuity、证据和可恢复锚点。
+- canonical lifecycle / worker / recovery state truth lives in `configs/framework/RUNTIME_REGISTRY.json` and the shared control-plane contracts.
+- `team` still follows the OMC intent of `scoping -> delegation -> execution -> integration -> qa -> cleanup`.
+- Rust `alias.state_machine` and `alias.entry_contract` are the executable projection for the current turn.
 
 ## Local Replacements
 
@@ -113,7 +107,7 @@ approval_required_tools:
 1. 先定主线程与 worker 的边界，再决定是否真实派发。
 2. shared continuity 只允许 supervisor 写，worker 不准直接共写主 continuity 文件。
 3. 如果 runtime policy 不允许派发，保留同样的 team 结构并退化成 local-supervisor 队列，而不是放弃 team 逻辑。
-4. 需要拆分时，优先走 [`$subagent-delegation`](/Users/joe/Documents/skill/skills/subagent-delegation/SKILL.md) 做 bounded split。
+4. 需要拆分时，`$subagent-delegation` 负责 bounded subagent lane；当生命周期、integration、QA、cleanup、resume/recovery 需要 supervisor 持续主导时，保持在 `team` 主线。
 5. 集成后必须补验证证据，没有验证证据不宣布 team 收口完成。
 6. 如果 worker 失败或中断，必须保留恢复锚点并优先续跑，不把中断当完成。
 

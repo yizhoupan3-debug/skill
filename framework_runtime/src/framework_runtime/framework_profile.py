@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any, Dict, Iterable, Mapping, MutableMapping, Sequence
 
 
@@ -225,7 +226,8 @@ class FrameworkProfile:
     host_capability_requirements: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def shared_contract_surface(self) -> Dict[str, Any]:
+    @cached_property
+    def _shared_contract_surface(self) -> Dict[str, Any]:
         return {
             "artifact_contract": _clone_json_like(self.artifact_contract),
             "memory_mounts": normalize_framework_memory_mounts(self.memory_mounts),
@@ -241,9 +243,12 @@ class FrameworkProfile:
             "session_contract": build_framework_session_contract(self.session_policy),
         }
 
+    def shared_contract_surface(self) -> Dict[str, Any]:
+        return _clone_json_like(self._shared_contract_surface)
+
     def shared_contract_bridges(self) -> Dict[str, Any]:
         return extract_framework_workspace_bridges(
-            self.shared_contract_surface()["workspace_bootstrap"]
+            self._shared_contract_surface["workspace_bootstrap"]
         )
 
     def shared_contract_payload(self) -> Dict[str, Any]:
@@ -254,7 +259,7 @@ class FrameworkProfile:
             "profile_id": self.profile_id,
             "framework_profile_version": self.framework_profile_version,
             "shared_contract_fields": list(FRAMEWORK_SHARED_CONTRACT_FIELDS),
-            "shared_contract": self.shared_contract_surface(),
+            "shared_contract": _clone_json_like(self._shared_contract_surface),
         }
 
     def to_dict(self) -> Dict[str, Any]:

@@ -187,7 +187,7 @@ const USER_PROMPT_HOOK_TERMS: [&str; 6] = [
 const USER_PROMPT_MEMORY_PRIORITY_CONTEXT: &str =
     "记忆真源：这个仓库优先使用 repo-local shared memory `./.codex/memory/`，不要把 Codex global memories 当成当前项目真相。";
 const USER_PROMPT_CONTINUITY_CONTEXT: &str =
-    "当前任务真源：`artifacts/current/<task_id>/` + `artifacts/current/active_task.json` + `.supervisor_state.json`。";
+    "任务真源：`artifacts/current/<task_id>/` + `active_task.json` + `.supervisor_state.json`。";
 const USER_PROMPT_PERF_CONTEXT: &str =
     "顺手看热路径上的重复 I/O、重复序列化、无谓 clone、临时对象和多余包装层。";
 const USER_PROMPT_COMPAT_CONTEXT: &str =
@@ -196,9 +196,12 @@ const USER_PROMPT_HOOK_CONTEXT: &str =
     "Hook 额外检查：让 hook 增加自动化，而不是只做阻拦；优先短上下文、窄触发、低开销，并尽量用 matcher/if 避免无谓触发。";
 const USER_PROMPT_CLOSEOUT_CONTEXT: &str =
     "完成任务时默认只用一小段收尾：说清做了什么、达成了什么效果、下一步是什么；如果已经结束，就直接说已收尾。";
+const USER_PROMPT_EXECUTION_INTENT_PREFIX: &str = "执行意图：";
 const USER_PROMPT_STATE_COMPACT_PREFIX: &str = "当前状态：";
 const USER_PROMPT_STATE_BUDGET_CHARS: usize = 120;
+const USER_PROMPT_COMPLEX_STATE_BUDGET_CHARS: usize = 220;
 const USER_PROMPT_CONTEXT_MAX_CHARS: usize = 420;
+const USER_PROMPT_COMPLEX_CONTEXT_MAX_CHARS: usize = 1100;
 const QUALITY_RUST_CONTEXT: &str =
     "Rust 额外检查：盯住热循环里的分配、clone、String/Vec 复制和 serde_json 往返。";
 const QUALITY_PYTHON_CONTEXT: &str =
@@ -1351,6 +1354,17 @@ fn looks_like_coding_request(prompt_text: &str) -> bool {
     if prompt_text.trim().is_empty() {
         return false;
     }
+    let lowered = prompt_text.to_lowercase();
+    if prompt_text.contains("/autopilot")
+        || prompt_text.contains("/deepinterview")
+        || prompt_text.contains("/team")
+        || lowered.contains("autopilot")
+        || lowered.contains("deepinterview")
+        || lowered.contains("deep-interview")
+        || lowered.contains("team mode")
+    {
+        return true;
+    }
     let markdown_mentions = markdown_path_mentions(prompt_text);
     let markdown_execution_mentions = markdown_mentions
         .iter()
@@ -1415,7 +1429,7 @@ fn user_prompt_memory_projection(repo_root: &Path, max_lines: usize) -> Result<S
     Ok(lines.join("\n"))
 }
 
-fn compact_user_prompt_projection(repo_root: &Path) -> Result<String, String> {
+fn compact_user_prompt_projection(repo_root: &Path, state_budget_chars: usize) -> Result<String, String> {
     let projection = user_prompt_memory_projection(repo_root, 1)?;
     let summary = projection
         .lines()
@@ -1446,16 +1460,77 @@ fn compact_user_prompt_projection(repo_root: &Path) -> Result<String, String> {
     if summary.is_empty() {
         return Ok(String::new());
     }
-    let shortened = if summary.chars().count() > USER_PROMPT_STATE_BUDGET_CHARS {
+    let shortened = if summary.chars().count() > state_budget_chars {
         let truncated = summary
             .chars()
-            .take(USER_PROMPT_STATE_BUDGET_CHARS.saturating_sub(1))
+            .take(state_budget_chars.saturating_sub(1))
             .collect::<String>();
         format!("{truncated}…")
     } else {
         summary
     };
     Ok(format!("{USER_PROMPT_STATE_COMPACT_PREFIX}{shortened}"))
+}
+
+fn complex_coding_request(prompt_text: &str) -> bool {
+    let lowered = prompt_text.to_lowercase();
+    if prompt_text.contains("/autopilot")
+        || prompt_text.contains("/deepinterview")
+        || prompt_text.contains("/team")
+        || lowered.contains("autopilot")
+        || lowered.contains("deepinterview")
+        || lowered.contains("deep-interview")
+        || lowered.contains("team mode")
+    {
+        return true;
+    }
+    if (lowered.contains("root cause") || lowered.contains("根因"))
+        && (lowered.contains("resume") || lowered.contains("续跑") || lowered.contains("恢复"))
+    {
+        return true;
+    }
+    let path_mentions = prompt_path_mentions(prompt_text, false).len();
+    let strong_actions = count_contains(&lowered, &USER_PROMPT_STRONG_ACTION_TERMS);
+    let code_targets = count_contains(&lowered, &USER_PROMPT_CODE_TARGET_TERMS);
+    path_mentions >= 2 || (strong_actions >= 3 && code_targets >= 4)
+}
+
+fn execution_intent_summary(prompt_text: &str) -> Option<String> {
+    if !looks_like_coding_request(prompt_text) || !complex_coding_request(prompt_text) {
+        return None;
+    }
+    let lowered = prompt_text.to_lowercase();
+    let mut parts = Vec::new();
+    if prompt_text.contains("/deepinterview") || lowered.contains("deepinterview") || lowered.contains("deep-interview") {
+        parts.push("先澄清最弱维度，再决定是否 handoff");
+    }
+    if prompt_text.contains("/team") || lowered.contains("team mode") || lowered.contains("多 agent") || lowered.contains("worker") {
+        parts.push("shared continuity 只允许 supervisor 持有");
+    }
+    if prompt_text.contains("/autopilot") || lowered.contains("autopilot") {
+        parts.push("优先续跑当前执行链，不把中断当完成");
+    }
+    if lowered.contains("root cause") || lowered.contains("根因") {
+        parts.push("根因未明时先定位，不机械重试");
+    }
+    if lowered.contains("resume") || lowered.contains("续跑") || lowered.contains("恢复") {
+        parts.push("先核对恢复锚点，再继续执行");
+    }
+    if parts.is_empty() {
+        parts.push("保留执行语义，优先验证与恢复锚点");
+    }
+    Some(format!("{USER_PROMPT_EXECUTION_INTENT_PREFIX}{}", parts.join("；")))
+}
+
+fn user_prompt_context_budget(prompt_text: &str) -> (usize, usize) {
+    if looks_like_coding_request(prompt_text) && complex_coding_request(prompt_text) {
+        (
+            USER_PROMPT_COMPLEX_CONTEXT_MAX_CHARS,
+            USER_PROMPT_COMPLEX_STATE_BUDGET_CHARS,
+        )
+    } else {
+        (USER_PROMPT_CONTEXT_MAX_CHARS, USER_PROMPT_STATE_BUDGET_CHARS)
+    }
 }
 
 fn shrink_user_prompt_context(text: &str, max_chars: usize) -> String {
@@ -1477,15 +1552,20 @@ fn shrink_user_prompt_context(text: &str, max_chars: usize) -> String {
 }
 
 fn build_user_prompt_context_payload(repo_root: &Path, prompt_text: &str) -> Result<Value, String> {
+    let (context_budget_chars, state_budget_chars) = user_prompt_context_budget(prompt_text);
     let mut sections = vec![
         USER_PROMPT_MEMORY_PRIORITY_CONTEXT.to_string(),
         USER_PROMPT_CONTINUITY_CONTEXT.to_string(),
     ];
     let mut lanes = vec!["memory-truth".to_string(), "continuity-truth".to_string()];
-    let projection = compact_user_prompt_projection(repo_root)?;
+    let projection = compact_user_prompt_projection(repo_root, state_budget_chars)?;
     if !projection.trim().is_empty() {
         sections.push(projection);
         lanes.push("state-compact".to_string());
+    }
+    if let Some(intent) = execution_intent_summary(prompt_text) {
+        sections.push(intent);
+        lanes.push("execution-intent".to_string());
     }
     if looks_like_coding_request(prompt_text) {
         let lowered = prompt_text.to_lowercase();
@@ -1510,16 +1590,17 @@ fn build_user_prompt_context_payload(repo_root: &Path, prompt_text: &str) -> Res
         sections.push(join_unique_context(&parts));
     }
     let pre_shrink = sections.join("\n\n");
-    let context = shrink_user_prompt_context(&pre_shrink, USER_PROMPT_CONTEXT_MAX_CHARS);
+    let context = shrink_user_prompt_context(&pre_shrink, context_budget_chars);
     let trimmed = context.chars().count() < pre_shrink.chars().count();
     Ok(json!({
         "text": context,
         "telemetry": {
             "lanes": lanes,
             "char_count": pre_shrink.chars().count(),
-            "final_char_count": pre_shrink.chars().count().min(USER_PROMPT_CONTEXT_MAX_CHARS).min(context.chars().count()),
+            "final_char_count": pre_shrink.chars().count().min(context_budget_chars).min(context.chars().count()),
             "trimmed": trimmed,
-            "budget_chars": USER_PROMPT_CONTEXT_MAX_CHARS,
+            "budget_chars": context_budget_chars,
+            "state_budget_chars": state_budget_chars,
         }
     }))
 }
@@ -2580,6 +2661,7 @@ mod tests {
         assert!(lanes.iter().any(|item| item.as_str() == Some("perf")));
         assert!(lanes.iter().any(|item| item.as_str() == Some("compat")));
         assert_eq!(telemetry["budget_chars"], Value::from(USER_PROMPT_CONTEXT_MAX_CHARS as u64));
+        assert_eq!(telemetry["state_budget_chars"], Value::from(USER_PROMPT_STATE_BUDGET_CHARS as u64));
         assert_eq!(telemetry["trimmed"], Value::Bool(false));
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
@@ -2644,6 +2726,27 @@ mod tests {
         assert!(context.contains("matcher/if"));
         assert!(context.contains("完成任务时默认只用一小段收尾"));
         assert_eq!(context.matches("Hook 额外检查").count(), 1);
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn user_prompt_submit_expands_budget_for_complex_execution_alias_requests() {
+        let repo_root = temp_repo_root("user-prompt-submit-complex-alias");
+        let payload = json!({
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "继续 /autopilot 续跑当前任务，先核对恢复锚点，再处理 root cause，必要时按 /team 拆 worker"
+        });
+        let result = run_user_prompt_submit(&repo_root, &payload).expect("audit ok");
+        let telemetry = result["contextTelemetry"].as_object().expect("telemetry");
+        let lanes = telemetry["lanes"].as_array().expect("lanes");
+        let context = result["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or("");
+        assert!(lanes.iter().any(|item| item.as_str() == Some("execution-intent")));
+        assert_eq!(telemetry["budget_chars"], Value::from(USER_PROMPT_COMPLEX_CONTEXT_MAX_CHARS as u64));
+        assert_eq!(telemetry["state_budget_chars"], Value::from(USER_PROMPT_COMPLEX_STATE_BUDGET_CHARS as u64));
+        assert!(context.contains("执行意图："));
+        assert!(context.contains("优先续跑当前执行链") || context.contains("先核对恢复锚点"));
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 

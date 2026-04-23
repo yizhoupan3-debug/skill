@@ -386,8 +386,52 @@ def _framework_alias_upstream_source(alias_name: str) -> dict[str, str]:
     return {str(key): str(value) for key, value in raw.items() if isinstance(value, str) and value}
 
 
+def _framework_alias_interaction_invariants(alias_name: str) -> dict[str, Any]:
+    payload = _framework_alias_payload(alias_name)
+    invariants = payload.get("interaction_invariants")
+    if isinstance(invariants, dict):
+        explicit_entrypoints = invariants.get("explicit_entrypoints")
+        if isinstance(explicit_entrypoints, list) and any(
+            isinstance(item, str) and item for item in explicit_entrypoints
+        ):
+            return invariants
+    lane_contract = payload.get("lane_contract")
+    explicit_entrypoints: list[str] = []
+    if isinstance(lane_contract, dict):
+        raw = lane_contract.get("explicit_entrypoints")
+        if isinstance(raw, list):
+            explicit_entrypoints = [str(item) for item in raw if isinstance(item, str) and item]
+    if not explicit_entrypoints:
+        host_entrypoints = payload.get("host_entrypoints")
+        if isinstance(host_entrypoints, dict):
+            explicit_entrypoints = [
+                str(item)
+                for item in host_entrypoints.values()
+                if isinstance(item, str) and item
+            ]
+    implicit_route_policy = "manual-only"
+    if isinstance(invariants, dict):
+        raw_policy = invariants.get("implicit_route_policy")
+        if isinstance(raw_policy, str) and raw_policy:
+            implicit_route_policy = raw_policy
+    return {
+        "explicit_entrypoints": explicit_entrypoints,
+        "implicit_route_policy": implicit_route_policy,
+    }
+
+
 def _build_claude_framework_alias_command(alias_name: str) -> str:
     entrypoint = _framework_alias_claude_entrypoint(alias_name)
+    interaction_invariants = _framework_alias_interaction_invariants(alias_name)
+    explicit_entrypoints = interaction_invariants.get("explicit_entrypoints")
+    if not isinstance(explicit_entrypoints, list):
+        explicit_entrypoints = []
+    explicit_entrypoint_text = ", ".join(
+        f"`{item}`" for item in explicit_entrypoints if isinstance(item, str) and item
+    )
+    implicit_route_policy = interaction_invariants.get("implicit_route_policy")
+    if not isinstance(implicit_route_policy, str):
+        implicit_route_policy = "unknown"
     skill_path = _framework_alias_upstream_source(alias_name).get(
         "official_skill_path",
         f"skills/{alias_name}/SKILL.md",
@@ -412,6 +456,8 @@ If both resident binaries are missing, self-heal with:
 `{project_dir_snippet}; cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias {alias_name} --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
 
 Use `alias.state_machine` and `alias.entry_contract` as the working contract for this turn.
+This alias only enters through explicit entrypoints: {explicit_entrypoint_text}.
+Implicit routing policy: `{implicit_route_policy}`.
 Prefer the Rust alias payload over opening long docs or restating OMC background.
 Only open `{skill_path}` if the alias payload is missing something you still need.
 Keep execution inside the repo's native Rust/continuity lane.
@@ -421,6 +467,8 @@ Keep execution inside the repo's native Rust/continuity lane.
         entrypoint=entrypoint,
         project_dir_snippet=CLAUDE_PROJECT_DIR_SNIPPET,
         skill_path=skill_path,
+        explicit_entrypoint_text=explicit_entrypoint_text,
+        implicit_route_policy=implicit_route_policy,
     )
 
 
@@ -436,9 +484,14 @@ def _build_claude_team_command() -> str:
     return _build_claude_framework_alias_command("team")
 
 
+def _build_claude_latex_compile_acceleration_command() -> str:
+    return _build_claude_framework_alias_command("latex-compile-acceleration")
+
+
 CLAUDE_AUTOPILOT_COMMAND = _build_claude_autopilot_command()
 CLAUDE_DEEPINTERVIEW_COMMAND = _build_claude_deepinterview_command()
 CLAUDE_TEAM_COMMAND = _build_claude_team_command()
+CLAUDE_LATEX_COMPILE_ACCELERATION_COMMAND = _build_claude_latex_compile_acceleration_command()
 
 
 CLAUDE_AGENTS_README = """# Claude Agents Directory
@@ -702,6 +755,7 @@ HOST_ENTRYPOINT_TEXT_FILES = {
     ".claude/commands/autopilot.md": CLAUDE_AUTOPILOT_COMMAND,
     ".claude/commands/deepinterview.md": CLAUDE_DEEPINTERVIEW_COMMAND,
     ".claude/commands/team.md": CLAUDE_TEAM_COMMAND,
+    ".claude/commands/latex-compile-acceleration.md": CLAUDE_LATEX_COMPILE_ACCELERATION_COMMAND,
     ".claude/hooks/README.md": CLAUDE_HOOKS_README,
     ".claude/hooks/run.sh": CLAUDE_HOOK_RUNNER,
 }

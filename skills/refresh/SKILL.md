@@ -57,6 +57,11 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null |
 下一轮执行 prompt 已准备好，并且已经复制到剪贴板。
 ```
 
+### Optional debug mode
+
+If the user explicitly asks for a verbose/debug refresh, run the same command with `--framework-refresh-verbose` appended, inspect the returned JSON for `refresh.debug`, and summarize only the diagnostic fields they asked for.
+Do not change the default confirmation sentence for normal `$refresh` use.
+
 ## Constraints
 
 - Do not rewrite root continuity artifacts

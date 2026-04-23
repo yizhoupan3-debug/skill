@@ -536,7 +536,6 @@ class CodexAgnoRuntime:
                 **({"model_id": result.model_id} if result.live_run else {}),
             },
         )
-        self._attach_trace_metadata(result, routing_result)
         self._maybe_flush_trace(result, routing_result)
         return result
 
@@ -607,26 +606,47 @@ class CodexAgnoRuntime:
 
         return self.background_service.get_status(job_id)
 
-    def _attach_trace_metadata(self, response: RunTaskResponse, routing_result: RoutingResult) -> None:
+    def _trace_runtime_snapshot(self, session_id: str) -> dict[str, Any]:
+        latest_cursor = self._trace.latest_cursor(session_id=session_id)
+        stream_state = self._trace.describe_stream()
+        transport = self.trace_service.describe_transport(session_id=session_id)
+        handoff = self.trace_service.describe_handoff(session_id=session_id)
+        return {
+            "latest_cursor": latest_cursor,
+            "stream_state": stream_state,
+            "transport": transport,
+            "handoff": handoff,
+            "trace_event_count": len(self._trace.events),
+            "trace_output_path": str(self.trace_service.output_path) if self.trace_service.output_path else None,
+            "trace_stream_path": (
+                str(self.trace_service.event_stream_path) if self.trace_service.event_stream_path else None
+            ),
+        }
+
+    def _attach_trace_metadata(
+        self,
+        response: RunTaskResponse,
+        routing_result: RoutingResult,
+        trace_snapshot: dict[str, Any] | None = None,
+    ) -> None:
         """Stamp final trace metadata onto a response payload."""
 
         reroute_count = self._trace.count_reroutes(response.session_id)
         retry_count = self._trace.count_retries(response.session_id)
-        latest_cursor = self._trace.latest_cursor(session_id=response.session_id)
-        stream_state = self._trace.describe_stream()
-        transport = self.trace_service.describe_transport(session_id=response.session_id)
-        handoff = self.trace_service.describe_handoff(session_id=response.session_id)
+        trace_snapshot = trace_snapshot or self._trace_runtime_snapshot(response.session_id)
+        latest_cursor = trace_snapshot["latest_cursor"]
+        stream_state = trace_snapshot["stream_state"]
+        transport = trace_snapshot["transport"]
+        handoff = trace_snapshot["handoff"]
         response.metadata.update(
             {
                 **self.execution_service.kernel_payload(
                     dry_run=not response.live_run,
                     metadata=response.metadata,
                 ),
-                "trace_event_count": len(self._trace.events),
-                "trace_output_path": str(self.trace_service.output_path) if self.trace_service.output_path else None,
-                "trace_stream_path": (
-                    str(self.trace_service.event_stream_path) if self.trace_service.event_stream_path else None
-                ),
+                "trace_event_count": trace_snapshot["trace_event_count"],
+                "trace_output_path": trace_snapshot["trace_output_path"],
+                "trace_stream_path": trace_snapshot["trace_stream_path"],
                 "trace_resume_manifest_path": handoff.resume_manifest_path,
                 "trace_resume_manifest_role": handoff.resume_manifest_role,
                 "trace_resume_manifest_binding_path": transport.binding_artifact_path,
@@ -675,9 +695,11 @@ class CodexAgnoRuntime:
     def _maybe_flush_trace(self, result: RunTaskResponse, routing_result: RoutingResult) -> None:
         """Flush canonical trace metadata when configured."""
 
+        trace_snapshot = self._trace_runtime_snapshot(result.session_id)
         reroute_count = self._trace.count_reroutes(result.session_id)
         retry_count = self._trace.count_retries(result.session_id)
         artifact_paths = self._runtime_artifact_paths()
+        supervisor_projection = self._build_supervisor_projection().model_dump(mode="json")
         self._trace.flush_metadata(
             task=routing_result.task,
             matched_skills=[
@@ -690,15 +712,17 @@ class CodexAgnoRuntime:
             artifact_paths=artifact_paths,
             verification_status="completed" if result.live_run else "dry_run",
             session_id=result.session_id,
-            supervisor_projection=self._build_supervisor_projection().model_dump(mode="json"),
+            supervisor_projection=supervisor_projection,
             reroute_count=reroute_count,
             retry_count=retry_count,
         )
+        self._attach_trace_metadata(result, routing_result, trace_snapshot=trace_snapshot)
         self._write_resume_manifest(
             session_id=result.session_id,
             job_id=None,
             status="completed" if result.live_run else "dry_run",
             artifact_paths=artifact_paths,
+            supervisor_projection=supervisor_projection,
         )
 
     @staticmethod
@@ -780,14 +804,17 @@ class CodexAgnoRuntime:
         job_id: str | None,
         status: str,
         artifact_paths: list[str] | None = None,
+        supervisor_projection: dict[str, Any] | None = None,
     ) -> None:
         """Write the runtime-owned resume manifest when trace artifacts are configured."""
 
         artifact_paths = artifact_paths or self._runtime_artifact_paths()
+        if supervisor_projection is None:
+            supervisor_projection = self._build_supervisor_projection().model_dump(mode="json")
         self.trace_service.checkpoint(
             session_id=session_id,
             job_id=job_id,
             status=status,
             artifact_paths=artifact_paths,
-            supervisor_projection=self._build_supervisor_projection().model_dump(mode="json"),
+            supervisor_projection=supervisor_projection,
         )

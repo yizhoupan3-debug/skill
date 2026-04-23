@@ -134,7 +134,7 @@
 | `slides-source-first` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Build or revise slide workflows where source-of-truth authoring and artifact con |
 | `sql-pro` | Active | P2 | L4 | owner | none | project | ✓ 97.7 | Write, optimize, debug, and review SQL for PostgreSQL, MySQL, SQLite, and analyt |
 | `statistical-analysis` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Guide research statistics for test choice, effect sizes, uncertainty reporting,  |
-| `subagent-delegation` | Active | P1 | L0 | gate | delegation | project | ✓ 94.5 | Decide whether to split a complex task across sidecars or preserve the same stru |
+| `subagent-delegation` | Active | P1 | L0 | gate | delegation | project | ✓ 94.5 | Decide whether a complex task should stay local, use bounded subagents, or prese |
 | `sustech-mailer` | Active | P2 | L2 | owner | none | project | ✓ 96.8 | Send emails from the SUSTech student mailbox via SMTP with auto-generated conten |
 | `svelte` | Active | P2 | L4 | owner | none | project | ✓ 97.7 | Deliver Svelte 5 applications using runes-based reactivity ($state, $derived, $e |
 | `systematic-debugging` | Active | P1 | L0 | gate | evidence | project | ✓ 97.0 | Investigate unknown failures before fixing |

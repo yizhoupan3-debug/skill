@@ -140,7 +140,7 @@ def test_runtime_registry_prefers_rust_export_for_explicit_repo_root(
             {
                 "schema_version": "framework-runtime-registry-v1",
                 "default_host_peer_set": ["repo-host"],
-                "shared_project_mcp_servers": ["framework-mcp"],
+                "shared_project_mcp_servers": [],
                 "workspace_bootstrap_defaults": {"skill_bridge": {"source_rel": "repo-skills"}},
                 "framework_native_aliases": {"autopilot": {"canonical_owner": "repo-owner"}},
                 "omc_retirement_contract": {"runtime_authority": "repo-rust"},
@@ -164,19 +164,85 @@ def test_runtime_registry_prefers_rust_export_for_explicit_repo_root(
     payload = runtime_registry.load_runtime_registry(repo_root=repo_root)
 
     assert payload["plugins"][0]["plugin_name"] == "repo-plugin"
-    assert captured == ["export-runtime-registry", "--repo-root", str(repo_root.resolve())]
+    assert payload["shared_project_mcp_servers"] == []
+    assert shared_project_mcp_servers(repo_root=repo_root) == (
+        "browser-mcp",
+        "framework-mcp",
+        "openaiDeveloperDocs",
+    )
+    assert captured[:3] == ["export-runtime-registry", "--repo-root", str(repo_root.resolve())]
+    assert len(captured) % 3 == 0
+
+
+def test_runtime_registry_empty_shared_project_mcp_servers_falls_back_only_in_helper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {
+        "schema_version": "framework-runtime-registry-v1",
+        "shared_project_mcp_servers": [],
+    }
+    monkeypatch.setattr(runtime_registry, "_load_runtime_registry_or_none", lambda repo_root=None: payload)
+
+    assert tuple(payload["shared_project_mcp_servers"]) == ()
+    assert shared_project_mcp_servers() == (
+        "browser-mcp",
+        "framework-mcp",
+        "openaiDeveloperDocs",
+    )
+
+
+def test_runtime_registry_nonempty_shared_project_mcp_servers_do_not_fall_back(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / "configs" / "framework").mkdir(parents=True)
+    registry_path = repo_root / "configs" / "framework" / "RUNTIME_REGISTRY.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "framework-runtime-registry-v1",
+                "default_host_peer_set": ["repo-host"],
+                "shared_project_mcp_servers": ["framework-mcp"],
+                "workspace_bootstrap_defaults": {"skill_bridge": {"source_rel": "repo-skills"}},
+                "framework_native_aliases": {"autopilot": {"canonical_owner": "repo-owner"}},
+                "omc_retirement_contract": {"runtime_authority": "repo-rust"},
+                "plugins": [{"plugin_name": "repo-plugin", "source_rel": "repo-plugin"}],
+                "host_adapters": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    def _fake_run_host_integration_rs(*args: str) -> dict[str, object]:
+        return json.loads(registry_path.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(runtime_registry, "run_host_integration_rs", _fake_run_host_integration_rs)
+
+    assert shared_project_mcp_servers(repo_root=repo_root) == ("framework-mcp",)
 
 
 def test_runtime_registry_exposes_framework_native_aliases_and_omc_retirement_contract() -> None:
     aliases = framework_native_aliases()
     assert aliases["autopilot"]["canonical_owner"] == "execution-controller-coding"
     assert aliases["autopilot"]["host_entrypoints"]["codex-cli"] == "$autopilot"
+    assert aliases["autopilot"]["interaction_invariants"]["requires_explicit_entrypoint"] is True
+    assert aliases["autopilot"]["interaction_invariants"]["explicit_entrypoints"] == ["/autopilot", "$autopilot"]
+    assert aliases["autopilot"]["interaction_invariants"]["implicit_route_policy"] == "never"
     assert aliases["autopilot"]["omc_lineage"]["inherits_core_capabilities"] is True
     assert aliases["autopilot"]["upstream_source"]["tag"] == "v4.13.2"
     assert "qa" in aliases["autopilot"]["official_workflow"]["phases"]
     assert "resume-and-recovery-required" in aliases["autopilot"]["implementation_bar"]
+    assert "execution-controller-coding" in aliases["autopilot"]["execution_owners"]
+    assert aliases["autopilot"]["decision_contract"]["verify_when"][0] == "implementation changed but evidence is still missing"
+    assert aliases["autopilot"]["decision_contract"]["repair_when"][0] == "continuity state is inconsistent"
     assert aliases["deepinterview"]["canonical_owner"] == "code-review"
     assert aliases["deepinterview"]["host_entrypoints"]["claude-code"] == "/deepinterview"
+    assert aliases["deepinterview"]["interaction_invariants"]["requires_explicit_entrypoint"] is True
+    assert aliases["deepinterview"]["interaction_invariants"]["explicit_entrypoints"] == ["/deepinterview", "$deepinterview"]
+    assert aliases["deepinterview"]["interaction_invariants"]["implicit_route_policy"] == "never"
     assert aliases["deepinterview"]["omc_lineage"]["inherits_core_capabilities"] is True
     assert aliases["deepinterview"]["upstream_source"]["official_skill_path"] == "skills/deep-interview/SKILL.md"
     assert "one-question-at-a-time" in aliases["deepinterview"]["official_workflow"]["loop_rules"]
@@ -184,10 +250,46 @@ def test_runtime_registry_exposes_framework_native_aliases_and_omc_retirement_co
     assert aliases["team"]["canonical_owner"] == "execution-controller-coding"
     assert aliases["team"]["host_entrypoints"]["codex-cli"] == "$team"
     assert aliases["team"]["host_entrypoints"]["claude-code"] == "/team"
+    assert aliases["team"]["interaction_invariants"]["requires_explicit_entrypoint"] is True
+    assert aliases["team"]["interaction_invariants"]["explicit_entrypoints"] == ["/team", "$team"]
+    assert aliases["team"]["interaction_invariants"]["implicit_route_policy"] == "strong-orchestration-only"
+    assert "worker lifecycle" in aliases["team"]["interaction_invariants"]["implicit_route_signals"]
     assert aliases["team"]["omc_lineage"]["inherits_core_capabilities"] is True
     assert aliases["team"]["upstream_source"]["official_skill_path"] == "skills/team/SKILL.md"
     assert "delegation" in aliases["team"]["official_workflow"]["phases"]
+    assert "spawn-blocked" in aliases["team"]["official_workflow"]["transition_states"]
+    assert "worker-failed-recoverable" in aliases["team"]["official_workflow"]["recovery_states"]
+    assert aliases["team"]["supervisor_contract"]["shared_continuity_owner"] == "supervisor"
+    assert "lane_id" in aliases["team"]["lane_contract"]["required_fields"]
+    assert "failed-recoverable" in aliases["team"]["worker_lifecycle"]["states"]
+    assert aliases["team"]["verification_contract"]["verification_evidence_required_before_cleanup"] is True
+    assert aliases["team"]["auto_route_allowed"] is True
+    assert aliases["team"]["route_mode"] == "team-orchestration"
+    assert aliases["team"]["selection_signals"]["prefer_when"][0] == (
+        "multi-phase execution needs explicit worker lifecycle management"
+    )
+    assert aliases["team"]["selection_signals"]["avoid_when"][0] == (
+        "task is a small tightly coupled local change"
+    )
     assert "supervisor-owned-continuity" in aliases["team"]["implementation_bar"]
+    assert aliases["latex-compile-acceleration"]["canonical_owner"] == "latex-compile-acceleration"
+    assert aliases["latex-compile-acceleration"]["host_entrypoints"]["codex-cli"] == "$latex-compile-acceleration"
+    assert aliases["latex-compile-acceleration"]["host_entrypoints"]["claude-code"] == "/latex-compile-acceleration"
+    assert aliases["latex-compile-acceleration"]["interaction_invariants"]["requires_explicit_entrypoint"] is True
+    assert aliases["latex-compile-acceleration"]["interaction_invariants"]["explicit_entrypoints"] == [
+        "/latex-compile-acceleration",
+        "$latex-compile-acceleration",
+    ]
+    assert aliases["latex-compile-acceleration"]["interaction_invariants"]["implicit_route_policy"] == "measurement-only"
+    assert aliases["latex-compile-acceleration"]["upstream_source"]["official_skill_path"] == "skills/latex-compile-acceleration/SKILL.md"
+    assert aliases["latex-compile-acceleration"]["official_workflow"]["phases"][0] == "measurement"
+    assert "verification" in aliases["latex-compile-acceleration"]["official_workflow"]["phases"]
+    assert "engine-cache-strategy" in aliases["latex-compile-acceleration"]["official_workflow"]["lane_defaults"]
+    assert aliases["latex-compile-acceleration"]["delegation_gate"] == "subagent-delegation"
+    assert "parallelism-gate-required" in aliases["latex-compile-acceleration"]["implementation_bar"]
+    assert aliases["latex-compile-acceleration"]["lane_contract"]["parallelism_gate"][0] == (
+        "independent compile units must be explicit"
+    )
 
     retirement = omc_retirement_contract()
     assert retirement["runtime_authority"] == "rust-session-supervisor"
@@ -202,6 +304,11 @@ def test_runtime_registry_exposes_framework_native_aliases_and_omc_retirement_co
     assert (
         "supervisor-owned-continuity"
         in retirement["framework_native_alias_guarantees"]["team"]["implementation_bar"]
+    )
+    assert retirement["framework_native_alias_guarantees"]["latex-compile-acceleration"]["inherits_omc_core_capabilities"] is False
+    assert (
+        "parallelism-gate-required"
+        in retirement["framework_native_alias_guarantees"]["latex-compile-acceleration"]["implementation_bar"]
     )
 
 
@@ -222,5 +329,7 @@ def test_runtime_registry_host_records_expose_supervisor_capabilities() -> None:
 
     assert codex["protocol_hints"]["framework_alias_entrypoints"]["autopilot"] == "$autopilot"
     assert codex["protocol_hints"]["framework_alias_entrypoints"]["team"] == "$team"
+    assert codex["protocol_hints"]["framework_alias_entrypoints"]["latex-compile-acceleration"] == "$latex-compile-acceleration"
     assert claude["protocol_hints"]["framework_alias_entrypoints"]["deepinterview"] == "/deepinterview"
     assert claude["protocol_hints"]["framework_alias_entrypoints"]["team"] == "/team"
+    assert claude["protocol_hints"]["framework_alias_entrypoints"]["latex-compile-acceleration"] == "/latex-compile-acceleration"

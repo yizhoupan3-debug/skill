@@ -6,6 +6,9 @@ import re
 from textwrap import dedent
 from typing import Optional
 
+_COMPACT_BODY_MAX_CHARS = 1200
+_COMPACT_BODY_MAX_LINES = 12
+
 from framework_runtime.schemas import RoutingResult, SkillMetadata
 
 # Fuzzy-match substrings for key instructional sections found in real SKILL.md files.
@@ -174,17 +177,25 @@ class PromptBuilder:
             if skill.do_not_use:
                 sections.append(f"Avoid it when:\n{skill.do_not_use.strip()}")
 
-        # Token budget: L0/L-1 controllers get full body; domain skills get key sections only
-        if skill.body.strip() and skill.routing_layer in ("L0", "L-1"):
-            sections.append(f"Full instructions:\n{skill.body.strip()}")
-        else:
-            key_content = self._extract_key_sections(skill.body)
-            if key_content:
-                sections.append(f"Key rules:\n{key_content}")
-            elif skill.body.strip():
-                # Fallback: use full body if no key sections found
-                sections.append(f"Full instructions:\n{skill.body.strip()}")
+        key_content = self._extract_key_sections(skill.body)
+        if key_content:
+            sections.append(f"Key rules:\n{key_content}")
+        elif skill.body.strip():
+            sections.append(f"Key rules:\n{self._compact_body(skill.body)}")
         return "\n\n".join(sections).strip()
+
+    @staticmethod
+    def _compact_body(body: str) -> str:
+        compact = body.strip()
+        if not compact:
+            return ""
+        lines = [line.rstrip() for line in compact.splitlines() if line.strip()]
+        compact = "\n".join(lines[:_COMPACT_BODY_MAX_LINES]).strip()
+        if len(compact) > _COMPACT_BODY_MAX_CHARS:
+            compact = compact[: _COMPACT_BODY_MAX_CHARS - 1].rstrip() + "…"
+        elif len(lines) > _COMPACT_BODY_MAX_LINES or len(body.strip()) > len(compact):
+            compact = compact.rstrip() + "\n…"
+        return compact
 
     @staticmethod
     def _extract_key_sections(body: str) -> str:

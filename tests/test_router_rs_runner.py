@@ -30,6 +30,7 @@ def test_parse_hot_request_for_framework_refresh(tmp_path: Path) -> None:
     assert request is not None
     assert request.op == "framework_refresh"
     assert request.payload["max_lines"] == 6
+    assert request.payload["verbose"] is False
     assert request.payload["repo_root"] == str(tmp_path.resolve())
     assert request.socket_path.name.startswith("router-rs-hot-")
 
@@ -106,12 +107,33 @@ def test_dispatch_hot_request_wraps_framework_alias_envelope(tmp_path: Path) -> 
     }
 
 
+def test_parse_hot_request_for_framework_refresh_verbose(tmp_path: Path) -> None:
+    binary_path = tmp_path / "router-rs"
+    binary_path.write_text("", encoding="utf-8")
+
+    request = router_rs_runner._parse_hot_request(
+        [
+            "--framework-refresh-json",
+            "--framework-refresh-verbose",
+            "--claude-hook-max-lines",
+            "6",
+            "--repo-root",
+            str(tmp_path),
+        ],
+        binary_path=binary_path,
+    )
+
+    assert request is not None
+    assert request.payload["verbose"] is True
+
+
 def test_dispatch_hot_request_wraps_framework_refresh_envelope(tmp_path: Path) -> None:
     request = router_rs_runner.HotRequest(
         op="framework_refresh",
         payload={
             "repo_root": str(tmp_path),
             "max_lines": 6,
+            "verbose": True,
         },
         socket_path=tmp_path / "router-rs.sock",
     )
@@ -127,10 +149,12 @@ def test_dispatch_hot_request_wraps_framework_refresh_envelope(tmp_path: Path) -
             *,
             repo_root: Path,
             max_lines: int,
+            verbose: bool,
         ) -> dict[str, object]:
             calls["repo_root"] = repo_root
             calls["max_lines"] = max_lines
-            return {"ok": True, "confirmation": "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。"}
+            calls["verbose"] = verbose
+            return {"ok": True, "confirmation": "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。", "verbose": verbose}
 
     response = router_rs_runner._dispatch_hot_request(request, adapter=FakeAdapter())
 
@@ -140,4 +164,5 @@ def test_dispatch_hot_request_wraps_framework_refresh_envelope(tmp_path: Path) -
     assert calls == {
         "repo_root": tmp_path,
         "max_lines": 6,
+        "verbose": True,
     }

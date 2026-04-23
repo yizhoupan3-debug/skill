@@ -252,6 +252,14 @@ def _assert_descriptor_matches_canonical(
         )
 
 
+def _normalize_attach_descriptor(
+    attach_descriptor: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    if attach_descriptor is None:
+        return None
+    return RuntimeEventAttachDescriptor.from_payload(attach_descriptor).model_dump(mode="json")
+
+
 def _build_external_runtime_attach_request(
     *,
     attach_descriptor: Mapping[str, Any] | None = None,
@@ -261,7 +269,7 @@ def _build_external_runtime_attach_request(
 ) -> dict[str, Any]:
     request: dict[str, Any] = {}
     if attach_descriptor is not None:
-        request["attach_descriptor"] = RuntimeEventAttachDescriptor.from_payload(attach_descriptor).model_dump(mode="json")
+        request["attach_descriptor"] = dict(attach_descriptor)
     if binding_artifact_path is not None:
         request["binding_artifact_path"] = binding_artifact_path
     if handoff_path is not None:
@@ -373,11 +381,7 @@ def resolve_external_runtime_event_transport(
 ) -> ExternalRuntimeEventTransportAttachment:
     """Resolve and validate the canonical attach payload for external runtime replay."""
 
-    requested_descriptor = (
-        RuntimeEventAttachDescriptor.from_payload(attach_descriptor).model_dump(mode="json")
-        if attach_descriptor is not None
-        else None
-    )
+    requested_descriptor = _normalize_attach_descriptor(attach_descriptor)
     request = _build_external_runtime_attach_request(
         attach_descriptor=requested_descriptor,
         binding_artifact_path=binding_artifact_path,
@@ -392,10 +396,11 @@ def resolve_external_runtime_event_transport(
             raise attach_error from exc
         raise
     attachment = _validate_attachment_payload(payload)
+    canonical_descriptor = attachment.attach_descriptor.model_dump(mode="json")
     if requested_descriptor is not None:
         _assert_descriptor_matches_canonical(
             requested_descriptor=requested_descriptor,
-            canonical_descriptor=attachment.attach_descriptor.model_dump(mode="json"),
+            canonical_descriptor=canonical_descriptor,
         )
     return attachment
 

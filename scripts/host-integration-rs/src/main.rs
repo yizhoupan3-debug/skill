@@ -1,3 +1,4 @@
+use chrono::Local;
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -507,6 +508,61 @@ fn shared_project_mcp_servers(repo_root: &Path) -> Result<Vec<String>, String> {
     Ok(registry.shared_project_mcp_servers)
 }
 
+fn router_rs_crate_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../router-rs")
+}
+
+fn router_rs_binary_candidates() -> Vec<PathBuf> {
+    let crate_root = router_rs_crate_root();
+    vec![
+        crate_root.join("target/release/router-rs"),
+        crate_root.join("target/debug/router-rs"),
+    ]
+}
+
+fn run_router_rs_json(repo_root: &Path, args: &[&str]) -> Result<Value, String> {
+    for candidate in router_rs_binary_candidates() {
+        if !candidate.is_file() {
+            continue;
+        }
+        let output = Command::new(&candidate)
+            .args(args)
+            .arg("--repo-root")
+            .arg(repo_root)
+            .output()
+            .map_err(|err| err.to_string())?;
+        if output.status.success() {
+            let stdout = String::from_utf8(output.stdout).map_err(|err| err.to_string())?;
+            return serde_json::from_str(stdout.trim()).map_err(|err| err.to_string());
+        }
+    }
+
+    let crate_root = router_rs_crate_root();
+    let manifest_path = crate_root.join("Cargo.toml");
+    let output = Command::new("cargo")
+        .arg("run")
+        .arg("--manifest-path")
+        .arg(&manifest_path)
+        .arg("--release")
+        .arg("--")
+        .args(args)
+        .arg("--repo-root")
+        .arg(repo_root)
+        .output()
+        .map_err(|err| err.to_string())?;
+    if output.status.success() {
+        let stdout = String::from_utf8(output.stdout).map_err(|err| err.to_string())?;
+        return serde_json::from_str(stdout.trim()).map_err(|err| err.to_string());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if stderr.is_empty() {
+        "missing required router-rs binary and cargo fallback failed".to_string()
+    } else {
+        stderr
+    })
+}
+
 fn describe_path(report_root: &Path, target_root: &Path, path: &Path) -> String {
     if let Ok(relative) = path.strip_prefix(report_root) {
         return relative.to_string_lossy().into_owned();
@@ -687,6 +743,175 @@ fn default_bootstrap_mirror_path(output_dir: &Path) -> PathBuf {
     output_dir.join("framework_default_bootstrap.json")
 }
 
+fn workspace_name_from_root(repo_root: &Path) -> String {
+    repo_root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("workspace")
+        .to_string()
+}
+
+fn current_local_timestamp() -> String {
+    Local::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
+fn safe_slug(label: &str) -> String {
+    let mut slug = String::new();
+    let mut previous_dash = false;
+    for ch in label.chars().flat_map(|ch| ch.to_lowercase()) {
+        let normalized = if ch.is_ascii_alphanumeric() {
+            Some(ch)
+        } else if ch.is_whitespace() || matches!(ch, '-' | '_' | '/' | '\\' | '.') {
+            Some('-')
+        } else {
+            None
+        };
+        if let Some(value) = normalized {
+            if value == '-' {
+                if slug.is_empty() || previous_dash {
+                    continue;
+                }
+                previous_dash = true;
+                slug.push(value);
+            } else {
+                previous_dash = false;
+                slug.push(value);
+            }
+        }
+    }
+    let trimmed = slug.trim_matches('-').to_string();
+    if trimmed.is_empty() {
+        "workspace".to_string()
+    } else {
+        trimmed
+    }
+}
+
+fn build_framework_task_id(label: &str) -> String {
+    let stamp = current_local_timestamp()
+        .chars()
+        .filter(|value| value.is_ascii_alphanumeric())
+        .collect::<String>();
+    let slug = safe_slug(label);
+    if stamp.is_empty() {
+        slug
+    } else {
+        let suffix = if stamp.len() > 14 {
+            &stamp[stamp.len() - 14..]
+        } else {
+            &stamp
+        };
+        format!("{slug}-{suffix}")
+    }
+}
+
+fn compact_evolution_proposals(payload: &Value) -> Value {
+    json!({
+        "proposal_count": payload.get("proposal_count").and_then(Value::as_u64).unwrap_or(0),
+        "proposals": payload
+            .get("proposals")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default(),
+    })
+}
+
+fn build_default_bootstrap_payload(repo_root: &Path, output_dir: &Path) -> Result<Value, String> {
+    let repo_root = repo_root.canonicalize().unwrap_or_else(|_| repo_root.to_path_buf());
+    let memory = run_router_rs_json(
+        &repo_root,
+        &["--framework-memory-recall-json", "--framework-memory-mode", "active", "--limit", "8"],
+    )?;
+    let memory_recall = memory
+        .get("memory_recall")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "router-rs memory recall payload missing memory_recall object".to_string())?;
+    let prompt_payload = memory_recall
+        .get("prompt_payload")
+        .cloned()
+        .ok_or_else(|| "router-rs memory recall payload missing prompt_payload".to_string())?;
+    let continuity_decision = prompt_payload
+        .get("continuity_decision")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let workspace = prompt_payload
+        .get("workspace")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .unwrap_or_else(|| workspace_name_from_root(&repo_root));
+    let created_at = current_local_timestamp();
+    let task_id = continuity_decision
+        .get("task_id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| build_framework_task_id(&workspace));
+    let runtime = json!({
+        "skills": [],
+        "count": 0,
+        "source": "skills/SKILL_ROUTING_RUNTIME.json",
+    });
+    let proposals = compact_evolution_proposals(&json!({
+        "proposal_count": 0,
+        "proposals": [],
+    }));
+    let payload = json!({
+        "skills-export": runtime,
+        "memory-bootstrap": prompt_payload,
+        "evolution-proposals": proposals,
+        "bootstrap": {
+            "query": "",
+            "workspace": workspace,
+            "repo_root": repo_root.to_string_lossy(),
+            "task_id": task_id,
+            "created_at": created_at,
+            "source_task": continuity_decision.get("source_task").cloned().unwrap_or(Value::Null),
+            "query_matches_active_task": continuity_decision
+                .get("query_matches_active_task")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            "ignored_root_continuity": continuity_decision
+                .get("ignored_root_continuity")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        }
+    });
+    let task_output_dir = output_dir.join(&task_id);
+    fs::create_dir_all(&task_output_dir).map_err(|err| err.to_string())?;
+    let bootstrap_path = task_output_dir.join("framework_default_bootstrap.json");
+    let mirror_bootstrap_path = default_bootstrap_mirror_path(output_dir);
+    write_json_if_changed(&bootstrap_path, &payload)?;
+    write_json_if_changed(&mirror_bootstrap_path, &payload)?;
+    Ok(json!({
+        "bootstrap_path": bootstrap_path.to_string_lossy(),
+        "paths": {
+            "output_dir": output_dir.to_string_lossy(),
+            "task_output_dir": task_output_dir.to_string_lossy(),
+            "repo_root": repo_root.to_string_lossy(),
+            "memory_root": memory_recall
+                .get("memory_root")
+                .and_then(Value::as_str)
+                .unwrap_or(""),
+            "mirror_bootstrap_path": mirror_bootstrap_path.to_string_lossy(),
+        },
+        "memory_items": memory_recall
+            .get("retrieval")
+            .and_then(Value::as_object)
+            .and_then(|retrieval| retrieval.get("items"))
+            .and_then(Value::as_array)
+            .map(|items| items.len())
+            .unwrap_or(0),
+        "proposal_count": payload
+            .get("evolution-proposals")
+            .and_then(Value::as_object)
+            .and_then(|entry| entry.get("proposal_count"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        "payload": payload,
+    }))
+}
+
 fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> bool {
     payload
         .get("bootstrap")
@@ -711,7 +936,7 @@ fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> bool
 }
 
 fn ensure_default_bootstrap(
-    template_root: &Path,
+    _template_root: &Path,
     repo_root: &Path,
     output_dir: Option<&Path>,
 ) -> Result<Value, String> {
@@ -738,33 +963,7 @@ fn ensure_default_bootstrap(
         }));
     }
 
-    let snippet = r#"import json, sys
-from pathlib import Path
-template_root = Path(sys.argv[1]).resolve()
-repo_root = Path(sys.argv[2]).resolve()
-output_dir = Path(sys.argv[3]).resolve()
-sys.path.insert(0, str(template_root))
-from scripts.default_bootstrap import run_default_bootstrap
-result = run_default_bootstrap(repo_root=repo_root, output_dir=output_dir)
-print(json.dumps(result, ensure_ascii=False))
-"#;
-    let completed = Command::new("python3")
-        .arg("-c")
-        .arg(snippet)
-        .arg(template_root)
-        .arg(repo_root)
-        .arg(&resolved_output_dir)
-        .output()
-        .map_err(|err| err.to_string())?;
-    if !completed.status.success() {
-        let stderr = String::from_utf8_lossy(&completed.stderr);
-        return Err(format!(
-            "default bootstrap materialization failed: {}",
-            stderr.trim()
-        ));
-    }
-    let raw_stdout = String::from_utf8(completed.stdout).map_err(|err| err.to_string())?;
-    let parsed: Value = serde_json::from_str(raw_stdout.trim()).map_err(|err| err.to_string())?;
+    let parsed = build_default_bootstrap_payload(repo_root, &resolved_output_dir)?;
     let output_dir_value = parsed
         .get("paths")
         .and_then(|value| value.get("output_dir"))
