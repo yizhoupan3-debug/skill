@@ -321,6 +321,16 @@ python3 /Users/joe/Documents/skill/scripts/paper_lane_scaffold.py \
   --lane "fig_b|figure_audit|figure:F3-F4|paper-visuals"
 ```
 
+Or let the script auto-fill a default batch for supported gates:
+
+```bash
+python3 /Users/joe/Documents/skill/scripts/paper_lane_scaffold.py \
+  --workspace /path/to/manuscript \
+  --review-dir paper_review_v3 \
+  --main-gate G11 \
+  --preset-by-gate
+```
+
 ## 11. Merge-Back Contract
 
 Merge-back is always local to the main thread.

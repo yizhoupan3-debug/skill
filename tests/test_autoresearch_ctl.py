@@ -221,10 +221,12 @@ def test_format_resume_returns_compact_handoff_summary() -> None:
         next_step="Retest on a second benchmark.",
         activate_hypothesis=None,
     )
+    state["novelty_gate"]["recommended_focus"] = "C1: Resume output should compress the critical context"
 
     resume_text = module.format_resume(state)
 
     assert "question: What should the next session know immediately?" in resume_text
+    assert "recommended_focus: C1: Resume output should compress the critical context" in resume_text
     assert "active_hypothesis: resume-compact" in resume_text
     assert "latest_run: run-001 (confirmatory)" in resume_text
     assert "latest_direction: BROADEN" in resume_text
@@ -327,15 +329,22 @@ def test_draft_claims_from_question_generates_claims_and_search_plan(tmp_path: P
     search_plan = reloaded["novelty_gate"]["search_plan"]
 
     assert len(draft_claims) == 4
-    assert draft_claims[0]["claim_id"] == "C1"
-    assert draft_claims[0]["axis"] == "method"
+    assert draft_claims[0]["recommended_order"] == 1
+    assert draft_claims[0]["priority_label"] in {"first", "next", "later"}
+    assert draft_claims[0]["priority_score"] >= draft_claims[-1]["priority_score"]
+    assert reloaded["novelty_gate"]["recommended_focus"].startswith(draft_claims[0]["claim_id"])
     assert len(search_plan) == 4
-    assert search_plan[0]["claim_id"] == "C1"
+    assert search_plan[0]["recommended_order"] == 1
+    assert search_plan[0]["claim_id"] == draft_claims[0]["claim_id"]
     assert any(query["label"] == "broad" for query in search_plan[0]["queries"])
 
     claims_text = (root / "literature" / "NOVELTY_CLAIMS.md").read_text(encoding="utf-8")
     plan_text = (root / "literature" / "NOVELTY_SEARCH_PLAN.md").read_text(encoding="utf-8")
     assert "<!-- autoresearch:claims:start -->" in claims_text
     assert "Managed Claim Extraction" in claims_text
+    assert "recommended first claim" in claims_text
+    assert "why first or later" in claims_text
     assert "file-backed research controller" in claims_text
+    assert "recommended first search target" in plan_text
+    assert "priority:" in plan_text
     assert "deep research workflows" in plan_text

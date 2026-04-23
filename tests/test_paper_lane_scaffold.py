@@ -8,7 +8,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.paper_lane_scaffold import LaneSpec, parse_lane_spec, scaffold_parallel_batch
+from scripts.paper_lane_scaffold import (
+    LaneSpec,
+    parse_lane_spec,
+    preset_for_gate,
+    resolve_batch_plan,
+    scaffold_parallel_batch,
+)
 
 
 def test_parse_lane_spec_requires_four_fields() -> None:
@@ -86,3 +92,54 @@ def test_scaffold_parallel_batch_cli(tmp_path: Path) -> None:
     assert manifest_path.exists()
     assert (manifest_path.parent / "refs_a" / "lane.md").exists()
     assert (manifest_path.parent / "refs_b" / "lane.md").exists()
+
+
+def test_preset_for_gate_returns_expected_default_batch() -> None:
+    preset = preset_for_gate("g11")
+
+    assert preset is not None
+    assert preset.batch_id == "g11_figures_a"
+    assert preset.lanes[0] == LaneSpec("fig_a", "figure_audit", "figure:F1-F2", "paper-visuals")
+
+
+def test_resolve_batch_plan_can_use_gate_preset_without_explicit_lanes() -> None:
+    batch_id, batch_goal, lanes = resolve_batch_plan(
+        main_gate="G14",
+        batch_id=None,
+        batch_goal=None,
+        lanes=[],
+        use_preset=True,
+    )
+
+    assert batch_id == "g14_layout_a"
+    assert "page economy" in batch_goal
+    assert lanes[0] == LaneSpec("layout_a", "layout_audit", "layout_surface:P1-P4", "pdf")
+
+
+def test_scaffold_parallel_batch_cli_with_gate_preset(tmp_path: Path) -> None:
+    script = PROJECT_ROOT / "scripts" / "paper_lane_scaffold.py"
+    result = subprocess.run(
+        [
+            "python3",
+            str(script),
+            "--workspace",
+            str(tmp_path),
+            "--review-dir",
+            "paper_review_v8",
+            "--main-gate",
+            "G11",
+            "--preset-by-gate",
+        ],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "manifest:" in result.stdout
+    manifest_path = tmp_path / "paper_review_v8" / "lanes" / "g11_figures_a" / "lane_manifest.md"
+    assert manifest_path.exists()
+    manifest = manifest_path.read_text(encoding="utf-8")
+    assert "Audit final-scale figures before gate closeout." in manifest
+    assert (manifest_path.parent / "fig_a" / "lane.md").exists()
+    assert (manifest_path.parent / "fig_b" / "lane.md").exists()

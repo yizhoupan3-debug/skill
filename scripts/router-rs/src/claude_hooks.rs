@@ -166,13 +166,13 @@ const QUALITY_RUNTIME_PREFIXES: [&str; 2] = [
     "codex_agno_runtime/src/codex_agno_runtime/",
     "scripts/router-rs/src/",
 ];
-const QUALITY_HOOK_PREFIXES: [&str; 2] = ["scripts/claude_hook_", ".claude/hooks/"];
+const QUALITY_HOOK_PREFIXES: [&str; 1] = [".claude/hooks/"];
 const QUALITY_TARGET_SUFFIXES: [&str; 3] = [".py", ".rs", ".sh"];
 const ASYNC_AUDIT_PREFIXES: [&str; 5] = [
     "codex_agno_runtime/src/codex_agno_runtime/",
     "scripts/router-rs/src/",
-    "scripts/claude_hook_",
     "scripts/materialize_cli_host_entrypoints.py",
+    "tests/",
     ".claude/hooks/",
 ];
 const SNAPSHOT_ROOT_DIRNAME: &str = "claude_hook_automation_snapshots";
@@ -2433,7 +2433,7 @@ mod tests {
     #[test]
     fn pre_tool_use_quality_emits_context_for_runtime_targets() {
         let repo_root = temp_repo_root("pre-tool-quality");
-        let target = repo_root.join("scripts/router-rs/src/claude_hooks.rs");
+        let target = repo_root.join("tests/test_cli_host_entrypoints.py");
         fs::create_dir_all(target.parent().expect("target parent")).expect("create target parent");
         fs::write(&target, "fn main() {}\n").expect("write target");
 
@@ -2455,8 +2455,8 @@ mod tests {
         let context = result["hookSpecificOutput"]["additionalContext"]
             .as_str()
             .unwrap_or("");
-        assert!(context.contains("热路径"));
-        assert!(context.contains("serde_json"));
+        assert!(context.contains("测试额外检查"));
+        assert!(context.contains("补丁式旧行为"));
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
@@ -2490,7 +2490,7 @@ mod tests {
     #[test]
     fn post_tool_audit_uses_pre_tool_snapshot_for_true_delta_review() {
         let repo_root = temp_repo_root("post-tool-snapshot");
-        let target = repo_root.join("scripts/claude_hook_automation.py");
+        let target = repo_root.join("tests/test_cli_host_entrypoints.py");
         fs::create_dir_all(target.parent().expect("target parent")).expect("create target parent");
         fs::write(
             &target,
