@@ -43,8 +43,9 @@ framework policy instead of forking per-host routing or memory rules.
 - `scripts/materialize_cli_host_entrypoints.py` renders shared host-entrypoint files and consumes the Rust Claude hook manifest from `scripts/router-rs/`.
 - `scripts/router-rs/` owns the Rust hook bridge, lifecycle commands, and
   generated-surface audits.
-- `artifacts/current/` plus `.supervisor_state.json` are the durable task-state
-  surfaces; do not treat chat text as the only recovery source.
+- `artifacts/current/<task_id>/`, `artifacts/current/task_registry.json`, and
+  `.supervisor_state.json` are the durable task-state surfaces; do not treat
+  chat text as the only recovery source.
 
 ## Communication Style
 
@@ -139,12 +140,15 @@ framework policy instead of forking per-host routing or memory rules.
 - Host-specific entry files are thin projections only; they must not fork
   routing, memory schema, or artifact rules.
 - Complex tasks externalize state into `SESSION_SUMMARY.md`,
-  `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`, and
-  `.supervisor_state.json`.
-- `artifacts/current/<task_id>/` is task-local continuity. Keep bootstrap,
-  ops, evidence, and scratch outputs in their own roots.
+  `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`,
+  `.supervisor_state.json`, and `artifacts/current/task_registry.json`.
+- `artifacts/current/<task_id>/` is task-local continuity and the primary task
+  truth. Keep bootstrap, ops, evidence, and scratch outputs in their own roots.
+- Root-level mirrors plus `artifacts/current/active_task.json` /
+  `artifacts/current/focus_task.json` are focus-task projections only, not a
+  parallel write surface.
 - Shared continuity files are a single-writer surface: only the active
-  integrator writes them; parallel lanes emit local deltas.
+  integrator writes the shared focus projection; parallel lanes emit local deltas.
 
 ## Memory Contract
 

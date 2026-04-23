@@ -23,17 +23,6 @@ run_router_rs() {
     "$ROUTER_RS_DEBUG_BIN" "$@"
     return
   fi
-  if command -v cargo >/dev/null 2>&1; then
-    cargo build --manifest-path "$ROUTER_RS_CRATE_ROOT/Cargo.toml" >/dev/null
-    if [ -x "$ROUTER_RS_DEBUG_BIN" ]; then
-      "$ROUTER_RS_DEBUG_BIN" "$@"
-      return
-    fi
-    if [ -x "$ROUTER_RS_RELEASE_BIN" ]; then
-      "$ROUTER_RS_RELEASE_BIN" "$@"
-      return
-    fi
-  fi
   if [ -x "$ROUTER_RS_RELEASE_BIN" ]; then
     "$ROUTER_RS_RELEASE_BIN" "$@"
     return
