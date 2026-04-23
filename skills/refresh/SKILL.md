@@ -1,6 +1,6 @@
 ---
 name: refresh
-description: "Use the Rust refresh command to generate and copy the next-turn execution prompt"
+description: "使用 Rust refresh 命令生成并复制下一轮执行提示"
 routing_layer: L3
 routing_owner: owner
 routing_gate: none
@@ -8,68 +8,68 @@ session_start: n/a
 trigger_hints:
   - $refresh
   - refresh
-  - 下一轮执行 prompt
+  - 下一轮执行提示
   - 复制到剪贴板
 ---
 
 # Refresh
 
-Codex-side equivalent of Claude Code `/refresh`.
+这是 Claude Code `/refresh` 在 Codex 侧的对应能力。
 
-## When to use
+## 何时使用
 
-- The user wants to prepare the next-turn execution prompt for the current repository
-- The prompt should be copied to the macOS clipboard
-- The user expects one fixed confirmation sentence
+- 用户想为当前仓库准备下一轮执行提示
+- 这段提示需要复制到 macOS 剪贴板
+- 用户期待收到一句固定确认语
 
-## Do not use
+## 不要用于
 
-- The task is to refresh shared memory artifacts or rewrite continuity state
-- The task is generic note-taking, summary-only output, or unrelated skill maintenance
+- 任务目标是刷新共享 memory 制品，或重写 continuity 状态
+- 任务只是通用记笔记、只做总结输出，或处理无关的 skill 维护
 
-## Objective
+## 目标
 
-用 Rust refresh 命令生成下一轮执行 prompt，复制到剪贴板，并返回固定确认句。
+用 Rust refresh 命令生成下一轮执行提示，复制到剪贴板，并返回固定确认语。
 
-## Instructions
+## 操作说明
 
-1. Run:
+1. 运行：
 
 ```bash
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/target/release/router-rs --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR"
 ```
 
-If the release binary is missing, rerun the same command with:
+如果 release 二进制不存在，用下面的命令重试：
 
 ```bash
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR"
 ```
 
-If both resident binaries are missing, self-heal with:
+如果两个常驻二进制都不存在，用下面的命令自修复：
 
 ```bash
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR"
 ```
 
-2. Then reply with exactly:
+2. 然后严格回复：
 
 ```text
-下一轮执行 prompt 已准备好，并且已经复制到剪贴板。
+下一轮执行提示已准备好，并且已经复制到剪贴板。
 ```
 
-### Optional debug mode
+### 可选 debug 模式
 
-If the user explicitly asks for a verbose/debug refresh, run the same command with `--framework-refresh-verbose` appended, inspect the returned JSON for `refresh.debug`, and summarize only the diagnostic fields they asked for.
-Do not change the default confirmation sentence for normal `$refresh` use.
+如果用户明确要求 verbose/debug refresh，就在同一条命令后追加 `--framework-refresh-verbose`，检查返回 JSON 里的 `refresh.debug`，只概括用户点名要看的诊断字段。
+正常执行 `$refresh` 时，不要改动默认确认语。
 
-## Constraints
+## 约束
 
-- Do not rewrite root continuity artifacts
-- Do not refresh `.codex/memory/CLAUDE_MEMORY.md`
-- Do not mention memory refresh, summary, `/clear`, or internal diagnostics in the user-visible reply
-- Keep behavior aligned with the global Claude `refresh` command
+- 不要重写根目录 continuity 制品
+- 不要刷新 `.codex/memory/CLAUDE_MEMORY.md`
+- 面向用户的回复里，不要提 memory refresh、summary、`/clear` 或内部诊断
+- 行为要与全局 Claude `refresh` 命令保持一致
 
-## Usage
+## 用法
 
 ```text
 $refresh

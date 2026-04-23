@@ -113,7 +113,7 @@
 | `python-pro` | Active | P1 | L4 | owner | none | project | ✓ 98.5 | Deliver production-grade Python 3.12+ code with clean async boundaries, strict t |
 | `react` | Active | P1 | L4 | owner | none | project | ✓ 98.0 | Deliver React 19+ components with correct hook dependencies, optimal Server Comp |
 | `refactoring` | Active | P2 | L1 | owner | none | project | ✓ 97.2 | Plan and execute systematic code refactoring without changing behavior. Use when |
-| `refresh` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Use the Rust refresh command to generate and copy the next-turn execution prompt |
+| `refresh` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | 使用 Rust refresh 命令生成并复制下一轮执行提示 |
 | `release-engineering` | Active | P2 | L3 | owner | none | project | ✓ 97.3 | Build release pipelines from commit to published artifact. Use for versioning st |
 | `research-engineer` | Active | P2 | L4 | owner | none | project | ✓ 96.6 | Provide rigorous technical critique, algorithm analysis, formal reasoning, compl |
 | `rust-pro` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Deliver ownership-correct Rust code that compiles without unnecessary clones, ma |
