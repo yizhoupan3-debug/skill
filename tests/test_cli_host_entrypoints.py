@@ -143,6 +143,10 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "user-visible effect over implementation narration" in agent_policy
     assert "Do not silently choose an ambiguous interpretation" in agent_policy
     assert "Prefer the smallest solution that fully solves the stated problem" in agent_policy
+    assert "## Simplify First" in agent_policy
+    assert "Prefer simplification before expansion" in agent_policy
+    assert "If two approaches both solve the task" in agent_policy
+    assert "Prefer removing obsolete compatibility" in agent_policy
     assert "For non-trivial execution, state the minimum success criteria" in agent_policy
     assert "Keep this file compact and factual" in agent_policy
     assert "configs/framework/FRAMEWORK_SURFACE_POLICY.json" in agent_policy
@@ -175,7 +179,6 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         "Bash(python3 -m pytest *)",
         "Bash(python3 -m compileall *)",
         "Bash(cargo test *)",
-        "Bash(git rev-parse *)",
         f"Bash(cargo run --manifest-path {CLAUDE_ROUTER_RS_MANIFEST_PATH} --release -- *)",
         f"Bash({CLAUDE_ROUTER_RS_RELEASE_BINARY} *)",
         f"Bash({CLAUDE_ROUTER_RS_DEBUG_BINARY} *)",
@@ -335,6 +338,8 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         "intentionally uninstalled",
         "live in `AGENT.md`, not in hooks",
         "repo-specific invariants only",
+        "Use `matcher` first and `if` to narrow further",
+        "reinforce simplify-first execution",
         "permissionDecision: deny",
     ):
         assert marker in hooks_readme

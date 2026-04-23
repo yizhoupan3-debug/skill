@@ -3398,19 +3398,6 @@ fn build_steady_state_execution_kernel_metadata(response_shape: &str) -> Map<Str
         "execution_kernel_prompt_preview_owner".to_string(),
         Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string()),
     );
-    metadata.insert("execution_kernel_live_fallback".to_string(), Value::Null);
-    metadata.insert(
-        "execution_kernel_live_fallback_authority".to_string(),
-        Value::Null,
-    );
-    metadata.insert(
-        "execution_kernel_live_fallback_enabled".to_string(),
-        Value::Bool(false),
-    );
-    metadata.insert(
-        "execution_kernel_live_fallback_mode".to_string(),
-        Value::String("disabled".to_string()),
-    );
     metadata
 }
 
@@ -3434,10 +3421,6 @@ fn build_execution_kernel_metadata_bridge() -> Value {
             "execution_kernel_live_primary_authority",
             "execution_kernel_response_shape",
             "execution_kernel_prompt_preview_owner",
-            "execution_kernel_live_fallback",
-            "execution_kernel_live_fallback_authority",
-            "execution_kernel_live_fallback_enabled",
-            "execution_kernel_live_fallback_mode",
         ],
         "runtime_fields": {
             "shared": [
@@ -5142,12 +5125,6 @@ fn build_runtime_control_plane_payload() -> Value {
             "kernel_live_delegate_family": "rust-cli",
             "kernel_live_delegate_impl": "router-rs",
             "kernel_live_delegate_mode": "rust-primary",
-            "kernel_live_fallback_kind": Value::Null,
-            "kernel_live_fallback_authority": Value::Null,
-            "kernel_live_fallback_family": Value::Null,
-            "kernel_live_fallback_impl": Value::Null,
-            "kernel_live_fallback_enabled": false,
-            "kernel_live_fallback_mode": "disabled",
             "kernel_mode_support": ["dry_run", "live"],
             "execution_schema_version": EXECUTION_SCHEMA_VERSION,
             "sandbox_lifecycle_contract": {
@@ -7566,11 +7543,6 @@ mod tests {
             Value::String(EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY.to_string())
         );
         assert_eq!(
-            payload["services"]["execution"]["kernel_contract"]
-                ["execution_kernel_live_fallback_enabled"],
-            Value::Bool(false)
-        );
-        assert_eq!(
             payload["services"]["execution"]["kernel_contract_by_mode"]
                 [EXECUTION_RESPONSE_SHAPE_DRY_RUN]["execution_kernel_response_shape"],
             Value::String(EXECUTION_RESPONSE_SHAPE_DRY_RUN.to_string())
@@ -7583,10 +7555,6 @@ mod tests {
         assert_eq!(
             payload["services"]["execution"]["kernel_live_delegate_authority"],
             Value::String("rust-execution-cli".to_string())
-        );
-        assert_eq!(
-            payload["services"]["execution"]["kernel_live_fallback_enabled"],
-            Value::Bool(false)
         );
         assert_eq!(
             payload["services"]["execution"]["sandbox_lifecycle_contract"]["schema_version"],
@@ -8468,22 +8436,6 @@ mod tests {
         assert_eq!(
             response.metadata["execution_kernel_live_primary_authority"],
             EXECUTION_AUTHORITY
-        );
-        assert_eq!(
-            response.metadata["execution_kernel_live_fallback"],
-            Value::Null
-        );
-        assert_eq!(
-            response.metadata["execution_kernel_live_fallback_authority"],
-            Value::Null
-        );
-        assert_eq!(
-            response.metadata["execution_kernel_live_fallback_enabled"],
-            Value::Bool(false)
-        );
-        assert_eq!(
-            response.metadata["execution_kernel_live_fallback_mode"],
-            "disabled"
         );
         assert_eq!(
             response.metadata["execution_kernel_response_shape"],

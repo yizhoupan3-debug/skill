@@ -21,6 +21,21 @@ framework policy instead of forking per-host routing or memory rules.
   implementation and use that definition to drive execution.
 - Ask before destructive actions, external publishing, or account-impacting work.
 
+## Simplify First
+
+- Prefer simplification before expansion: delete, merge, inline, or narrow an
+  existing path before adding a new layer, branch, helper, or adapter.
+- If two approaches both solve the task, prefer the one with fewer moving
+  parts, fewer branching paths, and fewer files or surfaces to keep in sync.
+- Prefer removing obsolete compatibility, transition, or fallback logic over
+  wrapping it again, unless a real caller or rollout constraint still needs it.
+- Keep hot paths simple: avoid repeated parse/serialize loops, repeated file
+  I/O, copy-heavy data flow, and wrapper-on-wrapper structure when a direct path
+  will do.
+- Keep `AGENT.md` short and high-signal; if a rule only matters for one
+  workflow, move it into the task-specific doc instead of bloating shared
+  policy.
+
 ## Repo Landmarks
 
 - `skills/` holds the shared routing and workflow bodies; read the selected

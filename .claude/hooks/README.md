@@ -14,7 +14,7 @@ Active hooks:
 | Event | Script | Purpose |
 | --- | --- | --- |
 | `UserPromptSubmit` | `user_prompt_submit.sh` | Inject a short coding-only `additionalContext` block before Claude starts planning, using intent-based matching instead of broad keyword spam. |
-| `PreToolUse` | `pre_tool_use_quality.sh` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code so code is written with direct implementation and hot-path hygiene in mind. |
+| `PreToolUse` | `pre_tool_use_quality.sh` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code, and capture a lightweight pre-edit baseline for later delta-aware review. |
 | `PreToolUse` | `pre_tool_use.sh` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
 | `PostToolUse` | `post_tool_use_audit.sh` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
 | `SessionEnd` | `session_end.sh` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |
@@ -32,8 +32,13 @@ Project hook principles:
 - Keep project hooks for repo-specific invariants only.
 - Keep hooks fast, especially `PreToolUse`, because it runs inside the agent
   loop.
+- Use `matcher` first and `if` to narrow further, so hook handlers do not spawn
+  on unrelated tool calls and normal edits stay fast.
 - Automation hooks should be additive and short: inject narrow repo context or
   launch cheap follow-up work, not essay-length prompt rewrites.
+- Let hooks reinforce simplify-first execution: prefer short reminders to
+  delete, merge, inline, or narrow code paths instead of nudging toward another
+  wrapper or orchestration layer.
 - Prefer async `PostToolUse` for cheap quality follow-up that should not block
   the main turn.
 - Put personal notifications and local approval shortcuts in `~/.claude/settings.json`

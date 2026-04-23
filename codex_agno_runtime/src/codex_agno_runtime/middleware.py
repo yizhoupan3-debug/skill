@@ -246,19 +246,19 @@ class MiddlewareChain:
 # ---------------------------------------------------------------------------
 
 
-def _python_prompt_required(ctx: MiddlewareContext) -> bool:
-    if "python_prompt_required" in ctx.metadata:
-        return bool(ctx.metadata["python_prompt_required"])
-    if "dry_run" in ctx.metadata:
-        return bool(ctx.metadata["dry_run"])
-    return True
-
-
 def _routing_prompt_preview(ctx: MiddlewareContext) -> str | None:
     preview = ctx.metadata.get("routing_prompt_preview")
     if preview is None:
         return None
     return str(preview)
+
+
+def _prompt_projection_enabled(ctx: MiddlewareContext) -> bool:
+    if "python_prompt_required" in ctx.metadata:
+        return bool(ctx.metadata["python_prompt_required"])
+    if ctx.prompt:
+        return True
+    return _routing_prompt_preview(ctx) is not None
 
 
 def _resolve_projection_prompt(
@@ -304,7 +304,7 @@ class SkillInjectionMiddleware(Middleware):
         Returns:
             MiddlewareContext: Context with prompt populated.
         """
-        if not _python_prompt_required(ctx):
+        if not _prompt_projection_enabled(ctx):
             return ctx
         ctx.prompt, source = _resolve_projection_prompt(
             ctx,
@@ -343,7 +343,7 @@ class ContextCompressionMiddleware(Middleware):
         Returns:
             MiddlewareContext: Context with potentially compressed prompt.
         """
-        if not _python_prompt_required(ctx):
+        if not _prompt_projection_enabled(ctx):
             return ctx
         preview = _routing_prompt_preview(ctx)
         if not ctx.prompt and preview:
@@ -390,7 +390,7 @@ class MemoryMiddleware(Middleware):
         Returns:
             MiddlewareContext: Context with memory facts injected.
         """
-        if not _python_prompt_required(ctx):
+        if not _prompt_projection_enabled(ctx):
             return ctx
         preview = _routing_prompt_preview(ctx)
         if not ctx.prompt and preview:
@@ -493,7 +493,7 @@ class SubagentLimitMiddleware(Middleware):
         ctx.metadata["max_concurrent_subagents"] = self._max_concurrent
         ctx.metadata["subagent_timeout_seconds"] = self._timeout
 
-        if _python_prompt_required(ctx):
+        if _prompt_projection_enabled(ctx):
             preview = _routing_prompt_preview(ctx)
             if not ctx.prompt and preview:
                 ctx.prompt = preview

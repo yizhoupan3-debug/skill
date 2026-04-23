@@ -82,12 +82,6 @@ EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS = (
     EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
     EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY,
 )
-EXECUTION_KERNEL_RETIRED_LIVE_FALLBACK_MARKER_METADATA_FIELDS = (
-    "execution_kernel_live_fallback",
-    "execution_kernel_live_fallback_authority",
-    "execution_kernel_live_fallback_enabled",
-    "execution_kernel_live_fallback_mode",
-)
 EXECUTION_KERNEL_PUBLIC_RUNTIME_CONTRACT_FIELDS = (
     "execution_kernel",
     "execution_kernel_authority",
@@ -104,7 +98,6 @@ EXECUTION_KERNEL_PUBLIC_RUNTIME_RESPONSE_METADATA_FIELDS = (
 )
 EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS = (
     *EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS,
-    *EXECUTION_KERNEL_RETIRED_LIVE_FALLBACK_MARKER_METADATA_FIELDS,
 )
 RUNTIME_TRACE_METADATA_FIELDS = (
     "trace_event_count",
@@ -471,55 +464,6 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
         },
     }
 
-
-def build_execution_kernel_dry_run_response(
-    *,
-    session_id: str,
-    user_id: str,
-    skill: str,
-    overlay: str | None,
-    content: str,
-    prompt_preview: str,
-    input_tokens: int,
-    output_tokens: int,
-    execution_kernel: str,
-    execution_kernel_authority: str,
-    trace_event_count: int,
-    trace_output_path: str | None,
-    extra_metadata: Mapping[str, Any] | None = None,
-) -> RunTaskResponse:
-    """Return the compatibility dry-run response shape for Python projection paths."""
-
-    usage = UsageMetrics(
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        total_tokens=input_tokens + output_tokens,
-        mode="estimated",
-    )
-    return RunTaskResponse(
-        session_id=session_id,
-        user_id=user_id,
-        skill=skill,
-        overlay=overlay,
-        live_run=False,
-        content=content,
-        usage=usage.model_dump(mode="json"),
-        prompt_preview=prompt_preview,
-        model_id=None,
-        metadata=build_execution_kernel_runtime_metadata(
-            execution_kernel=execution_kernel,
-            execution_kernel_authority=execution_kernel_authority,
-            trace_event_count=trace_event_count,
-            trace_output_path=trace_output_path,
-            response_shape=EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
-            extra_fields={
-                "reason": "Live model execution is disabled; returned a deterministic dry-run payload."
-            }
-            | dict(extra_metadata or {}),
-        ),
-    )
-
-
 def validate_execution_kernel_steady_state_metadata(
     *,
     metadata: Mapping[str, Any],
@@ -575,24 +519,6 @@ def validate_execution_kernel_steady_state_metadata(
                 "execution-kernel steady-state metadata returned an unexpected value: "
                 f"{field}={normalized.get(field)!r}"
             )
-    if (
-        "execution_kernel_live_fallback_enabled" in normalized
-        and normalized.get("execution_kernel_live_fallback_enabled") is not False
-    ):
-        raise RuntimeError(
-            "execution-kernel steady-state metadata returned an unexpected value: "
-            f"execution_kernel_live_fallback_enabled="
-            f"{normalized.get('execution_kernel_live_fallback_enabled')!r}"
-        )
-    if (
-        "execution_kernel_live_fallback_mode" in normalized
-        and normalized.get("execution_kernel_live_fallback_mode") != "disabled"
-    ):
-        raise RuntimeError(
-            "execution-kernel steady-state metadata returned an unexpected value: "
-            f"execution_kernel_live_fallback_mode="
-            f"{normalized.get('execution_kernel_live_fallback_mode')!r}"
-        )
     for field in (
         "execution_kernel_delegate_family",
         "execution_kernel_delegate_impl",
@@ -605,16 +531,6 @@ def validate_execution_kernel_steady_state_metadata(
                 "execution-kernel steady-state metadata returned an invalid value: "
                 f"{field}={value!r}"
             )
-    if (
-        "execution_kernel_live_fallback" in normalized
-        and normalized.get("execution_kernel_live_fallback") is not None
-    ):
-        raise RuntimeError("execution-kernel steady-state metadata returned a live fallback marker.")
-    if (
-        "execution_kernel_live_fallback_authority" in normalized
-        and normalized.get("execution_kernel_live_fallback_authority") is not None
-    ):
-        raise RuntimeError("execution-kernel steady-state metadata returned a live fallback authority.")
     for field in (
         EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
         EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,

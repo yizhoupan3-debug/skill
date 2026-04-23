@@ -307,7 +307,6 @@
       "Bash(python3 -m pytest *)",
       "Bash(python3 -m compileall *)",
       "Bash(cargo test *)",
-      "Bash(git rev-parse *)",
       "Bash(cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- *)",
       "Bash(./scripts/router-rs/target/release/router-rs *)",
       "Bash(./scripts/router-rs/target/debug/router-rs *)",
