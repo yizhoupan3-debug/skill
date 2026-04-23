@@ -23,6 +23,19 @@
         "matcher": "project_settings"
       }
     ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "timeout": 8,
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|MultiEdit|Write"
+      }
+    ],
     "PreToolUse": [
       {
         "hooks": [

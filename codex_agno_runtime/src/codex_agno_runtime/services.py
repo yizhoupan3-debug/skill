@@ -40,7 +40,6 @@ from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_BRIDGE_KIND,
     EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
     EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
-    EXECUTION_KERNEL_RESPONSE_SHAPE_RETIRED,
     EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
     execution_kernel_steady_state_fields,
     normalize_execution_kernel_metadata_bridge,
@@ -1684,7 +1683,6 @@ class ExecutionEnvironmentService:
         for shape in (
             EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
             EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
-            EXECUTION_KERNEL_RESPONSE_SHAPE_RETIRED,
         ):
             try:
                 contract = _runtime_execution_kernel_contract(
@@ -1850,8 +1848,6 @@ class ExecutionEnvironmentService:
             request,
             settings=self.settings,
             rust_adapter=self._rust_adapter,
-            kernel_contract=kernel_contract,
-            metadata_bridge=self.describe_kernel_metadata_bridge(),
         )
 
 

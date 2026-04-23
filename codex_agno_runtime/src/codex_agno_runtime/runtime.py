@@ -415,7 +415,6 @@ class CodexAgnoRuntime:
     ) -> str | None:
         """Build one explicit Rust-owned dry-run preview without mutating the route result."""
 
-        kernel_contract = self.execution_service.describe_kernel_contract(dry_run=True)
         return preview_router_rs_request_prompt(
             ExecutionKernelRequest(
                 task=task,
@@ -427,8 +426,6 @@ class CodexAgnoRuntime:
             ),
             settings=self.settings,
             rust_adapter=self.rust_adapter,
-            kernel_contract=kernel_contract,
-            metadata_bridge=self.execution_service.describe_kernel_metadata_bridge(),
         )
 
     def _prepare_session(

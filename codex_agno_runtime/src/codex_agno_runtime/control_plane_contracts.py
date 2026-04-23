@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from codex_agno_runtime.execution_kernel_contracts import (
-    EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
     EXECUTION_KERNEL_PUBLIC_RUNTIME_CONTRACT_FIELDS,
     EXECUTION_KERNEL_PUBLIC_RUNTIME_RESPONSE_METADATA_FIELDS,
     build_execution_kernel_live_response_serialization_contract_core,
@@ -246,9 +245,6 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
         "public_runtime_response_metadata_fields": [
             *EXECUTION_KERNEL_PUBLIC_RUNTIME_RESPONSE_METADATA_FIELDS
         ],
-        "retired_runtime_response_metadata_fields": [
-            EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
-        ],
         "current_contract_truth": {
             "execution_kernel_contract_mode": "rust-live-primary",
             "execution_kernel_in_process_replacement_complete": True,
@@ -261,17 +257,12 @@ def build_execution_kernel_live_fallback_retirement_status() -> Dict[str, Any]:
             "live_fallback_request_behavior": "surface-removed",
             "live_fallback_request_surface": "removed",
             "live_prompt_preview_passthrough_disabled": True,
-            "compatibility_fallback_reason_metadata_key": EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
         },
         "current_response_metadata_truth": {
             "live_delegate_family": "rust-cli",
             "live_delegate_impl": "router-rs",
             "dry_run_delegate_family": "rust-cli",
             "dry_run_delegate_impl": "router-rs",
-            "compatibility_fallback_reason_present_in_steady_state": False,
-            "retired_response_metadata_fields": [
-                EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
-            ],
         },
         "remaining_python_owned_surfaces": [],
         "retirement_readiness": {

@@ -21,7 +21,6 @@ from codex_agno_runtime.execution_kernel import (
     RouterRsInfrastructureError,
     build_router_rs_execution_request_payload,
     decode_router_rs_execution_payload,
-    decode_router_rs_execution_payload_with_contract,
     execute_router_rs_request,
     preview_router_rs_request_prompt,
 )
@@ -36,7 +35,6 @@ from codex_agno_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
     EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
     EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
-    EXECUTION_KERNEL_METADATA_BRIDGE_SCHEMA_VERSION,
     EXECUTION_KERNEL_METADATA_SCHEMA_VERSION,
     EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY,
     EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY,
@@ -94,55 +92,6 @@ def _steady_state_kernel_metadata(**extra: object) -> dict[str, object]:
         response_shape=EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
         extra_fields=merged_extra,
     )
-
-
-def _kernel_contract(*, response_shape: str) -> dict[str, object]:
-    metadata = build_execution_kernel_runtime_metadata(
-        execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
-        execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
-        trace_event_count=0,
-        trace_output_path=None,
-        response_shape=response_shape,
-    )
-    return {
-        field: metadata[field]
-        for field in EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS
-    }
-
-
-def _metadata_bridge(
-    *,
-    live_prompt_preview_owner: str = LIVE_PRIMARY_PROMPT_PREVIEW_OWNER,
-    dry_run_prompt_preview_owner: str = LIVE_PRIMARY_PROMPT_PREVIEW_OWNER,
-    live_primary_model_id_source: str = LIVE_PRIMARY_MODEL_ID_SOURCE,
-) -> dict[str, object]:
-    return {
-        "schema_version": EXECUTION_KERNEL_METADATA_BRIDGE_SCHEMA_VERSION,
-        "authority": "rust-runtime-control-plane",
-        "projection": "python-thin-projection",
-        "steady_state_fields": [
-            *EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS
-        ],
-        "metadata_keys": {
-            "metadata_schema_version": EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY,
-            "contract_mode": EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
-            "fallback_policy": EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
-            "response_shape": EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
-            "prompt_preview_owner": EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY,
-            "model_id_source": EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY,
-        },
-        "defaults": {
-            "contract_mode": "rust-live-primary",
-            "fallback_policy": "infrastructure-only-explicit",
-            "prompt_preview_owner_by_mode": {
-                "live_primary": live_prompt_preview_owner,
-                "dry_run": dry_run_prompt_preview_owner,
-            },
-            "live_primary_model_id_source": live_primary_model_id_source,
-            "supported_response_shapes": ["live_primary", "dry_run"],
-        },
-    }
-
 
 def _settings() -> SimpleNamespace:
     return SimpleNamespace(
@@ -419,73 +368,9 @@ def test_router_rs_execution_kernel_rejects_legacy_delegate_first_metadata(monke
                 _request(),
                 settings=settings,
                 rust_adapter=adapter,
-                kernel_contract=_kernel_contract(
-                    response_shape=EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
-                ),
             )
         )
 
-
-def test_router_rs_execution_kernel_can_follow_rust_metadata_bridge(monkeypatch) -> None:
-    settings = _settings()
-    adapter = _adapter(settings)
-    kernel_contract = _kernel_contract(response_shape=EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY)
-    metadata_bridge = _metadata_bridge(
-        live_prompt_preview_owner="rust-router-preview-owner",
-        live_primary_model_id_source="router-rs-upstream.model",
-    )
-
-    def fake_execute(payload):
-        return {
-            "execution_schema_version": "router-rs-execute-response-v1",
-            "authority": "rust-execution-cli",
-            "session_id": payload["session_id"],
-            "user_id": payload["user_id"],
-            "skill": payload["selected_skill"],
-            "overlay": payload["overlay_skill"],
-            "live_run": True,
-            "content": "bridge-driven content",
-            "usage": {
-                "input_tokens": 21,
-                "output_tokens": 13,
-                "total_tokens": 34,
-                "mode": "live",
-            },
-            "prompt_preview": payload["prompt_preview"],
-            "model_id": "gpt-5.4",
-            "metadata": _steady_state_kernel_metadata(
-                run_id="run-bridge",
-                status="completed",
-                trace_event_count=payload["trace_event_count"],
-                trace_output_path=payload["trace_output_path"],
-                execution_mode="live",
-                route_engine=payload["route_engine"],
-                diagnostic_route_mode=payload["diagnostic_route_mode"],
-                execution_kernel_prompt_preview_owner="rust-router-preview-owner",
-                execution_kernel_model_id_source="router-rs-upstream.model",
-            ),
-        }
-
-    monkeypatch.setattr(adapter, "execute", fake_execute)
-
-    response = asyncio.run(
-        execute_router_rs_request(
-            _request(),
-            settings=settings,
-            rust_adapter=adapter,
-            kernel_contract=kernel_contract,
-            metadata_bridge=metadata_bridge,
-        )
-    )
-
-    assert (
-        response.metadata[EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY]
-        == "rust-router-preview-owner"
-    )
-    assert (
-        response.metadata[EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY]
-        == "router-rs-upstream.model"
-    )
 
 
 def test_execution_kernel_contract_helpers_stay_rust_primary() -> None:
@@ -551,24 +436,10 @@ def test_execution_kernel_contract_helpers_stay_rust_primary() -> None:
         "live_primary",
         "dry_run",
     ]
-    assert contract_core["current_contract_truth"]["compatibility_fallback_runtime_path"] == (
-        "retired"
-    )
     assert contract_core["runtime_response_metadata_fields"]["steady_state_kernel"] == [
         *EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS
     ]
-    assert contract_core["runtime_response_metadata_fields"]["retired_compatibility_fallback"] == [
-        "run_id",
-        "status",
-        EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
-        EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
-        "execution_kernel_primary",
-        "execution_kernel_primary_authority",
-        EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
-        EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
-        EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
-        EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
-    ]
+    assert "retired_compatibility_fallback" not in contract_core["runtime_response_metadata_fields"]
 
     validated_contract = validate_execution_kernel_steady_state_metadata(
         metadata={
@@ -738,58 +609,3 @@ def test_decode_router_rs_execution_payload_rejects_runtime_renaming_without_con
 
     with pytest.raises(RuntimeError, match="execution_kernel='rust-runtime-owned-kernel'"):
         decode_router_rs_execution_payload(payload)
-
-
-def test_decode_router_rs_execution_payload_can_follow_explicit_kernel_contract() -> None:
-    payload = {
-        "session_id": "kernel-contract-session",
-        "user_id": "tester",
-        "skill": "plan-to-code",
-        "overlay": "rust-pro",
-        "live_run": True,
-        "content": "router-rs content",
-        "usage": {
-            "input_tokens": 21,
-            "output_tokens": 13,
-            "total_tokens": 34,
-            "mode": "live",
-        },
-        "prompt_preview": "Rust-owned live prompt",
-        "model_id": "gpt-5.4",
-        "metadata": _steady_state_kernel_metadata(
-            execution_kernel="rust-runtime-owned-kernel",
-            execution_kernel_authority="rust-runtime-owned-authority",
-            execution_kernel_delegate="router-rs-live",
-            execution_kernel_delegate_authority="rust-runtime-live-authority",
-            execution_kernel_delegate_family="rust-direct-live",
-            execution_kernel_delegate_impl="router-rs-http",
-            execution_kernel_live_primary="router-rs-live-primary",
-            execution_kernel_live_primary_authority="rust-primary-authority",
-            run_id="run-1",
-            status="completed",
-            trace_event_count=9,
-            trace_output_path="/tmp/TRACE_METADATA.json",
-            execution_mode="live",
-            route_engine="rust",
-            diagnostic_route_mode="none",
-        ),
-    }
-
-    response = decode_router_rs_execution_payload_with_contract(
-        payload,
-        kernel_contract={
-            "execution_kernel": "rust-runtime-owned-kernel",
-            "execution_kernel_authority": "rust-runtime-owned-authority",
-            "execution_kernel_delegate": "router-rs-live",
-            "execution_kernel_delegate_authority": "rust-runtime-live-authority",
-            "execution_kernel_delegate_family": "rust-direct-live",
-            "execution_kernel_delegate_impl": "router-rs-http",
-        },
-    )
-
-    assert response.metadata["execution_kernel"] == "rust-runtime-owned-kernel"
-    assert response.metadata["execution_kernel_authority"] == "rust-runtime-owned-authority"
-    assert response.metadata["execution_kernel_delegate"] == "router-rs-live"
-    assert response.metadata["execution_kernel_delegate_authority"] == "rust-runtime-live-authority"
-    assert response.metadata["execution_kernel_delegate_family"] == "rust-direct-live"
-    assert response.metadata["execution_kernel_delegate_impl"] == "router-rs-http"

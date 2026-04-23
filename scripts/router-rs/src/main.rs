@@ -57,8 +57,6 @@ const EXECUTION_KERNEL_DELEGATE_FAMILY: &str = "rust-cli";
 const EXECUTION_KERNEL_DELEGATE_IMPL: &str = "router-rs";
 const EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY: &str = "live_primary";
 const EXECUTION_RESPONSE_SHAPE_DRY_RUN: &str = "dry_run";
-const EXECUTION_RESPONSE_SHAPE_RETIRED: &str = "retired";
-const EXECUTION_RESPONSE_SHAPE_RETIRED_PROMPT_PREVIEW_OWNER: &str = "python-agno-kernel-adapter";
 const EXECUTION_PROMPT_PREVIEW_OWNER: &str = "rust-execution-cli";
 const EXECUTION_MODEL_ID_SOURCE: &str = "aggregator-response.model";
 const RUNTIME_CONTROL_PLANE_SCHEMA_VERSION: &str = "router-rs-runtime-control-plane-v1";
@@ -3416,16 +3414,6 @@ fn build_steady_state_execution_kernel_metadata(response_shape: &str) -> Map<Str
     metadata
 }
 
-fn build_retired_execution_kernel_metadata() -> Map<String, Value> {
-    let mut metadata =
-        build_steady_state_execution_kernel_metadata(EXECUTION_RESPONSE_SHAPE_RETIRED);
-    metadata.insert(
-        "execution_kernel_prompt_preview_owner".to_string(),
-        Value::String(EXECUTION_RESPONSE_SHAPE_RETIRED_PROMPT_PREVIEW_OWNER.to_string()),
-    );
-    metadata
-}
-
 fn build_execution_kernel_metadata_bridge() -> Value {
     serde_json::json!({
         "schema_version": EXECUTION_METADATA_BRIDGE_SCHEMA_VERSION,
@@ -3470,18 +3458,6 @@ fn build_execution_kernel_metadata_bridge() -> Value {
                 "trace_event_count",
                 "trace_output_path",
             ],
-            "retired_required": [
-                "execution_kernel_fallback_reason",
-                "execution_kernel_contract_mode",
-                "execution_kernel_fallback_policy",
-                "execution_kernel_primary",
-                "execution_kernel_primary_authority",
-                "execution_kernel_compatibility_agent_contract",
-                "execution_kernel_compatibility_agent_kind",
-                "execution_kernel_compatibility_agent_authority",
-                "trace_event_count",
-                "trace_output_path",
-            ],
         },
         "metadata_keys": {
             "metadata_schema_version": "execution_kernel_metadata_schema_version",
@@ -3497,15 +3473,11 @@ fn build_execution_kernel_metadata_bridge() -> Value {
             "prompt_preview_owner_by_mode": {
                 EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY: EXECUTION_PROMPT_PREVIEW_OWNER,
                 EXECUTION_RESPONSE_SHAPE_DRY_RUN: EXECUTION_PROMPT_PREVIEW_OWNER,
-                EXECUTION_RESPONSE_SHAPE_RETIRED: (
-                    EXECUTION_RESPONSE_SHAPE_RETIRED_PROMPT_PREVIEW_OWNER
-                ),
             },
             "live_primary_model_id_source": EXECUTION_MODEL_ID_SOURCE,
             "supported_response_shapes": [
                 EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
                 EXECUTION_RESPONSE_SHAPE_DRY_RUN,
-                EXECUTION_RESPONSE_SHAPE_RETIRED,
             ],
         },
     })
@@ -3524,10 +3496,6 @@ fn build_execution_kernel_contracts_by_mode() -> Map<String, Value> {
         Value::Object(build_steady_state_execution_kernel_metadata(
             EXECUTION_RESPONSE_SHAPE_DRY_RUN,
         )),
-    );
-    contracts.insert(
-        EXECUTION_RESPONSE_SHAPE_RETIRED.to_string(),
-        Value::Object(build_retired_execution_kernel_metadata()),
     );
     contracts
 }
@@ -7587,14 +7555,8 @@ mod tests {
             vec![
                 EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY.to_string(),
                 EXECUTION_RESPONSE_SHAPE_DRY_RUN.to_string(),
-                EXECUTION_RESPONSE_SHAPE_RETIRED.to_string(),
             ]
         );
-        let retired_required = payload["services"]["execution"]["kernel_metadata_bridge"]
-            ["runtime_fields"]["retired_required"]
-            .as_array()
-            .expect("retired_required");
-        assert!(retired_required.len() > 4);
         assert_eq!(
             payload["services"]["execution"]["kernel_metadata_bridge"]["steady_state_fields"][0],
             Value::String("execution_kernel_metadata_schema_version".to_string())
@@ -7617,16 +7579,6 @@ mod tests {
             payload["services"]["execution"]["kernel_contract_by_mode"]
                 [EXECUTION_RESPONSE_SHAPE_DRY_RUN]["execution_kernel_prompt_preview_owner"],
             Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string())
-        );
-        assert_eq!(
-            payload["services"]["execution"]["kernel_contract_by_mode"]
-                [EXECUTION_RESPONSE_SHAPE_RETIRED]["execution_kernel_response_shape"],
-            Value::String(EXECUTION_RESPONSE_SHAPE_RETIRED.to_string())
-        );
-        assert_eq!(
-            payload["services"]["execution"]["kernel_contract_by_mode"]
-                [EXECUTION_RESPONSE_SHAPE_RETIRED]["execution_kernel_prompt_preview_owner"],
-            Value::String(EXECUTION_RESPONSE_SHAPE_RETIRED_PROMPT_PREVIEW_OWNER.to_string())
         );
         assert_eq!(
             payload["services"]["execution"]["kernel_live_delegate_authority"],
@@ -7686,7 +7638,7 @@ mod tests {
     }
 
     #[test]
-    fn execution_kernel_metadata_shape_consistency_regression_for_primary_dry_run_retired() {
+    fn execution_kernel_metadata_shape_consistency_regression_for_primary_and_dry_run() {
         let contracts = build_execution_kernel_contracts_by_mode();
         let live_primary = contracts
             .get(EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY)
@@ -7694,12 +7646,8 @@ mod tests {
         let dry_run = contracts
             .get(EXECUTION_RESPONSE_SHAPE_DRY_RUN)
             .expect("dry run contract");
-        let retired = contracts
-            .get(EXECUTION_RESPONSE_SHAPE_RETIRED)
-            .expect("retired contract");
         let base_fields = execution_kernel_contract_shape_fields(live_primary);
         assert_eq!(base_fields, execution_kernel_contract_shape_fields(dry_run));
-        assert_eq!(base_fields, execution_kernel_contract_shape_fields(retired));
         assert_eq!(
             live_primary["execution_kernel_response_shape"],
             Value::String(EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY.to_string())
@@ -7709,10 +7657,6 @@ mod tests {
             Value::String(EXECUTION_RESPONSE_SHAPE_DRY_RUN.to_string())
         );
         assert_eq!(
-            retired["execution_kernel_response_shape"],
-            Value::String(EXECUTION_RESPONSE_SHAPE_RETIRED.to_string())
-        );
-        assert_eq!(
             live_primary["execution_kernel_prompt_preview_owner"],
             Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string())
         );
@@ -7720,11 +7664,7 @@ mod tests {
             dry_run["execution_kernel_prompt_preview_owner"],
             Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string())
         );
-        assert_eq!(
-            retired["execution_kernel_prompt_preview_owner"],
-            Value::String(EXECUTION_RESPONSE_SHAPE_RETIRED_PROMPT_PREVIEW_OWNER.to_string())
-        );
-        assert_eq!(contracts.len(), 3);
+        assert_eq!(contracts.len(), 2);
     }
 
     #[test]

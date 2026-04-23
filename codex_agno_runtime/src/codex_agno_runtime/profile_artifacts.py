@@ -437,10 +437,6 @@ def _write_default_artifacts(
         "cli_common_adapter": _write_json(
             default_dir / "cli_common_adapter.json", python_artifacts["cli_common_adapter"]
         ),
-        "codex_common_adapter": _write_json(
-            default_dir / "codex_common_adapter.json",
-            python_artifacts["codex_common_adapter"],
-        ),
         "codex_cli_adapter": _write_json(
             default_dir / "codex_cli_adapter.json",
             python_artifacts["codex_cli_adapter"],
@@ -618,6 +614,14 @@ def _write_continuity_artifacts(
     continuity_dir = output_dir / CONTINUITY_ARTIFACT_DIRNAME
     paths: dict[str, str] = {}
     if emit_compatibility_inventory:
+        paths["codex_common_adapter"] = _write_json(
+            continuity_dir / "codex_common_adapter.json",
+            (
+                rust_codex_artifacts["codex_common_adapter"]
+                if rust_codex_artifacts is not None and "codex_common_adapter" in rust_codex_artifacts
+                else python_artifacts["codex_common_adapter"]
+            ),
+        )
         compatibility_matrix = (
             rust_codex_artifacts.get("upgrade_compatibility_matrix")
             if rust_codex_artifacts is not None

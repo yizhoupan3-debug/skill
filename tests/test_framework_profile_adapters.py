@@ -47,8 +47,6 @@ from codex_agno_runtime.framework_profile import (
     resolve_host_capability_requirements,
 )
 from codex_agno_runtime.execution_kernel_contracts import (
-    COMPATIBILITY_FALLBACK_RUNTIME_METADATA_FIELDS,
-    EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
     RUNTIME_TRACE_METADATA_FIELDS,
     build_execution_kernel_live_response_serialization_contract_core,
 )
@@ -1946,9 +1944,6 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
         "execution_kernel_delegate_family",
         "execution_kernel_delegate_impl",
     ]
-    assert status["retired_runtime_response_metadata_fields"] == [
-        EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
-    ]
     assert status["current_contract_truth"]["dry_run_delegate_kind"] == "router-rs"
     assert status["current_contract_truth"]["live_fallback_runtime_path_available"] is False
     assert status["current_contract_truth"]["live_fallback_mode"] == "retired"
@@ -1958,7 +1953,6 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert status["current_response_metadata_truth"]["live_delegate_family"] == "rust-cli"
     assert status["current_response_metadata_truth"]["dry_run_delegate_family"] == "rust-cli"
     assert status["current_response_metadata_truth"]["dry_run_delegate_impl"] == "router-rs"
-    assert status["current_response_metadata_truth"]["compatibility_fallback_reason_present_in_steady_state"] is False
     assert status["remaining_python_owned_surfaces"] == []
     assert status["retirement_readiness"]["ready"] is True
     assert status["retirement_readiness"]["runtime_control_flow_change_required"] is False
@@ -2012,9 +2006,6 @@ def test_execution_kernel_live_response_serialization_contract_stays_contract_on
     assert status["runtime_response_metadata_fields"]["shared"] == [
         *RUNTIME_TRACE_METADATA_FIELDS,
     ]
-    assert status["runtime_response_metadata_fields"]["retired_compatibility_fallback"] == [
-        *COMPATIBILITY_FALLBACK_RUNTIME_METADATA_FIELDS,
-    ]
     assert status["current_contract_truth"]["live_primary_schema_version"] == (
         "router-rs-execute-response-v1"
     )
@@ -2022,18 +2013,9 @@ def test_execution_kernel_live_response_serialization_contract_stays_contract_on
         "live_primary",
         "dry_run",
     ]
-    assert status["current_contract_truth"]["retired_compatibility_fallback_model_id_source"] == (
-        "agno-run-output.model"
-    )
     assert status["current_response_shape_truth"]["live_primary"]["prompt_preview_source"] == (
         "rust-owned-live-prompt"
     )
-    assert status["current_response_shape_truth"]["retired_compatibility_fallback"][
-        "runtime_path_available"
-    ] is False
-    assert status["current_response_shape_truth"]["retired_compatibility_fallback"][
-        "legacy_fallback_reason_present"
-    ] is True
     assert status["current_response_shape_truth"]["dry_run"]["model_id_present"] is False
     assert status["current_response_shape_truth"]["dry_run"]["prompt_preview_source"] == (
         "rust-owned-dry-run-prompt"
@@ -2330,12 +2312,6 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
         "execution_kernel_delegate_impl",
     ]
     assert payload["execution_kernel_live_fallback_retirement_status"][
-        "retired_runtime_response_metadata_fields"
-    ] == ["execution_kernel_fallback_reason"]
-    assert payload["execution_kernel_live_fallback_retirement_status"]["current_response_metadata_truth"][
-        "compatibility_fallback_reason_present_in_steady_state"
-    ] is False
-    assert payload["execution_kernel_live_fallback_retirement_status"][
         "remaining_python_owned_surfaces"
     ] == []
     assert payload["execution_kernel_live_fallback_retirement_status"]["retirement_readiness"][
@@ -2352,22 +2328,6 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     ]["shared"] == [
         "trace_event_count",
         "trace_output_path",
-    ]
-    assert payload["execution_kernel_live_response_serialization_contract"][
-        "current_response_shape_truth"
-    ]["retired_compatibility_fallback"]["legacy_required_metadata_fields"] == [
-        "run_id",
-        "status",
-        "trace_event_count",
-        "trace_output_path",
-        "execution_kernel_contract_mode",
-        "execution_kernel_fallback_policy",
-        "execution_kernel_primary",
-        "execution_kernel_primary_authority",
-        "execution_kernel_fallback_reason",
-        "execution_kernel_compatibility_agent_contract",
-        "execution_kernel_compatibility_agent_kind",
-        "execution_kernel_compatibility_agent_authority",
     ]
     assert payload["execution_kernel_live_response_serialization_contract"]["retirement_gates"][
         "compatibility_live_response_serialization_still_python_owned"
