@@ -353,7 +353,7 @@ def test_observability_helpers_delegate_to_rust_contract_lane() -> None:
         assert record == adapter.runtime_metric_record(request)
 
 
-def test_observability_helpers_fallback_to_python_when_rust_lane_is_unavailable() -> None:
+def test_observability_helpers_fail_closed_when_rust_lane_is_unavailable() -> None:
     class _BrokenRustObservabilityAdapter:
         def runtime_observability_exporter_descriptor(self) -> dict[str, object]:
             raise RuntimeError("rust observability lane unavailable")
@@ -371,48 +371,36 @@ def test_observability_helpers_fallback_to_python_when_rust_lane_is_unavailable(
         "framework_runtime.observability._observability_rust_adapter",
         return_value=_BrokenRustObservabilityAdapter(),
     ):
-        exporter = build_runtime_observability_exporter_descriptor()
-        assert exporter["ownership_lane"] == "rust-contract-lane"
-        assert exporter["producer_owner"] == "rust-control-plane"
-        assert exporter["exporter_owner"] == "rust-control-plane"
-        assert exporter["export_path"] == "jsonl-plus-otel"
+        for helper in (
+            build_runtime_observability_exporter_descriptor,
+            runtime_observability_metric_catalog,
+            runtime_observability_dashboard_schema,
+        ):
+            try:
+                helper()
+            except RuntimeError as exc:
+                assert "Rust observability lane failed" in str(exc)
+            else:
+                raise AssertionError("observability helpers must fail without the Rust lane")
 
-        catalog = runtime_observability_metric_catalog()
-        assert catalog["schema_version"] == "runtime-observability-metric-catalog-v1"
-        assert catalog["metric_catalog_version"] == "runtime-observability-metrics-v1"
-        assert tuple(catalog["resource_dimensions"]) == (
-            "service.name",
-            "service.version",
-            "runtime.instance.id",
-            "route_engine_mode",
-        )
-
-        schema = runtime_observability_dashboard_schema()
-        assert schema["schema_version"] == "runtime-observability-dashboard-v1"
-        assert tuple(schema["resource_dimensions"]) == RUNTIME_OBSERVABILITY_DASHBOARD_DIMENSIONS
-
-        record = build_runtime_metric_record(
-            "runtime.route_mismatch_total",
-            value=3,
-            service_name="codex-runtime",
-            service_version="v1",
-            runtime_instance_id="runtime-123",
-            route_engine_mode="rust",
-            job_id="job-1",
-            session_id="session-1",
-            attempt=2,
-            worker_id="worker-7",
-            generation="gen-a",
-        )
-        assert record["dimensions"] == {
-            "runtime.job_id": "job-1",
-            "runtime.session_id": "session-1",
-            "runtime.attempt": 2,
-            "runtime.worker_id": "worker-7",
-            "runtime.generation": "gen-a",
-            "runtime.stage": "runtime.metric",
-            "runtime.status": "ok",
-        }
+        try:
+            build_runtime_metric_record(
+                "runtime.route_mismatch_total",
+                value=3,
+                service_name="codex-runtime",
+                service_version="v1",
+                runtime_instance_id="runtime-123",
+                route_engine_mode="rust",
+                job_id="job-1",
+                session_id="session-1",
+                attempt=2,
+                worker_id="worker-7",
+                generation="gen-a",
+            )
+        except RuntimeError as exc:
+            assert "Rust observability lane failed" in str(exc)
+        else:
+            raise AssertionError("metric records must fail without the Rust lane")
 
 
 def test_observability_helpers_fail_closed_for_unknown_metrics_and_empty_dimensions() -> None:

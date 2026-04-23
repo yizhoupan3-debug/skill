@@ -219,6 +219,26 @@ def _run_router_rs_claude_project_settings(repo_root: Path) -> dict[str, object]
     return json.loads(completed.stdout)
 
 
+def _run_router_rs_claude_hook_projection() -> dict[str, object]:
+    crate_root = PROJECT_ROOT / "scripts" / "router-rs"
+    binary_path = ensure_rust_binary(
+        crate_root=crate_root,
+        binary_name="router-rs",
+        release=True,
+        allow_stale_fallback=False,
+        allow_cross_profile_fallback=False,
+        cwd=PROJECT_ROOT,
+    )
+    completed = subprocess.run(
+        [str(binary_path), "--claude-hook-projection-json"],
+        cwd=PROJECT_ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return json.loads(completed.stdout)
+
+
 def _run_router_rs_claude_audit(
     command: str,
     repo_root: Path,
@@ -279,6 +299,7 @@ def test_router_rs_exports_claude_hook_manifest() -> None:
 def test_materialized_claude_settings_hooks_match_rust_manifest(tmp_path: Path) -> None:
     manifest = _run_router_rs_hook_manifest()
     expected_settings = _run_router_rs_claude_project_settings(tmp_path)
+    hook_projection = _run_router_rs_claude_hook_projection()
     materialize_repo_host_entrypoints(tmp_path)
 
     settings = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
@@ -319,6 +340,50 @@ def test_router_rs_hook_manifest_resolution_stays_release_strict(
     assert captured["allow_stale_fallback"] is False
     assert captured["allow_cross_profile_fallback"] is False
     assert captured["cwd"] == tmp_path
+
+
+def test_materializer_router_rs_output_retries_via_cargo_when_binary_execution_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    release_bin = tmp_path / "scripts" / "router-rs" / "target" / "release" / "router-rs"
+    release_bin.parent.mkdir(parents=True, exist_ok=True)
+    release_bin.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "scripts.materialize_cli_host_entrypoints._ensure_router_rs_binary",
+        lambda: release_bin,
+    )
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd[0] == str(release_bin):
+            raise subprocess.CalledProcessError(cmd=cmd, returncode=1, stderr="stale binary")
+        assert cmd[:6] == [
+            "cargo",
+            "run",
+            "--quiet",
+            "--manifest-path",
+            str(PROJECT_ROOT / "scripts" / "router-rs" / "Cargo.toml"),
+            "--release",
+        ]
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout='{"schema_version":"router-rs-claude-hook-projection-v1","authority":"rust-claude-hook"}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    from scripts.materialize_cli_host_entrypoints import _load_router_rs_json_output
+
+    payload = _load_router_rs_json_output("--claude-hook-projection-json")
+
+    assert payload["schema_version"] == "router-rs-claude-hook-projection-v1"
+    assert calls[0] == [str(release_bin), "--claude-hook-projection-json"]
+    assert calls[1][-2:] == ["--", "--claude-hook-projection-json"]
 
 
 def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxies(
@@ -373,6 +438,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "AGENT.md" in (tmp_path / "GEMINI.md").read_text(encoding="utf-8")
     settings = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
     expected_settings = _run_router_rs_claude_project_settings(tmp_path)
+    hook_projection = _run_router_rs_claude_hook_projection()
     codex_hooks = json.loads((tmp_path / ".codex" / "hooks.json").read_text(encoding="utf-8"))
     assert settings == expected_settings
     assert settings["$schema"] == "https://json.schemastore.org/claude-code-settings.json"
@@ -383,7 +449,20 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     ]
     assert "statusLine" not in settings
     assert codex_hooks == CODEX_PROJECT_HOOKS
-    assert codex_hooks["hooks"] == {}
+    assert set(codex_hooks["hooks"]) == {
+        "PreToolUse",
+        "PermissionRequest",
+    }
+    assert codex_hooks["hooks"]["PreToolUse"][0]["matcher"] == "Bash"
+    assert codex_hooks["hooks"]["PermissionRequest"][0]["matcher"] == "Bash"
+    pre_tool_command = codex_hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    permission_command = codex_hooks["hooks"]["PermissionRequest"][0]["hooks"][0]["command"]
+    assert "framework_hook_bridge.py" not in pre_tool_command
+    assert "ROUTER_RS_RELEASE_BIN=" in pre_tool_command
+    assert "ROUTER_RS_DEBUG_BIN=" in pre_tool_command
+    assert "--codex-hook-command pre-tool-use" in pre_tool_command
+    assert "framework_hook_bridge.py" not in permission_command
+    assert "--codex-hook-command permission-request" in permission_command
     assert set(settings["hooks"]) == {
         "PreToolUse",
         "PostToolUse",
@@ -444,6 +523,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert (tmp_path / ".claude" / "commands" / "latex-compile-acceleration.md").is_file()
     assert (tmp_path / ".claude" / "hooks" / "run.sh").is_file()
     hook_runner_script = (tmp_path / ".claude" / "hooks" / "run.sh").read_text(encoding="utf-8")
+    assert hook_runner_script == hook_projection["hook_runner"]
     assert "run_router_rs" in hook_runner_script
     assert "python3 \"$PROJECT_DIR/scripts/claude_hook" not in hook_runner_script
     assert "cargo build --manifest-path \"$ROUTER_RS_CRATE_ROOT/Cargo.toml\"" not in hook_runner_script
@@ -516,6 +596,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert aliases["autopilot"]["host_entrypoints"]["claude-code"] in autopilot_command
     assert "--framework-alias-json" in autopilot_command
     assert "--framework-alias autopilot" in autopilot_command
+    assert "--framework-host-id claude-code" in autopilot_command
     assert "--compact-output" in autopilot_command
     assert "--claude-hook-max-lines 3" in autopilot_command
     assert "resident Rust binary directly" in autopilot_command
@@ -527,7 +608,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs' in autopilot_command
     assert '"$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs' in autopilot_command
     assert (
-        'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias autopilot --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"'
+        'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias autopilot --framework-host-id claude-code --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"'
         in autopilot_command
     )
     assert "python3 scripts/router_rs_runner.py" not in autopilot_command
@@ -537,6 +618,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert aliases["deepinterview"]["host_entrypoints"]["claude-code"] in deepinterview_command
     assert "--framework-alias-json" in deepinterview_command
     assert "--framework-alias deepinterview" in deepinterview_command
+    assert "--framework-host-id claude-code" in deepinterview_command
     assert "--compact-output" in deepinterview_command
     assert "--claude-hook-max-lines 3" in deepinterview_command
     assert "resident Rust binary directly" in deepinterview_command
@@ -548,7 +630,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs' in deepinterview_command
     assert '"$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs' in deepinterview_command
     assert (
-        'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias deepinterview --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"'
+        'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias deepinterview --framework-host-id claude-code --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"'
         in deepinterview_command
     )
     assert "python3 scripts/router_rs_runner.py" not in deepinterview_command
@@ -558,6 +640,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert aliases["team"]["host_entrypoints"]["claude-code"] in team_command
     assert "--framework-alias-json" in team_command
     assert "--framework-alias team" in team_command
+    assert "--framework-host-id claude-code" in team_command
     assert "--compact-output" in team_command
     assert "--claude-hook-max-lines 3" in team_command
     assert "resident Rust binary directly" in team_command
@@ -569,7 +652,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs' in team_command
     assert '"$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs' in team_command
     assert (
-        'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias team --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"'
+        'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias team --framework-host-id claude-code --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"'
         in team_command
     )
     assert "python3 scripts/router_rs_runner.py" not in team_command
@@ -579,6 +662,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert aliases["latex-compile-acceleration"]["host_entrypoints"]["claude-code"] in latex_compile_acceleration_command
     assert "--framework-alias-json" in latex_compile_acceleration_command
     assert "--framework-alias latex-compile-acceleration" in latex_compile_acceleration_command
+    assert "--framework-host-id claude-code" in latex_compile_acceleration_command
     assert "--compact-output" in latex_compile_acceleration_command
     assert "--claude-hook-max-lines 3" in latex_compile_acceleration_command
     assert "resident Rust binary directly" in latex_compile_acceleration_command
@@ -590,7 +674,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs' in latex_compile_acceleration_command
     assert '"$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs' in latex_compile_acceleration_command
     assert (
-        'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias latex-compile-acceleration --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"'
+        'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias latex-compile-acceleration --framework-host-id claude-code --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"'
         in latex_compile_acceleration_command
     )
     assert "python3 scripts/router_rs_runner.py" not in latex_compile_acceleration_command
@@ -605,6 +689,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "Generated-first maintenance" in hooks_readme
     assert "update `scripts/router-rs/` first for Claude hook rules and contracts" in hooks_readme
     assert "Event-level lifecycle decisions live in `.claude/hooks/README.md`." in claude_entry
+    assert hooks_readme == hook_projection["hooks_readme"]
     for marker in (
         "`PreToolUse` | `run.sh pre-tool-use`",
         "`SessionEnd` | `run.sh session-end`",
@@ -854,7 +939,9 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert patchy_edit.returncode == 0
     patchy_payload = json.loads(patchy_edit.stdout)
     assert patchy_payload["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
-    assert "异步实现复查" in patchy_payload["additionalContext"]
+    assert patchy_payload["additionalContext"]
+    assert "增量来源=edit_new_string" in patchy_payload["additionalContext"]
+    assert "clone=" in patchy_payload["additionalContext"]
 
     for command_name in ("config-change", "stop-failure"):
         payload = None
@@ -881,11 +968,60 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert (tmp_path / ".codex" / "memory" / "CLAUDE_MEMORY.md").is_file()
 
 
-def test_materialized_codex_hooks_are_disabled(tmp_path: Path) -> None:
+def test_materialized_codex_hooks_match_codex_supported_event_surface(tmp_path: Path) -> None:
     materialize_repo_host_entrypoints(tmp_path)
 
     hooks = json.loads((tmp_path / ".codex" / "hooks.json").read_text(encoding="utf-8"))
-    assert hooks == {"hooks": {}}
+    assert hooks == CODEX_PROJECT_HOOKS
+    assert set(hooks["hooks"]) == {"PreToolUse", "PermissionRequest"}
+    assert "UserPromptSubmit" not in hooks["hooks"]
+    assert hooks["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"] == 8
+    assert hooks["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"] == 8
+
+
+def test_materialized_codex_hooks_execute_via_router_rs_without_python_bridge(tmp_path: Path) -> None:
+    _ensure_router_rs_binaries()
+    materialize_repo_host_entrypoints(tmp_path)
+    (tmp_path / "scripts").symlink_to(PROJECT_ROOT / "scripts", target_is_directory=True)
+
+    cargo_bin_dir = tmp_path / "fake-bin"
+    cargo_log = tmp_path / "cargo-args.txt"
+    cargo_bin_dir.mkdir(parents=True)
+    _write_text(
+        cargo_bin_dir / "cargo",
+        "\n".join(
+            [
+                "#!/bin/sh",
+                "set -eu",
+                f"printf '%s\\n' \"$@\" > '{cargo_log}'",
+            ]
+        )
+        + "\n",
+    )
+    os.chmod(cargo_bin_dir / "cargo", 0o755)
+
+    hooks = json.loads((tmp_path / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+    command = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    env = os.environ.copy()
+    env["PATH"] = f"{cargo_bin_dir}{os.pathsep}{env.get('PATH', '')}"
+
+    result = subprocess.run(
+        ["sh", "-c", command],
+        cwd=tmp_path,
+        env=env,
+        input='{"tool_name":"Bash","tool_input":{"command":"cp tmp .claude/settings.json"}}\n',
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "block"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert ".claude/settings.json" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert result.stderr == ""
+    assert not cargo_log.exists()
 
 
 def test_pre_tool_use_hook_uses_repo_local_audit_without_router_rs_bootstrap(tmp_path: Path) -> None:

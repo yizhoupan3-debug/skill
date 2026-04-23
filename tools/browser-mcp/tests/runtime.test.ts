@@ -1,12 +1,12 @@
 import { execFile as execFileCallback } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import { AddressInfo } from 'node:net';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { BrowserRuntime } from '../src/runtime.js';
+import { BrowserRuntime, resetRouterRsProcessStateForTests } from '../src/runtime.js';
 
 let server: Server;
 let baseUrl: string;
@@ -318,6 +318,28 @@ conn.close()
     handoffPath,
     resumeManifestPath,
   };
+}
+
+async function createFakeRouterRsCommand(delayMs: number): Promise<{
+  tempRoot: string;
+  commandPath: string;
+}> {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), 'browser-mcp-router-rs-'));
+  const commandPath = path.join(tempRoot, 'fake-router-rs');
+  await writeFile(
+    commandPath,
+    `#!/bin/sh
+delay_seconds=$(awk "BEGIN { printf \\"%.3f\\", ${delayMs} / 1000 }")
+while IFS= read -r line; do
+  request_id=$(printf '%s\n' "$line" | sed -n 's/.*"id":[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p')
+  sleep "$delay_seconds"
+  printf '{"id":%s,"ok":true,"payload":{"schema_version":"router-rs-trace-stream-replay-v1","authority":"rust-runtime-trace-io","path":"/tmp/fake-trace.jsonl","event_count":1,"latest_event_id":"evt-fake-1","latest_event_kind":"job.completed","latest_event_timestamp":"2026-04-23T00:00:00.000Z","after_event_id":null,"window_start_index":0,"has_more":false,"next_cursor":null,"events":[{"ts":"2026-04-23T00:00:00.000Z","event_id":"evt-fake-1","kind":"job.completed","seq":1,"generation":0,"cursor":"g0:s1:evt-fake-1"}]}}\n' "$request_id"
+done
+`,
+    'utf8',
+  );
+  await chmod(commandPath, 0o755);
+  return { tempRoot, commandPath };
 }
 
 /**
@@ -771,6 +793,75 @@ describe('BrowserRuntime', () => {
     }
   }, 15000);
 
+  it('replays attached runtime events concurrently across the router stdio pool', async () => {
+    const { tempRoot, commandPath } = await createFakeRouterRsCommand(150);
+    const previousCommand = process.env.BROWSER_MCP_ROUTER_RS_COMMAND;
+    const previousPoolSize = process.env.CODEX_ROUTER_STDIO_POOL_SIZE;
+    process.env.BROWSER_MCP_ROUTER_RS_COMMAND = commandPath;
+    resetRouterRsProcessStateForTests();
+
+    async function measureReplayElapsed(poolSize: string): Promise<number> {
+      process.env.CODEX_ROUTER_STDIO_POOL_SIZE = poolSize;
+      resetRouterRsProcessStateForTests();
+      const attachedRuntime = new BrowserRuntime({
+        headless: true,
+        runtimeAttachDescriptor: {
+          schema_version: 'runtime-event-attach-descriptor-v1',
+          attach_mode: 'process_external_artifact_replay',
+          artifact_backend_family: 'filesystem',
+          attach_capabilities: {
+            artifact_replay: true,
+            live_remote_stream: false,
+            cleanup_preserves_replay: true,
+          },
+          recommended_entrypoint: 'describe_runtime_event_handoff',
+          resolved_artifacts: {
+            trace_stream_path: path.join(tempRoot, 'TRACE_EVENTS.jsonl'),
+          },
+        },
+        screenshotDir: path.join(tempRoot, `screenshots-${poolSize}`),
+      });
+
+      try {
+        const startedAt = Date.now();
+        const [first, second] = await Promise.all([
+          attachedRuntime.getAttachedRuntimeEvents({ limit: 1 }),
+          attachedRuntime.getAttachedRuntimeEvents({ limit: 1 }),
+        ]);
+        const elapsedMs = Date.now() - startedAt;
+
+        expect(first.events).toHaveLength(1);
+        expect(second.events).toHaveLength(1);
+        return elapsedMs;
+      } finally {
+        await attachedRuntime.shutdown();
+      }
+    }
+
+    try {
+      const serialElapsedMs = await measureReplayElapsed('1');
+      const startedAt = Date.now();
+      const pooledElapsedMs = await measureReplayElapsed('2');
+
+      expect(serialElapsedMs).toBeGreaterThanOrEqual(250);
+      expect(pooledElapsedMs).toBeLessThan(serialElapsedMs - 100);
+      expect(Date.now() - startedAt).toBeLessThan(2500);
+    } finally {
+      resetRouterRsProcessStateForTests();
+      if (previousCommand === undefined) {
+        delete process.env.BROWSER_MCP_ROUTER_RS_COMMAND;
+      } else {
+        process.env.BROWSER_MCP_ROUTER_RS_COMMAND = previousCommand;
+      }
+      if (previousPoolSize === undefined) {
+        delete process.env.CODEX_ROUTER_STDIO_POOL_SIZE;
+      } else {
+        process.env.CODEX_ROUTER_STDIO_POOL_SIZE = previousPoolSize;
+      }
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  }, 15000);
+
   it('hydrates replay from a transport binding artifact path', async () => {
     const { tempRoot, traceStreamPath, bindingArtifactPath } = await createAttachedRuntimeFixture();
     const attachedRuntime = new BrowserRuntime({
@@ -792,6 +883,38 @@ describe('BrowserRuntime', () => {
 
       const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
       expect(replay.replayContext.descriptorSource).toBe('binding_artifact_path');
+      expect(replay.replayContext.inputArtifactKind).toBe('binding_artifact');
+      expect(replay.replayContext.bindingArtifactSource).toBe('explicit_request');
+      expect(replay.replayContext.traceStreamSource).toBe('resume_manifest');
+      expect(replay.events).toHaveLength(2);
+      expect(replay.events[1]!.event_id).toBe('evt-2');
+    } finally {
+      await attachedRuntime.shutdown();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  }, 15000);
+
+  it('hydrates replay from an attach artifact path that points at a transport binding artifact', async () => {
+    const { tempRoot, traceStreamPath, bindingArtifactPath } = await createAttachedRuntimeFixture();
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeAttachArtifactPath: bindingArtifactPath,
+      screenshotDir: path.join(tempRoot, 'screenshots'),
+    });
+
+    try {
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.attachedRuntime.status).toBe('ready');
+      expect(diagnostics.attachedRuntime.descriptorSource).toBe('attach_artifact_path');
+      expect(diagnostics.attachedRuntime.inputArtifactKind).toBe('binding_artifact');
+      expect(diagnostics.attachedRuntime.sourceTransportMethod).toBe('describe_runtime_event_transport');
+      expect(diagnostics.attachedRuntime.sourceHandoffMethod).toBe('describe_runtime_event_handoff');
+      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
+      expect(diagnostics.attachedRuntime.bindingArtifactSource).toBe('explicit_request');
+      expect(diagnostics.attachedRuntime.traceStreamSource).toBe('resume_manifest');
+
+      const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
+      expect(replay.replayContext.descriptorSource).toBe('attach_artifact_path');
       expect(replay.replayContext.inputArtifactKind).toBe('binding_artifact');
       expect(replay.replayContext.bindingArtifactSource).toBe('explicit_request');
       expect(replay.replayContext.traceStreamSource).toBe('resume_manifest');

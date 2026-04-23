@@ -45,80 +45,74 @@ approval_required_tools:
 
 # autopilot
 
-`autopilot` 现在按 OMC 官方 `v4.13.2` 的 `autopilot` 技能骨架来跑，再做本地 Rust 化和仓内落地。也就是说，核心能力不是我自己想的，而是直接继承官方的“从想法到可验证代码”的全流程自动推进；本仓只把 `.omc` 状态面换成了你仓自己的 Rust supervisor、continuity artifacts 和验证闭环。
+`autopilot` 继承 OMC `v4.13.2` 的端到端执行流，但在本仓直接落到 Rust supervisor、continuity artifacts 和验证闭环，不再依赖 `.omc`。
+
+显式入口：
+- Codex：`$autopilot`
+- Claude：`/autopilot`
 
 ## Upstream Baseline
 
 - 官方来源：`oh-my-claudecode` `v4.13.2`
 - 对应技能：`skills/autopilot/SKILL.md`
-- 继承的原版主流程：Expansion -> Planning -> Execution -> QA -> Validation -> Cleanup
+- 主流程：Expansion -> Planning -> Execution -> QA -> Validation -> Cleanup
 
 ## When to use
 
-- 每轮对话开始 / first-turn / conversation start，而且这轮已经是执行主导
-- 用户想直接推进，不想来回确认
-- 任务是执行主导：改代码、修问题、补验证、直到收口
-- 需要把计划、调试、委派、验证串成一条连续执行链
-- 用户已经给了产品想法、项目目标或一段可落地需求，希望直接端到端做完
+- 用户明确要直接推进到底
+- 当前任务以实现、修复、验证、收口为主
+- 需要把规格、计划、执行、QA、验收串成一条主线
+- first-turn 就已经进入执行态
 
 ## Do not use
 
-- 只是泛泛 brainstorming，没有进入执行态
-- 任务本质是纯 review，没有实现/修复动作
-- 明显需要单一窄 owner，且不需要执行控制器收口
-- 用户只是想了解 `autopilot` 是什么或怎么用，而不是现在就触发它
+- 只是 brainstorming，还没进执行态
+- 纯 review，没有实现或修复动作
+- 只是了解 `autopilot`，不是要现在触发
 
 ## Canonical owner
 
 - 主 owner：[`$execution-controller-coding`](/Users/joe/Documents/skill/skills/execution-controller-coding/SKILL.md)
 
-## Official Workflow
+## Workflow
 
 1. `Expansion`
-   - 把简短需求扩成清晰 spec。
-   - 如果输入仍然很虚，优先转给 [`$deepinterview`](/Users/joe/Documents/skill/skills/deepinterview/SKILL.md) 先做澄清。
+   - 先把需求扩成能执行的 spec。
+   - 仍然模糊时，先转 [`$deepinterview`](/Users/joe/Documents/skill/skills/deepinterview/SKILL.md)。
 2. `Planning`
-   - 把 spec 变成可执行计划和验收路径。
+   - 把 spec 变成计划和验收路径。
 3. `Execution`
-   - 进入真实代码实现，必要时并行拆 sidecar。
+   - 做真实实现，必要时拆 sidecar。
 4. `QA`
-   - 构建、测试、修复，直到测试信号稳定。
+   - 构建、测试、修复，直到信号稳定。
 5. `Validation`
-   - 用架构、安全、代码质量、执行验收几条 review 面做复核。
+   - 用 review 面复核结果。
 6. `Cleanup`
-   - 结束时清理运行态残留，只保留 continuity 和证据。
+   - 清掉运行残留，只保留 continuity 和证据。
 
-## Local Replacements
+## Local runtime
 
-- 不再写 `.omc/state/autopilot-state.json` 这类官方状态文件。
-- 运行态改由 Rust `session-supervisor`、background state 和 resume 机制承接。
-- 规格、计划、证据改写入：
-  - `artifacts/current/<task_id>/bootstrap/`
-  - `artifacts/current/<task_id>/evidence/`
-  - `SESSION_SUMMARY.md`
-  - `NEXT_ACTIONS.json`
-  - `EVIDENCE_INDEX.json`
-  - `TRACE_METADATA.json`
-  - `.supervisor_state.json`
+- 不再写 `.omc` 状态。
+- 运行态由 Rust `session-supervisor`、background state、resume 承接。
+- 任务真相写到 `artifacts/current/<task_id>/...`、`SESSION_SUMMARY.md`、`NEXT_ACTIONS.json`、`EVIDENCE_INDEX.json`、`TRACE_METADATA.json`、`.supervisor_state.json`。
 
 ## Instructions
 
-1. 按官方 `autopilot` 的 6 段流程推进，不跳过中间的 spec、计划、QA、validation。
-2. 如果任务仍模糊，先走 [`$deepinterview`](/Users/joe/Documents/skill/skills/deepinterview/SKILL.md) 做澄清，不要硬扩需求。
-3. 如果根因未知，先走 [`$systematic-debugging`](/Users/joe/Documents/skill/skills/systematic-debugging/SKILL.md)，再回到执行主线。
-4. 只有在 task、acceptance、next actions 已经足够具体时，才直接留在 [`$execution-controller-coding`](/Users/joe/Documents/skill/skills/execution-controller-coding/SKILL.md) 主线继续执行。
-5. 如果 continuity 是 stale，先 refresh continuity；如果 continuity 是 inconsistent，先 repair continuity；如果任务已经 completed，就新开 bounded task，不复活历史执行。
-6. 对清晰、低风险、可逆的本地步骤自动继续推进。
-7. 需要并行拆分时，使用 [`$subagent-delegation`](/Users/joe/Documents/skill/skills/subagent-delegation/SKILL.md)。
-8. 进入强验收时，加入 [`$execution-audit`](/Users/joe/Documents/skill/skills/execution-audit/SKILL.md)。
-9. 没有验证证据，不宣布完成；缺 evidence 时优先补 QA / Validation，而不是直接写 closeout。
-10. 如果执行被打断、限流或挂起，必须保留恢复锚点并优先续跑，不把中断当完成。
-11. 如果同一错误连续重复，必须上升为根因问题处理，而不是机械重试。
+1. 六段流程不要跳，尤其不要省掉 spec、QA、validation。
+2. 模糊需求先去 [`$deepinterview`](/Users/joe/Documents/skill/skills/deepinterview/SKILL.md)，不要硬猜。
+3. 根因未知先去 [`$systematic-debugging`](/Users/joe/Documents/skill/skills/systematic-debugging/SKILL.md)。
+4. 只有 task、acceptance、next actions 已够具体时，才留在 [`$execution-controller-coding`](/Users/joe/Documents/skill/skills/execution-controller-coding/SKILL.md) 继续跑。
+5. `stale` 先 refresh，`inconsistent` 先 repair，`completed` 就新开 bounded task。
+6. 清晰、低风险、可逆的本地步骤自动继续。
+7. 并行拆分走 [`$subagent-delegation`](/Users/joe/Documents/skill/skills/subagent-delegation/SKILL.md)。
+8. 强验收时加 [`$execution-audit`](/Users/joe/Documents/skill/skills/execution-audit/SKILL.md)。
+9. 没有验证证据，不宣布完成。
+10. 中断、限流、挂起都要保留恢复锚点并优先续跑。
+11. 同一错误连续重复，升级为根因问题，不机械重试。
 
 ## Constraints
 
-- 这是“复用官方实现再本地化”，不是自创新协议。
-- 用本仓共享 skill、artifact contract、host entrypoint 来解释行为。
+- 这是官方能力的本地化，不是自创新协议。
+- 用本仓 skill、artifact contract、host entrypoint 解释行为。
 - 不把宿主私有行为写成 framework 真相。
-- 用户看到的是稳定的原生 `autopilot` 能力，不是外部兼容层。
-- 必须做到“承接 OMC 核心能力，但实现标准更强”，至少强制根因定位、验证证据、恢复续跑、收敛闭环。
+- 用户看到的是原生 `autopilot`，不是外部兼容层。

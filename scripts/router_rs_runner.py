@@ -95,6 +95,7 @@ def _parse_hot_request(argv: list[str], *, binary_path: Path) -> HotRequest | No
             "alias": alias_name,
             "max_lines": max_lines,
             "compact": "--compact-output" in argv,
+            "host_id": _option_value(argv, "--framework-host-id") or "codex-cli",
         },
         socket_path=_socket_path(binary_path, repo_root),
     )
@@ -202,6 +203,7 @@ def _dispatch_hot_request(request: HotRequest, *, adapter: RustRouteAdapter) -> 
             alias=str(request.payload["alias"]),
             max_lines=int(request.payload.get("max_lines", 4)),
             compact=bool(request.payload.get("compact", False)),
+            host_id=str(request.payload.get("host_id") or "codex-cli"),
         )
         return {
             "schema_version": adapter.framework_alias_schema_version,

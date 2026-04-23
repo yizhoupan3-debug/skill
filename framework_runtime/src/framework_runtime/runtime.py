@@ -672,8 +672,7 @@ class CodexAgnoRuntime:
     def _trace_runtime_snapshot(self, session_id: str) -> dict[str, Any]:
         latest_cursor = self._trace.latest_cursor(session_id=session_id)
         stream_state = self._trace.describe_stream()
-        transport = self.trace_service.describe_transport(session_id=session_id)
-        handoff = self.trace_service.describe_handoff(session_id=session_id)
+        transport, handoff = self.trace_service.describe_stream_artifacts(session_id=session_id)
         return {
             "latest_cursor": latest_cursor,
             "stream_state": stream_state,
@@ -786,6 +785,7 @@ class CodexAgnoRuntime:
             status="completed" if result.live_run else "dry_run",
             artifact_paths=artifact_paths,
             supervisor_projection=supervisor_projection,
+            transport=trace_snapshot["transport"],
         )
 
     @staticmethod
@@ -868,6 +868,7 @@ class CodexAgnoRuntime:
         status: str,
         artifact_paths: list[str] | None = None,
         supervisor_projection: dict[str, Any] | None = None,
+        transport: Any | None = None,
     ) -> None:
         """Write the runtime-owned resume manifest when trace artifacts are configured."""
 
@@ -880,4 +881,5 @@ class CodexAgnoRuntime:
             status=status,
             artifact_paths=artifact_paths,
             supervisor_projection=supervisor_projection,
+            transport=transport,
         )

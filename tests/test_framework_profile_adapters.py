@@ -978,6 +978,7 @@ def test_adapt_framework_profile_allows_explicit_host_private_opt_in() -> None:
         },
     ).host_payload
     assert adapted["host_projection"]["context_files"] == ["AGENTS.md"]
+    assert adapted["host_adapter_payload"]["context_files"] == ["AGENTS.md"]
 
 
 def test_compile_cli_common_adapter_uses_rust_artifact_and_keeps_override_surface(
@@ -1304,6 +1305,7 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     assert cli.host_payload["execution_surface"]["entrypoint_kind"] == "headless"
     assert cli.host_payload["execution_surface"]["controller_is_cli"] is False
     assert cli.host_payload["common_contract"] == desktop.host_payload["common_contract"]
+    assert cli.host_payload["host_adapter_payload"] == cli.host_payload["host_projection"]
     assert cli.host_payload["execution_surface"]["shared_adapter"] == "cli_common_adapter"
     assert cli.host_payload["host_projection"]["context_files"] == ["AGENTS.md"]
     assert cli.host_payload["host_projection"]["settings_paths"] == [
@@ -1319,6 +1321,7 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
 
     assert claude.adapter == CLAUDE_CODE_ADAPTER
     assert claude.host_payload["execution_surface"]["shared_adapter"] == "cli_common_adapter"
+    assert claude.host_payload["host_adapter_payload"] == claude.host_payload["host_projection"]
     assert claude.host_payload["host_projection"]["context_files"] == [
         "CLAUDE.md",
         "CLAUDE.local.md",
@@ -1426,6 +1429,7 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
 
     assert gemini.adapter == GEMINI_CLI_ADAPTER
     assert gemini.host_payload["execution_surface"]["shared_adapter"] == "cli_common_adapter"
+    assert gemini.host_payload["host_adapter_payload"] == gemini.host_payload["host_projection"]
     assert gemini.host_payload["host_projection"]["context_files"] == ["GEMINI.md"]
     assert gemini.host_payload["host_projection"]["settings_paths"] == ["~/.gemini/settings.json"]
     assert gemini.host_payload["host_projection"]["structured_output_modes"] == [

@@ -3148,7 +3148,7 @@
     "plugin-creator": {
       "tier": "optional",
       "reasons": [
-        "specialist-opt-in"
+        "layer:L0"
       ],
       "surface": {
         "activation_mode": "explicit_opt_in",
@@ -3156,11 +3156,11 @@
         "default_loadout_memberships": []
       },
       "signals": {
-        "layer": "L1",
+        "layer": "L0",
         "owner": "owner",
         "gate": "none",
-        "priority": "P2",
-        "session_start": "n/a",
+        "priority": "P1",
+        "session_start": "preferred",
         "source": "system",
         "source_position": 0,
         "health": {
@@ -3758,7 +3758,7 @@
     "skill-creator": {
       "tier": "optional",
       "reasons": [
-        "specialist-opt-in"
+        "layer:L0"
       ],
       "surface": {
         "activation_mode": "explicit_opt_in",
@@ -3766,11 +3766,11 @@
         "default_loadout_memberships": []
       },
       "signals": {
-        "layer": "L1",
+        "layer": "L0",
         "owner": "owner",
         "gate": "none",
-        "priority": "P2",
-        "session_start": "n/a",
+        "priority": "P1",
+        "session_start": "preferred",
         "source": "system",
         "source_position": 0,
         "health": {
@@ -3849,7 +3849,7 @@
     "skill-installer": {
       "tier": "optional",
       "reasons": [
-        "specialist-opt-in"
+        "layer:L0"
       ],
       "surface": {
         "activation_mode": "explicit_opt_in",
@@ -3857,11 +3857,11 @@
         "default_loadout_memberships": []
       },
       "signals": {
-        "layer": "L1",
+        "layer": "L0",
         "owner": "owner",
         "gate": "none",
-        "priority": "P2",
-        "session_start": "n/a",
+        "priority": "P1",
+        "session_start": "preferred",
         "source": "system",
         "source_position": 0,
         "health": {

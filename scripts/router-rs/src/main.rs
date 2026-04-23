@@ -24,8 +24,8 @@ mod session_supervisor;
 
 use background_state::handle_background_state_operation;
 use claude_hooks::{
-    build_claude_hook_manifest, build_claude_project_settings, run_claude_audit_hook,
-    run_claude_lifecycle_hook,
+    build_claude_hook_manifest, build_claude_hook_projection, build_claude_project_settings,
+    run_claude_audit_hook, run_claude_lifecycle_hook, run_codex_audit_hook,
 };
 use framework_profile::{
     build_codex_artifact_bundle, build_profile_bundle, build_profile_bundle_with_legacy_alias,
@@ -200,6 +200,8 @@ struct Cli {
     #[arg(long)]
     framework_alias: Option<String>,
     #[arg(long)]
+    framework_host_id: Option<String>,
+    #[arg(long)]
     compact_output: bool,
     #[arg(long)]
     profile_json: bool,
@@ -216,11 +218,15 @@ struct Cli {
     #[arg(long)]
     claude_hook_manifest_json: bool,
     #[arg(long)]
+    claude_hook_projection_json: bool,
+    #[arg(long)]
     claude_project_settings_json: bool,
     #[arg(long)]
     claude_hook_command: Option<String>,
     #[arg(long)]
     claude_hook_audit_command: Option<String>,
+    #[arg(long)]
+    codex_hook_command: Option<String>,
     #[arg(long, default_value_t = 4)]
     claude_hook_max_lines: usize,
     #[arg(long, default_value = "stable")]
@@ -604,6 +610,18 @@ struct SandboxControlRequestPayload {
     current_state: Option<String>,
     next_state: Option<String>,
     cleanup_failed: Option<bool>,
+    tool_category: Option<String>,
+    capability_categories: Option<Vec<String>>,
+    dedicated_profile: Option<bool>,
+    budget_cpu: Option<f64>,
+    budget_memory: Option<i64>,
+    budget_wall_clock: Option<f64>,
+    budget_output_size: Option<i64>,
+    probe_cpu: Option<f64>,
+    probe_memory: Option<i64>,
+    probe_wall_clock: Option<f64>,
+    probe_output_size: Option<i64>,
+    error_kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -617,6 +635,11 @@ struct SandboxControlResponsePayload {
     resolved_state: Option<String>,
     reason: String,
     error: Option<String>,
+    failure_reason: Option<String>,
+    budget_violation: Option<String>,
+    cleanup_required: Option<bool>,
+    quarantined: Option<bool>,
+    event_kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -876,9 +899,11 @@ fn main() -> Result<(), String> {
         args.route_resolution_json,
         args.runtime_storage_json,
         args.claude_hook_manifest_json,
+        args.claude_hook_projection_json,
         args.claude_project_settings_json,
         args.claude_hook_command.is_some(),
         args.claude_hook_audit_command.is_some(),
+        args.codex_hook_command.is_some(),
     ]
     .into_iter()
     .filter(|enabled| *enabled)
@@ -886,7 +911,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-alias-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-project-settings-json, --profile-json, --profile-artifacts-json, and --routing-eval-json"
+            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-alias-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --claude-hook-command, --claude-hook-audit-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
                 .to_string(),
         );
     }
@@ -1293,6 +1318,7 @@ fn main() -> Result<(), String> {
                 alias_name,
                 args.claude_hook_max_lines,
                 args.compact_output,
+                args.framework_host_id.as_deref(),
             )?)
             .map_err(|err| format!("serialize output failed: {err}"))?
         );
@@ -1412,6 +1438,15 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.claude_hook_projection_json {
+        println!(
+            "{}",
+            serde_json::to_string(&build_claude_hook_projection())
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
     if args.claude_project_settings_json {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
         println!(
@@ -1443,6 +1478,18 @@ fn main() -> Result<(), String> {
             serde_json::to_string(&run_claude_audit_hook(command, &repo_root)?)
                 .map_err(|err| format!("serialize output failed: {err}"))?
         );
+        return Ok(());
+    }
+
+    if let Some(command) = args.codex_hook_command.as_deref() {
+        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+        if let Some(payload) = run_codex_audit_hook(command, &repo_root)? {
+            println!(
+                "{}",
+                serde_json::to_string(&payload)
+                    .map_err(|err| format!("serialize output failed: {err}"))?
+            );
+        }
         return Ok(());
     }
 
@@ -1923,11 +1970,13 @@ fn dispatch_stdio_framework_alias(payload: Value) -> Result<Value, String> {
         .get("compact")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let host_id = payload.get("host_id").and_then(Value::as_str);
     serde_json::to_value(build_framework_alias_envelope(
         Path::new(&repo_root),
         &alias_name,
         max_lines,
         compact,
+        host_id,
     )?)
     .map_err(|err| format!("serialize framework alias output failed: {err}"))
 }
@@ -3648,6 +3697,52 @@ fn build_background_control_response(
     }
 }
 
+fn sandbox_transition_allowed(current_state: &str, next_state: &str) -> bool {
+    matches!(
+        (current_state, next_state),
+        ("created", "warm")
+            | ("warm", "busy")
+            | ("busy", "draining")
+            | ("draining", "recycled")
+            | ("draining", "failed")
+            | ("warm", "failed")
+            | ("busy", "failed")
+            | ("recycled", "warm")
+    )
+}
+
+fn sandbox_response(
+    operation: &str,
+    current_state: Option<String>,
+    next_state: Option<String>,
+    allowed: bool,
+    resolved_state: Option<String>,
+    reason: &str,
+    error: Option<String>,
+    failure_reason: Option<String>,
+    budget_violation: Option<String>,
+    cleanup_required: Option<bool>,
+    quarantined: Option<bool>,
+    event_kind: Option<&str>,
+) -> SandboxControlResponsePayload {
+    SandboxControlResponsePayload {
+        schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
+        authority: SANDBOX_CONTROL_AUTHORITY.to_string(),
+        operation: operation.to_string(),
+        current_state,
+        next_state,
+        allowed,
+        resolved_state,
+        reason: reason.to_string(),
+        error,
+        failure_reason,
+        budget_violation,
+        cleanup_required,
+        quarantined,
+        event_kind: event_kind.map(|value| value.to_string()),
+    }
+}
+
 fn build_sandbox_control_response(
     payload: SandboxControlRequestPayload,
 ) -> Result<SandboxControlResponsePayload, String> {
@@ -3661,31 +3756,19 @@ fn build_sandbox_control_response(
                 .next_state
                 .clone()
                 .ok_or_else(|| "sandbox control transition requires next_state".to_string())?;
-            let allowed = matches!(
-                (current_state.as_str(), next_state.as_str()),
-                ("created", "warm")
-                    | ("warm", "busy")
-                    | ("busy", "draining")
-                    | ("draining", "recycled")
-                    | ("draining", "failed")
-                    | ("warm", "failed")
-                    | ("busy", "failed")
-                    | ("recycled", "warm")
-            );
-            Ok(SandboxControlResponsePayload {
-                schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
-                authority: SANDBOX_CONTROL_AUTHORITY.to_string(),
-                operation: payload.operation,
-                current_state: Some(current_state.clone()),
-                next_state: Some(next_state.clone()),
+            let allowed = sandbox_transition_allowed(&current_state, &next_state);
+            Ok(sandbox_response(
+                &payload.operation,
+                Some(current_state.clone()),
+                Some(next_state.clone()),
                 allowed,
-                resolved_state: Some(next_state.clone()),
-                reason: if allowed {
-                    "transition-accepted".to_string()
+                Some(next_state.clone()),
+                if allowed {
+                    "transition-accepted"
                 } else {
-                    "invalid-transition".to_string()
+                    "invalid-transition"
                 },
-                error: if allowed {
+                if allowed {
                     None
                 } else {
                     Some(format!(
@@ -3693,7 +3776,12 @@ fn build_sandbox_control_response(
                         current_state, next_state
                     ))
                 },
-            })
+                None,
+                None,
+                None,
+                None,
+                None,
+            ))
         }
         "cleanup" => {
             let current_state = payload
@@ -3703,22 +3791,20 @@ fn build_sandbox_control_response(
             let cleanup_failed = payload.cleanup_failed.unwrap_or(false);
             let resolved_state = if cleanup_failed { "failed" } else { "recycled" };
             let allowed = matches!(current_state.as_str(), "draining");
-            Ok(SandboxControlResponsePayload {
-                schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
-                authority: SANDBOX_CONTROL_AUTHORITY.to_string(),
-                operation: payload.operation,
-                current_state: Some(current_state.clone()),
-                next_state: Some(resolved_state.to_string()),
+            Ok(sandbox_response(
+                &payload.operation,
+                Some(current_state.clone()),
+                Some(resolved_state.to_string()),
                 allowed,
-                resolved_state: Some(resolved_state.to_string()),
-                reason: if !allowed {
-                    "cleanup-invalid-state".to_string()
+                Some(resolved_state.to_string()),
+                if !allowed {
+                    "cleanup-invalid-state"
                 } else if cleanup_failed {
-                    "cleanup-failed".to_string()
+                    "cleanup-failed"
                 } else {
-                    "cleanup-completed".to_string()
+                    "cleanup-completed"
                 },
-                error: if allowed {
+                if allowed {
                     None
                 } else {
                     Some(format!(
@@ -3726,7 +3812,187 @@ fn build_sandbox_control_response(
                         current_state, resolved_state
                     ))
                 },
-            })
+                payload
+                    .error_kind
+                    .clone()
+                    .or_else(|| cleanup_failed.then(|| "cleanup_failed".to_string())),
+                None,
+                Some(false),
+                Some(cleanup_failed),
+                Some(if cleanup_failed {
+                    "sandbox.cleanup_failed"
+                } else {
+                    "sandbox.cleanup_completed"
+                }),
+            ))
+        }
+        "admit" => {
+            let current_state = payload
+                .current_state
+                .clone()
+                .unwrap_or_else(|| "warm".to_string());
+            let categories = payload.capability_categories.clone().unwrap_or_default();
+            let tool_category = payload
+                .tool_category
+                .clone()
+                .unwrap_or_else(|| "workspace_mutating".to_string());
+            let dedicated_profile = payload.dedicated_profile.unwrap_or(false);
+            let failure_reason = if categories.is_empty() {
+                Some("policy_violation:missing_capability_declaration".to_string())
+            } else if let Some(unknown) = categories.iter().find(|category| {
+                !matches!(
+                    category.as_str(),
+                    "read_only" | "workspace_mutating" | "networked" | "high_risk"
+                )
+            }) {
+                Some(format!("policy_violation:unknown_capability:{unknown}"))
+            } else if !matches!(
+                tool_category.as_str(),
+                "read_only" | "workspace_mutating" | "networked" | "high_risk"
+            ) {
+                Some(format!("policy_violation:unknown_tool_category:{tool_category}"))
+            } else if !categories.iter().any(|category| category == &tool_category) {
+                Some(format!("policy_violation:capability_denied:{tool_category}"))
+            } else if tool_category == "high_risk" && !dedicated_profile {
+                Some("policy_violation:high_risk_requires_dedicated_profile".to_string())
+            } else if payload.budget_cpu.unwrap_or(0.0) <= 0.0 {
+                Some("budget_admission_failed:cpu_non_positive".to_string())
+            } else if payload.budget_memory.unwrap_or(0) <= 0 {
+                Some("budget_admission_failed:memory_non_positive".to_string())
+            } else if payload.budget_wall_clock.unwrap_or(0.0) <= 0.0 {
+                Some("budget_admission_failed:wall_clock_non_positive".to_string())
+            } else if payload.budget_output_size.unwrap_or(0) <= 0 {
+                Some("budget_admission_failed:output_size_non_positive".to_string())
+            } else {
+                None
+            };
+            if let Some(reason) = failure_reason {
+                return Ok(sandbox_response(
+                    &payload.operation,
+                    Some(current_state.clone()),
+                    Some("failed".to_string()),
+                    false,
+                    Some("failed".to_string()),
+                    "admission-rejected",
+                    Some(reason.clone()),
+                    Some(reason),
+                    None,
+                    Some(false),
+                    Some(true),
+                    Some("sandbox.failed"),
+                ));
+            }
+            Ok(sandbox_response(
+                &payload.operation,
+                Some(current_state.clone()),
+                Some("busy".to_string()),
+                sandbox_transition_allowed(&current_state, "busy"),
+                Some("busy".to_string()),
+                "admission-accepted",
+                None,
+                None,
+                None,
+                Some(false),
+                Some(false),
+                Some("sandbox.execution_started"),
+            ))
+        }
+        "execution_result" => {
+            let current_state = payload
+                .current_state
+                .clone()
+                .unwrap_or_else(|| "busy".to_string());
+            let budget_violation = [
+                (
+                    "cpu_exceeded",
+                    payload
+                        .probe_cpu
+                        .zip(payload.budget_cpu)
+                        .is_some_and(|(observed, limit)| observed > limit),
+                ),
+                (
+                    "memory_exceeded",
+                    payload
+                        .probe_memory
+                        .zip(payload.budget_memory)
+                        .is_some_and(|(observed, limit)| observed > limit),
+                ),
+                (
+                    "wall_clock_exceeded",
+                    payload
+                        .probe_wall_clock
+                        .zip(payload.budget_wall_clock)
+                        .is_some_and(|(observed, limit)| observed > limit),
+                ),
+                (
+                    "output_size_exceeded",
+                    payload
+                        .probe_output_size
+                        .zip(payload.budget_output_size)
+                        .is_some_and(|(observed, limit)| observed > limit),
+                ),
+            ]
+            .into_iter()
+            .find_map(|(reason, exceeded)| exceeded.then(|| reason.to_string()));
+            if let Some(reason) = payload.error_kind.clone() {
+                let resolved_state = if reason == "wall_clock_exceeded" {
+                    "draining"
+                } else {
+                    "failed"
+                };
+                return Ok(sandbox_response(
+                    &payload.operation,
+                    Some(current_state.clone()),
+                    Some(resolved_state.to_string()),
+                    sandbox_transition_allowed(&current_state, resolved_state),
+                    Some(resolved_state.to_string()),
+                    if resolved_state == "draining" {
+                        "execution-timeout"
+                    } else {
+                        "execution-failed"
+                    },
+                    Some(reason.clone()),
+                    Some(reason),
+                    None,
+                    Some(resolved_state == "draining"),
+                    Some(resolved_state == "failed"),
+                    Some(if resolved_state == "draining" {
+                        "sandbox.timeout"
+                    } else {
+                        "sandbox.failed"
+                    }),
+                ));
+            }
+            if let Some(violation) = budget_violation {
+                return Ok(sandbox_response(
+                    &payload.operation,
+                    Some(current_state.clone()),
+                    Some("draining".to_string()),
+                    sandbox_transition_allowed(&current_state, "draining"),
+                    Some("draining".to_string()),
+                    "budget-exceeded",
+                    Some(violation.clone()),
+                    Some(violation.clone()),
+                    Some(violation),
+                    Some(true),
+                    Some(false),
+                    Some("sandbox.budget_exceeded"),
+                ));
+            }
+            Ok(sandbox_response(
+                &payload.operation,
+                Some(current_state.clone()),
+                Some("draining".to_string()),
+                sandbox_transition_allowed(&current_state, "draining"),
+                Some("draining".to_string()),
+                "execution-completed",
+                None,
+                None,
+                None,
+                Some(true),
+                Some(false),
+                Some("sandbox.execution_completed"),
+            ))
         }
         other => Err(format!("unsupported sandbox control operation: {other}")),
     }
@@ -5094,6 +5360,23 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
             ));
         }
     }
+    let expected_scalars = [
+        ("source_transport_method", "describe_runtime_event_transport"),
+        ("source_handoff_method", "describe_runtime_event_handoff"),
+        ("attach_method", "attach_runtime_event_transport"),
+        ("subscribe_method", "subscribe_attached_runtime_events"),
+        ("cleanup_method", "cleanup_attached_runtime_event_transport"),
+        ("resume_mode", "after_event_id"),
+    ];
+    for (field_name, expected) in expected_scalars {
+        if let Some(value) = attach_descriptor.get(field_name).and_then(Value::as_str) {
+            if value != expected {
+                return Err(format!(
+                    "External runtime event attach descriptor must use {field_name}={expected:?}."
+                ));
+            }
+        }
+    }
     if let Some(capabilities) = descriptor_mapping(attach_descriptor, "attach_capabilities")? {
         if capabilities.get("artifact_replay").and_then(Value::as_bool) != Some(true) {
             return Err(
@@ -6292,6 +6575,76 @@ fn framework_alias_requires_explicit_call(slug: &str) -> bool {
     !framework_alias_explicit_entrypoints(slug).is_empty()
 }
 
+fn has_explicit_entrypoint_term(query_text: &str, entrypoint: &str) -> bool {
+    query_text.split_whitespace().any(|part| {
+        part.trim_matches(|ch: char| {
+            matches!(
+                ch,
+                '(' | ')'
+                    | '['
+                    | ']'
+                    | '{'
+                    | '}'
+                    | '<'
+                    | '>'
+                    | ','
+                    | '.'
+                    | '!'
+                    | '?'
+                    | '，'
+                    | '。'
+                    | '：'
+                    | '；'
+                    | '"'
+                    | '\''
+                    | '`'
+            )
+        }) == entrypoint
+    })
+}
+
+fn framework_alias_activation_labels(slug: &str) -> &'static [&'static str] {
+    match slug {
+        "autopilot" => &["autopilot", "auto-pilot", "auto pilot"],
+        "deepinterview" => &["deepinterview", "deep-interview", "deep interview"],
+        "team" => &["team"],
+        "latex-compile-acceleration" => &[
+            "latex-compile-acceleration",
+            "latex compile acceleration",
+        ],
+        _ => &[],
+    }
+}
+
+fn has_framework_alias_activation_phrase(
+    query_text: &str,
+    query_token_list: &[String],
+    slug: &str,
+) -> bool {
+    let activation_prefixes = [
+        "进入",
+        "切到",
+        "切换到",
+        "用",
+        "使用",
+        "开启",
+        "start",
+        "enter",
+        "use",
+        "switch to",
+    ];
+    framework_alias_activation_labels(slug).iter().any(|label| {
+        activation_prefixes.iter().any(|prefix| {
+            let spaced = format!("{prefix} {label}");
+            let compact = format!("{prefix}{label}");
+            query_text.contains(&normalize_text(&spaced))
+                || query_text.contains(&normalize_text(&compact))
+                || text_matches_phrase(query_token_list, &spaced)
+                || text_matches_phrase(query_token_list, &compact)
+        })
+    })
+}
+
 fn has_explicit_framework_alias_call(
     query_text: &str,
     query_token_list: &[String],
@@ -6300,9 +6653,10 @@ fn has_explicit_framework_alias_call(
     framework_alias_explicit_entrypoints(slug)
         .iter()
         .any(|entrypoint| {
-            query_text.contains(&normalize_text(entrypoint))
+            has_explicit_entrypoint_term(query_text, &normalize_text(entrypoint))
                 || query_token_list.iter().any(|token| token == entrypoint)
         })
+        || has_framework_alias_activation_phrase(query_text, query_token_list, slug)
 }
 
 fn has_team_orchestration_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -7984,7 +8338,7 @@ mod tests {
         )
         .expect("write supervisor state");
 
-        let payload = build_framework_alias_envelope(&repo_root, "autopilot", 4, false)
+        let payload = build_framework_alias_envelope(&repo_root, "autopilot", 4, false, None)
             .expect("build alias payload");
         let alias = payload
             .get("alias")
@@ -8000,7 +8354,7 @@ mod tests {
             json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
         );
         assert_eq!(alias["name"], json!("autopilot"));
-        assert_eq!(alias["host_entrypoint"], json!("/autopilot"));
+        assert_eq!(alias["host_entrypoint"], json!("$autopilot"));
         assert_eq!(alias["compact"], json!(false));
         assert!(prompt.contains("进入 autopilot"));
         assert!(prompt.contains("本地 Rust"));
@@ -8077,7 +8431,7 @@ mod tests {
         )
         .expect("write supervisor state");
 
-        let payload = build_framework_alias_envelope(&repo_root, "deepinterview", 5, false)
+        let payload = build_framework_alias_envelope(&repo_root, "deepinterview", 5, false, None)
             .expect("build alias payload");
         let alias = payload
             .get("alias")
@@ -8093,7 +8447,7 @@ mod tests {
             json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
         );
         assert_eq!(alias["name"], json!("deepinterview"));
-        assert_eq!(alias["host_entrypoint"], json!("/deepinterview"));
+        assert_eq!(alias["host_entrypoint"], json!("$deepinterview"));
         assert_eq!(alias["compact"], json!(false));
         assert_eq!(alias["canonical_owner"], json!("code-review"));
         assert_eq!(
@@ -8162,7 +8516,7 @@ mod tests {
         )
         .expect("write supervisor state");
 
-        let payload = build_framework_alias_envelope(&repo_root, "team", 5, false)
+        let payload = build_framework_alias_envelope(&repo_root, "team", 5, false, None)
             .expect("build alias payload");
         let alias = payload
             .get("alias")
@@ -8175,7 +8529,7 @@ mod tests {
 
         assert_eq!(payload["schema_version"], json!(FRAMEWORK_ALIAS_SCHEMA_VERSION));
         assert_eq!(alias["name"], json!("team"));
-        assert_eq!(alias["host_entrypoint"], json!("/team"));
+        assert_eq!(alias["host_entrypoint"], json!("$team"));
         assert_eq!(alias["compact"], json!(false));
         assert_eq!(alias["canonical_owner"], json!("execution-controller-coding"));
         assert_eq!(
@@ -8244,7 +8598,13 @@ mod tests {
         )
         .expect("write supervisor state");
 
-        let payload = build_framework_alias_envelope(&repo_root, "latex-compile-acceleration", 5, false)
+        let payload = build_framework_alias_envelope(
+            &repo_root,
+            "latex-compile-acceleration",
+            5,
+            false,
+            None,
+        )
             .expect("build alias payload");
         let alias = payload
             .get("alias")
@@ -8257,7 +8617,7 @@ mod tests {
 
         assert_eq!(payload["schema_version"], json!(FRAMEWORK_ALIAS_SCHEMA_VERSION));
         assert_eq!(alias["name"], json!("latex-compile-acceleration"));
-        assert_eq!(alias["host_entrypoint"], json!("/latex-compile-acceleration"));
+        assert_eq!(alias["host_entrypoint"], json!("$latex-compile-acceleration"));
         assert_eq!(alias["compact"], json!(false));
         assert_eq!(alias["canonical_owner"], json!("latex-compile-acceleration"));
         assert_eq!(
@@ -8330,7 +8690,7 @@ mod tests {
         )
         .expect("write supervisor state");
 
-        let payload = build_framework_alias_envelope(&repo_root, "autopilot", 3, true)
+        let payload = build_framework_alias_envelope(&repo_root, "autopilot", 3, true, None)
             .expect("build alias payload");
         let alias = payload
             .get("alias")
@@ -9174,7 +9534,7 @@ mod tests {
             operation: "transition".to_string(),
             current_state: Some("warm".to_string()),
             next_state: Some("busy".to_string()),
-            cleanup_failed: None,
+            ..sandbox_control_request_defaults()
         })
         .expect("accepted transition");
         assert_eq!(accepted.authority, SANDBOX_CONTROL_AUTHORITY);
@@ -9187,7 +9547,7 @@ mod tests {
             operation: "transition".to_string(),
             current_state: Some("busy".to_string()),
             next_state: Some("warm".to_string()),
-            cleanup_failed: None,
+            ..sandbox_control_request_defaults()
         })
         .expect("rejected transition");
         assert!(!rejected.allowed);
@@ -9204,8 +9564,8 @@ mod tests {
             schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
             operation: "cleanup".to_string(),
             current_state: Some("draining".to_string()),
-            next_state: None,
             cleanup_failed: Some(false),
+            ..sandbox_control_request_defaults()
         })
         .expect("cleanup recycled response");
         assert!(recycled.allowed);
@@ -9216,13 +9576,35 @@ mod tests {
             schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
             operation: "cleanup".to_string(),
             current_state: Some("draining".to_string()),
-            next_state: None,
             cleanup_failed: Some(true),
+            ..sandbox_control_request_defaults()
         })
         .expect("cleanup failed response");
         assert!(failed.allowed);
         assert_eq!(failed.reason, "cleanup-failed");
         assert_eq!(failed.resolved_state.as_deref(), Some("failed"));
+    }
+
+    fn sandbox_control_request_defaults() -> SandboxControlRequestPayload {
+        SandboxControlRequestPayload {
+            schema_version: String::new(),
+            operation: String::new(),
+            current_state: None,
+            next_state: None,
+            cleanup_failed: None,
+            tool_category: None,
+            capability_categories: None,
+            dedicated_profile: None,
+            budget_cpu: None,
+            budget_memory: None,
+            budget_wall_clock: None,
+            budget_output_size: None,
+            probe_cpu: None,
+            probe_memory: None,
+            probe_wall_clock: None,
+            probe_output_size: None,
+            error_kind: None,
+        }
     }
 
     fn background_control_request_defaults() -> BackgroundControlRequestPayload {

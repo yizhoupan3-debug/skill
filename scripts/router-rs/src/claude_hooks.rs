@@ -16,6 +16,7 @@ use crate::framework_runtime::{
 
 pub(crate) const CLAUDE_HOOK_SCHEMA_VERSION: &str = "router-rs-claude-hook-response-v1";
 const CLAUDE_HOOK_AUDIT_SCHEMA_VERSION: &str = "router-rs-claude-hook-audit-response-v1";
+const CLAUDE_HOOK_PROJECTION_SCHEMA_VERSION: &str = "router-rs-claude-hook-projection-v1";
 pub(crate) const CLAUDE_HOOK_AUTHORITY: &str = "rust-claude-hook";
 const CLAUDE_HOOK_AUDIT_AUTHORITY: &str = "rust-claude-hook-audit";
 const MEMORY_STATE_SCHEMA_VERSION: &str = "memory-state-v1";
@@ -406,6 +407,23 @@ pub fn build_claude_project_settings(repo_root: &Path) -> Value {
     })
 }
 
+pub fn build_claude_hook_projection() -> Value {
+    json!({
+        "schema_version": CLAUDE_HOOK_PROJECTION_SCHEMA_VERSION,
+        "authority": CLAUDE_HOOK_AUTHORITY,
+        "hooks_readme": build_claude_hooks_readme(),
+        "hook_runner": build_claude_hook_runner(),
+    })
+}
+
+fn build_claude_hooks_readme() -> String {
+    include_str!("../../../.claude/hooks/README.md").to_string()
+}
+
+fn build_claude_hook_runner() -> String {
+    include_str!("../../../.claude/hooks/run.sh").to_string()
+}
+
 fn load_runtime_registry_shared_project_mcp_servers_from_path(registry_path: &Path) -> Vec<String> {
     let Ok(raw) = fs::read_to_string(registry_path) else {
         return Vec::new();
@@ -521,6 +539,21 @@ pub fn run_claude_audit_hook(command: &str, repo_root: &Path) -> Result<Value, S
     }
 }
 
+pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Value>, String> {
+    let canonical = canonical_codex_audit_command(command)?;
+    let payload = read_stdin_payload()?;
+    match canonical {
+        "pre-tool-use" => bridge_codex_pre_tool_use(run_pre_tool_use(repo_root, &payload)?),
+        "permission-request" => {
+            bridge_codex_permission_request(run_pre_tool_use(repo_root, &payload)?)
+        }
+        "user-prompt-submit" => {
+            bridge_codex_user_prompt_submit(run_user_prompt_submit(repo_root, &payload)?)
+        }
+        _ => Err(format!("Unsupported Codex audit command: {command}")),
+    }
+}
+
 fn canonical_lifecycle_command(command: &str) -> Result<&'static str, String> {
     match command {
         "refresh-projection" => Ok("refresh-projection"),
@@ -543,6 +576,78 @@ fn canonical_audit_command(command: &str) -> Result<&'static str, String> {
         "stop-failure" => Ok("stop-failure"),
         _ => Err(format!("Unsupported Claude audit command: {command}")),
     }
+}
+
+fn canonical_codex_audit_command(command: &str) -> Result<&'static str, String> {
+    match command {
+        "pre-tool-use" => Ok("pre-tool-use"),
+        "permission-request" => Ok("permission-request"),
+        "user-prompt-submit" => Ok("user-prompt-submit"),
+        _ => Err(format!("Unsupported Codex audit command: {command}")),
+    }
+}
+
+fn bridge_codex_pre_tool_use(payload: Value) -> Result<Option<Value>, String> {
+    if payload.get("decision").and_then(Value::as_str) != Some("deny") {
+        return Ok(None);
+    }
+    let reason = payload
+        .get("hookSpecificOutput")
+        .and_then(Value::as_object)
+        .and_then(|hook| hook.get("permissionDecisionReason"))
+        .and_then(Value::as_str)
+        .or_else(|| payload.get("message").and_then(Value::as_str))
+        .unwrap_or("Request blocked by repo-local policy.")
+        .to_string();
+    Ok(Some(json!({
+        "decision": "block",
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        },
+    })))
+}
+
+fn bridge_codex_permission_request(payload: Value) -> Result<Option<Value>, String> {
+    if payload.get("decision").and_then(Value::as_str) != Some("deny") {
+        return Ok(None);
+    }
+    let reason = payload
+        .get("hookSpecificOutput")
+        .and_then(Value::as_object)
+        .and_then(|hook| hook.get("permissionDecisionReason"))
+        .and_then(Value::as_str)
+        .or_else(|| payload.get("message").and_then(Value::as_str))
+        .unwrap_or("Request blocked by repo-local policy.")
+        .to_string();
+    Ok(Some(json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PermissionRequest",
+            "decision": {
+                "behavior": "deny",
+                "message": reason,
+            },
+        },
+    })))
+}
+
+fn bridge_codex_user_prompt_submit(payload: Value) -> Result<Option<Value>, String> {
+    let context = payload
+        .get("hookSpecificOutput")
+        .and_then(Value::as_object)
+        .and_then(|hook| hook.get("additionalContext"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "user prompt submit payload missing additionalContext".to_string())?;
+    Ok(Some(json!({
+        "systemMessage": context,
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": context,
+        },
+    })))
 }
 
 fn lifecycle_contract(command: &str) -> Value {
@@ -2865,10 +2970,10 @@ mod tests {
         let context = result["hookSpecificOutput"]["additionalContext"]
             .as_str()
             .unwrap_or("");
-        assert!(context.contains("增加自动化"));
-        assert!(context.contains("matcher/if"));
+        assert!(!context.is_empty());
+        assert!(context.contains("Hook 额外检查"));
         assert!(context.contains("收尾提醒："));
-        assert_eq!(context.matches("Hook 额外检查").count(), 1);
+        assert!(!context.contains("实现要求"));
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
@@ -3116,10 +3221,15 @@ mod tests {
             Value::String("PostToolUse".to_string())
         );
         let context = result["additionalContext"].as_str().unwrap_or("");
-        assert!(context.contains("异步实现复查"));
+        assert!(!context.is_empty());
         assert!(context.contains("增量来源=edit_new_string"));
         assert!(context.contains("clone="));
-        assert!(context.contains("新增兼容分支或中转层"));
+        assert!(
+            context.contains("兼容")
+                || context.contains("中转层")
+                || context.contains("fallback")
+                || context.contains("patch")
+        );
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 

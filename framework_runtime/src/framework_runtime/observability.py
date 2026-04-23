@@ -5,16 +5,10 @@ from __future__ import annotations
 from functools import lru_cache
 import math
 from dataclasses import dataclass
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable
 
 from framework_runtime.paths import default_codex_home
 from framework_runtime.rust_router import RustRouteAdapter
-from framework_runtime.trace import (
-    TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
-    TRACE_EVENT_HANDOFF_SCHEMA_VERSION,
-    TRACE_EVENT_SINK_SCHEMA_VERSION,
-)
-
 RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION = "runtime-observability-exporter-v1"
 RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION = "runtime-observability-metric-record-v1"
 RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION = "runtime-observability-metrics-v1"
@@ -39,7 +33,6 @@ RUNTIME_OBSERVABILITY_DASHBOARD_DIMENSIONS = (
 )
 RUNTIME_METRIC_STAGE = "runtime.metric"
 RUNTIME_METRIC_STATUS = "ok"
-_R = TypeVar("_R")
 RUNTIME_OBSERVABILITY_OWNERSHIP = {
     "ownership_lane": "rust-contract-lane",
     "producer_owner": "rust-control-plane",
@@ -193,40 +186,31 @@ _RUNTIME_OBSERVABILITY_DASHBOARD_ALERTS = (
 
 
 @lru_cache(maxsize=1)
-def _observability_rust_adapter() -> RustRouteAdapter | None:
+def _observability_rust_adapter() -> RustRouteAdapter:
     """Return the repo-local Rust adapter when the observability lane is executable."""
 
     adapter = RustRouteAdapter(default_codex_home())
     if not adapter.health()["available"]:
-        return None
+        raise RuntimeError("Rust observability lane requires an available router-rs binary")
     try:
         adapter.runtime_observability_exporter_descriptor()
-    except Exception:
-        return None
+    except Exception as exc:
+        raise RuntimeError("Rust observability lane is unavailable") from exc
     return adapter
 
 
-def _with_rust_observability_adapter(fallback_fn: Callable[[RustRouteAdapter], _R]) -> _R | None:
-    adapter = _observability_rust_adapter()
-    if adapter is None:
-        return None
-    try:
-        return fallback_fn(adapter)
-    except Exception:
-        _observability_rust_adapter.cache_clear()
-        return None
-
-
-def _with_explicit_rust_observability_adapter(
+def _resolve_rust_observability_payload(
     rust_adapter: RustRouteAdapter | None,
-    resolver: Callable[[RustRouteAdapter], _R],
-) -> _R | None:
-    if rust_adapter is None:
-        return None
+    resolver: Callable[[RustRouteAdapter], dict[str, Any]],
+) -> dict[str, Any]:
+    """Resolve an observability payload through Rust and fail closed on drift."""
+
+    adapter = rust_adapter or _observability_rust_adapter()
     try:
-        return resolver(rust_adapter)
-    except Exception:
-        return None
+        return resolver(adapter)
+    except Exception as exc:
+        _observability_rust_adapter.cache_clear()
+        raise RuntimeError("Rust observability lane failed") from exc
 
 
 def _require_non_empty_string(value: str, *, field_name: str) -> str:
@@ -290,25 +274,10 @@ def build_runtime_observability_exporter_descriptor(
 ) -> dict[str, Any]:
     """Describe the concrete exporter lane used by the runtime."""
 
-    adapter = _with_explicit_rust_observability_adapter(
+    return _resolve_rust_observability_payload(
         rust_adapter,
         lambda adapter_obj: adapter_obj.runtime_observability_exporter_descriptor(),
-    ) or _with_rust_observability_adapter(
-        lambda adapter_obj: adapter_obj.runtime_observability_exporter_descriptor(),
     )
-    if adapter is not None:
-        return adapter
-    return {
-        "schema_version": RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION,
-        "metric_catalog_version": RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION,
-        "dashboard_schema_version": RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION,
-        "signal_vocabulary": RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY,
-        "export_path": "jsonl-plus-otel",
-        "jsonl_sink_schema_version": TRACE_EVENT_SINK_SCHEMA_VERSION,
-        "trace_bridge_schema_version": TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
-        "trace_handoff_schema_version": TRACE_EVENT_HANDOFF_SCHEMA_VERSION,
-        **RUNTIME_OBSERVABILITY_OWNERSHIP,
-    }
 
 
 def _build_runtime_observability_health_snapshot(
@@ -353,31 +322,10 @@ def runtime_observability_metric_catalog(
 ) -> dict[str, Any]:
     """Return the machine-readable runtime metric catalog frozen by the contract."""
 
-    catalog = _with_explicit_rust_observability_adapter(
+    return _resolve_rust_observability_payload(
         rust_adapter,
         lambda adapter_obj: adapter_obj.runtime_observability_metric_catalog(),
-    ) or _with_rust_observability_adapter(
-        lambda adapter_obj: adapter_obj.runtime_observability_metric_catalog(),
     )
-    if catalog is not None:
-        return catalog
-    return {
-        "schema_version": RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION,
-        "metric_catalog_version": RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION,
-        "resource_dimensions": list(RUNTIME_OBSERVABILITY_RESOURCE_DIMENSIONS),
-        "base_dimensions": list(RUNTIME_OBSERVABILITY_BASE_DIMENSIONS),
-        "metrics": [
-            {
-                "intent": spec.intent,
-                "metric_name": spec.metric_name,
-                "metric_type": spec.metric_type,
-                "unit": spec.unit,
-                "dimensions": list(spec.base_dimensions),
-                "dashboard_derivation": spec.dashboard_derivation,
-            }
-            for spec in RUNTIME_OBSERVABILITY_METRIC_SPECS
-        ],
-    }
 
 
 def runtime_observability_dashboard_schema(
@@ -386,21 +334,10 @@ def runtime_observability_dashboard_schema(
 ) -> dict[str, Any]:
     """Return the canonical dashboard schema backing the contract doc."""
 
-    schema = _with_explicit_rust_observability_adapter(
+    return _resolve_rust_observability_payload(
         rust_adapter,
         lambda adapter_obj: adapter_obj.runtime_observability_dashboard_schema(),
-    ) or _with_rust_observability_adapter(
-        lambda adapter_obj: adapter_obj.runtime_observability_dashboard_schema(),
     )
-    if schema is not None:
-        return schema
-    return {
-        "schema_version": RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION,
-        "title": "Runtime Observability",
-        "resource_dimensions": list(RUNTIME_OBSERVABILITY_DASHBOARD_DIMENSIONS),
-        "panels": [dict(panel) for panel in _RUNTIME_OBSERVABILITY_DASHBOARD_PANELS],
-        "alerts": [dict(alert) for alert in _RUNTIME_OBSERVABILITY_DASHBOARD_ALERTS],
-    }
 
 
 def build_runtime_metric_record(
@@ -436,7 +373,8 @@ def build_runtime_metric_record(
         "runtime.stage": RUNTIME_METRIC_STAGE,
         "runtime.status": RUNTIME_METRIC_STATUS,
     }
-    record = _with_rust_observability_adapter(
+    return _resolve_rust_observability_payload(
+        None,
         lambda adapter_obj: adapter_obj.runtime_metric_record(
             {
                 "metric_name": spec.metric_name,
@@ -453,16 +391,3 @@ def build_runtime_metric_record(
             }
         )
     )
-    if record is not None:
-        return record
-    payload = {
-        "schema_version": RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION,
-        "metric_name": spec.metric_name,
-        "metric_type": spec.metric_type,
-        "unit": spec.unit,
-        "value": normalized_value,
-        "resource_attributes": resource_attributes,
-        "dimensions": dimensions,
-        "ownership": build_runtime_observability_exporter_descriptor(),
-    }
-    return payload

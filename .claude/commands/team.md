@@ -15,15 +15,15 @@ This command now enters the repo through the resident Rust binary directly.
 
 Run:
 
-`PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/target/release/router-rs --framework-alias-json --framework-alias team --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
+`PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/target/release/router-rs --framework-alias-json --framework-alias team --framework-host-id claude-code --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
 
 If the release binary is missing, rerun the same command with:
 
-`PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs --framework-alias-json --framework-alias team --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
+`PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs --framework-alias-json --framework-alias team --framework-host-id claude-code --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
 
 If both resident binaries are missing, self-heal with:
 
-`PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias team --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
+`PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias team --framework-host-id claude-code --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"`
 
 Use `alias.state_machine` and `alias.entry_contract` as the working contract for this turn.
 This alias only enters through explicit entrypoints: `/team`, `$team`.

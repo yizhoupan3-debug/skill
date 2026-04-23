@@ -16,6 +16,7 @@ from typing import Any, Callable, Awaitable
 from pydantic import BaseModel, Field
 
 from framework_runtime.schemas import RoutingResult, RunTaskResponse
+from framework_runtime.utils import estimate_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -351,7 +352,7 @@ class ContextCompressionMiddleware(Middleware):
             ctx.metadata.setdefault("python_prompt_source", "routing-metadata-preview")
         from framework_runtime.context import ContextEngineer
 
-        estimated = _estimate_tokens(ctx.prompt)
+        estimated = estimate_tokens(ctx.prompt)
         limit = int(self._budget * self._threshold)
         if estimated > limit:
             logger.info(
@@ -510,17 +511,3 @@ class SubagentLimitMiddleware(Middleware):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _estimate_tokens(text: str) -> int:
-    """Quick token estimation (4 chars ≈ 1 token).
-
-    Parameters:
-        text: The text to estimate.
-
-    Returns:
-        int: Estimated token count.
-    """
-    if not text:
-        return 0
-    return max(1, (len(text.strip()) + 3) // 4)

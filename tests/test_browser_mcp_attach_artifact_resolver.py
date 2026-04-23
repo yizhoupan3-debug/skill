@@ -154,7 +154,7 @@ def test_resolver_falls_back_to_binding_artifact_when_manifest_is_missing(tmp_pa
         {
             "schema_version": "runtime-event-transport-v1",
             "binding_artifact_path": str(binding_path),
-            "binding_backend_family": "filesystem",
+            "binding_backend_family": "sqlite",
         },
     )
 
@@ -212,7 +212,7 @@ def test_resolver_ignores_invalid_payloads_and_keeps_valid_binding_fallback(tmp_
         binding_path,
         {
             "schema_version": "runtime-event-transport-v1",
-            "binding_backend_family": "filesystem",
+            "binding_backend_family": "sqlite",
         },
     )
 
@@ -271,7 +271,7 @@ def test_resolver_ignores_sqlite_query_failures_and_uses_filesystem_fallback(tmp
         {
             "schema_version": "runtime-event-transport-v1",
             "binding_artifact_path": str(binding_path),
-            "binding_backend_family": "filesystem",
+            "binding_backend_family": "sqlite",
         },
     )
 
@@ -288,7 +288,7 @@ def test_resolver_cli_prints_resolved_attach_path_on_success(tmp_path: Path) -> 
         {
             "schema_version": "runtime-event-transport-v1",
             "binding_artifact_path": str(binding_path),
-            "binding_backend_family": "filesystem",
+            "binding_backend_family": "sqlite",
         },
     )
 
@@ -297,6 +297,24 @@ def test_resolver_cli_prints_resolved_attach_path_on_success(tmp_path: Path) -> 
     assert completed.returncode == 0
     assert completed.stdout.strip() == str(binding_path)
     assert completed.stderr == ""
+
+
+def test_resolver_ignores_bare_filesystem_binding_without_replay_manifest(tmp_path: Path) -> None:
+    search_root = tmp_path / "scratch"
+    binding_path = search_root / "run-a" / "data" / "runtime_event_transports" / "session__job.json"
+    _write_json(
+        binding_path,
+        {
+            "schema_version": "runtime-event-transport-v1",
+            "binding_artifact_path": str(binding_path),
+            "binding_backend_family": "filesystem",
+        },
+    )
+
+    completed = _run_resolver_cli(search_root)
+
+    assert completed.returncode == 1
+    assert completed.stdout == ""
 
 
 def test_resolver_cli_exits_nonzero_when_no_candidates_exist(tmp_path: Path) -> None:

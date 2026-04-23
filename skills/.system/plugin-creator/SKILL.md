@@ -1,17 +1,18 @@
 ---
 name: plugin-creator
-description: Create a local Codex plugin scaffold with `.codex-plugin/plugin.json` and optional marketplace or companion files.
-routing_layer: L1
+description: Create and scaffold plugin directories for Codex with a required `.codex-plugin/plugin.json`, optional plugin folders/files, and baseline placeholders you can edit before publishing or testing. Use when Codex needs to create a new local plugin, add optional plugin structure, or generate or update repo-root `.agents/plugins/marketplace.json` entries for plugin ordering and availability metadata.
+routing_layer: L0
 routing_owner: owner
 routing_gate: none
-session_start: n/a
+routing_priority: P1
+session_start: preferred
+short_description: Scaffold a local Codex plugin and optional marketplace entry
 trigger_hints:
-  - 创建插件
-  - Codex plugin
-  - .codex-plugin/plugin.json
-  - plugin scaffold
-  - 插件脚手架
-source: system
+  - create plugin
+  - scaffold plugin
+  - plugin marketplace
+  - local plugin
+  - codex plugin
 ---
 
 # Plugin Creator
@@ -21,10 +22,11 @@ source: system
 1. Run the scaffold script:
 
 ```bash
-# Run from the target repo root.
-# Plugin names are normalized to lower-case hyphen-case and must be <= 64 chars.
-# By default this creates <repo_root>/plugins/<plugin-name>.
-python3 /Users/joe/Documents/skill/skills/.system/plugin-creator/scripts/create_basic_plugin.py <plugin-name>
+  # Plugin names are normalized to lower-case hyphen-case and must be <= 64 chars.
+  # The generated folder and plugin.json name are always the same.
+# Run from repo root (or replace .agents/... with the absolute path to this SKILL).
+# By default creates in <repo_root>/plugins/<plugin-name>.
+python3 .agents/skills/plugin-creator/scripts/create_basic_plugin.py <plugin-name>
 ```
 
 2. Open `<plugin-path>/.codex-plugin/plugin.json` and replace `[TODO: ...]` placeholders.
@@ -33,13 +35,13 @@ python3 /Users/joe/Documents/skill/skills/.system/plugin-creator/scripts/create_
 
 ```bash
 # marketplace.json always lives at <repo-root>/.agents/plugins/marketplace.json
-python3 /Users/joe/Documents/skill/skills/.system/plugin-creator/scripts/create_basic_plugin.py my-plugin --with-marketplace
+python3 .agents/skills/plugin-creator/scripts/create_basic_plugin.py my-plugin --with-marketplace
 ```
 
 For a home-local plugin, treat `<home>` as the root and use:
 
 ```bash
-python3 /Users/joe/Documents/skill/skills/.system/plugin-creator/scripts/create_basic_plugin.py my-plugin \
+python3 .agents/skills/plugin-creator/scripts/create_basic_plugin.py my-plugin \
   --path ~/plugins \
   --marketplace-path ~/.agents/plugins/marketplace.json \
   --with-marketplace
@@ -48,7 +50,7 @@ python3 /Users/joe/Documents/skill/skills/.system/plugin-creator/scripts/create_
 4. Generate/adjust optional companion folders as needed:
 
 ```bash
-python3 /Users/joe/Documents/skill/skills/.system/plugin-creator/scripts/create_basic_plugin.py my-plugin --path <parent-plugin-directory> \
+python3 .agents/skills/plugin-creator/scripts/create_basic_plugin.py my-plugin --path <parent-plugin-directory> \
   --with-skills --with-hooks --with-scripts --with-assets --with-mcp --with-apps --with-marketplace
 ```
 
@@ -166,6 +168,5 @@ For the exact canonical sample JSON for both plugin manifests and marketplace en
 After editing `SKILL.md`, run:
 
 ```bash
-cd /Users/joe/Documents/skill
-python3 scripts/check_skills.py --include-system --verify-codex-link
+python3 <path-to-skill-creator>/scripts/quick_validate.py .agents/skills/plugin-creator
 ```

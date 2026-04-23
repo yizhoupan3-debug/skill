@@ -80,7 +80,7 @@ def test_ensure_tui_status_line_bootstraps_table_when_missing(tmp_path: Path) ->
     content = config_path.read_text(encoding="utf-8")
     assert changed is True
     assert "[tui]" in content
-    assert 'status_line = ["model-with-reasoning", "git-branch", "context-used", "fast-mode"]' in content
+    assert 'status_line = ["model-with-reasoning", "context-remaining", "git-branch"]' in content
     for item in DEFAULT_TUI_STATUS_ITEMS:
         assert f'"{item}"' in content
 
@@ -110,7 +110,7 @@ def test_ensure_tui_status_line_preserves_existing_tui_keys(tmp_path: Path) -> N
     assert changed is True
     assert 'theme = "monokai-extended-bright"' in content
     assert content.count("[tui]") == 1
-    assert 'status_line = ["model-with-reasoning", "git-branch", "context-used", "fast-mode"]' in content
+    assert 'status_line = ["model-with-reasoning", "context-remaining", "git-branch"]' in content
 
 
 def test_build_codex_hooks_feature_block_enables_feature() -> None:

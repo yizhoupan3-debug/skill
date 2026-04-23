@@ -2,9 +2,9 @@
 
 | Skill | Status | P | Layer | Owner | Gate | Source | Health | Description |
 |---|---|---|---|---|---|---|---|---|
-| `plugin-creator` | Active | P2 | L1 | owner | none | system | ✓ 100.0 | Create a local Codex plugin scaffold with `.codex-plugin/plugin.json` and option |
-| `skill-creator` | Active | P2 | L1 | owner | none | system | ✓ 96.4 | Create or update a Codex skill package with clear routing metadata, scope, and s |
-| `skill-installer` | Active | P2 | L1 | owner | none | system | ✓ 97.0 | Install Codex skills from curated sources or GitHub into `$CODEX_HOME/skills`. |
+| `plugin-creator` | Active | P1 | L0 | owner | none | system | ✓ 100.0 | Scaffold a local Codex plugin and optional marketplace entry |
+| `skill-creator` | Active | P1 | L0 | owner | none | system | ✓ 96.4 | Design or revise one Codex skill package |
+| `skill-installer` | Active | P1 | L0 | owner | none | system | ✓ 97.0 | Install curated or remote Codex skills |
 | `academic-search` | Active | P2 | L3 | owner | none | project | ✓ 98.3 | Execute structured academic literature searches using Semantic Scholar, arXiv, G |
 | `accessibility-auditor` | Active | P2 | L3 | owner | none | project | ✓ 92.1 | Find and fix user-blocking accessibility issues with concrete WCAG 2.1/2.2-groun |
 | `agent-memory` | Active | P2 | L4 | owner | none | project | ✓ 92.1 | Design persistent agent memory across sessions |
