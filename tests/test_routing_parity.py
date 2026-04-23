@@ -1127,6 +1127,26 @@ def test_framework_aliases_only_route_from_explicit_entrypoints(
     assert rust_decision["overlay_skill"] == "anti-laziness"
 
 
+@pytest.mark.parametrize("query", ["team mode", "agent team", "worker orchestration"])
+def test_framework_alias_plaintext_hints_do_not_route_team(query: str) -> None:
+    python_decision = route_decision_contract(
+        query,
+        codex_home=PROJECT_ROOT,
+        session_id="implicit-framework-alias-session",
+        allow_overlay=True,
+        first_turn=True,
+    ).model_dump(mode="json")
+    rust_decision = _live_route_adapter().route_contract(
+        query=query,
+        session_id="implicit-framework-alias-session",
+        allow_overlay=True,
+        first_turn=True,
+    ).model_dump(mode="json")
+
+    assert rust_decision == python_decision
+    assert rust_decision["selected_skill"] != "team"
+
+
 @pytest.mark.parametrize(
     ("mode", "expected"),
     [

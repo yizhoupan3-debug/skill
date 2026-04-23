@@ -1270,7 +1270,7 @@ class RustRouteAdapter:
         max_lines: int = 4,
         compact: bool = False,
     ) -> dict[str, Any]:
-        """Build the compact Rust-owned alias contract for autopilot/deepinterview."""
+        """Build the compact Rust-owned alias contract for framework-native aliases."""
 
         args = [
             "--framework-alias-json",
