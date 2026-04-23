@@ -24,13 +24,13 @@ RUNTIME_CHECKPOINT_CONTROL_PLANE_SCHEMA_VERSION = "runtime-checkpoint-control-pl
 _DEFAULT_TRACE_SERVICE_DESCRIPTOR = {
     "authority": "rust-runtime-control-plane",
     "role": "trace-and-handoff",
-    "projection": "python-thin-projection",
+    "projection": "rust-native-projection",
     "delegate_kind": "filesystem-trace-store",
 }
 _DEFAULT_STATE_SERVICE_DESCRIPTOR = {
     "authority": "rust-runtime-control-plane",
     "role": "durable-background-state",
-    "projection": "python-thin-projection",
+    "projection": "rust-native-projection",
     "delegate_kind": "filesystem-state-store",
 }
 

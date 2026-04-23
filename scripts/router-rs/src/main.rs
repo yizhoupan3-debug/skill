@@ -35,6 +35,7 @@ use framework_runtime::{
     build_framework_alias_envelope, build_framework_contract_summary_envelope,
     build_framework_memory_recall_envelope, build_framework_refresh_payload,
     build_framework_runtime_snapshot_envelope, resolve_repo_root_arg,
+    write_framework_session_artifacts,
 };
 use session_supervisor::handle_session_supervisor_operation;
 
@@ -196,6 +197,8 @@ struct Cli {
     #[arg(long)]
     framework_refresh_verbose: bool,
     #[arg(long)]
+    framework_session_artifact_write_json: bool,
+    #[arg(long)]
     framework_alias_json: bool,
     #[arg(long)]
     framework_alias: Option<String>,
@@ -237,6 +240,8 @@ struct Cli {
     framework_artifact_source_dir: Option<PathBuf>,
     #[arg(long)]
     framework_task_id: Option<String>,
+    #[arg(long)]
+    framework_session_artifact_write_input_json: Option<String>,
     #[arg(long)]
     cases: Option<PathBuf>,
     #[arg(long)]
@@ -318,6 +323,8 @@ struct SkillRecord {
     trigger_hints: Vec<String>,
     name_tokens: HashSet<String>,
     keyword_tokens: HashSet<String>,
+    alias_tokens: HashSet<String>,
+    do_not_use_tokens: HashSet<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -428,6 +435,35 @@ struct RouteExecutionPolicyPayload {
     route_result_engine: String,
     diagnostic_report_required: bool,
     strict_verification_required: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct InlineSkillRecordPayload {
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    short_description: String,
+    #[serde(default)]
+    when_to_use: String,
+    #[serde(default)]
+    do_not_use: String,
+    #[serde(default = "default_skill_layer")]
+    routing_layer: String,
+    #[serde(default = "default_skill_owner")]
+    routing_owner: String,
+    #[serde(default = "default_skill_gate")]
+    routing_gate: String,
+    #[serde(default = "default_skill_priority")]
+    routing_priority: String,
+    #[serde(default = "default_skill_session_start")]
+    session_start: String,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default, alias = "trigger_phrases")]
+    trigger_hints: Vec<String>,
+    #[serde(default = "default_skill_health")]
+    health: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -795,6 +831,10 @@ impl SkillRecord {
             priority,
             session_start,
             summary,
+            short_description,
+            when_to_use,
+            do_not_use,
+            tags,
             trigger_hints,
             health,
         } = raw;
@@ -804,6 +844,16 @@ impl SkillRecord {
         let session_start_lower = normalize_text(&session_start);
         let summary_lower = normalize_text(&summary);
         let trigger_hints_lower = normalize_text(&trigger_hints.join(" "));
+        let alias_tokens = tags
+            .iter()
+            .flat_map(|tag| tokenize_query(tag))
+            .collect::<HashSet<_>>();
+        let do_not_use_tokens = tokenize_query(&do_not_use)
+            .into_iter()
+            .filter(|token| {
+                !common_route_stop_tokens().contains(&token.as_str()) && token.len() > 2
+            })
+            .collect::<HashSet<_>>();
         let mut fuzzy_source = String::with_capacity(
             slug_lower.len() + summary_lower.len() + trigger_hints_lower.len() + 2,
         );
@@ -817,9 +867,13 @@ impl SkillRecord {
         let name_tokens = tokenize_query(&slug.replace('-', " "))
             .into_iter()
             .collect::<HashSet<_>>();
-        let keyword_tokens = tokenize_query(&format!("{summary} {}", trigger_hints.join(" ")))
-            .into_iter()
-            .collect::<HashSet<_>>();
+        let keyword_tokens = tokenize_query(&format!(
+            "{summary} {short_description} {when_to_use} {} {}",
+            trigger_hints.join(" "),
+            tags.join(" ")
+        ))
+        .into_iter()
+        .collect::<HashSet<_>>();
 
         Self {
             slug,
@@ -841,6 +895,8 @@ impl SkillRecord {
             trigger_hints,
             name_tokens,
             keyword_tokens,
+            alias_tokens,
+            do_not_use_tokens,
         }
     }
 }
@@ -854,8 +910,36 @@ struct RawSkillRecord {
     priority: String,
     session_start: String,
     summary: String,
+    short_description: String,
+    when_to_use: String,
+    do_not_use: String,
+    tags: Vec<String>,
     trigger_hints: Vec<String>,
     health: f64,
+}
+
+fn default_skill_layer() -> String {
+    "L3".to_string()
+}
+
+fn default_skill_owner() -> String {
+    "owner".to_string()
+}
+
+fn default_skill_gate() -> String {
+    "none".to_string()
+}
+
+fn default_skill_priority() -> String {
+    "P2".to_string()
+}
+
+fn default_skill_session_start() -> String {
+    "n/a".to_string()
+}
+
+fn default_skill_health() -> f64 {
+    100.0
 }
 
 fn main() -> Result<(), String> {
@@ -891,6 +975,7 @@ fn main() -> Result<(), String> {
         args.framework_contract_summary_json,
         args.framework_memory_recall_json,
         args.framework_refresh_json,
+        args.framework_session_artifact_write_json,
         args.framework_alias_json,
         args.profile_json,
         args.profile_artifacts_json,
@@ -911,7 +996,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-alias-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --claude-hook-command, --claude-hook-audit-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
+            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-session-artifact-write-json, --framework-alias-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --claude-hook-command, --claude-hook-audit-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
                 .to_string(),
         );
     }
@@ -1306,6 +1391,24 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.framework_session_artifact_write_json {
+        let payload = serde_json::from_str::<Value>(
+            args.framework_session_artifact_write_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--framework-session-artifact-write-input-json is required with --framework-session-artifact-write-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse framework session artifact write input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&write_framework_session_artifacts(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
     if args.framework_alias_json {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
         let alias_name = args.framework_alias.as_deref().ok_or_else(|| {
@@ -1395,12 +1498,9 @@ fn main() -> Result<(), String> {
 
     if args.route_resolution_json {
         let payload = serde_json::from_str::<Value>(
-            args.route_resolution_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--route-resolution-input-json is required with --route-resolution-json"
-                        .to_string()
-                })?,
+            args.route_resolution_input_json.as_deref().ok_or_else(|| {
+                "--route-resolution-input-json is required with --route-resolution-json".to_string()
+            })?,
         )
         .map_err(|err| format!("parse route resolution input failed: {err}"))?;
         println!(
@@ -1413,12 +1513,9 @@ fn main() -> Result<(), String> {
 
     if args.runtime_storage_json {
         let payload = serde_json::from_str::<RuntimeStorageRequestPayload>(
-            args.runtime_storage_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--runtime-storage-input-json is required with --runtime-storage-json"
-                        .to_string()
-                })?,
+            args.runtime_storage_input_json.as_deref().ok_or_else(|| {
+                "--runtime-storage-input-json is required with --runtime-storage-json".to_string()
+            })?,
         )
         .map_err(|err| format!("parse runtime storage input failed: {err}"))?;
         println!(
@@ -1783,6 +1880,7 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
         "framework_runtime_snapshot" => dispatch_stdio_framework_runtime_snapshot(payload),
         "framework_contract_summary" => dispatch_stdio_framework_contract_summary(payload),
         "framework_memory_recall" => dispatch_stdio_framework_memory_recall(payload),
+        "framework_session_artifact_write" => write_framework_session_artifacts(payload),
         "framework_alias" => dispatch_stdio_framework_alias(payload),
         "claude_lifecycle_hook" => dispatch_stdio_claude_lifecycle_hook(payload),
         _ => Err(format!("unsupported stdio operation: {op}")),
@@ -1791,7 +1889,8 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
 
 fn dispatch_stdio_claude_lifecycle_hook(payload: Value) -> Result<Value, String> {
     let command = required_non_empty_string(&payload, "command", "stdio Claude lifecycle hook")?;
-    let repo_root = required_non_empty_string(&payload, "repo_root", "stdio Claude lifecycle hook")?;
+    let repo_root =
+        required_non_empty_string(&payload, "repo_root", "stdio Claude lifecycle hook")?;
     let max_lines = payload
         .get("max_lines")
         .and_then(Value::as_u64)
@@ -1812,11 +1911,23 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
         .get("first_turn")
         .and_then(Value::as_bool)
         .unwrap_or(true);
+    let owned_inline_records = if payload.get("skills").is_some() {
+        Some(load_inline_records(&payload)?)
+    } else {
+        None
+    };
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
     let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
-    let records = load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?;
+    let cached_records;
+    let records: &[SkillRecord] = if let Some(items) = owned_inline_records.as_ref() {
+        items.as_slice()
+    } else {
+        cached_records =
+            load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?;
+        cached_records.as_ref()
+    };
     serde_json::to_value(route_task(
-        records.as_ref(),
+        records,
         &query,
         &session_id,
         allow_overlay,
@@ -2047,6 +2158,34 @@ fn load_records(
     Err("No routing index found.".to_string())
 }
 
+fn load_inline_records(payload: &Value) -> Result<Vec<SkillRecord>, String> {
+    let rows = payload
+        .get("skills")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "inline route requires a skills array".to_string())?;
+    let mut records = Vec::with_capacity(rows.len());
+    for row in rows {
+        let skill = serde_json::from_value::<InlineSkillRecordPayload>(row.clone())
+            .map_err(|err| format!("parse inline skill payload failed: {err}"))?;
+        records.push(SkillRecord::from_raw(RawSkillRecord {
+            slug: skill.name,
+            layer: skill.routing_layer,
+            owner: skill.routing_owner,
+            gate: skill.routing_gate,
+            priority: skill.routing_priority,
+            session_start: skill.session_start,
+            summary: skill.description,
+            short_description: skill.short_description,
+            when_to_use: skill.when_to_use,
+            do_not_use: skill.do_not_use,
+            tags: skill.tags,
+            trigger_hints: skill.trigger_hints,
+            health: skill.health,
+        }));
+    }
+    Ok(records)
+}
+
 fn records_cache_key(runtime_path: Option<&Path>, manifest_path: Option<&Path>) -> RecordsCacheKey {
     RecordsCacheKey {
         runtime_path: runtime_path.map(Path::to_path_buf),
@@ -2217,6 +2356,10 @@ fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
                     .map(value_to_string)
                     .unwrap_or_else(|| "n/a".to_string()),
                 summary: value_to_string(&row[idx_summary]),
+                short_description: String::new(),
+                when_to_use: String::new(),
+                do_not_use: String::new(),
+                tags: Vec::new(),
                 trigger_hints: value_to_string_list(&row[idx_trigger_hints]),
                 health: value_to_f64(&row[idx_health]).unwrap_or(100.0),
             }))
@@ -2297,6 +2440,10 @@ fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, String> {
                     .map(value_to_string)
                     .unwrap_or_else(|| "n/a".to_string()),
                 summary: value_to_string(&row[idx_desc]),
+                short_description: String::new(),
+                when_to_use: String::new(),
+                do_not_use: String::new(),
+                tags: Vec::new(),
                 trigger_hints: value_to_string_list(&row[idx_trigger_hints]),
                 health: value_to_f64(&row[idx_health]).unwrap_or(100.0),
             }))
@@ -2548,6 +2695,10 @@ fn term_score(term: &str, record: &SkillRecord) -> f64 {
         return 5.0;
     }
 
+    if term.contains('-') || term.contains('_') || term.contains('/') {
+        return 0.0;
+    }
+
     if term.chars().count() >= 4 {
         let mut best: f64 = 0.0;
         for token in &record.fuzzy_tokens {
@@ -2654,6 +2805,9 @@ fn route_task(
 
     if viable.is_empty() {
         let fallback = fallback_owner(records)?;
+        let fallback_reasons = compact_route_reasons(&[
+            "No explicit keyword hit; fell back to highest-priority layer owner.".to_string(),
+        ]);
         return Ok(RouteDecision {
             decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
             authority: ROUTE_AUTHORITY.to_string(),
@@ -2664,26 +2818,26 @@ fn route_task(
             overlay_skill: None,
             layer: fallback.layer.clone(),
             score: 0.0,
-            reasons: vec![
-                "No explicit keyword hit; fell back to highest-priority layer owner.".to_string(),
-            ],
+            reasons: fallback_reasons.clone(),
             route_snapshot: build_route_snapshot(
                 "rust",
                 &fallback.slug,
                 None,
                 &fallback.layer,
                 0.0,
-                &[
-                    "No explicit keyword hit; fell back to highest-priority layer owner."
-                        .to_string(),
-                ],
+                &fallback_reasons,
             ),
         });
     }
 
     let selected = pick_owner(viable);
     let overlay = if allow_overlay {
-        pick_overlay(records, &normalized_query, &query_token_list, &selected.record)
+        pick_overlay(
+            records,
+            &normalized_query,
+            &query_token_list,
+            &selected.record,
+        )
     } else {
         None
     };
@@ -2692,6 +2846,7 @@ fn route_task(
         .as_ref()
         .filter(|item| *item != &selected.record.slug)
         .cloned();
+    let compact_reasons = compact_route_reasons(&selected.reasons);
 
     Ok(RouteDecision {
         decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
@@ -2711,9 +2866,9 @@ fn route_task(
                 .filter(|item| *item != selected.record.slug.as_str()),
             &selected.record.layer,
             round2(selected.score),
-            &selected.reasons,
+            &compact_reasons,
         ),
-        reasons: selected.reasons,
+        reasons: compact_reasons,
     })
 }
 
@@ -3850,9 +4005,13 @@ fn build_sandbox_control_response(
                 tool_category.as_str(),
                 "read_only" | "workspace_mutating" | "networked" | "high_risk"
             ) {
-                Some(format!("policy_violation:unknown_tool_category:{tool_category}"))
+                Some(format!(
+                    "policy_violation:unknown_tool_category:{tool_category}"
+                ))
             } else if !categories.iter().any(|category| category == &tool_category) {
-                Some(format!("policy_violation:capability_denied:{tool_category}"))
+                Some(format!(
+                    "policy_violation:capability_denied:{tool_category}"
+                ))
             } else if tool_category == "high_risk" && !dedicated_profile {
                 Some("policy_violation:high_risk_requires_dedicated_profile".to_string())
             } else if payload.budget_cpu.unwrap_or(0.0) <= 0.0 {
@@ -4013,17 +4172,24 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     }
     lines.push("How to reply:".to_string());
     lines.push("- Lead with the answer or result.".to_string());
-    lines.push("- Use plain Chinese unless the user asks otherwise, and keep the wording natural.".to_string());
+    lines.push(
+        "- Use plain Chinese unless the user asks otherwise, and keep the wording natural."
+            .to_string(),
+    );
     lines.push("- Keep the default reply short; only use a list when the content is naturally list-shaped.".to_string());
     lines.push("- For closeouts, say what was done, what effect was achieved, and what needs to happen next or that the work is finished.".to_string());
     lines.push("- Do not default to file inventories, evidence dumps, or step-by-step process retellings unless the user asks for them.".to_string());
-    if !payload.reasons.is_empty() {
+    let prompt_reasons = payload
+        .reasons
+        .iter()
+        .map(|reason| reason.trim())
+        .filter(|reason| !reason.is_empty())
+        .take(5)
+        .collect::<Vec<_>>();
+    if !prompt_reasons.is_empty() {
         lines.push("Task cues:".to_string());
-        for reason in &payload.reasons {
-            let reason = reason.trim();
-            if !reason.is_empty() {
-                lines.push(format!("- {reason}"));
-            }
+        for reason in prompt_reasons {
+            lines.push(format!("- {reason}"));
         }
     }
     if payload.selected_skill == "idea-to-plan" {
@@ -4099,7 +4265,7 @@ fn build_execution_kernel_metadata_bridge() -> Value {
     serde_json::json!({
         "schema_version": EXECUTION_METADATA_BRIDGE_SCHEMA_VERSION,
         "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-        "projection": "python-thin-projection",
+        "projection": "rust-native-projection",
         "steady_state_fields": [
             "execution_kernel_metadata_schema_version",
             "execution_kernel",
@@ -4923,7 +5089,7 @@ fn sqlite_write_text(
     db_path: &Path,
     storage_root: &Path,
     payload_text: &str,
-    ) -> Result<(), String> {
+) -> Result<(), String> {
     let (stable_key, _) = sqlite_lookup_keys(path, storage_root)?;
     if let Some(parent) = db_path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
@@ -5123,15 +5289,12 @@ fn resolve_runtime_storage_backend(
                 .and_then(|value| normalize_runtime_path(value))?;
             let storage_root = match request.storage_root.clone() {
                 Some(value) => normalize_runtime_path(&value)?,
-                None => db_path
-                    .parent()
-                    .map(Path::to_path_buf)
-                    .ok_or_else(|| {
-                        format!(
-                            "runtime_storage sqlite db path {} must have a parent directory",
-                            db_path.display()
-                        )
-                    })?,
+                None => db_path.parent().map(Path::to_path_buf).ok_or_else(|| {
+                    format!(
+                        "runtime_storage sqlite db path {} must have a parent directory",
+                        db_path.display()
+                    )
+                })?,
             };
             Ok((
                 ResolvedStorageBackend::Sqlite {
@@ -5165,9 +5328,8 @@ fn runtime_storage_operation(
             (true, Some(payload), None)
         }
         "write_text" => {
-            let payload = payload_text.ok_or_else(|| {
-                "runtime_storage write_text requires payload_text".to_string()
-            })?;
+            let payload = payload_text
+                .ok_or_else(|| "runtime_storage write_text requires payload_text".to_string())?;
             match &backend {
                 ResolvedStorageBackend::Filesystem => {
                     if let Some(parent) = path.parent() {
@@ -5179,7 +5341,10 @@ fn runtime_storage_operation(
                         })?;
                     }
                     fs::write(&path, payload.as_bytes()).map_err(|err| {
-                        format!("write runtime storage payload failed for {}: {err}", path.display())
+                        format!(
+                            "write runtime storage payload failed for {}: {err}",
+                            path.display()
+                        )
                     })?;
                 }
                 ResolvedStorageBackend::Sqlite {
@@ -5192,9 +5357,8 @@ fn runtime_storage_operation(
             (true, None, Some(payload.as_bytes().len()))
         }
         "append_text" => {
-            let payload = payload_text.ok_or_else(|| {
-                "runtime_storage append_text requires payload_text".to_string()
-            })?;
+            let payload = payload_text
+                .ok_or_else(|| "runtime_storage append_text requires payload_text".to_string())?;
             match &backend {
                 ResolvedStorageBackend::Filesystem => {
                     if let Some(parent) = path.parent() {
@@ -5231,11 +5395,7 @@ fn runtime_storage_operation(
             }
             (true, None, Some(payload.as_bytes().len()))
         }
-        other => {
-            return Err(format!(
-                "unsupported runtime_storage operation: {other:?}"
-            ))
-        }
+        other => return Err(format!("unsupported runtime_storage operation: {other:?}")),
     };
 
     Ok(RuntimeStorageResponsePayload {
@@ -5361,7 +5521,10 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
         }
     }
     let expected_scalars = [
-        ("source_transport_method", "describe_runtime_event_transport"),
+        (
+            "source_transport_method",
+            "describe_runtime_event_transport",
+        ),
         ("source_handoff_method", "describe_runtime_event_handoff"),
         ("attach_method", "attach_runtime_event_transport"),
         ("subscribe_method", "subscribe_attached_runtime_events"),
@@ -6016,24 +6179,24 @@ fn build_runtime_control_plane_payload() -> Value {
         "skill_loader": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "role": "skill-registry-projection",
-            "projection": "python-thin-projection",
+            "projection": "rust-native-projection",
             "delegate_kind": "rust-runtime-control-plane",
         },
         "prompt_builder": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "role": "prompt-contract-projection",
-            "projection": "python-thin-projection",
+            "projection": "rust-native-projection",
             "delegate_kind": "rust-execution-cli",
         },
         "middleware": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "role": "middleware-policy-projection",
-            "projection": "python-thin-projection",
+            "projection": "rust-native-projection",
             "delegate_kind": "rust-runtime-control-plane",
             "subagent_limit_contract": {
                 "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
                 "owner": "rust-runtime-control-plane",
-                "projection": "python-thin-projection",
+                "projection": "rust-native-projection",
                 "limit_owner": "rust-control-plane",
                 "max_concurrent_subagents": DEFAULT_MAX_CONCURRENT_SUBAGENTS,
                 "timeout_seconds": DEFAULT_SUBAGENT_TIMEOUT_SECONDS,
@@ -6043,31 +6206,31 @@ fn build_runtime_control_plane_payload() -> Value {
         "state": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "role": "durable-background-state",
-            "projection": "python-thin-projection",
+            "projection": "rust-native-projection",
             "delegate_kind": "filesystem-state-store",
         },
         "trace": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "role": "trace-and-handoff",
-            "projection": "python-thin-projection",
+            "projection": "rust-native-projection",
             "delegate_kind": "filesystem-trace-store",
         },
         "memory": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "role": "memory-lifecycle",
-            "projection": "python-thin-projection",
+            "projection": "rust-native-projection",
             "delegate_kind": "fact-memory-store",
         },
         "checkpoint": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "role": "checkpoint-artifact-projection",
-            "projection": "python-thin-projection",
+            "projection": "rust-native-projection",
             "delegate_kind": "filesystem-checkpointer",
         },
         "execution": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "role": "execution-kernel-control",
-            "projection": "python-thin-projection",
+            "projection": "rust-native-projection",
             "delegate_kind": "rust-execution-kernel-slice",
             "kernel_metadata_bridge": build_execution_kernel_metadata_bridge(),
             "kernel_contract": Value::Object(build_steady_state_execution_kernel_metadata(
@@ -6094,7 +6257,7 @@ fn build_runtime_control_plane_payload() -> Value {
                 "schema_version": "runtime-sandbox-lifecycle-v1",
                 "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
                 "role": "sandbox-lifecycle-control",
-                "projection": "python-thin-projection",
+                "projection": "rust-native-projection",
                 "delegate_kind": "rust-runtime-control-plane",
                 "lifecycle_states": [
                     "created",
@@ -6135,13 +6298,13 @@ fn build_runtime_control_plane_payload() -> Value {
         "background": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "role": "background-orchestration",
-            "projection": "python-thin-projection",
+            "projection": "rust-native-projection",
             "delegate_kind": "rust-background-control-policy",
             "orchestration_contract": {
                 "schema_version": "runtime-background-orchestration-v1",
                 "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
                 "role": "background-orchestration-control",
-                "projection": "python-thin-projection",
+                "projection": "rust-native-projection",
                 "delegate_kind": "rust-background-control-policy",
                 "policy_schema_version": BACKGROUND_CONTROL_SCHEMA_VERSION,
                 "queue_model": "bounded-async-host",
@@ -6201,7 +6364,7 @@ fn build_runtime_control_plane_payload() -> Value {
         "runtime_host": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "role": "runtime-orchestration",
-            "projection": "python-thin-projection",
+            "projection": "rust-native-projection",
             "delegate_kind": "rust-runtime-control-plane",
             "startup_order": ["router", "state", "trace", "memory", "execution", "background"],
             "shutdown_order": ["background", "execution", "memory", "trace", "state", "router"],
@@ -6563,16 +6726,25 @@ fn framework_alias_explicit_entrypoints(slug: &str) -> &'static [&'static str] {
         "autopilot" => &["/autopilot", "$autopilot"],
         "deepinterview" => &["/deepinterview", "$deepinterview"],
         "team" => &["/team", "$team"],
-        "latex-compile-acceleration" => &[
-            "/latex-compile-acceleration",
-            "$latex-compile-acceleration",
-        ],
+        "latex-compile-acceleration" => {
+            &["/latex-compile-acceleration", "$latex-compile-acceleration"]
+        }
         _ => &[],
     }
 }
 
 fn framework_alias_requires_explicit_call(slug: &str) -> bool {
     !framework_alias_explicit_entrypoints(slug).is_empty()
+}
+
+fn framework_alias_literal_entrypoints(slug: &str) -> &'static [&'static str] {
+    framework_alias_explicit_entrypoints(slug)
+}
+
+fn has_literal_framework_alias_call(query_text: &str, slug: &str) -> bool {
+    framework_alias_literal_entrypoints(slug)
+        .iter()
+        .any(|entrypoint| has_explicit_entrypoint_term(query_text, &normalize_text(entrypoint)))
 }
 
 fn has_explicit_entrypoint_term(query_text: &str, entrypoint: &str) -> bool {
@@ -6608,10 +6780,9 @@ fn framework_alias_activation_labels(slug: &str) -> &'static [&'static str] {
         "autopilot" => &["autopilot", "auto-pilot", "auto pilot"],
         "deepinterview" => &["deepinterview", "deep-interview", "deep interview"],
         "team" => &["team"],
-        "latex-compile-acceleration" => &[
-            "latex-compile-acceleration",
-            "latex compile acceleration",
-        ],
+        "latex-compile-acceleration" => {
+            &["latex-compile-acceleration", "latex compile acceleration"]
+        }
         _ => &[],
     }
 }
@@ -6688,12 +6859,85 @@ fn has_team_orchestration_context(query_text: &str, query_token_list: &[String])
         "worker 输出",
     ];
     let matched_orchestration = orchestration_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker)) || text_matches_phrase(query_token_list, marker)
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
     });
     let matched_lifecycle = lifecycle_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker)) || text_matches_phrase(query_token_list, marker)
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
     });
     matched_orchestration && matched_lifecycle
+}
+
+fn has_bounded_subagent_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "sidecar",
+        "sidecars",
+        "subagent",
+        "subagents",
+        "delegation plan",
+        "bounded sidecar",
+        "bounded sidecars",
+        "bounded subagent",
+        "bounded subagents",
+        "subagent lane",
+        "sidecar lane",
+        "local-supervisor",
+        "local-supervisor queue",
+        "保留 sidecar 边界",
+        "只切 sidecar",
+        "并行 sidecar",
+        "不实际 spawn",
+        "stay local",
+        "主线程保留",
+        "保留主线程",
+        "主线程集成",
+        "lane-local output",
+        "不创建 worker",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_token_budget_pressure(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "token budget",
+        "context budget",
+        "token 开销",
+        "token 成本",
+        "降低 token",
+        "压 token",
+        "省 token",
+        "缩上下文",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_team_negation_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "不要 team",
+        "不要进入 team",
+        "不进 team",
+        "不用 team",
+        "无需 team",
+        "not team",
+        "without team",
+        "不要 team orchestration",
+        "只是 sidecar",
+        "only sidecar",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
 }
 
 fn paper_skill_requires_context(slug: &str) -> bool {
@@ -6731,12 +6975,10 @@ fn has_paper_context(query_text: &str, query_token_list: &[String]) -> bool {
 }
 
 fn has_github_pr_context(query_text: &str, query_token_list: &[String]) -> bool {
-    ["github", "gh", "pull request", "pr"]
-        .iter()
-        .any(|marker| {
-            query_text.contains(&normalize_text(marker))
-                || text_matches_phrase(query_token_list, marker)
-        })
+    ["github", "gh", "pull request", "pr"].iter().any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
 }
 
 fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[String]) -> bool {
@@ -6750,18 +6992,13 @@ fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[String
         "审稿意见",
         "评审意见",
     ];
-    let revise_markers = [
-        "改论文",
-        "修改论文",
-        "改稿",
-        "修改稿",
-        "进入修改",
-        "直接改",
-    ];
+    let revise_markers = ["改论文", "修改论文", "改稿", "修改稿", "进入修改", "直接改"];
     review_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker)) || text_matches_phrase(query_token_list, marker)
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
     }) && revise_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker)) || text_matches_phrase(query_token_list, marker)
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
     })
 }
 
@@ -6825,6 +7062,21 @@ fn score_route_candidate<'a>(
             score: 0.0,
             reasons: vec![
                 "Suppressed: meta-routing repair request should not be treated as a generic runtime-debugging gate."
+                    .to_string(),
+            ],
+        };
+    }
+    let literal_framework_alias = framework_alias_requires_explicit_call(&record.slug)
+        && has_literal_framework_alias_call(query_text, &record.slug);
+    let bounded_subagent_context = has_bounded_subagent_context(query_text, query_token_list);
+    let team_negation_context = has_team_negation_context(query_text, query_token_list);
+    let token_budget_pressure = has_token_budget_pressure(query_text, query_token_list);
+    if record.slug == "team" && team_negation_context && !literal_framework_alias {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: query explicitly rejects team orchestration and should stay on bounded multi-agent lanes."
                     .to_string(),
             ],
         };
@@ -6956,6 +7208,26 @@ fn score_route_candidate<'a>(
         ));
     }
 
+    let mut alias_hits = record
+        .alias_tokens
+        .iter()
+        .filter(|token| query_tokens.contains(*token))
+        .cloned()
+        .collect::<Vec<_>>();
+    alias_hits.sort();
+    if !alias_hits.is_empty() {
+        score += 12.0 + (alias_hits.len() as f64) * 4.0;
+        reasons.push(format!(
+            "Skill alias hints matched: {}.",
+            alias_hits
+                .iter()
+                .take(8)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
     if first_turn && score > 0.0 {
         if record.session_start_lower == "required" {
             score += 8.0;
@@ -7015,6 +7287,20 @@ fn score_route_candidate<'a>(
         ]
         .iter()
         .any(|marker| query_text.contains(*marker));
+        if bounded_subagent_context {
+            score += 22.0;
+            reasons.push(
+                "Bounded-sidecar boost applied: query prefers multi-agent sidecars without full team orchestration."
+                    .to_string(),
+            );
+        }
+        if bounded_subagent_context && token_budget_pressure {
+            score += 8.0;
+            reasons.push(
+                "Token-budget boost applied: bounded sidecars fit prompt-budget pressure better than wider orchestration."
+                    .to_string(),
+            );
+        }
         let team_orchestration = has_team_orchestration_context(query_text, query_token_list);
         let controller_markers = [
             "高负载",
@@ -7043,6 +7329,13 @@ fn score_route_candidate<'a>(
                     .to_string(),
             );
         }
+        if team_negation_context {
+            score += 16.0;
+            reasons.push(
+                "Team-negation boost applied: query says bounded multi-agent routing should avoid team."
+                    .to_string(),
+            );
+        }
         if team_orchestration && !explicit_delegation {
             score *= 0.4;
             reasons.push(
@@ -7050,6 +7343,23 @@ fn score_route_candidate<'a>(
                     .to_string(),
             );
         }
+    }
+
+    if record.slug == "team" && score > 0.0 && bounded_subagent_context && !explicit_framework_alias
+    {
+        score *= 0.2;
+        reasons.push(
+            "Team suppression applied: bounded sidecar wording prefers subagent-delegation over team."
+                .to_string(),
+        );
+    }
+
+    if record.slug == "team" && score > 0.0 && bounded_subagent_context && token_budget_pressure {
+        score *= 0.6;
+        reasons.push(
+            "Team suppression applied: token-budget pressure favors bounded sidecars over full team orchestration."
+                .to_string(),
+        );
     }
 
     if record.slug == "team" && score > 0.0 && !explicit_framework_alias {
@@ -7092,6 +7402,27 @@ fn score_route_candidate<'a>(
                         .to_string(),
                 ],
             };
+        }
+    }
+
+    if !record.do_not_use_tokens.is_empty() && score > 0.0 {
+        let negative_hits = record
+            .do_not_use_tokens
+            .iter()
+            .filter(|token| query_tokens.contains(*token))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !negative_hits.is_empty() {
+            let penalty = f64::min(score * 0.3, (negative_hits.len() as f64) * 5.0);
+            score = f64::max(0.0, score - penalty);
+            reasons.push(format!(
+                "Do-not-use penalty applied: {}.",
+                negative_hits
+                    .into_iter()
+                    .take(5)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
         }
     }
 
@@ -7357,6 +7688,22 @@ fn round2(value: f64) -> f64 {
 fn score_bucket(score: f64) -> String {
     let floor = ((score.max(0.0) / 10.0).floor() as i32) * 10;
     format!("{floor:02}-{ceiling:02}", ceiling = floor + 9)
+}
+
+fn compact_route_reasons(reasons: &[String]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut compact = Vec::new();
+    for reason in reasons {
+        let normalized = normalize_text(reason);
+        if normalized.is_empty() || !seen.insert(normalized) {
+            continue;
+        }
+        compact.push(reason.clone());
+        if compact.len() >= 6 {
+            break;
+        }
+    }
+    compact
 }
 
 fn reasons_class(reasons: &[String]) -> String {
@@ -8236,8 +8583,11 @@ mod tests {
             "- task: bounded rerun\n- phase: closeout\n- status: completed\n",
         )
         .expect("write session summary");
-        fs::write(task_root.join("NEXT_ACTIONS.json"), r#"{"next_actions":[]}"#)
-            .expect("write next actions");
+        fs::write(
+            task_root.join("NEXT_ACTIONS.json"),
+            r#"{"next_actions":[]}"#,
+        )
+        .expect("write next actions");
         fs::write(task_root.join("EVIDENCE_INDEX.json"), r#"{"artifacts":[]}"#)
             .expect("write evidence index");
         fs::write(
@@ -8246,7 +8596,10 @@ mod tests {
         )
         .expect("write trace metadata");
         fs::write(
-            repo_root.join("artifacts").join("current").join("active_task.json"),
+            repo_root
+                .join("artifacts")
+                .join("current")
+                .join("active_task.json"),
             r#"{"task_id":"completed-rerun-20260423","task":"bounded rerun"}"#,
         )
         .expect("write active task");
@@ -8263,8 +8616,7 @@ mod tests {
             }"#,
         )
         .expect("write supervisor state");
-        fs::write(memory_root.join("MEMORY.md"), "# 项目长期记忆\n")
-            .expect("write memory");
+        fs::write(memory_root.join("MEMORY.md"), "# 项目长期记忆\n").expect("write memory");
 
         let refresh =
             build_framework_refresh_payload(&repo_root, 6, false).expect("build refresh payload");
@@ -8527,11 +8879,17 @@ mod tests {
             .and_then(Value::as_str)
             .expect("entry prompt");
 
-        assert_eq!(payload["schema_version"], json!(FRAMEWORK_ALIAS_SCHEMA_VERSION));
+        assert_eq!(
+            payload["schema_version"],
+            json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
+        );
         assert_eq!(alias["name"], json!("team"));
         assert_eq!(alias["host_entrypoint"], json!("$team"));
         assert_eq!(alias["compact"], json!(false));
-        assert_eq!(alias["canonical_owner"], json!("execution-controller-coding"));
+        assert_eq!(
+            alias["canonical_owner"],
+            json!("execution-controller-coding")
+        );
         assert_eq!(
             alias["state_machine"]["handoff"]["rules"][1]["target"],
             json!("subagent-delegation")
@@ -8605,7 +8963,7 @@ mod tests {
             false,
             None,
         )
-            .expect("build alias payload");
+        .expect("build alias payload");
         let alias = payload
             .get("alias")
             .and_then(Value::as_object)
@@ -8615,11 +8973,20 @@ mod tests {
             .and_then(Value::as_str)
             .expect("entry prompt");
 
-        assert_eq!(payload["schema_version"], json!(FRAMEWORK_ALIAS_SCHEMA_VERSION));
+        assert_eq!(
+            payload["schema_version"],
+            json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
+        );
         assert_eq!(alias["name"], json!("latex-compile-acceleration"));
-        assert_eq!(alias["host_entrypoint"], json!("$latex-compile-acceleration"));
+        assert_eq!(
+            alias["host_entrypoint"],
+            json!("$latex-compile-acceleration")
+        );
         assert_eq!(alias["compact"], json!(false));
-        assert_eq!(alias["canonical_owner"], json!("latex-compile-acceleration"));
+        assert_eq!(
+            alias["canonical_owner"],
+            json!("latex-compile-acceleration")
+        );
         assert_eq!(
             alias["state_machine"]["handoff"]["default_mode"],
             json!("measure-first-latex-optimization")
@@ -8847,7 +9214,11 @@ mod tests {
         ));
         fs::create_dir_all(repo_root.join("artifacts/current/task-1")).expect("create temp repo");
         fs::create_dir_all(repo_root.join(".codex/memory")).expect("create memory dir");
-        fs::write(repo_root.join(".codex/memory/MEMORY.md"), "# 项目长期记忆\n").expect("write memory");
+        fs::write(
+            repo_root.join(".codex/memory/MEMORY.md"),
+            "# 项目长期记忆\n",
+        )
+        .expect("write memory");
         fs::write(
             repo_root.join(".supervisor_state.json"),
             serde_json::to_string_pretty(&json!({
@@ -8915,6 +9286,26 @@ mod tests {
             json!(ROUTE_SNAPSHOT_SCHEMA_VERSION)
         );
         assert_eq!(payload["route_snapshot"]["selected_skill"], json!("router"));
+    }
+
+    #[test]
+    fn stdio_route_supports_inline_skill_catalog_and_token_budget_bias() {
+        let response = handle_stdio_json_line(
+            r#"{"id":4,"op":"route","payload":{"query":"这是多阶段任务，但只要 bounded sidecar，保留主线程集成，降低 token 开销，不要 team orchestration","session_id":"inline-route","allow_overlay":true,"first_turn":true,"skills":[{"name":"subagent-delegation","description":"Decide whether work should stay local, use bounded sidecars, or escalate to team orchestration.","routing_layer":"L0","routing_owner":"gate","routing_gate":"delegation","routing_priority":"P1","trigger_hints":["subagent","sidecar","delegation"]},{"name":"team","description":"Supervisor-led worker lifecycle with integration qa cleanup and resume phases.","routing_layer":"L0","routing_owner":"owner","routing_gate":"none","routing_priority":"P1","trigger_hints":["team orchestration","supervisor","worker lifecycle","integration","qa","cleanup"]},{"name":"anti-laziness","description":"Push work to completion.","routing_layer":"L1","routing_owner":"overlay","routing_gate":"none","routing_priority":"P1"}]}}"#,
+        );
+        assert!(response.ok, "{:?}", response.error);
+        let payload = response.payload.expect("payload");
+        assert_eq!(payload["selected_skill"], json!("subagent-delegation"));
+        assert_eq!(payload["overlay_skill"], json!("anti-laziness"));
+        let reasons = payload["reasons"]
+            .as_array()
+            .expect("route reasons array")
+            .iter()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>();
+        assert!(reasons
+            .iter()
+            .any(|reason| reason.contains("Token-budget boost applied")));
     }
 
     #[test]
@@ -8988,8 +9379,14 @@ mod tests {
         })
         .expect("sqlite write payload");
         assert_eq!(write.backend_family, "sqlite");
-        assert_eq!(write.sqlite_db_path.as_deref(), Some(db_path.display().to_string().as_str()));
-        assert_eq!(write.storage_root.as_deref(), Some(root.display().to_string().as_str()));
+        assert_eq!(
+            write.sqlite_db_path.as_deref(),
+            Some(db_path.display().to_string().as_str())
+        );
+        assert_eq!(
+            write.storage_root.as_deref(),
+            Some(root.display().to_string().as_str())
+        );
         assert!(db_path.exists());
 
         let read = runtime_storage_operation(RuntimeStorageRequestPayload {
@@ -10139,9 +10536,35 @@ mod tests {
         assert!(prompt.contains("Extra guidance: rust-pro"));
         assert!(prompt.contains("How to reply:"));
         assert!(prompt.contains("Lead with the answer or result."));
-        assert!(prompt.contains("Use plain Chinese unless the user asks otherwise, and keep the wording natural."));
+        assert!(prompt.contains(
+            "Use plain Chinese unless the user asks otherwise, and keep the wording natural."
+        ));
         assert!(prompt.contains("Keep the default reply short; only use a list when the content is naturally list-shaped."));
         assert!(prompt.contains("Trigger phrase matched: 直接做代码."));
+    }
+
+    #[test]
+    fn live_execute_prompt_builder_caps_task_cues_to_five_lines() {
+        let mut payload = sample_execute_request();
+        payload.dry_run = false;
+        payload.prompt_preview = None;
+        payload.reasons = vec![
+            "cue-1".to_string(),
+            "cue-2".to_string(),
+            "cue-3".to_string(),
+            "cue-4".to_string(),
+            "cue-5".to_string(),
+            "cue-6".to_string(),
+        ];
+
+        let prompt = build_live_execute_prompt(&payload);
+
+        assert!(prompt.contains("- cue-1"));
+        assert!(prompt.contains("- cue-2"));
+        assert!(prompt.contains("- cue-3"));
+        assert!(prompt.contains("- cue-4"));
+        assert!(prompt.contains("- cue-5"));
+        assert!(!prompt.contains("- cue-6"));
     }
 
     #[test]
@@ -10475,13 +10898,13 @@ mod tests {
                     "state": {
                         "authority": "rust-runtime-control-plane",
                         "role": "durable-background-state",
-                        "projection": "python-thin-projection",
+                        "projection": "rust-native-projection",
                         "delegate_kind": "filesystem-state-store"
                     },
                     "trace": {
                         "authority": "rust-runtime-control-plane",
                         "role": "trace-and-handoff",
-                        "projection": "python-thin-projection",
+                        "projection": "rust-native-projection",
                         "delegate_kind": "filesystem-trace-store"
                     }
                 }
@@ -10512,7 +10935,7 @@ mod tests {
         );
         assert_eq!(
             response["health"]["control_plane_projection"],
-            Value::String("python-thin-projection".to_string())
+            Value::String("rust-native-projection".to_string())
         );
         assert_eq!(
             response["health"]["control_plane_delegate_kind"],
@@ -10546,7 +10969,7 @@ mod tests {
         );
         assert_eq!(
             persisted["control_plane"]["projection"],
-            Value::String("python-thin-projection".to_string())
+            Value::String("rust-native-projection".to_string())
         );
         assert_eq!(
             persisted["control_plane"]["delegate_kind"],
@@ -10612,7 +11035,7 @@ mod tests {
                     "state": {
                         "authority": "rust-runtime-control-plane",
                         "role": "durable-background-state",
-                        "projection": "python-thin-projection",
+                        "projection": "rust-native-projection",
                         "delegate_kind": "filesystem-state-store"
                     }
                 }
@@ -10679,7 +11102,7 @@ mod tests {
                 "state": {
                     "authority": "rust-runtime-control-plane",
                     "role": "durable-background-state",
-                    "projection": "python-thin-projection",
+                    "projection": "rust-native-projection",
                     "delegate_kind": "filesystem-state-store"
                 }
             }

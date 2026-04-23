@@ -12,7 +12,6 @@ routing_priority: P1
 session_start: n/a
 short_description: Audit execution quality with evidence, sidecar-first collection, and compressed sign-off
 trigger_hints:
-  - execution-audit-codex
   - execution-audit
   - 强制验收
   - 高质量闭环
@@ -38,7 +37,6 @@ metadata:
   version: "2.2.0"
   platforms: [codex]
   tags:
-    - execution-audit-codex
     - audit
     - quality-gate
     - robustness

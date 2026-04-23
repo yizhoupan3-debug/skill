@@ -40,7 +40,7 @@ _TRACE_SERVICE_NAME = "trace"
 _DEFAULT_TRACE_SERVICE_DESCRIPTOR = {
     "authority": "rust-runtime-control-plane",
     "role": "trace-and-handoff",
-    "projection": "python-thin-projection",
+    "projection": "rust-native-projection",
     "delegate_kind": "filesystem-trace-store",
 }
 _DEFAULT_TRACE_OWNERSHIP_DESCRIPTOR = {

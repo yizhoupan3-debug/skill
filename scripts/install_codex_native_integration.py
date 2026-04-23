@@ -15,12 +15,18 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from framework_runtime.runtime_registry import (
+    primary_plugin_record as load_primary_plugin_record,
+)
+from framework_runtime.runtime_registry import (
+    workspace_bootstrap_defaults as load_workspace_bootstrap_defaults,
+)
 from scripts.default_bootstrap import resolve_bootstrap_path, run_default_bootstrap
+from scripts.host_integration_runner import run_host_integration as _shared_run_host_integration
 from scripts.materialize_cli_host_entrypoints import (
     CLAUDE_REFRESH_COMMAND,
     write_host_entrypoint_template,
 )
-from scripts.host_integration_rs import export_runtime_registry, run_host_integration_rs
 from scripts.memory_support import (
     bootstrap_artifact_root,
     get_repo_root,
@@ -51,6 +57,7 @@ PERSONAL_PLUGIN_LIVE_PROJECTION_EXCLUDES = frozenset({"skills", ".mcp.json"})
 FRAMEWORK_SERVER_PATTERN = re.compile(r"(?ms)^\[mcp_servers\.framework-mcp\]\n.*?(?=^\[|\Z)")
 OPENAI_DEVELOPER_DOCS_SERVER_PATTERN = re.compile(r"(?ms)^\[mcp_servers\.openaiDeveloperDocs\]\n.*?(?=^\[|\Z)")
 FEATURES_BLOCK_PATTERN = re.compile(r"(?ms)^\[features\]\n.*?(?=^\[|\Z)")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _bootstrap_payload_matches_contract(payload: dict[str, Any], repo_root: Path) -> bool:
@@ -90,28 +97,16 @@ def _upsert_named_toml_block(content: str, *, block: str, pattern: re.Pattern[st
     return content.rstrip() + ("\n\n" if content.strip() else "") + block + "\n"
 
 
-def _runtime_registry_payload(repo_root: Path | None = None) -> dict[str, Any]:
-    payload = export_runtime_registry(repo_root)
-    if not isinstance(payload, dict):
-        raise ValueError("Rust runtime registry export must be a JSON object.")
-    return payload
+def _run_host_integration_command(*args: str) -> dict[str, Any]:
+    return _shared_run_host_integration(*args, cwd=PROJECT_ROOT)
 
 
 def _primary_plugin_record(repo_root: Path | None = None) -> dict[str, Any]:
-    records = _runtime_registry_payload(repo_root).get("plugins")
-    if not isinstance(records, list) or not records:
-        raise ValueError("Runtime registry must define at least one plugin record.")
-    record = records[0]
-    if not isinstance(record, dict):
-        raise ValueError("Runtime registry plugin record must be an object.")
-    return record
+    return load_primary_plugin_record(repo_root=(repo_root or PROJECT_ROOT).resolve())
 
 
 def _workspace_bootstrap_defaults(repo_root: Path | None = None) -> dict[str, Any]:
-    defaults = _runtime_registry_payload(repo_root).get("workspace_bootstrap_defaults")
-    if not isinstance(defaults, dict):
-        raise ValueError("Runtime registry workspace_bootstrap_defaults must be an object.")
-    return defaults
+    return load_workspace_bootstrap_defaults(repo_root=(repo_root or PROJECT_ROOT).resolve())
 
 
 def ensure_default_bootstrap_bundle(
@@ -610,7 +605,7 @@ def install_native_integration(
             command.append("--skip-home-claude-mcp-sync")
         if not install_default_bootstrap:
             command.append("--skip-default-bootstrap")
-        return run_host_integration_rs(*command)
+        return _run_host_integration_command(*command)
 
 
 def main() -> int:

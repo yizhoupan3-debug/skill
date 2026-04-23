@@ -363,7 +363,7 @@ def test_trace_recorder_writes_versioned_metadata(tmp_path: Path) -> None:
     assert data["reroute_count"] == 1
     assert data["retry_count"] == 1
     assert data["control_plane"]["authority"] == "rust-runtime-control-plane"
-    assert data["control_plane"]["projection"] == "python-thin-projection"
+    assert data["control_plane"]["projection"] == "rust-native-projection"
     assert data["control_plane"]["ownership_lane"] == "rust-contract-lane"
     assert data["control_plane"]["producer_owner"] == "rust-control-plane"
     assert data["control_plane"]["producer_authority"] == "rust-runtime-control-plane"
@@ -389,7 +389,7 @@ def test_trace_recorder_writes_versioned_metadata(tmp_path: Path) -> None:
     assert lines[0]["event"]["cursor"].startswith("g0:s1:")
     assert data["stream"]["replay_supported"] is True
     assert data["stream"]["control_plane_authority"] == "rust-runtime-control-plane"
-    assert data["stream"]["control_plane_projection"] == "python-thin-projection"
+    assert data["stream"]["control_plane_projection"] == "rust-native-projection"
     assert data["stream"]["ownership_lane"] == "rust-contract-lane"
     assert data["stream"]["producer_owner"] == "rust-control-plane"
     assert data["stream"]["producer_authority"] == "rust-runtime-control-plane"
@@ -1180,7 +1180,7 @@ def test_in_memory_event_bridge_supports_last_event_id_heartbeat_and_cleanup() -
     cleaned = bridge.subscribe(session_id="session-4", job_id="job-4", heartbeat=True)
     assert cleaned.events == []
     assert cleaned.heartbeat is not None
-    assert bridge.health()["control_plane_projection"] == "python-thin-projection"
+    assert bridge.health()["control_plane_projection"] == "rust-native-projection"
     assert bridge.health()["transport_family"] == "artifact-handoff"
     other_job = bridge.subscribe(session_id="session-4", job_id="job-5")
     assert [event.job_id for event in other_job.events] == ["job-5"]

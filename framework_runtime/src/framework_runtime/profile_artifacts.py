@@ -265,23 +265,23 @@ def build_framework_artifact_layout_manifest(
 def _classify_alias_reference(path: Path) -> tuple[str, str]:
     parts = set(path.parts)
     if path.name == "host_adapters.py":
-        return "compatibility_infrastructure", "compatibility_only"
+        return "legacy_alias_infrastructure", "legacy_alias_only"
     if path.name == "profile_artifacts.py":
-        return "artifact_emitter", "compatibility_only"
+        return "artifact_emitter", "legacy_alias_only"
     if path.name == "runtime_registry.py":
-        return "runtime_registry_contract", "compatibility_only"
+        return "runtime_registry_contract", "legacy_alias_only"
     if path.name == "write_framework_contract_artifacts.py":
-        return "compatibility_emitter_cli", "compatibility_only"
+        return "legacy_alias_emitter_cli", "legacy_alias_only"
     if path.name == "rust_router.py":
-        return "compatibility_router_cli", "compatibility_only"
+        return "legacy_alias_router_cli", "legacy_alias_only"
     if path.name == "__init__.py":
-        return "retired_root_export_surface", "compatibility_only"
+        return "retired_root_export_surface", "legacy_alias_only"
     if path.name == "framework_profile.rs":
-        return "rust_contract_artifact_lane", "compatibility_only"
+        return "rust_contract_artifact_lane", "legacy_alias_only"
     if "tests" in parts:
-        return "compatibility_regression_tests", "compatibility_only"
+        return "legacy_alias_regression_tests", "legacy_alias_only"
     if "docs" in parts or "aionrs_fusion_docs" in parts:
-        return "compatibility_contract_docs", "compatibility_only"
+        return "legacy_alias_contract_docs", "legacy_alias_only"
     return "unclassified_code", "primary_identity_risk"
 
 
@@ -297,7 +297,7 @@ def build_codex_desktop_alias_inventory(repo_root: Path | None = None) -> dict[s
     )
     references: list[dict[str, Any]] = []
     category_counts: dict[str, int] = {}
-    risk_counts = {"compatibility_only": 0, "primary_identity_risk": 0}
+    risk_counts = {"legacy_alias_only": 0, "primary_identity_risk": 0}
 
     for root in search_roots:
         if not root.exists():
@@ -331,8 +331,8 @@ def build_codex_desktop_alias_inventory(repo_root: Path | None = None) -> dict[s
         "total_occurrences": len(references),
         "category_counts": category_counts,
         "primary_identity_risk_occurrences": risk_counts["primary_identity_risk"],
-        "compatibility_only_occurrences": risk_counts["compatibility_only"],
-        "translation_shim_required": risk_counts["primary_identity_risk"] > 0,
+        "legacy_alias_only_occurrences": risk_counts["legacy_alias_only"],
+        "legacy_alias_shim_required": risk_counts["primary_identity_risk"] > 0,
     }
     return {
         "canonical_adapter_id": "codex_desktop_adapter",

@@ -16,7 +16,7 @@ const BACKGROUND_SESSION_TAKEOVER_ARBITRATION_SCHEMA_VERSION: &str =
     "runtime-background-session-takeover-arbitration-v1";
 const DEFAULT_STATE_SERVICE_AUTHORITY: &str = "rust-runtime-control-plane";
 const DEFAULT_STATE_SERVICE_ROLE: &str = "durable-background-state";
-const DEFAULT_STATE_SERVICE_PROJECTION: &str = "python-thin-projection";
+const DEFAULT_STATE_SERVICE_PROJECTION: &str = "rust-native-projection";
 const DEFAULT_BACKGROUND_JOB_MULTITASK_STRATEGY: &str = "reject";
 const DEFAULT_BACKGROUND_JOB_ATTEMPT: i64 = 1;
 const DEFAULT_BACKGROUND_JOB_RETRY_COUNT: i64 = 0;

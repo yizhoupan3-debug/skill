@@ -954,10 +954,71 @@ def test_adapt_framework_profile_rejects_implicit_host_private_override_fields()
         raise AssertionError("expected host-private override injection to require explicit opt-in")
 
 
-def test_adapt_framework_profile_allows_explicit_host_private_opt_in() -> None:
+def test_adapt_framework_profile_rejects_implicit_host_adapter_payload_override_fields() -> None:
     profile = build_framework_profile(
-        profile_id="host-private-optin",
-        display_name="Host Private Optin",
+        profile_id="host-adapter-payload-blocked",
+        display_name="Host Adapter Payload Blocked",
+        session_policy={"mode": "bounded", "approval_mode": "manual"},
+        tool_policy={"shell": "allow"},
+        approval_policy={"mode": "manual"},
+        loadout_policy={"default": "framework"},
+        artifact_contract={"layout": "stable-v1"},
+        memory_mounts=(
+            {"mount_id": "project", "source": ".codex/memory"},
+            "user",
+        ),
+        mcp_servers=({"server_id": "local-memory", "transport": "stdio"},),
+        workspace_bootstrap={"skill_bridge": {"project_dir": ".codex/skills"}},
+    )
+
+    try:
+        adapt_framework_profile(
+            profile,
+            CODEX_CLI_ADAPTER,
+            host_overrides={"host_adapter_payload": {"context_files": ["AGENTS.md"]}},
+        )
+    except ValueError as exc:
+        assert "host_private" in str(exc)
+        assert "explicit opt-in" in str(exc)
+    else:
+        raise AssertionError("expected host-adapter-payload override injection to require explicit opt-in")
+
+
+def test_adapt_framework_profile_rejects_legacy_host_projection_opt_in() -> None:
+    profile = build_framework_profile(
+        profile_id="legacy-host-projection-optin-blocked",
+        display_name="Legacy Host Projection Optin Blocked",
+        session_policy={"mode": "bounded", "approval_mode": "manual"},
+        tool_policy={"shell": "allow"},
+        approval_policy={"mode": "manual"},
+        loadout_policy={"default": "framework"},
+        artifact_contract={"layout": "stable-v1"},
+        memory_mounts=(
+            {"mount_id": "project", "source": ".codex/memory"},
+            "user",
+        ),
+        mcp_servers=({"server_id": "local-memory", "transport": "stdio"},),
+        workspace_bootstrap={"skill_bridge": {"project_dir": ".codex/skills"}},
+    )
+    try:
+        adapt_framework_profile(
+            profile,
+            CODEX_CLI_ADAPTER,
+            host_overrides={
+                "host_private": {"host_projection": {"context_files": ["AGENTS.md"]}}
+            },
+        )
+    except ValueError as exc:
+        assert "host_projection is a legacy read surface" in str(exc)
+        assert "host_adapter_payload" in str(exc)
+    else:
+        raise AssertionError("expected legacy host_projection opt-in to be rejected")
+
+
+def test_adapt_framework_profile_allows_explicit_host_adapter_payload_opt_in() -> None:
+    profile = build_framework_profile(
+        profile_id="host-adapter-payload-optin",
+        display_name="Host Adapter Payload Optin",
         session_policy={"mode": "bounded", "approval_mode": "manual"},
         tool_policy={"shell": "allow"},
         approval_policy={"mode": "manual"},
@@ -974,11 +1035,11 @@ def test_adapt_framework_profile_allows_explicit_host_private_opt_in() -> None:
         profile,
         CODEX_CLI_ADAPTER,
         host_overrides={
-            "host_private": {"host_projection": {"context_files": ["AGENTS.md"]}}
+            "host_private": {"host_adapter_payload": {"context_files": ["AGENTS.md"]}}
         },
     ).host_payload
-    assert adapted["host_projection"]["context_files"] == ["AGENTS.md"]
     assert adapted["host_adapter_payload"]["context_files"] == ["AGENTS.md"]
+    assert adapted["host_projection"]["context_files"] == ["AGENTS.md"]
 
 
 def test_compile_cli_common_adapter_uses_rust_artifact_and_keeps_override_surface(
@@ -1307,8 +1368,8 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     assert cli.host_payload["common_contract"] == desktop.host_payload["common_contract"]
     assert cli.host_payload["host_adapter_payload"] == cli.host_payload["host_projection"]
     assert cli.host_payload["execution_surface"]["shared_adapter"] == "cli_common_adapter"
-    assert cli.host_payload["host_projection"]["context_files"] == ["AGENTS.md"]
-    assert cli.host_payload["host_projection"]["settings_paths"] == [
+    assert cli.host_payload["host_adapter_payload"]["context_files"] == ["AGENTS.md"]
+    assert cli.host_payload["host_adapter_payload"]["settings_paths"] == [
         "~/.codex/config.toml",
         ".codex/config.toml",
     ]
@@ -1322,38 +1383,38 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     assert claude.adapter == CLAUDE_CODE_ADAPTER
     assert claude.host_payload["execution_surface"]["shared_adapter"] == "cli_common_adapter"
     assert claude.host_payload["host_adapter_payload"] == claude.host_payload["host_projection"]
-    assert claude.host_payload["host_projection"]["context_files"] == [
+    assert claude.host_payload["host_adapter_payload"]["context_files"] == [
         "CLAUDE.md",
         "CLAUDE.local.md",
     ]
-    assert claude.host_payload["host_projection"]["settings_paths"] == [
+    assert claude.host_payload["host_adapter_payload"]["settings_paths"] == [
         "~/.claude/settings.json",
         ".claude/settings.json",
         ".claude/settings.local.json",
     ]
-    assert claude.host_payload["host_projection"]["config_root_env_var"] == "CLAUDE_CONFIG_DIR"
+    assert claude.host_payload["host_adapter_payload"]["config_root_env_var"] == "CLAUDE_CONFIG_DIR"
     assert claude.host_payload["execution_surface"]["supports_cron"] is False
-    assert claude.host_payload["host_projection"]["mcp_config_paths"] == ["~/.claude.json"]
-    assert claude.host_payload["host_projection"]["settings_scope_order"] == [
+    assert claude.host_payload["host_adapter_payload"]["mcp_config_paths"] == ["~/.claude.json"]
+    assert claude.host_payload["host_adapter_payload"]["settings_scope_order"] == [
         "managed",
         "command_line",
         "local",
         "project",
         "user",
     ]
-    assert claude.host_payload["host_projection"]["settings_scopes"][0]["scope"] == "managed"
-    assert claude.host_payload["host_projection"]["settings_scopes"][2]["locations"] == [
+    assert claude.host_payload["host_adapter_payload"]["settings_scopes"][0]["scope"] == "managed"
+    assert claude.host_payload["host_adapter_payload"]["settings_scopes"][2]["locations"] == [
         ".claude/settings.json",
         "CLAUDE.md",
         ".claude/agents/",
     ]
-    assert claude.host_payload["host_projection"]["subagent_paths"] == [
+    assert claude.host_payload["host_adapter_payload"]["subagent_paths"] == [
         "~/.claude/agents/",
         ".claude/agents/",
     ]
-    assert ".claude/hooks/" in claude.host_payload["host_projection"]["claude_directory_features"]
-    assert ".claude/rules/" in claude.host_payload["host_projection"]["claude_directory_features"]
-    assert claude.host_payload["host_projection"]["hook_event_names"] == [
+    assert ".claude/hooks/" in claude.host_payload["host_adapter_payload"]["claude_directory_features"]
+    assert ".claude/rules/" in claude.host_payload["host_adapter_payload"]["claude_directory_features"]
+    assert claude.host_payload["host_adapter_payload"]["hook_event_names"] == [
         "PreToolUse",
         "PostToolUse",
         "Notification",
@@ -1381,23 +1442,23 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
         "Elicitation",
         "ElicitationResult",
     ]
-    assert claude.host_payload["host_projection"]["hook_handler_types"] == [
+    assert claude.host_payload["host_adapter_payload"]["hook_handler_types"] == [
         "command",
         "prompt",
         "agent",
         "http",
     ]
-    assert claude.host_payload["host_projection"]["hook_control_settings"] == [
+    assert claude.host_payload["host_adapter_payload"]["hook_control_settings"] == [
         "disableAllHooks",
         "allowManagedHooksOnly",
         "allowedHttpHookUrls",
         "httpHookAllowedEnvVars",
     ]
-    assert claude.host_payload["host_projection"]["hook_inspection_commands"] == ["/hooks"]
-    assert claude.host_payload["host_projection"]["plugin_hook_manifest_paths"] == [
+    assert claude.host_payload["host_adapter_payload"]["hook_inspection_commands"] == ["/hooks"]
+    assert claude.host_payload["host_adapter_payload"]["plugin_hook_manifest_paths"] == [
         "hooks/hooks.json"
     ]
-    assert [item["source"] for item in claude.host_payload["host_projection"]["hook_definition_sources"]] == [
+    assert [item["source"] for item in claude.host_payload["host_adapter_payload"]["hook_definition_sources"]] == [
         "managed_settings",
         "user_settings",
         "project_settings",
@@ -1409,18 +1470,18 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
         "built_in",
         "sdk",
     ]
-    assert claude.host_payload["host_projection"]["hook_environment_markers"] == [
+    assert claude.host_payload["host_adapter_payload"]["hook_environment_markers"] == [
         "CLAUDE_ENV_FILE",
         "CLAUDE_PROJECT_DIR",
         "CLAUDE_PLUGIN_ROOT",
         "CLAUDE_PLUGIN_DATA",
         "CLAUDE_CODE_REMOTE",
     ]
-    assert claude.host_payload["host_projection"]["checkpointing_supported"] is True
-    assert claude.host_payload["host_projection"]["managed_settings_paths"][0] == (
+    assert claude.host_payload["host_adapter_payload"]["checkpointing_supported"] is True
+    assert claude.host_payload["host_adapter_payload"]["managed_settings_paths"][0] == (
         "/Library/Application Support/ClaudeCode/managed-settings.json"
     )
-    assert claude.host_payload["host_projection"]["managed_mcp_paths"][-1] == (
+    assert claude.host_payload["host_adapter_payload"]["managed_mcp_paths"][-1] == (
         "C:/Program Files/ClaudeCode/managed-mcp.json"
     )
     assert "hook_registry" in claude.host_payload["capabilities"]["host"]
@@ -1430,14 +1491,14 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     assert gemini.adapter == GEMINI_CLI_ADAPTER
     assert gemini.host_payload["execution_surface"]["shared_adapter"] == "cli_common_adapter"
     assert gemini.host_payload["host_adapter_payload"] == gemini.host_payload["host_projection"]
-    assert gemini.host_payload["host_projection"]["context_files"] == ["GEMINI.md"]
-    assert gemini.host_payload["host_projection"]["settings_paths"] == ["~/.gemini/settings.json"]
-    assert gemini.host_payload["host_projection"]["structured_output_modes"] == [
+    assert gemini.host_payload["host_adapter_payload"]["context_files"] == ["GEMINI.md"]
+    assert gemini.host_payload["host_adapter_payload"]["settings_paths"] == ["~/.gemini/settings.json"]
+    assert gemini.host_payload["host_adapter_payload"]["structured_output_modes"] == [
         "json",
         "stream-json",
     ]
     assert gemini.host_payload["execution_surface"]["supports_cron"] is False
-    assert gemini.host_payload["host_projection"]["checkpointing_supported"] is True
+    assert gemini.host_payload["host_adapter_payload"]["checkpointing_supported"] is True
 
 
 def test_host_adapter_payload_resolves_host_capability_requirements_per_adapter() -> None:
@@ -1821,22 +1882,23 @@ def test_codex_desktop_alias_retirement_status_tracks_parity_first_exit_gate() -
         alias_inventory_summary={
             "inventory_complete": True,
             "primary_identity_risk_occurrences": 0,
-            "translation_shim_required": False,
+            "legacy_alias_shim_required": False,
         }
     )
 
     assert status["canonical_adapter_id"] == "codex_desktop_adapter"
     assert status["legacy_alias_id"] == "codex_desktop_host_adapter"
-    assert status["alias_lifecycle"] == "compatibility-only"
+    assert status["alias_lifecycle"] == "retired-alias-only"
     assert status["alias_mode"] == "mirror-only"
     assert status["primary_regression_artifact"] == "cli_family_parity_snapshot"
-    assert status["codex_dual_entry_compatibility_artifact"] == "codex_dual_entry_parity_snapshot"
+    assert status["codex_dual_entry_parity_artifact"] == "codex_dual_entry_parity_snapshot"
     assert status["secondary_inventory_artifact"] == "upgrade_compatibility_matrix"
     assert status["emitter_contract"]["python_emits_alias_artifact"] is False
     assert status["emitter_contract"]["rust_emits_alias_artifact"] is False
     assert status["emitter_contract"]["legacy_alias_artifact_opt_in"] is True
     assert status["retirement_gates"]["runtime_primary_identity_consumers_cleared"] is True
-    assert status["retirement_gates"]["translation_shim_ready_if_needed"] is True
+    assert status["retirement_gates"]["legacy_alias_inventory_is_secondary"] is True
+    assert status["retirement_gates"]["legacy_alias_shim_ready_if_needed"] is True
 
 
 def test_legacy_codex_desktop_alias_compiler_drops_the_old_compatibility_escape_hatch() -> None:
@@ -1893,13 +1955,22 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
         "evidence_required",
     ]
 
-    assert delegation["status_contract"] == "delegation_contract_v3"
+    assert delegation["status_contract"] == "delegation_contract_v4"
     assert delegation["gate"]["gate_skill"] == "subagent-delegation"
     assert delegation["gate"]["gate_type"] == "multi_agent_routing"
     assert delegation["gate"]["decision_before_spawn"] is True
     assert delegation["gate"]["route_outcomes"] == ["local", "subagent", "team"]
     assert delegation["gate"]["team_route_skill"] == "team"
     assert delegation["local_supervisor_mode"]["preserves_sidecar_boundaries"] is True
+    assert delegation["selection_matrix"]["local_when"][0] == (
+        "immediate blocker is faster to solve on the main thread"
+    )
+    assert delegation["selection_matrix"]["subagent_when"][0] == (
+        "bounded sidecars exist with non-overlapping write scopes"
+    )
+    assert delegation["selection_matrix"]["team_when"][0] == (
+        "supervisor-led worker lifecycle management is part of the task"
+    )
     assert delegation["delegation_state_fields"] == [
         "routing_decision",
         "orchestration_mode",
@@ -2219,7 +2290,7 @@ def test_router_rs_profile_json_can_opt_in_legacy_alias_output() -> None:
     assert payload["compatibility_lane"]["codex_desktop_host_adapter"]["source_contract"]["alias_mode"] == (
         "mirror-only"
     )
-    assert payload["codex_desktop_alias_retirement_status"]["alias_lifecycle"] == "compatibility-only"
+    assert payload["codex_desktop_alias_retirement_status"]["alias_lifecycle"] == "retired-alias-only"
 
 
 def test_router_rs_profile_json_resolves_host_capability_requirements_per_adapter() -> None:
@@ -2444,7 +2515,7 @@ def test_router_rs_profile_artifacts_json_can_opt_in_continuity_alias_artifact()
         "stream-json",
     ]
     assert "codex_desktop_host_adapter" not in payload
-    assert payload["codex_desktop_alias_retirement_status"]["alias_lifecycle"] == "compatibility-only"
+    assert payload["codex_desktop_alias_retirement_status"]["alias_lifecycle"] == "retired-alias-only"
     assert payload["codex_desktop_alias_retirement_status"]["emitter_contract"]["rust_emits_alias_artifact"] is False
     assert payload["upgrade_compatibility_matrix"]["codex_desktop_host_adapter"]["compatible"] is True
     assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["legacy_surface"] is True

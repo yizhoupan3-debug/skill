@@ -138,12 +138,24 @@ def test_search_skills_matches_memory_and_native_debug_queries() -> None:
     assert native_results[0].record.name == "native-app-debugging"
 
 
-def test_search_skills_keeps_legacy_skill_slugs_routing_to_new_canonical_names() -> None:
-    """Verify renamed skill slugs keep a compatibility search path."""
+def test_search_skills_drops_legacy_skill_slug_compatibility_path() -> None:
+    """Verify renamed skill slugs no longer stay on the default read surface."""
 
     framework_results = search_skills("skill-developer-codex", codex_home=PROJECT_ROOT, limit=3)
     repair_results = search_skills("skill-routing-repair-codex", codex_home=PROJECT_ROOT, limit=3)
     audit_results = search_skills("execution-audit-codex", codex_home=PROJECT_ROOT, limit=3)
+
+    assert not framework_results
+    assert not repair_results
+    assert not audit_results
+
+
+def test_search_skills_keeps_canonical_skill_slugs_routing_normally() -> None:
+    """Verify canonical skill slugs still route as expected."""
+
+    framework_results = search_skills("skill-framework-developer", codex_home=PROJECT_ROOT, limit=3)
+    repair_results = search_skills("skill-routing-repair", codex_home=PROJECT_ROOT, limit=3)
+    audit_results = search_skills("execution-audit", codex_home=PROJECT_ROOT, limit=3)
 
     assert framework_results
     assert framework_results[0].record.name == "skill-framework-developer"

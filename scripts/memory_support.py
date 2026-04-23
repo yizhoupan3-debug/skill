@@ -770,6 +770,124 @@ def write_active_task_pointer(
     return changed
 
 
+def render_session_summary(
+    *,
+    task: str,
+    phase: str,
+    status: str,
+    summary: str,
+) -> str:
+    """Build the canonical Markdown session summary text."""
+
+    return "\n".join(
+        [
+            "# SESSION_SUMMARY",
+            "",
+            f"- task: {task}",
+            f"- phase: {phase}",
+            f"- status: {status}",
+            "",
+            "## Summary",
+            summary.strip() or "No summary provided.",
+            "",
+        ]
+    )
+
+
+def build_next_actions_payload(actions: list[str]) -> dict[str, Any]:
+    """Build the canonical next-actions payload."""
+
+    return {
+        "schema_version": NEXT_ACTIONS_SCHEMA_VERSION,
+        "next_actions": actions,
+    }
+
+
+def build_evidence_index_payload(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build the canonical evidence-index payload."""
+
+    return {
+        "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
+        "artifacts": entries,
+    }
+
+
+def write_standard_session_artifacts(
+    output_dir: Path,
+    *,
+    task: str,
+    phase: str,
+    status: str,
+    summary: str,
+    next_actions: list[str],
+    evidence: list[dict[str, Any]],
+    task_id: str | None = None,
+    mirror_output_dir: Path | None = None,
+    repo_root: Path | None = None,
+    focus: bool = False,
+) -> dict[str, str]:
+    """Write the canonical summary, next-actions, and evidence artifacts."""
+
+    resolved_task_id = task_id or build_task_id(task)
+    primary_dir = output_dir / resolved_task_id if (task_id or repo_root is not None) else output_dir
+    primary_dir.mkdir(parents=True, exist_ok=True)
+
+    summary_path = primary_dir / ARTIFACT_NAMES["session_summary"]
+    next_actions_path = primary_dir / ARTIFACT_NAMES["next_actions"]
+    evidence_path = primary_dir / ARTIFACT_NAMES["evidence_index"]
+
+    summary_text = render_session_summary(
+        task=task,
+        phase=phase,
+        status=status,
+        summary=summary,
+    )
+    next_actions_payload = build_next_actions_payload(next_actions)
+    evidence_payload = build_evidence_index_payload(evidence)
+
+    write_text_if_changed(summary_path, summary_text)
+    write_json_if_changed(next_actions_path, next_actions_payload)
+    write_json_if_changed(evidence_path, evidence_payload)
+
+    if mirror_output_dir is not None and focus:
+        mirror_output_dir.mkdir(parents=True, exist_ok=True)
+        write_text_if_changed(mirror_output_dir / ARTIFACT_NAMES["session_summary"], summary_text)
+        write_json_if_changed(mirror_output_dir / ARTIFACT_NAMES["next_actions"], next_actions_payload)
+        write_json_if_changed(mirror_output_dir / ARTIFACT_NAMES["evidence_index"], evidence_payload)
+
+    if repo_root is not None:
+        repo_root.mkdir(parents=True, exist_ok=True)
+        write_task_registry(
+            repo_root,
+            task_id=resolved_task_id,
+            task=task,
+            phase=phase,
+            status=status,
+            resume_allowed=None,
+            focus_task_id=resolved_task_id if focus else None,
+        )
+        if focus:
+            write_text_if_changed(repo_root / ARTIFACT_NAMES["session_summary"], summary_text)
+            write_json_if_changed(repo_root / ARTIFACT_NAMES["next_actions"], next_actions_payload)
+            write_json_if_changed(repo_root / ARTIFACT_NAMES["evidence_index"], evidence_payload)
+            write_active_task_pointer(
+                repo_root,
+                task_id=resolved_task_id,
+                task=task,
+                phase=phase,
+                status=status,
+                resume_allowed=None,
+                focus=True,
+            )
+
+    return {
+        "summary": str(summary_path),
+        "next_actions": str(next_actions_path),
+        "evidence": str(evidence_path),
+        "task_id": resolved_task_id,
+    }
+
+
 def _json_text(payload: dict[str, Any]) -> str:
     """Serialize JSON payloads using the shared pretty-print contract."""
 
@@ -961,10 +1079,7 @@ def _synthesized_summary(supervisor_state: dict[str, Any]) -> str:
 def _synthesized_next_actions_payload(next_actions: list[str]) -> dict[str, Any]:
     """Build the canonical next-actions payload from supervisor-derived actions."""
 
-    return {
-        "schema_version": NEXT_ACTIONS_SCHEMA_VERSION,
-        "next_actions": next_actions,
-    }
+    return build_next_actions_payload(next_actions)
 
 
 def _synthesized_trace_payload(
@@ -1062,7 +1177,7 @@ def repair_runtime_continuity_artifacts(
         for item in supervisor.get("next_actions", [])
         if _coerce_next_action_line(item)
     )
-    evidence_index = {"schema_version": EVIDENCE_INDEX_SCHEMA_VERSION, "artifacts": []}
+    evidence_index = build_evidence_index_payload([])
     source_summary_path = task_root / ARTIFACT_NAMES["session_summary"]
     source_next_actions_path = task_root / ARTIFACT_NAMES["next_actions"]
     source_evidence_path = task_root / ARTIFACT_NAMES["evidence_index"]
@@ -1116,18 +1231,11 @@ def repair_runtime_continuity_artifacts(
         changed = write_json_if_changed(source_trace_path, trace_payload) or changed
     else:
         task_root.mkdir(parents=True, exist_ok=True)
-        summary_text = "\n".join(
-            [
-                "# SESSION_SUMMARY",
-                "",
-                f"- task: {task}",
-                f"- phase: {phase}",
-                f"- status: {status}",
-                "",
-                "## Summary",
-                _synthesized_summary(supervisor),
-                "",
-            ]
+        summary_text = render_session_summary(
+            task=task,
+            phase=phase,
+            status=status,
+            summary=_synthesized_summary(supervisor),
         )
         changed = write_text_if_changed(source_summary_path, summary_text) or changed
         changed = write_json_if_changed(source_next_actions_path, next_actions_payload) or changed

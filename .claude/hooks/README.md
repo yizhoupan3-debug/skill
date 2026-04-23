@@ -4,18 +4,19 @@ Claude Code project hooks live here.
 
 Generated-first maintenance:
 
-- Edit `scripts/materialize_cli_host_entrypoints.py` for host-entrypoint rendering, and update `scripts/router-rs/` first for Claude hook rules and contracts.
+- Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then use `scripts/materialize_cli_host_entrypoints.py` as the thin materializer.
 - Treat `.claude/settings.json`, this README, and `.claude/hooks/*.sh` as
   materialized outputs.
 - Manual Claude host guidance belongs in `.claude/agents/*.md` unless noted.
-- Codex repo hooks stay disabled here by default; keep shared hook logic scoped
-  to Claude unless the project explicitly re-enables a Codex-specific layer.
+- Codex uses `.codex/hooks.json` for a separate silent preflight guardrail
+  layer on `Edit` / `MultiEdit` / `Write` / `Bash`; do not mirror Claude
+  prompt hooks onto Codex.
 
 Active hooks:
 
 | Event | Runner | Purpose |
 | --- | --- | --- |
-| `UserPromptSubmit` | `run.sh user-prompt-submit` | Inject the repo-local shared memory and continuity truth on every real prompt, and only add a one-line closeout reminder on execution turns. |
+| `UserPromptSubmit` | `run.sh user-prompt-submit` | Inject the repo-local shared memory and continuity truth on every real prompt, plus narrow execution-time hints when the current prompt clearly needs them. |
 | `PreToolUse` | `run.sh pre-tool-use-quality` | Add a short path-aware implementation reminder before editing runtime, materializer, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |
 | `PreToolUse` | `run.sh pre-tool-use` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
 | `PostToolUse` | `run.sh post-tool-audit` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
@@ -28,9 +29,8 @@ Everything else stays intentionally uninstalled here so startup and tool turns r
 `./.codex/memory/` plus continuity artifacts, so prompt-time injection is the
 lowest-friction way to keep Claude aligned with repo-local state instead of stale
 host-global recall.
-For execution turns it may add one short closeout reminder, but reply tone,
-"讲人话" rules, closeout shape, and broad implementation philosophy still live in
-`AGENT.md`, not in hooks.
+Reply tone, "讲人话" rules, closeout shape, and broad implementation philosophy
+still live in `AGENT.md`, not in hooks.
 Static behavior rules belong in `AGENT.md` or `CLAUDE.md`; these hooks exist
 for deterministic guardrails, lightweight execution-time context, and lifecycle
 maintenance.
@@ -98,7 +98,7 @@ Validation commands:
 ' | ./scripts/router-rs/target/debug/router-rs --claude-hook-audit-command config-change --repo-root "$PWD"`
   Expected: JSON on stdout plus audit-only stderr guidance; exit 0.
 - In Claude Code, run `/hooks`
-  Expected: the project shows `PreToolUse`, `PostToolUse`, `SessionEnd`,
-  `ConfigChange`, and `StopFailure` from `.claude/settings.json`.
+  Expected: the project shows `PreToolUse`, `PostToolUse`, `UserPromptSubmit`,
+  `SessionEnd`, `ConfigChange`, and `StopFailure` from `.claude/settings.json`.
 
 Shared routing policy still comes from `../../AGENT.md`.

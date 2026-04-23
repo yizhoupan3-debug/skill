@@ -174,6 +174,11 @@ def _split_host_overrides(
         raise ValueError(
             f"{_HOST_PRIVATE_OVERRIDE_KEY} must be a mapping when provided in host_overrides."
         )
+    if LEGACY_HOST_PROJECTION_KEY in host_private:
+        raise ValueError(
+            f"{LEGACY_HOST_PROJECTION_KEY} is a legacy read surface; use "
+            f"{HOST_ADAPTER_PAYLOAD_KEY} under {_HOST_PRIVATE_OVERRIDE_KEY} instead."
+        )
     return normalized, _clone_json_like(host_private)
 
 
@@ -189,22 +194,13 @@ def _merge_mapping(base: Mapping[str, Any], override: Mapping[str, Any]) -> Dict
 
 
 def _normalize_host_adapter_payload_aliases(payload: Mapping[str, Any]) -> Dict[str, Any]:
-    """Keep the new host-adapter payload key and the legacy alias in sync."""
+    """Project the canonical host adapter payload to the legacy output key."""
 
     normalized = dict(_clone_json_like(payload))
     adapter_payload = normalized.get(HOST_ADAPTER_PAYLOAD_KEY)
-    legacy_projection = normalized.get(LEGACY_HOST_PROJECTION_KEY)
 
-    if isinstance(adapter_payload, Mapping) and isinstance(legacy_projection, Mapping):
-        merged = _merge_mapping(legacy_projection, adapter_payload)
-        normalized[HOST_ADAPTER_PAYLOAD_KEY] = _clone_json_like(merged)
-        normalized[LEGACY_HOST_PROJECTION_KEY] = _clone_json_like(merged)
-        return normalized
     if isinstance(adapter_payload, Mapping):
         normalized[LEGACY_HOST_PROJECTION_KEY] = _clone_json_like(adapter_payload)
-        return normalized
-    if isinstance(legacy_projection, Mapping):
-        normalized[HOST_ADAPTER_PAYLOAD_KEY] = _clone_json_like(legacy_projection)
     return normalized
 
 
@@ -1070,6 +1066,6 @@ def should_emit_codex_desktop_alias_artifact(
         return True
     if alias_inventory_summary.get("primary_identity_risk_occurrences") != 0:
         return True
-    if alias_inventory_summary.get("translation_shim_required") is not False:
+    if alias_inventory_summary.get("legacy_alias_shim_required") is not False:
         return True
     return False

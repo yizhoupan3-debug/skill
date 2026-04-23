@@ -288,7 +288,7 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert execution_service.health()["execution_mode_default"] == "dry_run"
     assert execution_service.health()["control_plane_authority"] == "rust-runtime-control-plane"
     assert execution_service.health()["control_plane_role"] == "execution-kernel-control"
-    assert execution_service.health()["control_plane_projection"] == "python-thin-projection"
+    assert execution_service.health()["control_plane_projection"] == "rust-native-projection"
     assert execution_service.health()["control_plane_delegate_kind"] == "rust-execution-kernel-slice"
     assert execution_service.health()["kernel_adapter_kind"] == "rust-execution-kernel-slice"
     assert execution_service.health()["kernel_authority"] == "rust-execution-kernel-authority"
@@ -442,7 +442,7 @@ def test_execution_service_consumes_rust_like_execution_descriptor() -> None:
     service_descriptor = {
         "authority": "rust-runtime-control-plane",
         "role": "execution-kernel-control",
-        "projection": "python-thin-projection",
+        "projection": "rust-native-projection",
         "delegate_kind": "rust-execution-kernel-slice",
         "kernel_contract_by_mode": {
             "live_primary": {
@@ -2021,7 +2021,7 @@ def test_execution_environment_service_exposes_control_plane_contract_descriptor
     assert descriptors["execution_controller_contract"]["boundaries"][
         "runtime_branching_changes_required"
     ] is False
-    assert descriptors["delegation_contract"]["status_contract"] == "delegation_contract_v3"
+    assert descriptors["delegation_contract"]["status_contract"] == "delegation_contract_v4"
     assert descriptors["delegation_contract"]["gate"]["gate_skill"] == "subagent-delegation"
     assert descriptors["delegation_contract"]["gate"]["gate_type"] == "multi_agent_routing"
     assert descriptors["delegation_contract"]["gate"]["route_outcomes"] == ["local", "subagent", "team"]
@@ -2029,6 +2029,9 @@ def test_execution_environment_service_exposes_control_plane_contract_descriptor
     assert descriptors["delegation_contract"]["local_supervisor_mode"][
         "allowed_when_runtime_blocks_spawning"
     ] is True
+    assert descriptors["delegation_contract"]["selection_matrix"]["subagent_when"][0] == (
+        "bounded sidecars exist with non-overlapping write scopes"
+    )
     assert descriptors["delegation_contract"]["delegation_state_fields"] == [
         "routing_decision",
         "orchestration_mode",

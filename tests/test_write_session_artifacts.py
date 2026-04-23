@@ -14,8 +14,12 @@ if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
 from framework_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
-from scripts.memory_support import read_task_registry
 from scripts.write_session_artifacts import write_artifacts
+
+
+def _read_task_registry(repo_root: Path) -> dict[str, object]:
+    path = repo_root / "artifacts" / "current" / "task_registry.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
 def test_write_artifacts_creates_all_phase1_contract_files(tmp_path: Path) -> None:
@@ -82,7 +86,7 @@ def test_write_artifacts_only_registers_background_tasks_without_focus_projectio
         repo_root=repo_root,
     )
 
-    registry = read_task_registry(repo_root)
+    registry = _read_task_registry(repo_root)
 
     assert Path(paths["summary"]).parent.name == paths["task_id"]
     assert registry["tasks"][0]["task_id"] == paths["task_id"]

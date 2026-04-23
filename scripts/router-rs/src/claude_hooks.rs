@@ -196,13 +196,8 @@ const USER_PROMPT_COMPAT_CONTEXT: &str =
     "如果旧 compat/fallback/过渡逻辑已经没有真实必要，优先删掉而不是继续包一层。";
 const USER_PROMPT_HOOK_CONTEXT: &str =
     "Hook 额外检查：让 hook 增加自动化，而不是只做阻拦；优先短上下文、窄触发、低开销，并尽量用 matcher/if 避免无谓触发。";
-const USER_PROMPT_CLOSEOUT_CONTEXT: &str =
-    "收尾提醒：完成任务时默认用很短的收尾，跟着当前任务态自然收尾；如果这轮已经结束，就直接说已收尾，不要把完成态重新当成当前任务。";
-const FALLBACK_SHARED_PROJECT_MCP_SERVERS: [&str; 3] = [
-    "browser-mcp",
-    "framework-mcp",
-    "openaiDeveloperDocs",
-];
+const FALLBACK_SHARED_PROJECT_MCP_SERVERS: [&str; 3] =
+    ["browser-mcp", "framework-mcp", "openaiDeveloperDocs"];
 const USER_PROMPT_EXECUTION_INTENT_PREFIX: &str = "执行意图：";
 const USER_PROMPT_STATE_COMPACT_PREFIX: &str = "当前状态：";
 const USER_PROMPT_STATE_BUDGET_CHARS: usize = 120;
@@ -220,6 +215,7 @@ const QUALITY_RUNTIME_PREFIXES: [&str; 2] = [
 ];
 const QUALITY_HOOK_PREFIXES: [&str; 1] = [".claude/hooks/"];
 const QUALITY_TARGET_SUFFIXES: [&str; 3] = [".py", ".rs", ".sh"];
+const PATCH_ARTIFACT_SUFFIXES: [&str; 4] = [".patch", ".diff", ".rej", ".orig"];
 const ASYNC_AUDIT_PREFIXES: [&str; 5] = [
     "framework_runtime/src/framework_runtime/",
     "scripts/router-rs/src/",
@@ -407,13 +403,50 @@ pub fn build_claude_project_settings(repo_root: &Path) -> Value {
     })
 }
 
+pub fn build_codex_hook_manifest() -> Value {
+    json!({
+        "hooks": {
+            "PreToolUse": [
+                build_codex_command_hook("pre-tool-use", "Edit"),
+                build_codex_command_hook("pre-tool-use", "MultiEdit"),
+                build_codex_command_hook("pre-tool-use", "Write"),
+                build_codex_command_hook("pre-tool-use", "Bash"),
+            ],
+            "PermissionRequest": [
+                build_codex_command_hook("permission-request", "Bash"),
+            ],
+        }
+    })
+}
+
 pub fn build_claude_hook_projection() -> Value {
     json!({
         "schema_version": CLAUDE_HOOK_PROJECTION_SCHEMA_VERSION,
         "authority": CLAUDE_HOOK_AUTHORITY,
+        "agent_policy": build_agent_policy(),
+        "root_agents_proxy": build_root_agents_proxy(),
+        "root_claude_proxy": build_root_claude_proxy(),
+        "root_gemini_proxy": build_root_gemini_proxy(),
         "hooks_readme": build_claude_hooks_readme(),
         "hook_runner": build_claude_hook_runner(),
+        "codex_hooks": build_codex_hook_manifest(),
     })
+}
+
+fn build_agent_policy() -> String {
+    include_str!("../../../AGENT.md").to_string()
+}
+
+fn build_root_agents_proxy() -> String {
+    include_str!("../../../AGENTS.md").to_string()
+}
+
+fn build_root_claude_proxy() -> String {
+    include_str!("../../../CLAUDE.md").to_string()
+}
+
+fn build_root_gemini_proxy() -> String {
+    include_str!("../../../GEMINI.md").to_string()
 }
 
 fn build_claude_hooks_readme() -> String {
@@ -422,6 +455,63 @@ fn build_claude_hooks_readme() -> String {
 
 fn build_claude_hook_runner() -> String {
     include_str!("../../../.claude/hooks/run.sh").to_string()
+}
+
+fn build_codex_command_hook(event: &str, matcher: &str) -> Value {
+    json!({
+        "matcher": matcher,
+        "hooks": [
+            {
+                "type": "command",
+                "command": build_codex_hook_bridge_command(event),
+                "timeout": 8,
+            }
+        ]
+    })
+}
+
+fn build_codex_hook_bridge_command(event: &str) -> String {
+    let mut command = String::new();
+    command
+        .push_str("CODEX_PROJECT_ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; ");
+    command.push_str(
+        "ROUTER_RS_RELEASE_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\"; ",
+    );
+    command.push_str(
+        "ROUTER_RS_DEBUG_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\"; ",
+    );
+    command.push_str("ROUTER_RS_CRATE_ROOT=\"$CODEX_PROJECT_ROOT/scripts/router-rs\"; ");
+    command.push_str("router_rs_is_fresh() { ");
+    command.push_str("bin_path=\"$1\"; ");
+    command.push_str("[ -x \"$bin_path\" ] || return 1; ");
+    command.push_str("[ \"$ROUTER_RS_CRATE_ROOT/Cargo.toml\" -nt \"$bin_path\" ] && return 1; ");
+    command.push_str(
+        "find \"$ROUTER_RS_CRATE_ROOT/src\" -type f -newer \"$bin_path\" | grep -q . && return 1; ",
+    );
+    command.push_str("return 0; ");
+    command.push_str("}; ");
+    command.push_str("run_router_rs() { ");
+    command.push_str(
+        "if router_rs_is_fresh \"$ROUTER_RS_RELEASE_BIN\"; then \"$ROUTER_RS_RELEASE_BIN\" \"$@\"; return; fi; ",
+    );
+    command.push_str(
+        "if router_rs_is_fresh \"$ROUTER_RS_DEBUG_BIN\"; then \"$ROUTER_RS_DEBUG_BIN\" \"$@\"; return; fi; ",
+    );
+    command.push_str(
+        "if [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then \"$ROUTER_RS_RELEASE_BIN\" \"$@\"; return; fi; ",
+    );
+    command.push_str(
+        "if [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then \"$ROUTER_RS_DEBUG_BIN\" \"$@\"; return; fi; ",
+    );
+    command.push_str(
+        "echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; ",
+    );
+    command.push_str("exit 1; ");
+    command.push_str("}; ");
+    command.push_str(&format!(
+        "run_router_rs --codex-hook-command {event} --repo-root \"$CODEX_PROJECT_ROOT\""
+    ));
+    command
 }
 
 fn load_runtime_registry_shared_project_mcp_servers_from_path(registry_path: &Path) -> Vec<String> {
@@ -462,8 +552,9 @@ fn load_runtime_registry_shared_project_mcp_servers(repo_root: &Path) -> Vec<Str
     if !servers.is_empty() {
         return servers;
     }
-    let fallback_servers =
-        load_runtime_registry_shared_project_mcp_servers_from_path(&framework_runtime_registry_path());
+    let fallback_servers = load_runtime_registry_shared_project_mcp_servers_from_path(
+        &framework_runtime_registry_path(),
+    );
     if !fallback_servers.is_empty() {
         return fallback_servers;
     }
@@ -543,15 +634,27 @@ pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Va
     let canonical = canonical_codex_audit_command(command)?;
     let payload = read_stdin_payload()?;
     match canonical {
-        "pre-tool-use" => bridge_codex_pre_tool_use(run_pre_tool_use(repo_root, &payload)?),
+        "pre-tool-use" => run_codex_pre_tool_use(repo_root, &payload),
         "permission-request" => {
             bridge_codex_permission_request(run_pre_tool_use(repo_root, &payload)?)
         }
-        "user-prompt-submit" => {
-            bridge_codex_user_prompt_submit(run_user_prompt_submit(repo_root, &payload)?)
-        }
+        // Older project-local Codex hook installs may still invoke this event.
+        // The current Codex runtime surfaces `systemMessage` visibly and does
+        // not yet honor `suppressOutput`, so keep the compatibility path silent.
+        "user-prompt-submit" => Ok(None),
         _ => Err(format!("Unsupported Codex audit command: {command}")),
     }
+}
+
+fn run_codex_pre_tool_use(repo_root: &Path, payload: &Value) -> Result<Option<Value>, String> {
+    let base = run_pre_tool_use(repo_root, payload)?;
+    if base.get("decision").and_then(Value::as_str) == Some("deny") {
+        return bridge_codex_pre_tool_use(base);
+    }
+    if let Some(block) = codex_pre_tool_use_quality_block(repo_root, payload)? {
+        return Ok(Some(block));
+    }
+    Ok(None)
 }
 
 fn canonical_lifecycle_command(command: &str) -> Result<&'static str, String> {
@@ -591,14 +694,15 @@ fn bridge_codex_pre_tool_use(payload: Value) -> Result<Option<Value>, String> {
     if payload.get("decision").and_then(Value::as_str) != Some("deny") {
         return Ok(None);
     }
-    let reason = payload
-        .get("hookSpecificOutput")
-        .and_then(Value::as_object)
-        .and_then(|hook| hook.get("permissionDecisionReason"))
-        .and_then(Value::as_str)
-        .or_else(|| payload.get("message").and_then(Value::as_str))
-        .unwrap_or("Request blocked by repo-local policy.")
-        .to_string();
+    let reason = codex_pre_tool_use_reason(
+        payload
+            .get("hookSpecificOutput")
+            .and_then(Value::as_object)
+            .and_then(|hook| hook.get("permissionDecisionReason"))
+            .and_then(Value::as_str)
+            .or_else(|| payload.get("message").and_then(Value::as_str))
+            .unwrap_or("Request blocked by repo-local policy."),
+    );
     Ok(Some(json!({
         "decision": "block",
         "hookSpecificOutput": {
@@ -613,14 +717,15 @@ fn bridge_codex_permission_request(payload: Value) -> Result<Option<Value>, Stri
     if payload.get("decision").and_then(Value::as_str) != Some("deny") {
         return Ok(None);
     }
-    let reason = payload
-        .get("hookSpecificOutput")
-        .and_then(Value::as_object)
-        .and_then(|hook| hook.get("permissionDecisionReason"))
-        .and_then(Value::as_str)
-        .or_else(|| payload.get("message").and_then(Value::as_str))
-        .unwrap_or("Request blocked by repo-local policy.")
-        .to_string();
+    let reason = codex_pre_tool_use_reason(
+        payload
+            .get("hookSpecificOutput")
+            .and_then(Value::as_object)
+            .and_then(|hook| hook.get("permissionDecisionReason"))
+            .and_then(Value::as_str)
+            .or_else(|| payload.get("message").and_then(Value::as_str))
+            .unwrap_or("Request blocked by repo-local policy."),
+    );
     Ok(Some(json!({
         "hookSpecificOutput": {
             "hookEventName": "PermissionRequest",
@@ -632,22 +737,117 @@ fn bridge_codex_permission_request(payload: Value) -> Result<Option<Value>, Stri
     })))
 }
 
-fn bridge_codex_user_prompt_submit(payload: Value) -> Result<Option<Value>, String> {
-    let context = payload
-        .get("hookSpecificOutput")
-        .and_then(Value::as_object)
-        .and_then(|hook| hook.get("additionalContext"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| "user prompt submit payload missing additionalContext".to_string())?;
-    Ok(Some(json!({
-        "systemMessage": context,
+fn codex_pre_tool_use_reason(reason: &str) -> String {
+    reason.replace("[claude-pre-tool-use]", "[codex-pre-tool-use]")
+}
+
+fn codex_block_payload(reason: String) -> Value {
+    json!({
+        "decision": "block",
         "hookSpecificOutput": {
-            "hookEventName": "UserPromptSubmit",
-            "additionalContext": context,
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": codex_pre_tool_use_reason(&reason),
         },
-    })))
+    })
+}
+
+fn is_patch_artifact_path(path: &str) -> bool {
+    let lowered = path.to_lowercase();
+    PATCH_ARTIFACT_SUFFIXES
+        .iter()
+        .any(|suffix| lowered.ends_with(suffix))
+}
+
+fn codex_patch_artifact_message(path: &str) -> String {
+    format!(
+        "[claude-pre-tool-use] blocked patch artifact write {path}; implement the change in tracked source files instead of emitting diff/patch byproducts."
+    )
+}
+
+fn codex_pre_tool_use_quality_block(
+    repo_root: &Path,
+    payload: &Value,
+) -> Result<Option<Value>, String> {
+    let tool_name = payload
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    if !matches!(tool_name, "Edit" | "MultiEdit" | "Write") {
+        return Ok(None);
+    }
+
+    let mut rel_paths = iter_payload_paths(payload)
+        .into_iter()
+        .map(|path| relative_candidate_path(&path, repo_root))
+        .collect::<Vec<_>>();
+    rel_paths.sort();
+    rel_paths.dedup();
+
+    for path in &rel_paths {
+        if is_patch_artifact_path(path) {
+            return Ok(Some(codex_block_payload(codex_patch_artifact_message(
+                path,
+            ))));
+        }
+    }
+
+    for path in rel_paths {
+        if quality_target_context(&path).is_none() {
+            continue;
+        }
+        let (delta_text, source_mode) = extract_audit_delta(repo_root, &path, payload)?;
+        if delta_text.trim().is_empty() {
+            continue;
+        }
+        if let Some(reason) = codex_quality_block_reason(&path, &delta_text, &source_mode) {
+            return Ok(Some(codex_block_payload(reason)));
+        }
+    }
+
+    Ok(None)
+}
+
+fn codex_quality_block_reason(path: &str, text: &str, source_mode: &str) -> Option<String> {
+    let compat_hits = compat_smell_count(text);
+    let lowered_path = path.to_lowercase();
+    let source_label = format!("增量来源={source_mode}");
+
+    if path.ends_with(".rs") {
+        let clone_hits = text.matches(".clone(").count() + text.matches(".clone()").count();
+        let serde_hits = text.matches("serde_json::").count();
+        let string_hits =
+            text.matches(".to_string()").count() + text.matches(".to_owned()").count();
+        if compat_hits >= 1 || clone_hits >= 3 || serde_hits >= 3 || string_hits >= 4 {
+            return Some(format!(
+                "[claude-pre-tool-use] blocked patchy Rust edit in {path} ({source_label}, compat={compat_hits}, clone={clone_hits}, serde={serde_hits}, string_copy={string_hits}); fold the fix into the real path instead of adding fallback/shim glue or extra hot-path copies."
+            ));
+        }
+    } else if path.ends_with(".py") {
+        let json_hits = text.matches("json.loads(").count() + text.matches("json.dumps(").count();
+        let io_hits = text.matches(".read_text(").count()
+            + text.matches(".read_bytes(").count()
+            + text.matches(".write_text(").count();
+        let wrapper_hits = text.matches("def ").count();
+        if compat_hits >= 1
+            || json_hits >= 3
+            || io_hits >= 3
+            || (lowered_path.contains("hook") && wrapper_hits >= 3)
+        {
+            return Some(format!(
+                "[claude-pre-tool-use] blocked patchy Python edit in {path} ({source_label}, compat={compat_hits}, json_roundtrip={json_hits}, file_io={io_hits}, helper_defs={wrapper_hits}); collapse the change into the main path instead of stacking wrappers, patch branches, or repeated parse/write loops."
+            ));
+        }
+    } else if path.ends_with(".sh") {
+        let deny_hits = text.matches("permissionDecision").count();
+        if compat_hits >= 1 || (lowered_path.contains("hook") && deny_hits >= 1) {
+            return Some(format!(
+                "[claude-pre-tool-use] blocked patchy hook shell edit in {path} ({source_label}, compat={compat_hits}, deny_rules={deny_hits}); keep the hook short and Rust-owned instead of growing another shell-side guard layer."
+            ));
+        }
+    }
+
+    None
 }
 
 fn lifecycle_contract(command: &str) -> Value {
@@ -1633,7 +1833,10 @@ fn user_prompt_memory_projection(repo_root: &Path, max_lines: usize) -> Result<S
     Ok(lines.join("\n"))
 }
 
-fn compact_user_prompt_projection(repo_root: &Path, state_budget_chars: usize) -> Result<String, String> {
+fn compact_user_prompt_projection(
+    repo_root: &Path,
+    state_budget_chars: usize,
+) -> Result<String, String> {
     let projection = user_prompt_memory_projection(repo_root, 1)?;
     let summary = projection
         .lines()
@@ -1705,10 +1908,17 @@ fn execution_intent_summary(prompt_text: &str) -> Option<String> {
     }
     let lowered = prompt_text.to_lowercase();
     let mut parts = Vec::new();
-    if prompt_text.contains("/deepinterview") || lowered.contains("deepinterview") || lowered.contains("deep-interview") {
+    if prompt_text.contains("/deepinterview")
+        || lowered.contains("deepinterview")
+        || lowered.contains("deep-interview")
+    {
         parts.push("先澄清最弱维度，再决定是否 handoff");
     }
-    if prompt_text.contains("/team") || lowered.contains("team mode") || lowered.contains("多 agent") || lowered.contains("worker") {
+    if prompt_text.contains("/team")
+        || lowered.contains("team mode")
+        || lowered.contains("多 agent")
+        || lowered.contains("worker")
+    {
         parts.push("shared continuity 只允许 supervisor 持有");
     }
     if prompt_text.contains("/autopilot") || lowered.contains("autopilot") {
@@ -1723,7 +1933,10 @@ fn execution_intent_summary(prompt_text: &str) -> Option<String> {
     if parts.is_empty() {
         parts.push("保留执行语义，优先验证与恢复锚点");
     }
-    Some(format!("{USER_PROMPT_EXECUTION_INTENT_PREFIX}{}", parts.join("；")))
+    Some(format!(
+        "{USER_PROMPT_EXECUTION_INTENT_PREFIX}{}",
+        parts.join("；")
+    ))
 }
 
 fn user_prompt_context_budget(prompt_text: &str) -> (usize, usize) {
@@ -1733,7 +1946,10 @@ fn user_prompt_context_budget(prompt_text: &str) -> (usize, usize) {
             USER_PROMPT_COMPLEX_STATE_BUDGET_CHARS,
         )
     } else {
-        (USER_PROMPT_CONTEXT_MAX_CHARS, USER_PROMPT_STATE_BUDGET_CHARS)
+        (
+            USER_PROMPT_CONTEXT_MAX_CHARS,
+            USER_PROMPT_STATE_BUDGET_CHARS,
+        )
     }
 }
 
@@ -1773,8 +1989,7 @@ fn build_user_prompt_context_payload(repo_root: &Path, prompt_text: &str) -> Res
     }
     if looks_like_coding_request(prompt_text) {
         let lowered = prompt_text.to_lowercase();
-        let mut parts = vec![USER_PROMPT_CLOSEOUT_CONTEXT];
-        lanes.push("closeout".to_string());
+        let mut parts = Vec::new();
         if count_contains(&lowered, &USER_PROMPT_PERF_TERMS) > 0 {
             parts.push(USER_PROMPT_PERF_CONTEXT);
             lanes.push("perf".to_string());
@@ -1791,7 +2006,9 @@ fn build_user_prompt_context_payload(repo_root: &Path, prompt_text: &str) -> Res
             parts.push(USER_PROMPT_HOOK_CONTEXT);
             lanes.push("hook".to_string());
         }
-        sections.push(join_unique_context(&parts));
+        if !parts.is_empty() {
+            sections.push(join_unique_context(&parts));
+        }
     }
     let pre_shrink = sections.join("\n\n");
     let context = shrink_user_prompt_context(&pre_shrink, context_budget_chars);
@@ -2873,14 +3090,25 @@ mod tests {
         );
         let telemetry = result["contextTelemetry"].as_object().expect("telemetry");
         let lanes = telemetry["lanes"].as_array().expect("lanes");
-        assert!(lanes.iter().any(|item| item.as_str() == Some("memory-truth")));
-        assert!(lanes.iter().any(|item| item.as_str() == Some("continuity-truth")));
-        assert!(lanes.iter().any(|item| item.as_str() == Some("state-compact")));
-        assert!(lanes.iter().any(|item| item.as_str() == Some("closeout")));
+        assert!(lanes
+            .iter()
+            .any(|item| item.as_str() == Some("memory-truth")));
+        assert!(lanes
+            .iter()
+            .any(|item| item.as_str() == Some("continuity-truth")));
+        assert!(lanes
+            .iter()
+            .any(|item| item.as_str() == Some("state-compact")));
         assert!(lanes.iter().any(|item| item.as_str() == Some("perf")));
         assert!(lanes.iter().any(|item| item.as_str() == Some("compat")));
-        assert_eq!(telemetry["budget_chars"], Value::from(USER_PROMPT_CONTEXT_MAX_CHARS as u64));
-        assert_eq!(telemetry["state_budget_chars"], Value::from(USER_PROMPT_STATE_BUDGET_CHARS as u64));
+        assert_eq!(
+            telemetry["budget_chars"],
+            Value::from(USER_PROMPT_CONTEXT_MAX_CHARS as u64)
+        );
+        assert_eq!(
+            telemetry["state_budget_chars"],
+            Value::from(USER_PROMPT_STATE_BUDGET_CHARS as u64)
+        );
         assert_eq!(telemetry["trimmed"], Value::Bool(false));
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
@@ -2895,15 +3123,20 @@ mod tests {
         let result = run_user_prompt_submit(&repo_root, &payload).expect("audit ok");
         let telemetry = result["contextTelemetry"].as_object().expect("telemetry");
         let lanes = telemetry["lanes"].as_array().expect("lanes");
-        assert!(lanes.iter().any(|item| item.as_str() == Some("memory-truth")));
-        assert!(lanes.iter().any(|item| item.as_str() == Some("continuity-truth")));
-        assert!(lanes.iter().any(|item| item.as_str() == Some("state-compact")));
-        assert!(!lanes.iter().any(|item| item.as_str() == Some("closeout")));
+        assert!(lanes
+            .iter()
+            .any(|item| item.as_str() == Some("memory-truth")));
+        assert!(lanes
+            .iter()
+            .any(|item| item.as_str() == Some("continuity-truth")));
+        assert!(lanes
+            .iter()
+            .any(|item| item.as_str() == Some("state-compact")));
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
     #[test]
-    fn user_prompt_submit_keeps_doc_edits_on_repo_memory_without_code_nudges() {
+    fn user_prompt_submit_keeps_doc_edits_on_repo_memory_without_extra_code_nudges() {
         let repo_root = temp_repo_root("user-prompt-submit-doc");
         for prompt in [
             "优化 .claude/hooks/README.md，把说明写得更清楚",
@@ -2917,11 +3150,26 @@ mod tests {
             let context = result["hookSpecificOutput"]["additionalContext"]
                 .as_str()
                 .unwrap_or("");
-            assert!(context.contains("repo-local shared memory"), "missing repo memory for {prompt}");
-            assert!(context.contains("当前状态："), "missing compact state for {prompt}");
-            assert!(!context.contains("Task Snapshot"), "unexpected long state block for {prompt}");
-            assert!(!context.contains("实现要求"), "unexpected old code nudge for {prompt}");
-            assert!(context.contains("收尾提醒："), "missing closeout reminder for {prompt}");
+            assert!(
+                context.contains("repo-local shared memory"),
+                "missing repo memory for {prompt}"
+            );
+            assert!(
+                context.contains("当前状态："),
+                "missing compact state for {prompt}"
+            );
+            assert!(
+                !context.contains("Task Snapshot"),
+                "unexpected long state block for {prompt}"
+            );
+            assert!(
+                !context.contains("实现要求"),
+                "unexpected old code nudge for {prompt}"
+            );
+            assert!(
+                !context.contains("收尾提醒："),
+                "unexpected closeout reminder for {prompt}"
+            );
             assert!(context.chars().count() <= USER_PROMPT_CONTEXT_MAX_CHARS);
         }
         fs::remove_dir_all(repo_root).expect("cleanup repo");
@@ -2972,7 +3220,6 @@ mod tests {
             .unwrap_or("");
         assert!(!context.is_empty());
         assert!(context.contains("Hook 额外检查"));
-        assert!(context.contains("收尾提醒："));
         assert!(!context.contains("实现要求"));
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
@@ -2990,9 +3237,17 @@ mod tests {
         let context = result["hookSpecificOutput"]["additionalContext"]
             .as_str()
             .unwrap_or("");
-        assert!(lanes.iter().any(|item| item.as_str() == Some("execution-intent")));
-        assert_eq!(telemetry["budget_chars"], Value::from(USER_PROMPT_COMPLEX_CONTEXT_MAX_CHARS as u64));
-        assert_eq!(telemetry["state_budget_chars"], Value::from(USER_PROMPT_COMPLEX_STATE_BUDGET_CHARS as u64));
+        assert!(lanes
+            .iter()
+            .any(|item| item.as_str() == Some("execution-intent")));
+        assert_eq!(
+            telemetry["budget_chars"],
+            Value::from(USER_PROMPT_COMPLEX_CONTEXT_MAX_CHARS as u64)
+        );
+        assert_eq!(
+            telemetry["state_budget_chars"],
+            Value::from(USER_PROMPT_COMPLEX_STATE_BUDGET_CHARS as u64)
+        );
         assert!(context.contains("执行意图："));
         assert!(context.contains("优先续跑当前执行链") || context.contains("先核对恢复锚点"));
         fs::remove_dir_all(repo_root).expect("cleanup repo");
@@ -3168,6 +3423,77 @@ mod tests {
         let result = run_pre_tool_use(&repo_root, &payload).expect("guard ok");
         assert_eq!(result["decision"], Value::String("allow".to_string()));
         assert!(result.get("hookSpecificOutput").is_none());
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn codex_pre_tool_use_blocks_patch_artifact_writes() {
+        let repo_root = temp_repo_root("codex-pre-tool-patch");
+        let payload = json!({
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "tmp/fix.patch",
+                "content": "diff --git a/x b/x\n"
+            }
+        });
+        let result = run_codex_pre_tool_use(&repo_root, &payload).expect("codex hook ok");
+        let payload = result.expect("codex block payload");
+        assert_eq!(payload["decision"], Value::String("block".to_string()));
+        assert_eq!(
+            payload["hookSpecificOutput"]["permissionDecision"],
+            Value::String("deny".to_string())
+        );
+        assert!(payload["hookSpecificOutput"]["permissionDecisionReason"]
+            .as_str()
+            .unwrap_or("")
+            .contains("patch artifact write"));
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn codex_pre_tool_use_blocks_patchy_runtime_edits() {
+        let repo_root = temp_repo_root("codex-pre-tool-quality");
+        let target = repo_root.join("scripts/router-rs/src/claude_hooks.rs");
+        fs::create_dir_all(target.parent().expect("target parent")).expect("create target parent");
+        fs::write(&target, "fn main() {}\n").expect("write target");
+
+        let payload = json!({
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": target.display().to_string(),
+                "new_string": "let a = foo.clone();\nlet b = bar.clone();\nlet c = baz.clone();\nlet g = serde_json::to_string(&x)?;\n// legacy fallback compatibility patch",
+            }
+        });
+        let result = run_codex_pre_tool_use(&repo_root, &payload).expect("codex hook ok");
+        let payload = result.expect("codex block payload");
+        assert_eq!(payload["decision"], Value::String("block".to_string()));
+        assert_eq!(
+            payload["hookSpecificOutput"]["permissionDecision"],
+            Value::String("deny".to_string())
+        );
+        assert!(payload["hookSpecificOutput"]["permissionDecisionReason"]
+            .as_str()
+            .unwrap_or("")
+            .contains("patchy Rust edit"));
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn codex_pre_tool_use_keeps_clean_runtime_edits_silent() {
+        let repo_root = temp_repo_root("codex-pre-tool-clean");
+        let target = repo_root.join("tests/test_cli_host_entrypoints.py");
+        fs::create_dir_all(target.parent().expect("target parent")).expect("create target parent");
+        fs::write(&target, "assert True\n").expect("write target");
+
+        let payload = json!({
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": target.display().to_string(),
+                "new_string": "assert render_statusline() == 'ok'\n",
+            }
+        });
+        let result = run_codex_pre_tool_use(&repo_root, &payload).expect("codex hook ok");
+        assert!(result.is_none());
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 

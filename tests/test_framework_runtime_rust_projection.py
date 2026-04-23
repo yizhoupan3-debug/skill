@@ -209,6 +209,42 @@ Implement the task directly.
     assert "Do not force personality or performative style by default." not in prompt
 
 
+def test_prompt_builder_prefers_rust_snapshot_reasons_over_compatibility_noise() -> None:
+    routing_result = RoutingResult(
+        task="直接做代码",
+        session_id="session-snapshot-reasons",
+        selected_skill=SkillMetadata(
+            name="plan-to-code",
+            description="Implement a concrete plan or spec into integrated code",
+            routing_layer="L2",
+            body="## Core workflow\n\nImplement the task directly.",
+            body_loaded=True,
+        ),
+        overlay_skill=None,
+        layer="L2",
+        reasons=[
+            "Trigger phrase matched: 直接做代码.",
+            "Python router executed only as a thin compatibility projection under the Rust control plane.",
+        ],
+        route_snapshot=RouteDecisionSnapshot(
+            engine="rust",
+            selected_skill="plan-to-code",
+            overlay_skill=None,
+            layer="L2",
+            score=88.0,
+            score_bucket="80-89",
+            reasons=["Trigger phrase matched: 直接做代码."],
+            reasons_class="direct-match",
+        ),
+        route_engine="rust",
+    )
+
+    prompt = PromptBuilder().build_prompt(routing_result)
+
+    assert "Trigger phrase matched: 直接做代码." in prompt
+    assert "thin compatibility projection" not in prompt
+
+
 def test_prompt_builder_uses_skill_body_without_extra_idea_to_plan_contract() -> None:
     skill = SkillMetadata(
         name="idea-to-plan",
@@ -314,9 +350,9 @@ def test_skill_router_reports_thin_projection_under_rust_control_plane() -> None
                 "router": {
                     "authority": "rust-route-core",
                     "role": "route-selection",
-                    "projection": "python-thin-projection",
+                    "projection": "rust-native-projection",
                     "delegate_kind": "rust-route-adapter",
-                    "python_projection_materialization": "compatibility-subprocess",
+                    "rust_projection_materialization": "router-rs-stdio",
                 }
             },
         },
@@ -324,11 +360,14 @@ def test_skill_router_reports_thin_projection_under_rust_control_plane() -> None
 
     result = router.route("直接做代码", session_id="session-4")
 
-    assert result.route_engine == "python"
-    assert any("thin compatibility projection" in reason for reason in result.reasons)
-    assert router.projection_descriptor()["compatibility_only"] is True
-    assert router.projection_descriptor()["python_projection_materialization"] == (
-        "compatibility-subprocess"
+    assert result.route_engine == "rust"
+    assert result.route_snapshot is not None
+    assert result.route_snapshot.engine == "rust"
+    assert not any("compatibility projection" in reason for reason in result.reasons)
+    assert router.projection_descriptor()["rust_owned"] is True
+    assert router.projection_descriptor()["projection"] == "rust-native-projection"
+    assert router.projection_descriptor()["rust_projection_materialization"] == (
+        "router-rs-stdio"
     )
 
 
@@ -385,9 +424,9 @@ def test_skill_router_delegates_to_rust_contract_when_adapter_is_present() -> No
                 "router": {
                     "authority": "rust-route-core",
                     "role": "route-selection",
-                    "projection": "python-thin-projection",
+                    "projection": "rust-native-projection",
                     "delegate_kind": "rust-route-adapter",
-                    "python_projection_materialization": "compatibility-subprocess",
+                    "rust_projection_materialization": "router-rs-stdio",
                 }
             },
         },
@@ -400,7 +439,7 @@ def test_skill_router_delegates_to_rust_contract_when_adapter_is_present() -> No
     assert result.selected_skill.name == "plan-to-code"
     assert result.route_snapshot is not None
     assert result.route_snapshot.engine == "rust"
-    assert any("thin compatibility projection" in reason for reason in result.reasons)
+    assert not any("compatibility projection" in reason for reason in result.reasons)
 
 
 def test_skill_router_overlay_skill_cannot_be_selected_as_primary_owner() -> None:
@@ -464,3 +503,46 @@ def test_skill_router_wording_cleanup_query_does_not_hit_artifact_gate() -> None
     )
 
     assert result.selected_skill.name == "writing-skills"
+
+
+def test_skill_router_prefers_bounded_subagent_route_when_token_budget_is_tight() -> None:
+    router = SkillRouter(
+        [
+            SkillMetadata(
+                name="subagent-delegation",
+                description="Decide whether work should stay local, use bounded sidecars, or escalate to team orchestration.",
+                routing_layer="L0",
+                routing_owner="gate",
+                routing_gate="delegation",
+                routing_priority="P1",
+                trigger_hints=["subagent", "sidecar", "delegation"],
+            ),
+            SkillMetadata(
+                name="team",
+                description="Supervisor-led worker lifecycle with integration, qa, cleanup, and resume phases.",
+                routing_layer="L0",
+                routing_owner="owner",
+                routing_gate="none",
+                routing_priority="P1",
+                trigger_hints=["team orchestration", "supervisor", "worker lifecycle", "integration", "qa", "cleanup"],
+            ),
+            SkillMetadata(
+                name="anti-laziness",
+                description="Pushes short, direct execution and prevents half-finished work.",
+                routing_layer="L1",
+                routing_owner="overlay",
+                routing_gate="none",
+                routing_priority="P1",
+            ),
+        ]
+    )
+
+    result = router.route(
+        "这是多阶段任务，但只要 bounded sidecar，保留主线程集成，降低 token 开销，不要 team orchestration",
+        session_id="session-token-budget",
+    )
+
+    assert result.selected_skill.name == "subagent-delegation"
+    assert result.overlay_skill is not None
+    assert result.overlay_skill.name == "anti-laziness"
+    assert any("Token-budget boost applied" in reason for reason in result.reasons)

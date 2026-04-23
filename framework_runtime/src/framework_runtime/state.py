@@ -31,7 +31,7 @@ _STATE_SERVICE_NAME = "state"
 _DEFAULT_STATE_SERVICE_DESCRIPTOR = {
     "authority": "rust-runtime-control-plane",
     "role": "durable-background-state",
-    "projection": "python-thin-projection",
+    "projection": "rust-native-projection",
     "delegate_kind": "filesystem-state-store",
 }
 _DEFAULT_BACKGROUND_JOB_MULTITASK_STRATEGY = "reject"
@@ -371,11 +371,7 @@ class BackgroundJobStore:
             and capabilities.backend_family != "memory"
             and self._control_plane.authority == RustRouteAdapter.background_state_store_authority
         )
-        self._rust_adapter = (
-            RustRouteAdapter(default_codex_home())
-            if self._use_rust_background_state
-            else None
-        )
+        self._rust_adapter = RustRouteAdapter(default_codex_home()) if self._use_rust_background_state else None
         self._load_state()
 
     def set_status(

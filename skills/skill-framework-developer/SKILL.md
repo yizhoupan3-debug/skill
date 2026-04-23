@@ -11,7 +11,6 @@ routing_priority: P1
 session_start: preferred
 short_description: Design and tune Codex skill routing/framework behavior
 trigger_hints:
-  - skill-developer-codex
   - skill-framework-developer
   - skill框架
   - 路由系统
@@ -38,7 +37,6 @@ metadata:
   version: "3.2.0"
   platforms: [codex]
   tags:
-    - skill-developer-codex
     - codex
     - skill-authoring
     - routing

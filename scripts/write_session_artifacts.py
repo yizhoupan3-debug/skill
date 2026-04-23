@@ -6,90 +6,23 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.memory_support import build_task_id, write_active_task_pointer, write_task_registry
+from framework_runtime.rust_router import RustRouteAdapter
 
 
-NEXT_ACTIONS_SCHEMA_VERSION = "next-actions-v2"
-EVIDENCE_INDEX_SCHEMA_VERSION = "evidence-index-v2"
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
 
 
-def write_session_summary(
-    path: Path,
-    *,
-    task: str,
-    phase: str,
-    status: str,
-    summary: str,
-) -> None:
-    """Write the canonical Markdown session summary.
-
-    Parameters:
-        path: Output Markdown path.
-        task: Task title.
-        phase: Current execution phase.
-        status: Current task status.
-        summary: High-level summary text.
-
-    Returns:
-        None.
-    """
-
-    content = "\n".join(
-        [
-            "# SESSION_SUMMARY",
-            "",
-            f"- task: {task}",
-            f"- phase: {phase}",
-            f"- status: {status}",
-            "",
-            "## Summary",
-            summary.strip() or "No summary provided.",
-            "",
-        ]
-    )
-    path.write_text(content, encoding="utf-8")
-
-
-def write_next_actions(path: Path, actions: list[str]) -> None:
-    """Write the canonical JSON next-actions file.
-
-    Parameters:
-        path: Output JSON path.
-        actions: Ordered next actions list.
-
-    Returns:
-        None.
-    """
-
-    payload = {
-        "schema_version": NEXT_ACTIONS_SCHEMA_VERSION,
-        "next_actions": actions,
-    }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def write_evidence_index(path: Path, entries: list[dict[str, Any]]) -> None:
-    """Write the canonical JSON evidence index file.
-
-    Parameters:
-        path: Output JSON path.
-        entries: Evidence entry dictionaries.
-
-    Returns:
-        None.
-    """
-
-    payload = {
-        "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
-        "artifacts": entries,
-    }
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+@lru_cache(maxsize=1)
+def _rust_adapter() -> RustRouteAdapter:
+    return RustRouteAdapter(_repo_root())
 
 
 def parse_evidence(raw_items: list[str]) -> list[dict[str, Any]]:
@@ -110,7 +43,6 @@ def parse_evidence(raw_items: list[str]) -> list[dict[str, Any]]:
         parsed.append({"kind": kind.strip(), "path": path.strip()})
     return parsed
 
-
 def write_artifacts(
     output_dir: Path,
     *,
@@ -125,81 +57,25 @@ def write_artifacts(
     repo_root: Path | None = None,
     focus: bool = False,
 ) -> dict[str, str]:
-    """Write the three standard session artifact files into a directory.
-
-    Parameters:
-        output_dir: Target directory for artifact files.
-        task: Task title.
-        phase: Current execution phase.
-        status: Current task status.
-        summary: High-level summary text.
-        next_actions: Ordered next action items.
-        evidence: Structured evidence entries.
-
-    Returns:
-        dict[str, str]: Mapping of artifact type to written file path.
-    """
-
-    resolved_task_id = task_id or build_task_id(task)
-    primary_dir = output_dir / resolved_task_id if (task_id or repo_root is not None) else output_dir
-    primary_dir.mkdir(parents=True, exist_ok=True)
-
-    summary_path = primary_dir / "SESSION_SUMMARY.md"
-    next_actions_path = primary_dir / "NEXT_ACTIONS.json"
-    evidence_path = primary_dir / "EVIDENCE_INDEX.json"
-
-    write_session_summary(summary_path, task=task, phase=phase, status=status, summary=summary)
-    write_next_actions(next_actions_path, next_actions)
-    write_evidence_index(evidence_path, evidence)
-
-    if mirror_output_dir is not None and focus:
-        mirror_output_dir.mkdir(parents=True, exist_ok=True)
-        write_session_summary(
-            mirror_output_dir / "SESSION_SUMMARY.md",
-            task=task,
-            phase=phase,
-            status=status,
-            summary=summary,
-        )
-        write_next_actions(mirror_output_dir / "NEXT_ACTIONS.json", next_actions)
-        write_evidence_index(mirror_output_dir / "EVIDENCE_INDEX.json", evidence)
-
-    if repo_root is not None:
-        repo_root.mkdir(parents=True, exist_ok=True)
-        write_task_registry(
-            repo_root,
-            task_id=resolved_task_id,
-            task=task,
-            phase=phase,
-            status=status,
-            resume_allowed=None,
-            focus_task_id=resolved_task_id if focus else None,
-        )
-        if focus:
-            write_session_summary(
-                repo_root / "SESSION_SUMMARY.md",
-                task=task,
-                phase=phase,
-                status=status,
-                summary=summary,
-            )
-            write_next_actions(repo_root / "NEXT_ACTIONS.json", next_actions)
-            write_evidence_index(repo_root / "EVIDENCE_INDEX.json", evidence)
-            write_active_task_pointer(
-                repo_root,
-                task_id=resolved_task_id,
-                task=task,
-                phase=phase,
-                status=status,
-                resume_allowed=None,
-                focus=True,
-            )
-
+    payload = {
+        "output_dir": str(output_dir),
+        "task": task,
+        "phase": phase,
+        "status": status,
+        "summary": summary,
+        "next_actions": next_actions,
+        "evidence": evidence,
+        "task_id": task_id,
+        "mirror_output_dir": str(mirror_output_dir) if mirror_output_dir is not None else None,
+        "repo_root": str(repo_root) if repo_root is not None else None,
+        "focus": focus,
+    }
+    resolved = _rust_adapter().write_framework_session_artifacts(payload)
     return {
-        "summary": str(summary_path),
-        "next_actions": str(next_actions_path),
-        "evidence": str(evidence_path),
-        "task_id": resolved_task_id,
+        "summary": resolved["summary"],
+        "next_actions": resolved["next_actions"],
+        "evidence": resolved["evidence"],
+        "task_id": resolved["task_id"],
     }
 
 

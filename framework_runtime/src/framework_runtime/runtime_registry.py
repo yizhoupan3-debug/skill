@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from scripts.host_integration_rs import run_host_integration_rs
+from scripts.host_integration_runner import run_host_integration as _shared_run_host_integration
 
 RUNTIME_REGISTRY_SCHEMA_VERSION = "framework-runtime-registry-v1"
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -468,7 +468,7 @@ def _rust_runtime_registry_payload(repo_root: Path | None = None) -> dict[str, A
     registry_path = _repo_runtime_registry_path(repo_root)
     if registry_path is None:
         return None
-    payload = run_host_integration_rs(
+    payload = _run_host_integration_command(
         "export-runtime-registry",
         "--repo-root",
         str(registry_path.parents[2]),
@@ -476,6 +476,10 @@ def _rust_runtime_registry_payload(repo_root: Path | None = None) -> dict[str, A
     if not isinstance(payload, dict):
         raise ValueError("Rust runtime registry export must be a JSON object.")
     return _validate_runtime_registry_payload(payload, source="rust-host-integration")
+
+
+def _run_host_integration_command(*args: str) -> dict[str, Any]:
+    return _shared_run_host_integration(*args, cwd=_REPO_ROOT)
 
 
 def _last_resort_fallback_host_adapter_rows() -> tuple[dict[str, Any], ...]:

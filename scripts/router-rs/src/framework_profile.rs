@@ -237,7 +237,7 @@ struct AdapterBuildContext<'a> {
 struct CliFamilyAdapterInputs<'a> {
     shared_contract: &'a Map<String, Value>,
     controller_boundary: &'a Map<String, Value>,
-    host_projection: &'a Map<String, Value>,
+    host_adapter_payload: &'a Map<String, Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -432,7 +432,7 @@ pub fn build_profile_bundle_with_legacy_alias(
         CliFamilyAdapterInputs {
             shared_contract: &shared_contract,
             controller_boundary: &controller_boundary,
-            host_projection: &build_claude_host_projection(),
+            host_adapter_payload: &build_claude_host_adapter_payload(),
         },
     );
     let gemini_cli_adapter = build_cli_family_host_adapter(
@@ -447,7 +447,7 @@ pub fn build_profile_bundle_with_legacy_alias(
         CliFamilyAdapterInputs {
             shared_contract: &shared_contract,
             controller_boundary: &controller_boundary,
-            host_projection: &build_gemini_host_projection(),
+            host_adapter_payload: &build_gemini_host_adapter_payload(),
         },
     );
     let cli_family_parity_snapshot = build_cli_family_parity_snapshot(
@@ -1790,7 +1790,7 @@ fn build_cli_family_host_adapter(
         )),
     );
     let host_adapter_payload =
-        complete_cli_host_projection(descriptor.host_id, inputs.host_projection.clone());
+        complete_cli_host_adapter_payload(descriptor.host_id, inputs.host_adapter_payload.clone());
     payload.insert(
         HOST_ADAPTER_PAYLOAD_KEY.to_string(),
         Value::Object(host_adapter_payload.clone()),
@@ -1846,7 +1846,7 @@ fn build_cli_family_host_adapter(
     payload
 }
 
-fn complete_cli_host_projection(
+fn complete_cli_host_adapter_payload(
     host_cli: &str,
     projection: Map<String, Value>,
 ) -> Map<String, Value> {
@@ -1889,11 +1889,12 @@ fn complete_cli_host_projection(
     completed
 }
 
-fn adapter_host_payload<'a>(adapter: &'a Map<String, Value>) -> Result<&'a Map<String, Value>, String> {
+fn adapter_host_payload<'a>(
+    adapter: &'a Map<String, Value>,
+) -> Result<&'a Map<String, Value>, String> {
     adapter
         .get(HOST_ADAPTER_PAYLOAD_KEY)
         .and_then(Value::as_object)
-        .or_else(|| adapter.get(LEGACY_HOST_PROJECTION_KEY).and_then(Value::as_object))
         .ok_or_else(|| format!("cli adapter missing {HOST_ADAPTER_PAYLOAD_KEY}"))
 }
 
@@ -1926,7 +1927,7 @@ fn build_host_alias_entrypoints(host_key: &str) -> Value {
     Value::Object(entrypoints)
 }
 
-fn build_codex_host_projection() -> Map<String, Value> {
+fn build_codex_host_adapter_payload() -> Map<String, Value> {
     let mut projection = Map::new();
     projection.insert(
         "context_files".to_string(),
@@ -1958,7 +1959,7 @@ fn build_codex_host_projection() -> Map<String, Value> {
     projection
 }
 
-fn build_claude_host_projection() -> Map<String, Value> {
+fn build_claude_host_adapter_payload() -> Map<String, Value> {
     let mut projection = Map::new();
     projection.insert(
         "context_files".to_string(),
@@ -2184,7 +2185,7 @@ fn build_claude_host_projection() -> Map<String, Value> {
     projection
 }
 
-fn build_gemini_host_projection() -> Map<String, Value> {
+fn build_gemini_host_adapter_payload() -> Map<String, Value> {
     let mut projection = Map::new();
     projection.insert(
         "context_files".to_string(),
@@ -2386,7 +2387,7 @@ fn build_codex_cli_adapter(
         CliFamilyAdapterInputs {
             shared_contract,
             controller_boundary,
-            host_projection: &build_codex_host_projection(),
+            host_adapter_payload: &build_codex_host_adapter_payload(),
         },
     );
     payload.insert(
@@ -2689,8 +2690,12 @@ fn build_cli_family_capability_discovery_entry(
         .get("execution_surface")
         .and_then(Value::as_object)
         .ok_or_else(|| format!("{} missing execution_surface", descriptor.adapter_id))?;
-    let host_projection = adapter_host_payload(adapter)
-        .map_err(|_| format!("{} missing {}", descriptor.adapter_id, HOST_ADAPTER_PAYLOAD_KEY))?;
+    let host_projection = adapter_host_payload(adapter).map_err(|_| {
+        format!(
+            "{} missing {}",
+            descriptor.adapter_id, HOST_ADAPTER_PAYLOAD_KEY
+        )
+    })?;
     let resolved_host_requirements =
         resolve_host_capability_requirements(profile, descriptor.host_id, descriptor.adapter_id);
     let required_host_capabilities = resolved_host_requirements
@@ -3010,8 +3015,8 @@ fn build_codex_desktop_alias_retirement_status() -> Map<String, Value> {
     let primary_identity_risk_occurrences = inventory_summary
         .get("primary_identity_risk_occurrences")
         .and_then(Value::as_u64);
-    let translation_shim_required = inventory_summary
-        .get("translation_shim_required")
+    let legacy_alias_shim_required = inventory_summary
+        .get("legacy_alias_shim_required")
         .and_then(Value::as_bool);
     let runtime_primary_identity_consumers_cleared = if inventory_complete {
         Value::Bool(primary_identity_risk_occurrences == Some(0))
@@ -3028,7 +3033,7 @@ fn build_codex_desktop_alias_retirement_status() -> Map<String, Value> {
         Value::Bool(true),
     );
     retirement_gates.insert(
-        "compatibility_matrix_is_secondary_inventory".to_string(),
+        "legacy_alias_inventory_is_secondary".to_string(),
         Value::Bool(true),
     );
     retirement_gates.insert(
@@ -3036,14 +3041,14 @@ fn build_codex_desktop_alias_retirement_status() -> Map<String, Value> {
         runtime_primary_identity_consumers_cleared,
     );
     retirement_gates.insert(
-        "translation_shim_required".to_string(),
-        translation_shim_required
+        "legacy_alias_shim_required".to_string(),
+        legacy_alias_shim_required
             .map(Value::Bool)
             .unwrap_or(Value::Null),
     );
     retirement_gates.insert(
-        "translation_shim_ready_if_needed".to_string(),
-        Value::Bool(!translation_shim_required.unwrap_or(false)),
+        "legacy_alias_shim_ready_if_needed".to_string(),
+        Value::Bool(!legacy_alias_shim_required.unwrap_or(false)),
     );
 
     let mut emitter_contract = Map::new();
@@ -3076,7 +3081,7 @@ fn build_codex_desktop_alias_retirement_status() -> Map<String, Value> {
     );
     payload.insert(
         "alias_lifecycle".to_string(),
-        Value::String("compatibility-only".to_string()),
+        Value::String("retired-alias-only".to_string()),
     );
     payload.insert(
         "alias_mode".to_string(),
@@ -3091,7 +3096,7 @@ fn build_codex_desktop_alias_retirement_status() -> Map<String, Value> {
         Value::String(CLI_FAMILY_PARITY_ARTIFACT_ID.to_string()),
     );
     payload.insert(
-        "codex_dual_entry_compatibility_artifact".to_string(),
+        "codex_dual_entry_parity_artifact".to_string(),
         Value::String("codex_dual_entry_parity_snapshot".to_string()),
     );
     payload.insert(
@@ -3286,10 +3291,7 @@ fn build_delegation_contract() -> Map<String, Value> {
     );
 
     let mut team_contract = Map::new();
-    team_contract.insert(
-        "supervisor_owned_continuity".to_string(),
-        Value::Bool(true),
-    );
+    team_contract.insert("supervisor_owned_continuity".to_string(), Value::Bool(true));
     team_contract.insert(
         "integration_and_qa_stay_supervisor_led".to_string(),
         Value::Bool(true),
@@ -3310,7 +3312,7 @@ fn build_delegation_contract() -> Map<String, Value> {
     );
     payload.insert(
         "status_contract".to_string(),
-        Value::String("delegation_contract_v3".to_string()),
+        Value::String("delegation_contract_v4".to_string()),
     );
     payload.insert(
         "artifact_role".to_string(),
@@ -3320,6 +3322,26 @@ fn build_delegation_contract() -> Map<String, Value> {
     payload.insert(
         "local_supervisor_mode".to_string(),
         Value::Object(local_supervisor_mode),
+    );
+    payload.insert(
+        "selection_matrix".to_string(),
+        json!({
+            "local_when": [
+                "immediate blocker is faster to solve on the main thread",
+                "task is tightly coupled and sidecar boundaries are weak",
+                "delegation overhead would exceed throughput gains"
+            ],
+            "subagent_when": [
+                "bounded sidecars exist with non-overlapping write scopes",
+                "search, audit, implementation, or verification can run as lane-local outputs",
+                "integration and final judgment should still stay local"
+            ],
+            "team_when": [
+                "supervisor-led worker lifecycle management is part of the task",
+                "integration, qa, cleanup, or resume/recovery are first-class workflow phases",
+                "shared continuity must remain supervisor-owned while multiple lanes stay active"
+            ]
+        }),
     );
     payload.insert(
         "delegation_state_fields".to_string(),
@@ -3359,10 +3381,7 @@ fn build_delegation_contract() -> Map<String, Value> {
         "sidecar_contract".to_string(),
         Value::Object(sidecar_contract),
     );
-    payload.insert(
-        "team_contract".to_string(),
-        Value::Object(team_contract),
-    );
+    payload.insert("team_contract".to_string(), Value::Object(team_contract));
     payload.insert(
         "non_goals".to_string(),
         json!([
@@ -4185,7 +4204,7 @@ fn build_codex_desktop_alias_inventory_summary() -> Map<String, Value> {
     let mut category_counts = Map::new();
     let mut total_occurrences = 0_u64;
     let mut primary_identity_risk_occurrences = 0_u64;
-    let mut compatibility_only_occurrences = 0_u64;
+    let mut legacy_alias_only_occurrences = 0_u64;
 
     for root in search_roots {
         if !root.exists() {
@@ -4206,14 +4225,14 @@ fn build_codex_desktop_alias_inventory_summary() -> Map<String, Value> {
                 let (category, risk) = classify_alias_reference(&path);
                 increment_counter(&mut category_counts, category);
                 match risk {
-                    "compatibility_only" => compatibility_only_occurrences += 1,
+                    "legacy_alias_only" => legacy_alias_only_occurrences += 1,
                     _ => primary_identity_risk_occurrences += 1,
                 }
             }
         }
     }
 
-    let translation_shim_required = primary_identity_risk_occurrences > 0;
+    let legacy_alias_shim_required = primary_identity_risk_occurrences > 0;
     let mut summary = Map::new();
     summary.insert("inventory_complete".to_string(), Value::Bool(true));
     summary.insert(
@@ -4233,12 +4252,12 @@ fn build_codex_desktop_alias_inventory_summary() -> Map<String, Value> {
         Value::from(primary_identity_risk_occurrences),
     );
     summary.insert(
-        "compatibility_only_occurrences".to_string(),
-        Value::from(compatibility_only_occurrences),
+        "legacy_alias_only_occurrences".to_string(),
+        Value::from(legacy_alias_only_occurrences),
     );
     summary.insert(
-        "translation_shim_required".to_string(),
-        Value::Bool(translation_shim_required),
+        "legacy_alias_shim_required".to_string(),
+        Value::Bool(legacy_alias_shim_required),
     );
     summary
 }
@@ -4290,31 +4309,31 @@ fn classify_alias_reference(path: &Path) -> (&'static str, &'static str) {
         .filter_map(|component| component.as_os_str().to_str())
         .collect();
     if file_name == "host_adapters.py" {
-        return ("compatibility_infrastructure", "compatibility_only");
+        return ("legacy_alias_infrastructure", "legacy_alias_only");
     }
     if file_name == "profile_artifacts.py" {
-        return ("artifact_emitter", "compatibility_only");
+        return ("artifact_emitter", "legacy_alias_only");
     }
     if file_name == "runtime_registry.py" {
-        return ("runtime_registry_contract", "compatibility_only");
+        return ("runtime_registry_contract", "legacy_alias_only");
     }
     if file_name == "write_framework_contract_artifacts.py" {
-        return ("compatibility_emitter_cli", "compatibility_only");
+        return ("legacy_alias_emitter_cli", "legacy_alias_only");
     }
     if file_name == "rust_router.py" {
-        return ("compatibility_router_cli", "compatibility_only");
+        return ("legacy_alias_router_cli", "legacy_alias_only");
     }
     if file_name == "__init__.py" {
-        return ("retired_root_export_surface", "compatibility_only");
+        return ("retired_root_export_surface", "legacy_alias_only");
     }
     if file_name == "framework_profile.rs" {
-        return ("rust_contract_artifact_lane", "compatibility_only");
+        return ("rust_contract_artifact_lane", "legacy_alias_only");
     }
     if parts.contains("tests") {
-        return ("compatibility_regression_tests", "compatibility_only");
+        return ("legacy_alias_regression_tests", "legacy_alias_only");
     }
     if parts.contains("docs") || parts.contains("aionrs_fusion_docs") {
-        return ("compatibility_contract_docs", "compatibility_only");
+        return ("legacy_alias_contract_docs", "legacy_alias_only");
     }
     ("unclassified_code", "primary_identity_risk")
 }
@@ -4596,6 +4615,21 @@ mod tests {
                 ["runtime_response_metadata_fields"]["shared"],
             json!(["trace_event_count", "trace_output_path"])
         );
+    }
+
+    #[test]
+    fn adapter_host_payload_requires_canonical_key() {
+        let adapter = Map::from_iter([(
+            LEGACY_HOST_PROJECTION_KEY.to_string(),
+            value_object([(
+                "context_files",
+                Value::Array(vec![Value::String("CLAUDE.md".to_string())]),
+            )]),
+        )]);
+
+        let err = adapter_host_payload(&adapter).expect_err("legacy-only host payload should fail");
+
+        assert!(err.contains(HOST_ADAPTER_PAYLOAD_KEY));
     }
 
     #[test]
