@@ -27,14 +27,6 @@ except ImportError:  # pragma: no cover - optional host probe dependency.
 
 from framework_runtime.checkpoint_store import RuntimeCheckpointer
 from framework_runtime.config import RuntimeSettings
-from framework_runtime.execution_kernel import (
-    ExecutionKernelRequest,
-    SANDBOX_CAPABILITY_CATEGORIES,
-    SandboxExecutionPolicy,
-    SandboxResourceBudget,
-    SandboxRuntimeProbe,
-    execute_router_rs_request,
-)
 from framework_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_BRIDGE_AUTHORITY,
     EXECUTION_KERNEL_BRIDGE_KIND,
@@ -42,11 +34,11 @@ from framework_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
     EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
     execution_kernel_steady_state_fields,
+    build_execution_kernel_live_response_serialization_contract_core,
     normalize_execution_kernel_metadata_bridge,
     resolve_execution_kernel_expectations,
     validate_execution_kernel_steady_state_metadata,
 )
-from framework_runtime.control_plane_contracts import build_control_plane_contract_descriptors
 from framework_runtime.memory import FactMemoryStore
 from framework_runtime.middleware import MiddlewareContext
 from framework_runtime.observability import build_runtime_observability_health_snapshot
@@ -56,12 +48,17 @@ from framework_runtime.schemas import (
     BackgroundParallelGroupSummary,
     BackgroundRunRequest,
     BackgroundRunStatus,
+    ExecutionKernelRequest,
     RouteDecisionContract,
     RouteDecisionSnapshot,
     RouteDiagnosticReport,
     RouteExecutionPolicy,
     RoutingResult,
     RunTaskResponse,
+    SANDBOX_CAPABILITY_CATEGORIES,
+    SandboxExecutionPolicy,
+    SandboxResourceBudget,
+    SandboxRuntimeProbe,
 )
 from framework_runtime.skill_loader import SkillLoader
 from framework_runtime.state import (
@@ -1702,18 +1699,125 @@ class ExecutionEnvironmentService:
         """Return control-plane-only descriptors for shared execution artifacts."""
 
         snapshot = self._execution_kernel_descriptor_snapshot()
-        payload = build_control_plane_contract_descriptors(
-            execution_kernel_metadata_bridge=snapshot["metadata_bridge"],
-            execution_kernel_live_contract=snapshot["contract_by_mode"].get(
-                EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
-            ),
-            execution_kernel_dry_run_contract=snapshot["contract_by_mode"].get(
-                EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
-            ),
-        )
+        payload = self._rust_adapter.control_plane_contract_descriptors()
+        self._apply_runtime_execution_contract_projection(payload, snapshot=snapshot)
         if self.control_plane_descriptor:
             payload["runtime_control_plane"] = self.control_plane_descriptor
         return payload
+
+    def _apply_runtime_execution_contract_projection(
+        self,
+        payload: dict[str, Any],
+        *,
+        snapshot: Mapping[str, Any],
+    ) -> None:
+        """Project runtime-specific execution metadata onto Rust static descriptors."""
+
+        metadata_bridge = snapshot["metadata_bridge"]
+        contract_by_mode = snapshot["contract_by_mode"]
+        live_contract = contract_by_mode.get(EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY, {})
+        dry_run_contract = contract_by_mode.get(EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN, {})
+        live_expectations = resolve_execution_kernel_expectations(live_contract)
+        dry_run_expectations = resolve_execution_kernel_expectations(dry_run_contract or live_contract)
+
+        serialization_key = "execution_kernel_live_response_serialization_contract"
+        serialization_contract = dict(payload.get(serialization_key, {}))
+        serialization_contract.update(
+            build_execution_kernel_live_response_serialization_contract_core(
+                metadata_bridge=metadata_bridge
+            )
+        )
+        payload[serialization_key] = serialization_contract
+
+        retirement_key = "execution_kernel_live_fallback_retirement_status"
+        retirement_contract = dict(payload.get(retirement_key, {}))
+        live_primary = dict(retirement_contract.get("live_primary", {}))
+        live_primary.update(
+            {
+                "contract_mode": live_contract.get(
+                    "execution_kernel_contract_mode",
+                    "rust-live-primary",
+                ),
+                "adapter_kind": live_contract.get(
+                    "execution_kernel_live_primary",
+                    live_expectations["execution_kernel_delegate"],
+                ),
+                "authority": live_contract.get(
+                    "execution_kernel_live_primary_authority",
+                    live_expectations["execution_kernel_delegate_authority"],
+                ),
+                "family": live_contract.get(
+                    "execution_kernel_delegate_family",
+                    live_expectations["execution_kernel_delegate_family"],
+                ),
+                "impl": live_contract.get(
+                    "execution_kernel_delegate_impl",
+                    live_expectations["execution_kernel_delegate_impl"],
+                ),
+            }
+        )
+        retirement_contract["live_primary"] = live_primary
+
+        current_contract_truth = dict(retirement_contract.get("current_contract_truth", {}))
+        current_contract_truth.update(
+            {
+                "execution_kernel_contract_mode": live_contract.get(
+                    "execution_kernel_contract_mode",
+                    "rust-live-primary",
+                ),
+                "execution_kernel_in_process_replacement_complete": live_contract.get(
+                    "execution_kernel_in_process_replacement_complete",
+                    True,
+                ),
+                "dry_run_delegate_kind": dry_run_contract.get(
+                    "execution_kernel_delegate",
+                    dry_run_expectations["execution_kernel_delegate"],
+                ),
+                "dry_run_delegate_authority": dry_run_contract.get(
+                    "execution_kernel_delegate_authority",
+                    dry_run_expectations["execution_kernel_delegate_authority"],
+                ),
+                "live_primary_kind": live_contract.get(
+                    "execution_kernel_live_primary",
+                    live_expectations["execution_kernel_delegate"],
+                ),
+                "live_primary_authority": live_contract.get(
+                    "execution_kernel_live_primary_authority",
+                    live_expectations["execution_kernel_delegate_authority"],
+                ),
+                "live_prompt_preview_passthrough_disabled": (
+                    serialization_contract["current_response_shape_truth"]["live_primary"][
+                        "prompt_preview_source"
+                    ]
+                    == "rust-owned-live-prompt"
+                ),
+            }
+        )
+        retirement_contract["current_contract_truth"] = current_contract_truth
+
+        response_metadata_truth = dict(retirement_contract.get("current_response_metadata_truth", {}))
+        response_metadata_truth.update(
+            {
+                "live_delegate_family": live_contract.get(
+                    "execution_kernel_delegate_family",
+                    live_expectations["execution_kernel_delegate_family"],
+                ),
+                "live_delegate_impl": live_contract.get(
+                    "execution_kernel_delegate_impl",
+                    live_expectations["execution_kernel_delegate_impl"],
+                ),
+                "dry_run_delegate_family": dry_run_contract.get(
+                    "execution_kernel_delegate_family",
+                    dry_run_expectations["execution_kernel_delegate_family"],
+                ),
+                "dry_run_delegate_impl": dry_run_contract.get(
+                    "execution_kernel_delegate_impl",
+                    dry_run_expectations["execution_kernel_delegate_impl"],
+                ),
+            }
+        )
+        retirement_contract["current_response_metadata_truth"] = response_metadata_truth
+        payload[retirement_key] = retirement_contract
 
     def _rust_adapter_health_snapshot(self) -> dict[str, Any]:
         cached = self._rust_adapter_health
@@ -1911,10 +2015,9 @@ class ExecutionEnvironmentService:
     ) -> RunTaskResponse:
         snapshot = self._execution_kernel_descriptor_snapshot()
         kernel_contract = self.describe_kernel_contract(dry_run=request.dry_run)
-        return await execute_router_rs_request(
+        return await self._rust_adapter.execute_runtime_request(
             request,
             settings=self.settings,
-            rust_adapter=self._rust_adapter,
             kernel_contract=kernel_contract,
             metadata_bridge=snapshot["metadata_bridge"],
         )

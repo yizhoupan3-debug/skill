@@ -49,7 +49,9 @@ VERIFY_PRESET_CONFIGS: dict[str, dict[str, Any]] = {
             },
         ],
         "path_rules": (
-            "scripts/materialize_cli_host_entrypoints.py",
+            "scripts/router-rs/src/",
+            "scripts/router-rs/src/host_integration.rs",
+            "scripts/install_skills.sh",
             "tests/test_cli_host_entrypoints.py",
             ".claude/",
             "AGENT.md",
@@ -67,14 +69,14 @@ VERIFY_PRESET_CONFIGS: dict[str, dict[str, Any]] = {
                 "cwd": "scripts/router-rs",
             },
             {
-                "command": "python3 -m pytest -q --noconftest tests/test_route_cli_entrypoint.py tests/test_router_rs_runner.py",
+                "command": "python3 -m pytest -q --noconftest tests/test_rust_only_adapter_chain.py tests/test_rust_release_entrypoints.py",
             },
         ],
         "path_rules": (
             "scripts/router-rs/",
             "framework_runtime/src/framework_runtime/rust_router.py",
-            "tests/test_route_cli_entrypoint.py",
-            "tests/test_router_rs_runner.py",
+            "tests/test_rust_only_adapter_chain.py",
+            "tests/test_rust_release_entrypoints.py",
         ),
     },
     "routing-eval": {

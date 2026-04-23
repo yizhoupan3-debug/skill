@@ -8,27 +8,69 @@ import json
 import re
 import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from framework_runtime.rust_router import get_cached_route_adapter
 from scripts.memory_store import MemoryItem, open_workspace_store
-from scripts.memory_support import (
-    build_memory_state,
-    current_local_date,
-    current_local_timestamp,
-    load_runtime_snapshot,
-    memory_state_path,
-    read_text_if_exists,
-    resolve_effective_memory_dir,
-    safe_slug,
-    write_json_if_changed,
-    write_text_if_changed,
-)
 
 STABLE_DOCUMENTS = ("MEMORY.md", "preferences.md", "decisions.md", "lessons.md", "runbooks.md")
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _current_local_date() -> str:
+    return datetime.now().astimezone().date().isoformat()
+
+
+def _current_local_timestamp() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _read_text_if_exists(path: Path) -> str:
+    return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
+def _write_text_if_changed(path: Path, content: str) -> bool:
+    existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if existing == content:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return True
+
+
+def _write_json_if_changed(path: Path, payload: dict[str, Any] | list[Any]) -> bool:
+    content = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    return _write_text_if_changed(path, content)
+
+
+def _safe_slug(value: str, fallback: str = "unknown") -> str:
+    slug = re.sub(r"[^\w.-]+", "-", value, flags=re.UNICODE)
+    slug = re.sub(r"-{2,}", "-", slug).strip("._-")
+    return slug or fallback
+
+
+def _resolve_effective_memory_dir(
+    *,
+    workspace: str,
+    memory_root: Path | None = None,
+    repo_root: Path | None = None,
+) -> Path:
+    if repo_root is not None:
+        return repo_root.expanduser().resolve() / ".codex" / "memory"
+    root = (memory_root or (Path.home() / ".codex" / "memories")).expanduser().resolve()
+    return root / _safe_slug(workspace)
+
+
+def _memory_state_path(memory_root: Path) -> Path:
+    return memory_root / "state.json"
 
 
 def _extract_bullet_lines(raw: str) -> list[str]:
@@ -96,8 +138,8 @@ def _memory_category_for_file(file_name: str) -> str:
 
 
 def _memory_item_id(workspace: str, category: str, index: int, summary: str, fallback: str) -> str:
-    summary_slug = safe_slug(summary[:80], fallback=fallback)
-    return f"{safe_slug(workspace)}:{category}:{index}:{summary_slug}"
+    summary_slug = _safe_slug(summary[:80], fallback=fallback)
+    return f"{_safe_slug(workspace)}:{category}:{index}:{summary_slug}"
 
 
 def _default_memory_md(repo_root: Path) -> str:
@@ -138,18 +180,18 @@ def _default_runbooks() -> str:
 
 def _load_stable_documents(repo_root: Path, resolved_dir: Path) -> dict[str, str]:
     documents: dict[str, str] = {}
-    documents["MEMORY.md"] = read_text_if_exists(resolved_dir / "MEMORY.md") or _default_memory_md(repo_root)
-    documents["preferences.md"] = read_text_if_exists(resolved_dir / "preferences.md") or "# preferences\n"
-    documents["decisions.md"] = read_text_if_exists(resolved_dir / "decisions.md") or "# decisions\n"
-    documents["lessons.md"] = read_text_if_exists(resolved_dir / "lessons.md") or "# lessons\n"
-    documents["runbooks.md"] = read_text_if_exists(resolved_dir / "runbooks.md") or _default_runbooks()
+    documents["MEMORY.md"] = _read_text_if_exists(resolved_dir / "MEMORY.md") or _default_memory_md(repo_root)
+    documents["preferences.md"] = _read_text_if_exists(resolved_dir / "preferences.md") or "# preferences\n"
+    documents["decisions.md"] = _read_text_if_exists(resolved_dir / "decisions.md") or "# decisions\n"
+    documents["lessons.md"] = _read_text_if_exists(resolved_dir / "lessons.md") or "# lessons\n"
+    documents["runbooks.md"] = _read_text_if_exists(resolved_dir / "runbooks.md") or _default_runbooks()
     return documents
 
 
 def _move_to_archive(source: Path, destination: Path) -> str:
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
-        suffix = current_local_timestamp().replace(":", "").replace("+", "_")
+        suffix = _current_local_timestamp().replace(":", "").replace("+", "_")
         destination = destination.with_name(f"{destination.stem}-{suffix}{destination.suffix}")
     shutil.move(str(source), str(destination))
     return str(destination)
@@ -164,7 +206,7 @@ def archive_legacy_memory_bundle(
     """Archive legacy prompt-visible memory surfaces before the strong cutover."""
 
     store = open_workspace_store(workspace, memory_root=memory_root, resolved_dir=resolved_dir)
-    archive_root = resolved_dir / "archive" / f"pre-cutover-{current_local_date()}"
+    archive_root = resolved_dir / "archive" / f"pre-cutover-{_current_local_date()}"
     archived_paths: list[str] = []
     for legacy_name in ("MEMORY_AUTO.md",):
         legacy_path = resolved_dir / legacy_name
@@ -179,11 +221,11 @@ def archive_legacy_memory_bundle(
     legacy_memory_item_count = len(legacy_memory_items)
     dump_path = archive_root / "sqlite_legacy_dump.json"
     if legacy_row_count or legacy_memory_item_count:
-        write_json_if_changed(
+        _write_json_if_changed(
             dump_path,
             {
                 "schema_version": "memory-legacy-dump-v1",
-                "exported_at": current_local_timestamp(),
+                "exported_at": _current_local_timestamp(),
                 "workspace": workspace,
                 "memory_items": legacy_memory_items,
                 **legacy_rows,
@@ -243,12 +285,13 @@ def persist_memory_bundle(
 def build_memory_documents(
     *,
     workspace: str,
-    snapshot: Any,
+    repo_root: Path | None = None,
+    snapshot: Any | None = None,
 ) -> dict[str, str]:
     """Build the stable memory markdown documents."""
 
-    repo_root = snapshot.artifact_base.parent
-    resolved_dir = resolve_effective_memory_dir(workspace=workspace, repo_root=repo_root)
+    repo_root = repo_root or snapshot.artifact_base.parent
+    resolved_dir = _resolve_effective_memory_dir(workspace=workspace, repo_root=repo_root)
     return _load_stable_documents(repo_root, resolved_dir)
 
 
@@ -259,16 +302,23 @@ def write_documents(documents: dict[str, str], resolved_dir: Path) -> list[str]:
     resolved_dir.mkdir(parents=True, exist_ok=True)
     for file_name in STABLE_DOCUMENTS:
         text = documents.get(file_name, "")
-        if text and write_text_if_changed(resolved_dir / file_name, text):
+        if text and _write_text_if_changed(resolved_dir / file_name, text):
             changed_files.append(str((resolved_dir / file_name).resolve()))
     return changed_files
 
 
-def write_memory_state(snapshot: Any, resolved_dir: Path) -> str | None:
+def write_memory_state(repo_root: Path, resolved_dir: Path) -> str | None:
     """Write the freshness gate state file."""
 
-    path = memory_state_path(resolved_dir)
-    if write_json_if_changed(path, build_memory_state(snapshot)):
+    get_cached_route_adapter(_repo_root()).framework_memory_recall(
+        repo_root=repo_root,
+        query="",
+        top=1,
+        mode="stable",
+        memory_root=resolved_dir,
+    )
+    path = _memory_state_path(resolved_dir)
+    if path.is_file():
         return str(path.resolve())
     return None
 
@@ -282,9 +332,8 @@ def main() -> int:
     parser.add_argument("--memory-root", type=Path, default=None)
     parser.add_argument("--json", action="store_true", dest="json_output")
     args = parser.parse_args()
-    source_root = (args.source_root or Path(__file__).resolve().parents[1]).resolve()
-    snapshot = load_runtime_snapshot(source_root)
-    resolved_dir = resolve_effective_memory_dir(
+    source_root = (args.source_root or _repo_root()).resolve()
+    resolved_dir = _resolve_effective_memory_dir(
         workspace=args.workspace,
         memory_root=args.memory_root,
         repo_root=source_root,
@@ -294,9 +343,9 @@ def main() -> int:
         resolved_dir,
         memory_root=args.memory_root,
     )
-    documents = build_memory_documents(workspace=args.workspace, snapshot=snapshot)
+    documents = build_memory_documents(workspace=args.workspace, repo_root=source_root)
     changed_files = write_documents(documents, resolved_dir)
-    state_path = write_memory_state(snapshot, resolved_dir)
+    state_path = write_memory_state(source_root, resolved_dir)
     if state_path:
         changed_files.append(state_path)
     sqlite_result = persist_memory_bundle(

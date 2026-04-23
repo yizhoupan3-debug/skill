@@ -4165,7 +4165,7 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
     payload
 }
 
-fn build_control_plane_contract_descriptors() -> Map<String, Value> {
+pub fn build_control_plane_contract_descriptors() -> Map<String, Value> {
     let mut payload = Map::new();
     payload.insert(
         EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID.to_string(),

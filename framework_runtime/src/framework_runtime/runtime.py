@@ -20,16 +20,11 @@ from framework_runtime.trace import (
     TraceSupervisorProjection,
 )
 from framework_runtime.config import RuntimeSettings
-from framework_runtime.execution_kernel import (
-    ExecutionKernelRequest,
-    preview_router_rs_request_prompt,
-)
 from framework_runtime.middleware import (
     ContextCompressionMiddleware,
     MemoryMiddleware,
     MiddlewareChain,
     MiddlewareContext,
-    SubagentLimitMiddleware,
 )
 from framework_runtime.rust_router import RustRouteAdapter
 from framework_runtime.schemas import (
@@ -37,6 +32,7 @@ from framework_runtime.schemas import (
     BackgroundParallelGroupSummary,
     BackgroundRunRequest,
     BackgroundRunStatus,
+    ExecutionKernelRequest,
     PrepareSessionRequest,
     PrepareSessionResponse,
     RoutingResult,
@@ -126,6 +122,10 @@ class CodexAgnoRuntime:
         self.control_plane_descriptor = self.router_service.control_plane_descriptor
         self._max_background_jobs, self._background_job_timeout = _runtime_background_defaults(
             self.control_plane_descriptor
+        )
+        self._max_concurrent_subagents, self._subagent_timeout_seconds = _runtime_subagent_defaults(
+            settings,
+            self.control_plane_descriptor,
         )
         self.checkpointer = FilesystemRuntimeCheckpointer(
             data_dir=self.settings.resolved_data_dir,
@@ -335,19 +335,11 @@ class CodexAgnoRuntime:
         """Build the ordered middleware pipeline."""
 
         s = self.settings
-        max_concurrent_subagents, subagent_timeout_seconds = _runtime_subagent_defaults(
-            s,
-            self.control_plane_descriptor,
-        )
         middlewares = [
             MemoryMiddleware(self._memory_store) if s.memory_enabled else None,
             ContextCompressionMiddleware(
                 budget_tokens=s.context_budget_tokens,
                 threshold=s.compression_threshold,
-            ),
-            SubagentLimitMiddleware(
-                max_concurrent=max_concurrent_subagents,
-                timeout_seconds=subagent_timeout_seconds,
             ),
         ]
         return MiddlewareChain(
@@ -389,6 +381,10 @@ class CodexAgnoRuntime:
         self._apply_control_plane_descriptor(self.router_service.control_plane_descriptor)
         self._max_background_jobs, self._background_job_timeout = _runtime_background_defaults(
             self.control_plane_descriptor
+        )
+        self._max_concurrent_subagents, self._subagent_timeout_seconds = _runtime_subagent_defaults(
+            self.settings,
+            self.control_plane_descriptor,
         )
         self.background_service.configure_limits(
             max_background_jobs=self._max_background_jobs,
@@ -468,7 +464,7 @@ class CodexAgnoRuntime:
     ) -> str | None:
         """Build one explicit Rust-owned dry-run preview without mutating the route result."""
 
-        return preview_router_rs_request_prompt(
+        return self.rust_adapter.preview_runtime_request_prompt(
             ExecutionKernelRequest(
                 task=task,
                 session_id=session_id,
@@ -478,7 +474,6 @@ class CodexAgnoRuntime:
                 dry_run=True,
             ),
             settings=self.settings,
-            rust_adapter=self.rust_adapter,
         )
 
     def _prepare_session(
@@ -560,7 +555,13 @@ class CodexAgnoRuntime:
             execution_kernel_delegate=kernel_contract.get("execution_kernel_delegate"),
             execution_kernel_delegate_authority=kernel_contract.get("execution_kernel_delegate_authority"),
         )
-        ctx.metadata["dry_run"] = execution_is_dry_run
+        ctx.metadata.update(
+            {
+                "dry_run": execution_is_dry_run,
+                "max_concurrent_subagents": self._max_concurrent_subagents,
+                "subagent_timeout_seconds": self._subagent_timeout_seconds,
+            }
+        )
 
         async def _core_agent_fn(mw_ctx: MiddlewareContext) -> RunTaskResponse:
             return await self.execution_service.execute(
@@ -823,36 +824,34 @@ class CodexAgnoRuntime:
             return TraceSupervisorProjection(
                 supervisor_state_path=str(supervisor_state_path.resolve())
             )
-        schema_version = payload.get("schema_version")
         delegation = payload.get("delegation")
-        if schema_version != "supervisor-state-v2" and not isinstance(delegation, dict):
-            delegation = {
-                "delegation_plan_created": payload.get("delegation_plan_created"),
-                "spawn_attempted": payload.get("spawn_attempted"),
-                "fallback_mode": payload.get("fallback_mode"),
-                "delegated_sidecars": payload.get("delegated_sidecars"),
-            }
         verification = payload.get("verification")
-        if schema_version != "supervisor-state-v2" and not isinstance(verification, dict):
-            verification = {"verification_status": payload.get("verification_status")}
-        delegated_sidecars = delegation.get("delegated_sidecars")
+        delegated_sidecars = (
+            delegation.get("delegated_sidecars")
+            if isinstance(delegation, dict)
+            else None
+        )
         if not isinstance(delegated_sidecars, list):
             delegated_sidecars = []
         verification_status = (
-            verification.get("verification_status")
+            verification.get("verification_status", verification)
             if isinstance(verification, dict)
-            else payload.get("verification_status")
+            else None
         )
         return TraceSupervisorProjection(
             supervisor_state_path=str(supervisor_state_path.resolve()),
             active_phase=payload.get("active_phase"),
             verification_status=self._normalize_supervisor_verification_status(verification_status),
-            delegation={
-                "plan_created": delegation.get("delegation_plan_created"),
-                "spawn_attempted": delegation.get("spawn_attempted"),
-                "fallback_mode": delegation.get("fallback_mode"),
-                "sidecar_count": len(delegated_sidecars),
-            },
+            delegation=(
+                {
+                    "plan_created": delegation.get("delegation_plan_created"),
+                    "spawn_attempted": delegation.get("spawn_attempted"),
+                    "fallback_mode": delegation.get("fallback_mode"),
+                    "sidecar_count": len(delegated_sidecars),
+                }
+                if isinstance(delegation, dict)
+                else None
+            ),
         )
 
     def _runtime_artifact_paths(self) -> list[str]:

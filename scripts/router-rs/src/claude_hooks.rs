@@ -3,7 +3,7 @@ use regex::Regex;
 use rusqlite::{params, types::ValueRef, Connection};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::{self, Read};
@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::framework_runtime::{
-    build_framework_recap_projection, build_framework_runtime_snapshot_envelope,
+    build_framework_memory_recall_envelope, build_framework_recap_projection,
+    build_framework_runtime_snapshot_envelope,
 };
 
 pub(crate) const CLAUDE_HOOK_SCHEMA_VERSION: &str = "router-rs-claude-hook-response-v1";
@@ -33,10 +34,80 @@ const STABLE_DOCUMENTS: [&str; 5] = [
     "lessons.md",
     "runbooks.md",
 ];
+const MEMORY_AUTOMATION_DEFAULT_TOP: usize = 8;
+const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 7] = [
+    "SESSION_SUMMARY.md",
+    "NEXT_ACTIONS.json",
+    "EVIDENCE_INDEX.json",
+    "TRACE_METADATA.json",
+    "active_task.json",
+    "focus_task.json",
+    "task_registry.json",
+];
+const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 5] = [
+    "SESSION_SUMMARY.md",
+    "NEXT_ACTIONS.json",
+    "EVIDENCE_INDEX.json",
+    "TRACE_METADATA.json",
+    ".supervisor_state.json",
+];
 const GENERATED_PATHS: [&str; 3] = [
     ".claude/settings.json",
     ".claude/hooks/README.md",
+    ".codex/hooks.json",
+];
+const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
+const HOST_ENTRYPOINT_SYNC_HINT: &str =
+    "cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root \"$PWD\"";
+const HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES: [&str; 6] = [
+    ".claude",
+    ".claude/agents",
+    ".claude/commands",
+    ".claude/hooks",
+    ".gemini",
+    ".codex",
+];
+const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 12] = [
+    "AGENT.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    ".claude/agents/README.md",
+    ".claude/commands/autopilot.md",
+    ".claude/commands/background_batch.md",
+    ".claude/commands/deepinterview.md",
+    ".claude/commands/latex-compile-acceleration.md",
+    ".claude/commands/refresh.md",
+    ".claude/commands/team.md",
+    ".claude/hooks/README.md",
+];
+const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 3] = [
+    ".codex/hooks.json",
+    ".claude/settings.json",
+    ".gemini/settings.json",
+];
+const RETIRED_HOST_ENTRYPOINT_PATHS: [&str; 16] = [
+    ".claude/CLAUDE.md",
+    ".codex/model_instructions.md",
+    ".mcp.json",
+    "configs/codex/AGENTS.md",
+    "configs/claude/CLAUDE.md",
+    "configs/gemini/GEMINI.md",
+    ".claude/commands/deepreview.md",
     ".claude/hooks/run.sh",
+    ".claude/hooks/session_start.sh",
+    ".claude/hooks/stop.sh",
+    ".claude/hooks/pre_compact.sh",
+    ".claude/hooks/subagent_stop.sh",
+    ".claude/hooks/user_prompt_submit.sh",
+    ".claude/hooks/pre_tool_use_quality.sh",
+    ".claude/hooks/post_tool_use_audit.sh",
+    ".claude/hooks/pre_tool_use.sh",
+];
+const MORE_RETIRED_HOST_ENTRYPOINT_PATHS: [&str; 3] = [
+    ".claude/hooks/session_end.sh",
+    ".claude/hooks/config_change.sh",
+    ".claude/hooks/stop_failure.sh",
 ];
 const CLAUDE_PRE_TOOL_USE_RULES: [&str; 13] = [
     "/AGENT.md",
@@ -67,10 +138,11 @@ const CLAUDE_PRE_TOOL_USE_BASH_RULES: [&str; 12] = [
     "*.codex/host_entrypoints_sync_manifest.json*",
     "*.codex/memory/CLAUDE_MEMORY.md*",
 ];
-const CLAUDE_QUALITY_PRE_TOOL_USE_RULES: [&str; 5] = [
+const CLAUDE_QUALITY_PRE_TOOL_USE_RULES: [&str; 6] = [
     "/framework_runtime/src/**",
     "/scripts/router-rs/src/**",
-    "/scripts/materialize_cli_host_entrypoints.py",
+    "/scripts/router-rs/src/host_integration.rs",
+    "/scripts/install_skills.sh",
     "/tests/**",
     "/.claude/hooks/**",
 ];
@@ -209,17 +281,19 @@ const QUALITY_RUST_CONTEXT: &str =
 const QUALITY_PYTHON_CONTEXT: &str =
     "Python 额外检查：盯住重复解析、重复读文件、wrapper-on-wrapper 和兼容别名链。";
 const QUALITY_TEST_CONTEXT: &str = "测试额外检查：锁真实契约和回归点，不给补丁式旧行为续命。";
-const QUALITY_RUNTIME_PREFIXES: [&str; 2] = [
+const QUALITY_RUNTIME_PREFIXES: [&str; 3] = [
     "framework_runtime/src/framework_runtime/",
     "scripts/router-rs/src/",
+    "scripts/router-rs/src/host_integration.rs",
 ];
 const QUALITY_HOOK_PREFIXES: [&str; 1] = [".claude/hooks/"];
 const QUALITY_TARGET_SUFFIXES: [&str; 3] = [".py", ".rs", ".sh"];
 const PATCH_ARTIFACT_SUFFIXES: [&str; 4] = [".patch", ".diff", ".rej", ".orig"];
-const ASYNC_AUDIT_PREFIXES: [&str; 5] = [
+const ASYNC_AUDIT_PREFIXES: [&str; 6] = [
     "framework_runtime/src/framework_runtime/",
     "scripts/router-rs/src/",
-    "scripts/materialize_cli_host_entrypoints.py",
+    "scripts/router-rs/src/host_integration.rs",
+    "scripts/install_skills.sh",
     "tests/",
     ".claude/hooks/",
 ];
@@ -260,7 +334,7 @@ const TERMINAL_VERIFICATION_STATUSES: [&str; 6] = [
 ];
 
 const CLAUDE_SETTINGS_SCHEMA_URL: &str = "https://json.schemastore.org/claude-code-settings.json";
-const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 25] = [
+const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 24] = [
     "Bash(ls)",
     "Bash(pwd)",
     "Bash(rg *)",
@@ -272,7 +346,6 @@ const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 25] = [
     "Bash(git rev-parse *)",
     "Bash(git ls-files *)",
     "Bash(python3 scripts/check_skills.py --verify-sync)",
-    "Bash(python3 scripts/materialize_cli_host_entrypoints.py)",
     "Bash(python3 -m pytest *)",
     "Bash(python3 -m compileall *)",
     "Bash(cargo test *)",
@@ -289,11 +362,11 @@ const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 25] = [
 ];
 
 pub fn build_claude_hook_manifest() -> Value {
-    let pre_tool_command = "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use";
-    let quality_command = "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality";
-    let post_tool_command = "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit";
+    let pre_tool_command = build_claude_host_hook_command("pre-tool-use");
+    let quality_command = build_claude_host_hook_command("pre-tool-use-quality");
+    let post_tool_command = build_claude_host_hook_command("post-tool-audit");
 
-    let pre_tool_hooks = build_tool_path_hooks(&CLAUDE_PRE_TOOL_USE_RULES, pre_tool_command, None);
+    let pre_tool_hooks = build_tool_path_hooks(&CLAUDE_PRE_TOOL_USE_RULES, &pre_tool_command, None);
     let pre_tool_bash_hooks = CLAUDE_PRE_TOOL_USE_BASH_RULES
         .iter()
         .map(|rule| {
@@ -305,10 +378,10 @@ pub fn build_claude_hook_manifest() -> Value {
         })
         .collect::<Vec<_>>();
     let quality_pre_tool_hooks =
-        build_tool_path_hooks(&CLAUDE_QUALITY_PRE_TOOL_USE_RULES, quality_command, None);
+        build_tool_path_hooks(&CLAUDE_QUALITY_PRE_TOOL_USE_RULES, &quality_command, None);
     let post_tool_hooks = build_tool_path_hooks(
         &CLAUDE_QUALITY_PRE_TOOL_USE_RULES,
-        post_tool_command,
+        &post_tool_command,
         Some(json!({"async": true, "timeout": 8})),
     );
 
@@ -347,7 +420,7 @@ pub fn build_claude_hook_manifest() -> Value {
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh user-prompt-submit",
+                            "command": build_claude_host_hook_command("user-prompt-submit"),
                         }
                     ]
                 }
@@ -357,7 +430,7 @@ pub fn build_claude_hook_manifest() -> Value {
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh session-end",
+                            "command": build_claude_host_hook_command("session-end"),
                         }
                     ]
                 }
@@ -368,7 +441,7 @@ pub fn build_claude_hook_manifest() -> Value {
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh config-change",
+                            "command": build_claude_host_hook_command("config-change"),
                         }
                     ]
                 }
@@ -379,7 +452,7 @@ pub fn build_claude_hook_manifest() -> Value {
                     "hooks": [
                         {
                             "type": "command",
-                            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh stop-failure",
+                            "command": build_claude_host_hook_command("stop-failure"),
                         }
                     ]
                 }
@@ -419,6 +492,458 @@ pub fn build_codex_hook_manifest() -> Value {
     })
 }
 
+struct HostEntrypointSyncSection {
+    text_files: Vec<String>,
+    json_files: Vec<String>,
+    managed_directories: Vec<String>,
+}
+
+fn host_entrypoint_partial_sync_section() -> HostEntrypointSyncSection {
+    HostEntrypointSyncSection {
+        text_files: HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES
+            .iter()
+            .map(|path| (*path).to_string())
+            .collect(),
+        json_files: HOST_ENTRYPOINT_JSON_RELATIVE_PATHS
+            .iter()
+            .map(|path| (*path).to_string())
+            .collect(),
+        managed_directories: HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES
+            .iter()
+            .map(|path| (*path).to_string())
+            .collect(),
+    }
+}
+
+#[derive(Default)]
+struct SingleSyncReport {
+    written: Vec<String>,
+    unchanged: Vec<String>,
+    created_dirs: Vec<String>,
+}
+
+pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Value, String> {
+    let root = normalize_repo_root(repo_root)?;
+    let desired_files = build_host_entrypoint_files(&root)?;
+    let partial_section = host_entrypoint_partial_sync_section();
+    let (matched_worktrees, skipped_worktrees) = discover_matching_worktrees(&root);
+    let mut report = json!({
+        "written": [],
+        "unchanged": [],
+        "created_dirs": [],
+        "synced_worktrees": [],
+        "skipped_worktrees": skipped_worktrees,
+    });
+    let full_text_files = desired_files
+        .keys()
+        .filter(|path| path.as_str() != HOST_ENTRYPOINT_SYNC_MANIFEST_PATH)
+        .filter(|path| !HOST_ENTRYPOINT_JSON_RELATIVE_PATHS.contains(&path.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    let full_json_files = vec![
+        HOST_ENTRYPOINT_JSON_RELATIVE_PATHS[0],
+        HOST_ENTRYPOINT_JSON_RELATIVE_PATHS[1],
+        HOST_ENTRYPOINT_JSON_RELATIVE_PATHS[2],
+        HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
+    ];
+    let full_section = HostEntrypointSyncSection {
+        text_files: full_text_files
+            .into_iter()
+            .map(|path| path.to_string())
+            .collect(),
+        json_files: full_json_files
+            .into_iter()
+            .map(|path| path.to_string())
+            .collect(),
+        managed_directories: HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES
+            .iter()
+            .map(|path| (*path).to_string())
+            .collect(),
+    };
+    let mut targets = vec![root.clone()];
+    targets.extend(matched_worktrees);
+
+    for target_root in targets {
+        let section = if target_root == root {
+            &full_section
+        } else {
+            &partial_section
+        };
+        let single =
+            sync_host_entrypoints_single_root(&desired_files, &target_root, &root, apply, section)?;
+        extend_report_array(&mut report, "written", single.written)?;
+        extend_report_array(&mut report, "unchanged", single.unchanged)?;
+        extend_report_array(&mut report, "created_dirs", single.created_dirs)?;
+        if target_root != root {
+            extend_report_array(
+                &mut report,
+                "synced_worktrees",
+                vec![target_root.to_string_lossy().into_owned()],
+            )?;
+        }
+    }
+
+    sort_report_array(&mut report, "written")?;
+    sort_report_array(&mut report, "unchanged")?;
+    sort_report_array(&mut report, "created_dirs")?;
+    sort_report_array(&mut report, "synced_worktrees")?;
+    sort_report_array(&mut report, "skipped_worktrees")?;
+    Ok(report)
+}
+
+fn build_host_entrypoint_files(repo_root: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
+    let projection = build_claude_hook_projection();
+    let mut files = BTreeMap::new();
+    files.insert(
+        "AGENT.md".to_string(),
+        required_projection_string(&projection, "agent_policy")?.into_bytes(),
+    );
+    files.insert(
+        "AGENTS.md".to_string(),
+        required_projection_string(&projection, "root_agents_proxy")?.into_bytes(),
+    );
+    files.insert(
+        "CLAUDE.md".to_string(),
+        required_projection_string(&projection, "root_claude_proxy")?.into_bytes(),
+    );
+    files.insert(
+        "GEMINI.md".to_string(),
+        required_projection_string(&projection, "root_gemini_proxy")?.into_bytes(),
+    );
+    files.insert(
+        ".claude/agents/README.md".to_string(),
+        required_projection_string(&projection, "claude_agents_readme")?.into_bytes(),
+    );
+    let commands = projection
+        .get("claude_commands")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "Rust hook projection must include claude_commands object".to_string())?;
+    files.insert(
+        ".claude/commands/refresh.md".to_string(),
+        required_projection_object_string(commands, "refresh")?.into_bytes(),
+    );
+    files.insert(
+        ".claude/commands/background_batch.md".to_string(),
+        required_projection_object_string(commands, "background_batch")?.into_bytes(),
+    );
+    files.insert(
+        ".claude/commands/autopilot.md".to_string(),
+        required_projection_object_string(commands, "autopilot")?.into_bytes(),
+    );
+    files.insert(
+        ".claude/commands/deepinterview.md".to_string(),
+        required_projection_object_string(commands, "deepinterview")?.into_bytes(),
+    );
+    files.insert(
+        ".claude/commands/team.md".to_string(),
+        required_projection_object_string(commands, "team")?.into_bytes(),
+    );
+    files.insert(
+        ".claude/commands/latex-compile-acceleration.md".to_string(),
+        required_projection_object_string(commands, "latex_compile_acceleration")?.into_bytes(),
+    );
+    files.insert(
+        ".claude/hooks/README.md".to_string(),
+        required_projection_string(&projection, "hooks_readme")?.into_bytes(),
+    );
+    files.insert(
+        ".codex/hooks.json".to_string(),
+        serialize_pretty_json_bytes(
+            projection.get("codex_hooks").ok_or_else(|| {
+                "Rust hook projection must include codex_hooks object".to_string()
+            })?,
+        )?,
+    );
+    files.insert(
+        ".claude/settings.json".to_string(),
+        serialize_pretty_json_bytes(&build_claude_project_settings(repo_root))?,
+    );
+    files.insert(
+        ".gemini/settings.json".to_string(),
+        serialize_pretty_json_bytes(&json!({}))?,
+    );
+    files.insert(
+        HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string(),
+        serialize_pretty_json_bytes(&build_host_entrypoint_sync_manifest(&files))?,
+    );
+    Ok(files)
+}
+
+fn required_projection_string(projection: &Value, key: &str) -> Result<String, String> {
+    projection
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| format!("Rust hook projection must include {key} string"))
+}
+
+fn required_projection_object_string(
+    object: &serde_json::Map<String, Value>,
+    key: &str,
+) -> Result<String, String> {
+    object
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| format!("Rust hook projection must include claude_commands.{key} string"))
+}
+
+fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>) -> Value {
+    let mut retired_paths = RETIRED_HOST_ENTRYPOINT_PATHS
+        .iter()
+        .chain(MORE_RETIRED_HOST_ENTRYPOINT_PATHS.iter())
+        .map(|path| (*path).to_string())
+        .collect::<Vec<_>>();
+    retired_paths.sort();
+    let full_text_files = desired_files
+        .keys()
+        .filter(|path| path.as_str() != HOST_ENTRYPOINT_SYNC_MANIFEST_PATH)
+        .filter(|path| !HOST_ENTRYPOINT_JSON_RELATIVE_PATHS.contains(&path.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    json!({
+        "schema_version": "host-entrypoints-sync-manifest-v1",
+        "full_sync": {
+            "text_files": full_text_files,
+            "json_files": [
+                HOST_ENTRYPOINT_JSON_RELATIVE_PATHS[0],
+                HOST_ENTRYPOINT_JSON_RELATIVE_PATHS[1],
+                HOST_ENTRYPOINT_JSON_RELATIVE_PATHS[2],
+                HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
+            ],
+            "managed_directories": HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES,
+            "retired_paths": retired_paths,
+        },
+        "partial_sync": {
+            "text_files": HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES,
+            "json_files": HOST_ENTRYPOINT_JSON_RELATIVE_PATHS,
+            "managed_directories": HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES,
+            "retired_paths": retired_paths,
+        },
+    })
+}
+
+fn serialize_pretty_json_bytes(payload: &Value) -> Result<Vec<u8>, String> {
+    let mut bytes = serde_json::to_vec_pretty(payload).map_err(|err| err.to_string())?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+fn sync_host_entrypoints_single_root(
+    desired_files: &BTreeMap<String, Vec<u8>>,
+    target_root: &Path,
+    report_root: &Path,
+    apply: bool,
+    section: &HostEntrypointSyncSection,
+) -> Result<SingleSyncReport, String> {
+    let mut report = SingleSyncReport::default();
+    for relative in &section.managed_directories {
+        let directory = target_root.join(relative);
+        if !directory.exists() {
+            if apply {
+                fs::create_dir_all(&directory).map_err(|err| err.to_string())?;
+            }
+            report.created_dirs.push(describe_host_entrypoint_path(
+                report_root,
+                target_root,
+                &directory,
+            ));
+        }
+    }
+
+    for relative in section.text_files.iter().chain(section.json_files.iter()) {
+        let desired = desired_files
+            .get(relative)
+            .ok_or_else(|| format!("missing generated host-entrypoint payload for {}", relative))?;
+        sync_host_entrypoint_file(
+            desired,
+            relative,
+            target_root,
+            report_root,
+            apply,
+            &mut report,
+        )?;
+    }
+
+    for relative in RETIRED_HOST_ENTRYPOINT_PATHS
+        .iter()
+        .chain(MORE_RETIRED_HOST_ENTRYPOINT_PATHS.iter())
+    {
+        let path = target_root.join(relative);
+        let exists = path.exists() || symlink_exists(&path);
+        if exists && apply {
+            remove_path(&path).map_err(|err| err.to_string())?;
+        }
+        if exists {
+            report.written.push(describe_host_entrypoint_path(
+                report_root,
+                target_root,
+                &path,
+            ));
+        }
+    }
+
+    Ok(report)
+}
+
+fn sync_host_entrypoint_file(
+    desired: &[u8],
+    relative: &str,
+    target_root: &Path,
+    report_root: &Path,
+    apply: bool,
+    report: &mut SingleSyncReport,
+) -> Result<(), String> {
+    let destination = target_root.join(relative);
+    let existing = fs::read(&destination).ok();
+    let changed = existing.as_deref() != Some(desired);
+    if changed && apply {
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+        }
+        fs::write(&destination, desired).map_err(|err| err.to_string())?;
+    }
+    let bucket = if changed {
+        &mut report.written
+    } else {
+        &mut report.unchanged
+    };
+    bucket.push(describe_host_entrypoint_path(
+        report_root,
+        target_root,
+        &destination,
+    ));
+    Ok(())
+}
+
+fn extend_report_array(report: &mut Value, key: &str, items: Vec<String>) -> Result<(), String> {
+    let array = report
+        .get_mut(key)
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| format!("host-entrypoint sync report missing {key} array"))?;
+    array.extend(items.into_iter().map(Value::String));
+    Ok(())
+}
+
+fn sort_report_array(report: &mut Value, key: &str) -> Result<(), String> {
+    let array = report
+        .get_mut(key)
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| format!("host-entrypoint sync report missing {key} array"))?;
+    let mut values = array
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    values.sort();
+    *array = values.into_iter().map(Value::String).collect();
+    Ok(())
+}
+
+fn normalize_repo_root(path: &Path) -> Result<PathBuf, String> {
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        Ok(env::current_dir()
+            .map_err(|err| err.to_string())?
+            .join(path))
+    }
+}
+
+fn discover_matching_worktrees(root: &Path) -> (Vec<PathBuf>, Vec<String>) {
+    let root_head = read_git_stdout(root, &["rev-parse", "HEAD"]);
+    let worktree_listing = read_git_stdout(root, &["worktree", "list", "--porcelain"]);
+    if root_head.is_none() || worktree_listing.is_none() {
+        return (Vec::new(), Vec::new());
+    }
+
+    let normalized_root_head = root_head.unwrap_or_default().trim().to_string();
+    let mut current: BTreeMap<String, String> = BTreeMap::new();
+    let mut worktrees = Vec::new();
+    for raw_line in worktree_listing.unwrap_or_default().lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            if !current.is_empty() {
+                worktrees.push(current);
+                current = BTreeMap::new();
+            }
+            continue;
+        }
+        let mut parts = line.splitn(2, ' ');
+        let key = parts.next().unwrap_or_default().to_string();
+        let value = parts.next().unwrap_or_default().to_string();
+        current.insert(key, value);
+    }
+    if !current.is_empty() {
+        worktrees.push(current);
+    }
+
+    let mut matches = Vec::new();
+    let mut skipped = Vec::new();
+    for entry in worktrees {
+        let Some(worktree_path) = entry.get("worktree") else {
+            continue;
+        };
+        let candidate = normalize_repo_root(Path::new(worktree_path))
+            .unwrap_or_else(|_| PathBuf::from(worktree_path));
+        if candidate == root {
+            continue;
+        }
+        if !candidate.exists() {
+            skipped.push(format!("{} (missing)", candidate.to_string_lossy()));
+            continue;
+        }
+        if entry.get("HEAD").map(|value| value.trim()) != Some(normalized_root_head.as_str()) {
+            skipped.push(format!("{} (head mismatch)", candidate.to_string_lossy()));
+            continue;
+        }
+        matches.push(candidate);
+    }
+    (matches, skipped)
+}
+
+fn read_git_stdout(root: &Path, args: &[&str]) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout).ok()
+}
+
+fn describe_host_entrypoint_path(report_root: &Path, target_root: &Path, path: &Path) -> String {
+    if let Ok(relative) = path.strip_prefix(report_root) {
+        return relative.to_string_lossy().into_owned();
+    }
+    if let Ok(relative) = path.strip_prefix(target_root) {
+        return format!(
+            "{}::{}",
+            target_root.to_string_lossy(),
+            relative.to_string_lossy()
+        );
+    }
+    path.to_string_lossy().into_owned()
+}
+
+fn remove_path(path: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
+    }
+}
+
+fn symlink_exists(path: &Path) -> bool {
+    fs::symlink_metadata(path)
+        .map(|metadata| metadata.file_type().is_symlink())
+        .unwrap_or(false)
+}
+
 pub fn build_claude_hook_projection() -> Value {
     json!({
         "schema_version": CLAUDE_HOOK_PROJECTION_SCHEMA_VERSION,
@@ -427,8 +952,9 @@ pub fn build_claude_hook_projection() -> Value {
         "root_agents_proxy": build_root_agents_proxy(),
         "root_claude_proxy": build_root_claude_proxy(),
         "root_gemini_proxy": build_root_gemini_proxy(),
+        "claude_agents_readme": build_claude_agents_readme(),
+        "claude_commands": build_claude_commands_projection(),
         "hooks_readme": build_claude_hooks_readme(),
-        "hook_runner": build_claude_hook_runner(),
         "codex_hooks": build_codex_hook_manifest(),
     })
 }
@@ -449,12 +975,23 @@ fn build_root_gemini_proxy() -> String {
     include_str!("../../../GEMINI.md").to_string()
 }
 
-fn build_claude_hooks_readme() -> String {
-    include_str!("../../../.claude/hooks/README.md").to_string()
+fn build_claude_agents_readme() -> String {
+    include_str!("../../../.claude/agents/README.md").to_string()
 }
 
-fn build_claude_hook_runner() -> String {
-    include_str!("../../../.claude/hooks/run.sh").to_string()
+fn build_claude_commands_projection() -> Value {
+    json!({
+        "refresh": include_str!("../../../.claude/commands/refresh.md"),
+        "background_batch": include_str!("../../../.claude/commands/background_batch.md"),
+        "autopilot": include_str!("../../../.claude/commands/autopilot.md"),
+        "deepinterview": include_str!("../../../.claude/commands/deepinterview.md"),
+        "team": include_str!("../../../.claude/commands/team.md"),
+        "latex_compile_acceleration": include_str!("../../../.claude/commands/latex-compile-acceleration.md"),
+    })
+}
+
+fn build_claude_hooks_readme() -> String {
+    include_str!("../../../.claude/hooks/README.md").to_string()
 }
 
 fn build_codex_command_hook(event: &str, matcher: &str) -> Value {
@@ -463,53 +1000,54 @@ fn build_codex_command_hook(event: &str, matcher: &str) -> Value {
         "hooks": [
             {
                 "type": "command",
-                "command": build_codex_hook_bridge_command(event),
+                "command": build_codex_hook_command(event),
                 "timeout": 8,
             }
         ]
     })
 }
 
-fn build_codex_hook_bridge_command(event: &str) -> String {
+fn build_hook_binary_preamble(project_var: &str, env_var: &str) -> String {
     let mut command = String::new();
-    command
-        .push_str("CODEX_PROJECT_ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; ");
-    command.push_str(
-        "ROUTER_RS_RELEASE_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs\"; ",
-    );
-    command.push_str(
-        "ROUTER_RS_DEBUG_BIN=\"$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs\"; ",
-    );
-    command.push_str("ROUTER_RS_CRATE_ROOT=\"$CODEX_PROJECT_ROOT/scripts/router-rs\"; ");
-    command.push_str("router_rs_is_fresh() { ");
-    command.push_str("bin_path=\"$1\"; ");
-    command.push_str("[ -x \"$bin_path\" ] || return 1; ");
-    command.push_str("[ \"$ROUTER_RS_CRATE_ROOT/Cargo.toml\" -nt \"$bin_path\" ] && return 1; ");
-    command.push_str(
-        "find \"$ROUTER_RS_CRATE_ROOT/src\" -type f -newer \"$bin_path\" | grep -q . && return 1; ",
-    );
-    command.push_str("return 0; ");
-    command.push_str("}; ");
-    command.push_str("run_router_rs() { ");
-    command.push_str(
-        "if router_rs_is_fresh \"$ROUTER_RS_RELEASE_BIN\"; then \"$ROUTER_RS_RELEASE_BIN\" \"$@\"; return; fi; ",
-    );
-    command.push_str(
-        "if router_rs_is_fresh \"$ROUTER_RS_DEBUG_BIN\"; then \"$ROUTER_RS_DEBUG_BIN\" \"$@\"; return; fi; ",
-    );
-    command.push_str(
-        "if [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then \"$ROUTER_RS_RELEASE_BIN\" \"$@\"; return; fi; ",
-    );
-    command.push_str(
-        "if [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then \"$ROUTER_RS_DEBUG_BIN\" \"$@\"; return; fi; ",
-    );
-    command.push_str(
-        "echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; ",
-    );
-    command.push_str("exit 1; ");
-    command.push_str("}; ");
     command.push_str(&format!(
-        "run_router_rs --codex-hook-command {event} --repo-root \"$CODEX_PROJECT_ROOT\""
+        "{project_var}=\"${{{env_var}:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; "
+    ));
+    command.push_str(&format!(
+        "ROUTER_RS_RELEASE_BIN=\"${project_var}/scripts/router-rs/target/release/router-rs\"; "
+    ));
+    command.push_str(&format!(
+        "ROUTER_RS_DEBUG_BIN=\"${project_var}/scripts/router-rs/target/debug/router-rs\"; "
+    ));
+    command.push_str(&format!("ROUTER_RS_BIN=\"\"; "));
+    command
+        .push_str("if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ");
+    command.push_str(
+        "if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; ",
+    );
+    command.push_str(
+        "elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; ",
+    );
+    command.push_str(
+        "elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; ",
+    );
+    command.push_str(
+        "if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; ",
+    );
+    command
+}
+
+fn build_claude_host_hook_command(event: &str) -> String {
+    let mut command = build_hook_binary_preamble("CLAUDE_PROJECT_DIR", "CLAUDE_PROJECT_DIR");
+    command.push_str(&format!(
+        "\"$ROUTER_RS_BIN\" --claude-host-hook-command {event} --repo-root \"$CLAUDE_PROJECT_DIR\""
+    ));
+    command
+}
+
+fn build_codex_hook_command(event: &str) -> String {
+    let mut command = build_hook_binary_preamble("CODEX_PROJECT_ROOT", "CODEX_PROJECT_ROOT");
+    command.push_str(&format!(
+        "\"$ROUTER_RS_BIN\" --codex-hook-command {event} --repo-root \"$CODEX_PROJECT_ROOT\""
     ));
     command
 }
@@ -919,7 +1457,7 @@ fn build_claude_memory_projection(repo_root: &Path, max_lines: usize) -> Result<
 
 fn consolidate_shared_memory(repo_root: &Path) -> Result<Value, String> {
     repair_terminal_resume_allowed(repo_root)?;
-    let runtime_snapshot = build_framework_runtime_snapshot_envelope(repo_root)?
+    let runtime_snapshot = build_framework_runtime_snapshot_envelope(repo_root, None, None)?
         .get("runtime_snapshot")
         .and_then(Value::as_object)
         .cloned()
@@ -1022,7 +1560,7 @@ fn default_memory_md(repo_root: &Path) -> String {
 }
 
 fn default_runbooks() -> String {
-    "# runbooks\n\n## 标准操作\n\n- 统一维护入口：python3 scripts/run_memory_automation.py --workspace <workspace>\n- 需要迁移旧 artifact 布局时显式执行：python3 scripts/run_memory_automation.py --workspace <workspace> --apply-artifact-migrations\n- 合并稳定记忆：python3 scripts/consolidate_memory.py --workspace <workspace>\n- 召回上下文：python3 scripts/retrieve_memory.py --workspace <workspace> --mode stable|active|history|debug --topic <关键词>\n- 生命周期收口：./scripts/router-rs/target/release/router-rs --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4\n- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。\n"
+    "# runbooks\n\n## 标准操作\n\n- 统一维护入口：cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace>\n- 需要迁移旧 artifact 布局时显式执行：cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace> --apply-artifact-migrations\n- 合并稳定记忆：cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4\n- 召回上下文：cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --framework-memory-recall-json --repo-root <repo_root> --framework-memory-mode stable|active|history|debug --query <关键词> --limit <N>\n- 生命周期收口：./scripts/router-rs/target/release/router-rs --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4\n- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。\n"
         .to_string()
 }
 
@@ -1393,8 +1931,9 @@ fn run_config_change(repo_root: &Path, payload: &Value) -> Result<Value, String>
             notices.push(message.to_string());
         } else {
             let message = format!(
-                "[claude-config-change] detected edits on generated Claude host surfaces: {}; regenerate via scripts/materialize_cli_host_entrypoints.py instead of hand-editing outputs.",
-                hits.join(", ")
+                "[claude-config-change] detected edits on generated Claude host surfaces: {}; regenerate via `{}` instead of hand-editing outputs.",
+                hits.join(", "),
+                HOST_ENTRYPOINT_SYNC_HINT
             );
             eprintln!("{message}");
             notices.push(message);
@@ -2045,8 +2584,9 @@ fn quality_target_context(path: &str) -> Option<String> {
         .any(|prefix| path.starts_with(prefix))
         || lowered_path.contains("hook");
     let is_test = path.starts_with("tests/");
-    let is_materializer = path == "scripts/materialize_cli_host_entrypoints.py";
-    if !(is_runtime || is_hook || is_test || is_materializer) {
+    let is_host_entrypoint_runtime =
+        path == "scripts/install_skills.sh" || path == "scripts/router-rs/src/host_integration.rs";
+    if !(is_runtime || is_hook || is_test || is_host_entrypoint_runtime) {
         return None;
     }
 
@@ -2057,10 +2597,10 @@ fn quality_target_context(path: &str) -> Option<String> {
     if path.ends_with(".rs") && is_runtime {
         parts.push(QUALITY_RUST_CONTEXT);
     }
-    if path.ends_with(".py") && (is_runtime || is_hook || is_materializer) {
+    if path.ends_with(".py") && (is_runtime || is_hook) {
         parts.push(QUALITY_PYTHON_CONTEXT);
     }
-    if is_hook || path.ends_with(".sh") || is_materializer {
+    if is_hook || path.ends_with(".sh") || is_host_entrypoint_runtime {
         parts.push(USER_PROMPT_HOOK_CONTEXT);
     }
     if is_test {
@@ -2381,7 +2921,9 @@ fn pre_tool_use_message(path: &str) -> String {
         );
     }
     format!(
-        "[claude-pre-tool-use] blocked direct edits to generated host surface {path}; edit scripts/materialize_cli_host_entrypoints.py and regenerate outputs instead."
+        "[claude-pre-tool-use] blocked direct edits to generated host surface {path}; rerun `{}` instead."
+        ,
+        HOST_ENTRYPOINT_SYNC_HINT
     )
 }
 

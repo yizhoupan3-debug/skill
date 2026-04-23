@@ -105,7 +105,7 @@ class RuntimeSettings(BaseSettings):
         validation_alias=AliasChoices("CODEX_AGNO_COMPRESSION_THRESHOLD"),
     )
 
-    # Sub-agent hard limits (SubagentLimitMiddleware)
+    # Sub-agent hard limits projected directly from the Rust control plane
     max_concurrent_subagents: int = Field(
         default=3,
         validation_alias=AliasChoices("CODEX_AGNO_MAX_CONCURRENT_SUBAGENTS"),

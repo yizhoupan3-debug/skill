@@ -11,8 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-from framework_runtime.middleware import ContextCompressionMiddleware, MiddlewareContext, SkillInjectionMiddleware
-from framework_runtime.prompt_builder import PromptBuilder
+from framework_runtime.middleware import ContextCompressionMiddleware, MiddlewareContext
 from framework_runtime.router import SkillRouter
 from framework_runtime.schemas import RouteDecisionContract, RouteDecisionSnapshot, RoutingResult, SkillMetadata
 from framework_runtime.skill_loader import SkillLoader
@@ -147,145 +146,6 @@ Should never be read during compatibility load.
     assert skill.source_path is None
 
 
-def test_prompt_builder_passthroughs_explicit_rust_owned_prompt_preview() -> None:
-    class _Loader:
-        calls = 0
-
-        def load_body(self, skill: SkillMetadata) -> None:
-            self.calls += 1
-            raise AssertionError("prompt preview should bypass Python body loading")
-
-    loader = _Loader()
-    builder = PromptBuilder(loader=loader)
-
-    prompt = builder.build_prompt(_routing_result(), prompt_preview="Rust-owned preview")
-
-    assert prompt == "Rust-owned preview"
-    assert loader.calls == 0
-
-
-def test_prompt_builder_marks_python_as_compatibility_projection() -> None:
-    skill = SkillMetadata(
-        name="plan-to-code",
-        description="Implement a concrete plan or spec into integrated code",
-        routing_layer="L2",
-        body="""
-## Core workflow
-
-Implement the task directly.
-""".strip(),
-        body_loaded=True,
-    )
-    overlay = SkillMetadata(
-        name="rust-pro",
-        description="Rust owner overlay",
-        routing_layer="L4",
-        body="",
-        body_loaded=True,
-    )
-    routing_result = RoutingResult(
-        task="直接做代码",
-        session_id="session-2",
-        selected_skill=skill,
-        overlay_skill=overlay,
-        layer="L2",
-        reasons=["Trigger phrase matched: 直接做代码."],
-        route_engine="rust",
-    )
-
-    prompt = PromptBuilder().build_prompt(routing_result)
-
-    assert "Help with the user's request directly." in prompt
-    assert "Primary focus: plan-to-code" in prompt
-    assert "How to reply:" in prompt
-    assert "Key rules:" in prompt
-    assert "Lead with the answer or result." in prompt
-    assert "Use plain Chinese unless the user asks otherwise, and keep the wording natural." in prompt
-    assert "Keep the default reply short; only use a list when the content is naturally list-shaped." in prompt
-    assert "For closeouts, say what was done, what effect was achieved, and what needs to happen next or that the work is finished." in prompt
-    assert "Do not default to file inventories, evidence dumps, or step-by-step process retellings unless the user asks for them." in prompt
-    assert "Explain things in plain language first." not in prompt
-    assert "Keep closeouts plain and natural, not like an artifact log or status machine." not in prompt
-    assert "Do not force personality or performative style by default." not in prompt
-
-
-def test_prompt_builder_prefers_rust_snapshot_reasons_over_compatibility_noise() -> None:
-    routing_result = RoutingResult(
-        task="直接做代码",
-        session_id="session-snapshot-reasons",
-        selected_skill=SkillMetadata(
-            name="plan-to-code",
-            description="Implement a concrete plan or spec into integrated code",
-            routing_layer="L2",
-            body="## Core workflow\n\nImplement the task directly.",
-            body_loaded=True,
-        ),
-        overlay_skill=None,
-        layer="L2",
-        reasons=[
-            "Trigger phrase matched: 直接做代码.",
-            "Python router executed only as a thin compatibility projection under the Rust control plane.",
-        ],
-        route_snapshot=RouteDecisionSnapshot(
-            engine="rust",
-            selected_skill="plan-to-code",
-            overlay_skill=None,
-            layer="L2",
-            score=88.0,
-            score_bucket="80-89",
-            reasons=["Trigger phrase matched: 直接做代码."],
-            reasons_class="direct-match",
-        ),
-        route_engine="rust",
-    )
-
-    prompt = PromptBuilder().build_prompt(routing_result)
-
-    assert "Trigger phrase matched: 直接做代码." in prompt
-    assert "thin compatibility projection" not in prompt
-
-
-def test_prompt_builder_uses_skill_body_without_extra_idea_to_plan_contract() -> None:
-    skill = SkillMetadata(
-        name="idea-to-plan",
-        description="Turn ambiguous ideas into evidence-backed plans",
-        routing_layer="L-1",
-        body="""
-## Output Contract
-
-- outline.md
-- decision_log.md
-- code_list.md
-""".strip(),
-        body_loaded=True,
-    )
-    overlay = SkillMetadata(
-        name="anti-laziness",
-        description="Anti laziness overlay",
-        routing_layer="L1",
-        body="",
-        body_loaded=True,
-    )
-    routing_result = RoutingResult(
-        task="先探索代码库现状，列出 critical files，再给我方案。",
-        session_id="session-plan",
-        selected_skill=skill,
-        overlay_skill=overlay,
-        layer="L-1",
-        reasons=["Trigger hint matched: 先探索代码库再出方案."],
-        route_engine="rust",
-    )
-
-    prompt = PromptBuilder().build_prompt(routing_result)
-
-    assert "outline.md" in prompt
-    assert "decision_log.md" in prompt
-    assert "code_list.md" in prompt
-    assert "Planning contract:" not in prompt
-    assert "READ-ONLY planning route" not in prompt
-    assert "<proposed_plan>" not in prompt
-
-
 def test_context_compression_middleware_uses_shared_token_estimator() -> None:
     middleware = ContextCompressionMiddleware(budget_tokens=4, threshold=0.75)
     ctx = MiddlewareContext(
@@ -300,34 +160,6 @@ def test_context_compression_middleware_uses_shared_token_estimator() -> None:
 
     assert updated.prompt != "alpha beta gamma delta"
     assert "[Context compression]" in updated.prompt
-
-
-def test_skill_injection_middleware_prefers_route_preview() -> None:
-    class _PromptBuilder:
-        def __init__(self) -> None:
-            self.calls = 0
-
-        def build_prompt(self, routing_result: RoutingResult, *, prompt_preview: str | None = None) -> str:
-            self.calls += 1
-            return "python-generated prompt"
-
-    prompt_builder = _PromptBuilder()
-    middleware = SkillInjectionMiddleware(prompt_builder)
-    ctx = MiddlewareContext(
-        task="直接做代码",
-        session_id="session-3",
-        user_id="user-3",
-        routing_result=_routing_result(),
-    )
-    ctx.metadata["dry_run"] = True
-    ctx.metadata["routing_prompt_preview"] = "Rust preview"
-
-    updated = asyncio.run(middleware.before_agent(ctx))
-
-    assert updated.prompt == "Rust preview"
-    assert updated.metadata["python_prompt_source"] == "routing-metadata-preview"
-    assert prompt_builder.calls == 0
-
 
 def test_skill_router_reports_thin_projection_under_rust_control_plane() -> None:
     skills = [

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import atexit
 import json
 import os
@@ -14,18 +15,55 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
-from scripts.rust_binary_runner import latest_crate_source_mtime, resolve_binary_candidate
-
+from framework_runtime.config import RuntimeSettings
+from framework_runtime.execution_kernel_contracts import (
+    EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION,
+    EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
+    EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
+    decode_router_rs_execution_response,
+    normalize_execution_kernel_metadata_bridge,
+    resolve_execution_kernel_expectations,
+    validate_execution_kernel_steady_state_metadata,
+)
 from framework_runtime.schemas import (
+    ExecutionKernelRequest,
     RoutingEvalCases,
     RoutingEvalReport,
     RouteDecisionContract,
     RouteDecisionSnapshot,
     RouteDiagnosticReport,
     RouteExecutionPolicy,
+    RunTaskResponse,
     SearchMatchesContract,
     SearchMatchResult,
 )
+
+
+class RouterRsExecutionError(RuntimeError):
+    """Base error raised when router-rs execution cannot complete."""
+
+
+class RouterRsInfrastructureError(RouterRsExecutionError):
+    """Router-rs failed before a valid execution result could be produced."""
+
+
+def _resolve_binary_candidate(*candidates: Path) -> Path | None:
+    existing: list[tuple[float, int, Path]] = []
+    for index, candidate in enumerate(candidates):
+        if candidate.is_file():
+            existing.append((candidate.stat().st_mtime, -index, candidate))
+    if not existing:
+        return None
+    return max(existing)[2]
+
+
+def _latest_crate_source_mtime(crate_root: Path) -> float:
+    candidates = [
+        crate_root / "Cargo.toml",
+        crate_root / "Cargo.lock",
+        *crate_root.joinpath("src").rglob("*.rs"),
+    ]
+    return max((path.stat().st_mtime for path in candidates if path.is_file()), default=0.0)
 
 
 def _load_json_object(payload: str, *, source: str) -> dict[str, Any]:
@@ -485,6 +523,7 @@ class RustRouteAdapter:
     trace_stream_replay_schema_version = "router-rs-trace-stream-replay-v1"
     trace_stream_inspect_schema_version = "router-rs-trace-stream-inspect-v1"
     trace_compaction_delta_write_schema_version = "router-rs-trace-compaction-delta-write-v1"
+    trace_metadata_write_schema_version = "router-rs-trace-metadata-write-v1"
     runtime_observability_exporter_schema_version = "runtime-observability-exporter-v1"
     runtime_observability_metric_catalog_schema_version = "runtime-observability-metric-catalog-v1"
     runtime_observability_metric_record_schema_version = "runtime-observability-metric-record-v1"
@@ -511,6 +550,7 @@ class RustRouteAdapter:
     transport_binding_write_authority = "rust-runtime-transport-binding-writer"
     checkpoint_manifest_write_authority = "rust-runtime-checkpoint-manifest-writer"
     trace_stream_io_authority = "rust-runtime-trace-io"
+    trace_metadata_write_authority = "rust-runtime-trace-metadata-writer"
     framework_runtime_authority = "rust-framework-runtime-read-model"
     framework_session_artifact_write_authority = "rust-framework-session-artifact-writer"
     claude_hook_authority = "rust-claude-hook"
@@ -570,6 +610,202 @@ class RustRouteAdapter:
                 f"{resolved.get('authority')!r}"
             )
         return resolved
+
+    def build_execution_request_payload(
+        self,
+        request: ExecutionKernelRequest,
+        *,
+        settings: RuntimeSettings,
+    ) -> dict[str, Any]:
+        """Serialize one execution request into the router-rs request payload."""
+
+        routing_result = request.routing_result
+        route_snapshot = routing_result.route_snapshot
+        snapshot_reasons: list[str] = []
+        if route_snapshot is not None:
+            if hasattr(route_snapshot, "reasons"):
+                snapshot_reasons = [str(reason) for reason in route_snapshot.reasons]
+            elif isinstance(route_snapshot, Mapping):
+                snapshot_reasons = [str(reason) for reason in route_snapshot.get("reasons") or []]
+        prompt_reasons = (
+            snapshot_reasons
+            if snapshot_reasons
+            else [str(reason) for reason in routing_result.reasons]
+        )
+        return {
+            "schema_version": EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION,
+            "task": request.task,
+            "session_id": request.session_id,
+            "user_id": request.user_id,
+            "selected_skill": routing_result.selected_skill.name,
+            "overlay_skill": routing_result.overlay_skill.name if routing_result.overlay_skill else None,
+            "layer": routing_result.layer,
+            "route_engine": routing_result.route_engine,
+            "diagnostic_route_mode": routing_result.diagnostic_route_mode,
+            "reasons": prompt_reasons,
+            "prompt_preview": None,
+            "dry_run": request.dry_run,
+            "trace_event_count": request.trace_event_count,
+            "trace_output_path": request.trace_output_path,
+            "default_output_tokens": settings.default_output_tokens,
+            "model_id": settings.model_id,
+            "aggregator_base_url": settings.aggregator_base_url,
+            "aggregator_api_key": settings.aggregator_api_key,
+        }
+
+    def _resolve_runtime_execution_contract_bundle(
+        self,
+        *,
+        dry_run: bool,
+        kernel_contract: Mapping[str, Any] | None = None,
+        metadata_bridge: Mapping[str, Any] | None = None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        """Resolve the Rust-owned execution contract bundle for one response shape."""
+
+        resolved_contract = dict(kernel_contract) if isinstance(kernel_contract, Mapping) else None
+        resolved_bridge = (
+            normalize_execution_kernel_metadata_bridge(metadata_bridge)
+            if metadata_bridge is not None
+            else None
+        )
+        response_shape = (
+            EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
+            if dry_run
+            else EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
+        )
+        if resolved_contract is not None and resolved_bridge is not None:
+            expectations = resolve_execution_kernel_expectations(resolved_contract)
+            validated_contract = validate_execution_kernel_steady_state_metadata(
+                metadata=resolved_contract,
+                execution_kernel=expectations["execution_kernel"],
+                execution_kernel_authority=expectations["execution_kernel_authority"],
+                execution_kernel_delegate=expectations["execution_kernel_delegate"],
+                execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
+                response_shape=response_shape,
+                metadata_bridge=resolved_bridge,
+            )
+            return dict(validated_contract), resolved_bridge
+
+        control_plane_descriptor = self.runtime_control_plane()
+        services = control_plane_descriptor.get("services")
+        if not isinstance(services, Mapping):
+            raise RuntimeError("runtime control plane is missing services.")
+        service_descriptor = services.get("execution")
+        if not isinstance(service_descriptor, Mapping):
+            raise RuntimeError("runtime control plane is missing execution service descriptor.")
+
+        if resolved_bridge is None:
+            bridge_payload = service_descriptor.get("kernel_metadata_bridge")
+            if bridge_payload is not None:
+                if not isinstance(bridge_payload, Mapping):
+                    raise RuntimeError(
+                        "runtime control plane execution descriptor returned an invalid kernel_metadata_bridge."
+                    )
+                resolved_bridge = normalize_execution_kernel_metadata_bridge(bridge_payload)
+
+        if resolved_contract is None:
+            contract_modes = service_descriptor.get("kernel_contract_by_mode")
+            contract_payload = (
+                contract_modes.get(response_shape)
+                if isinstance(contract_modes, Mapping)
+                else None
+            )
+            if not isinstance(contract_payload, Mapping):
+                raise RuntimeError(
+                    "runtime control plane execution descriptor is missing "
+                    f"kernel_contract_by_mode.{response_shape}."
+                )
+            expectations = resolve_execution_kernel_expectations(contract_payload)
+            resolved_contract = validate_execution_kernel_steady_state_metadata(
+                metadata=contract_payload,
+                execution_kernel=expectations["execution_kernel"],
+                execution_kernel_authority=expectations["execution_kernel_authority"],
+                execution_kernel_delegate=expectations["execution_kernel_delegate"],
+                execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
+                response_shape=response_shape,
+                metadata_bridge=resolved_bridge,
+            )
+
+        return (
+            dict(resolved_contract) if resolved_contract is not None else None,
+            resolved_bridge,
+        )
+
+    def decode_execution_payload(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        dry_run: bool | None = None,
+        kernel_contract: Mapping[str, Any] | None = None,
+        metadata_bridge: Mapping[str, Any] | None = None,
+    ) -> RunTaskResponse:
+        """Decode one router-rs execution payload against the runtime contract bundle."""
+
+        if dry_run is None:
+            dry_run = not bool(payload.get("live_run"))
+        resolved_contract, resolved_bridge = self._resolve_runtime_execution_contract_bundle(
+            dry_run=dry_run,
+            kernel_contract=kernel_contract,
+            metadata_bridge=metadata_bridge,
+        )
+        expectations = resolve_execution_kernel_expectations(resolved_contract)
+        return decode_router_rs_execution_response(
+            payload,
+            execution_kernel=expectations["execution_kernel"],
+            execution_kernel_authority=expectations["execution_kernel_authority"],
+            execution_kernel_delegate=expectations["execution_kernel_delegate"],
+            execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
+            execution_kernel_delegate_family=expectations["execution_kernel_delegate_family"],
+            execution_kernel_delegate_impl=expectations["execution_kernel_delegate_impl"],
+            metadata_bridge=resolved_bridge,
+        )
+
+    async def execute_runtime_request(
+        self,
+        request: ExecutionKernelRequest,
+        *,
+        settings: RuntimeSettings,
+        kernel_contract: Mapping[str, Any] | None = None,
+        metadata_bridge: Mapping[str, Any] | None = None,
+    ) -> RunTaskResponse:
+        """Execute one normalized runtime request through router-rs."""
+
+        payload = self.build_execution_request_payload(request, settings=settings)
+        try:
+            response_payload = await asyncio.to_thread(self.execute, payload)
+            return await asyncio.to_thread(
+                self.decode_execution_payload,
+                response_payload,
+                dry_run=request.dry_run,
+                kernel_contract=kernel_contract,
+                metadata_bridge=metadata_bridge,
+            )
+        except RuntimeError as exc:
+            raise RouterRsInfrastructureError(str(exc)) from exc
+
+    def preview_runtime_request_prompt(
+        self,
+        request: ExecutionKernelRequest,
+        *,
+        settings: RuntimeSettings,
+        kernel_contract: Mapping[str, Any] | None = None,
+        metadata_bridge: Mapping[str, Any] | None = None,
+    ) -> str | None:
+        """Resolve the Rust-owned dry-run prompt preview for one request."""
+
+        if not request.dry_run:
+            raise ValueError("preview_prompt requires a dry-run execution request")
+        payload = self.build_execution_request_payload(request, settings=settings)
+        try:
+            response_payload = self.execute(payload)
+            return self.decode_execution_payload(
+                response_payload,
+                dry_run=True,
+                kernel_contract=kernel_contract,
+                metadata_bridge=metadata_bridge,
+            ).prompt_preview
+        except RuntimeError as exc:
+            raise RouterRsInfrastructureError(str(exc)) from exc
 
     def route_contract(
         self,
@@ -1189,7 +1425,37 @@ class RustRouteAdapter:
             failure_label="profile artifact compiler",
         )
 
-    def framework_runtime_snapshot(self, *, repo_root: Path) -> dict[str, Any]:
+    def control_plane_contract_descriptors(self) -> dict[str, Any]:
+        """Return the Rust-owned control-plane contract descriptor set."""
+
+        payload = self._run_hot_json_command(
+            "control_plane_contracts",
+            {},
+            [*self._binary_command(), "--control-plane-contracts-json"],
+            failure_label="control-plane contract compiler",
+        )
+        required = {
+            "execution_controller_contract",
+            "delegation_contract",
+            "supervisor_state_contract",
+            "execution_kernel_live_fallback_retirement_status",
+            "execution_kernel_live_response_serialization_contract",
+        }
+        missing = sorted(key for key in required if key not in payload)
+        if missing:
+            raise RuntimeError(
+                "Rust control-plane contract compiler returned an incomplete payload: "
+                + ", ".join(missing)
+            )
+        return payload
+
+    def framework_runtime_snapshot(
+        self,
+        *,
+        repo_root: Path,
+        artifact_source_dir: Path | None = None,
+        task_id: str | None = None,
+    ) -> dict[str, Any]:
         """Build the framework runtime snapshot read-model through router-rs."""
 
         args = [
@@ -1197,9 +1463,19 @@ class RustRouteAdapter:
             "--repo-root",
             str(repo_root),
         ]
+        if artifact_source_dir is not None:
+            args.extend(["--framework-artifact-source-dir", str(artifact_source_dir)])
+        if task_id:
+            args.extend(["--framework-task-id", task_id])
         payload = self._run_hot_json_command(
             "framework_runtime_snapshot",
-            {"repo_root": str(repo_root)},
+            {
+                "repo_root": str(repo_root),
+                "artifact_source_dir": (
+                    str(artifact_source_dir) if artifact_source_dir is not None else None
+                ),
+                "task_id": task_id,
+            },
             [*self._binary_command(), *args],
             failure_label="framework runtime snapshot compiler",
         )
@@ -1953,6 +2229,36 @@ class RustRouteAdapter:
             raise RuntimeError("Rust trace compaction delta writer returned invalid bytes_written.")
         return resolved
 
+    def write_trace_metadata(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--write-trace-metadata-json",
+            "--write-trace-metadata-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        resolved = self._run_hot_json_command(
+            "write_trace_metadata",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="trace metadata writer",
+        )
+        if resolved.get("schema_version") != self.trace_metadata_write_schema_version:
+            raise RuntimeError(
+                "Rust trace metadata writer returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
+            )
+        if resolved.get("authority") != self.trace_metadata_write_authority:
+            raise RuntimeError(
+                "Rust trace metadata writer returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        path = resolved.get("output_path")
+        bytes_written = resolved.get("bytes_written")
+        if not isinstance(path, str) or not path:
+            raise RuntimeError("Rust trace metadata writer returned a missing output_path.")
+        if not isinstance(bytes_written, int) or bytes_written < 0:
+            raise RuntimeError("Rust trace metadata writer returned invalid bytes_written.")
+        return resolved
+
     def health(self) -> dict[str, Any]:
         """Describe Rust route-adapter availability."""
 
@@ -1992,6 +2298,7 @@ class RustRouteAdapter:
             "trace_stream_replay_schema_version": self.trace_stream_replay_schema_version,
             "trace_stream_inspect_schema_version": self.trace_stream_inspect_schema_version,
             "trace_compaction_delta_write_schema_version": self.trace_compaction_delta_write_schema_version,
+            "trace_metadata_write_schema_version": self.trace_metadata_write_schema_version,
             "runtime_observability_exporter_schema_version": self.runtime_observability_exporter_schema_version,
             "runtime_observability_metric_catalog_schema_version": self.runtime_observability_metric_catalog_schema_version,
             "runtime_observability_metric_record_schema_version": self.runtime_observability_metric_record_schema_version,
@@ -2001,6 +2308,7 @@ class RustRouteAdapter:
             "transport_binding_write_authority": self.transport_binding_write_authority,
             "checkpoint_manifest_write_authority": self.checkpoint_manifest_write_authority,
             "trace_stream_io_authority": self.trace_stream_io_authority,
+            "trace_metadata_write_authority": self.trace_metadata_write_authority,
             "runtime_storage_authority": self.runtime_storage_authority,
         }
 
@@ -2037,13 +2345,13 @@ class RustRouteAdapter:
         return args
 
     def _resolved_binary(self) -> Path | None:
-        return resolve_binary_candidate(self.release_bin, self.debug_bin)
+        return _resolve_binary_candidate(self.release_bin, self.debug_bin)
 
     def _fresh_resolved_binary(self) -> Path | None:
         resolved_binary = self._resolved_binary()
         if resolved_binary is None:
             return None
-        latest_source_mtime = self._latest_source_mtime()
+        latest_source_mtime = self._cached_source_mtime()
         if resolved_binary.stat().st_mtime < latest_source_mtime:
             return None
         return resolved_binary
@@ -2061,7 +2369,7 @@ class RustRouteAdapter:
         )
 
     def _latest_source_mtime(self) -> float:
-        return latest_crate_source_mtime(self.router_dir)
+        return _latest_crate_source_mtime(self.router_dir)
 
     def _cached_source_mtime(self) -> float:
         cached = self._cached_latest_source_mtime
@@ -2104,11 +2412,11 @@ class RustRouteAdapter:
             return self._stdio_client().request(operation, payload)
         except RuntimeError as exc:
             error_text = str(exc)
-            if "unsupported" in error_text and "operation" in error_text:
-                self._reset_stdio_client()
-                self._invalidate_binary_cache()
-                return self._run_json_command(command, failure_label=failure_label)
             self._reset_stdio_client()
+            if "unsupported" in error_text and "operation" in error_text:
+                raise RuntimeError(
+                    f"router-rs stdio does not support '{operation}'; rebuild scripts/router-rs before retrying."
+                ) from exc
             return self._stdio_client().request(operation, payload)
 
     def _stdio_client(self) -> _RouterStdioClientPool:

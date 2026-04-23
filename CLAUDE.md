@@ -10,7 +10,8 @@ or manual resume, not default startup injection.
 
 Generated-first maintenance rule:
 
-- Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then use `scripts/materialize_cli_host_entrypoints.py` as the thin materializer.
+- Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then regenerate via `cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root "$PWD"`.
+- Host entrypoint sync runs directly through `router-rs`; do not reintroduce a Python wrapper in front of it.
 - Treat those files as materialized outputs, not hand-authored truth.
 - `.claude/agents/*.md` stays manually maintained unless a file says otherwise.
 - Event-level lifecycle decisions live in `.claude/hooks/README.md`.

@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,23 +24,138 @@ from scripts.consolidate_memory import (
     write_documents,
     write_memory_state,
 )
-from scripts.default_bootstrap import run_default_bootstrap
-from scripts.memory_support import (
-    DEFAULT_CODEX_ROOT,
-    CURRENT_ALLOWED_ARTIFACT_NAMES,
-    TASK_ALLOWED_ARTIFACT_NAMES,
-    build_task_id,
-    current_local_date,
-    current_local_timestamp,
-    evidence_artifact_root,
-    get_repo_root,
-    load_runtime_snapshot,
-    ops_memory_automation_root,
-    resolve_effective_memory_dir,
-    scratch_artifact_root,
-    write_json_if_changed,
-    write_text_if_changed,
-)
+
+DEFAULT_CODEX_ROOT = Path.home() / ".codex"
+ROUTER_RS_ROOT = Path(__file__).resolve().parents[1] / "scripts" / "router-rs"
+ROUTER_RS_MANIFEST = ROUTER_RS_ROOT / "Cargo.toml"
+ROUTER_RS_DEBUG_BIN = ROUTER_RS_ROOT / "target" / "debug" / "router-rs"
+ROUTER_RS_RELEASE_BIN = ROUTER_RS_ROOT / "target" / "release" / "router-rs"
+CURRENT_ALLOWED_ARTIFACT_NAMES = {
+    "SESSION_SUMMARY.md",
+    "NEXT_ACTIONS.json",
+    "EVIDENCE_INDEX.json",
+    "TRACE_METADATA.json",
+    "active_task.json",
+    "focus_task.json",
+    "task_registry.json",
+}
+TASK_ALLOWED_ARTIFACT_NAMES = {
+    "SESSION_SUMMARY.md",
+    "NEXT_ACTIONS.json",
+    "EVIDENCE_INDEX.json",
+    "TRACE_METADATA.json",
+    ".supervisor_state.json",
+}
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _latest_router_rs_source_mtime() -> float:
+    candidates = [ROUTER_RS_MANIFEST, *ROUTER_RS_ROOT.joinpath("src").rglob("*.rs")]
+    return max((path.stat().st_mtime for path in candidates if path.exists()), default=0.0)
+
+
+def _resolve_router_rs_binary() -> Path:
+    candidates = [path for path in (ROUTER_RS_RELEASE_BIN, ROUTER_RS_DEBUG_BIN) if path.is_file()]
+    if candidates:
+        freshest_binary = max(candidates, key=lambda path: (path.stat().st_mtime, path.name))
+        if freshest_binary.stat().st_mtime >= _latest_router_rs_source_mtime():
+            return freshest_binary
+    subprocess.run(
+        ["cargo", "build", "--manifest-path", str(ROUTER_RS_MANIFEST)],
+        cwd=_repo_root(),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    candidates = [path for path in (ROUTER_RS_RELEASE_BIN, ROUTER_RS_DEBUG_BIN) if path.is_file()]
+    if not candidates:
+        raise FileNotFoundError("router-rs binary was not produced by cargo build")
+    return max(candidates, key=lambda path: (path.stat().st_mtime, path.name))
+
+
+def _run_host_integration(*args: str) -> dict[str, Any]:
+    completed = subprocess.run(
+        [
+            str(_resolve_router_rs_binary()),
+            "--host-integration",
+            *args,
+        ],
+        cwd=_repo_root(),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(completed.stdout)
+    if not isinstance(payload, dict):
+        raise ValueError("router-rs host-integration command must return a JSON object")
+    return payload
+
+
+def _current_local_date() -> str:
+    return datetime.now().astimezone().date().isoformat()
+
+
+def _current_local_timestamp() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _safe_slug(value: str, fallback: str = "unknown") -> str:
+    import re
+
+    slug = re.sub(r"[^\w.-]+", "-", value, flags=re.UNICODE)
+    slug = re.sub(r"-{2,}", "-", slug).strip("._-")
+    return slug or fallback
+
+
+def _build_task_id(task: str, *, created_at: str | None = None) -> str:
+    import re
+
+    stamp = re.sub(r"[^0-9A-Za-z]+", "", (created_at or _current_local_timestamp()))
+    base = _safe_slug(task or "task")
+    return f"{base}-{stamp[-14:]}" if stamp else base
+
+
+def _ops_memory_automation_root(source_root: Path) -> Path:
+    return source_root / "artifacts" / "ops" / "memory_automation"
+
+
+def _evidence_artifact_root(source_root: Path, task_id: str | None = None) -> Path:
+    root = source_root / "artifacts" / "evidence"
+    return root / _safe_slug(task_id) if task_id else root
+
+
+def _scratch_artifact_root(source_root: Path, run_id: str | None = None) -> Path:
+    root = source_root / "artifacts" / "scratch"
+    return root / _safe_slug(run_id) if run_id else root
+
+
+def _resolve_effective_memory_dir(
+    *,
+    workspace: str,
+    memory_root: Path | None = None,
+    repo_root: Path | None = None,
+) -> Path:
+    if repo_root is not None:
+        return repo_root.expanduser().resolve() / ".codex" / "memory"
+    root = (memory_root or (Path.home() / ".codex" / "memories")).expanduser().resolve()
+    return root / _safe_slug(workspace)
+
+
+def _write_text_if_changed(path: Path, content: str) -> bool:
+    existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if existing == content:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return True
+
+
+def _write_json_if_changed(path: Path, payload: dict[str, Any] | list[Any]) -> bool:
+    content = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    return _write_text_if_changed(path, content)
 
 
 def _summary_lines(
@@ -94,7 +211,7 @@ def _top_recommendations(report: dict[str, Any]) -> list[str]:
 def _move_path(source: Path, destination: Path) -> str:
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
-        suffix = current_local_timestamp().replace(":", "").replace("+", "_")
+        suffix = _current_local_timestamp().replace(":", "").replace("+", "_")
         destination = destination.with_name(f"{destination.stem}-{suffix}{destination.suffix}")
     shutil.move(str(source), str(destination))
     return str(destination)
@@ -113,13 +230,13 @@ def _destination_for_current_artifact(repo_root: Path, path: Path, active_task_i
         return repo_root / "artifacts" / "bootstrap" / "legacy-current" / Path(*suffix)
     if path.name in {"run_summary.json", "storage_audit.json", "snapshot.json", "snapshot.md"}:
         suffix = [path.name] if path.parent == current_root else [active_task_id, path.name]
-        return ops_memory_automation_root(repo_root) / "legacy-current" / Path(*suffix)
+        return _ops_memory_automation_root(repo_root) / "legacy-current" / Path(*suffix)
     if path.name.startswith("tmp-"):
         if path.parent == current_root:
-            return scratch_artifact_root(repo_root) / path.name
-        return scratch_artifact_root(repo_root, "legacy-current") / active_task_id / path.name
+            return _scratch_artifact_root(repo_root) / path.name
+        return _scratch_artifact_root(repo_root, "legacy-current") / active_task_id / path.name
     suffix = [path.name] if path.parent == current_root else [active_task_id, path.name]
-    return evidence_artifact_root(repo_root, "legacy-current") / Path(*suffix)
+    return _evidence_artifact_root(repo_root, "legacy-current") / Path(*suffix)
 
 
 def plan_current_artifact_clutter_migrations(repo_root: Path, active_task_id: str) -> list[dict[str, str]]:
@@ -153,7 +270,7 @@ def plan_legacy_artifact_root_migrations(repo_root: Path) -> list[dict[str, str]
         plans.append(
             {
                 "source": str(legacy_memory_root),
-                "destination": str(ops_memory_automation_root(repo_root) / "legacy-root"),
+                "destination": str(_ops_memory_automation_root(repo_root) / "legacy-root"),
             }
         )
     for path in sorted(artifacts_root.iterdir()):
@@ -161,7 +278,7 @@ def plan_legacy_artifact_root_migrations(repo_root: Path) -> list[dict[str, str]
             plans.append(
                 {
                     "source": str(path),
-                    "destination": str(scratch_artifact_root(repo_root) / path.name),
+                    "destination": str(_scratch_artifact_root(repo_root) / path.name),
                 }
             )
     return plans
@@ -199,12 +316,16 @@ def run_pipeline(
     """Run the shared CLI memory maintenance pipeline."""
 
     repo_root = source_root.resolve()
-    resolved_dir = resolve_effective_memory_dir(workspace=workspace, memory_root=memory_root, repo_root=repo_root)
-    snapshot = load_runtime_snapshot(repo_root, artifact_root=artifact_source_dir)
+    resolved_dir = _resolve_effective_memory_dir(workspace=workspace, memory_root=memory_root, repo_root=repo_root)
+    runtime_snapshot = get_cached_route_adapter(_repo_root()).framework_runtime_snapshot(
+        repo_root=repo_root,
+        artifact_source_dir=artifact_source_dir,
+    )
+    active_task_id = str(runtime_snapshot.get("active_task_id") or "")
     planned_current_artifact_migrations = (
         []
         if artifact_source_dir is not None
-        else plan_current_artifact_clutter_migrations(repo_root, snapshot.active_task_id)
+        else plan_current_artifact_clutter_migrations(repo_root, active_task_id)
     )
     planned_legacy_root_migrations = (
         []
@@ -212,7 +333,7 @@ def run_pipeline(
         else plan_legacy_artifact_root_migrations(repo_root)
     )
     moved_current_artifacts = (
-        migrate_current_artifact_clutter(repo_root, snapshot.active_task_id)
+        migrate_current_artifact_clutter(repo_root, active_task_id)
         if apply_artifact_migrations and artifact_source_dir is None
         else []
     )
@@ -222,27 +343,27 @@ def run_pipeline(
         else []
     )
     archive_result = archive_legacy_memory_bundle(workspace, resolved_dir, memory_root=memory_root)
-    documents = build_memory_documents(workspace=workspace, snapshot=snapshot)
+    documents = build_memory_documents(workspace=workspace, repo_root=repo_root)
     changed_files = write_documents(documents, resolved_dir)
-    state_path = write_memory_state(snapshot, resolved_dir)
+    state_path = write_memory_state(repo_root, resolved_dir)
     if state_path:
         changed_files.append(state_path)
     sqlite_result = persist_memory_bundle(workspace, documents, memory_root=memory_root, resolved_dir=resolved_dir)
     report = collect_storage_report(DEFAULT_CODEX_ROOT, top=top)
-    retrieval_payload = get_cached_route_adapter(get_repo_root()).framework_memory_recall(
+    retrieval_payload = get_cached_route_adapter(_repo_root()).framework_memory_recall(
         repo_root=repo_root,
         query=topic,
         top=top,
         mode="stable",
-        memory_root=memory_root,
+        memory_root=resolved_dir,
         artifact_source_dir=artifact_source_dir,
     )
     retrieval = retrieval_payload.get("retrieval")
     if not isinstance(retrieval, dict):
         raise RuntimeError("Rust memory recall returned a missing retrieval payload.")
-    generated_at = current_local_timestamp()
-    run_id = build_task_id(f"{workspace}-memory-automation", created_at=generated_at)
-    out_dir = (output_dir or (ops_memory_automation_root(repo_root) / run_id)).resolve()
+    generated_at = _current_local_timestamp()
+    run_id = _build_task_id(f"{workspace}-memory-automation", created_at=generated_at)
+    out_dir = (output_dir or (_ops_memory_automation_root(repo_root) / run_id)).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     summary_md = "\n".join(
         [
@@ -267,9 +388,9 @@ def run_pipeline(
             *[f"- {line}" for line in _top_recommendations(report)],
         ]
     ) + "\n"
-    write_json_if_changed(out_dir / "storage_audit.json", report)
-    write_text_if_changed(out_dir / "snapshot.md", summary_md)
-    write_json_if_changed(
+    _write_json_if_changed(out_dir / "storage_audit.json", report)
+    _write_text_if_changed(out_dir / "snapshot.md", summary_md)
+    _write_json_if_changed(
         out_dir / "snapshot.json",
         {
             "workspace": workspace,
@@ -287,7 +408,7 @@ def run_pipeline(
     run_summary = {
         "workspace": workspace,
         "generated_at": generated_at,
-        "run_date": current_local_date(),
+        "run_date": _current_local_date(),
         "run_id": run_id,
         "sqlite_path": sqlite_result.get("db_path", ""),
         "memory_root": str(resolved_dir),
@@ -304,14 +425,21 @@ def run_pipeline(
         "top_storage_entries": report.get("top_entries", []),
         "retrieval": retrieval,
     }
-    write_json_if_changed(out_dir / "run_summary.json", run_summary)
-    bootstrap = run_default_bootstrap(
-        query=topic,
-        repo_root=repo_root,
-        memory_root=memory_root,
-        artifact_source_dir=artifact_source_dir,
-        workspace=workspace,
-        top=top,
+    _write_json_if_changed(out_dir / "run_summary.json", run_summary)
+    bootstrap = _run_host_integration(
+        "build-default-bootstrap",
+        "--repo-root",
+        str(repo_root),
+        "--query",
+        topic,
+        "--memory-root",
+        str(memory_root),
+        "--artifact-source-dir",
+        str(artifact_source_dir),
+        "--workspace",
+        workspace,
+        "--top",
+        str(top),
     )
     return {
         "workspace": workspace,
@@ -351,7 +479,7 @@ def main() -> int:
     args = parser.parse_args()
     results = run_pipeline(
         workspace=args.workspace,
-        source_root=(args.source_root or get_repo_root()),
+        source_root=(args.source_root or _repo_root()),
         memory_root=args.memory_root,
         output_dir=args.output_dir,
         artifact_source_dir=args.artifact_source_dir,

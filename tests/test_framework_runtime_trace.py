@@ -26,7 +26,6 @@ from framework_runtime.middleware import (
     Middleware,
     MiddlewareChain,
     MiddlewareContext,
-    SkillInjectionMiddleware,
 )
 from framework_runtime.schemas import (
     RoutingResult,
@@ -74,18 +73,6 @@ class _RecordingMemoryStore:
 
     def save_facts(self, user_id: str, facts: list[str]) -> None:
         self.saved.append((user_id, facts))
-
-
-class _RecordingPromptBuilder:
-    """Prompt builder spy used to assert live middleware skips Python shaping."""
-
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def build_prompt(self, routing_result: RoutingResult, *, prompt_preview: str | None = None) -> str:
-        self.calls += 1
-        return f"prompt for {routing_result.selected_skill.name}"
-
 
 class _NoOpMiddleware(Middleware):
     """Simple middleware used to validate enter/exit trace emission."""
@@ -559,61 +546,6 @@ def test_middleware_chain_emits_trace_events_and_skips_memory_write_on_dry_run()
     assert trace.events[0].payload["execution_kernel_delegate"] == "router-rs"
     assert trace.events[0].payload["execution_kernel_delegate_authority"] == "rust-execution-cli"
     assert trace.events[-1].payload["middleware"] == "MemoryMiddleware"
-
-
-def test_middleware_chain_skips_python_prompt_mutation_on_live_runs() -> None:
-    """Live middleware should not eagerly build or rewrite Python prompt text."""
-
-    trace = RuntimeTraceRecorder()
-    memory_store = _RecordingMemoryStore()
-    prompt_builder = _RecordingPromptBuilder()
-    chain = MiddlewareChain(
-        [SkillInjectionMiddleware(prompt_builder), MemoryMiddleware(memory_store), _NoOpMiddleware()],
-        trace_recorder=trace,
-    )
-    ctx = MiddlewareContext(
-        task="live trace coverage",
-        session_id="session-live",
-        user_id="user-live",
-        routing_result=_build_routing_result("session-live"),
-        execution_kernel="rust-execution-kernel-slice",
-        execution_kernel_authority="rust-execution-kernel-authority",
-        execution_kernel_delegate="router-rs",
-        execution_kernel_delegate_authority="rust-execution-cli",
-    )
-    ctx.metadata["dry_run"] = False
-
-    async def _agent(mw_ctx: MiddlewareContext) -> RunTaskResponse:
-        return RunTaskResponse(
-            session_id=mw_ctx.session_id,
-            user_id=mw_ctx.user_id,
-            skill=mw_ctx.routing_result.selected_skill.name,
-            live_run=True,
-            content="live result",
-            usage=UsageMetrics(input_tokens=5, output_tokens=3, total_tokens=8, mode="live"),
-            prompt_preview=None,
-            model_id="gpt-5.4",
-        )
-
-    result = asyncio.run(chain.execute(ctx, _agent))
-
-    assert result.live_run is True
-    assert result.prompt_preview is None
-    assert prompt_builder.calls == 0
-    assert ctx.prompt == ""
-    assert memory_store.extracted == ["User: live trace coverage\nAssistant: live result"]
-    assert memory_store.saved == [("user-live", ["new fact"])]
-    assert [event.kind for event in trace.events] == [
-        "middleware.enter",
-        "middleware.enter",
-        "middleware.enter",
-        "middleware.exit",
-        "middleware.exit",
-        "middleware.exit",
-    ]
-    assert trace.events[0].payload["middleware"] == "SkillInjectionMiddleware"
-    assert trace.events[1].payload["middleware"] == "MemoryMiddleware"
-    assert trace.events[-1].payload["middleware"] == "SkillInjectionMiddleware"
 
 
 def test_trace_recorder_supports_resumable_replay_windows(tmp_path: Path) -> None:

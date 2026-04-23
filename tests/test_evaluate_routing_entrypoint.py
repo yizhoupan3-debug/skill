@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -14,19 +13,8 @@ if str(SCRIPTS_ROOT) not in sys.path:
 import evaluate_routing as evaluate_routing_script
 
 
-def _touch(path: Path, *, mtime: float) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("", encoding="utf-8")
-    os.utime(path, (mtime, mtime))
-
-
 def test_build_routing_eval_exec_command_uses_router_rs_and_default_paths(tmp_path: Path) -> None:
     codex_home = tmp_path
-    router_dir = codex_home / "scripts" / "router-rs"
-    _touch(router_dir / "Cargo.toml", mtime=100.0)
-    _touch(router_dir / "src" / "main.rs", mtime=100.0)
-    binary_path = router_dir / "target" / "release" / "router-rs"
-    _touch(binary_path, mtime=200.0)
 
     command = evaluate_routing_script._build_routing_eval_exec_command(
         codex_home=codex_home,
@@ -34,7 +22,13 @@ def test_build_routing_eval_exec_command_uses_router_rs_and_default_paths(tmp_pa
     )
 
     assert command == [
-        str(binary_path),
+        "cargo",
+        "run",
+        "--quiet",
+        "--manifest-path",
+        str(codex_home / "scripts" / "router-rs" / "Cargo.toml"),
+        "--release",
+        "--",
         "--routing-eval-json",
         "--runtime",
         str(codex_home / "skills" / "SKILL_ROUTING_RUNTIME.json"),
@@ -47,11 +41,6 @@ def test_build_routing_eval_exec_command_uses_router_rs_and_default_paths(tmp_pa
 
 def test_build_routing_eval_exec_command_allows_custom_skills_root_and_cases(tmp_path: Path) -> None:
     codex_home = tmp_path
-    router_dir = codex_home / "scripts" / "router-rs"
-    _touch(router_dir / "Cargo.toml", mtime=100.0)
-    _touch(router_dir / "src" / "main.rs", mtime=100.0)
-    binary_path = router_dir / "target" / "debug" / "router-rs"
-    _touch(binary_path, mtime=200.0)
     skills_root = tmp_path / "custom-skills"
     cases_path = tmp_path / "custom-cases.json"
 
@@ -61,7 +50,13 @@ def test_build_routing_eval_exec_command_allows_custom_skills_root_and_cases(tmp
     )
 
     assert command == [
-        str(binary_path),
+        "cargo",
+        "run",
+        "--quiet",
+        "--manifest-path",
+        str(codex_home / "scripts" / "router-rs" / "Cargo.toml"),
+        "--release",
+        "--",
         "--routing-eval-json",
         "--runtime",
         str(skills_root / "SKILL_ROUTING_RUNTIME.json"),
@@ -74,18 +69,13 @@ def test_build_routing_eval_exec_command_allows_custom_skills_root_and_cases(tmp
 
 def test_main_execs_router_rs_directly_for_routing_eval(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     codex_home = tmp_path
-    router_dir = codex_home / "scripts" / "router-rs"
-    _touch(router_dir / "Cargo.toml", mtime=100.0)
-    _touch(router_dir / "src" / "main.rs", mtime=100.0)
-    binary_path = router_dir / "target" / "release" / "router-rs"
-    _touch(binary_path, mtime=200.0)
 
     calls: list[tuple[str, list[str]]] = []
 
     monkeypatch.setattr(evaluate_routing_script.route_cli, "_discover_codex_home", lambda _: codex_home)
     monkeypatch.setattr(
         evaluate_routing_script.os,
-        "execv",
+        "execvp",
         lambda path, argv: calls.append((path, list(argv))),
     )
 
@@ -94,9 +84,15 @@ def test_main_execs_router_rs_directly_for_routing_eval(monkeypatch: pytest.Monk
     assert result is None
     assert calls == [
         (
-            str(binary_path),
+            "cargo",
             [
-                str(binary_path),
+                "cargo",
+                "run",
+                "--quiet",
+                "--manifest-path",
+                str(codex_home / "scripts" / "router-rs" / "Cargo.toml"),
+                "--release",
+                "--",
                 "--routing-eval-json",
                 "--runtime",
                 str(codex_home / "skills" / "SKILL_ROUTING_RUNTIME.json"),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field as dataclass_field
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -449,6 +450,94 @@ class RunTaskResponse(BaseModel):
     prompt_preview: str | None = None
     model_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+SANDBOX_CAPABILITY_CATEGORIES = (
+    "read_only",
+    "workspace_mutating",
+    "networked",
+    "high_risk",
+)
+
+
+@dataclass(slots=True, frozen=True)
+class SandboxExecutionPolicy:
+    """Explicit sandbox capability policy carried with one kernel request."""
+
+    profile: str = "workspace-default"
+    capability_categories: tuple[str, ...] = ("read_only", "workspace_mutating", "networked")
+    dedicated_profile: bool = False
+    reusable: bool = True
+    schema_version: str = "runtime-sandbox-policy-v1"
+
+    def to_metadata(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "profile": self.profile,
+            "capability_categories": list(self.capability_categories),
+            "dedicated_profile": self.dedicated_profile,
+            "reusable": self.reusable,
+        }
+
+
+@dataclass(slots=True, frozen=True)
+class SandboxResourceBudget:
+    """Runtime sandbox resource budgets attached to one execution."""
+
+    cpu: float = 30.0
+    memory: int = 512 * 1024 * 1024
+    wall_clock: float = 30.0
+    output_size: int = 64 * 1024
+    schema_version: str = "runtime-sandbox-budget-v1"
+
+    def to_metadata(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "cpu": self.cpu,
+            "memory": self.memory,
+            "wall_clock": self.wall_clock,
+            "output_size": self.output_size,
+        }
+
+
+@dataclass(slots=True, frozen=True)
+class SandboxRuntimeProbe:
+    """Optional runtime measurements supplied by the host around kernel execution."""
+
+    cpu: float | None = None
+    memory: int | None = None
+    wall_clock: float | None = None
+    output_size: int | None = None
+    source: str = "host-runtime"
+    schema_version: str = "runtime-sandbox-runtime-probe-v1"
+
+    def to_metadata(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "cpu": self.cpu,
+            "memory": self.memory,
+            "wall_clock": self.wall_clock,
+            "output_size": self.output_size,
+            "source": self.source,
+        }
+
+
+@dataclass(slots=True)
+class ExecutionKernelRequest:
+    """Normalized execution payload passed to the active kernel adapter."""
+
+    task: str
+    session_id: str
+    user_id: str
+    routing_result: RoutingResult
+    job_id: str | None = None
+    dry_run: bool = False
+    trace_event_count: int = 0
+    trace_output_path: str | None = None
+    sandbox_policy: SandboxExecutionPolicy = dataclass_field(default_factory=SandboxExecutionPolicy)
+    sandbox_budget: SandboxResourceBudget = dataclass_field(default_factory=SandboxResourceBudget)
+    sandbox_tool_category: str = "workspace_mutating"
+    sandbox_runtime_probe: SandboxRuntimeProbe | None = None
 
 
 class BackgroundRunRequest(RunTaskRequest):

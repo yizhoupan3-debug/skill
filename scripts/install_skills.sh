@@ -23,6 +23,9 @@ HOME_CLAUDE_REFRESH_PATH="$HOME/.claude/commands/refresh.md"
 HOME_CLAUDE_MCP_CONFIG_PATH="$HOME/.claude.json"
 PROJECT_INSTRUCTIONS_PATH="$REPO_ROOT/.codex/model_instructions.md"
 FRAMEWORK_START_MARKER="<!-- FRAMEWORK_DEFAULT_RUNTIME_START -->"
+ROUTER_RS_MANIFEST="$REPO_ROOT/scripts/router-rs/Cargo.toml"
+ROUTER_RS_RELEASE_BIN="$REPO_ROOT/scripts/router-rs/target/release/router-rs"
+ROUTER_RS_DEBUG_BIN="$REPO_ROOT/scripts/router-rs/target/debug/router-rs"
 
 # Supported tools and their skill paths
 TOOLS="codex agents gemini"
@@ -52,8 +55,44 @@ usage() {
   echo "Codex default path: native integration installer + default bootstrap bundle"
 }
 
+run_router_host_integration() {
+  local router_bin=""
+  if [ -x "$ROUTER_RS_RELEASE_BIN" ] && [ -x "$ROUTER_RS_DEBUG_BIN" ]; then
+    if [ "$ROUTER_RS_DEBUG_BIN" -nt "$ROUTER_RS_RELEASE_BIN" ]; then
+      router_bin="$ROUTER_RS_DEBUG_BIN"
+    else
+      router_bin="$ROUTER_RS_RELEASE_BIN"
+    fi
+  elif [ -x "$ROUTER_RS_RELEASE_BIN" ]; then
+    router_bin="$ROUTER_RS_RELEASE_BIN"
+  elif [ -x "$ROUTER_RS_DEBUG_BIN" ]; then
+    router_bin="$ROUTER_RS_DEBUG_BIN"
+  fi
+
+  if [ -n "$router_bin" ]; then
+    "$router_bin" --host-integration "$@"
+    return
+  fi
+
+  cargo run --quiet --manifest-path "$ROUTER_RS_MANIFEST" -- --host-integration "$@"
+}
+
 run_codex_native_install() {
-  local cmd=(python3 "$SCRIPT_DIR/install_codex_native_integration.py")
+  local cmd=(
+    run_router_host_integration
+    install-native-integration
+    --repo-root "$REPO_ROOT"
+    --home-config-path "$HOME/.codex/config.toml"
+    --home-plugin-root "$HOME_PLUGIN_ROOT"
+    --home-marketplace-path "$HOME_MARKETPLACE_PATH"
+    --home-codex-skills-path "$HOME_CODEX_SKILLS_PATH"
+    --home-claude-skills-path "$HOME_CLAUDE_SKILLS_PATH"
+    --home-claude-refresh-path "$HOME_CLAUDE_REFRESH_PATH"
+    --home-claude-mcp-config-path "$HOME_CLAUDE_MCP_CONFIG_PATH"
+    --project-instructions-path "$PROJECT_INSTRUCTIONS_PATH"
+    --skip-home-claude-skills-link
+    --skip-home-claude-refresh
+  )
 
   if [ -n "${CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR:-}" ]; then
     cmd+=(--bootstrap-output-dir "$CODEX_NATIVE_BOOTSTRAP_OUTPUT_DIR")
@@ -68,117 +107,36 @@ run_codex_native_install() {
 
 bootstrap_payload_matches_contract() {
   local bootstrap_path="$1"
-  if [ ! -f "$bootstrap_path" ]; then
-    return 1
-  fi
-
-  python3 - "$bootstrap_path" "$REPO_ROOT" <<'PY' >/dev/null
-import json
-import sys
-from pathlib import Path
-
-bootstrap_path = Path(sys.argv[1])
-repo_root = str(Path(sys.argv[2]).resolve())
-payload = json.loads(bootstrap_path.read_text(encoding="utf-8"))
-
-bootstrap = payload.get("bootstrap")
-memory = payload.get("memory-bootstrap")
-skills = payload.get("skills-export")
-proposals = payload.get("evolution-proposals")
-
-if not isinstance(bootstrap, dict):
-    raise SystemExit(1)
-if bootstrap.get("repo_root") != repo_root:
-    raise SystemExit(1)
-if not isinstance(memory, dict):
-    raise SystemExit(1)
-if not isinstance(skills, dict) or skills.get("source") != "skills/SKILL_ROUTING_RUNTIME.json":
-    raise SystemExit(1)
-if not isinstance(proposals, dict):
-    raise SystemExit(1)
-PY
+  run_router_host_integration \
+    validate-default-bootstrap \
+    --bootstrap-path "$bootstrap_path" \
+    --repo-root "$REPO_ROOT" \
+    | grep -q '"ok": true'
 }
 
 marketplace_has_framework_plugin() {
   local marketplace_path="$1"
-  if [ ! -f "$marketplace_path" ]; then
-    return 1
-  fi
-
-  python3 - "$marketplace_path" "$PLUGIN_NAME" <<'PY' >/dev/null
-import json
-import sys
-from pathlib import Path
-
-marketplace_path = Path(sys.argv[1])
-plugin_name = sys.argv[2]
-payload = json.loads(marketplace_path.read_text(encoding="utf-8"))
-plugins = payload.get("plugins")
-if not isinstance(plugins, list):
-    raise SystemExit(1)
-if not any(isinstance(plugin, dict) and plugin.get("name") == plugin_name for plugin in plugins):
-    raise SystemExit(1)
-PY
+  run_router_host_integration \
+    validate-marketplace-plugin \
+    --marketplace-path "$marketplace_path" \
+    --plugin-name "$PLUGIN_NAME" \
+    | grep -q '"ok": true'
 }
 
 claude_mcp_has_shared_servers() {
   local config_path="$1"
-  if [ ! -f "$config_path" ]; then
-    return 1
-  fi
-
-  python3 - "$config_path" "$REPO_ROOT" <<'PY' >/dev/null
-import json
-import sys
-from pathlib import Path
-
-config_path = Path(sys.argv[1])
-repo_root = str(Path(sys.argv[2]).resolve())
-payload = json.loads(config_path.read_text(encoding="utf-8"))
-servers = payload.get("mcpServers")
-if not isinstance(servers, dict):
-    raise SystemExit(1)
-browser = servers.get("browser-mcp")
-framework = servers.get("framework-mcp")
-openai_docs = servers.get("openaiDeveloperDocs")
-if not isinstance(browser, dict) or not isinstance(framework, dict) or not isinstance(openai_docs, dict):
-    raise SystemExit(1)
-if browser.get("command") != "bash":
-    raise SystemExit(1)
-if browser.get("cwd") != repo_root:
-    raise SystemExit(1)
-if framework.get("command") != "python3":
-    raise SystemExit(1)
-if framework.get("cwd") != repo_root:
-    raise SystemExit(1)
-env = framework.get("env")
-if not isinstance(env, dict) or env.get("PYTHONPATH") != repo_root:
-    raise SystemExit(1)
-if openai_docs.get("type") != "http":
-    raise SystemExit(1)
-if openai_docs.get("url") != "https://developers.openai.com/mcp":
-    raise SystemExit(1)
-PY
+  run_router_host_integration \
+    validate-home-claude-mcp \
+    --config-path "$config_path" \
+    --repo-root "$REPO_ROOT" \
+    | grep -q '"ok": true'
 }
 
 resolve_shared_skills_root() {
-  python3 - "$REPO_ROOT" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-repo_root = Path(sys.argv[1]).resolve()
-registry_path = repo_root / "configs" / "framework" / "RUNTIME_REGISTRY.json"
-source_rel = "skills"
-if registry_path.is_file():
-    payload = json.loads(registry_path.read_text(encoding="utf-8"))
-    source_rel = (
-        payload.get("workspace_bootstrap_defaults", {})
-        .get("skill_bridge", {})
-        .get("source_rel", "skills")
-    )
-print((repo_root / source_rel).resolve())
-PY
+  run_router_host_integration \
+    resolve-skill-bridge-source \
+    --repo-root "$REPO_ROOT" \
+    | sed -n 's/.*"path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
 }
 
 skills_link_matches_source() {
@@ -198,44 +156,11 @@ skills_link_matches_source() {
 
 plugin_mcp_matches_contract() {
   local config_path="$1"
-  if [ ! -f "$config_path" ]; then
-    return 1
-  fi
-
-  python3 - "$config_path" "$REPO_ROOT" <<'PY' >/dev/null
-import json
-import sys
-from pathlib import Path
-
-config_path = Path(sys.argv[1])
-repo_root = str(Path(sys.argv[2]).resolve())
-browser_script = str((Path(sys.argv[2]).resolve() / "tools/browser-mcp/scripts/start_browser_mcp.sh").resolve())
-payload = json.loads(config_path.read_text(encoding="utf-8"))
-servers = payload.get("mcpServers")
-if not isinstance(servers, dict):
-    raise SystemExit(1)
-browser = servers.get("browser-mcp")
-framework = servers.get("framework-mcp")
-openai_docs = servers.get("openaiDeveloperDocs")
-if not isinstance(browser, dict) or not isinstance(framework, dict) or not isinstance(openai_docs, dict):
-    raise SystemExit(1)
-if framework.get("command") != "python3":
-    raise SystemExit(1)
-if framework.get("args") != ["-m", "scripts.framework_mcp"]:
-    raise SystemExit(1)
-if framework.get("cwd") != repo_root:
-    raise SystemExit(1)
-if browser.get("command") != "bash":
-    raise SystemExit(1)
-if browser.get("args") != [browser_script]:
-    raise SystemExit(1)
-if browser.get("cwd") != repo_root:
-    raise SystemExit(1)
-if openai_docs.get("type") != "http":
-    raise SystemExit(1)
-if openai_docs.get("url") != "https://developers.openai.com/mcp":
-    raise SystemExit(1)
-PY
+  run_router_host_integration \
+    validate-personal-plugin-mcp \
+    --config-path "$config_path" \
+    --repo-root "$REPO_ROOT" \
+    | grep -q '"ok": true'
 }
 
 show_codex_status() {
