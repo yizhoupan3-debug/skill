@@ -50,6 +50,27 @@ brew install --cask libreoffice
 brew install poppler
 ```
 
+## Optional OfficeCLI Install
+
+For deeper `.pptx` inspection, HTML preview, path-based querying, and structured issue / schema checks, this skill can also use local `officecli`.
+
+On this machine, `officecli --version` resolved successfully and reported `1.0.53`.
+
+Quick check:
+
+```bash
+officecli --version
+officecli pptx --help
+```
+
+What it adds to `ppt-pptx`:
+
+- `view outline` for quick deck shape / text-box counts
+- `view issues` for overflow / missing-title / structure diagnostics
+- `validate` for OpenXML schema checks
+- `get` / `query` for stable-path inspection of existing decks
+- `watch` for live HTML preview when iterating on an already-generated `.pptx`
+
 ## Python QA Dependencies
 
 The bundled QA scripts also expect Python packages that are separate from the Node deck toolchain:
@@ -89,6 +110,7 @@ Then copy into the workspace:
 - `assets/deck.template.js` as `deck.js`
 - `assets/pptxgenjs_helpers/`
 - any needed Python QA scripts from `scripts/`
+- optionally `scripts/officecli_bridge.py` when you want OfficeCLI-backed inspection or watch preview
 
 Optional images:
 
@@ -128,6 +150,12 @@ Cross-platform font default:
 - check for missing `soffice` / LibreOffice and Poppler
 - deck generation and deck rendering are separate dependency layers
 
+### OfficeCLI-backed diagnostics are missing
+
+- check `officecli --version`
+- if unavailable, the deck can still build and render; only the deeper OfficeCLI audit / watch path is unavailable
+- `officecli_bridge.py probe --json` is the quickest local check
+
 ### `ModuleNotFoundError: No module named 'pdf2image'`
 
 - install `pdf2image`
@@ -147,3 +175,11 @@ Verified locally on this machine on March 18, 2026:
 - `python3 -m pip install --user pdf2image python-pptx` succeeded
 - the template generated a real `.pptx`
 - `render_slides.py` successfully rendered that `.pptx` into slide PNGs
+
+Useful OfficeCLI audit commands after generation:
+
+```bash
+python3 scripts/officecli_bridge.py doctor deck.pptx --json
+python3 scripts/officecli_bridge.py outline deck.pptx --json
+python3 scripts/officecli_bridge.py watch deck.pptx --port 18080
+```

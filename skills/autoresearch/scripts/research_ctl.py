@@ -947,6 +947,7 @@ def default_state(project: str, question: str, mode: str) -> dict[str, Any]:
             "overlap_summary": None,
             "differentiation_strategy": None,
             "decision": None,
+            "recommended_focus": None,
         },
         "hypotheses": [],
         "hypothesis_backlog": [],
@@ -979,6 +980,7 @@ def ensure_state_defaults(state: dict[str, Any]) -> dict[str, Any]:
     novelty_gate.setdefault("overlap_summary", None)
     novelty_gate.setdefault("differentiation_strategy", None)
     novelty_gate.setdefault("decision", None)
+    novelty_gate.setdefault("recommended_focus", None)
     hydrated.setdefault("hypotheses", [])
     hydrated.setdefault("hypothesis_backlog", [])
     hydrated.setdefault("run_history", [])
@@ -1380,9 +1382,15 @@ def add_claim_comparison(
         claim_records.append(record)
     else:
         claim_records[existing_index] = record
-    novelty_gate["claims"] = [item.get("claim") for item in claim_records]
+    prioritized_records = prioritize_claims(claim_records)
+    novelty_gate["claim_records"] = prioritized_records
+    novelty_gate["claims"] = [item.get("claim") for item in prioritized_records]
     novelty_gate["overlap_summary"] = ", ".join(
-        f"{item['claim_id']}={item['overlap']}" for item in claim_records
+        f"{item['claim_id']}={item['overlap']}" for item in prioritized_records
+    )
+    top_record = prioritized_records[0] if prioritized_records else None
+    novelty_gate["recommended_focus"] = (
+        f"{top_record['claim_id']}: {top_record['claim']}" if top_record is not None else None
     )
     return next_state
 
@@ -1408,6 +1416,14 @@ def generate_search_plan(state: dict[str, Any]) -> dict[str, Any]:
     novelty_gate["search_plan"] = [
         build_search_plan_entry(record) for record in synthesized_records
     ]
+    novelty_gate["search_plan"] = sorted(
+        novelty_gate["search_plan"],
+        key=lambda item: (
+            int(item.get("recommended_order", 999) or 999),
+            -int(item.get("priority_score", 0) or 0),
+            item.get("claim_id", ""),
+        ),
+    )
     return next_state
 
 
@@ -1419,9 +1435,13 @@ def draft_claims_from_state(
 ) -> dict[str, Any]:
     next_state = ensure_state_defaults(state)
     question = question_override or next_state.get("question", "")
-    drafts = propose_claims_from_question(question, count=count)
+    drafts = prioritize_claims(propose_claims_from_question(question, count=count))
     next_state["novelty_gate"]["draft_claims"] = drafts
     next_state["novelty_gate"]["claims"] = [draft["claim"] for draft in drafts]
+    top_draft = drafts[0] if drafts else None
+    next_state["novelty_gate"]["recommended_focus"] = (
+        f"{top_draft['claim_id']}: {top_draft['claim']}" if top_draft is not None else None
+    )
     return generate_search_plan(next_state)
 
 
@@ -1456,6 +1476,7 @@ def format_resume(state: dict[str, Any]) -> str:
         f"stage: {state.get('stage', '-')}",
         f"novelty_gate: {state.get('novelty_gate', {}).get('status', '-')}",
         f"novelty_assessment: {overall_novelty_assessment(state)}",
+        f"recommended_focus: {state.get('novelty_gate', {}).get('recommended_focus') or '-'}",
         f"active_hypothesis: {active_id or '-'}",
     ]
     if active_id:
