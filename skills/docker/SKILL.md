@@ -30,7 +30,7 @@ source: community
 # docker
 
 This skill owns Docker containerization: image building, Compose orchestration, container debugging, security hardening, and CI/CD integration patterns.
-- **Dual-Dimension Audit (Pre: Layers/Config, Post: Build-Size/Runtime Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Layers/Config, Post: Build-Size/Runtime Results)** → `$execution-audit` [Overlay]
 
 ## When to use
 
@@ -46,10 +46,10 @@ This skill owns Docker containerization: image building, Compose orchestration, 
 - The task is Cloudflare Workers deployment → use `$cloudflare-deploy`
 
 ## Hard Constraints
-- **Superior Quality Audit**: For production images, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production images, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 - Do not run containers as root.
 - Use multi-stage builds for minimal production footprint.
 
 ## Trigger examples
 - "强制进行 Docker 深度审计 / 检查镜像构建结果与运行时隔离状态。"
-- "Use $execution-audit-codex to audit this Dockerfile for layer-caching idealism."
+- "Use $execution-audit to audit this Dockerfile for layer-caching idealism."

@@ -58,7 +58,7 @@ system. It is the **post-generation design acceptance** layer.
 - The user wants to create `DESIGN.md` from existing assets -> use `$design-md`
 - The user wants to strengthen the generation prompt before creating output -> use `$design-prompt-enhancer`
 - The user wants direct redesign or implementation -> use `$frontend-design`
-- The task is generic implementation sign-off across code/runtime layers -> add `$execution-audit-codex`
+- The task is generic implementation sign-off across code/runtime layers -> add `$execution-audit`
 
 ## Core workflow
 

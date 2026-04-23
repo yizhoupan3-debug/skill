@@ -1,4 +1,4 @@
 interface:
   display_name: "Paper Reviewer"
-  short_description: "Gate-chain whole-manuscript review"
-  default_prompt: "Use $paper-reviewer for paper review requests, not rewriting requests. Map vague manuscript-review asks such as '帮我审这篇 paper', '投稿前把关', '能不能投', or '做整套 review' to the full `G0-G14` chain. Map explicit dimension asks such as claim, math, references, appendix routing, title/abstract/intro/conclusion, notation, figure, table, language, or layout to one `single_gate` review only. Every review pass must use a fresh isolated reviewer subagent or an equivalent clean-room reload, and state transfer must happen through the markdown packet only. In autonomous full-chain mode, wrap the flow as a 5-minute heartbeat that advances at most one gate round per tick and writes exactly one new non-overwriting gate checklist file. Emit a standalone Reject Case only when the user explicitly asks for hostile or top-journal stress testing."
+  short_description: "Judge whether a paper is ready to submit"
+  default_prompt: "Use $paper-reviewer for paper review requests. Treat vague asks like '帮我审这篇 paper', '能不能投', or '投稿前把关' as strict whole-paper review. If the user explicitly names one dimension such as claim, math, references, figures, tables, language, or layout, review only that slice. Review and decide; do not drift into direct rewriting."

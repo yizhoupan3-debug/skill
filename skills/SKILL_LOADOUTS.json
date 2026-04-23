@@ -24,7 +24,7 @@
         "plan-to-code",
         "python-pro",
         "typescript-pro",
-        "git-workflow",
+        "gitx",
         "shell-cli"
       ],
       "overlays": [
@@ -83,7 +83,7 @@
       "surface_class": "specialist",
       "owners": [],
       "overlays": [
-        "execution-audit-codex",
+        "execution-audit",
         "code-review",
         "security-audit",
         "anti-laziness"
@@ -97,13 +97,13 @@
       "activation": "explicit",
       "surface_class": "specialist",
       "owners": [
-        "skill-developer-codex",
+        "skill-framework-developer",
         "execution-controller-coding",
         "idea-to-plan",
         "checklist-normalizer"
       ],
       "overlays": [
-        "execution-audit-codex"
+        "execution-audit"
       ],
       "exclude": [
         "seo-web"
@@ -114,12 +114,12 @@
       "activation": "explicit",
       "surface_class": "specialist",
       "owners": [
-        "git-workflow",
+        "gitx",
         "linux-server-ops",
         "observability"
       ],
       "overlays": [
-        "execution-audit-codex"
+        "execution-audit"
       ],
       "exclude": [
         "paper-writing"

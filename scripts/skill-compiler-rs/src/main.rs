@@ -72,9 +72,9 @@ const INDEX_COMMON_LANES: [(&str, &str); 10] = [
     ("前端运行时问题", "frontend-debugging"),
     ("README / ADR / 项目文档", "documentation-engineering"),
     ("构建 / 打包 / 工具链", "build-tooling"),
-    ("Git 流程 / 合并 / 推送", "git-workflow"),
+    ("Git 流程 / 合并 / 推送", "gitx"),
     ("多轮调研 / 对比 / 检索", "information-retrieval"),
-    ("skill 库 / 路由框架自身", "skill-developer-codex"),
+    ("skill 库 / 路由框架自身", "skill-framework-developer"),
 ];
 
 const INDEX_OVERLAY_SHORTCUTS: [(&str, &str); 3] = [
@@ -1000,7 +1000,7 @@ mod tests {
         let skills_root = temp_skills_root("nested-discovery");
         write_skill(&skills_root.join("top-skill"), "top-skill");
         write_skill(
-            &skills_root.join("codex-primary-runtime").join("spreadsheets"),
+            &skills_root.join("primary-runtime").join("spreadsheets"),
             "spreadsheets",
         );
         fs::create_dir_all(skills_root.join("junk-container").join("nested"))
@@ -1020,7 +1020,7 @@ mod tests {
         assert_eq!(
             discovered_paths,
             vec![
-                "codex-primary-runtime/spreadsheets".to_string(),
+                "primary-runtime/spreadsheets".to_string(),
                 "top-skill".to_string(),
             ]
         );

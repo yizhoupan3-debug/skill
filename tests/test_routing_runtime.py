@@ -138,6 +138,21 @@ def test_search_skills_matches_memory_and_native_debug_queries() -> None:
     assert native_results[0].record.name == "native-app-debugging"
 
 
+def test_search_skills_keeps_legacy_skill_slugs_routing_to_new_canonical_names() -> None:
+    """Verify renamed skill slugs keep a compatibility search path."""
+
+    framework_results = search_skills("skill-developer-codex", codex_home=PROJECT_ROOT, limit=3)
+    repair_results = search_skills("skill-routing-repair-codex", codex_home=PROJECT_ROOT, limit=3)
+    audit_results = search_skills("execution-audit-codex", codex_home=PROJECT_ROOT, limit=3)
+
+    assert framework_results
+    assert framework_results[0].record.name == "skill-framework-developer"
+    assert repair_results
+    assert repair_results[0].record.name == "skill-routing-repair"
+    assert audit_results
+    assert audit_results[0].record.name == "execution-audit"
+
+
 def test_search_skills_matches_design_md_system_synthesis_queries() -> None:
     """Verify DESIGN.md-oriented queries hit the new design-system owner.
 

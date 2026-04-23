@@ -18,11 +18,13 @@ from codex_agno_runtime.trace import (
 )
 
 RUNTIME_EVENT_ATTACH_DESCRIPTOR_SCHEMA_VERSION = "runtime-event-attach-descriptor-v1"
+RUNTIME_EVENT_ATTACH_MODE = "process_external_artifact_replay"
 RUNTIME_EVENT_ATTACH_SOURCE_HANDOFF_METHOD = "describe_runtime_event_handoff"
 RUNTIME_EVENT_ATTACH_SOURCE_TRANSPORT_METHOD = "describe_runtime_event_transport"
 RUNTIME_EVENT_ATTACH_METHOD = "attach_runtime_event_transport"
 RUNTIME_EVENT_ATTACH_SUBSCRIBE_METHOD = "subscribe_attached_runtime_events"
 RUNTIME_EVENT_ATTACH_CLEANUP_METHOD = "cleanup_attached_runtime_event_transport"
+RUNTIME_EVENT_ATTACH_RESUME_MODE = "after_event_id"
 _DESCRIPTOR_PATH_FIELDS = (
     ("requested_artifacts", "binding_artifact_path"),
     ("requested_artifacts", "handoff_path"),
@@ -95,12 +97,58 @@ class RuntimeEventAttachDescriptor(BaseModel):
     resolved_artifacts: _RuntimeEventAttachDescriptorArtifacts | None = None
     resolution: _RuntimeEventAttachDescriptorArtifacts | None = None
 
+    def _assert_contract(self) -> None:
+        """Fail closed when callers mutate descriptor vocabulary away from the Rust-owned contract."""
+
+        expected_scalars = {
+            "attach_mode": RUNTIME_EVENT_ATTACH_MODE,
+            "source_transport_method": RUNTIME_EVENT_ATTACH_SOURCE_TRANSPORT_METHOD,
+            "source_handoff_method": RUNTIME_EVENT_ATTACH_SOURCE_HANDOFF_METHOD,
+            "attach_method": RUNTIME_EVENT_ATTACH_METHOD,
+            "subscribe_method": RUNTIME_EVENT_ATTACH_SUBSCRIBE_METHOD,
+            "cleanup_method": RUNTIME_EVENT_ATTACH_CLEANUP_METHOD,
+            "resume_mode": RUNTIME_EVENT_ATTACH_RESUME_MODE,
+        }
+        for field_name, expected_value in expected_scalars.items():
+            value = getattr(self, field_name)
+            if value is not None and value != expected_value:
+                raise ValueError(
+                    "External runtime event attach descriptor must use "
+                    f"{field_name}={expected_value!r}."
+                )
+        if self.attach_capabilities is None:
+            return
+        if (
+            self.attach_capabilities.artifact_replay is not None
+            and self.attach_capabilities.artifact_replay is not True
+        ):
+            raise ValueError(
+                "External runtime event attach descriptor must advertise "
+                "attach_capabilities.artifact_replay=True."
+            )
+        if (
+            self.attach_capabilities.cleanup_preserves_replay is not None
+            and self.attach_capabilities.cleanup_preserves_replay is not True
+        ):
+            raise ValueError(
+                "External runtime event attach descriptor must advertise "
+                "attach_capabilities.cleanup_preserves_replay=True."
+            )
+        if (
+            self.attach_capabilities.live_remote_stream is not None
+            and self.attach_capabilities.live_remote_stream is not False
+        ):
+            raise ValueError(
+                "External runtime event attach descriptor must advertise "
+                "attach_capabilities.live_remote_stream=False."
+            )
+
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> "RuntimeEventAttachDescriptor":
         """Validate and normalize a raw attach descriptor payload."""
 
         try:
-            return cls.model_validate(payload)
+            descriptor = cls.model_validate(payload)
         except ValidationError as exc:
             errors = exc.errors()
             if any(err.get("loc") == ("schema_version",) for err in errors):
@@ -108,6 +156,8 @@ class RuntimeEventAttachDescriptor(BaseModel):
                     "External runtime event attach payload returned an unknown attach_descriptor schema_version."
                 ) from exc
             raise ValueError("External runtime event attach payload returned an invalid attach_descriptor.") from exc
+        descriptor._assert_contract()
+        return descriptor
 
 
 class ExternalRuntimeEventTransportAttachment(BaseModel):

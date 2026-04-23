@@ -1,4 +1,4 @@
-# skill-routing-repair-codex — Detailed Guide
+# skill-routing-repair — Detailed Guide
 
 > Extracted from SKILL.md to reduce token consumption at routing time.
 
@@ -31,7 +31,7 @@ These rules override all other instructions in this skill:
 4. **Defer major promotion**  
    Do not escalate into a framework rewrite, new gate, or multi-skill split unless the miss is structural or recurring.
 5. **At most one overlay handoff**  
-   This skill may suggest `$skill-developer-codex` for bigger redesigns, but should not bounce back and forth repeatedly in one turn.
+   This skill may suggest `$skill-framework-developer` for bigger redesigns, but should not bounce back and forth repeatedly in one turn.
 
 ## Miss taxonomy
 
@@ -78,7 +78,7 @@ Do not start by expanding deep body prose if the discovery surface is still weak
 
 ### 3. Decide whether to escalate
 
-Escalate to [`$skill-developer-codex`](/Users/joe/Documents/skill/skills/skill-developer-codex/SKILL.md) when any of these are true:
+Escalate to [`$skill-framework-developer`](/Users/joe/Documents/skill/skills/skill-framework-developer/SKILL.md) when any of these are true:
 
 - the fix requires a new skill
 - the current skill should split into owner/gate/overlay variants

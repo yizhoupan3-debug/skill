@@ -3,10 +3,12 @@ use regex::Regex;
 use rusqlite::{params, types::ValueRef, Connection};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::env;
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use crate::framework_runtime::{
     build_framework_recap_projection, build_framework_runtime_snapshot_envelope,
@@ -64,6 +66,118 @@ const PROTECTED_BASH_PATH_HINTS: [&str; 12] = [
     ".codex/host_entrypoints_sync_manifest.json",
     ".codex/memory/CLAUDE_MEMORY.md",
 ];
+const USER_PROMPT_STRONG_ACTION_TERMS: [&str; 21] = [
+    "修复",
+    "实现",
+    "优化",
+    "重构",
+    "加速",
+    "删掉",
+    "去掉",
+    "移除",
+    "清理",
+    "替换",
+    "落实",
+    "补齐",
+    "增强",
+    "改代码",
+    "fix",
+    "implement",
+    "optimize",
+    "refactor",
+    "speed up",
+    "remove",
+    "rewrite",
+];
+const USER_PROMPT_WEAK_ACTION_TERMS: [&str; 8] =
+    ["改", "写", "调", "修", "做", "update", "change", "improve"];
+const USER_PROMPT_CODE_TARGET_TERMS: [&str; 22] = [
+    "代码",
+    "runtime",
+    "hook",
+    "hooks",
+    "agent.md",
+    "agents.md",
+    "claude.md",
+    "gemini.md",
+    "脚本",
+    "router",
+    "路由",
+    "内存",
+    "性能",
+    "热区",
+    "热路径",
+    "保底",
+    "补丁",
+    "fallback",
+    "shim",
+    "wrapper",
+    "patch",
+    "兼容层",
+];
+const USER_PROMPT_NON_CODE_EDIT_TERMS: [&str; 11] = [
+    "结论",
+    "措辞",
+    "翻译",
+    "润色",
+    "摘要",
+    "邮件",
+    "口语化",
+    "人话",
+    "readme",
+    "文档",
+    "说明",
+];
+const USER_PROMPT_PERF_TERMS: [&str; 8] = [
+    "加速",
+    "性能",
+    "内存",
+    "热区",
+    "热路径",
+    "performance",
+    "memory",
+    "latency",
+];
+const USER_PROMPT_COMPAT_TERMS: [&str; 7] = [
+    "保底", "补丁", "兼容", "fallback", "shim", "wrapper", "patch",
+];
+const USER_PROMPT_HOOK_TERMS: [&str; 6] = [
+    "hook",
+    "hooks",
+    "agent.md",
+    "claude.md",
+    "pretooluse",
+    "userpromptsubmit",
+];
+const USER_PROMPT_COMMON_CONTEXT: &str =
+    "实现要求：优先直接落目标行为，不要先叠兼容层、补丁分支、保底开关或 keep-old-and-add-new。";
+const USER_PROMPT_PERF_CONTEXT: &str =
+    "顺手看热路径上的重复 I/O、重复序列化、无谓 clone、临时对象和多余包装层。";
+const USER_PROMPT_COMPAT_CONTEXT: &str =
+    "如果旧 compat/fallback/过渡逻辑已经没有真实必要，优先删掉而不是继续包一层。";
+const USER_PROMPT_HOOK_CONTEXT: &str =
+    "Hook 额外检查：让 hook 增加自动化，而不是只做阻拦；优先短上下文、窄触发、低开销，并尽量用 matcher/if 避免无谓触发。";
+const QUALITY_RUST_CONTEXT: &str =
+    "Rust 额外检查：盯住热循环里的分配、clone、String/Vec 复制和 serde_json 往返。";
+const QUALITY_PYTHON_CONTEXT: &str =
+    "Python 额外检查：盯住重复解析、重复读文件、wrapper-on-wrapper 和兼容别名链。";
+const QUALITY_TEST_CONTEXT: &str = "测试额外检查：锁真实契约和回归点，不给补丁式旧行为续命。";
+const QUALITY_RUNTIME_PREFIXES: [&str; 2] = [
+    "codex_agno_runtime/src/codex_agno_runtime/",
+    "scripts/router-rs/src/",
+];
+const QUALITY_HOOK_PREFIXES: [&str; 2] = ["scripts/claude_hook_", ".claude/hooks/"];
+const QUALITY_TARGET_SUFFIXES: [&str; 3] = [".py", ".rs", ".sh"];
+const ASYNC_AUDIT_PREFIXES: [&str; 5] = [
+    "codex_agno_runtime/src/codex_agno_runtime/",
+    "scripts/router-rs/src/",
+    "scripts/claude_hook_",
+    "scripts/materialize_cli_host_entrypoints.py",
+    ".claude/hooks/",
+];
+const SNAPSHOT_ROOT_DIRNAME: &str = "claude_hook_automation_snapshots";
+const SNAPSHOT_MAX_BYTES: u64 = 200_000;
+const COMPAT_SMELL_PATTERN: &str = r"\b(?:compat|compatibility|legacy|fallback|shim|patch|workaround|temporary|deprecated)\b|兼容|保底|补丁";
 const SHARED_CONTINUITY_PATHS: [&str; 5] = [
     "SESSION_SUMMARY.md",
     "NEXT_ACTIONS.json",
@@ -130,7 +244,10 @@ pub fn run_claude_audit_hook(command: &str, repo_root: &Path) -> Result<Value, S
     let canonical = canonical_audit_command(command)?;
     let payload = read_stdin_payload()?;
     match canonical {
+        "user-prompt-submit" => run_user_prompt_submit(&payload),
         "pre-tool-use" => run_pre_tool_use(repo_root, &payload),
+        "pre-tool-use-quality" => run_pre_tool_use_quality(repo_root, &payload),
+        "post-tool-audit" => run_post_tool_audit(repo_root, &payload),
         "config-change" => run_config_change(repo_root, &payload),
         "stop-failure" => run_stop_failure(repo_root, &payload),
         _ => Err(format!("Unsupported Claude audit command: {command}")),
@@ -151,7 +268,10 @@ fn canonical_lifecycle_command(command: &str) -> Result<&'static str, String> {
 
 fn canonical_audit_command(command: &str) -> Result<&'static str, String> {
     match command {
+        "user-prompt-submit" => Ok("user-prompt-submit"),
         "pre-tool-use" => Ok("pre-tool-use"),
+        "pre-tool-use-quality" => Ok("pre-tool-use-quality"),
+        "post-tool-audit" => Ok("post-tool-audit"),
         "config-change" => Ok("config-change"),
         "stop-failure" => Ok("stop-failure"),
         _ => Err(format!("Unsupported Claude audit command: {command}")),
@@ -438,43 +558,63 @@ fn persist_memory_bundle(
         .iter()
         .map(|(name, _)| name.clone())
         .collect::<Vec<_>>();
-    delete_memory_items_not_in_sources(&conn, workspace, &sources)?;
-    delete_memory_items_by_sources(&conn, workspace, &sources)?;
+    let expected_items = documents
+        .iter()
+        .map(|(_, text)| extract_memory_segments(text).len())
+        .sum::<usize>();
+    let bundle_hash = build_authoritative_bundle_hash(documents)?;
+    let bundle_hash_key = workspace_schema_meta_key(workspace, "authoritative_bundle_hash");
+    let existing_bundle_hash = read_schema_meta_value(&conn, &bundle_hash_key)?;
+    let existing_items_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM memory_items WHERE workspace = ?",
+            params![workspace],
+            |row| row.get(0),
+        )
+        .map_err(|err| format!("count memory items failed: {err}"))?;
+    let bundle_matches = existing_bundle_hash.as_deref() == Some(bundle_hash.as_str())
+        && existing_items_count == expected_items as i64;
 
     let mut persisted_items = 0usize;
-    for (file_name, text) in documents {
-        let category = memory_category_for_file(file_name);
-        let segments = extract_memory_segments(text);
-        for (index, (headings, summary)) in segments.iter().enumerate() {
-            let heading_context = headings.join(" / ");
-            let item_id = memory_item_id(workspace, category, index + 1, summary, file_name);
-            let metadata = json!({
-                "document": file_name,
-                "headings": headings,
-            });
-            let keywords = json!([summary, file_name, headings]).to_string();
-            let now = current_local_timestamp();
-            conn.execute(
-                "INSERT INTO memory_items (item_id, workspace, category, source, confidence, status, summary, notes, evidence_json, metadata_json, keywords_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(item_id) DO UPDATE SET workspace=excluded.workspace, category=excluded.category, source=excluded.source, confidence=excluded.confidence, status=excluded.status, summary=excluded.summary, notes=excluded.notes, evidence_json=excluded.evidence_json, metadata_json=excluded.metadata_json, keywords_json=excluded.keywords_json, updated_at=excluded.updated_at",
-                params![
-                    item_id,
-                    workspace,
-                    category,
-                    file_name,
-                    0.8f64,
-                    "active",
-                    summary,
-                    heading_context,
-                    "[]",
-                    metadata.to_string(),
-                    keywords,
-                    now,
-                    current_local_timestamp(),
-                ],
-            )
-            .map_err(|err| format!("upsert memory item failed: {err}"))?;
-            persisted_items += 1;
+    if !bundle_matches {
+        delete_memory_items_not_in_sources(&conn, workspace, &sources)?;
+        delete_memory_items_by_sources(&conn, workspace, &sources)?;
+
+        for (file_name, text) in documents {
+            let category = memory_category_for_file(file_name);
+            let segments = extract_memory_segments(text);
+            for (index, (headings, summary)) in segments.iter().enumerate() {
+                let heading_context = headings.join(" / ");
+                let item_id = memory_item_id(workspace, category, index + 1, summary, file_name);
+                let metadata = json!({
+                    "document": file_name,
+                    "headings": headings,
+                });
+                let keywords = json!([summary, file_name, headings]).to_string();
+                let now = current_local_timestamp();
+                conn.execute(
+                    "INSERT INTO memory_items (item_id, workspace, category, source, confidence, status, summary, notes, evidence_json, metadata_json, keywords_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(item_id) DO UPDATE SET workspace=excluded.workspace, category=excluded.category, source=excluded.source, confidence=excluded.confidence, status=excluded.status, summary=excluded.summary, notes=excluded.notes, evidence_json=excluded.evidence_json, metadata_json=excluded.metadata_json, keywords_json=excluded.keywords_json, updated_at=excluded.updated_at",
+                    params![
+                        item_id,
+                        workspace,
+                        category,
+                        file_name,
+                        0.8f64,
+                        "active",
+                        summary,
+                        heading_context,
+                        "[]",
+                        metadata.to_string(),
+                        keywords,
+                        now,
+                        current_local_timestamp(),
+                    ],
+                )
+                .map_err(|err| format!("upsert memory item failed: {err}"))?;
+                persisted_items += 1;
+            }
         }
+        write_schema_meta_value(&conn, &bundle_hash_key, &bundle_hash)?;
     }
 
     let memory_items_count: i64 = conn
@@ -514,7 +654,8 @@ fn write_memory_state(
     resolved_dir: &Path,
 ) -> Result<Option<String>, String> {
     let path = resolved_dir.join(MEMORY_STATE_FILENAME);
-    let payload = build_memory_state(runtime_snapshot)?;
+    let existing = read_json_if_exists(&path);
+    let payload = build_memory_state(runtime_snapshot, Some(&existing))?;
     if write_json_if_changed(&path, &payload)? {
         let resolved = path.canonicalize().unwrap_or(path);
         return Ok(Some(resolved.display().to_string()));
@@ -522,7 +663,10 @@ fn write_memory_state(
     Ok(None)
 }
 
-fn build_memory_state(runtime_snapshot: &Map<String, Value>) -> Result<Value, String> {
+fn build_memory_state(
+    runtime_snapshot: &Map<String, Value>,
+    existing_state: Option<&Value>,
+) -> Result<Value, String> {
     let continuity = runtime_snapshot
         .get("continuity")
         .and_then(Value::as_object)
@@ -538,11 +682,26 @@ fn build_memory_state(runtime_snapshot: &Map<String, Value>) -> Result<Value, St
         .and_then(Value::as_object)
         .and_then(|inner| inner.get("last_updated_at"))
         .and_then(Value::as_str)
-        .or_else(|| runtime_snapshot.get("collected_at").and_then(Value::as_str))
-        .unwrap_or("")
-        .to_string();
+        .map(|value| value.to_string());
     let source_hash = build_runtime_source_hash(&paths, runtime_snapshot.get("active_task_id"))?;
-    Ok(json!({
+    let reused_source_updated_at = existing_state
+        .and_then(Value::as_object)
+        .filter(|existing| {
+            existing.get("content_hash").and_then(Value::as_str) == Some(source_hash.as_str())
+        })
+        .and_then(|existing| existing.get("source_updated_at"))
+        .and_then(Value::as_str)
+        .map(|value| value.to_string());
+    let source_updated_at = source_updated_at
+        .or(reused_source_updated_at)
+        .or_else(|| {
+            runtime_snapshot
+                .get("collected_at")
+                .and_then(Value::as_str)
+                .map(|value| value.to_string())
+        })
+        .unwrap_or_default();
+    let mut payload = json!({
         "schema_version": MEMORY_STATE_SCHEMA_VERSION,
         "source_task_id": runtime_snapshot.get("active_task_id").cloned().unwrap_or(Value::Null),
         "source_task": continuity.get("task").cloned().unwrap_or(Value::Null),
@@ -553,7 +712,17 @@ fn build_memory_state(runtime_snapshot: &Map<String, Value>) -> Result<Value, St
         "source_updated_at": source_updated_at,
         "content_hash": source_hash,
         "last_consolidated_at": current_local_timestamp(),
-    }))
+    });
+    if let Some(existing) = existing_state {
+        if memory_state_matches_ignoring_timestamp(existing, &payload) {
+            if let Some(previous_timestamp) =
+                existing.get("last_consolidated_at").and_then(Value::as_str)
+            {
+                payload["last_consolidated_at"] = Value::String(previous_timestamp.to_string());
+            }
+        }
+    }
+    Ok(payload)
 }
 
 fn build_runtime_source_hash(
@@ -573,6 +742,52 @@ fn build_runtime_source_hash(
     let mut hasher = Sha256::new();
     hasher.update(encoded);
     Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn build_authoritative_bundle_hash(documents: &[(String, String)]) -> Result<String, String> {
+    let encoded = serde_json::to_vec(documents)
+        .map_err(|err| format!("encode authoritative bundle hash failed: {err}"))?;
+    let mut hasher = Sha256::new();
+    hasher.update(encoded);
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn workspace_schema_meta_key(workspace: &str, suffix: &str) -> String {
+    format!("workspace:{}:{suffix}", safe_slug(workspace))
+}
+
+fn read_schema_meta_value(conn: &Connection, key: &str) -> Result<Option<String>, String> {
+    let mut statement = conn
+        .prepare("SELECT value FROM schema_meta WHERE key = ?")
+        .map_err(|err| format!("prepare schema meta lookup failed: {err}"))?;
+    match statement.query_row(params![key], |row| row.get::<_, String>(0)) {
+        Ok(value) => Ok(Some(value)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(err) => Err(format!("read schema meta value failed: {err}")),
+    }
+}
+
+fn write_schema_meta_value(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO schema_meta(key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+        params![key, value, current_local_timestamp()],
+    )
+    .map_err(|err| format!("write schema meta value failed: {err}"))?;
+    Ok(())
+}
+
+fn memory_state_matches_ignoring_timestamp(existing: &Value, candidate: &Value) -> bool {
+    let Some(existing_object) = existing.as_object() else {
+        return false;
+    };
+    let Some(candidate_object) = candidate.as_object() else {
+        return false;
+    };
+    let mut existing_cmp = existing_object.clone();
+    let mut candidate_cmp = candidate_object.clone();
+    existing_cmp.remove("last_consolidated_at");
+    candidate_cmp.remove("last_consolidated_at");
+    existing_cmp == candidate_cmp
 }
 
 fn run_config_change(repo_root: &Path, payload: &Value) -> Result<Value, String> {
@@ -620,6 +835,26 @@ fn run_config_change(repo_root: &Path, payload: &Value) -> Result<Value, String>
         "repo_root": repo_root.display().to_string(),
         "scope": scope,
         "notices": notices,
+    }))
+}
+
+fn run_user_prompt_submit(payload: &Value) -> Result<Value, String> {
+    let prompt_text = extract_user_prompt_text(payload);
+    let Some(context) = build_user_prompt_context(&prompt_text) else {
+        return Ok(json!({
+            "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
+            "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
+            "command": "user-prompt-submit",
+        }));
+    };
+    Ok(json!({
+        "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
+        "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
+        "command": "user-prompt-submit",
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": context,
+        }
     }))
 }
 
@@ -674,6 +909,108 @@ fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Result<Value, String> 
         "command": "pre-tool-use",
         "tool_name": tool_name,
         "decision": "allow",
+    }))
+}
+
+fn run_pre_tool_use_quality(repo_root: &Path, payload: &Value) -> Result<Value, String> {
+    let tool_name = payload
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    if !matches!(tool_name, "Edit" | "MultiEdit" | "Write") {
+        return Ok(json!({
+            "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
+            "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
+            "command": "pre-tool-use-quality",
+            "tool_name": tool_name,
+        }));
+    }
+
+    let mut rel_paths = iter_payload_paths(payload)
+        .into_iter()
+        .map(|path| relative_candidate_path(&path, repo_root))
+        .collect::<Vec<_>>();
+    rel_paths.sort();
+    rel_paths.dedup();
+
+    for path in &rel_paths {
+        if is_async_audit_target(path) && is_quality_target_path(path) {
+            store_pre_edit_snapshot(repo_root, path)?;
+        }
+        if let Some(context) = quality_target_context(path) {
+            return Ok(json!({
+                "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
+                "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
+                "command": "pre-tool-use-quality",
+                "tool_name": tool_name,
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                    "permissionDecisionReason": "Apply repo implementation-quality defaults.",
+                    "additionalContext": context,
+                },
+            }));
+        }
+    }
+
+    Ok(json!({
+        "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
+        "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
+        "command": "pre-tool-use-quality",
+        "tool_name": tool_name,
+    }))
+}
+
+fn run_post_tool_audit(repo_root: &Path, payload: &Value) -> Result<Value, String> {
+    let tool_name = payload
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    if !matches!(tool_name, "Edit" | "MultiEdit" | "Write") {
+        return Ok(json!({
+            "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
+            "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
+            "command": "post-tool-audit",
+            "tool_name": tool_name,
+        }));
+    }
+
+    let mut rel_paths = iter_payload_paths(payload)
+        .into_iter()
+        .map(|path| relative_candidate_path(&path, repo_root))
+        .collect::<Vec<_>>();
+    rel_paths.sort();
+    rel_paths.dedup();
+
+    for path in rel_paths {
+        if !is_async_audit_target(&path) || !is_quality_target_path(&path) {
+            continue;
+        }
+        let (delta_text, source_mode) = extract_audit_delta(repo_root, &path, payload)?;
+        if delta_text.trim().is_empty() {
+            continue;
+        }
+        let Some(context) = build_async_audit_context(&path, &delta_text, &source_mode) else {
+            continue;
+        };
+        return Ok(json!({
+            "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
+            "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
+            "command": "post-tool-audit",
+            "tool_name": tool_name,
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": context,
+            },
+            "additionalContext": context,
+        }));
+    }
+
+    Ok(json!({
+        "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
+        "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
+        "command": "post-tool-audit",
+        "tool_name": tool_name,
     }))
 }
 
@@ -774,6 +1111,467 @@ fn payload_mentions_continuity(payload: &Value) -> bool {
     SHARED_CONTINUITY_PATHS
         .iter()
         .any(|needle| serialized.contains(needle))
+}
+
+fn extract_user_prompt_text(payload: &Value) -> String {
+    let mut values = Vec::new();
+    for key in ["prompt", "user_prompt", "text", "message"] {
+        if let Some(text) = payload.get(key).and_then(Value::as_str) {
+            values.push(text.trim().to_string());
+        }
+    }
+    if let Some(text) = payload.get("input").and_then(Value::as_str) {
+        values.push(text.trim().to_string());
+    }
+    if let Some(nested) = payload.get("payload").and_then(Value::as_object) {
+        for key in ["prompt", "user_prompt", "text", "message"] {
+            if let Some(text) = nested.get(key).and_then(Value::as_str) {
+                values.push(text.trim().to_string());
+            }
+        }
+    }
+    values
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn count_contains(text: &str, tokens: &[&str]) -> usize {
+    tokens.iter().filter(|token| text.contains(**token)).count()
+}
+
+fn prompt_path_mentions(prompt_text: &str, code_only: bool) -> Vec<String> {
+    let suffixes = if code_only {
+        "(?:py|rs|sh)"
+    } else {
+        "(?:py|rs|sh|json)"
+    };
+    let pattern = format!(r"(^|[^A-Za-z0-9_])([\w./-]+\.{suffixes})([^A-Za-z0-9_]|$)");
+    let Ok(regex) = Regex::new(&pattern) else {
+        return Vec::new();
+    };
+    let mut results = Vec::new();
+    for captures in regex.captures_iter(prompt_text) {
+        if let Some(path) = captures
+            .get(2)
+            .map(|value| value.as_str().replace('\\', "/"))
+        {
+            results.push(path);
+        }
+    }
+    results
+}
+
+fn markdown_path_mentions(prompt_text: &str) -> Vec<String> {
+    let Ok(regex) = Regex::new(r"(^|[^A-Za-z0-9_])([\w./-]+\.md)([^A-Za-z0-9_]|$)") else {
+        return Vec::new();
+    };
+    let mut results = Vec::new();
+    for captures in regex.captures_iter(prompt_text) {
+        if let Some(path) = captures
+            .get(2)
+            .map(|value| value.as_str().replace('\\', "/"))
+        {
+            results.push(path);
+        }
+    }
+    results
+}
+
+fn looks_like_coding_request(prompt_text: &str) -> bool {
+    if prompt_text.trim().is_empty() {
+        return false;
+    }
+    if !markdown_path_mentions(prompt_text).is_empty()
+        && prompt_path_mentions(prompt_text, false).is_empty()
+    {
+        return false;
+    }
+    let lowered = prompt_text.to_lowercase();
+    let strong_actions = count_contains(&lowered, &USER_PROMPT_STRONG_ACTION_TERMS);
+    let weak_actions = count_contains(&lowered, &USER_PROMPT_WEAK_ACTION_TERMS);
+    let code_targets = count_contains(&lowered, &USER_PROMPT_CODE_TARGET_TERMS);
+    let path_mentions = prompt_path_mentions(prompt_text, false).len();
+    let non_code_edits = count_contains(&lowered, &USER_PROMPT_NON_CODE_EDIT_TERMS);
+    let action_score = strong_actions * 2 + weak_actions;
+    let target_score = code_targets + path_mentions * 2;
+    if action_score == 0 || target_score == 0 {
+        return false;
+    }
+    if non_code_edits >= 2 && strong_actions == 0 && target_score < 2 {
+        return false;
+    }
+    action_score + target_score >= non_code_edits + 3
+}
+
+fn join_unique_context(parts: &[&str]) -> String {
+    let mut seen = HashSet::new();
+    let mut ordered = Vec::new();
+    for part in parts {
+        if part.is_empty() || !seen.insert(*part) {
+            continue;
+        }
+        ordered.push(*part);
+    }
+    ordered.join(" ")
+}
+
+fn build_user_prompt_context(prompt_text: &str) -> Option<String> {
+    if !looks_like_coding_request(prompt_text) {
+        return None;
+    }
+    let lowered = prompt_text.to_lowercase();
+    let mut parts = vec![USER_PROMPT_COMMON_CONTEXT];
+    if count_contains(&lowered, &USER_PROMPT_PERF_TERMS) > 0 {
+        parts.push(USER_PROMPT_PERF_CONTEXT);
+    }
+    if count_contains(&lowered, &USER_PROMPT_COMPAT_TERMS) > 0 {
+        parts.push(USER_PROMPT_COMPAT_CONTEXT);
+    }
+    let path_hints = prompt_path_mentions(prompt_text, true);
+    let path_hint_has_hook = path_hints
+        .iter()
+        .any(|hint| hint.to_lowercase().contains("hook"));
+    if count_contains(&lowered, &USER_PROMPT_HOOK_TERMS) > 0 || path_hint_has_hook {
+        parts.push(USER_PROMPT_HOOK_CONTEXT);
+    }
+    Some(join_unique_context(&parts))
+}
+
+fn is_quality_target_path(path: &str) -> bool {
+    QUALITY_TARGET_SUFFIXES
+        .iter()
+        .any(|suffix| path.ends_with(suffix))
+}
+
+fn quality_target_context(path: &str) -> Option<String> {
+    if !is_quality_target_path(path) {
+        return None;
+    }
+    let lowered_path = path.to_lowercase();
+    let is_runtime = QUALITY_RUNTIME_PREFIXES
+        .iter()
+        .any(|prefix| path.starts_with(prefix));
+    let is_hook = QUALITY_HOOK_PREFIXES
+        .iter()
+        .any(|prefix| path.starts_with(prefix))
+        || lowered_path.contains("hook");
+    let is_test = path.starts_with("tests/");
+    if !(is_runtime || is_hook || is_test || path == "scripts/materialize_cli_host_entrypoints.py")
+    {
+        return None;
+    }
+
+    let mut parts = Vec::new();
+    if is_runtime {
+        parts.push(USER_PROMPT_PERF_CONTEXT);
+    }
+    if path.ends_with(".rs") && is_runtime {
+        parts.push(QUALITY_RUST_CONTEXT);
+    }
+    if path.ends_with(".py") && (is_runtime || is_hook) {
+        parts.push(QUALITY_PYTHON_CONTEXT);
+    }
+    if is_hook || path.ends_with(".sh") {
+        parts.push(USER_PROMPT_HOOK_CONTEXT);
+    }
+    if is_test {
+        parts.push(QUALITY_TEST_CONTEXT);
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    Some(join_unique_context(&parts))
+}
+
+fn snapshot_root() -> PathBuf {
+    env::temp_dir().join(SNAPSHOT_ROOT_DIRNAME)
+}
+
+fn read_text_if_small(path: &Path) -> Option<String> {
+    let metadata = path.metadata().ok()?;
+    if !metadata.is_file() || metadata.len() > SNAPSHOT_MAX_BYTES {
+        return None;
+    }
+    fs::read_to_string(path).ok()
+}
+
+fn snapshot_path(repo_root: &Path, path: &str) -> PathBuf {
+    let key = Sha256::digest(format!("{}::{path}", repo_root.display()).as_bytes());
+    let key_hex = format!("{key:x}");
+    snapshot_root()
+        .join(&key_hex[..2])
+        .join(format!("{key_hex}.json"))
+}
+
+fn store_pre_edit_snapshot(repo_root: &Path, path: &str) -> Result<(), String> {
+    let target = repo_root.join(path);
+    let payload = if target.is_file() {
+        let Some(text) = read_text_if_small(&target) else {
+            return Ok(());
+        };
+        json!({ "exists": true, "text": text })
+    } else {
+        json!({ "exists": false, "text": "" })
+    };
+    let snapshot = snapshot_path(repo_root, path);
+    if let Some(parent) = snapshot.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create snapshot parent failed: {err}"))?;
+    }
+    let text = serde_json::to_string(&payload)
+        .map_err(|err| format!("serialize snapshot failed: {err}"))?;
+    fs::write(&snapshot, text).map_err(|err| format!("write snapshot failed: {err}"))?;
+    Ok(())
+}
+
+fn pop_pre_edit_snapshot(repo_root: &Path, path: &str) -> Option<(String, String)> {
+    let snapshot = snapshot_path(repo_root, path);
+    if !snapshot.is_file() {
+        return None;
+    }
+    let text = fs::read_to_string(&snapshot).ok();
+    let _ = fs::remove_file(&snapshot);
+    let payload = serde_json::from_str::<Value>(&text?).ok()?;
+    let before = payload
+        .get("text")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let mode = if payload.get("exists").and_then(Value::as_bool) == Some(true) {
+        "pre_tool_snapshot_added_lines"
+    } else {
+        "pre_tool_snapshot_new_file"
+    };
+    Some((before, mode.to_string()))
+}
+
+fn compat_smell_count(text: &str) -> usize {
+    Regex::new(COMPAT_SMELL_PATTERN)
+        .ok()
+        .map(|regex| regex.find_iter(text).count())
+        .unwrap_or(0)
+}
+
+fn git_tracked_text(repo_root: &Path, path: &str) -> String {
+    Command::new("git")
+        .arg("show")
+        .arg(format!("HEAD:{path}"))
+        .current_dir(repo_root)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .unwrap_or_default()
+}
+
+fn added_lines(before: &str, after: &str) -> String {
+    let mut before_counts = HashMap::new();
+    for line in before.lines() {
+        *before_counts.entry(line.to_string()).or_insert(0usize) += 1;
+    }
+    let mut added = Vec::new();
+    for line in after.lines() {
+        if let Some(count) = before_counts.get_mut(line) {
+            if *count > 0 {
+                *count -= 1;
+                continue;
+            }
+        }
+        added.push(line);
+    }
+    added.join("\n").trim().to_string()
+}
+
+fn extract_multi_edit_delta(tool_input: &Map<String, Value>) -> String {
+    tool_input
+        .get("edits")
+        .and_then(Value::as_array)
+        .map(|edits| {
+            edits
+                .iter()
+                .filter_map(Value::as_object)
+                .filter_map(|edit| edit.get("new_string").and_then(Value::as_str))
+                .filter(|text| !text.trim().is_empty())
+                .collect::<Vec<_>>()
+                .join("\n")
+                .trim()
+                .to_string()
+        })
+        .unwrap_or_default()
+}
+
+fn extract_audit_delta(
+    repo_root: &Path,
+    path: &str,
+    payload: &Value,
+) -> Result<(String, String), String> {
+    let tool_name = payload
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let tool_input = payload
+        .get("tool_input")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+
+    if let Some((before_text, mode)) = pop_pre_edit_snapshot(repo_root, path) {
+        let after_path = repo_root.join(path);
+        let after_text = if after_path.exists() {
+            let Some(text) = read_text_if_small(&after_path) else {
+                return Ok(("".to_string(), "snapshot_skip_large_after".to_string()));
+            };
+            text
+        } else {
+            String::new()
+        };
+        let added = added_lines(&before_text, &after_text);
+        let source_mode = if added.is_empty() {
+            format!("{mode}_no_added_lines")
+        } else {
+            mode
+        };
+        return Ok((added, source_mode));
+    }
+
+    if tool_name == "Edit" {
+        return Ok((
+            tool_input
+                .get("new_string")
+                .and_then(Value::as_str)
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .unwrap_or_default(),
+            if tool_input
+                .get("new_string")
+                .and_then(Value::as_str)
+                .map(|value| !value.trim().is_empty())
+                .unwrap_or(false)
+            {
+                "edit_new_string".to_string()
+            } else {
+                "edit_empty".to_string()
+            },
+        ));
+    }
+
+    if tool_name == "MultiEdit" {
+        let delta = extract_multi_edit_delta(&tool_input);
+        return Ok((
+            delta.clone(),
+            if delta.is_empty() {
+                "multi_edit_empty".to_string()
+            } else {
+                "multi_edit_new_strings".to_string()
+            },
+        ));
+    }
+
+    if tool_name == "Write" {
+        let content = tool_input
+            .get("content")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_default();
+        if content.trim().is_empty() {
+            return Ok(("".to_string(), "write_empty".to_string()));
+        }
+        let tracked = git_tracked_text(repo_root, path);
+        if !tracked.is_empty() {
+            let added = added_lines(&tracked, &content);
+            return Ok((
+                added.clone(),
+                if added.is_empty() {
+                    "write_no_added_lines".to_string()
+                } else {
+                    "write_git_added_lines".to_string()
+                },
+            ));
+        }
+        if !repo_root.join(path).exists() {
+            return Ok((content, "write_new_file".to_string()));
+        }
+        return Ok((
+            "".to_string(),
+            "write_skip_existing_without_base".to_string(),
+        ));
+    }
+
+    Ok(("".to_string(), "unsupported_tool".to_string()))
+}
+
+fn build_async_audit_context(path: &str, text: &str, source_mode: &str) -> Option<String> {
+    let compat_hits = compat_smell_count(text);
+    let lowered_path = path.to_lowercase();
+    let source_label = format!("增量来源={source_mode}");
+    let mut parts = Vec::new();
+
+    if path.ends_with(".rs") {
+        let clone_hits = text.matches(".clone(").count() + text.matches(".clone()").count();
+        let serde_hits = text.matches("serde_json::").count();
+        let string_hits =
+            text.matches(".to_string()").count() + text.matches(".to_owned()").count();
+        if compat_hits >= 1 || clone_hits >= 2 || serde_hits >= 2 || string_hits >= 3 {
+            parts.push(format!(
+                "`{path}` 的新增片段有实现复查信号：{source_label}, compat={compat_hits}, clone={clone_hits}, serde={serde_hits}, string_copy={string_hits}。"
+            ));
+            parts.push(
+                "如果这轮还在继续，先看新增兼容分支或中转层能不能直接收掉，再压缩热路径里的 clone 和序列化往返。"
+                    .to_string(),
+            );
+        }
+    } else if path.ends_with(".py") {
+        let json_hits = text.matches("json.loads(").count() + text.matches("json.dumps(").count();
+        let io_hits = text.matches(".read_text(").count()
+            + text.matches(".read_bytes(").count()
+            + text.matches(".write_text(").count();
+        let wrapper_hits = if lowered_path.contains("hook") {
+            text.matches("def ").count()
+        } else {
+            0
+        };
+        if compat_hits >= 1 || json_hits >= 2 || io_hits >= 2 {
+            parts.push(format!(
+                "`{path}` 的新增片段有实现复查信号：{source_label}, compat={compat_hits}, json_roundtrip={json_hits}, file_io={io_hits}。"
+            ));
+            parts.push(
+                "如果这轮还在继续，先看新增兼容/补丁分支能不能直接收掉，再减少重复解析、重复读写和 wrapper-on-wrapper。"
+                    .to_string(),
+            );
+        } else if lowered_path.contains("hook") && compat_hits >= 1 {
+            parts.push(format!(
+                "`{path}` 的新增片段仍带有明显的 hook 过渡信号：{source_label}, compat={compat_hits}, helper_defs={wrapper_hits}。"
+            ));
+            parts.push(
+                "确认这层是在增加自动化，而不是只多加一道阻拦或中转包装；优先把新增中转层收回到更短路径。"
+                    .to_string(),
+            );
+        }
+    } else if path.ends_with(".sh") {
+        let deny_hits = text.matches("permissionDecision").count();
+        if lowered_path.contains("hook") && (compat_hits >= 1 || deny_hits >= 1) {
+            parts.push(format!(
+                "`{path}` 的新增片段有 hook 复查信号：{source_label}, compat={compat_hits}, deny_rules={deny_hits}。"
+            ));
+            parts.push(
+                "确认这层仍然是短路径、低开销、加自动化；优先删掉新增阻拦规则或合并重复判断。"
+                    .to_string(),
+            );
+        }
+    }
+
+    if parts.is_empty() {
+        return None;
+    }
+    Some(format!("异步实现复查：{}", parts.join(" ")))
+}
+
+fn is_async_audit_target(path: &str) -> bool {
+    ASYNC_AUDIT_PREFIXES
+        .iter()
+        .any(|prefix| path.starts_with(prefix))
 }
 
 fn classify_protected_generated_path(path: &str) -> Option<&'static str> {
@@ -1410,6 +2208,44 @@ mod tests {
     }
 
     #[test]
+    fn session_end_skips_rewriting_unchanged_memory_state_and_bundle() {
+        let repo_root = temp_repo_root("session-end-idempotent");
+
+        let first = run_claude_lifecycle_hook("session-end", &repo_root, 6).expect("first hook ok");
+        let first_state = read_json_if_exists(&repo_root.join(".codex/memory/state.json"));
+        let first_timestamp = first_state
+            .get("last_consolidated_at")
+            .and_then(Value::as_str)
+            .expect("first timestamp")
+            .to_string();
+        assert!(
+            first["consolidation"]["sqlite_result"]["persisted_items"]
+                .as_u64()
+                .unwrap_or(0)
+                > 0
+        );
+
+        let second =
+            run_claude_lifecycle_hook("session-end", &repo_root, 6).expect("second hook ok");
+        let second_state = read_json_if_exists(&repo_root.join(".codex/memory/state.json"));
+        let second_timestamp = second_state
+            .get("last_consolidated_at")
+            .and_then(Value::as_str)
+            .expect("second timestamp");
+        assert_eq!(second_timestamp, first_timestamp);
+        assert_eq!(
+            second["consolidation"]["sqlite_result"]["persisted_items"],
+            Value::from(0)
+        );
+        assert_eq!(
+            second["consolidation"]["changed_files"],
+            Value::Array(Vec::new())
+        );
+
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
     fn config_change_audit_detects_generated_surfaces() {
         let repo_root = temp_repo_root("audit");
         let payload = json!({
@@ -1434,6 +2270,68 @@ mod tests {
                 .unwrap_or("")
                 .contains("generated Claude host surfaces")));
         fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn user_prompt_submit_emits_context_for_code_requests() {
+        let payload = json!({
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "继续优化 runtime，去掉补丁式保底并顺手看内存和速度"
+        });
+        let result = run_user_prompt_submit(&payload).expect("audit ok");
+        assert_eq!(
+            result["hookSpecificOutput"]["hookEventName"],
+            Value::String("UserPromptSubmit".to_string())
+        );
+        let context = result["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or("");
+        assert!(context.contains("热路径"));
+        assert!(context.contains("fallback"));
+        assert!(!context.contains("简化优先"));
+    }
+
+    #[test]
+    fn user_prompt_submit_stays_silent_for_non_code_wording() {
+        let payload = json!({
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "把这个结论改得更像人话一点，顺手润色一下措辞"
+        });
+        let result = run_user_prompt_submit(&payload).expect("audit ok");
+        assert!(result.get("hookSpecificOutput").is_none());
+    }
+
+    #[test]
+    fn user_prompt_submit_stays_silent_for_markdown_doc_edits() {
+        for prompt in [
+            "优化 .claude/hooks/README.md，把说明写得更清楚",
+            "继续优化 AGENT.md，把 simplify 原则再收紧一点",
+        ] {
+            let payload = json!({
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": prompt,
+            });
+            let result = run_user_prompt_submit(&payload).expect("audit ok");
+            assert!(
+                result.get("hookSpecificOutput").is_none(),
+                "prompt should stay silent: {prompt}"
+            );
+        }
+    }
+
+    #[test]
+    fn user_prompt_submit_uses_hook_path_mentions_to_raise_precision() {
+        let payload = json!({
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "继续改 scripts/router-rs/src/claude_hooks.rs，把 hook 自动化做准一点，hook 触发要更窄"
+        });
+        let result = run_user_prompt_submit(&payload).expect("audit ok");
+        let context = result["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or("");
+        assert!(context.contains("增加自动化"));
+        assert!(context.contains("matcher/if"));
+        assert_eq!(context.matches("Hook 额外检查").count(), 1);
     }
 
     #[test]
@@ -1528,6 +2426,106 @@ mod tests {
         });
         let result = run_pre_tool_use(&repo_root, &payload).expect("guard ok");
         assert_eq!(result["decision"], Value::String("allow".to_string()));
+        assert!(result.get("hookSpecificOutput").is_none());
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn pre_tool_use_quality_emits_context_for_runtime_targets() {
+        let repo_root = temp_repo_root("pre-tool-quality");
+        let target = repo_root.join("scripts/router-rs/src/claude_hooks.rs");
+        fs::create_dir_all(target.parent().expect("target parent")).expect("create target parent");
+        fs::write(&target, "fn main() {}\n").expect("write target");
+
+        let payload = json!({
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": target.display().to_string()
+            }
+        });
+        let result = run_pre_tool_use_quality(&repo_root, &payload).expect("quality ok");
+        assert_eq!(
+            result["hookSpecificOutput"]["hookEventName"],
+            Value::String("PreToolUse".to_string())
+        );
+        assert_eq!(
+            result["hookSpecificOutput"]["permissionDecision"],
+            Value::String("allow".to_string())
+        );
+        let context = result["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or("");
+        assert!(context.contains("热路径"));
+        assert!(context.contains("serde_json"));
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn post_tool_audit_reports_patchy_rust_runtime_edits() {
+        let repo_root = temp_repo_root("post-tool-rust");
+        let target = repo_root.join("scripts/router-rs/src/claude_hooks.rs");
+        fs::create_dir_all(target.parent().expect("target parent")).expect("create target parent");
+        fs::write(&target, "fn main() {}\n").expect("write target");
+
+        let payload = json!({
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": target.display().to_string(),
+                "new_string": "let a = foo.clone();\nlet b = bar.clone();\nlet g = serde_json::to_string(&x)?;\n// legacy fallback compatibility patch",
+            }
+        });
+        let result = run_post_tool_audit(&repo_root, &payload).expect("audit ok");
+        assert_eq!(
+            result["hookSpecificOutput"]["hookEventName"],
+            Value::String("PostToolUse".to_string())
+        );
+        let context = result["additionalContext"].as_str().unwrap_or("");
+        assert!(context.contains("异步实现复查"));
+        assert!(context.contains("增量来源=edit_new_string"));
+        assert!(context.contains("clone="));
+        assert!(context.contains("新增兼容分支或中转层"));
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn post_tool_audit_uses_pre_tool_snapshot_for_true_delta_review() {
+        let repo_root = temp_repo_root("post-tool-snapshot");
+        let target = repo_root.join("scripts/claude_hook_automation.py");
+        fs::create_dir_all(target.parent().expect("target parent")).expect("create target parent");
+        fs::write(
+            &target,
+            "legacy fallback compatibility patch\njson.dumps(x)\njson.loads(y)\njson.dumps(z)\njson.loads(w)\n",
+        )
+        .expect("write target");
+
+        let pre_payload = json!({
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": target.display().to_string()
+            }
+        });
+        let pre_result = run_pre_tool_use_quality(&repo_root, &pre_payload).expect("pre hook ok");
+        assert_eq!(
+            pre_result["hookSpecificOutput"]["permissionDecision"],
+            Value::String("allow".to_string())
+        );
+
+        fs::write(
+            &target,
+            format!(
+                "{}helper = build_context(payload)\n",
+                fs::read_to_string(&target).expect("read target")
+            ),
+        )
+        .expect("append target");
+
+        let post_payload = json!({
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": target.display().to_string()
+            }
+        });
+        let result = run_post_tool_audit(&repo_root, &post_payload).expect("audit ok");
         assert!(result.get("hookSpecificOutput").is_none());
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }

@@ -53,7 +53,7 @@ This skill owns the end-to-end release lifecycle: from version strategy design t
 
 ## Do not use
 
-- The task is Git operations (branch, commit, push, rebase) → use `$git-workflow`
+- The task is Git operations (branch, commit, push, rebase) → use `$gitx`
 - The task is writing GitHub Actions workflow YAML → use `$github-actions-authoring`
 - The task is npm package structure (`package.json`, exports, ESM/CJS) → use `$npm-package-authoring`
 - The task is fixing broken CI checks → use `$gh-fix-ci`
@@ -74,14 +74,14 @@ This skill owns:
 - release tooling comparison and selection
 
 This skill does not own:
-- Git operations execution (branching, committing, pushing) — delegate to `$git-workflow`
+- Git operations execution (branching, committing, pushing) — delegate to `$gitx`
 - CI/CD workflow YAML authoring — delegate to `$github-actions-authoring`
 - npm package structure and exports — delegate to `$npm-package-authoring`
 - Docker image build/push details — delegate to `$docker`
 - deployment infrastructure (servers, Cloudflare, VMs)
 
 If the task shifts to adjacent skill territory, route to:
-- `$git-workflow` for tag/branch Git operations
+- `$gitx` for tag/branch Git operations
 - `$github-actions-authoring` for workflow file creation
 - `$npm-package-authoring` for package structure
 - `$docker` for image build/push

@@ -17,18 +17,18 @@ ROUTING_META_HINTS = {"skill", "router", "routing", "route", "触发", "路由",
 COMMON_STOP_TOKENS = {"一个", "帮我", "帮我看", "我看", "先给", "给我", "给我一", "我一个", "写一", "写一个", "看这", "这张", "然后", "输出", "问题", "checklist", "skill", "路由"}
 # Skills that should only be used as overlays, never as the primary owner.
 # Per AGENTS.md: iterative-optimizer does not count toward the overlay quota.
-OVERLAY_ONLY_SKILLS = {"iterative-optimizer", "execution-audit-codex", "i18n-l10n", "humanizer"}
+OVERLAY_ONLY_SKILLS = {"iterative-optimizer", "execution-audit", "i18n-l10n", "humanizer"}
 OVERLAY_EXPLICIT_HINTS = {
     "anti-laziness": {"anti-laziness", "防偷懒", "别糊弄", "别装死", "严格落实", "不许偷工减料", "gsd", "get shit done", "推进到底", "别停", "直接干完"},
     "code-review": {"code-review", "code review", "pr review", "代码审查", "review"},
     "coding-standards": {"coding-standards", "编码规范", "代码风格", "持续改进", "standardize"},
     "error-handling-patterns": {"error-handling-patterns", "错误处理", "error propagation", "retry", "circuit breaker"},
     "iterative-optimizer": {"iterative-optimizer", "多轮优化", "自迭代", "优化x轮", "review→fix→verify"},
-    "execution-audit-codex": {"execution-audit-codex", "强制验收", "零容忍审计", "sign-off", "高质量闭环"},
+    "execution-audit": {"execution-audit", "execution-audit-codex", "强制验收", "零容忍审计", "sign-off", "高质量闭环"},
     "frontend-code-quality": {"frontend-code-quality", "前端代码质量", "early return", "roro", "frontend quality"},
     "i18n-l10n": {"i18n", "l10n", "国际化", "多语言", "localization", "internationalization", "locale", "rtl"},
     "security-audit": {"security-audit", "安全审计", "security review", "ssrf", "csrf", "鉴权"},
-    "skill-routing-repair-codex": {"skill-routing-repair-codex", "路由修复", "触发修复", "以后别再选错", "顺手修一下 skill"},
+    "skill-routing-repair": {"skill-routing-repair", "skill-routing-repair-codex", "路由修复", "触发修复", "以后别再选错", "顺手修一下 skill"},
     "tdd-workflow": {"tdd-workflow", "tdd", "red-green-refactor", "先写测试", "测试驱动"},
     "vercel-react-best-practices": {"vercel-react-best-practices", "react 最佳实践", "next.js 最佳实践", "hydration", "server component"},
     "writing-skills": {"writing-skills", "skill 文档统一", "批量改 skill", "template unification", "standardize skill docs"},
@@ -40,7 +40,7 @@ SKILL_ALIAS_HINTS = {
     "checklist-writting": {"执行清单", "先写 checklist", "写成 checklist md", "写成 checklist 文件", "放到 checklist 目录", "路线已经定了", "不用再论证", "execution-ready checklist"},
     "checklist-normalizer": {"规范化 checklist", "整理成可执行清单", "串行的写在一点", "并行的拆开", "lane 重写", "补齐验收和约束"},
     "checklist-fixer": {"逐项修复", "fix list", "按 checklist 执行", "先做 1-3", "从 p0 开始", "只做第一个"},
-    "skill-routing-repair-codex": {"这次为什么没触发", "为什么没有触发", "是不是路由问题", "路由问题吗", "以后别再选错"},
+    "skill-routing-repair": {"这次为什么没触发", "为什么没有触发", "是不是路由问题", "路由问题吗", "以后别再选错"},
     "idea-to-plan": {"方案", "先做方案", "技术方案", "路线比较", "tradeoff", "权衡", "先调研再给计划", "先别写代码", "先探索现状再提方案", "先探索代码库再出方案", "风险评估", "decision log", "open questions", "assumptions", "critical files", "explore-plan", "outline.md", "code_list.md", "收敛"},
     "python-pro": {"python", "脚本", "pytest", "fastapi", "mypy", "pyright"},
     "visual-review": {"截图", "看图", "render", "渲染", "screenshot", "screen recording", "录屏", "图像", "图片"},
@@ -62,12 +62,33 @@ SKILL_ALIAS_HINTS = {
     "tailwind-pro": {"tailwind", "tailwindcss", "tw-"},
     "git-workflow": {"git", "commit", "branch", "merge", "rebase", "pr"},
     "execution-controller-coding": {"高负载", "跨文件", "长运行", "系统指挥中心", ".supervisor_state.json", "checkpoint", "rollback", "gsd", "get shit done", "推进到底", "别停"},
-    "skill-developer-codex": {"skill框架", "边界重叠", "owner", "gate", "overlay", "framework", "routing", "token"},
+    "skill-framework-developer": {"skill-framework-developer", "skill-developer-codex", "skill框架", "边界重叠", "owner", "gate", "overlay", "framework", "routing", "token"},
 }
 FRAMEWORK_ALIAS_EXPLICIT_ENTRYPOINTS = {
     "autopilot": {"/autopilot", "$autopilot"},
     "deepinterview": {"/deepinterview", "$deepinterview"},
 }
+PAPER_CONTEXT_SKILLS = {
+    "paper-reviewer",
+    "paper-reviser",
+    "paper-writing",
+    "paper-logic",
+    "paper-visuals",
+}
+PAPER_CONTEXT_MARKERS = (
+    "paper",
+    "manuscript",
+    "论文",
+    "稿子",
+    "稿件",
+    "摘要",
+    "引言",
+    "审稿意见",
+    "reviewer comments",
+    "rebuttal",
+    "appendix",
+    "claim",
+)
 GSD_EXECUTION_MARKERS = ("gsd", "get shit done", "推进到底", "别停", "直接干完", "一路做完")
 GATE_HINTS = {
     "source": {"官方", "官方文档", "文档", "docs", "readme", "api", "openai", "github", "look up", "search"},
@@ -133,6 +154,17 @@ def _has_explicit_framework_alias_call(normalized_task: str, task_tokens: list[s
     return any(
         normalize_text(entrypoint) in normalized_task or entrypoint in task_tokens
         for entrypoint in entrypoints
+    )
+
+
+def _paper_skill_requires_context(skill_name: str) -> bool:
+    return skill_name in PAPER_CONTEXT_SKILLS
+
+
+def _has_paper_context(normalized_task: str, task_tokens: list[str]) -> bool:
+    return any(
+        marker in normalized_task or _contains_phrase(task_tokens, marker)
+        for marker in PAPER_CONTEXT_MARKERS
     )
 
 
@@ -316,7 +348,7 @@ class SkillRouter:
         if explicit_overlay is not None:
             return explicit_overlay
         if (
-            selected_skill.name == "skill-developer-codex"
+            selected_skill.name == "skill-framework-developer"
             and any(
                 _contains_phrase(task_tokens, marker)
                 for marker in ("review", "framework-review", "routing-review", "审查", "审核")
@@ -398,6 +430,15 @@ class SkillRouter:
                 reasons=[
                     "Suppressed: framework alias skills only route from explicit /alias or $alias entrypoints."
                 ],
+            )
+        if _paper_skill_requires_context(skill.name) and not _has_paper_context(
+            normalized_task,
+            task_token_list,
+        ):
+            return _build_scored_skill(
+                skill,
+                score=0.0,
+                reasons=["Suppressed: paper skills require explicit paper or manuscript context."],
             )
 
         if skill.name.startswith("skill-") and not any(hint in normalized_task for hint in ROUTING_META_HINTS):

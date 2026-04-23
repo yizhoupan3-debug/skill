@@ -27,10 +27,10 @@ def test_write_trace_metadata_emits_required_fields(tmp_path: Path) -> None:
     write_trace_metadata(
         output,
         task="full outline rollout",
-        matched_skills=["execution-controller-coding", "execution-audit-codex"],
+        matched_skills=["execution-controller-coding", "execution-audit"],
         owner="execution-controller-coding",
         gate="delegation",
-        overlay="execution-audit-codex",
+        overlay="execution-audit",
         reroute_count=1,
         retry_count=2,
         artifact_paths=["artifacts/current/SESSION_SUMMARY.md"],
@@ -42,7 +42,7 @@ def test_write_trace_metadata_emits_required_fields(tmp_path: Path) -> None:
     assert data["task"] == "full outline rollout"
     assert data["matched_skills"] == [
         "execution-controller-coding",
-        "execution-audit-codex",
+        "execution-audit",
     ]
     assert data["decision"]["owner"] == "execution-controller-coding"
     assert data["reroute_count"] == 1

@@ -17,7 +17,7 @@ This document provides the full 7-phase workflow for `plan-to-code`. Use this fo
 - Use fast search (`rg`, `rg --files`) and read only the files needed to understand the implementation path.
 - Check whether similar features already exist and copy the established pattern when it reduces risk.
 - Audit partial implementation first when stub files, TODOs, or half-finished work already exist.
-- If the work is large or risky, coordinate with `$git-workflow`.
+- If the work is large or risky, coordinate with `$gitx`.
 
 ## Phase 3: Build an execution map
 
@@ -45,7 +45,7 @@ This document provides the full 7-phase workflow for `plan-to-code`. Use this fo
 
 - **Critique own work**: Before concluding implementation, act as a strict reviewer.
 - **Find "Blind Spots"**: Search for unhandled errors, unwired UI states, or potential race conditions.
-- **Reinforce**: If the user requested "Superior Quality", proactively trigger `$execution-audit-codex` findings and fix them before concluding.
+- **Reinforce**: If the user requested "Superior Quality", proactively trigger `$execution-audit` findings and fix them before concluding.
 
 ## Phase 6: Review
 

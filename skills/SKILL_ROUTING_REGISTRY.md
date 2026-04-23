@@ -33,8 +33,6 @@
 | `cloudflare-deploy` | Active | P2 | L3 | owner | none | project | ✓ 98.7 | Deploy, publish, migrate, and operate applications on Cloudflare using Workers,  |
 | `code-acceleration` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Speed up code with measured rewrites, batching, caching, and parallel execution |
 | `code-review` | Active | P2 | L2 | overlay | none | project | ✓ 94.7 | Review code with structured findings and optional quality scoring. Use when the  |
-| `slides` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Route presentation-artifact work before choosing a slide-authoring lane. Use thi |
-| `spreadsheets` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Route workbook-native spreadsheet artifact work before choosing a narrower imple |
 | `coding-standards` | Active | P2 | L1 | overlay | none | project | ✓ 97.7 | Enforce cross-stack coding standards: naming, readability, error handling, immut |
 | `copywriting` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Create persuasive commercial copy for landing pages, ads, product descriptions,  |
 | `css-pro` | Active | P2 | L2 | owner | none | project | ✓ 97.7 | Architect maintainable CSS layout, responsive, animation, and vibrant design-tok |
@@ -53,7 +51,7 @@
 | `email-template` | Active | P2 | L4 | owner | none | project | ✓ 98.3 | Produce cross-client HTML emails that render correctly in Outlook, Gmail, and Ap |
 | `env-config-management` | Active | P2 | L2 | owner | none | project | ✓ 97.7 | Design, audit, debug, and implement app configuration across env vars, `.env`, s |
 | `error-handling-patterns` | Active | P2 | L1 | overlay | none | project | ✓ 97.2 | Design cross-language error-handling architectures such as custom errors, retry/ |
-| `execution-audit-codex` | Active | P1 | L1 | overlay | none | project | ✓ 100.0 | Audit execution quality with evidence, sidecar-first collection, and compressed  |
+| `execution-audit` | Active | P1 | L1 | overlay | none | project | ✓ 100.0 | Audit execution quality with evidence, sidecar-first collection, and compressed  |
 | `execution-controller-app` | Active | P0 | L0 | @app-controller | delegation | project | ✓ 100.0 | Master orchestrator for production-grade app optimization, refactor, and full-st |
 | `execution-controller-coding` | Active | P0 | L0 | @kernel-controller | delegation | project | ✓ 100.0 | Orchestrate complex execution with clear scope, state, delegation, and verificat |
 | `experiment-reproducibility` | Active | P2 | L3 | owner | none | project | ✓ 96.2 | Ensure and manage research experiment reproducibility: environment capture, rand |
@@ -64,7 +62,6 @@
 | `gh-address-comments` | Active | P2 | L0 | gate | source | project | ✓ 94.0 | Triage and address GitHub PR review comments and review threads for the current  |
 | `gh-fix-ci` | Active | P2 | L0 | gate | source | project | ✓ 93.5 | Triage failing GitHub Actions PR checks with `gh` and `scripts/inspect_pr_checks |
 | `gh-pr-triage` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Triage GitHub pull requests by collecting PR metadata, comments, reviewer state, |
-| `git-workflow` | Active | P1 | L2 | owner | none | project | ✓ 100.0 | Safely execute Git operations and remote sync |
 | `github-actions-authoring` | Active | P2 | L3 | owner | none | project | ✓ 97.7 | Produce GitHub Actions workflow YAML with minimal permissions, stable cache keys |
 | `github-investigator` | Active | P2 | L2 | owner | none | project | ⚠ 64.0 | Deep GitHub repo research with issue/PR timeline and code-history evidence |
 | `gitx` | Active | P1 | L2 | owner | none | project | ✓ 100.0 | Run the safe Git review-fix-tidy-commit-merge-push workflow end to end. |
@@ -95,12 +92,12 @@
 | `observability` | Active | P2 | L2 | owner | none | project | ✓ 94.6 | Make production systems observable through logs, metrics, traces, dashboards, an |
 | `openai-docs` | Active | P1 | L1 | gate | source | project | ✓ 100.0 | Use official OpenAI docs first for current OpenAI guidance |
 | `paper-length-tuner` | Active | P2 | L4 | owner | none | project | ✓ 97.8 | Diagnose paper length vs target page/word budget and produce a section-level exp |
-| `paper-logic` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Audit a paper's scientific defensibility under peer review: claims-vs- evidence  |
+| `paper-logic` | Active | P2 | L2 | owner | none | project | ✓ 95.7 | Check whether a paper's claims are actually supported. Use for requests like "看论 |
 | `paper-notation-audit` | Active | P2 | L4 | owner | none | project | ✓ 97.1 | Audit and enforce notation consistency across an academic paper: abbreviations,  |
-| `paper-reviewer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Review a paper by abstract dimensions, not by sections. Default to the full `G0- |
-| `paper-reviser` | Active | P2 | L4 | owner | none | project | ✓ 97.3 | Execute the paper gate ledger one gate at a time. Default to sequential revision |
+| `paper-reviewer` | Active | P2 | L2 | owner | none | project | ✓ 95.8 | Judge whether a paper is ready to submit. Use for requests like "帮我审这篇 paper", " |
+| `paper-reviser` | Active | P2 | L2 | owner | none | project | ✓ 97.3 | Change a paper based on reviewer comments, known findings, or a clear decision t |
 | `paper-visuals` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Audit and improve paper figures, tables, captions, legends, axes, notes, and res |
-| `paper-writing` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Polish already-decided academic paper prose without changing evidence or claim b |
+| `paper-writing` | Active | P2 | L2 | owner | none | project | ✓ 95.7 | Polish local paper text after the claim and evidence boundary is already fixed.  |
 | `pdf` | Active | P1 | L3 | gate | artifact | project | ✓ 94.8 | Read, create, edit, repair, and review PDFs when rendering and page layout matte |
 | `performance-expert` | Active | P2 | L3 | owner | none | project | ✓ 94.2 | Audit and improve web performance with emphasis on Core Web Vitals, asset weight |
 | `plan-to-code` | Active | P1 | L2 | owner | none | project | ✓ 95.8 | Implement a concrete plan or spec into integrated code |
@@ -109,6 +106,8 @@
 | `ppt-html-export` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Use after the `$slides` gate when the user explicitly wants HTML slides plus a b |
 | `ppt-markdown` | Active | P2 | L4 | owner | none | project | ✓ 95.2 | Build slide decks from Markdown using Slidev or Marp. Use for explicit Markdown  |
 | `ppt-pptx` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Create source-first `deck.js` plus editable `.pptx` decks with PptxGenJS, theme- |
+| `slides` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Route presentation-artifact work before choosing a slide-authoring lane. Use thi |
+| `spreadsheets` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Route workbook-native spreadsheet artifact work before choosing a narrower imple |
 | `prompt-engineer` | Active | P2 | L1 | owner | none | project | ✓ 95.8 | Transform vague instructions into structured prompts with explicit role, constra |
 | `python-pro` | Active | P1 | L4 | owner | none | project | ✓ 98.5 | Deliver production-grade Python 3.12+ code with clean async boundaries, strict t |
 | `react` | Active | P1 | L4 | owner | none | project | ✓ 98.0 | Deliver React 19+ components with correct hook dependencies, optimal Server Comp |
@@ -125,10 +124,10 @@
 | `seo-web` | Active | P2 | L4 | owner | none | project | ✓ 94.1 | Audit and optimize technical SEO for web apps: meta tags, structured data (JSON- |
 | `shell-cli` | Active | P2 | L2 | owner | none | project | ✓ 98.4 | Produce safe, portable shell commands, pipelines, and scripts that handle quotin |
 | `skill-developer` | Active | P2 | L3 | owner | none | project | ✓ 96.2 | Create, improve, debug, and audit Antigravity skills and `SKILL.md` files. Use w |
-| `skill-developer-codex` | Active | P1 | L0 | owner | none | project | ✓ 97.5 | Design and tune Codex skill routing/framework behavior |
+| `skill-framework-developer` | Active | P1 | L0 | owner | none | project | ✓ 97.5 | Design and tune Codex skill routing/framework behavior |
 | `skill-installer-antigravity` | Active | P2 | L3 | owner | none | project | ✓ 96.2 | Install Antigravity skills into the shared workspace skill library from local fo |
-| `skill-maintenance-codex` | Active | P2 | L1 | overlay | none | project | ✓ 100.0 | Maintain Codex skill-library operational health through validation, sync checks, |
-| `skill-routing-repair-codex` | Active | P1 | L0 | owner | none | project | ✓ 97.0 | Patch routing misses with the smallest safe skill fix |
+| `skill-library-maintenance` | Active | P2 | L1 | overlay | none | project | ✓ 100.0 | Maintain skill-library operational health through validation, sync checks, drift |
+| `skill-routing-repair` | Active | P1 | L0 | owner | none | project | ✓ 97.0 | Patch routing misses with the smallest safe skill fix |
 | `skill-scout` | Active | P2 | L1 | owner | none | project | ✓ 98.0 | Research external skill ecosystems and produce gap-analysis proposals for the lo |
 | `skill-writer` | Active | P1 | L0 | owner | none | project | ✓ 95.5 | Shape one skill's wording, boundary, and token budget |
 | `slides-source-first` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Build or revise slide workflows where source-of-truth authoring and artifact con |

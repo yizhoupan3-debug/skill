@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -37,13 +38,31 @@ NODE_DEPS = [
     "js-yaml",
 ]
 
+RUST_TOOL_MANIFEST = ROOT.parents[1] / "rust_tools" / "pptx_tool_rs" / "Cargo.toml"
 
-def run(cmd: list[str], cwd: Path, label: str) -> subprocess.CompletedProcess[str]:
+
+def rust_tool_env() -> dict[str, str]:
+    target_root = ROOT.parents[1] / "rust_tools" / "target" / "debug"
+    binary = target_root / "pptx_tool_rs"
+    env = os.environ.copy()
+    env["PPT_PPTX_RUST_TOOL_BIN"] = str(binary)
+    env["PPT_PPTX_RUST_TOOL_MANIFEST"] = str(RUST_TOOL_MANIFEST)
+    return env
+
+
+def run(
+    cmd: list[str],
+    cwd: Path,
+    label: str,
+    *,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     proc = subprocess.run(
         cmd,
         cwd=str(cwd),
         text=True,
         capture_output=True,
+        env=env,
     )
     if proc.returncode != 0:
         raise RuntimeError(
@@ -57,6 +76,7 @@ def run(cmd: list[str], cwd: Path, label: str) -> subprocess.CompletedProcess[st
 
 def copy_common_python_tools(dest: Path) -> None:
     for name in [
+        "rust_bridge.py",
         "render_slides.py",
         "slides_test.py",
         "detect_font.py",
@@ -83,6 +103,7 @@ def scenario_outline(root: Path) -> dict:
     shutil.copytree(ASSETS / "pptxgenjs_helpers", workdir / "pptxgenjs_helpers")
     copy_common_python_tools(workdir)
     npm_bootstrap(workdir)
+    env = rust_tool_env()
 
     run(["node", "outline_to_deck.js", "outline.yaml", "-o", "deck.js"], workdir, "outline_to_deck")
     run(["node", "deck.js"], workdir, "generated deck.js")
@@ -90,14 +111,21 @@ def scenario_outline(root: Path) -> dict:
         [sys.executable, "render_slides.py", "deck.pptx", "--output_dir", "rendered"],
         workdir,
         "render_slides",
+        env=env,
     )
-    run([sys.executable, "slides_test.py", "deck.pptx"], workdir, "slides_test")
+    run([sys.executable, "slides_test.py", "deck.pptx"], workdir, "slides_test", env=env)
     run(
         [sys.executable, "detect_font.py", "deck.pptx", "--include-missing", "--include-substituted"],
         workdir,
         "detect_font",
+        env=env,
     )
-    run([sys.executable, "extract_pptx_structure.py", "deck.pptx", "-o", "structure.json"], workdir, "extract_structure")
+    run(
+        [sys.executable, "extract_pptx_structure.py", "deck.pptx", "-o", "structure.json"],
+        workdir,
+        "extract_structure",
+        env=env,
+    )
 
     return {
         "name": "outline_flow",
@@ -118,18 +146,21 @@ def scenario_template(root: Path) -> dict:
     shutil.copytree(ASSETS / "pptxgenjs_helpers", workdir / "pptxgenjs_helpers")
     copy_common_python_tools(workdir)
     npm_bootstrap(workdir)
+    env = rust_tool_env()
 
     run(["node", "deck.js"], workdir, "template deck.js")
     run(
         [sys.executable, "render_slides.py", "deck.pptx", "--output_dir", "rendered"],
         workdir,
         "render_slides",
+        env=env,
     )
-    run([sys.executable, "slides_test.py", "deck.pptx"], workdir, "slides_test")
+    run([sys.executable, "slides_test.py", "deck.pptx"], workdir, "slides_test", env=env)
     run(
         [sys.executable, "detect_font.py", "deck.pptx", "--include-missing", "--include-substituted"],
         workdir,
         "detect_font",
+        env=env,
     )
 
     return {
@@ -146,14 +177,17 @@ def scenario_sample_deck(root: Path) -> dict:
 
     shutil.copy2(ROOT / "deck.js", workdir / "deck.js")
     shutil.copytree(ASSETS / "pptxgenjs_helpers", workdir / "pptxgenjs_helpers")
+    shutil.copy2(SCRIPTS / "rust_bridge.py", workdir / "rust_bridge.py")
     shutil.copy2(SCRIPTS / "render_slides.py", workdir / "render_slides.py")
     npm_bootstrap(workdir)
+    env = rust_tool_env()
 
     run(["node", "deck.js"], workdir, "sample deck.js")
     run(
         [sys.executable, "render_slides.py", "deck.pptx", "--output_dir", "rendered"],
         workdir,
         "render_slides",
+        env=env,
     )
 
     return {
@@ -174,6 +208,11 @@ def main() -> int:
     temp_root = Path(temp_dir_obj.name)
 
     try:
+        run(
+            ["cargo", "build", "--manifest-path", str(RUST_TOOL_MANIFEST)],
+            ROOT.parents[1],
+            "cargo build pptx_tool_rs",
+        )
         results = [
             scenario_outline(temp_root),
             scenario_template(temp_root),

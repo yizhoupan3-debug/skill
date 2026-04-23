@@ -53,7 +53,7 @@ This skill owns GitHub Actions workflow authoring and pipeline structure: new wo
 ## Do not use
 
 - The main request is diagnosing an already failing PR check or GitHub Actions run → use `$gh-fix-ci`
-- The task is local Git branching, commit, or push workflow → use `$git-workflow`
+- The task is local Git branching, commit, or push workflow → use `$gitx`
 - The main deployment concern is provider-specific rollout rather than Actions authoring → use `$cloudflare-deploy`
 - The task is general system architecture instead of CI/CD implementation
 
@@ -74,7 +74,7 @@ This skill does not own:
 
 If the task shifts to adjacent skill territory, route to:
 - `$gh-fix-ci` for retrospective CI failure triage
-- `$git-workflow` for branch/commit/push operations
+- `$gitx` for branch/commit/push operations
 - `$cloudflare-deploy` for provider-specific deployment
 - `$architect-review` for broader system design
 

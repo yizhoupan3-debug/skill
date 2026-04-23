@@ -24,7 +24,7 @@ metadata:
     - builder
 ---
 
-- **Dual-Dimension Audit (Pre: Schema/Contract, Post: Tool-Discoverability/Execution Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Schema/Contract, Post: Tool-Discoverability/Execution Results)** → `$execution-audit` [Overlay]
 # mcp-builder
 
 ## Overview
@@ -54,7 +54,7 @@ metadata:
 
 See [detailed workflow steps, design rules, and language guidance](references/DETAIL.md) for complete reference.
 
-- **Superior Quality Audit**: For high-availability MCP servers, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For high-availability MCP servers, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Quick Checklist
 
@@ -78,7 +78,7 @@ See [detailed workflow steps, design rules, and language guidance](references/DE
 - The user wants to build, scaffold, or debug an MCP (Model Context Protocol) server
 - The task involves MCP tools, resources, prompts, or server implementation
 - "强制进行 MCP server 深度审计 / 检查 Tool Schema 定义与实际执行结果。"
-- "Use $execution-audit-codex to audit this MCP server for tool-discoverability idealism."
+- "Use $execution-audit to audit this MCP server for tool-discoverability idealism."
 - The user says "MCP server", "MCP 工具", "Model Context Protocol"
 - The user wants to create a tool server that AI agents can call
 

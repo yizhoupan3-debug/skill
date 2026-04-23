@@ -33,7 +33,7 @@ trigger_hints:
   - workspace
 ---
 
-- **Dual-Dimension Audit (Pre: Workspace-Topo/Boundary, Post: DAG-Execution/Cache-Hits Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Workspace-Topo/Boundary, Post: DAG-Execution/Cache-Hits Results)** → `$execution-audit` [Overlay]
 # monorepo-tooling
 
 This skill owns repository-level workspace structure and tooling orchestration when the problem is package boundaries, task graphs, and shared tooling rather than one app in isolation.
@@ -55,7 +55,7 @@ This skill owns repository-level workspace structure and tooling orchestration w
 - The task is npm package authoring/publishing for one package rather than repo-wide workspace tooling → use `$npm-package-authoring`
 - The main task is one application's framework implementation → use the relevant domain skill
 - The task is CI workflow authoring rather than workspace structure → use `$github-actions-authoring`
-- The task is generic Git organization rather than monorepo tooling → use `$git-workflow`
+- The task is generic Git organization rather than monorepo tooling → use `$gitx`
 
 ## Task ownership and boundaries
 
@@ -75,7 +75,7 @@ This skill does not own:
 If the task shifts to adjacent skill territory, route to:
 - `$npm-package-authoring`
 - `$github-actions-authoring`
-- `$git-workflow`
+- `$gitx`
 - `$typescript-pro`
 - `$node-backend`
 
@@ -138,7 +138,7 @@ Recommended structure:
 - Do not centralize config so aggressively that per-package behavior becomes opaque.
 - If publishing/versioning strategy is affected, call it out explicitly.
 - Preserve a clear dependency direction between apps and shared packages.
-- **Superior Quality Audit**: For high-efficiency monorepo architectures, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For high-efficiency monorepo architectures, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -146,4 +146,4 @@ Recommended structure:
 - "帮我设计 monorepo 结构和 workspace scripts。"
 - "Turborepo/Nx 这里为什么 task graph 和共享包有问题？"
 - "强制进行 Monorepo 深度审计 / 检查 DAG 拓扑与缓存执行结果。"
-- "Use $execution-audit-codex to audit this monorepo for workspace-topo idealism."
+- "Use $execution-audit to audit this monorepo for workspace-topo idealism."

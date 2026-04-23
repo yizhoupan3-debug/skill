@@ -38,7 +38,7 @@ approval_required_tools:
   - git push
 ---
 
-- **Dual-Dimension Audit (Pre: Test-Case/Logic, Post: Coverage-Metric/Mutation-Score Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Test-Case/Logic, Post: Coverage-Metric/Mutation-Score Results)** → `$execution-audit` [Overlay]
 # test-engineering
 
 This skill owns practical testing work: choosing the right test layer, writing maintainable tests, stabilizing flaky behavior, and improving regression protection.
@@ -144,7 +144,7 @@ Recommended structure:
 - Do not couple assertions tightly to internal implementation details unless that is the contract.
 - In this repository, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) for broad `pytest` / `cargo test` / similar validation runs when the output is high-volume and raw fidelity is not the immediate need.
 - If a test gap remains, say exactly what confidence is still missing.
-- **Superior Quality Audit**: For high-fidelity testing frameworks, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For high-fidelity testing frameworks, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -152,4 +152,4 @@ Recommended structure:
 - "帮我给这个 API 写 pytest，并设计 fixtures。"
 - "这个 Vitest/Jest 测试很 flaky，帮我稳定下来。"
 - "强制进行测试工程深度审计 / 检查用例覆盖率与变异测试结果。"
-- "Use $execution-audit-codex to audit this test suite for coverage-integrity idealism."
+- "Use $execution-audit to audit this test suite for coverage-integrity idealism."

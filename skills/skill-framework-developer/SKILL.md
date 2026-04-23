@@ -1,7 +1,7 @@
 ---
-name: skill-developer-codex
+name: skill-framework-developer
 description: |
-  Codex skill 框架治理：路由、边界、owner/gate/overlay、维护规范与减少 token 消耗。
+  Skill 框架治理：路由、边界、owner/gate/overlay、维护规范与减少 token 消耗。
   Use when the request is about framework policy, routing-system review, skill-boundary audit,
   overlap repair strategy, or skill-library self-optimization.
 routing_layer: L0
@@ -11,6 +11,8 @@ routing_priority: P1
 session_start: preferred
 short_description: Design and tune Codex skill routing/framework behavior
 trigger_hints:
+  - skill-developer-codex
+  - skill-framework-developer
   - skill框架
   - 路由系统
   - skill 边界
@@ -36,6 +38,7 @@ metadata:
   version: "3.2.0"
   platforms: [codex]
   tags:
+    - skill-developer-codex
     - codex
     - skill-authoring
     - routing
@@ -60,11 +63,11 @@ artifact_outputs:
   - EVIDENCE_INDEX.json
 bridge_behavior: mobile_complete_once
 ---
-- **Dual-Dimension Audit (Pre: Framework-Policy/Logic, Post: Sync-Health/Registry Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Framework-Policy/Logic, Post: Sync-Health/Registry Results)** → `$execution-audit` [Overlay]
 
-# skill-developer-codex
+# skill-framework-developer
 
-This skill owns **Codex skill-framework design**: owner/gate/overlay policy,
+This skill owns **shared skill-framework design**: owner/gate/overlay policy,
 boundary cleanup, trigger-surface tuning, session-start routing, and high-level
 library self-optimization.
 
@@ -79,7 +82,7 @@ the request is about framework structure rather than one isolated file edit.
 - The task is about **边界重叠 / 修改旧 skill / 顺手修旧 skill / 旧 skill 该不该拆**
 - The user wants to decide owner vs gate vs overlay, or when to split vs extend an incumbent skill
 - A skill is over-broad, misfiring, or weak at first-turn routing
-- The problem is framework-level overlap between `skill-writer`, `skill-creator`, `skill-installer`, and `skill-routing-repair-codex`
+- The problem is framework-level overlap between `skill-writer`, `skill-creator`, `skill-installer`, and `skill-routing-repair`
 - Best for requests like:
   - "优化整个 skill 框架"
   - "这个 Codex skill 到底该谁当 owner？"
@@ -88,7 +91,7 @@ the request is about framework structure rather than one isolated file edit.
 
 ## Do not use
 
-- The main job is a **post-task smallest-patch repair** after a miss → use [`$skill-routing-repair-codex`](/Users/joe/Documents/skill/skills/skill-routing-repair-codex/SKILL.md)
+- The main job is a **post-task smallest-patch repair** after a miss → use [`$skill-routing-repair`](/Users/joe/Documents/skill/skills/skill-routing-repair/SKILL.md)
 - The task is **concrete skill file authoring** rather than framework policy → use [`$skill-creator`](/Users/joe/Documents/skill/skills/.system/skill-creator/SKILL.md)
 - The task is **new skill intake / install / relink / re-index** → use [`$skill-installer`](/Users/joe/Documents/skill/skills/.system/skill-installer/SKILL.md)
 - The task is mainly **single-skill writing guidance** for description quality / token budget / packaging → use [`$skill-writer`](/Users/joe/Documents/skill/skills/skill-writer/SKILL.md)
@@ -129,8 +132,8 @@ If runtime policy does **not** permit spawning:
 
 Use this owner split:
 
-- **`skill-developer-codex`** → framework policy, routing rules, overlap decisions, split strategy
-- **`skill-routing-repair-codex`** → post-task smallest safe repair after a concrete miss
+- **`skill-framework-developer`** → framework policy, routing rules, overlap decisions, split strategy
+- **`skill-routing-repair`** → post-task smallest safe repair after a concrete miss
 - **`skill-creator`** → create/update/split a specific Codex skill package
 - **`skill-installer`** → import, normalize, link, and re-index a new skill
 - **`skill-writer`** → wording, description budget, progressive disclosure, packaging advice
@@ -174,8 +177,8 @@ Before finishing, verify:
 - description carries real trigger phrasing users will say
 - optional examples live in `references/` instead of bloating `SKILL.md`
 - the framework is more precise, faster to scan, and cheaper to load than before
-- **Superior Quality Audit**: For framework-level redesigns, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For framework-level redesigns, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 - "强制进行 Codex 框架深度审计 / 检查路由策略与同步状态。"
-- "Use $execution-audit-codex to audit this framework-policy for sync-health idealism."
+- "Use $execution-audit to audit this framework-policy for sync-health idealism."

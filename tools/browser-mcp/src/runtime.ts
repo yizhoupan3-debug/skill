@@ -66,6 +66,13 @@ const SNAPSHOT_HISTORY_LIMIT = 10;
 const BODY_CAPTURE_LIMIT = 4096; // bytes
 const RUNTIME_VERSION = '0.2.0';
 const RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION = 'runtime-event-attach-descriptor-v1';
+const RUNTIME_ATTACH_MODE = 'process_external_artifact_replay';
+const RUNTIME_ATTACH_SOURCE_TRANSPORT_METHOD = 'describe_runtime_event_transport';
+const RUNTIME_ATTACH_SOURCE_HANDOFF_METHOD = 'describe_runtime_event_handoff';
+const RUNTIME_ATTACH_METHOD = 'attach_runtime_event_transport';
+const RUNTIME_ATTACH_SUBSCRIBE_METHOD = 'subscribe_attached_runtime_events';
+const RUNTIME_ATTACH_CLEANUP_METHOD = 'cleanup_attached_runtime_event_transport';
+const RUNTIME_ATTACH_RESUME_MODE = 'after_event_id';
 const RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION = 'runtime-event-transport-v1';
 const RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION = 'runtime-event-handoff-v1';
 const TRACE_RESUME_MANIFEST_SCHEMA_VERSION = 'runtime-resume-manifest-v1';
@@ -1419,6 +1426,7 @@ export class BrowserRuntime {
       if (this.attachDescriptorNeedsRustHydration(descriptor)) {
         throw error;
       }
+      this.assertAttachDescriptorContract(descriptor);
       return {
         descriptor,
         inputArtifactKind: 'attach_descriptor',
@@ -1426,7 +1434,46 @@ export class BrowserRuntime {
       };
     }
     this.assertAttachDescriptorMatchesCanonical(descriptor, hydrated.descriptor);
+    this.assertAttachDescriptorContract(hydrated.descriptor);
     return hydrated;
+  }
+
+  private assertAttachDescriptorContract(descriptor: RuntimeAttachDescriptor): void {
+    const expectedScalars: Array<[keyof RuntimeAttachDescriptor, string]> = [
+      ['attach_mode', RUNTIME_ATTACH_MODE],
+      ['source_transport_method', RUNTIME_ATTACH_SOURCE_TRANSPORT_METHOD],
+      ['source_handoff_method', RUNTIME_ATTACH_SOURCE_HANDOFF_METHOD],
+      ['attach_method', RUNTIME_ATTACH_METHOD],
+      ['subscribe_method', RUNTIME_ATTACH_SUBSCRIBE_METHOD],
+      ['cleanup_method', RUNTIME_ATTACH_CLEANUP_METHOD],
+      ['resume_mode', RUNTIME_ATTACH_RESUME_MODE],
+    ];
+    for (const [field, expected] of expectedScalars) {
+      const value = descriptor[field];
+      if (typeof value === 'string' && value !== expected) {
+        throw new Error(`runtime attach descriptor must use ${field}=${expected}`);
+      }
+    }
+    const capabilities = descriptor.attach_capabilities;
+    if (capabilities && capabilities.artifact_replay !== undefined && capabilities.artifact_replay !== true) {
+      throw new Error('runtime attach descriptor must advertise attach_capabilities.artifact_replay=true');
+    }
+    if (
+      capabilities &&
+      capabilities.cleanup_preserves_replay !== undefined &&
+      capabilities.cleanup_preserves_replay !== true
+    ) {
+      throw new Error(
+        'runtime attach descriptor must advertise attach_capabilities.cleanup_preserves_replay=true',
+      );
+    }
+    if (
+      capabilities &&
+      capabilities.live_remote_stream !== undefined &&
+      capabilities.live_remote_stream !== false
+    ) {
+      throw new Error('runtime attach descriptor must advertise attach_capabilities.live_remote_stream=false');
+    }
   }
 
   private async buildRuntimeAttachDescriptorFromBindingArtifact(

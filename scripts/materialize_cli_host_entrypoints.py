@@ -11,9 +11,8 @@ from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "codex_agno_runtime" / "src"))
 
-from codex_agno_runtime.runtime_registry import framework_native_aliases, shared_project_mcp_servers
+from framework_runtime.runtime_registry import framework_native_aliases, shared_project_mcp_servers
 from scripts.host_integration_rs import run_host_integration_rs
 
 
@@ -466,13 +465,15 @@ Generated-first maintenance:
 - Treat `.claude/settings.json`, this README, and `.claude/hooks/*.sh` as
   materialized outputs.
 - Manual Claude host guidance belongs in `.claude/agents/*.md` unless noted.
+- Codex experimental hooks reuse `pre_tool_use.sh` and `user_prompt_submit.sh`
+  through `.codex/hooks.json`; keep the shared logic here instead of forking a
+  second host-only script set.
 
 Active hooks:
 
 | Event | Script | Purpose |
 | --- | --- | --- |
-| `UserPromptSubmit` | `user_prompt_submit.sh` | Inject a short coding-only `additionalContext` block before Claude starts planning, using intent-based matching instead of broad keyword spam. |
-| `PreToolUse` | `pre_tool_use_quality.sh` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code, and capture a lightweight pre-edit baseline for later delta-aware review. |
+| `PreToolUse` | `pre_tool_use_quality.sh` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |
 | `PreToolUse` | `pre_tool_use.sh` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
 | `PostToolUse` | `post_tool_use_audit.sh` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
 | `SessionEnd` | `session_end.sh` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |
@@ -480,6 +481,8 @@ Active hooks:
 | `StopFailure` | `stop_failure.sh` | Emit a host-private hint for selected Claude stop failures without mutating shared continuity. |
 
 Everything else stays intentionally uninstalled here so startup and tool turns remain lean.
+`UserPromptSubmit` is intentionally not installed here: broad per-turn prompt hooks cost
+more than they help once `PreToolUse` and `PostToolUse` are already narrow.
 Reply tone, "讲人话" rules, and closeout style live in `AGENT.md`, not in hooks.
 Static behavior rules belong in `AGENT.md` or `CLAUDE.md`; these hooks exist
 for deterministic guardrails, lightweight execution-time context, and lifecycle
@@ -494,9 +497,8 @@ Project hook principles:
   on unrelated tool calls and normal edits stay fast.
 - Automation hooks should be additive and short: inject narrow repo context or
   launch cheap follow-up work, not essay-length prompt rewrites.
-- Let hooks reinforce simplify-first execution: prefer short reminders to
-  delete, merge, inline, or narrow code paths instead of nudging toward another
-  wrapper or orchestration layer.
+- Keep durable implementation philosophy in `AGENT.md`; hook-time nudges should
+  stay concrete, local to the current path, and local to the current delta.
 - Prefer async `PostToolUse` for cheap quality follow-up that should not block
   the main turn.
 - Put personal notifications and local approval shortcuts in `~/.claude/settings.json`
@@ -511,8 +513,6 @@ Project hook principles:
 
 Validation commands:
 
-- `printf '{"hook_event_name":"UserPromptSubmit","prompt":"继续优化这个 runtime，去掉补丁式保底并顺手看下内存和速度"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/user_prompt_submit.sh`
-  Expected: stdout emits JSON with a short coding-only `additionalContext` block.
 - `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use_quality.sh`
   Expected: stdout returns a JSON `permissionDecision: allow` payload with `additionalContext`.
 - `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/post_tool_use_audit.sh`
@@ -534,8 +534,8 @@ Validation commands:
 - `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}\n' | ./scripts/router-rs/target/debug/router-rs --claude-hook-audit-command config-change --repo-root "$PWD"`
   Expected: JSON on stdout plus audit-only stderr guidance; exit 0.
 - In Claude Code, run `/hooks`
-  Expected: the project shows `UserPromptSubmit`, `PreToolUse`, `PostToolUse`,
-  `SessionEnd`, `ConfigChange`, and `StopFailure` from `.claude/settings.json`.
+  Expected: the project shows `PreToolUse`, `PostToolUse`, `SessionEnd`,
+  `ConfigChange`, and `StopFailure` from `.claude/settings.json`.
 
 Shared routing policy still comes from `../../AGENT.md`.
 """
@@ -550,30 +550,30 @@ run_router_rs --claude-hook-audit-command config-change --repo-root "$PROJECT_DI
 
 CLAUDE_PRE_TOOL_USE_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
 response="$(run_router_rs --claude-hook-audit-command pre-tool-use --repo-root "$PROJECT_DIR")"
-if printf '%s' "$response" | grep -q '"permissionDecision":"deny"'; then
+if printf '%s' "$response" | grep -Eq '"permissionDecision"[[:space:]]*:[[:space:]]*"deny"'; then
   printf '%s\\n' "$response"
 fi
 """
 
-CLAUDE_USER_PROMPT_SUBMIT_HOOK = """#!/bin/sh
-set -eu
-
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
-python3 "$PROJECT_DIR/scripts/claude_hook_automation.py" user-prompt-submit --repo-root "$PROJECT_DIR"
+CLAUDE_USER_PROMPT_SUBMIT_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
+response="$(run_router_rs --claude-hook-audit-command user-prompt-submit --repo-root "$PROJECT_DIR")"
+if printf '%s' "$response" | grep -Eq '"hookSpecificOutput"[[:space:]]*:'; then
+  printf '%s\\n' "$response"
+fi
 """
 
-CLAUDE_PRE_TOOL_USE_QUALITY_HOOK = """#!/bin/sh
-set -eu
-
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
-python3 "$PROJECT_DIR/scripts/claude_hook_automation.py" pre-tool-use-quality --repo-root "$PROJECT_DIR"
+CLAUDE_PRE_TOOL_USE_QUALITY_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
+response="$(run_router_rs --claude-hook-audit-command pre-tool-use-quality --repo-root "$PROJECT_DIR")"
+if printf '%s' "$response" | grep -Eq '"hookSpecificOutput"[[:space:]]*:'; then
+  printf '%s\\n' "$response"
+fi
 """
 
-CLAUDE_POST_TOOL_USE_AUDIT_HOOK = """#!/bin/sh
-set -eu
-
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
-python3 "$PROJECT_DIR/scripts/claude_hook_automation.py" post-tool-audit --repo-root "$PROJECT_DIR"
+CLAUDE_POST_TOOL_USE_AUDIT_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
+response="$(run_router_rs --claude-hook-audit-command post-tool-audit --repo-root "$PROJECT_DIR")"
+if printf '%s' "$response" | grep -Eq '"hookSpecificOutput"[[:space:]]*:'; then
+  printf '%s\\n' "$response"
+fi
 """
 
 CLAUDE_STOP_FAILURE_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
@@ -586,20 +586,20 @@ CLAUDE_PRE_TOOL_USE_RULES = [
     "/CLAUDE.md",
     "/GEMINI.md",
     "/.gemini/settings.json",
-    "/.claude/**",
+    "/.claude/settings.json",
+    "/.claude/agents/README.md",
+    "/.claude/hooks/README.md",
+    "/.claude/hooks/*.sh",
+    "/.claude/commands/**",
+    "/.codex/hooks.json",
     "/.codex/host_entrypoints_sync_manifest.json",
     "/.codex/memory/CLAUDE_MEMORY.md",
 ]
 
 
-def _claude_pre_tool_use_hooks() -> list[dict[str, str]]:
+def _claude_pre_tool_use_hooks() -> list[dict[str, Any]]:
     command = 'sh "$CLAUDE_PROJECT_DIR"/.claude/hooks/pre_tool_use.sh'
-    hooks: list[dict[str, str]] = []
-    for rule in CLAUDE_PRE_TOOL_USE_RULES:
-        hooks.append({"type": "command", "if": f"Edit({rule})", "command": command})
-        hooks.append({"type": "command", "if": f"MultiEdit({rule})", "command": command})
-        hooks.append({"type": "command", "if": f"Write({rule})", "command": command})
-    return hooks
+    return _build_claude_tool_path_hooks(command, CLAUDE_PRE_TOOL_USE_RULES)
 
 
 def _claude_pre_tool_use_bash_hooks() -> list[dict[str, str]]:
@@ -611,7 +611,11 @@ def _claude_pre_tool_use_bash_hooks() -> list[dict[str, str]]:
         "*CLAUDE.md*",
         "*GEMINI.md*",
         "*.gemini/settings.json*",
-        "*.claude/*",
+        "*.claude/settings.json*",
+        "*.claude/agents/README.md*",
+        "*.claude/hooks/*",
+        "*.claude/commands/*",
+        "*.codex/hooks.json*",
         "*.codex/host_entrypoints_sync_manifest.json*",
         "*.codex/memory/CLAUDE_MEMORY.md*",
     ):
@@ -619,21 +623,44 @@ def _claude_pre_tool_use_bash_hooks() -> list[dict[str, str]]:
     return hooks
 
 
+def _build_claude_tool_path_hooks(
+    command: str,
+    rules: tuple[str, ...] | list[str],
+    *,
+    extras: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    hooks: list[dict[str, Any]] = []
+    for rule in rules:
+        for tool_name in ("Edit", "MultiEdit", "Write"):
+            hook = {"type": "command", "if": f"{tool_name}({rule})", "command": command}
+            if extras:
+                hook.update(extras)
+            hooks.append(hook)
+    return hooks
+
+
 CLAUDE_QUALITY_PRE_TOOL_USE_RULES = (
     "/codex_agno_runtime/src/**",
-    "/scripts/**",
-    "/tests/**",
+    "/scripts/router-rs/src/**",
+    "/scripts/claude_hook_*.py",
+    "/tests/test_claude_hook_automation.py",
+    "/tests/test_cli_host_entrypoints.py",
+    "/tests/test_codex_omx_hook_bridge.py",
 )
 
 
-def _claude_quality_pre_tool_use_hooks() -> list[dict[str, str]]:
+def _claude_quality_pre_tool_use_hooks() -> list[dict[str, Any]]:
     command = 'sh "$CLAUDE_PROJECT_DIR"/.claude/hooks/pre_tool_use_quality.sh'
-    hooks: list[dict[str, str]] = []
-    for rule in CLAUDE_QUALITY_PRE_TOOL_USE_RULES:
-        hooks.append({"type": "command", "if": f"Edit({rule})", "command": command})
-        hooks.append({"type": "command", "if": f"MultiEdit({rule})", "command": command})
-        hooks.append({"type": "command", "if": f"Write({rule})", "command": command})
-    return hooks
+    return _build_claude_tool_path_hooks(command, CLAUDE_QUALITY_PRE_TOOL_USE_RULES)
+
+
+def _claude_quality_post_tool_use_hooks() -> list[dict[str, Any]]:
+    command = 'sh "$CLAUDE_PROJECT_DIR"/.claude/hooks/post_tool_use_audit.sh'
+    return _build_claude_tool_path_hooks(
+        command,
+        CLAUDE_QUALITY_PRE_TOOL_USE_RULES,
+        extras={"async": True, "timeout": 8},
+    )
 
 CLAUDE_PROJECT_SETTINGS = {
     "$schema": "https://json.schemastore.org/claude-code-settings.json",
@@ -670,16 +697,6 @@ CLAUDE_PROJECT_SETTINGS = {
         {"serverName": server_name} for server_name in shared_project_mcp_servers()
     ],
     "hooks": {
-        "UserPromptSubmit": [
-            {
-                "hooks": [
-                    {
-                        "command": 'sh "$CLAUDE_PROJECT_DIR"/.claude/hooks/user_prompt_submit.sh',
-                        "type": "command",
-                    }
-                ]
-            }
-        ],
         "PreToolUse": [
             {
                 "matcher": "Edit|MultiEdit|Write",
@@ -697,14 +714,7 @@ CLAUDE_PROJECT_SETTINGS = {
         "PostToolUse": [
             {
                 "matcher": "Edit|MultiEdit|Write",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": 'sh "$CLAUDE_PROJECT_DIR"/.claude/hooks/post_tool_use_audit.sh',
-                        "async": True,
-                        "timeout": 8,
-                    }
-                ],
+                "hooks": _claude_quality_post_tool_use_hooks(),
             }
         ],
         "SessionEnd": [
@@ -742,6 +752,39 @@ CLAUDE_PROJECT_SETTINGS = {
     },
 }
 
+
+def _codex_shared_hook_command(script_name: str) -> str:
+    return f'sh "$(git rev-parse --show-toplevel)/.claude/hooks/{script_name}"'
+
+
+CODEX_PROJECT_HOOKS = {
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": _codex_shared_hook_command("pre_tool_use.sh"),
+                        "statusMessage": "Checking generated host surfaces",
+                    }
+                ],
+            }
+        ],
+        "UserPromptSubmit": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": _codex_shared_hook_command("user_prompt_submit.sh"),
+                        "statusMessage": "Loading repo coding context",
+                    }
+                ]
+            }
+        ],
+    }
+}
+
 HOST_ENTRYPOINT_SYNC_MANIFEST_PATH = ".codex/host_entrypoints_sync_manifest.json"
 
 HOST_ENTRYPOINT_TEXT_FILES = {
@@ -765,6 +808,7 @@ HOST_ENTRYPOINT_TEXT_FILES = {
 }
 
 HOST_ENTRYPOINT_JSON_FILES = {
+    ".codex/hooks.json": CODEX_PROJECT_HOOKS,
     ".claude/settings.json": CLAUDE_PROJECT_SETTINGS,
     ".gemini/settings.json": {},
 }

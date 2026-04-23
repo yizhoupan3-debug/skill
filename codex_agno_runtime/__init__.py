@@ -1,4 +1,4 @@
-"""Repo-root bridge for the local ``codex_agno_runtime`` src layout."""
+"""Repo-root bridge for the local framework runtime package layout."""
 
 from __future__ import annotations
 
@@ -31,9 +31,11 @@ from .control_plane_contracts import (
 )
 from .profile_artifacts import emit_framework_contract_artifacts
 from .runtime import CodexAgnoRuntime
+FrameworkRuntime = CodexAgnoRuntime
 
 __all__ = [
     "CodexAgnoRuntime",
+    "FrameworkRuntime",
     "RuntimeSettings",
     "FrameworkProfile",
     "compile_codex_desktop_adapter",

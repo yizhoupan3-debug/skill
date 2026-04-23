@@ -29,6 +29,126 @@
           {
             "async": true,
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "Edit(/codex_agno_runtime/src/**)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "MultiEdit(/codex_agno_runtime/src/**)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "Write(/codex_agno_runtime/src/**)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "Edit(/scripts/router-rs/src/**)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "MultiEdit(/scripts/router-rs/src/**)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "Write(/scripts/router-rs/src/**)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "Edit(/scripts/claude_hook_*.py)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "MultiEdit(/scripts/claude_hook_*.py)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "Write(/scripts/claude_hook_*.py)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "Edit(/tests/test_claude_hook_automation.py)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "MultiEdit(/tests/test_claude_hook_automation.py)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "Write(/tests/test_claude_hook_automation.py)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "Edit(/tests/test_cli_host_entrypoints.py)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "MultiEdit(/tests/test_cli_host_entrypoints.py)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "Write(/tests/test_cli_host_entrypoints.py)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "Edit(/tests/test_codex_omx_hook_bridge.py)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "MultiEdit(/tests/test_codex_omx_hook_bridge.py)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
+            "if": "Write(/tests/test_codex_omx_hook_bridge.py)",
             "timeout": 8,
             "type": "command"
           }
@@ -116,17 +236,92 @@
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
-            "if": "Edit(/.claude/**)",
+            "if": "Edit(/.claude/settings.json)",
             "type": "command"
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
-            "if": "MultiEdit(/.claude/**)",
+            "if": "MultiEdit(/.claude/settings.json)",
             "type": "command"
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
-            "if": "Write(/.claude/**)",
+            "if": "Write(/.claude/settings.json)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Edit(/.claude/agents/README.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "MultiEdit(/.claude/agents/README.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Write(/.claude/agents/README.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Edit(/.claude/hooks/README.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "MultiEdit(/.claude/hooks/README.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Write(/.claude/hooks/README.md)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Edit(/.claude/hooks/*.sh)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "MultiEdit(/.claude/hooks/*.sh)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Write(/.claude/hooks/*.sh)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Edit(/.claude/commands/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "MultiEdit(/.claude/commands/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Write(/.claude/commands/**)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Edit(/.codex/hooks.json)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "MultiEdit(/.codex/hooks.json)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Write(/.codex/hooks.json)",
             "type": "command"
           },
           {
@@ -191,7 +386,27 @@
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
-            "if": "Bash(*.claude/*)",
+            "if": "Bash(*.claude/settings.json*)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Bash(*.claude/agents/README.md*)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Bash(*.claude/hooks/*)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Bash(*.claude/commands/*)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use.sh",
+            "if": "Bash(*.codex/hooks.json*)",
             "type": "command"
           },
           {
@@ -226,32 +441,77 @@
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
-            "if": "Edit(/scripts/**)",
+            "if": "Edit(/scripts/router-rs/src/**)",
             "type": "command"
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
-            "if": "MultiEdit(/scripts/**)",
+            "if": "MultiEdit(/scripts/router-rs/src/**)",
             "type": "command"
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
-            "if": "Write(/scripts/**)",
+            "if": "Write(/scripts/router-rs/src/**)",
             "type": "command"
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
-            "if": "Edit(/tests/**)",
+            "if": "Edit(/scripts/claude_hook_*.py)",
             "type": "command"
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
-            "if": "MultiEdit(/tests/**)",
+            "if": "MultiEdit(/scripts/claude_hook_*.py)",
             "type": "command"
           },
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
-            "if": "Write(/tests/**)",
+            "if": "Write(/scripts/claude_hook_*.py)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "Edit(/tests/test_claude_hook_automation.py)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "MultiEdit(/tests/test_claude_hook_automation.py)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "Write(/tests/test_claude_hook_automation.py)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "Edit(/tests/test_cli_host_entrypoints.py)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "MultiEdit(/tests/test_cli_host_entrypoints.py)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "Write(/tests/test_cli_host_entrypoints.py)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "Edit(/tests/test_codex_omx_hook_bridge.py)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "MultiEdit(/tests/test_codex_omx_hook_bridge.py)",
+            "type": "command"
+          },
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
+            "if": "Write(/tests/test_codex_omx_hook_bridge.py)",
             "type": "command"
           }
         ],
@@ -277,16 +537,6 @@
           }
         ],
         "matcher": "invalid_request|server_error|max_output_tokens|rate_limit|authentication_failed|billing_error|unknown"
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/user_prompt_submit.sh",
-            "type": "command"
-          }
-        ]
       }
     ]
   },

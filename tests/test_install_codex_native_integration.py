@@ -17,12 +17,14 @@ from scripts.install_codex_native_integration import (
     DEFAULT_TUI_STATUS_ITEMS,
     build_personal_plugin_mcp_payload,
     build_personal_marketplace_payload,
+    build_codex_hooks_feature_block,
     build_framework_server_block,
     ensure_config_file,
     ensure_default_bootstrap_bundle,
     ensure_home_claude_refresh_command,
     ensure_home_claude_skills_link,
     ensure_home_codex_skills_link,
+    install_codex_hooks_feature,
     ensure_tui_status_line,
     install_framework_server,
     install_native_integration,
@@ -111,6 +113,35 @@ def test_ensure_tui_status_line_preserves_existing_tui_keys(tmp_path: Path) -> N
     assert 'status_line = ["model-with-reasoning", "git-branch", "context-used", "fast-mode"]' in content
 
 
+def test_build_codex_hooks_feature_block_enables_feature() -> None:
+    assert build_codex_hooks_feature_block() == "[features]\ncodex_hooks = true"
+
+
+def test_install_codex_hooks_feature_preserves_existing_feature_rows(tmp_path: Path) -> None:
+    config_path = tmp_path / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "\n".join(
+            [
+                "#:schema https://developers.openai.com/codex/config-schema.json",
+                "",
+                "[features]",
+                "memories = true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    changed = install_codex_hooks_feature(config_path)
+
+    content = config_path.read_text(encoding="utf-8")
+    assert changed is True
+    assert content.count("[features]") == 1
+    assert "memories = true" in content
+    assert "codex_hooks = true" in content
+
+
 def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     (repo_root / ".codex").mkdir(parents=True)
@@ -165,6 +196,8 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     plugin_mcp_payload = json.loads((home_plugin_root / ".mcp.json").read_text(encoding="utf-8"))
     assert first["success"] is True
     assert second["success"] is True
+    assert content.count("[features]") == 1
+    assert content.count("codex_hooks = true") == 1
     assert content.count("[mcp_servers.browser-mcp]") == 1
     assert content.count("[mcp_servers.framework-mcp]") == 1
     assert content.count("[mcp_servers.openaiDeveloperDocs]") == 1
@@ -194,6 +227,8 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert second["framework_overlay_retirement"]["status"] == "already-retired"
     assert first["default_bootstrap"]["status"] == "materialized"
     assert second["default_bootstrap"]["status"] == "already-present"
+    assert first["codex_hooks_feature_changed"] is True
+    assert second["codex_hooks_feature_changed"] is False
     assert Path(first["default_bootstrap"]["mirror_bootstrap_path"]).is_file()
     assert first["tui_status_line_changed"] is True
     assert second["tui_status_line_changed"] is False

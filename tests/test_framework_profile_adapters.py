@@ -419,22 +419,24 @@ def test_rust_route_adapter_reuses_stdio_process_for_hot_commands(
                     "schema_version": adapter.runtime_control_plane_schema_version,
                     "authority": adapter.runtime_control_plane_authority,
                 },
-                "search_skills": {
-                    "search_schema_version": adapter.search_schema_version,
-                    "authority": adapter.route_authority,
-                    "query": "迭代 优化",
-                    "matches": [
-                        {
-                            "slug": "iterative-optimizer",
-                            "layer": "L2",
-                            "owner": "codex",
-                            "gate": "none",
-                            "description": "Iterative optimization loop",
-                            "score": 9.5,
-                            "matched_terms": 2,
-                            "total_terms": 2,
-                        }
-                    ],
+                    "search_skills": {
+                        "search_schema_version": adapter.search_schema_version,
+                        "authority": adapter.route_authority,
+                        "query": "迭代 优化",
+                        "matches": [
+                            {
+                                "record": {
+                                    "name": "iterative-optimizer",
+                                    "routing_layer": "L2",
+                                    "routing_owner": "codex",
+                                    "routing_gate": "none",
+                                    "description": "Iterative optimization loop",
+                                },
+                                "score": 9.5,
+                                "matched_terms": 2,
+                                "total_terms": 2,
+                            }
+                        ],
                 },
                 "execute": {
                     "execution_schema_version": adapter.execution_schema_version,

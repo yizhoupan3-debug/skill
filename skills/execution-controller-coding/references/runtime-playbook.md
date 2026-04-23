@@ -58,4 +58,4 @@ At integration time:
 
 - Unknown root cause: `$systematic-debugging`
 - Strategy still undefined: `$idea-to-plan`
-- Sign-off / hostile audit dominant: `$execution-audit-codex`
+- Sign-off / hostile audit dominant: `$execution-audit`

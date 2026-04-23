@@ -66,7 +66,7 @@ This skill owns:
 - reverse proxy setup for app traffic
 - log, port, process, and environment troubleshooting on the host
 - host-level health/restart and runtime hardening basics
-- **Dual-Dimension Audit (Pre: Systemd/Config, Post: Restart-Health/Port Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Systemd/Config, Post: Restart-Health/Port Results)** → `$execution-audit` [Overlay]
 
 This skill does not own:
 - container image authoring
@@ -140,7 +140,7 @@ Recommended structure:
 - Do not leave ports, bind address, or reverse-proxy targets implicit.
 - Do not assume Docker/Kubernetes when the task is plainly host-level Linux ops.
 - If the advice depends on distro/init specifics, say so explicitly.
-- **Superior Quality Audit**: For server uptime critical nodes, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For server uptime critical nodes, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -148,4 +148,4 @@ Recommended structure:
 - "帮我看 Linux 服务器上这个服务为什么起不来。"
 - "给我一套可重复的服务部署/反向代理配置。"
 - "强制进行 Linux 运维深度审计 / 检查服务重启后的健康状态与端口结果。"
-- "Use $execution-audit-codex to audit this Linux server setup for restart-safe idealism."
+- "Use $execution-audit to audit this Linux server setup for restart-safe idealism."

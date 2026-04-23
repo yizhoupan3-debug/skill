@@ -73,7 +73,7 @@ If the task shifts to adjacent skill territory, route to:
 - `$vue` / `$svelte` for other frameworks
 - `$typescript-pro` for deep type system design
 - `$vercel-react-best-practices` for rendering/data-flow audits
-- **Dual-Dimension Audit (Pre: Spec/Logic, Post: Result Idealism)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Spec/Logic, Post: Result Idealism)** → `$execution-audit` [Overlay]
 
 ## Required workflow
 
@@ -202,7 +202,7 @@ Recommended structure:
 - Keep component files ≤150 lines; extract subcomponents, hooks, or helpers when exceeded.
 - Name event handler functions with `handle` prefix (e.g., `handleClick`, `handleSubmit`).
 - Handle errors at the beginning of functions; place the happy path last.
-- **Superior Quality Audit**: For high-stake UI, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For high-stake UI, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -211,4 +211,4 @@ Recommended structure:
 - "这个 React 组件 re-render 太频繁了。"
 - "用 Zustand 做全局状态管理。"
 - "强制进行 React 深度审计 / 检查 Hook 闭包与渲染性能。"
-- "Use $execution-audit-codex to review this React implementation for superior quality."
+- "Use $execution-audit to review this React implementation for superior quality."

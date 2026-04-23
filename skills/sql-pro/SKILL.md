@@ -71,7 +71,7 @@ This skill does not own:
 - NoSQL/document database design
 - database migration tooling
 - backend service architecture
-- **Dual-Dimension Audit (Pre: Plan/Syntax, Post: Dataset-Result/Performance)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Plan/Syntax, Post: Dataset-Result/Performance)** → `$execution-audit` [Overlay]
 
 If the task shifts to adjacent skill territory, route to:
 - `$python-pro` (SQLAlchemy, Django ORM)
@@ -181,7 +181,7 @@ Recommended structure:
 - Avoid heavy queries on production without safeguards (LIMIT, read replica, etc.).
 - Do not denormalize without explicitly stating the trade-off.
 - Prefer standard SQL when the RDBMS supports it over proprietary syntax.
-- **Superior Quality Audit**: For production or complex analytical SQL, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production or complex analytical SQL, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -190,4 +190,4 @@ Recommended structure:
 - "设计一个 star schema 的数据仓库模型。"
 - "这个 PostgreSQL 索引策略对不对？"
 - "强制进行 SQL 深度审计 / 检查执行计划与结果数据准确性。"
-- "Use $execution-audit-codex to audit this SQL query for execution-plan idealism."
+- "Use $execution-audit to audit this SQL query for execution-plan idealism."

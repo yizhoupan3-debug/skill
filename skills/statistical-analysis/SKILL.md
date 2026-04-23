@@ -32,7 +32,7 @@ risk: low
 source: local
 ---
 
-- **Dual-Dimension Audit (Pre: Test-Selection, Post: P-value/Effect-size Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Test-Selection, Post: P-value/Effect-size Results)** → `$execution-audit` [Overlay]
 
 # Statistical Analysis
 
@@ -141,7 +141,7 @@ Use `统计分析报告`:
 - Do not apply multiple tests without correction
 - Do not confuse statistical significance with practical importance
 - Always state assumptions and check them before running tests
-- **Superior Quality Audit**: For high-stakes statistical results, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For high-stakes statistical results, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 - Report exact p-values (p = 0.037) not just threshold labels (p < 0.05)
 
 ## Cross-references
@@ -159,4 +159,4 @@ Use `统计分析报告`:
 - "回归模型的残差图怎么看"
 - "多重比较要怎么校正"
 - "强制进行统计分析深度审计 / 检查检验方法与效应量结果。"
-- "Use $execution-audit-codex to audit this statistical analysis for rigor-fidelity idealism."
+- "Use $execution-audit to audit this statistical analysis for rigor-fidelity idealism."

@@ -57,21 +57,21 @@
       "first_turn": true
     },
     {
-      "id": "skill-developer-codex-near-miss",
+      "id": "skill-framework-developer-near-miss",
       "category": "wrong-owner-near-miss",
       "task": "这个 skill 框架 owner gate overlay 边界重叠了，顺手把路由策略修一下并减少 token 消耗。",
-      "focus_skill": "skill-developer-codex",
-      "expected_owner": "skill-developer-codex",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
       "expected_overlay": "anti-laziness",
       "forbidden_owners": ["idea-to-plan"],
       "first_turn": true
     },
     {
-      "id": "skill-developer-codex-generic-review-case",
+      "id": "skill-framework-developer-generic-review-case",
       "category": "should-trigger",
       "task": "深度review现在的路由系统和 skill 边界。",
-      "focus_skill": "skill-developer-codex",
-      "expected_owner": "skill-developer-codex",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
       "expected_overlay": "code-review",
       "first_turn": true
     },
@@ -125,8 +125,8 @@
       "id": "skill-routing-repair-direct-owner-case",
       "category": "should-trigger",
       "task": "这次为什么没触发，顺手修一下 skill，以后别再选错。",
-      "focus_skill": "skill-routing-repair-codex",
-      "expected_owner": "skill-routing-repair-codex",
+      "focus_skill": "skill-routing-repair",
+      "expected_owner": "skill-routing-repair",
       "expected_overlay": "anti-laziness",
       "forbidden_owners": ["env-config-management", "typescript-pro", "systematic-debugging"],
       "first_turn": true
@@ -135,8 +135,8 @@
       "id": "skill-routing-repair-beats-debug-gate-case",
       "category": "gate-vs-owner-conflict",
       "task": "这个 skill 的路由没触发，帮我修复这次 miss。",
-      "focus_skill": "skill-routing-repair-codex",
-      "expected_owner": "skill-routing-repair-codex",
+      "focus_skill": "skill-routing-repair",
+      "expected_owner": "skill-routing-repair",
       "expected_overlay": "anti-laziness",
       "forbidden_owners": ["systematic-debugging"],
       "first_turn": true
@@ -147,6 +147,96 @@
       "task": "只改一个单文件 shell 脚本，别上复杂编排。",
       "focus_skill": "execution-controller-coding",
       "forbidden_owners": ["execution-controller-coding"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-reviewer-whole-paper-case",
+      "category": "should-trigger",
+      "task": "帮我审这篇 paper，判断现在能不能投，先做整篇严审。",
+      "focus_skill": "paper-reviewer",
+      "expected_owner": "paper-reviewer",
+      "expected_overlay": null,
+      "forbidden_owners": ["paper-reviser", "paper-writing", "paper-logic"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-reviser-review-comments-case",
+      "category": "should-trigger",
+      "task": "根据 reviewer comments 修改论文，该删就删，该藏到附录就藏到附录。",
+      "focus_skill": "paper-reviser",
+      "expected_owner": "paper-reviser",
+      "expected_overlay": null,
+      "forbidden_owners": ["paper-reviewer", "paper-writing"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-writing-local-polish-case",
+      "category": "wrong-owner-near-miss",
+      "task": "润色摘要和引言表达，只做文字精修，不改 claim。",
+      "focus_skill": "paper-writing",
+      "expected_owner": "paper-writing",
+      "expected_overlay": null,
+      "forbidden_owners": ["paper-reviewer", "paper-reviser"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-reviewer-english-review-case",
+      "category": "wrong-owner-near-miss",
+      "task": "review 这篇 paper，告诉我现在能不能投。",
+      "focus_skill": "paper-reviewer",
+      "expected_owner": "paper-reviewer",
+      "expected_overlay": null,
+      "forbidden_owners": ["architect-review"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-reviewer-paper-review-phrase-case",
+      "category": "wrong-owner-near-miss",
+      "task": "paper review 一下这篇稿子，先给我整篇判断。",
+      "focus_skill": "paper-reviewer",
+      "expected_owner": "paper-reviewer",
+      "expected_overlay": null,
+      "forbidden_owners": ["architect-review"],
+      "first_turn": true
+    },
+    {
+      "id": "architect-review-generic-review-architecture-case",
+      "category": "wrong-owner-near-miss",
+      "task": "全面 review 这套架构，先给我结构层面的判断。",
+      "focus_skill": "architect-review",
+      "expected_owner": "architect-review",
+      "expected_overlay": null,
+      "forbidden_owners": ["paper-reviser", "paper-reviewer"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-reviewer-figure-layout-slice-case",
+      "category": "wrong-owner-near-miss",
+      "task": "只看 paper 的图表和排版，别检查别的维度。",
+      "focus_skill": "paper-reviewer",
+      "expected_owner": "paper-reviewer",
+      "expected_overlay": null,
+      "forbidden_owners": ["paper-logic", "visual-review"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-logic-evidence-case",
+      "category": "wrong-owner-near-miss",
+      "task": "别润色，直接看这篇论文 claims 和 evidence 对不对齐，实验支撑够不够。",
+      "focus_skill": "paper-logic",
+      "expected_owner": "paper-logic",
+      "expected_overlay": null,
+      "forbidden_owners": ["paper-writing", "paper-reviser"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-reviser-review-comments-chinese-case",
+      "category": "wrong-owner-near-miss",
+      "task": "按审稿意见改论文，别先给方案，直接进入修改。",
+      "focus_skill": "paper-reviser",
+      "expected_owner": "paper-reviser",
+      "expected_overlay": null,
+      "forbidden_owners": ["idea-to-plan", "paper-reviewer"],
       "first_turn": true
     },
     {

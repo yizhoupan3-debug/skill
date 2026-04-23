@@ -35,7 +35,7 @@ risk: low
 source: local
 ---
 
-- **Dual-Dimension Audit (Pre: Search-Query/Source, Post: Citation-Relevance/DB-Coverage Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Search-Query/Source, Post: Citation-Relevance/DB-Coverage Results)** → `$execution-audit` [Overlay]
 
 # Academic Search
 
@@ -231,7 +231,7 @@ Adjacent-venue backfills: M
 - Do not assume a paper exists just because the topic makes sense
 - In benchmark-pool mode, do not count a paper as retained unless the PDF is stored locally
 - When API access is unavailable, use web search and note the limitation
-- **Superior Quality Audit**: For systematic literature reviews, trigger `$execution-audit-codex` to verify search breadth against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For systematic literature reviews, trigger `$execution-audit` to verify search breadth against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -244,4 +244,4 @@ Adjacent-venue backfills: M
 - "给我做个系统的文献检索"
 - "PubMed 搜一下这个药物的临床试验论文"
 - "强制进行学术搜索深度审计 / 检查检索词质量与文献相关性。"
-- "Use $execution-audit-codex to audit this search strategy for coverage idealism."
+- "Use $execution-audit to audit this search strategy for coverage idealism."

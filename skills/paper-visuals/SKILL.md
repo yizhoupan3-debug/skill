@@ -34,7 +34,7 @@ risk: medium
 source: local
 ---
 
-- **Dual-Dimension Audit (Pre: Vector-Logic/Theme, Post: Resolution-DPI/Font-Fidelity Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Vector-Logic/Theme, Post: Resolution-DPI/Font-Fidelity Results)** → `$execution-audit` [Overlay]
 
 # Paper Visuals
 

@@ -16,7 +16,7 @@ LOADOUTS_PATH = SKILLS_ROOT / "SKILL_LOADOUTS.json"
 SHADOW_MAP_PATH = SKILLS_ROOT / "SKILL_SHADOW_MAP.json"
 APPROVAL_POLICY_PATH = SKILLS_ROOT / "SKILL_APPROVAL_POLICY.json"
 HEALTH_MANIFEST_PATH = SKILLS_ROOT / "SKILL_HEALTH_MANIFEST.json"
-OVERLAY_ONLY_SKILLS = {"iterative-optimizer", "execution-audit-codex", "i18n-l10n", "humanizer"}
+OVERLAY_ONLY_SKILLS = {"iterative-optimizer", "execution-audit", "i18n-l10n", "humanizer"}
 
 DEFAULT_LOADOUTS = {
     "version": 2,
@@ -42,7 +42,7 @@ DEFAULT_LOADOUTS = {
                 "plan-to-code",
                 "python-pro",
                 "typescript-pro",
-                "git-workflow",
+                "gitx",
                 "shell-cli",
             ],
             "overlays": ["anti-laziness"],
@@ -79,23 +79,23 @@ DEFAULT_LOADOUTS = {
             "activation": "explicit",
             "surface_class": "specialist",
             "owners": [],
-            "overlays": ["execution-audit-codex", "code-review", "security-audit", "anti-laziness"],
+            "overlays": ["execution-audit", "code-review", "security-audit", "anti-laziness"],
             "exclude": ["brainstorm-research"],
             "purpose": "Strict sign-off, audit, verification, and issue surfacing.",
         },
         "framework_loadout": {
             "activation": "explicit",
             "surface_class": "specialist",
-            "owners": ["skill-developer-codex", "execution-controller-coding", "idea-to-plan", "checklist-normalizer"],
-            "overlays": ["execution-audit-codex"],
+            "owners": ["skill-framework-developer", "execution-controller-coding", "idea-to-plan", "checklist-normalizer"],
+            "overlays": ["execution-audit"],
             "exclude": ["seo-web"],
             "purpose": "Framework design, routing policy, orchestrator evolution, and execution-shape normalization work.",
         },
         "ops_loadout": {
             "activation": "explicit",
             "surface_class": "specialist",
-            "owners": ["git-workflow", "linux-server-ops", "observability"],
-            "overlays": ["execution-audit-codex"],
+            "owners": ["gitx", "linux-server-ops", "observability"],
+            "overlays": ["execution-audit"],
             "exclude": ["paper-writing"],
             "purpose": "Operational changes, deployment support, and production diagnostics.",
         },

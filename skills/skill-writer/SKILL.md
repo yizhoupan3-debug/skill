@@ -48,7 +48,7 @@ packaging, and discovery surface of one skill.
 
 **Sharp boundary:**
 - `skill-writer` decides how **one skill** should read
-- `skill-developer-codex` decides framework policy across multiple skills
+- `skill-framework-developer` decides framework policy across multiple skills
 - `skill-creator` performs the concrete file/package edits
 
 ## When to use
@@ -61,9 +61,9 @@ packaging, and discovery surface of one skill.
 
 ## Do not use
 
-- The task changes framework rules, routing docs, or multiple skill boundaries → use [`$skill-developer-codex`](../skill-developer-codex/SKILL.md)
+- The task changes framework rules, routing docs, or multiple skill boundaries → use [`$skill-framework-developer`](../skill-framework-developer/SKILL.md)
 - The writing decisions are already made and the main work is file creation/update → use [`$skill-creator`](../.system/skill-creator/SKILL.md)
-- The job is post-task route-miss repair → use [`$skill-routing-repair-codex`](../skill-routing-repair-codex/SKILL.md)
+- The job is post-task route-miss repair → use [`$skill-routing-repair`](../skill-routing-repair/SKILL.md)
 - The task is batch normalization of many skills → use `$writing-skills`
 
 ## Required workflow

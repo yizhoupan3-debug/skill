@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any, TextIO
 
-from codex_agno_runtime.rust_router import RustRouteAdapter
+from framework_runtime.rust_router import RustRouteAdapter
 
 from scripts.default_bootstrap import resolve_bootstrap_path, run_default_bootstrap
 from scripts.framework_bridge import export_framework_skills

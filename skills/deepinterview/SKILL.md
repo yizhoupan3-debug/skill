@@ -87,7 +87,7 @@ approval_required_tools: []
 - 架构面：[`$architect-review`](/Users/joe/Documents/skill/skills/architect-review/SKILL.md)
 - 安全面：[`$security-audit`](/Users/joe/Documents/skill/skills/security-audit/SKILL.md)
 - 测试面：[`$test-engineering`](/Users/joe/Documents/skill/skills/test-engineering/SKILL.md)
-- 收敛验收：[`$execution-audit-codex`](/Users/joe/Documents/skill/skills/execution-audit-codex/SKILL.md)
+- 收敛验收：[`$execution-audit`](/Users/joe/Documents/skill/skills/execution-audit/SKILL.md)
 
 ## Local Replacements
 

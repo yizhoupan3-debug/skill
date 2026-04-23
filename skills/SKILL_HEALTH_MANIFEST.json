@@ -1,9 +1,9 @@
 {
   "ts": "2026-04-15T10:46:46.102903+00:00",
   "summary": {
-    "total_skills": 150,
+    "total_skills": 149,
     "critical_skills": 0,
-    "avg_health": 96.6
+    "avg_health": 96.5
   },
   "skills": {
     "plugin-creator": {
@@ -223,20 +223,6 @@
       "reroutes_30d": 0,
       "health_status": "Healthy"
     },
-    "slides": {
-      "dynamic_score": 100.0,
-      "static_score": 100.0,
-      "usage_30d": 0,
-      "reroutes_30d": 0,
-      "health_status": "Healthy"
-    },
-    "spreadsheets": {
-      "dynamic_score": 100.0,
-      "static_score": 100.0,
-      "usage_30d": 0,
-      "reroutes_30d": 0,
-      "health_status": "Healthy"
-    },
     "coding-standards": {
       "dynamic_score": 97.7,
       "static_score": 94.2,
@@ -363,7 +349,7 @@
       "reroutes_30d": 0,
       "health_status": "Healthy"
     },
-    "execution-audit-codex": {
+    "execution-audit": {
       "dynamic_score": 100.0,
       "static_score": 100.0,
       "usage_30d": 0,
@@ -437,13 +423,6 @@
       "dynamic_score": 100.0,
       "static_score": 100.0,
       "usage_30d": 0,
-      "reroutes_30d": 0,
-      "health_status": "Healthy"
-    },
-    "git-workflow": {
-      "dynamic_score": 100.0,
-      "static_score": 100.0,
-      "usage_30d": 1,
       "reroutes_30d": 0,
       "health_status": "Healthy"
     },
@@ -755,6 +734,20 @@
       "reroutes_30d": 0,
       "health_status": "Healthy"
     },
+    "slides": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
+    "spreadsheets": {
+      "dynamic_score": 100.0,
+      "static_score": 100.0,
+      "usage_30d": 0,
+      "reroutes_30d": 0,
+      "health_status": "Healthy"
+    },
     "prompt-engineer": {
       "dynamic_score": 95.8,
       "static_score": 89.6,
@@ -867,7 +860,7 @@
       "reroutes_30d": 0,
       "health_status": "Healthy"
     },
-    "skill-developer-codex": {
+    "skill-framework-developer": {
       "dynamic_score": 97.5,
       "static_score": 93.8,
       "usage_30d": 3,
@@ -881,14 +874,14 @@
       "reroutes_30d": 0,
       "health_status": "Healthy"
     },
-    "skill-maintenance-codex": {
+    "skill-library-maintenance": {
       "dynamic_score": 100.0,
       "static_score": 100.0,
       "usage_30d": 0,
       "reroutes_30d": 0,
       "health_status": "Healthy"
     },
-    "skill-routing-repair-codex": {
+    "skill-routing-repair": {
       "dynamic_score": 97.0,
       "static_score": 92.5,
       "usage_30d": 0,

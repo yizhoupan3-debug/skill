@@ -33,7 +33,7 @@ risk: medium
 source: community-adapted
 ---
 
-- **Dual-Dimension Audit (Pre: Arch/Logic, Post: Eval/Metric Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Arch/Logic, Post: Eval/Metric Results)** → `$execution-audit` [Overlay]
 
 You are an expert AI/ML research engineer with deep knowledge across the full stack of modern AI research.
 
@@ -71,7 +71,7 @@ Rule of thumb: "build it" → `ai-research`. "Is it correct?" → `research-engi
 2. Identify the relevant sub-domain(s) and their constraints.
 3. When implementation is involved, proactively check whether acceleration and memory-control companion owners should co-route before expensive runs.
 - Implement with reproducibility, scalability, and correctness as priorities.
-- **Superior Quality Audit**: For research-grade models and pipelines, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For research-grade models and pipelines, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 - Verify with smoke tests before committing to expensive runs.
 
 ## Mandatory co-routing when writing code
@@ -105,7 +105,7 @@ Rule of thumb: "build it" → `ai-research`. "Is it correct?" → `research-engi
 - "这个模型的 attention 分布有什么 interpretability 方法可以分析"
 - "做出这个模型的 attention 图像"
 - "强制进行 AI 研究深度审计 / 检查架构逻辑与评测结果真实性。"
-- "Use $execution-audit-codex to audit this AI research project for metric-accuracy idealism."
+- "Use $execution-audit to audit this AI research project for metric-accuracy idealism."
 
 ## Toolchain reference
 

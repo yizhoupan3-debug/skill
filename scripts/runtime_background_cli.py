@@ -11,19 +11,16 @@ from pathlib import Path
 
 if __package__ in {None, ""}:
     PROJECT_ROOT = Path(__file__).resolve().parents[1]
-    RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
-    if str(RUNTIME_SRC) not in sys.path:
-        sys.path.insert(0, str(RUNTIME_SRC))
 else:
     PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 from pydantic import BaseModel, Field
 
-from codex_agno_runtime.config import RuntimeSettings
-from codex_agno_runtime.runtime import CodexAgnoRuntime
-from codex_agno_runtime.schemas import BackgroundRunRequest
+from framework_runtime.config import RuntimeSettings
+from framework_runtime.runtime import CodexAgnoRuntime
+from framework_runtime.schemas import BackgroundRunRequest
 
 
 class BackgroundBatchCliPayload(BaseModel):

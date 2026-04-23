@@ -101,7 +101,7 @@ If runtime policy does **not** permit spawning:
 1. **Parse & Classify**: Read the brief, classify maturity (Level 1-4), and choose mode (Fast vs Structured).
 2. **Inspect & Map**: Locate entrypoints and map necessary changes (Storage -> Logic -> API -> UI).
 3. **Implement & Reflect**: Edit files directly; wire all layers; perform **Self-Reflection** to identify bugs/edge cases before concluding implementation.
-4. **Audit & Review**: Run spec-compliance checks. If **Reinforced Quality** is requested, trigger `$execution-audit-codex` as a mandatory overlay.
+4. **Audit & Review**: Run spec-compliance checks. If **Reinforced Quality** is requested, trigger `$execution-audit` as a mandatory overlay.
 5. **Verify**: Run final builds/tests.
 
 For complex tasks, refer to the [Detailed Implementation Workflow](references/workflow-depth.md).

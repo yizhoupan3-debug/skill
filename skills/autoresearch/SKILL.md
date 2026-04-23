@@ -29,6 +29,9 @@ metadata:
     - research-state
 risk: medium
 source: community-adapted
+runtime_requirements:
+  python:
+    - pyyaml
 ---
 
 # Autoresearch
@@ -116,6 +119,8 @@ spans sessions.
 - Treat `research-state.yaml` as the canonical control plane and `research-log.md` as
   the chronological record.
 - Keep experiment folders append-only after a run is labeled complete.
+- Prefer the bundled controller `scripts/research_ctl.py` over ad hoc manual edits for
+  init, queued hypotheses, run records, reflections, and next-step suggestions.
 
 ## Minimum Run Record
 
@@ -190,10 +195,24 @@ slices as follows before expensive runs.
 `research-state.yaml` central state
 `research-log.md` timeline
 `findings.md` narrative synthesis
+`BOOTSTRAP_BRIEF.md` scoped research brief
 `literature/` source notes
+`literature/NOVELTY_GATE.md` overlap and positioning gate
 `experiments/{hypothesis-slug}/` protocol, code, results, analysis
+`experiments/_templates/` hypothesis, protocol, run, reflection templates
 `to_human/` handoff drafts
 `paper/` manuscript assets
+
+## Primary Assets
+
+- Controller CLI: `skills/autoresearch/scripts/research_ctl.py`
+- Backward-compatible init wrapper: `skills/autoresearch/scripts/init_research.py`
+- Templates: `skills/autoresearch/templates/`
+- Resume handoff: `python3 skills/autoresearch/scripts/research_ctl.py resume --workspace <project>`
+- File resync: `python3 skills/autoresearch/scripts/research_ctl.py sync --workspace <project>`
+- Claim drafting lane: `python3 skills/autoresearch/scripts/research_ctl.py draft-claims --workspace <project>`
+- Novelty comparison lane: `python3 skills/autoresearch/scripts/research_ctl.py compare-claim --workspace <project> ...`
+- Search-plan lane: `python3 skills/autoresearch/scripts/research_ctl.py plan-search --workspace <project>`
 
 ## Git Protocol
 

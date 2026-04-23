@@ -82,7 +82,7 @@ In that case:
 ## Do not use
 
 - The task is mainly about failing CI checks rather than human review feedback → use `$gh-fix-ci`
-- The user wants generic git branching, rebasing, or publishing help → use `$git-workflow`
+- The user wants generic git branching, rebasing, or publishing help → use `$gitx`
 - There is no relevant PR context and the task is not review-comment driven
 - The user specifically wants GitHub review automation outside the current branch PR workflow
 

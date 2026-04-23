@@ -62,7 +62,7 @@
       "execution_owners": [
         "plan-to-code",
         "subagent-delegation",
-        "execution-audit-codex"
+        "execution-audit"
       ],
       "host_entrypoints": {
         "codex-cli": "$autopilot",
@@ -106,7 +106,7 @@
         "architect-review",
         "security-audit",
         "test-engineering",
-        "execution-audit-codex"
+        "execution-audit"
       ],
       "host_entrypoints": {
         "codex-cli": "$deepinterview",

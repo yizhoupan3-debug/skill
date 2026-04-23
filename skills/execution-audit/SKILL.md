@@ -1,7 +1,7 @@
 ---
-name: execution-audit-codex
+name: execution-audit
 description: |
-  Strict implementation-level audit overlay for Codex: enforce spec fidelity, robustness,
+  Strict implementation-level audit overlay: enforce spec fidelity, robustness,
   runtime evidence, and result idealism with automated verification, compressed main-thread reporting,
   and bounded sidecar evidence collection.
   Use for “强制验收 / 高质量闭环 / 100% 对齐检查 / 零容忍审计 / 最终 sign-off / 主线程只保留结论”.
@@ -12,6 +12,8 @@ routing_priority: P1
 session_start: n/a
 short_description: Audit execution quality with evidence, sidecar-first collection, and compressed sign-off
 trigger_hints:
+  - execution-audit-codex
+  - execution-audit
   - 强制验收
   - 高质量闭环
   - 100% 对齐检查
@@ -36,6 +38,7 @@ metadata:
   version: "2.2.0"
   platforms: [codex]
   tags:
+    - execution-audit-codex
     - audit
     - quality-gate
     - robustness
@@ -67,11 +70,11 @@ artifact_outputs:
 bridge_behavior: mobile_complete_once
 ---
 
-- **Dual-Dimension Audit (Pre: Spec-Integrity/Logic, Post: Result-Idealism/Runtime Evidence)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Spec-Integrity/Logic, Post: Result-Idealism/Runtime Evidence)** → `$execution-audit` [Overlay]
 
-# execution-audit-codex
+# execution-audit
 
-This skill owns **strict execution auditing** for Codex work: prove that an implementation is not only present, but also fully wired, resilient, measurable, and worthy of final sign-off.
+This skill owns **strict execution auditing** for implementation work: prove that an implementation is not only present, but also fully wired, resilient, measurable, and worthy of final sign-off.
 
 Use it as an **overlay**, not a primary builder. It should sit on top of `idea-to-plan`, `plan-to-code`, `checklist-fixer`, domain implementation skills, or [`$execution-controller-coding`](/Users/joe/Documents/skill/skills/execution-controller-coding/SKILL.md) slices.
 
@@ -342,4 +345,4 @@ Produce `audit_report.md` when the user explicitly asks for an audit artifact or
 - “强制进行审计自检 / 检查核心逻辑完整性与结果可信度。”
 - “帮我做最终验收，给我 PASS/REWORK 结论。”
 - “主线程只给我结论，细节放到报告里。”
-- “Use $execution-audit-codex to audit this execution trace for sign-off readiness.”
+- “Use $execution-audit to audit this execution trace for sign-off readiness.”

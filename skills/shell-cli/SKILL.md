@@ -53,7 +53,7 @@ This skill owns shell-first terminal work: commands, pipelines, scripts, and CLI
 
 ## Do not use
 
-- The main task is Git history, branching, remotes, or publishing workflows → use `$git-workflow`
+- The main task is Git history, branching, remotes, or publishing workflows → use `$gitx`
 - The best implementation should clearly be a Python program rather than shell automation → use `$python-pro`
 - The main task is browser automation rather than terminal automation → use `$playwright`
 - The task is primarily root-cause debugging of a broader software failure rather than shell work → use `$systematic-debugging`
@@ -74,7 +74,7 @@ This skill does not own:
 - non-shell system administration beyond the scoped request
 
 If the task shifts to adjacent skill territory, route to:
-- `$git-workflow`
+- `$gitx`
 - `$python-pro`
 - `$playwright`
 - `$systematic-debugging`

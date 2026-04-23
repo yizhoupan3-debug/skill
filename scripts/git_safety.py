@@ -4,14 +4,115 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import re
+import shlex
+import shutil
 import subprocess
 import tarfile
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+
+VERIFY_PRESET_CONFIGS: dict[str, dict[str, Any]] = {
+    "gitx-smoke": {
+        "label": "Gitx Smoke",
+        "priority": 40,
+        "commands": [
+            {
+                "command": "python3 -m pytest -q --noconftest tests/test_git_safety.py tests/test_gitx_skill.py",
+            },
+            {
+                "command": "python3 -m py_compile scripts/git_safety.py",
+            },
+        ],
+        "path_rules": (
+            "scripts/git_safety.py",
+            "tests/test_git_safety.py",
+            "tests/test_gitx_skill.py",
+            "skills/gitx/SKILL.md",
+        ),
+    },
+    "entrypoint-sync": {
+        "label": "Entrypoint Sync",
+        "priority": 60,
+        "commands": [
+            {
+                "command": "python3 scripts/check_skills.py --verify-sync",
+            },
+            {
+                "command": "python3 -m pytest -q --noconftest tests/test_cli_host_entrypoints.py",
+            },
+        ],
+        "path_rules": (
+            "scripts/materialize_cli_host_entrypoints.py",
+            "tests/test_cli_host_entrypoints.py",
+            ".claude/",
+            "AGENT.md",
+            "AGENTS.md",
+            "CLAUDE.md",
+            "GEMINI.md",
+        ),
+    },
+    "rust-router": {
+        "label": "Rust Router",
+        "priority": 90,
+        "commands": [
+            {
+                "command": "cargo build --manifest-path Cargo.toml",
+                "cwd": "scripts/router-rs",
+            },
+            {
+                "command": "python3 -m pytest -q --noconftest tests/test_route_cli_entrypoint.py tests/test_router_rs_runner.py",
+            },
+        ],
+        "path_rules": (
+            "scripts/router-rs/",
+            "codex_agno_runtime/src/codex_agno_runtime/rust_router.py",
+            "tests/test_route_cli_entrypoint.py",
+            "tests/test_router_rs_runner.py",
+        ),
+    },
+    "routing-eval": {
+        "label": "Routing Eval",
+        "priority": 80,
+        "commands": [
+            {
+                "command": "python3 -m pytest -q --noconftest tests/test_routing_eval.py tests/test_routing_parity.py tests/test_evaluate_routing_entrypoint.py",
+            },
+        ],
+        "path_rules": (
+            "scripts/evaluate_routing.py",
+            "tests/routing_eval_cases.json",
+            "tests/test_routing_eval.py",
+            "tests/test_routing_parity.py",
+            "tests/test_evaluate_routing_entrypoint.py",
+        ),
+    },
+    "browser-runtime": {
+        "label": "Browser Runtime",
+        "priority": 70,
+        "commands": [
+            {
+                "command": "python3 -m pytest -q --noconftest tests/test_browser_mcp_launcher_script.py",
+            },
+            {
+                "command": "npm test -- --run tests/runtime.test.ts",
+                "cwd": "tools/browser-mcp",
+            },
+        ],
+        "path_rules": (
+            "tools/browser-mcp/",
+            "tests/test_browser_mcp_launcher_script.py",
+            "tests/test_install_browser_mcp_codex.py",
+            "scripts/install_browser_mcp_codex.py",
+        ),
+    },
+}
 
 
 @dataclass
@@ -48,6 +149,9 @@ class WorktreeEntry:
 class RepoSnapshot:
     repo_root: str
     captured_at: str
+    collection_mode: str
+    probe_timings_ms: dict[str, int]
+    integrations: dict[str, bool]
     branch: BranchStatus
     changes: ChangeCounts
     hooks_path: str | None
@@ -69,6 +173,7 @@ class DoctorReport:
     suggested_topic_branch: str | None
     suggested_target_branch: str
     suggested_push_remote: str
+    suggested_verify_presets: list[str]
 
 
 @dataclass
@@ -80,6 +185,56 @@ class PublishPlan:
     blocked: bool
     warnings: list[str]
     steps: list[str]
+    suggested_verify_presets: list[str]
+
+
+@dataclass
+class VerificationCommandResult:
+    name: str
+    label: str
+    preset: str | None
+    merged_from: list[str]
+    command: str
+    resolved_command: list[str]
+    working_directory: str
+    used_rtk: bool
+    returncode: int
+    duration_ms: int
+    status: str
+    stdout: str
+    stderr: str
+
+
+@dataclass
+class VerificationBatchResult:
+    repo_root: str
+    status_contract: str
+    parallel_mode: str
+    requested_jobs: int
+    total_commands: int
+    passed: int
+    failed: int
+    rtk_enabled: bool
+    wall_time_ms: int
+    results: list[VerificationCommandResult]
+
+
+@dataclass
+class VerifyPresetDetail:
+    preset: str
+    label: str
+    priority: int
+    default_workdir: str
+    matched_paths: list[str]
+
+
+@dataclass
+class VerifyPresetSuggestion:
+    repo_root: str
+    candidate_paths: list[str]
+    suggested_presets: list[str]
+    matched_paths_by_preset: dict[str, list[str]]
+    preset_details: list[VerifyPresetDetail]
 
 
 @dataclass
@@ -99,6 +254,8 @@ class AutoCloseoutResult:
     deleted_topic_branch: bool
     warnings: list[str]
     actions: list[str]
+    verification_batch: VerificationBatchResult | None
+    inferred_verify_presets: list[str]
 
 
 def _run_git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -246,27 +403,62 @@ def _worktree_entry_from_payload(payload: dict[str, str], current_head_oid: str,
     )
 
 
+def _run_repo_probe(name: str, fn: callable) -> tuple[str, str, int]:
+    started_at = time.perf_counter()
+    value = fn()
+    duration_ms = int((time.perf_counter() - started_at) * 1000)
+    return name, value, duration_ms
+
+
+def _rtk_available() -> bool:
+    return shutil.which("rtk") is not None
+
+
+def _collect_repo_probe_payloads(root: Path) -> tuple[dict[str, str], dict[str, int]]:
+    probes: dict[str, callable] = {
+        "status_porcelain": lambda: _run_git(
+            root,
+            "status",
+            "--porcelain=v2",
+            "--branch",
+            "--untracked-files=all",
+            "--ignored=matching",
+        ).stdout,
+        "worktree_listing": lambda: _run_git(root, "worktree", "list", "--porcelain").stdout,
+        "stash_listing": lambda: _run_git(root, "stash", "list", check=False).stdout,
+        "hooks_path": lambda: _run_git(root, "config", "--get", "core.hooksPath", check=False).stdout,
+        "reflog_head": lambda: _run_git(root, "reflog", "-n", "20", "--date=iso").stdout,
+    }
+    payloads: dict[str, str] = {}
+    durations: dict[str, int] = {}
+    with ThreadPoolExecutor(max_workers=len(probes)) as executor:
+        future_map = {
+            executor.submit(_run_repo_probe, name, fn): name
+            for name, fn in probes.items()
+        }
+        for future in as_completed(future_map):
+            name, value, duration_ms = future.result()
+            payloads[name] = value
+            durations[name] = duration_ms
+    return payloads, durations
+
+
 def collect_repo_snapshot(repo_root: Path | None = None) -> RepoSnapshot:
     root = discover_repo_root(repo_root)
-    status_porcelain = _run_git(
-        root,
-        "status",
-        "--porcelain=v2",
-        "--branch",
-        "--untracked-files=all",
-        "--ignored=matching",
-    ).stdout
+    payloads, probe_timings_ms = _collect_repo_probe_payloads(root)
+    status_porcelain = payloads["status_porcelain"]
     branch, changes = _parse_status_porcelain(status_porcelain)
-    worktree_listing = _run_git(root, "worktree", "list", "--porcelain").stdout
+    worktree_listing = payloads["worktree_listing"]
     worktrees = _parse_worktree_listing(worktree_listing, branch.head_oid, root)
-    stash_proc = _run_git(root, "stash", "list", check=False)
-    stash_entries = [line for line in stash_proc.stdout.splitlines() if line.strip()]
-    hooks_proc = _run_git(root, "config", "--get", "core.hooksPath", check=False)
-    hooks_path = hooks_proc.stdout.strip() or None
-    reflog_head = _run_git(root, "reflog", "-n", "20", "--date=iso").stdout
+    stash_entries = [line for line in payloads["stash_listing"].splitlines() if line.strip()]
+    hooks_path = payloads["hooks_path"].strip() or None
+    reflog_head = payloads["reflog_head"]
     return RepoSnapshot(
         repo_root=str(root),
         captured_at=datetime.now().astimezone().isoformat(timespec="seconds"),
+        collection_mode="parallel-probes",
+        probe_timings_ms=probe_timings_ms,
+        integrations={"rtk": _rtk_available()},
         branch=branch,
         changes=changes,
         hooks_path=hooks_path,
@@ -292,6 +484,7 @@ def render_snapshot(snapshot: RepoSnapshot) -> str:
     changes = snapshot.changes
     lines = [
         f"repo: {snapshot.repo_root}",
+        f"audit_mode: {snapshot.collection_mode}",
         f"head: {branch.head_oid[:7]} ({branch.head_name})",
         f"upstream: {branch.upstream or '(none)'} [ahead {branch.ahead}, behind {branch.behind}]",
         (
@@ -304,10 +497,16 @@ def render_snapshot(snapshot: RepoSnapshot) -> str:
             f"untracked {changes.untracked_paths}, "
             f"ignored {changes.ignored_paths}"
         ),
+        f"rtk_available: {'yes' if snapshot.integrations.get('rtk') else 'no'}",
         f"hooks: {snapshot.hooks_path or '(default .git/hooks)'}",
         f"stash: {len(snapshot.stash_entries)}",
         f"worktrees: {len(snapshot.worktrees)}",
     ]
+    if snapshot.probe_timings_ms:
+        probe_summary = ", ".join(
+            f"{name}={duration}ms" for name, duration in sorted(snapshot.probe_timings_ms.items())
+        )
+        lines.append(f"probe_timings: {probe_summary}")
 
     findings: list[str] = []
     if snapshot.branch.head_name == "main" and _has_dirty_changes(snapshot):
@@ -419,10 +618,342 @@ def _candidate_paths(root: Path) -> list[str]:
     return candidates
 
 
+def _path_matches_verify_rule(path: str, rule: str) -> bool:
+    return path == rule or path.startswith(rule)
+
+
+def _preset_config(preset: str) -> dict[str, Any]:
+    config = VERIFY_PRESET_CONFIGS.get(preset)
+    if not isinstance(config, dict):
+        raise ValueError(f"unknown verify preset: {preset}")
+    return config
+
+
+def _preset_label(preset: str) -> str:
+    return str(_preset_config(preset).get("label") or preset)
+
+
+def _preset_priority(preset: str) -> int:
+    return int(_preset_config(preset).get("priority") or 0)
+
+
+def _preset_default_workdir(preset: str) -> str:
+    return str(_preset_config(preset).get("cwd") or ".")
+
+
+def _preset_path_rules(preset: str) -> tuple[str, ...]:
+    raw_rules = _preset_config(preset).get("path_rules") or ()
+    return tuple(str(rule) for rule in raw_rules)
+
+
+def _sorted_preset_names(presets: list[str], *, matched_paths_by_preset: dict[str, list[str]] | None = None) -> list[str]:
+    def sort_key(preset: str) -> tuple[int, int, str]:
+        matched_count = len((matched_paths_by_preset or {}).get(preset, []))
+        return (-_preset_priority(preset), -matched_count, preset)
+
+    return sorted(presets, key=sort_key)
+
+
+def match_verify_presets_for_paths(paths: list[str]) -> dict[str, list[str]]:
+    matches: dict[str, list[str]] = {}
+    for preset in VERIFY_PRESET_CONFIGS:
+        rules = _preset_path_rules(preset)
+        matched_paths = [
+            path for path in paths if any(_path_matches_verify_rule(path, rule) for rule in rules)
+        ]
+        if matched_paths:
+            matches[preset] = matched_paths
+    return matches
+
+
+def suggest_verify_presets_for_paths(paths: list[str]) -> list[str]:
+    matches = match_verify_presets_for_paths(paths)
+    return _sorted_preset_names(list(matches), matched_paths_by_preset=matches)
+
+
+def build_verify_preset_suggestion(repo_root: Path | None = None) -> VerifyPresetSuggestion:
+    root = discover_repo_root(repo_root)
+    candidate_paths = _candidate_paths(root)
+    matched_paths_by_preset = match_verify_presets_for_paths(candidate_paths)
+    suggested_presets = _sorted_preset_names(list(matched_paths_by_preset), matched_paths_by_preset=matched_paths_by_preset)
+    return VerifyPresetSuggestion(
+        repo_root=str(root),
+        candidate_paths=candidate_paths,
+        suggested_presets=suggested_presets,
+        matched_paths_by_preset=matched_paths_by_preset,
+        preset_details=[
+            VerifyPresetDetail(
+                preset=preset,
+                label=_preset_label(preset),
+                priority=_preset_priority(preset),
+                default_workdir=_preset_default_workdir(preset),
+                matched_paths=matched_paths_by_preset[preset],
+            )
+            for preset in suggested_presets
+        ],
+    )
+
+
+def render_verify_preset_suggestion(result: VerifyPresetSuggestion) -> str:
+    lines = [
+        f"repo: {result.repo_root}",
+        f"candidate_paths: {len(result.candidate_paths)}",
+        "suggested_presets:",
+    ]
+    if result.suggested_presets:
+        for detail in result.preset_details:
+            matched_paths = ", ".join(detail.matched_paths)
+            lines.append(
+                f"- {detail.preset} [{detail.label}]"
+                f" priority={detail.priority} cwd={detail.default_workdir}: {matched_paths}"
+            )
+    else:
+        lines.append("- (none)")
+    return "\n".join(lines)
+
+
 def _current_head_oid(root: Path) -> str | None:
     proc = _run_git(root, "rev-parse", "HEAD", check=False)
     value = proc.stdout.strip()
     return value or None
+
+
+def _should_wrap_with_rtk(command: str) -> bool:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    if not tokens or tokens[0] == "rtk":
+        return False
+    first = tokens[0]
+    second = tokens[1] if len(tokens) > 1 else ""
+    if first in {"pytest", "cargo"}:
+        return True
+    if first in {"npm", "pnpm", "yarn"} and second in {"test", "run", "lint", "build"}:
+        return True
+    if first == "uv" and len(tokens) > 2 and second == "run" and tokens[2] in {"pytest", "cargo"}:
+        return True
+    if first == "git" and second in {"status", "diff", "log"}:
+        return True
+    if first in {"python", "python3"} and len(tokens) >= 3:
+        if tokens[1] == "-m" and tokens[2] in {"pytest", "compileall", "unittest"}:
+            return True
+        script = tokens[1]
+        flag = tokens[2]
+        if script == "scripts/check_skills.py" and flag in {"--verify-sync", "--verify-codex-link"}:
+            return True
+        if script == "scripts/sync_skills.py" and flag == "--apply":
+            return True
+    return False
+
+
+def _resolve_verification_command(command: str, *, prefer_rtk: bool) -> tuple[list[str], bool]:
+    tokens = shlex.split(command)
+    use_rtk = prefer_rtk and _rtk_available() and _should_wrap_with_rtk(command)
+    if use_rtk:
+        return ["rtk", *tokens], True
+    return tokens, False
+
+
+def _expand_verify_commands(
+    *,
+    commands: list[str],
+    presets: list[str],
+) -> list[dict[str, Any]]:
+    unknown_presets = [preset for preset in presets if preset not in VERIFY_PRESET_CONFIGS]
+    if unknown_presets:
+        raise ValueError("unknown verify presets: " + ", ".join(sorted(unknown_presets)))
+    expanded: list[dict[str, Any]] = []
+
+    def add_job(job: dict[str, Any]) -> None:
+        key = (str(job["command"]), str(job["cwd"] or ""))
+        for existing in expanded:
+            existing_key = (str(existing["command"]), str(existing["cwd"] or ""))
+            if existing_key != key:
+                continue
+            merged_from = existing.setdefault("merged_from", [])
+            for source in job.get("merged_from", []):
+                if source not in merged_from:
+                    merged_from.append(source)
+            return
+        expanded.append(job)
+
+    for preset in _sorted_preset_names(presets):
+        config = _preset_config(preset)
+        default_cwd = str(config.get("cwd") or "")
+        for index, item in enumerate(config.get("commands") or [], start=1):
+            if isinstance(item, str):
+                command = item
+                cwd = default_cwd or None
+            elif isinstance(item, dict):
+                command = str(item.get("command") or "").strip()
+                cwd = str(item.get("cwd") or default_cwd or "") or None
+            else:
+                raise ValueError(f"invalid verify preset command entry for {preset!r}")
+            if not command:
+                raise ValueError(f"empty verify command in preset {preset!r}")
+            add_job(
+                {
+                    "command": command,
+                    "preset": preset,
+                    "label": f"{_preset_label(preset)} {index}",
+                    "cwd": cwd,
+                    "merged_from": [preset],
+                }
+            )
+    for index, command in enumerate(commands):
+        if not command.strip():
+            continue
+        add_job(
+            {
+                "command": command.strip(),
+                "preset": None,
+                "label": f"Custom {index + 1}",
+                "cwd": None,
+                "merged_from": ["custom"],
+            }
+        )
+    return expanded
+
+
+def _run_verification_command(
+    root: Path,
+    *,
+    index: int,
+    command: str,
+    label: str,
+    preset: str | None,
+    merged_from: list[str],
+    cwd: str | None,
+    prefer_rtk: bool,
+) -> tuple[int, VerificationCommandResult]:
+    started_at = time.perf_counter()
+    run_cwd = (root / cwd).resolve() if cwd else root
+    try:
+        resolved_command, used_rtk = _resolve_verification_command(command, prefer_rtk=prefer_rtk)
+    except ValueError as error:
+        duration_ms = int((time.perf_counter() - started_at) * 1000)
+        return index, VerificationCommandResult(
+            name=f"verify-{index + 1}",
+            label=label,
+            preset=preset,
+            merged_from=merged_from,
+            command=command,
+            resolved_command=[],
+            working_directory=str(run_cwd),
+            used_rtk=False,
+            returncode=2,
+            duration_ms=duration_ms,
+            status="failed",
+            stdout="",
+            stderr=str(error),
+        )
+    proc = subprocess.run(
+        resolved_command,
+        cwd=run_cwd,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    duration_ms = int((time.perf_counter() - started_at) * 1000)
+    return index, VerificationCommandResult(
+        name=f"verify-{index + 1}",
+        label=label,
+        preset=preset,
+        merged_from=merged_from,
+        command=command,
+        resolved_command=resolved_command,
+        working_directory=str(run_cwd),
+        used_rtk=used_rtk,
+        returncode=proc.returncode,
+        duration_ms=duration_ms,
+        status="passed" if proc.returncode == 0 else "failed",
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+    )
+
+
+def run_verification_batch(
+    *,
+    repo_root: Path | None = None,
+    commands: list[str],
+    presets: list[str] | None = None,
+    max_parallel: int | None = None,
+    prefer_rtk: bool = True,
+) -> VerificationBatchResult:
+    root = discover_repo_root(repo_root)
+    jobs = _expand_verify_commands(commands=commands, presets=presets or [])
+    if not jobs:
+        raise ValueError("verification batch requires at least one command")
+    requested_jobs = max(1, min(max_parallel or len(jobs), len(jobs)))
+    started_at = time.perf_counter()
+    results: list[VerificationCommandResult | None] = [None] * len(jobs)
+    with ThreadPoolExecutor(max_workers=requested_jobs) as executor:
+        future_map = {
+            executor.submit(
+                _run_verification_command,
+                root,
+                index=index,
+                command=str(job["command"]),
+                label=str(job["label"]),
+                preset=str(job["preset"]) if job["preset"] is not None else None,
+                merged_from=[str(item) for item in job.get("merged_from", [])],
+                cwd=str(job["cwd"]) if job["cwd"] is not None else None,
+                prefer_rtk=prefer_rtk,
+            ): index
+            for index, job in enumerate(jobs)
+        }
+        for future in as_completed(future_map):
+            index, result = future.result()
+            results[index] = result
+    completed_results = [result for result in results if result is not None]
+    failed = sum(1 for result in completed_results if result.status != "passed")
+    passed = len(completed_results) - failed
+    return VerificationBatchResult(
+        repo_root=str(root),
+        status_contract="gitx_verification_batch_v1",
+        parallel_mode="parallel" if requested_jobs > 1 else "serial",
+        requested_jobs=requested_jobs,
+        total_commands=len(completed_results),
+        passed=passed,
+        failed=failed,
+        rtk_enabled=prefer_rtk and _rtk_available(),
+        wall_time_ms=int((time.perf_counter() - started_at) * 1000),
+        results=completed_results,
+    )
+
+
+def render_verification_batch(result: VerificationBatchResult) -> str:
+    lines = [
+        f"repo: {result.repo_root}",
+        f"status_contract: {result.status_contract}",
+        f"parallel_mode: {result.parallel_mode}",
+        f"requested_jobs: {result.requested_jobs}",
+        f"rtk_enabled: {'yes' if result.rtk_enabled else 'no'}",
+        f"wall_time_ms: {result.wall_time_ms}",
+        f"passed: {result.passed}",
+        f"failed: {result.failed}",
+        "results:",
+    ]
+    for item in result.results:
+        lines.append(
+            "- "
+            + ", ".join(
+                [
+                    item.name,
+                    item.label,
+                    item.status,
+                    f"preset={item.preset or 'custom'}",
+                    f"merged_from={'|'.join(item.merged_from)}",
+                    f"rc={item.returncode}",
+                    f"duration={item.duration_ms}ms",
+                    f"cwd={item.working_directory}",
+                    f"rtk={'yes' if item.used_rtk else 'no'}",
+                    f"command={shlex.join(item.resolved_command) if item.resolved_command else item.command}",
+                ]
+            )
+        )
+    return "\n".join(lines)
 
 
 def write_checkpoint(
@@ -536,6 +1067,7 @@ def build_doctor_report(snapshot: RepoSnapshot) -> DoctorReport:
 
     findings: list[str] = []
     next_actions: list[str] = []
+    suggested_verify_presets = suggest_verify_presets_for_paths(_candidate_paths(Path(snapshot.repo_root)))
 
     if changes.unmerged_paths:
         findings.append(f"当前有 {changes.unmerged_paths} 个冲突文件，先解冲突，不能直接收口。")
@@ -581,6 +1113,7 @@ def build_doctor_report(snapshot: RepoSnapshot) -> DoctorReport:
         suggested_topic_branch=suggest_topic_branch(snapshot) if dirty_on_main else None,
         suggested_target_branch=_infer_target_branch(snapshot),
         suggested_push_remote=_infer_push_remote(snapshot),
+        suggested_verify_presets=suggested_verify_presets,
     )
 
 
@@ -599,6 +1132,9 @@ def render_doctor_report(report: DoctorReport) -> str:
         lines.append(f"suggested_topic_branch: {report.suggested_topic_branch}")
     lines.append(f"suggested_target_branch: {report.suggested_target_branch}")
     lines.append(f"suggested_push_remote: {report.suggested_push_remote}")
+    if report.suggested_verify_presets:
+        lines.append("suggested_verify_presets:")
+        lines.extend(f"- {preset}" for preset in report.suggested_verify_presets)
     return "\n".join(lines)
 
 
@@ -609,6 +1145,7 @@ def build_publish_plan(snapshot: RepoSnapshot, *, target_branch: str | None = No
     push_remote = _infer_push_remote(snapshot)
     warnings: list[str] = []
     steps: list[str] = []
+    suggested_verify_presets = suggest_verify_presets_for_paths(_candidate_paths(Path(snapshot.repo_root)))
 
     if snapshot.changes.unmerged_paths:
         warnings.append("当前存在未解决冲突，发布计划被阻塞。")
@@ -678,6 +1215,7 @@ def build_publish_plan(snapshot: RepoSnapshot, *, target_branch: str | None = No
         blocked=False,
         warnings=warnings,
         steps=steps,
+        suggested_verify_presets=suggested_verify_presets,
     )
 
 
@@ -692,6 +1230,9 @@ def render_publish_plan(plan: PublishPlan) -> str:
     if plan.warnings:
         lines.append("warnings:")
         lines.extend(f"- {item}" for item in plan.warnings)
+    if plan.suggested_verify_presets:
+        lines.append("suggested_verify_presets:")
+        lines.extend(f"- {preset}" for preset in plan.suggested_verify_presets)
     lines.append("steps:")
     lines.extend(f"{index}. {step}" for index, step in enumerate(plan.steps, start=1))
     return "\n".join(lines)
@@ -704,6 +1245,11 @@ def run_auto_closeout(
     commit_message: str | None = None,
     push: bool = False,
     delete_topic_branch: bool = False,
+    verify_commands: list[str] | None = None,
+    verify_presets: list[str] | None = None,
+    use_suggested_verify_presets: bool = False,
+    verify_jobs: int | None = None,
+    prefer_rtk_for_verification: bool = True,
 ) -> AutoCloseoutResult:
     root = discover_repo_root(repo_root)
     snapshot = collect_repo_snapshot(root)
@@ -721,6 +1267,8 @@ def run_auto_closeout(
     merged_to_target = False
     pushed = False
     deleted_topic = False
+    verification_batch: VerificationBatchResult | None = None
+    inferred_verify_presets: list[str] = []
 
     if snapshot.changes.unmerged_paths:
         return AutoCloseoutResult(
@@ -739,6 +1287,8 @@ def run_auto_closeout(
             deleted_topic_branch=False,
             warnings=["当前存在未解决冲突，自动收口已停止。"],
             actions=["先手动解决冲突，再重新运行 auto-closeout。"],
+            verification_batch=None,
+            inferred_verify_presets=[],
         )
 
     if branch.ahead > 0 and branch.behind > 0:
@@ -758,6 +1308,8 @@ def run_auto_closeout(
             deleted_topic_branch=False,
             warnings=["当前分支与上游分叉，自动收口已停止。"],
             actions=["先 `git fetch --prune` 并明确处理分叉，再重新运行 auto-closeout。"],
+            verification_batch=None,
+            inferred_verify_presets=[],
         )
 
     if branch.behind > 0:
@@ -777,6 +1329,8 @@ def run_auto_closeout(
             deleted_topic_branch=False,
             warnings=[f"当前分支落后上游 {branch.behind} 个提交，自动收口已停止。"],
             actions=["先同步当前分支，再重新运行 auto-closeout。"],
+            verification_batch=None,
+            inferred_verify_presets=[],
         )
 
     if _branch_exists(root, resolved_target):
@@ -798,6 +1352,8 @@ def run_auto_closeout(
                 deleted_topic_branch=False,
                 warnings=[f"目标分支 {resolved_target} 落后上游 {target_relation[1]} 个提交，自动收口已停止。"],
                 actions=[f"先同步目标分支 {resolved_target}，再重新运行 auto-closeout。"],
+                verification_batch=None,
+                inferred_verify_presets=[],
             )
 
     if working_branch == resolved_target and resolved_target in {"main", "master"} and _has_dirty_changes(snapshot):
@@ -810,6 +1366,56 @@ def run_auto_closeout(
         actions.append(f"checkpoint -> {checkpoint_dir}")
         actions.append(f"switch -> {chosen_topic}")
         snapshot = collect_repo_snapshot(root)
+
+    if use_suggested_verify_presets and not verify_commands and not verify_presets:
+        inferred_verify_presets = suggest_verify_presets_for_paths(_candidate_paths(root))
+        if inferred_verify_presets:
+            actions.append("infer-verify-presets -> " + ", ".join(inferred_verify_presets))
+
+    if verify_commands or verify_presets:
+        verification_batch = run_verification_batch(
+            repo_root=root,
+            commands=verify_commands,
+            presets=verify_presets or [],
+            max_parallel=verify_jobs,
+            prefer_rtk=prefer_rtk_for_verification,
+        )
+    elif inferred_verify_presets:
+        verification_batch = run_verification_batch(
+            repo_root=root,
+            commands=[],
+            presets=inferred_verify_presets,
+            max_parallel=verify_jobs,
+            prefer_rtk=prefer_rtk_for_verification,
+        )
+    if verification_batch is not None:
+        actions.append(
+            "verify-batch"
+            f" -> {verification_batch.passed} passed, {verification_batch.failed} failed, "
+            f"{verification_batch.parallel_mode}"
+        )
+        if verification_batch.failed:
+            warnings.append(f"{verification_batch.failed} 个验证命令失败，自动收口已停止。")
+            actions.append("先修复失败验证，再重新运行 auto-closeout。")
+            return AutoCloseoutResult(
+                repo_root=str(root),
+                original_branch=original_branch,
+                working_branch=working_branch,
+                target_branch=resolved_target,
+                push_remote=push_remote,
+                blocked=True,
+                created_topic_branch=created_topic_branch,
+                checkpoint_dir=checkpoint_dir,
+                commit_created=False,
+                commit_oid=None,
+                merged_to_target=False,
+                pushed=False,
+                deleted_topic_branch=False,
+                warnings=warnings,
+                actions=actions,
+                verification_batch=verification_batch,
+                inferred_verify_presets=inferred_verify_presets,
+            )
 
     candidate_paths = _candidate_paths(root)
     if candidate_paths:
@@ -869,6 +1475,8 @@ def run_auto_closeout(
         deleted_topic_branch=deleted_topic,
         warnings=warnings,
         actions=actions,
+        verification_batch=verification_batch,
+        inferred_verify_presets=inferred_verify_presets,
     )
 
 
@@ -890,6 +1498,15 @@ def render_auto_closeout(result: AutoCloseoutResult) -> str:
         lines.append(f"checkpoint_dir: {result.checkpoint_dir}")
     if result.commit_oid:
         lines.append(f"commit_oid: {result.commit_oid}")
+    if result.verification_batch is not None:
+        lines.append(
+            "verification: "
+            f"{result.verification_batch.passed} passed / {result.verification_batch.failed} failed, "
+            f"{result.verification_batch.parallel_mode}, "
+            f"rtk={'yes' if result.verification_batch.rtk_enabled else 'no'}"
+        )
+    if result.inferred_verify_presets:
+        lines.append("inferred_verify_presets: " + ", ".join(result.inferred_verify_presets))
     if result.warnings:
         lines.append("warnings:")
         lines.extend(f"- {item}" for item in result.warnings)
@@ -977,12 +1594,72 @@ def _auto_closeout_command(args: argparse.Namespace) -> int:
         commit_message=args.commit_message,
         push=args.push,
         delete_topic_branch=args.delete_topic_branch,
+        verify_commands=args.verify_cmd,
+        verify_presets=args.verify_preset,
+        use_suggested_verify_presets=args.use_suggested_verify_presets,
+        verify_jobs=args.verify_jobs,
+        prefer_rtk_for_verification=not args.no_rtk,
     )
     if args.json:
         print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
     else:
         print(render_auto_closeout(result))
     return 0 if not result.blocked else 2
+
+
+def _verify_batch_command(args: argparse.Namespace) -> int:
+    result = run_verification_batch(
+        repo_root=Path(args.repo_root) if args.repo_root else None,
+        commands=args.verify_cmd,
+        presets=args.verify_preset,
+        max_parallel=args.verify_jobs,
+        prefer_rtk=not args.no_rtk,
+    )
+    if args.json:
+        print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
+    else:
+        print(render_verification_batch(result))
+    return 0 if result.failed == 0 else 2
+
+
+def _list_verify_presets_command(args: argparse.Namespace) -> int:
+    payload = {
+        "presets": [
+            {
+                "name": name,
+                "label": _preset_label(name),
+                "priority": _preset_priority(name),
+                "default_workdir": _preset_default_workdir(name),
+                "commands": _preset_config(name).get("commands", []),
+            }
+            for name in _sorted_preset_names(list(VERIFY_PRESET_CONFIGS))
+        ]
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        for name in _sorted_preset_names(list(VERIFY_PRESET_CONFIGS)):
+            print(
+                f"{name} [{_preset_label(name)}]"
+                f" priority={_preset_priority(name)} cwd={_preset_default_workdir(name)}:"
+            )
+            for item in _preset_config(name).get("commands", []):
+                if isinstance(item, dict):
+                    command = str(item.get("command") or "")
+                    cwd = str(item.get("cwd") or _preset_default_workdir(name))
+                    print(f"- {command} (cwd={cwd or '.'})")
+                else:
+                    print(f"- {item}")
+    return 0
+
+
+def _suggest_verify_presets_command(args: argparse.Namespace) -> int:
+    result = build_verify_preset_suggestion(Path(args.repo_root) if args.repo_root else None)
+    if args.json:
+        print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
+    else:
+        print(render_verify_preset_suggestion(result))
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1055,8 +1732,78 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Delete the auto-created topic branch after a successful fast-forward merge.",
     )
+    auto_closeout_parser.add_argument(
+        "--verify-cmd",
+        action="append",
+        default=[],
+        help="Verification command to run before staging/commit. Repeatable and parallelizable.",
+    )
+    auto_closeout_parser.add_argument(
+        "--verify-preset",
+        action="append",
+        default=[],
+        help="Named verification preset to expand before running batch verification. Repeatable.",
+    )
+    auto_closeout_parser.add_argument(
+        "--use-suggested-verify-presets",
+        action="store_true",
+        help="If no explicit verify commands/presets are given, infer verification presets from current changed paths.",
+    )
+    auto_closeout_parser.add_argument(
+        "--verify-jobs",
+        type=int,
+        help="Maximum parallel verification commands to run at once. Defaults to the number of commands.",
+    )
+    auto_closeout_parser.add_argument(
+        "--no-rtk",
+        action="store_true",
+        help="Disable RTK auto-wrapping for high-output verification commands.",
+    )
     auto_closeout_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     auto_closeout_parser.set_defaults(func=_auto_closeout_command)
+
+    verify_batch_parser = subparsers.add_parser(
+        "verify-batch",
+        help="Run one bounded verification batch with optional RTK wrapping and parallel jobs.",
+    )
+    verify_batch_parser.add_argument(
+        "--verify-cmd",
+        action="append",
+        default=[],
+        help="Verification command to execute. Repeat to build one batch.",
+    )
+    verify_batch_parser.add_argument(
+        "--verify-preset",
+        action="append",
+        default=[],
+        help="Named verification preset to expand before running batch verification. Repeatable.",
+    )
+    verify_batch_parser.add_argument(
+        "--verify-jobs",
+        type=int,
+        help="Maximum parallel verification commands to run at once. Defaults to the number of commands.",
+    )
+    verify_batch_parser.add_argument(
+        "--no-rtk",
+        action="store_true",
+        help="Disable RTK auto-wrapping for high-output verification commands.",
+    )
+    verify_batch_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    verify_batch_parser.set_defaults(func=_verify_batch_command)
+
+    list_presets_parser = subparsers.add_parser(
+        "list-verify-presets",
+        help="List repo-local verification presets for gitx batch verification.",
+    )
+    list_presets_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    list_presets_parser.set_defaults(func=_list_verify_presets_command)
+
+    suggest_presets_parser = subparsers.add_parser(
+        "suggest-verify-presets",
+        help="Suggest verification presets from the current changed paths.",
+    )
+    suggest_presets_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    suggest_presets_parser.set_defaults(func=_suggest_verify_presets_command)
     return parser
 
 

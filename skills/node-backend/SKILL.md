@@ -71,7 +71,7 @@ This skill owns:
 This skill does not own:
 - framework-specific frontend routing concerns
 - pure type-level design detached from backend behavior
-- **Dual-Dimension Audit (Pre: Handler/Logic, Post: Response/Error Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Handler/Logic, Post: Response/Error Results)** → `$execution-audit` [Overlay]
 - high-level architecture review without coding ownership
 - standalone security auditing
 
@@ -142,7 +142,7 @@ Recommended structure:
 - Do not add auth-sensitive behavior without specifying how identity and authorization are derived.
 - Prefer narrow, testable modules over framework-wide magic.
 - If the request affects public API behavior, call out the contract change clearly.
-- **Superior Quality Audit**: For production APIs, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production APIs, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -150,4 +150,4 @@ Recommended structure:
 - "帮我写一个 Node 后端接口，带中间件和错误处理。"
 - "重构这个 Express 服务，把 controller/service 分开。"
 - "强制进行 Node 后端深度审计 / 检查 Handler 逻辑与 API 返回结果数据一致性。"
-- "Use $execution-audit-codex to audit this Node.js backend for result idealism."
+- "Use $execution-audit to audit this Node.js backend for result idealism."

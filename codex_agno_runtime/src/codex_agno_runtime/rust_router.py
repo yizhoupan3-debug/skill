@@ -8,7 +8,7 @@ import json
 import os
 import select
 import subprocess
-import sys
+import tempfile
 import threading
 from functools import lru_cache
 from pathlib import Path
@@ -16,9 +16,7 @@ from typing import Any, Mapping
 
 from codex_agno_runtime.schemas import (
     RoutingEvalCases,
-    RoutingEvalMetrics,
     RoutingEvalReport,
-    RoutingEvalResult,
     RouteDecisionContract,
     RouteDecisionSnapshot,
     RouteDiagnosticReport,
@@ -77,53 +75,6 @@ def discover_codex_home(start_path: Path) -> Path:
         return Path(proc.stdout.strip())
     except Exception:
         return start_path
-
-
-def build_route_cli_parser() -> argparse.ArgumentParser:
-    """Build the shared route CLI parser."""
-
-    parser = argparse.ArgumentParser(description="Lookup skills by query.")
-    parser.add_argument("--query", type=str, required=True, help="Natural-language search query.")
-    parser.add_argument("--limit", type=int, default=5, help="Max results to return.")
-    parser.add_argument("--json", action="store_true", help="Output typed search contract JSON.")
-    parser.add_argument("--route-json", action="store_true", help="Output final route decision in JSON format.")
-    parser.add_argument("--session-id", type=str, default="route-cli", help="Session id used in route decision.")
-    parser.add_argument(
-        "--allow-overlay",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Allow selecting one overlay skill in route mode.",
-    )
-    parser.add_argument(
-        "--first-turn",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Whether current task is the first turn for session-start boost.",
-    )
-    return parser
-
-
-def build_routing_eval_cli_parser(
-    *,
-    default_skills_root: Path,
-    default_cases_path: Path,
-) -> argparse.ArgumentParser:
-    """Build the shared offline routing-eval CLI parser."""
-
-    parser = argparse.ArgumentParser(description="Run offline routing evaluation cases.")
-    parser.add_argument(
-        "--skills-root",
-        type=Path,
-        default=default_skills_root,
-        help="Skill root path.",
-    )
-    parser.add_argument(
-        "--cases",
-        type=Path,
-        default=default_cases_path,
-        help="Routing eval case file.",
-    )
-    return parser
 
 
 def build_framework_contract_artifacts_cli_parser() -> argparse.ArgumentParser:
@@ -399,31 +350,6 @@ def route_decision_contract(
     )
 
 
-def run_route_cli(
-    *,
-    codex_home: Path,
-    argv: list[str] | None = None,
-) -> int:
-    """Run the shared Rust-owned route CLI flow for one repo."""
-
-    args = build_route_cli_parser().parse_args(argv)
-    if args.route_json and args.json:
-        print("Error: choose either --json or --route-json.", file=sys.stderr)
-        return 2
-
-    adapter = route_adapter(codex_home=codex_home)
-    adapter.exec_query_cli(
-        query=args.query,
-        limit=args.limit,
-        json_output=args.json,
-        route_json=args.route_json,
-        session_id=args.session_id,
-        allow_overlay=args.allow_overlay,
-        first_turn=args.first_turn,
-    )
-    return 0
-
-
 def load_routing_eval_cases(path: Path) -> RoutingEvalCases:
     """Load offline routing evaluation cases from JSON."""
 
@@ -435,114 +361,35 @@ def load_routing_eval_cases(path: Path) -> RoutingEvalCases:
 def evaluate_routing_cases(
     *,
     skills_root: Path,
-    cases_payload: RoutingEvalCases | dict[str, Any],
-) -> dict[str, Any]:
-    """Run offline routing evaluation cases through the Rust-backed route contract."""
+    cases_payload: RoutingEvalCases | dict[str, Any] | Path,
+) -> RoutingEvalReport:
+    """Run offline routing evaluation cases through the Rust-backed typed contract."""
 
     runtime_path = skills_root / "SKILL_ROUTING_RUNTIME.json"
     manifest_path = skills_root / "SKILL_MANIFEST.json"
     codex_home = skills_root.parent
 
-    if isinstance(cases_payload, dict):
-        cases_payload = RoutingEvalCases.model_validate(cases_payload)
-    metrics = RoutingEvalMetrics()
-    results: list[RoutingEvalResult] = []
-
-    for case in cases_payload.cases:
-        task = case.task.strip()
-        if not task:
-            continue
-
-        contract = route_decision_contract(
-            task,
+    if isinstance(cases_payload, Path):
+        cases_path = cases_payload
+        return route_adapter(
             codex_home=codex_home,
-            session_id=f"routing-eval::{case.id or metrics.case_count + 1}",
-            allow_overlay=True,
-            first_turn=case.first_turn,
             runtime_path=runtime_path,
             manifest_path=manifest_path,
-        )
-        selected_owner = contract.selected_skill
-        selected_overlay = contract.overlay_skill
-        metrics.case_count += 1
-        category = case.category.strip()
-        expected_owner = case.expected_owner
-        expected_overlay = case.expected_overlay
-        focus_skill = case.focus_skill
-        forbidden_owners = {str(item) for item in case.forbidden_owners}
+        ).routing_eval_contract(cases_path=cases_path)
 
-        trigger_hit = False
-        overtrigger = False
-        owner_correct = expected_owner == selected_owner if expected_owner else False
-        overlay_correct = expected_overlay == selected_overlay if expected_overlay is not None else False
-
-        if category == "should-trigger":
-            trigger_hit = focus_skill == selected_owner
-            if trigger_hit:
-                metrics.trigger_hit += 1
-            else:
-                metrics.trigger_miss += 1
-        elif category == "should-not-trigger":
-            overtrigger = selected_owner in forbidden_owners
-            if overtrigger:
-                metrics.overtrigger += 1
-        elif category in {"wrong-owner-near-miss", "gate-vs-owner-conflict"}:
-            trigger_hit = focus_skill == selected_owner
-            if trigger_hit:
-                metrics.trigger_hit += 1
-            else:
-                metrics.trigger_miss += 1
-            if selected_owner in forbidden_owners:
-                metrics.overtrigger += 1
-
-        if owner_correct:
-            metrics.owner_correct += 1
-        if overlay_correct:
-            metrics.overlay_correct += 1
-
-        results.append(
-            RoutingEvalResult(
-                id=case.id,
-                category=category,
-                task=task,
-                focus_skill=focus_skill,
-                selected_owner=selected_owner,
-                selected_overlay=selected_overlay,
-                expected_owner=expected_owner,
-                expected_overlay=expected_overlay,
-                forbidden_owners=sorted(forbidden_owners),
-                trigger_hit=trigger_hit,
-                overtrigger=overtrigger,
-                owner_correct=owner_correct,
-                overlay_correct=overlay_correct,
-            )
-        )
-
-    return RoutingEvalReport(
-        schema_version="routing-eval-v1",
-        metrics=metrics,
-        results=results,
-    ).model_dump(mode="json")
-
-
-def run_routing_eval_cli(
-    *,
-    codex_home: Path,
-    argv: list[str] | None = None,
-) -> int:
-    """Run the offline routing evaluation CLI for one repo."""
-
-    args = build_routing_eval_cli_parser(
-        default_skills_root=codex_home / "skills",
-        default_cases_path=codex_home / "tests" / "routing_eval_cases.json",
-    ).parse_args(argv)
-
-    payload = evaluate_routing_cases(
-        skills_root=args.skills_root,
-        cases_payload=load_routing_eval_cases(args.cases),
+    typed_cases = (
+        RoutingEvalCases.model_validate(cases_payload)
+        if isinstance(cases_payload, dict)
+        else cases_payload
     )
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0
+    with tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8") as handle:
+        json.dump(typed_cases.model_dump(mode="json"), handle, ensure_ascii=False)
+        handle.flush()
+        return route_adapter(
+            codex_home=codex_home,
+            runtime_path=runtime_path,
+            manifest_path=manifest_path,
+        ).routing_eval_contract(cases_path=Path(handle.name))
 
 
 def run_framework_contract_artifacts_cli(
@@ -605,6 +452,7 @@ class RustRouteAdapter:
     framework_refresh_schema_version = "router-rs-framework-refresh-v1"
     framework_alias_schema_version = "router-rs-framework-alias-v1"
     claude_hook_schema_version = "router-rs-claude-hook-response-v1"
+    routing_eval_schema_version = "routing-eval-v1"
     route_authority = "rust-route-core"
     execution_authority = "rust-execution-cli"
     compile_authority = "rust-route-compiler"
@@ -736,7 +584,7 @@ class RustRouteAdapter:
             raise RuntimeError(
                 f"Rust search engine returned an unexpected payload: {resolved!r}"
             )
-        contract = SearchMatchesContract.model_validate(dict(resolved))
+        contract = SearchMatchesContract.model_validate(resolved)
         if contract.search_schema_version != self.search_schema_version:
             raise RuntimeError(
                 "Rust search engine returned an unknown schema: "
@@ -866,6 +714,34 @@ class RustRouteAdapter:
             failure_label="profile compiler",
         )
 
+    def routing_eval_contract(
+        self,
+        *,
+        cases_path: Path,
+    ) -> RoutingEvalReport:
+        """Resolve one typed Rust-owned routing-eval report."""
+
+        command = [
+            *self._binary_command(),
+            "--routing-eval-json",
+            "--runtime",
+            str(self.runtime_path),
+            "--manifest",
+            str(self.manifest_path),
+            "--cases",
+            str(cases_path),
+        ]
+        payload = self._run_json_command(
+            command,
+            failure_label="routing eval engine",
+        )
+        if payload.get("schema_version") != self.routing_eval_schema_version:
+            raise RuntimeError(
+                "Rust routing eval engine returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
+            )
+        return RoutingEvalReport.model_validate(payload)
+
     def route_report_contract(
         self,
         *,
@@ -926,15 +802,6 @@ class RustRouteAdapter:
             )
         return RouteDiagnosticReport.model_validate(payload)
 
-    def route_policy(
-        self,
-        *,
-        mode: str,
-    ) -> dict[str, Any]:
-        """Resolve Rust-only route-mode policy through the Rust routing core."""
-
-        return self.route_policy_contract(mode=mode).model_dump(mode="json")
-
     def route_policy_contract(
         self,
         *,
@@ -964,27 +831,6 @@ class RustRouteAdapter:
                 f"{payload.get('authority')!r}"
             )
         return RouteExecutionPolicy.model_validate(payload)
-
-    def route_snapshot(
-        self,
-        *,
-        engine: str,
-        selected_skill: str,
-        overlay_skill: str | None,
-        layer: str,
-        score: float,
-        reasons: list[str],
-    ) -> dict[str, Any]:
-        """Build a canonical route snapshot through the Rust routing core."""
-
-        return self.route_snapshot_contract(
-            engine=engine,
-            selected_skill=selected_skill,
-            overlay_skill=overlay_skill,
-            layer=layer,
-            score=score,
-            reasons=reasons,
-        ).model_dump(mode="json")
 
     def route_snapshot_contract(
         self,

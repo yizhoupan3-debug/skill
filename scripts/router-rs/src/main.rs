@@ -90,7 +90,7 @@ const RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION: &str = "runtime-observabilit
 const RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION: &str = "runtime-observability-dashboard-v1";
 const RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY: &str = "shared-runtime-v1";
 const OVERLAY_ONLY_SKILLS: [&str; 4] = [
-    "execution-audit-codex",
+    "execution-audit",
     "humanizer",
     "i18n-l10n",
     "iterative-optimizer",
@@ -197,6 +197,8 @@ struct Cli {
     #[arg(long)]
     profile_artifacts_json: bool,
     #[arg(long)]
+    routing_eval_json: bool,
+    #[arg(long)]
     route_report_json: bool,
     #[arg(long)]
     claude_hook_command: Option<String>,
@@ -212,6 +214,8 @@ struct Cli {
     framework_artifact_source_dir: Option<PathBuf>,
     #[arg(long)]
     framework_task_id: Option<String>,
+    #[arg(long)]
+    cases: Option<PathBuf>,
     #[arg(long)]
     include_legacy_alias_artifact: bool,
     #[arg(long)]
@@ -302,12 +306,28 @@ struct MatchRow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct SearchMatchRecordPayload {
+    name: String,
+    description: String,
+    routing_layer: String,
+    routing_gate: String,
+    routing_owner: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SearchMatchPayload {
+    record: SearchMatchRecordPayload,
+    score: f64,
+    matched_terms: usize,
+    total_terms: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SearchResultsPayload {
     search_schema_version: String,
     authority: String,
     query: String,
-    matches: Vec<MatchRow>,
-    rows: Vec<MatchRow>,
+    matches: Vec<SearchMatchPayload>,
 }
 
 #[derive(Debug, Clone)]
@@ -398,6 +418,61 @@ struct RouteSnapshotEnvelopePayload {
     snapshot_schema_version: String,
     authority: String,
     route_snapshot: RouteDecisionSnapshotPayload,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RoutingEvalCasePayload {
+    id: Option<Value>,
+    task: String,
+    category: String,
+    #[serde(default = "default_true")]
+    first_turn: bool,
+    expected_owner: Option<String>,
+    expected_overlay: Option<String>,
+    focus_skill: Option<String>,
+    #[serde(default)]
+    forbidden_owners: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RoutingEvalCasesPayload {
+    schema_version: String,
+    #[serde(default)]
+    cases: Vec<RoutingEvalCasePayload>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RoutingEvalResultPayload {
+    id: Option<Value>,
+    category: String,
+    task: String,
+    focus_skill: Option<String>,
+    selected_owner: String,
+    selected_overlay: Option<String>,
+    expected_owner: Option<String>,
+    expected_overlay: Option<String>,
+    forbidden_owners: Vec<String>,
+    trigger_hit: bool,
+    overtrigger: bool,
+    owner_correct: bool,
+    overlay_correct: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct RoutingEvalMetricsPayload {
+    case_count: usize,
+    trigger_hit: usize,
+    trigger_miss: usize,
+    overtrigger: usize,
+    owner_correct: usize,
+    overlay_correct: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RoutingEvalReportPayload {
+    schema_version: String,
+    metrics: RoutingEvalMetricsPayload,
+    results: Vec<RoutingEvalResultPayload>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -743,6 +818,7 @@ fn main() -> Result<(), String> {
         args.framework_alias_json,
         args.profile_json,
         args.profile_artifacts_json,
+        args.routing_eval_json,
         args.route_report_json,
         args.claude_hook_command.is_some(),
         args.claude_hook_audit_command.is_some(),
@@ -753,7 +829,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-alias-json, --route-report-json, --profile-json, and --profile-artifacts-json"
+            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-alias-json, --route-report-json, --profile-json, --profile-artifacts-json, and --routing-eval-json"
                 .to_string(),
         );
     }
@@ -1313,6 +1389,22 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.routing_eval_json {
+        let cases_path = args
+            .cases
+            .as_deref()
+            .ok_or_else(|| "--cases is required with --routing-eval-json".to_string())?;
+        let records = load_records(args.runtime.as_deref(), args.manifest.as_deref())?;
+        let payload = load_routing_eval_cases(cases_path)?;
+        let report = evaluate_routing_cases(&records, payload)?;
+        println!(
+            "{}",
+            serde_json::to_string(&report)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
     let records = load_records(args.runtime.as_deref(), args.manifest.as_deref())?;
     let query = args
         .query
@@ -1358,7 +1450,7 @@ fn main() -> Result<(), String> {
         "Skill", "Layer", "Gate", "Score"
     );
     println!("{}", "-".repeat(120));
-    for row in payload.matches {
+    for row in rows {
         let mut description = row.description.clone();
         if description.chars().count() > 60 {
             description = description.chars().take(57).collect::<String>() + "...";
@@ -1376,8 +1468,21 @@ fn build_search_results_payload(query: &str, matches: Vec<MatchRow>) -> SearchRe
         search_schema_version: SEARCH_RESULTS_SCHEMA_VERSION.to_string(),
         authority: ROUTE_AUTHORITY.to_string(),
         query: query.to_string(),
-        matches: matches.clone(),
-        rows: matches,
+        matches: matches
+            .into_iter()
+            .map(|row| SearchMatchPayload {
+                record: SearchMatchRecordPayload {
+                    name: row.slug,
+                    description: row.description,
+                    routing_layer: row.layer,
+                    routing_gate: row.gate,
+                    routing_owner: row.owner,
+                },
+                score: row.score,
+                matched_terms: row.matched_terms,
+                total_terms: row.total_terms,
+            })
+            .collect(),
     }
 }
 
@@ -2010,6 +2115,21 @@ fn read_json(path: &Path) -> Result<Value, String> {
     serde_json::from_str(&text).map_err(|err| format!("failed parsing {}: {err}", path.display()))
 }
 
+fn normalize_optional_text(value: Option<String>) -> Option<String> {
+    value.and_then(|raw| {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn default_true() -> bool {
+    true
+}
+
 fn value_to_string(value: &Value) -> String {
     match value {
         Value::String(text) => text.clone(),
@@ -2497,6 +2617,140 @@ fn compare_route_contract_to_snapshot(
     }
 
     (verified_fields, mismatch_fields)
+}
+
+fn load_routing_eval_cases(path: &Path) -> Result<RoutingEvalCasesPayload, String> {
+    let payload = read_json(path)?;
+    let cases = serde_json::from_value::<RoutingEvalCasesPayload>(payload)
+        .map_err(|err| format!("failed parsing {}: {err}", path.display()))?;
+    if cases.schema_version != "routing-eval-cases-v1" {
+        return Err(format!(
+            "routing eval case file returned an unknown schema: {:?}",
+            cases.schema_version
+        ));
+    }
+    Ok(cases)
+}
+
+fn evaluate_routing_cases(
+    records: &[SkillRecord],
+    cases_payload: RoutingEvalCasesPayload,
+) -> Result<RoutingEvalReportPayload, String> {
+    let mut metrics = RoutingEvalMetricsPayload::default();
+    let mut results = Vec::new();
+
+    for case in cases_payload.cases {
+        let task = case.task.trim().to_string();
+        if task.is_empty() {
+            continue;
+        }
+
+        let session_suffix = case
+            .id
+            .as_ref()
+            .map(value_to_string)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| (metrics.case_count + 1).to_string());
+        let decision = route_task(
+            records,
+            &task,
+            &format!("routing-eval::{session_suffix}"),
+            true,
+            case.first_turn,
+        )?;
+        let selected_owner = decision.selected_skill.clone();
+        let selected_overlay = decision.overlay_skill.clone();
+        metrics.case_count += 1;
+
+        let category = case.category.trim().to_string();
+        let expected_owner = normalize_optional_text(case.expected_owner);
+        let expected_overlay = normalize_optional_text(case.expected_overlay);
+        let focus_skill = normalize_optional_text(case.focus_skill);
+        let forbidden_owners = case
+            .forbidden_owners
+            .into_iter()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .collect::<HashSet<_>>();
+
+        let mut trigger_hit = false;
+        let mut overtrigger = false;
+        let owner_correct = expected_owner
+            .as_ref()
+            .map(|expected| expected == &selected_owner)
+            .unwrap_or(false);
+        let overlay_correct = match &expected_overlay {
+            Some(expected) => Some(expected) == selected_overlay.as_ref(),
+            None => false,
+        };
+
+        match category.as_str() {
+            "should-trigger" => {
+                trigger_hit = focus_skill
+                    .as_ref()
+                    .map(|focus| focus == &selected_owner)
+                    .unwrap_or(false);
+                if trigger_hit {
+                    metrics.trigger_hit += 1;
+                } else {
+                    metrics.trigger_miss += 1;
+                }
+            }
+            "should-not-trigger" => {
+                overtrigger = forbidden_owners.contains(&selected_owner);
+                if overtrigger {
+                    metrics.overtrigger += 1;
+                }
+            }
+            "wrong-owner-near-miss" | "gate-vs-owner-conflict" => {
+                trigger_hit = focus_skill
+                    .as_ref()
+                    .map(|focus| focus == &selected_owner)
+                    .unwrap_or(false);
+                if trigger_hit {
+                    metrics.trigger_hit += 1;
+                } else {
+                    metrics.trigger_miss += 1;
+                }
+                if forbidden_owners.contains(&selected_owner) {
+                    overtrigger = true;
+                    metrics.overtrigger += 1;
+                }
+            }
+            _ => {}
+        }
+
+        if owner_correct {
+            metrics.owner_correct += 1;
+        }
+        if overlay_correct {
+            metrics.overlay_correct += 1;
+        }
+
+        let mut forbidden_owner_list = forbidden_owners.into_iter().collect::<Vec<_>>();
+        forbidden_owner_list.sort();
+        results.push(RoutingEvalResultPayload {
+            id: case.id,
+            category,
+            task,
+            focus_skill,
+            selected_owner,
+            selected_overlay,
+            expected_owner,
+            expected_overlay,
+            forbidden_owners: forbidden_owner_list,
+            trigger_hit,
+            overtrigger,
+            owner_correct,
+            overlay_correct,
+        });
+    }
+
+    Ok(RoutingEvalReportPayload {
+        schema_version: "routing-eval-v1".to_string(),
+        metrics,
+        results,
+    })
 }
 
 fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponsePayload, String> {
@@ -5606,6 +5860,35 @@ fn has_explicit_framework_alias_call(
         })
 }
 
+fn paper_skill_requires_context(slug: &str) -> bool {
+    matches!(
+        slug,
+        "paper-reviewer" | "paper-reviser" | "paper-writing" | "paper-logic" | "paper-visuals"
+    )
+}
+
+fn has_paper_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "paper",
+        "manuscript",
+        "论文",
+        "稿子",
+        "稿件",
+        "摘要",
+        "引言",
+        "审稿意见",
+        "reviewer comments",
+        "rebuttal",
+        "appendix",
+        "claim",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
 fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, String> {
     let normalized_mode = mode.trim().to_ascii_lowercase();
     let base = RouteExecutionPolicyPayload {
@@ -5678,6 +5961,18 @@ fn score_route_candidate<'a>(
             score: 0.0,
             reasons: vec![
                 "Suppressed: framework alias skills only route from explicit /alias or $alias entrypoints."
+                    .to_string(),
+            ],
+        };
+    }
+    if paper_skill_requires_context(&record.slug)
+        && !has_paper_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: paper skills require explicit paper or manuscript context."
                     .to_string(),
             ],
         };
@@ -5870,6 +6165,30 @@ fn score_route_candidate<'a>(
         }
     }
 
+    if record.slug == "architect-review" {
+        let mentions_deepinterview = query_text.contains("deepinterview");
+        let review_markers = [
+            "review",
+            "全面review",
+            "严格review",
+            "全面 review",
+            "严格 review",
+            "审查",
+            "审核",
+        ];
+        if mentions_deepinterview
+            && review_markers
+                .iter()
+                .any(|marker| text_matches_phrase(query_token_list, marker))
+        {
+            score += 28.0;
+            reasons.push(
+                "Deepinterview review-lane boost applied: plain-text deepinterview review defaults to architect-review."
+                    .to_string(),
+            );
+        }
+    }
+
     if is_overlay_record(record) && score > 0.0 {
         score *= 0.15;
         reasons.push(format!(
@@ -6024,7 +6343,7 @@ fn pick_overlay(
         }
     }
 
-    if selected_skill.slug == "skill-developer-codex"
+    if selected_skill.slug == "skill-framework-developer"
         && [
             "review",
             "framework-review",
@@ -6730,6 +7049,10 @@ mod tests {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/routing_route_fixtures.json")
     }
 
+    fn routing_eval_case_path() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/routing_eval_cases.json")
+    }
+
     fn sample_execute_request() -> ExecuteRequestPayload {
         ExecuteRequestPayload {
             schema_version: "router-rs-execute-request-v1".to_string(),
@@ -6853,7 +7176,7 @@ mod tests {
             .expect("write evidence index");
         fs::write(
             task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"active bootstrap repair","matched_skills":["execution-controller-coding","skill-developer-codex"]}"#,
+            r#"{"task":"active bootstrap repair","matched_skills":["execution-controller-coding","skill-framework-developer"]}"#,
         )
         .expect("write trace metadata");
         fs::create_dir_all(repo_root.join("artifacts").join("current"))
@@ -6871,7 +7194,7 @@ mod tests {
                 "active_phase":"implementation",
                 "verification":{"verification_status":"in_progress"},
                 "continuity":{"story_state":"active","resume_allowed":true},
-                "primary_owner":"skill-developer-codex",
+                "primary_owner":"skill-framework-developer",
                 "execution_contract":{
                     "goal":"Repair stale bootstrap injection",
                     "scope":["scripts/memory_support.py"],
@@ -7388,6 +7711,56 @@ mod tests {
             );
             assert_eq!(decision.route_snapshot.layer, decision.layer);
         }
+    }
+
+    #[test]
+    fn routing_eval_report_matches_expected_baseline() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let manifest_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
+        let records =
+            load_records(Some(&runtime_path), Some(&manifest_path)).expect("load routing records");
+        let cases =
+            load_routing_eval_cases(&routing_eval_case_path()).expect("load routing eval cases");
+        let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");
+
+        assert_eq!(report.schema_version, "routing-eval-v1");
+        assert!(report.metrics.case_count >= 11);
+        assert!(report.metrics.trigger_hit >= 9);
+        assert!(report.metrics.owner_correct >= 9);
+        assert!(report.metrics.overlay_correct >= 9);
+        assert_eq!(report.metrics.overtrigger, 0);
+
+        let results_by_id = report
+            .results
+            .iter()
+            .filter_map(|row| row.id.as_ref().map(|id| (value_to_string(id), row)))
+            .collect::<HashMap<_, _>>();
+        assert_eq!(
+            results_by_id["systematic-debugging-gate-conflict"].selected_owner,
+            "systematic-debugging"
+        );
+        assert_eq!(
+            results_by_id["skill-framework-developer-generic-review-case"].selected_owner,
+            "skill-framework-developer"
+        );
+        assert_eq!(
+            results_by_id["skill-framework-developer-generic-review-case"].selected_overlay,
+            Some("code-review".to_string())
+        );
+        assert_eq!(
+            results_by_id["design-agent-brand-routing-case"].selected_owner,
+            "design-agent"
+        );
+        assert_eq!(
+            results_by_id["frontend-design-screenshot-review-reroute-case"].selected_owner,
+            "visual-review"
+        );
+        assert_eq!(
+            results_by_id["frontend-design-motion-boundary-case"].selected_owner,
+            "motion-design"
+        );
     }
 
     #[test]

@@ -60,7 +60,7 @@ def _seed_runtime_artifacts(repo_root: Path, *, terminal: bool) -> None:
             "active_phase": "implementation",
             "verification": {"verification_status": "in_progress"},
             "continuity": {"story_state": "active", "resume_allowed": True},
-            "primary_owner": "skill-developer-codex",
+            "primary_owner": "skill-framework-developer",
             "execution_contract": {
                 "goal": "Repair stale bootstrap injection",
                 "scope": ["scripts/memory_support.py"],
@@ -70,7 +70,7 @@ def _seed_runtime_artifacts(repo_root: Path, *, terminal: bool) -> None:
         }
         trace_metadata = {
             "task": "active bootstrap repair",
-            "matched_skills": ["execution-controller-coding", "skill-developer-codex"],
+            "matched_skills": ["execution-controller-coding", "skill-framework-developer"],
         }
         next_actions = {"next_actions": ["Patch classifier", "Run MCP regression tests"]}
     _write_text(task_root / "SESSION_SUMMARY.md", "\n".join(summary_lines) + "\n")

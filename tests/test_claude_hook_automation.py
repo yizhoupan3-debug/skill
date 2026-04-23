@@ -31,10 +31,9 @@ def test_user_prompt_submit_injects_coding_context_for_code_requests() -> None:
     payload = json.loads(result.stdout.decode("utf-8"))
     output = payload["hookSpecificOutput"]
     assert output["hookEventName"] == "UserPromptSubmit"
-    assert "直接落目标行为" in output["additionalContext"]
-    assert "简化优先" in output["additionalContext"]
     assert "热路径" in output["additionalContext"]
-    assert "删掉" in output["additionalContext"]
+    assert "fallback" in output["additionalContext"]
+    assert "简化优先" not in output["additionalContext"]
 
 
 def test_user_prompt_submit_stays_silent_for_non_coding_prompts() -> None:
@@ -102,7 +101,7 @@ def test_post_tool_audit_reports_patchy_rust_runtime_edits(tmp_path: Path) -> No
     assert "异步实现复查" in payload["additionalContext"]
     assert "增量来源=edit_new_string" in payload["additionalContext"]
     assert "clone=" in payload["additionalContext"]
-    assert "删除、合并、内联或收窄" in payload["additionalContext"]
+    assert "新增兼容分支或中转层" in payload["additionalContext"]
 
 
 def test_post_tool_audit_stays_silent_for_clean_non_target_edits(tmp_path: Path) -> None:
@@ -229,6 +228,39 @@ def test_user_prompt_submit_stays_silent_for_non_code_wording_edits() -> None:
     assert result.stderr == b""
 
 
+def test_user_prompt_submit_stays_silent_for_readme_doc_edits() -> None:
+    result = _run_hook(
+        "user-prompt-submit",
+        {"hook_event_name": "UserPromptSubmit", "prompt": "改一下 README.md 的文档措辞，让说明更清楚"},
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == b""
+    assert result.stderr == b""
+
+
+def test_user_prompt_submit_stays_silent_for_hook_readme_doc_edits() -> None:
+    result = _run_hook(
+        "user-prompt-submit",
+        {"hook_event_name": "UserPromptSubmit", "prompt": "优化 .claude/hooks/README.md，把说明写得更清楚"},
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == b""
+    assert result.stderr == b""
+
+
+def test_user_prompt_submit_stays_silent_for_agent_policy_docs() -> None:
+    result = _run_hook(
+        "user-prompt-submit",
+        {"hook_event_name": "UserPromptSubmit", "prompt": "继续优化 AGENT.md，把 simplify 原则再收紧一点"},
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == b""
+    assert result.stderr == b""
+
+
 def test_user_prompt_submit_uses_path_mentions_to_raise_precision() -> None:
     result = _run_hook(
         "user-prompt-submit",
@@ -270,8 +302,7 @@ def test_pre_tool_use_quality_injects_additional_context_for_runtime_code() -> N
     payload = json.loads(result.stdout.decode("utf-8"))
     output = payload["hookSpecificOutput"]
     assert output["permissionDecision"] == "allow"
-    assert "直接落目标行为" in output["additionalContext"]
-    assert "简化优先" in output["additionalContext"]
+    assert "热路径" in output["additionalContext"]
     assert "Rust 额外检查" in output["additionalContext"]
     assert "增加自动化" in output["additionalContext"]
 

@@ -58,7 +58,7 @@ artifact_outputs:
   - TRACE_METADATA.json
 bridge_behavior: mobile_complete_once
 ---
-- **Dual-Dimension Audit (Pre: Complexity-Rubric/Logic, Post: Integration-Fidelity/Trace Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Complexity-Rubric/Logic, Post: Integration-Fidelity/Trace Results)** → `$execution-audit` [Overlay]
 
 # subagent-delegation
 
@@ -171,4 +171,4 @@ State:
 ## Trigger examples
 - "强制进行子代理派发深度审计 / 检查派发逻辑与集成完整性。"
 - "主线程尽量短，你来决定哪些切 sidecar。"
-- "Use $execution-audit-codex to audit this delegation trace for integration-fidelity idealism."
+- "Use $execution-audit to audit this delegation trace for integration-fidelity idealism."

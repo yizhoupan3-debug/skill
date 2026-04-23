@@ -64,7 +64,7 @@ If the task shifts to adjacent skill territory, route to:
 - `$react` for pure React patterns
 - `$vercel-react-best-practices` for rendering/data-flow audits, waterfalls, and hydration
 - `$performance-expert` for broader web perf
-- **Dual-Dimension Audit (Pre: RSC/Caching, Post: Streaming/Hydration Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: RSC/Caching, Post: Streaming/Hydration Results)** → `$execution-audit` [Overlay]
 
 ## Required workflow
 
@@ -197,7 +197,7 @@ Recommended structure:
 - Separate Server Actions into dedicated files to prevent cross-boundary issues.
 - Use `next-safe-action` for type-safe Server Actions with consistent `ActionResponse` types.
 - Delegate deep performance and Core Web Vitals profiling to `$performance-expert`.
-- **Superior Quality Audit**: For production-critical routes, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production-critical routes, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -208,4 +208,4 @@ Recommended structure:
 - "Next.js 15 caching 最佳实践怎么做？"
 - "Next.js 项目怎么切分 Data Access Layer？"
 - "强制进行 Next.js 生产环境审计 / 核心路由 RSC 边界核查。"
-- "Use $execution-audit-codex to audit this Next.js App Router implementation."
+- "Use $execution-audit to audit this Next.js App Router implementation."
