@@ -109,15 +109,9 @@ Apply these rules by default unless the user asks for a lighter format:
 - **Peer task points are parallel by default** unless an explicit dependency note says otherwise.
 - **Serial work belongs in one point** when the work shares one goal, one owner lane, one primary surface, and must happen in order — even if the serial chain is long.
 - **Each parallel point must be clearly isolated**. When relevant, write its exclusive scope and forbidden scope.
-- **Shared continuity artifacts are not parallel write surfaces.** By default, non-integrator points must forbid direct writes to `SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`, and `.supervisor_state.json`.
-- **Every checklist point must include**:
-  - current state
-  - goal
-  - constraints or boundaries
-  - deliverables
-  - acceptance criteria
-  - execution result placeholder or status update slot
-- **If global continuity must be refreshed**, create a dedicated integrator point instead of letting peer points co-edit the shared files.
+- **Shared continuity artifacts are not parallel write surfaces.** By default, non-integrator points must forbid direct writes to root mirrors and shared pointers: `SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`, `.supervisor_state.json`, `artifacts/current/active_task.json`, and `artifacts/current/focus_task.json`.
+- **Task-scoped continuity is the primary truth.** Prefer `artifacts/current/<task_id>/` for task body content, and treat `artifacts/current/task_registry.json` as workspace indexing only.
+- **If global continuity must be refreshed**, create a dedicated integrator point instead of letting peer points co-edit the shared focus projection.
 - **Add exit conditions and stop conditions** whenever the point represents a bounded execution track, experiment lane, or agent-owned workstream.
 - **Every execution-ready checklist should include top-level structure** for:
   - overall goal

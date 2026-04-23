@@ -196,6 +196,9 @@ const USER_PROMPT_HOOK_CONTEXT: &str =
     "Hook 额外检查：让 hook 增加自动化，而不是只做阻拦；优先短上下文、窄触发、低开销，并尽量用 matcher/if 避免无谓触发。";
 const USER_PROMPT_CLOSEOUT_CONTEXT: &str =
     "完成任务时默认只用一小段收尾：说清做了什么、达成了什么效果、下一步是什么；如果已经结束，就直接说已收尾。";
+const USER_PROMPT_STATE_COMPACT_PREFIX: &str = "当前状态：";
+const USER_PROMPT_STATE_BUDGET_CHARS: usize = 120;
+const USER_PROMPT_CONTEXT_MAX_CHARS: usize = 420;
 const QUALITY_RUST_CONTEXT: &str =
     "Rust 额外检查：盯住热循环里的分配、clone、String/Vec 复制和 serde_json 往返。";
 const QUALITY_PYTHON_CONTEXT: &str =
@@ -1403,17 +1406,81 @@ fn user_prompt_memory_projection(repo_root: &Path, max_lines: usize) -> Result<S
     Ok(lines.join("\n"))
 }
 
+fn compact_user_prompt_projection(repo_root: &Path) -> Result<String, String> {
+    let projection = user_prompt_memory_projection(repo_root, 1)?;
+    let summary = projection
+        .lines()
+        .map(str::trim)
+        .find_map(|line| {
+            if line.is_empty() || line.starts_with("##") {
+                return None;
+            }
+            let normalized = line.trim_start_matches("- ").trim();
+            if normalized.starts_with("current:")
+                || normalized.starts_with("no resumable active task")
+                || normalized.starts_with("resume:")
+                || normalized.starts_with("continuity:")
+                || normalized.starts_with("last_known:")
+            {
+                return Some(normalized.to_string());
+            }
+            None
+        })
+        .or_else(|| {
+            projection
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty() && !line.starts_with("##") && !line.starts_with('-'))
+                .map(|line| line.to_string())
+        })
+        .unwrap_or_default();
+    if summary.is_empty() {
+        return Ok(String::new());
+    }
+    let shortened = if summary.chars().count() > USER_PROMPT_STATE_BUDGET_CHARS {
+        let truncated = summary
+            .chars()
+            .take(USER_PROMPT_STATE_BUDGET_CHARS.saturating_sub(1))
+            .collect::<String>();
+        format!("{truncated}…")
+    } else {
+        summary
+    };
+    Ok(format!("{USER_PROMPT_STATE_COMPACT_PREFIX}{shortened}"))
+}
+
+fn shrink_user_prompt_context(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    let mut lines = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    while !lines.is_empty() && lines.join("\n\n").chars().count() > max_chars {
+        lines.pop();
+    }
+    if lines.is_empty() {
+        return text.chars().take(max_chars).collect();
+    }
+    lines.join("\n\n")
+}
+
 fn build_user_prompt_context(repo_root: &Path, prompt_text: &str) -> Result<String, String> {
     let mut sections = vec![
         USER_PROMPT_MEMORY_PRIORITY_CONTEXT.to_string(),
         USER_PROMPT_CONTINUITY_CONTEXT.to_string(),
     ];
-    let projection = user_prompt_memory_projection(repo_root, 4)?;
+    let projection = compact_user_prompt_projection(repo_root)?;
     if !projection.trim().is_empty() {
         sections.push(projection);
     }
     if !looks_like_coding_request(prompt_text) {
-        return Ok(sections.join("\n\n"));
+        return Ok(shrink_user_prompt_context(
+            &sections.join("\n\n"),
+            USER_PROMPT_CONTEXT_MAX_CHARS,
+        ));
     }
     let lowered = prompt_text.to_lowercase();
     let mut parts = vec![USER_PROMPT_CLOSEOUT_CONTEXT];
@@ -1431,7 +1498,10 @@ fn build_user_prompt_context(repo_root: &Path, prompt_text: &str) -> Result<Stri
         parts.push(USER_PROMPT_HOOK_CONTEXT);
     }
     sections.push(join_unique_context(&parts));
-    Ok(sections.join("\n\n"))
+    Ok(shrink_user_prompt_context(
+        &sections.join("\n\n"),
+        USER_PROMPT_CONTEXT_MAX_CHARS,
+    ))
 }
 
 fn is_quality_target_path(path: &str) -> bool {
@@ -2484,10 +2554,12 @@ mod tests {
             .unwrap_or("");
         assert!(context.contains("repo-local shared memory"));
         assert!(context.contains(".supervisor_state.json"));
+        assert!(context.contains("当前状态："));
         assert!(context.contains("完成任务时默认只用一小段收尾"));
         assert!(context.contains("热路径"));
         assert!(context.contains("fallback"));
-        assert!(!context.contains("简化优先"));
+        assert!(!context.contains("Task Snapshot"));
+        assert!(context.chars().count() <= USER_PROMPT_CONTEXT_MAX_CHARS);
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
@@ -2503,8 +2575,10 @@ mod tests {
             .as_str()
             .unwrap_or("");
         assert!(context.contains("repo-local shared memory"));
-        assert!(context.contains("Task Snapshot"));
+        assert!(context.contains("当前状态："));
+        assert!(!context.contains("Task Snapshot"));
         assert!(!context.contains("热路径"));
+        assert!(context.chars().count() <= USER_PROMPT_CONTEXT_MAX_CHARS);
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
@@ -2524,11 +2598,14 @@ mod tests {
                 .as_str()
                 .unwrap_or("");
             assert!(context.contains("repo-local shared memory"), "missing repo memory for {prompt}");
+            assert!(context.contains("当前状态："), "missing compact state for {prompt}");
+            assert!(!context.contains("Task Snapshot"), "unexpected long state block for {prompt}");
             assert!(!context.contains("实现要求"), "unexpected old code nudge for {prompt}");
             assert!(
                 context.contains("完成任务时默认只用一小段收尾"),
                 "missing closeout reminder for {prompt}"
             );
+            assert!(context.chars().count() <= USER_PROMPT_CONTEXT_MAX_CHARS);
         }
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }

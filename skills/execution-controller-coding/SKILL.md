@@ -74,8 +74,8 @@ bridge_behavior: mobile_complete_once
 
 - 每轮对话开始 / first-turn / conversation start，任务已经进入执行主导阶段
 - 高负载、跨文件、长运行、多阶段集成、多验证面并存
-- 需要显式维护 `.supervisor_state.json` 和 continuity artifacts
-- 并行 lane 存在共享状态冲突风险，需要由单一控制器收口 continuity 写入
+- 需要显式维护 `.supervisor_state.json`、task registry 和 continuity artifacts
+- 并行 lane 存在共享状态冲突风险，需要由单一控制器收口 focus projection 写入
 - 用户明确要求 `gsd` / `get shit done` / “推进到底” / “别停”
 
 ## Do not use
@@ -98,10 +98,11 @@ bridge_behavior: mobile_complete_once
 
 签收前至少保持这几份产物一致：
 
-- `SESSION_SUMMARY.md`
-- `NEXT_ACTIONS.json`
-- `EVIDENCE_INDEX.json`
-- `TRACE_METADATA.json`
+- `artifacts/current/<task_id>/SESSION_SUMMARY.md`
+- `artifacts/current/<task_id>/NEXT_ACTIONS.json`
+- `artifacts/current/<task_id>/EVIDENCE_INDEX.json`
+- `artifacts/current/<task_id>/TRACE_METADATA.json`
+- `artifacts/current/task_registry.json`
 - `.supervisor_state.json`
 
 非平凡执行在开工前先定清：
@@ -110,7 +111,9 @@ bridge_behavior: mobile_complete_once
 - verification path：用什么测试/命令/证据验收
 - minimum route：先走哪条最小实现路径
 
-- 这些文件是单写面：并行 lane 只写本地 delta，由集成步骤统一刷新。
+- 这些文件里，task-scoped artifacts 才是正文真相；`task_registry.json` 只做索引。
+- root mirror 与 `artifacts/current/active_task.json` / `focus_task.json` 只保留一个 focus task 的投影，不作为并行写面。
+- 这些 shared files 仍是单写面：并行 lane 只写本地 delta，由集成步骤统一刷新。
 
 主线程只保留：
 

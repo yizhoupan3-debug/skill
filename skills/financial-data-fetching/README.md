@@ -11,7 +11,7 @@ Use this skill when the main task is to:
 - build or reuse a market-data loader
 - export backtest-ready data for `generic`, `vectorbt`, or `backtrader`
 
-Do **not** use this skill as the primary owner when the main task is strategy design, alpha logic, execution logic, or risk management. In that case, start with [`algo-trading`](../algo-trading/SKILL.md).
+This skill owns **data acquisition, validation, normalization, and export only**. It must **not** own any task that decides strategy, alpha, execution, or risk. If the task includes any of those decisions, start with [`algo-trading`](../algo-trading/SKILL.md) and use this skill only as a supporting data tool.
 
 ---
 

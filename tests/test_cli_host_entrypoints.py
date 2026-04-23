@@ -146,19 +146,23 @@ def _init_git_repo(repo_root: Path) -> None:
     subprocess.run(["git", "commit", "-m", "init"], cwd=repo_root, check=True)
 
 
-def _ensure_router_rs_debug_binary() -> None:
+def _ensure_router_rs_binaries() -> None:
     crate_root = PROJECT_ROOT / "scripts" / "router-rs"
-    debug_bin = crate_root / "target" / "debug" / "router-rs"
-    latest_source_mtime = max(
-        (path.stat().st_mtime for path in [crate_root / "Cargo.toml", *crate_root.joinpath("src").rglob("*.rs")]),
-        default=0.0,
-    )
-    if debug_bin.is_file() and debug_bin.stat().st_mtime >= latest_source_mtime:
-        return
-    subprocess.run(
-        ["cargo", "build", "--manifest-path", str(crate_root / "Cargo.toml")],
+    ensure_rust_binary(
+        crate_root=crate_root,
+        binary_name="router-rs",
+        release=False,
+        allow_stale_fallback=False,
+        allow_cross_profile_fallback=False,
         cwd=PROJECT_ROOT,
-        check=True,
+    )
+    ensure_rust_binary(
+        crate_root=crate_root,
+        binary_name="router-rs",
+        release=True,
+        allow_stale_fallback=False,
+        allow_cross_profile_fallback=False,
+        cwd=PROJECT_ROOT,
     )
 
 
@@ -187,7 +191,7 @@ def _run_router_rs_claude_audit(
     repo_root: Path,
     payload: dict[str, object],
 ) -> subprocess.CompletedProcess[str]:
-    _ensure_router_rs_debug_binary()
+    _ensure_router_rs_binaries()
     debug_bin = PROJECT_ROOT / "scripts" / "router-rs" / "target" / "debug" / "router-rs"
     return subprocess.run(
         [str(debug_bin), "--claude-hook-audit-command", command, "--repo-root", str(repo_root)],
@@ -413,6 +417,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     hook_runner_script = (tmp_path / ".claude" / "hooks" / "run.sh").read_text(encoding="utf-8")
     assert "run_router_rs" in hook_runner_script
     assert "python3 \"$PROJECT_DIR/scripts/claude_hook" not in hook_runner_script
+    assert "cargo build --manifest-path \"$ROUTER_RS_CRATE_ROOT/Cargo.toml\"" not in hook_runner_script
     assert "case \"$command_name\" in" in hook_runner_script
     assert "--claude-hook-audit-command pre-tool-use" in hook_runner_script
     assert "--claude-hook-audit-command \"$command_name\"" in hook_runner_script
@@ -642,7 +647,7 @@ def test_write_generated_files_includes_shared_cli_entrypoints_when_repo_is_dirt
 
 
 def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None:
-    _ensure_router_rs_debug_binary()
+    _ensure_router_rs_binaries()
     materialize_repo_host_entrypoints(tmp_path)
     (tmp_path / "scripts").symlink_to(PROJECT_ROOT / "scripts", target_is_directory=True)
     _seed_runtime_artifacts(tmp_path)
@@ -675,9 +680,13 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert user_prompt.returncode == 0
     user_prompt_payload = json.loads(user_prompt.stdout)
     assert user_prompt_payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert "repo-local shared memory" in user_prompt_payload["hookSpecificOutput"]["additionalContext"]
-    assert "完成任务时默认只用一小段收尾" in user_prompt_payload["hookSpecificOutput"]["additionalContext"]
-    assert "热路径" in user_prompt_payload["hookSpecificOutput"]["additionalContext"]
+    context = user_prompt_payload["hookSpecificOutput"]["additionalContext"]
+    assert "repo-local shared memory" in context
+    assert "当前状态：" in context
+    assert "完成任务时默认只用一小段收尾" in context
+    assert "热路径" in context
+    assert "Task Snapshot" not in context
+    assert len(context) <= 420
 
     quality_context = subprocess.run(
         ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "pre-tool-use-quality"],
@@ -822,6 +831,43 @@ def test_pre_tool_use_hook_blocks_without_router_rs_binary(tmp_path: Path) -> No
     assert blocked_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert ".claude/settings.json" in blocked_payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert blocked.stderr == ""
+
+
+def test_user_prompt_submit_hook_avoids_cargo_bootstrap_on_hot_path(tmp_path: Path) -> None:
+    materialize_repo_host_entrypoints(tmp_path)
+    (tmp_path / "scripts").symlink_to(PROJECT_ROOT / "scripts", target_is_directory=True)
+    cargo_bin_dir = tmp_path / "fake-bin"
+    cargo_log = tmp_path / "cargo-args.txt"
+    cargo_bin_dir.mkdir(parents=True)
+    _write_text(
+        cargo_bin_dir / "cargo",
+        "\n".join(
+            [
+                "#!/bin/sh",
+                "set -eu",
+                f"printf '%s\\n' \"$@\" > '{cargo_log}'",
+            ]
+        )
+        + "\n",
+    )
+    os.chmod(cargo_bin_dir / "cargo", 0o755)
+
+    env = os.environ.copy()
+    env["CLAUDE_PROJECT_DIR"] = str(tmp_path)
+    env["PATH"] = f"{cargo_bin_dir}{os.pathsep}{env.get('PATH', '')}"
+
+    result = subprocess.run(
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "user-prompt-submit"],
+        cwd=tmp_path,
+        env=env,
+        input='{"hook_event_name":"UserPromptSubmit","prompt":"继续优化 runtime"}\n',
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0
+    assert "repo-local shared memory" in result.stdout
+    assert not cargo_log.exists()
 
 
 def test_user_prompt_submit_hook_emits_stderr_notice_when_router_response_has_no_hook_specific_output(
