@@ -20,6 +20,7 @@ if str(RUNTIME_SRC) not in sys.path:
 
 import codex_agno_runtime.profile_artifacts as profile_artifacts_module
 from codex_agno_runtime.framework_profile import build_framework_profile
+from codex_agno_runtime.host_adapters import compile_codex_common_adapter
 from codex_agno_runtime.profile_artifacts import (
     build_framework_shared_contract_projection_report,
     emit_framework_contract_artifacts,
@@ -159,7 +160,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "framework_profile",
         "framework_surface_policy",
         "cli_common_adapter",
-        "codex_common_adapter",
         "codex_cli_adapter",
         "claude_code_adapter",
         "gemini_cli_adapter",
@@ -193,6 +193,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert "codex_desktop_host_adapter" not in paths
     assert "codex_desktop_alias_inventory" not in paths
     assert "codex_desktop_alias_retirement_status" not in paths
+    assert "codex_common_adapter" not in paths
     assert "rust_codex_desktop_host_adapter" not in paths
     assert Path(paths["framework_profile"]).parent.name == "default"
     assert Path(paths["cli_common_adapter"]).parent.name == "default"
@@ -206,6 +207,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "rust": "rust",
     }
     assert "cli_common_adapter" in layout_manifest["artifacts_by_lane"]["default"]
+    assert "codex_common_adapter" not in layout_manifest["artifacts_by_lane"]["default"]
     assert "rust_profile_bundle" in layout_manifest["artifacts_by_lane"]["rust"]
 
     cli_common = json.loads(Path(paths["cli_common_adapter"]).read_text(encoding="utf-8"))
@@ -233,11 +235,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert cli_common["bridge_contract"] == cli_common["shared_contract"]["workspace_bootstrap"][
         "bridges"
     ]
-
-    common = json.loads(Path(paths["codex_common_adapter"]).read_text(encoding="utf-8"))
-    assert common["controller_boundary"]["framework_truth"] == "framework_core"
-    assert common["metadata"]["adapter_alias_of"] == "cli_common_adapter"
-    assert common["bridge_contract"] == common["shared_contract"]["workspace_bootstrap"]["bridges"]
 
     claude = json.loads(Path(paths["claude_code_adapter"]).read_text(encoding="utf-8"))
     assert claude["host_projection"]["context_files"] == [
@@ -397,25 +394,13 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert fallback_retirement["current_contract_truth"]["live_fallback_runtime_path_available"] is (
         False
     )
-    assert fallback_retirement["current_contract_truth"]["compatibility_fallback_reason_metadata_key"] == (
-        "execution_kernel_fallback_reason"
-    )
     assert fallback_retirement["public_runtime_response_metadata_fields"] == [
         "execution_kernel_delegate_family",
         "execution_kernel_delegate_impl",
     ]
-    assert fallback_retirement["retired_runtime_response_metadata_fields"] == [
-        "execution_kernel_fallback_reason",
-    ]
     assert fallback_retirement["current_response_metadata_truth"]["dry_run_delegate_family"] == "rust-cli"
     assert fallback_retirement["current_response_metadata_truth"]["dry_run_delegate_impl"] == "router-rs"
     assert fallback_retirement["current_response_metadata_truth"]["live_delegate_impl"] == "router-rs"
-    assert (
-        fallback_retirement["current_response_metadata_truth"][
-            "compatibility_fallback_reason_present_in_steady_state"
-        ]
-        is False
-    )
     assert fallback_retirement["remaining_python_owned_surfaces"] == []
     assert fallback_retirement["retirement_gates"]["response_metadata_surface_externalized"] is True
     assert fallback_retirement["retirement_gates"]["delegate_family_impl_metadata_externalized"] is True
@@ -447,9 +432,6 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "live_primary",
         "dry_run",
     ]
-    assert response_serialization["current_response_shape_truth"]["retired_compatibility_fallback"][
-        "runtime_path_available"
-    ] is False
     assert response_serialization["retirement_gates"][
         "compatibility_live_response_serialization_still_python_owned"
     ] is False
@@ -668,28 +650,11 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert rust_response_serialization["current_contract_truth"]["public_response_model"] == (
         "RunTaskResponse"
     )
-    assert rust_response_serialization["current_response_shape_truth"]["retired_compatibility_fallback"][
-        "legacy_required_metadata_fields"
-    ] == [
-        "run_id",
-        "status",
-        "trace_event_count",
-        "trace_output_path",
-        "execution_kernel_contract_mode",
-        "execution_kernel_fallback_policy",
-        "execution_kernel_primary",
-        "execution_kernel_primary_authority",
-        "execution_kernel_fallback_reason",
-        "execution_kernel_compatibility_agent_contract",
-        "execution_kernel_compatibility_agent_kind",
-        "execution_kernel_compatibility_agent_authority",
-    ]
     assert rust_response_serialization["retirement_gates"][
         "compatibility_live_response_serialization_still_python_owned"
     ] is False
 
     assert cli_common == rust_cli_common
-    assert common == rust_common
     assert rust_desktop == json.loads(Path(paths["codex_desktop_adapter"]).read_text(encoding="utf-8"))
     assert rust_cli == json.loads(Path(paths["codex_cli_adapter"]).read_text(encoding="utf-8"))
     assert claude == rust_claude
@@ -760,6 +725,7 @@ def test_emit_framework_contract_artifacts_requires_explicit_opt_in_for_continui
     assert "codex_desktop_host_adapter" not in paths
     assert "codex_desktop_alias_inventory" not in paths
     assert "codex_desktop_alias_retirement_status" not in paths
+    assert "codex_common_adapter" not in paths
     assert "upgrade_compatibility_matrix" not in paths
     assert "aionrs_companion_adapter" not in paths
     assert "aionui_host_adapter" not in paths
@@ -767,6 +733,29 @@ def test_emit_framework_contract_artifacts_requires_explicit_opt_in_for_continui
     manifest = json.loads(Path(paths["artifact_layout_manifest"]).read_text(encoding="utf-8"))
     assert "fallback" not in manifest["artifacts_by_lane"]
     assert "continuity" not in manifest["artifacts_by_lane"]
+
+
+def test_emit_framework_contract_artifacts_keeps_codex_common_adapter_out_of_default_lane(
+    tmp_path: Path,
+) -> None:
+    profile = build_framework_profile(
+        profile_id="artifact-profile-default-codex-common-hidden",
+        display_name="Artifact Profile Default Codex Common Hidden",
+        rules_bundle={"rules": [{"id": "outer-owned"}]},
+        skill_bundle={"skills": ["router"]},
+        session_policy={"mode": "bounded"},
+    )
+
+    paths = emit_framework_contract_artifacts(tmp_path, profile=profile)
+
+    assert "codex_common_adapter" not in paths
+    manifest = json.loads(Path(paths["artifact_layout_manifest"]).read_text(encoding="utf-8"))
+    assert "codex_common_adapter" not in manifest["artifacts_by_lane"]["default"]
+
+    report = build_framework_shared_contract_projection_report(profile)
+    projections = {item["adapter_id"]: item for item in report["adapter_projections"]}
+    assert projections["codex_common_adapter"]["shared_contract_match"] is True
+    assert projections["codex_common_adapter"]["bridge_contract_match"] is True
 
 
 def test_emit_framework_contract_artifacts_can_opt_in_fallback_host_outputs(
@@ -833,6 +822,10 @@ def test_emit_framework_contract_artifacts_can_opt_in_compatibility_inventory(
         include_compatibility_inventory=True,
     )
 
+    common = json.loads(Path(paths["codex_common_adapter"]).read_text(encoding="utf-8"))
+    assert Path(paths["codex_common_adapter"]).parent.name == "continuity"
+    assert common["controller_boundary"]["framework_truth"] == "framework_core"
+    assert common["metadata"]["adapter_alias_of"] == "cli_common_adapter"
     matrix = json.loads(Path(paths["upgrade_compatibility_matrix"]).read_text(encoding="utf-8"))
     assert Path(paths["upgrade_compatibility_matrix"]).parent.name == "continuity"
     assert matrix["cli_common_adapter"]["compatible"] is True
@@ -944,7 +937,7 @@ def test_framework_profile_artifact_bidirectional_shared_contract_consistency(tm
 
     contract_payloads = {
         "cli_common_adapter": _load_json_payload(Path(paths["cli_common_adapter"])),
-        "codex_common_adapter": _load_json_payload(Path(paths["codex_common_adapter"])),
+        "codex_common_adapter": compile_codex_common_adapter(framework_profile).host_payload,
         "codex_desktop_adapter": _load_json_payload(Path(paths["codex_desktop_adapter"])),
         "codex_cli_adapter": _load_json_payload(Path(paths["codex_cli_adapter"])),
         "claude_code_adapter": _load_json_payload(Path(paths["claude_code_adapter"])),
@@ -997,6 +990,10 @@ def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
     )
     assert alias_retirement["legacy_alias_id"] == "codex_desktop_host_adapter"
     assert alias_retirement["emitter_contract"]["legacy_alias_artifact_opt_in"] is True
+    assert Path(paths["codex_common_adapter"]).parent.name == "continuity"
+    assert json.loads(Path(paths["codex_common_adapter"]).read_text(encoding="utf-8")) == json.loads(
+        Path(paths["rust_codex_common_adapter"]).read_text(encoding="utf-8")
+    )
     assert json.loads(Path(paths["cli_common_adapter"]).read_text(encoding="utf-8"))[
         "controller_boundary"
     ]["shared_adapter"] == "cli_common_adapter"
@@ -1105,18 +1102,12 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
         "execution_kernel_delegate_family",
         "execution_kernel_delegate_impl",
     ]
-    assert payload["execution_kernel_live_fallback_retirement_status"][
-        "retired_runtime_response_metadata_fields"
-    ] == ["execution_kernel_fallback_reason"]
     assert payload["execution_kernel_live_fallback_retirement_status"]["compatibility_fallback"][
         "request_behavior"
     ] == "surface-removed"
     assert payload["execution_kernel_live_fallback_retirement_status"]["retirement_exit_contract"][
         "surface_status"
     ] == "removed"
-    assert payload["execution_kernel_live_fallback_retirement_status"]["current_response_metadata_truth"][
-        "compatibility_fallback_reason_present_in_steady_state"
-    ] is False
     assert payload["execution_kernel_live_fallback_retirement_status"]["retirement_gates"][
         "dry_run_prompt_preview_still_python_owned"
     ] is False

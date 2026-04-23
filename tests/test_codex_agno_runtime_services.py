@@ -1342,39 +1342,6 @@ def test_execution_service_can_disable_python_live_fallback(tmp_path: Path) -> N
 
     asyncio.run(_run())
 
-
-def test_execution_service_exposes_retired_kernel_contract_shape_from_rust_control_plane(
-    tmp_path: Path,
-) -> None:
-    settings = RuntimeSettings(
-        codex_home=PROJECT_ROOT,
-        data_dir=tmp_path / "runtime-data",
-        trace_output_path=tmp_path / "TRACE_METADATA.json",
-        live_model_override=False,
-    )
-    router_service = RouterService(settings)
-    execution_service = ExecutionEnvironmentService(
-        settings,
-        max_background_jobs=4,
-        background_job_timeout_seconds=30.0,
-        control_plane_descriptor=router_service.control_plane_descriptor,
-    )
-
-    retired_contract = execution_service.describe_kernel_contract(response_shape="retired")
-    retired_payload = execution_service.kernel_payload(response_shape="retired")
-
-    assert retired_contract["execution_kernel_response_shape"] == "retired"
-    assert retired_contract["execution_kernel_prompt_preview_owner"] == (
-        "python-agno-kernel-adapter"
-    )
-    assert retired_contract["execution_kernel_live_fallback_enabled"] is False
-    assert retired_contract["execution_kernel_live_fallback_mode"] == "disabled"
-    assert retired_payload["execution_kernel_response_shape"] == "retired"
-    assert retired_payload["execution_kernel_prompt_preview_owner"] == (
-        "python-agno-kernel-adapter"
-    )
-
-
 def test_execution_service_prefers_rust_live_metadata_when_present(tmp_path: Path) -> None:
     """Authority adapter should preserve Rust-emitted live metadata instead of rehydrating defaults."""
 

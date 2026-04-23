@@ -13,9 +13,10 @@ Active hooks:
 
 | Event | Script | Purpose |
 | --- | --- | --- |
-| `UserPromptSubmit` | `user_prompt_submit.sh` | Inject a short coding-only implementation bias before Claude starts planning: direct implementation first, then performance/memory/fallback cleanup. |
-| `PreToolUse` | `pre_tool_use_quality.sh` | Add a short implementation-quality reminder before editing runtime, hook, or test code so code is written with direct implementation and hot-path hygiene in mind. |
+| `UserPromptSubmit` | `user_prompt_submit.sh` | Inject a short coding-only `additionalContext` block before Claude starts planning, using intent-based matching instead of broad keyword spam. |
+| `PreToolUse` | `pre_tool_use_quality.sh` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code so code is written with direct implementation and hot-path hygiene in mind. |
 | `PreToolUse` | `pre_tool_use.sh` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
+| `PostToolUse` | `post_tool_use_audit.sh` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
 | `SessionEnd` | `session_end.sh` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |
 | `ConfigChange` | `config_change.sh` | Warn when generated Claude host files were edited directly instead of regenerated from source. |
 | `StopFailure` | `stop_failure.sh` | Emit a host-private hint for selected Claude stop failures without mutating shared continuity. |
@@ -33,6 +34,8 @@ Project hook principles:
   loop.
 - Automation hooks should be additive and short: inject narrow repo context or
   launch cheap follow-up work, not essay-length prompt rewrites.
+- Prefer async `PostToolUse` for cheap quality follow-up that should not block
+  the main turn.
 - Put personal notifications and local approval shortcuts in `~/.claude/settings.json`
   or `.claude/settings.local.json`, not in committed project settings.
 - Use `"$CLAUDE_PROJECT_DIR"`-anchored paths in hook commands and treat hook
@@ -47,10 +50,13 @@ Validation commands:
 
 - `printf '{"hook_event_name":"UserPromptSubmit","prompt":"继续优化这个 runtime，去掉补丁式保底并顺手看下内存和速度"}
 ' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/user_prompt_submit.sh`
-  Expected: stdout emits a short coding-only context paragraph.
+  Expected: stdout emits JSON with a short coding-only `additionalContext` block.
 - `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}
 ' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use_quality.sh`
   Expected: stdout returns a JSON `permissionDecision: allow` payload with `additionalContext`.
+- `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}
+' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/post_tool_use_audit.sh`
+  Expected: stdout is empty for clean edits, or JSON with top-level `additionalContext` when the new delta still looks patchy, compatibility-heavy, or wasteful.
 - `printf '{"tool_name":"MultiEdit","tool_input":{"file_path":".claude/settings.json"}}
 ' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use.sh`
   Expected: stdout returns a JSON `permissionDecision: deny` payload.
@@ -74,7 +80,7 @@ Validation commands:
 ' | ./scripts/router-rs/target/debug/router-rs --claude-hook-audit-command config-change --repo-root "$PWD"`
   Expected: JSON on stdout plus audit-only stderr guidance; exit 0.
 - In Claude Code, run `/hooks`
-  Expected: the project shows only `PreToolUse`, `SessionEnd`, `ConfigChange`,
-  and `StopFailure` from `.claude/settings.json`.
+  Expected: the project shows `UserPromptSubmit`, `PreToolUse`, `PostToolUse`,
+  `SessionEnd`, `ConfigChange`, and `StopFailure` from `.claude/settings.json`.
 
 Shared routing policy still comes from `../../AGENT.md`.

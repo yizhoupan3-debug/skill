@@ -196,6 +196,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert set(settings["hooks"]) == {
         "UserPromptSubmit",
         "PreToolUse",
+        "PostToolUse",
         "SessionEnd",
         "ConfigChange",
         "StopFailure",
@@ -215,6 +216,11 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     quality_hooks = settings["hooks"]["PreToolUse"][2]["hooks"]
     assert any(item["if"] == "Edit(/scripts/**)" for item in quality_hooks)
     assert any(item["if"] == "Write(/codex_agno_runtime/src/**)" for item in quality_hooks)
+    post_tool_hooks = settings["hooks"]["PostToolUse"][0]["hooks"]
+    assert settings["hooks"]["PostToolUse"][0]["matcher"] == "Edit|MultiEdit|Write"
+    assert post_tool_hooks[0]["command"].endswith("/.claude/hooks/post_tool_use_audit.sh")
+    assert post_tool_hooks[0]["async"] is True
+    assert post_tool_hooks[0]["timeout"] == 8
     assert settings["hooks"]["ConfigChange"][0]["matcher"] == "project_settings"
     assert settings["hooks"]["StopFailure"][0]["matcher"] == (
         "invalid_request|server_error|max_output_tokens|rate_limit|authentication_failed|billing_error|unknown"
@@ -227,6 +233,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert (tmp_path / ".claude" / "commands" / "deepinterview.md").is_file()
     assert (tmp_path / ".claude" / "hooks" / "user_prompt_submit.sh").is_file()
     assert (tmp_path / ".claude" / "hooks" / "pre_tool_use_quality.sh").is_file()
+    assert (tmp_path / ".claude" / "hooks" / "post_tool_use_audit.sh").is_file()
     assert not (tmp_path / ".claude" / "commands" / "deepreview.md").exists()
     refresh_command = (tmp_path / ".claude" / "commands" / "refresh.md").read_text(encoding="utf-8")
     background_batch_command = (

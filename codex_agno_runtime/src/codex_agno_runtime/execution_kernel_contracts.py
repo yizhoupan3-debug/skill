@@ -45,7 +45,6 @@ EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION = (
 EXECUTION_KERNEL_LIVE_PRIMARY_SCHEMA_VERSION = "router-rs-execute-response-v1"
 EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY = "live_primary"
 EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN = "dry_run"
-EXECUTION_KERNEL_RESPONSE_SHAPE_RETIRED = "retired"
 EXECUTION_KERNEL_LIVE_RESPONSE_SERIALIZATION_STATUS_CONTRACT = (
     "execution_kernel_live_response_serialization_contract_v1"
 )
@@ -88,12 +87,6 @@ EXECUTION_KERNEL_RETIRED_LIVE_FALLBACK_MARKER_METADATA_FIELDS = (
     "execution_kernel_live_fallback_authority",
     "execution_kernel_live_fallback_enabled",
     "execution_kernel_live_fallback_mode",
-)
-EXECUTION_KERNEL_RETIRED_COMPATIBILITY_FALLBACK_METADATA_FIELDS = (
-    EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
-    EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
-    EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
-    EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
 )
 EXECUTION_KERNEL_PUBLIC_RUNTIME_CONTRACT_FIELDS = (
     "execution_kernel",
@@ -145,30 +138,9 @@ DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS = (
     *DRY_RUN_RUNTIME_METADATA_FIELDS,
     *RUNTIME_TRACE_METADATA_FIELDS,
 )
-COMPATIBILITY_FALLBACK_RUNTIME_METADATA_FIELDS = (
-    "run_id",
-    "status",
-    EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
-    EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
-    "execution_kernel_primary",
-    "execution_kernel_primary_authority",
-    EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
-    EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
-    EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
-    EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
-)
-COMPATIBILITY_FALLBACK_REQUIRED_RUNTIME_METADATA_FIELDS = (
-    "run_id",
-    "status",
-    *RUNTIME_TRACE_METADATA_FIELDS,
-    *COMPATIBILITY_FALLBACK_RUNTIME_METADATA_FIELDS[2:],
-)
 LIVE_PRIMARY_PROMPT_PREVIEW_OWNER = "rust-execution-cli"
-COMPATIBILITY_FALLBACK_PROMPT_PREVIEW_OWNER = "python-agno-kernel-adapter"
 DRY_RUN_PROMPT_PREVIEW_OWNER = "rust-execution-cli"
 LIVE_PRIMARY_MODEL_ID_SOURCE = "aggregator-response.model"
-COMPATIBILITY_FALLBACK_MODEL_ID_SOURCE = "agno-run-output.model"
-EXECUTION_KERNEL_RETIRED_COMPATIBILITY_FALLBACK_MODE = "retired"
 
 
 def resolve_execution_kernel_expectations(
@@ -242,15 +214,11 @@ def normalize_execution_kernel_metadata_bridge(
                         LIVE_PRIMARY_PROMPT_PREVIEW_OWNER
                     ),
                     EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN: DRY_RUN_PROMPT_PREVIEW_OWNER,
-                    EXECUTION_KERNEL_RESPONSE_SHAPE_RETIRED: (
-                        COMPATIBILITY_FALLBACK_PROMPT_PREVIEW_OWNER
-                    ),
                 },
                 "live_primary_model_id_source": LIVE_PRIMARY_MODEL_ID_SOURCE,
                 "supported_response_shapes": (
                     EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
                     EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
-                    EXECUTION_KERNEL_RESPONSE_SHAPE_RETIRED,
                 ),
             },
         }
@@ -450,7 +418,6 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
             "steady_state_kernel": [*EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS],
             "live_primary": [*LIVE_PRIMARY_RUNTIME_METADATA_FIELDS],
             "dry_run": [*DRY_RUN_RUNTIME_METADATA_FIELDS],
-            "retired_compatibility_fallback": [*COMPATIBILITY_FALLBACK_RUNTIME_METADATA_FIELDS],
         },
         "current_contract_truth": {
             "public_response_model": "RunTaskResponse",
@@ -459,23 +426,8 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
             "steady_state_metadata_schema_version": EXECUTION_KERNEL_METADATA_SCHEMA_VERSION,
             "live_primary_prompt_preview_owner": LIVE_PRIMARY_PROMPT_PREVIEW_OWNER,
             "steady_state_response_shapes": ["live_primary", "dry_run"],
-            "retired_compatibility_fallback_prompt_preview_owner": (
-                COMPATIBILITY_FALLBACK_PROMPT_PREVIEW_OWNER
-            ),
             "dry_run_prompt_preview_owner": DRY_RUN_PROMPT_PREVIEW_OWNER,
             "live_primary_model_id_source": LIVE_PRIMARY_MODEL_ID_SOURCE,
-            "retired_compatibility_fallback_model_id_source": (
-                COMPATIBILITY_FALLBACK_MODEL_ID_SOURCE
-            ),
-            "compatibility_fallback_runtime_path": EXECUTION_KERNEL_RETIRED_COMPATIBILITY_FALLBACK_MODE,
-            "compatibility_fallback_request_behavior": "surface-removed",
-            "retired_compatibility_fallback_policy": EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
-            "retired_compatibility_agent_contract_version": (
-                EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION
-            ),
-            "compatibility_fallback_reason_metadata_key": (
-                EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY
-            ),
         },
         "current_response_shape_truth": {
             "live_primary": {
@@ -494,19 +446,6 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
                 "pass_through_metadata_fields": [
                     *LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS
                 ],
-            },
-            "retired_compatibility_fallback": {
-                "runtime_path_available": False,
-                "request_behavior": "surface-removed",
-                "legacy_live_run": True,
-                "legacy_usage_mode": "live",
-                "legacy_content_type": "string",
-                "legacy_prompt_preview_source": "python-prompt-builder",
-                "legacy_model_id_present": True,
-                "legacy_required_metadata_fields": [
-                    *COMPATIBILITY_FALLBACK_REQUIRED_RUNTIME_METADATA_FIELDS
-                ],
-                "legacy_fallback_reason_present": True,
             },
             "dry_run": {
                 "live_run": False,
@@ -527,9 +466,6 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
         "retirement_gates": {
             "response_shape_contract_externalized": True,
             "live_primary_response_contract_externalized": True,
-            "compatibility_fallback_response_contract_externalized": True,
-            "compatibility_fallback_runtime_path_removed": True,
-            "explicit_compatibility_requests_rejected": True,
             "compatibility_live_response_serialization_still_python_owned": False,
             "runtime_control_flow_change_required_for_removal": False,
         },
@@ -679,7 +615,12 @@ def validate_execution_kernel_steady_state_metadata(
         and normalized.get("execution_kernel_live_fallback_authority") is not None
     ):
         raise RuntimeError("execution-kernel steady-state metadata returned a live fallback authority.")
-    for field in EXECUTION_KERNEL_RETIRED_COMPATIBILITY_FALLBACK_METADATA_FIELDS:
+    for field in (
+        EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
+        EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
+        EXECUTION_KERNEL_COMPATIBILITY_AGENT_KIND_METADATA_KEY,
+        EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
+    ):
         if field in normalized:
             raise RuntimeError(
                 "execution-kernel steady-state metadata returned a retired compatibility "

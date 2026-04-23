@@ -3544,9 +3544,6 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         Value::String("execution_kernel_delegate_family".to_string()),
         Value::String("execution_kernel_delegate_impl".to_string()),
     ]);
-    let retired_runtime_response_metadata_fields = Value::Array(vec![Value::String(
-        "execution_kernel_fallback_reason".to_string(),
-    )]);
 
     let mut current_contract_truth = Map::new();
     current_contract_truth.insert(
@@ -3593,10 +3590,6 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         "live_prompt_preview_passthrough_disabled".to_string(),
         Value::Bool(true),
     );
-    current_contract_truth.insert(
-        "compatibility_fallback_reason_metadata_key".to_string(),
-        Value::String("execution_kernel_fallback_reason".to_string()),
-    );
 
     let mut current_response_metadata_truth = Map::new();
     current_response_metadata_truth.insert(
@@ -3614,14 +3607,6 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
     current_response_metadata_truth.insert(
         "dry_run_delegate_impl".to_string(),
         Value::String("router-rs".to_string()),
-    );
-    current_response_metadata_truth.insert(
-        "compatibility_fallback_reason_present_in_steady_state".to_string(),
-        Value::Bool(false),
-    );
-    current_response_metadata_truth.insert(
-        "retired_response_metadata_fields".to_string(),
-        retired_runtime_response_metadata_fields.clone(),
     );
 
     let remaining_python_owned_surfaces = Value::Array(vec![]);
@@ -3756,10 +3741,6 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         public_runtime_response_metadata_fields,
     );
     payload.insert(
-        "retired_runtime_response_metadata_fields".to_string(),
-        retired_runtime_response_metadata_fields,
-    );
-    payload.insert(
         "current_contract_truth".to_string(),
         Value::Object(current_contract_truth),
     );
@@ -3871,21 +3852,6 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         ]),
     );
     runtime_response_metadata_fields.insert(
-        "retired_compatibility_fallback".to_string(),
-        Value::Array(vec![
-            Value::String("run_id".to_string()),
-            Value::String("status".to_string()),
-            Value::String("execution_kernel_contract_mode".to_string()),
-            Value::String("execution_kernel_fallback_policy".to_string()),
-            Value::String("execution_kernel_primary".to_string()),
-            Value::String("execution_kernel_primary_authority".to_string()),
-            Value::String("execution_kernel_fallback_reason".to_string()),
-            Value::String("execution_kernel_compatibility_agent_contract".to_string()),
-            Value::String("execution_kernel_compatibility_agent_kind".to_string()),
-            Value::String("execution_kernel_compatibility_agent_authority".to_string()),
-        ]),
-    );
-    runtime_response_metadata_fields.insert(
         "dry_run".to_string(),
         Value::Array(vec![
             Value::String("reason".to_string()),
@@ -3920,40 +3886,12 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         json!(["live_primary", "dry_run"]),
     );
     current_contract_truth.insert(
-        "retired_compatibility_fallback_prompt_preview_owner".to_string(),
-        Value::String("python-agno-kernel-adapter".to_string()),
-    );
-    current_contract_truth.insert(
         "dry_run_prompt_preview_owner".to_string(),
         Value::String("rust-execution-cli".to_string()),
     );
     current_contract_truth.insert(
         "live_primary_model_id_source".to_string(),
         Value::String("aggregator-response.model".to_string()),
-    );
-    current_contract_truth.insert(
-        "retired_compatibility_fallback_model_id_source".to_string(),
-        Value::String("agno-run-output.model".to_string()),
-    );
-    current_contract_truth.insert(
-        "compatibility_fallback_runtime_path".to_string(),
-        Value::String("retired".to_string()),
-    );
-    current_contract_truth.insert(
-        "compatibility_fallback_request_behavior".to_string(),
-        Value::String("surface-removed".to_string()),
-    );
-    current_contract_truth.insert(
-        "retired_compatibility_fallback_policy".to_string(),
-        Value::String("infrastructure-only-explicit".to_string()),
-    );
-    current_contract_truth.insert(
-        "retired_compatibility_agent_contract_version".to_string(),
-        Value::String("execution-kernel-compatibility-agent-v1".to_string()),
-    );
-    current_contract_truth.insert(
-        "compatibility_fallback_reason_metadata_key".to_string(),
-        Value::String("execution_kernel_fallback_reason".to_string()),
     );
 
     let mut live_primary = Map::new();
@@ -3985,48 +3923,6 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         ]),
     );
 
-    let mut compatibility_fallback = Map::new();
-    compatibility_fallback.insert("runtime_path_available".to_string(), Value::Bool(false));
-    compatibility_fallback.insert(
-        "request_behavior".to_string(),
-        Value::String("surface-removed".to_string()),
-    );
-    compatibility_fallback.insert("legacy_live_run".to_string(), Value::Bool(true));
-    compatibility_fallback.insert(
-        "legacy_usage_mode".to_string(),
-        Value::String("live".to_string()),
-    );
-    compatibility_fallback.insert(
-        "legacy_content_type".to_string(),
-        Value::String("string".to_string()),
-    );
-    compatibility_fallback.insert(
-        "legacy_prompt_preview_source".to_string(),
-        Value::String("python-prompt-builder".to_string()),
-    );
-    compatibility_fallback.insert("legacy_model_id_present".to_string(), Value::Bool(true));
-    compatibility_fallback.insert(
-        "legacy_required_metadata_fields".to_string(),
-        Value::Array(vec![
-            Value::String("run_id".to_string()),
-            Value::String("status".to_string()),
-            Value::String("trace_event_count".to_string()),
-            Value::String("trace_output_path".to_string()),
-            Value::String("execution_kernel_contract_mode".to_string()),
-            Value::String("execution_kernel_fallback_policy".to_string()),
-            Value::String("execution_kernel_primary".to_string()),
-            Value::String("execution_kernel_primary_authority".to_string()),
-            Value::String("execution_kernel_fallback_reason".to_string()),
-            Value::String("execution_kernel_compatibility_agent_contract".to_string()),
-            Value::String("execution_kernel_compatibility_agent_kind".to_string()),
-            Value::String("execution_kernel_compatibility_agent_authority".to_string()),
-        ]),
-    );
-    compatibility_fallback.insert(
-        "legacy_fallback_reason_present".to_string(),
-        Value::Bool(true),
-    );
-
     let mut dry_run = Map::new();
     dry_run.insert("live_run".to_string(), Value::Bool(false));
     dry_run.insert(
@@ -4054,10 +3950,6 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
 
     let mut current_response_shape_truth = Map::new();
     current_response_shape_truth.insert("live_primary".to_string(), Value::Object(live_primary));
-    current_response_shape_truth.insert(
-        "retired_compatibility_fallback".to_string(),
-        Value::Object(compatibility_fallback),
-    );
     current_response_shape_truth.insert("dry_run".to_string(), Value::Object(dry_run));
 
     let mut retirement_gates = Map::new();
@@ -4067,18 +3959,6 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
     );
     retirement_gates.insert(
         "live_primary_response_contract_externalized".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "compatibility_fallback_response_contract_externalized".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "compatibility_fallback_runtime_path_removed".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "explicit_compatibility_requests_rejected".to_string(),
         Value::Bool(true),
     );
     retirement_gates.insert(
@@ -4583,14 +4463,8 @@ mod tests {
         );
         assert_eq!(
             bundle.execution_kernel_live_fallback_retirement_status
-                ["current_response_metadata_truth"]
-                ["compatibility_fallback_reason_present_in_steady_state"],
-            Value::Bool(false)
-        );
-        assert_eq!(
-            bundle.execution_kernel_live_fallback_retirement_status
-                ["retired_runtime_response_metadata_fields"],
-            json!(["execution_kernel_fallback_reason"])
+                ["current_response_metadata_truth"]["dry_run_delegate_impl"],
+            Value::String("router-rs".to_string())
         );
         assert_eq!(
             bundle.execution_kernel_live_response_serialization_contract["status_contract"],
@@ -4600,12 +4474,6 @@ mod tests {
             bundle.execution_kernel_live_response_serialization_contract
                 ["runtime_response_metadata_fields"]["shared"],
             json!(["trace_event_count", "trace_output_path"])
-        );
-        assert_eq!(
-            bundle.execution_kernel_live_response_serialization_contract
-                ["current_response_shape_truth"]["retired_compatibility_fallback"]
-                ["runtime_path_available"],
-            Value::Bool(false)
         );
     }
 
@@ -4949,8 +4817,8 @@ mod tests {
         assert_eq!(
             artifacts["execution_kernel_live_fallback_retirement_status"]
                 ["current_response_metadata_truth"]
-                ["compatibility_fallback_reason_present_in_steady_state"],
-            Value::Bool(false)
+                ["dry_run_delegate_impl"],
+            Value::String("router-rs".to_string())
         );
         assert_eq!(
             artifacts["execution_kernel_live_response_serialization_contract"]["status_contract"],
@@ -5046,11 +4914,6 @@ mod tests {
                 "execution_kernel_delegate_family",
                 "execution_kernel_delegate_impl"
             ])
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_fallback_retirement_status"]
-                ["retired_runtime_response_metadata_fields"],
-            json!(["execution_kernel_fallback_reason"])
         );
         assert_eq!(
             artifacts["execution_kernel_live_fallback_retirement_status"]["retirement_gates"]
