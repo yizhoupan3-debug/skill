@@ -10,9 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from codex_agno_runtime.rust_router import RustRouteAdapter
 from codex_agno_runtime.runtime_registry import framework_native_aliases
-from scripts.claude_hook_audit import run_config_change, run_pre_tool_use, run_stop_failure
 from scripts.claude_statusline import render_statusline
 from scripts.materialize_cli_host_entrypoints import (
     CODEX_PROJECT_HOOKS,
@@ -111,6 +109,22 @@ def _ensure_router_rs_debug_binary() -> None:
         ["cargo", "build", "--manifest-path", str(crate_root / "Cargo.toml")],
         cwd=PROJECT_ROOT,
         check=True,
+    )
+
+
+def _run_router_rs_claude_audit(
+    command: str,
+    repo_root: Path,
+    payload: dict[str, object],
+) -> subprocess.CompletedProcess[str]:
+    _ensure_router_rs_debug_binary()
+    debug_bin = PROJECT_ROOT / "scripts" / "router-rs" / "target" / "debug" / "router-rs"
+    return subprocess.run(
+        [str(debug_bin), "--claude-hook-audit-command", command, "--repo-root", str(repo_root)],
+        input=json.dumps(payload, ensure_ascii=False),
+        text=True,
+        capture_output=True,
+        check=False,
     )
 
 
@@ -234,9 +248,8 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert not any(item["if"] == "Bash(*.claude/*)" for item in bash_hooks)
     quality_hooks = settings["hooks"]["PreToolUse"][2]["hooks"]
     assert any(item["if"] == "Edit(/scripts/router-rs/src/**)" for item in quality_hooks)
-    assert any(item["if"] == "Edit(/scripts/claude_hook_*.py)" for item in quality_hooks)
-    assert any(item["if"] == "Edit(/tests/test_claude_hook_automation.py)" for item in quality_hooks)
     assert any(item["if"] == "Write(/codex_agno_runtime/src/**)" for item in quality_hooks)
+    assert any(item["if"] == "Edit(/tests/test_cli_host_entrypoints.py)" for item in quality_hooks)
     assert not any(item["if"] == "Edit(/scripts/**)" for item in quality_hooks)
     assert not any(item["if"] == "Edit(/tests/**)" for item in quality_hooks)
     post_tool_hooks = settings["hooks"]["PostToolUse"][0]["hooks"]
@@ -566,7 +579,7 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
         ["sh", str(tmp_path / ".claude" / "hooks" / "pre_tool_use_quality.sh")],
         cwd=tmp_path,
         env=env,
-        input='{"tool_name":"Edit","tool_input":{"file_path":"scripts/claude_hook_automation.py"}}\n',
+        input='{"tool_name":"Edit","tool_input":{"file_path":"tests/test_cli_host_entrypoints.py"}}\n',
         text=True,
         capture_output=True,
     )

@@ -3688,6 +3688,11 @@ fn build_execution_kernel_metadata_bridge() -> Value {
                 "trace_event_count",
                 "trace_output_path",
             ],
+            "live_primary_passthrough": [
+                "execution_mode",
+                "route_engine",
+                "diagnostic_route_mode",
+            ],
             "dry_run_required": [
                 "reason",
                 "execution_kernel_contract_mode",
