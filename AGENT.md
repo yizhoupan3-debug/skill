@@ -85,13 +85,15 @@ framework policy instead of forking per-host routing or memory rules.
 - Default the closeout to one short paragraph that covers exactly three points:
   what was done, what effect was achieved, and what still needs to happen next
   or that the work is finished.
+- Keep the wording plain and natural; do not make the default closeout sound
+  like a task artifact, audit log, or status machine.
 - Prefer user-visible effect over implementation narration in the default
   closeout.
 - If no further work is needed, say that directly instead of inventing follow-up
   tasks.
-- Do not default to changed-file inventories, evidence lists, changelog-style
-  recaps, or step-by-step implementation retellings in the final user-facing
-  closeout.
+- Do not default to changed-file inventories, evidence lists, path dumps,
+  changelog-style recaps, or step-by-step implementation retellings in the
+  final user-facing closeout.
 - Machine continuity artifacts such as `NEXT_ACTIONS.json`,
   `.supervisor_state.json`, and verification or blocker fields remain the
   recovery truth; do not mirror them verbatim into the user-facing closeout

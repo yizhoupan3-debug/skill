@@ -1,5 +1,5 @@
 ---
-description: 使用 Rust refresh 命令生成并复制下一轮执行提示。
+description: 使用 Rust refresh 命令继续当前活跃任务，并复制下一轮执行提示。
 allowed-tools:
   - Bash(git rev-parse *)
   - Bash(./scripts/router-rs/target/release/router-rs *)
@@ -9,6 +9,9 @@ allowed-tools:
   - Bash(cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- *)
   - Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)
 ---
+
+把 `/refresh` 当作当前仓库唯一显式的 continue / next 入口。
+它会读取现有 continuity 真源，为当前活跃任务生成下一轮执行提示。
 
 运行：
 

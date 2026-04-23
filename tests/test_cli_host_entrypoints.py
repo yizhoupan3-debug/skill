@@ -194,6 +194,31 @@ def _run_router_rs_hook_manifest() -> dict[str, object]:
     return json.loads(completed.stdout)
 
 
+def _run_router_rs_claude_project_settings(repo_root: Path) -> dict[str, object]:
+    crate_root = PROJECT_ROOT / "scripts" / "router-rs"
+    binary_path = ensure_rust_binary(
+        crate_root=crate_root,
+        binary_name="router-rs",
+        release=True,
+        allow_stale_fallback=False,
+        allow_cross_profile_fallback=False,
+        cwd=PROJECT_ROOT,
+    )
+    completed = subprocess.run(
+        [
+            str(binary_path),
+            "--claude-project-settings-json",
+            "--repo-root",
+            str(repo_root),
+        ],
+        cwd=PROJECT_ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return json.loads(completed.stdout)
+
+
 def _run_router_rs_claude_audit(
     command: str,
     repo_root: Path,
@@ -238,6 +263,9 @@ def test_router_rs_exports_claude_hook_manifest() -> None:
     assert "/.claude/settings.json" in manifest["protected_paths"]["edit_write"]
     assert "*.claude/settings.json*" in manifest["protected_paths"]["bash"]
     assert "/scripts/router-rs/src/**" in manifest["protected_paths"]["quality"]
+    assert "/scripts/materialize_cli_host_entrypoints.py" in manifest["protected_paths"]["quality"]
+    assert "/tests/**" in manifest["protected_paths"]["quality"]
+    assert "/.claude/hooks/**" in manifest["protected_paths"]["quality"]
     assert set(manifest["settings_hooks"]) == {
         "PreToolUse",
         "PostToolUse",
@@ -250,10 +278,12 @@ def test_router_rs_exports_claude_hook_manifest() -> None:
 
 def test_materialized_claude_settings_hooks_match_rust_manifest(tmp_path: Path) -> None:
     manifest = _run_router_rs_hook_manifest()
+    expected_settings = _run_router_rs_claude_project_settings(tmp_path)
     materialize_repo_host_entrypoints(tmp_path)
 
     settings = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
 
+    assert settings == expected_settings
     assert settings["hooks"] == manifest["settings_hooks"]
 
 
@@ -315,6 +345,8 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "changed-file inventories" in agent_policy
     assert "evidence lists" in agent_policy
     assert "what was done, what effect was achieved" in agent_policy
+    assert "plain and natural" in agent_policy
+    assert "task artifact, audit log, or status machine" in agent_policy
     assert "Explain things in plain language first" in agent_policy
     assert "Avoid internal runtime, routing, framework, or tool jargon" in agent_policy
     assert "Do not force personality" in agent_policy
@@ -340,35 +372,10 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "Generated-first maintenance rule" in claude_entry
     assert "AGENT.md" in (tmp_path / "GEMINI.md").read_text(encoding="utf-8")
     settings = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    expected_settings = _run_router_rs_claude_project_settings(tmp_path)
     codex_hooks = json.loads((tmp_path / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+    assert settings == expected_settings
     assert settings["$schema"] == "https://json.schemastore.org/claude-code-settings.json"
-    assert settings["permissions"]["allow"] == [
-        "Bash(ls)",
-        "Bash(pwd)",
-        "Bash(rg *)",
-        "Bash(cat *)",
-        "Bash(sed -n *)",
-        "Bash(git status)",
-        "Bash(git diff)",
-        "Bash(git show *)",
-        "Bash(git rev-parse *)",
-        "Bash(git ls-files *)",
-        "Bash(python3 scripts/check_skills.py --verify-sync)",
-        "Bash(python3 scripts/materialize_cli_host_entrypoints.py)",
-        "Bash(python3 -m pytest *)",
-        "Bash(python3 -m compileall *)",
-        "Bash(cargo test *)",
-        f"Bash(cargo run --manifest-path {CLAUDE_ROUTER_RS_MANIFEST_PATH} --release -- *)",
-        f"Bash({CLAUDE_ROUTER_RS_RELEASE_BINARY} *)",
-        f"Bash({CLAUDE_ROUTER_RS_DEBUG_BINARY} *)",
-        "Bash(*scripts/router-rs/target/release/router-rs *)",
-        "Bash(*scripts/router-rs/target/debug/router-rs *)",
-        "Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)",
-        "Bash(python3 scripts/runtime_background_cli.py *)",
-        "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
-        "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
-        "Bash(bash ./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
-    ]
     assert settings["allowedMcpServers"] == [
         {"serverName": "browser-mcp"},
         {"serverName": "framework-mcp"},
@@ -408,13 +415,17 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     quality_hooks = settings["hooks"]["PreToolUse"][2]["hooks"]
     assert any(item["if"] == "Edit(/scripts/router-rs/src/**)" for item in quality_hooks)
     assert any(item["if"] == "Write(/framework_runtime/src/**)" for item in quality_hooks)
-    assert any(item["if"] == "Edit(/tests/test_cli_host_entrypoints.py)" for item in quality_hooks)
+    assert any(item["if"] == "Edit(/scripts/materialize_cli_host_entrypoints.py)" for item in quality_hooks)
+    assert any(item["if"] == "Edit(/tests/**)" for item in quality_hooks)
+    assert any(item["if"] == "Edit(/.claude/hooks/**)" for item in quality_hooks)
     assert not any(item["if"] == "Edit(/scripts/**)" for item in quality_hooks)
-    assert not any(item["if"] == "Edit(/tests/**)" for item in quality_hooks)
     post_tool_hooks = settings["hooks"]["PostToolUse"][0]["hooks"]
     assert settings["hooks"]["PostToolUse"][0]["matcher"] == "Edit|MultiEdit|Write"
     assert any(item["if"] == "Edit(/scripts/router-rs/src/**)" for item in post_tool_hooks)
     assert any(item["if"] == "Write(/framework_runtime/src/**)" for item in post_tool_hooks)
+    assert any(item["if"] == "Edit(/scripts/materialize_cli_host_entrypoints.py)" for item in post_tool_hooks)
+    assert any(item["if"] == "Edit(/tests/**)" for item in post_tool_hooks)
+    assert any(item["if"] == "Edit(/.claude/hooks/**)" for item in post_tool_hooks)
     assert not any(item["if"] == "Edit(/scripts/**)" for item in post_tool_hooks)
     assert all(item["command"].endswith('/.claude/hooks/run.sh post-tool-audit') for item in post_tool_hooks)
     assert all(item["async"] is True for item in post_tool_hooks)
@@ -466,6 +477,9 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert team_command == CLAUDE_TEAM_COMMAND
     assert latex_compile_acceleration_command == CLAUDE_LATEX_COMPILE_ACCELERATION_COMMAND
     assert CLAUDE_PROJECT_DIR_SNIPPET in refresh_command
+    assert "使用 Rust refresh 命令继续当前活跃任务，并复制下一轮执行提示。" in refresh_command
+    assert "唯一显式的 continue / next 入口" in refresh_command
+    assert "读取现有 continuity 真源" in refresh_command
     assert (
         '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR"'
         in refresh_command
@@ -754,7 +768,7 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     telemetry = user_prompt_payload["contextTelemetry"]
     assert "repo-local shared memory" in context
     assert "当前状态：" in context
-    assert "完成任务时默认只用一小段收尾" in context
+    assert "收尾提醒：" in context
     assert "热路径" in context
     assert "Task Snapshot" not in context
     assert len(context) <= 420
@@ -777,6 +791,32 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     quality_payload = json.loads(quality_context.stdout)
     assert quality_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert "测试额外检查" in quality_payload["hookSpecificOutput"]["additionalContext"]
+
+    materializer_quality_context = subprocess.run(
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "pre-tool-use-quality"],
+        cwd=tmp_path,
+        env=env,
+        input='{"tool_name":"Edit","tool_input":{"file_path":"scripts/materialize_cli_host_entrypoints.py"}}\n',
+        text=True,
+        capture_output=True,
+    )
+    assert materializer_quality_context.returncode == 0
+    materializer_quality_payload = json.loads(materializer_quality_context.stdout)
+    assert materializer_quality_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert "Python 额外检查" in materializer_quality_payload["hookSpecificOutput"]["additionalContext"]
+
+    hook_quality_context = subprocess.run(
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "pre-tool-use-quality"],
+        cwd=tmp_path,
+        env=env,
+        input='{"tool_name":"Edit","tool_input":{"file_path":".claude/hooks/run.sh"}}\n',
+        text=True,
+        capture_output=True,
+    )
+    assert hook_quality_context.returncode == 0
+    hook_quality_payload = json.loads(hook_quality_context.stdout)
+    assert hook_quality_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert "Hook 额外检查" in hook_quality_payload["hookSpecificOutput"]["additionalContext"]
 
     allowed = subprocess.run(
         ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "pre-tool-use"],
@@ -1071,6 +1111,7 @@ def test_claude_statusline_renders_runtime_summary(tmp_path: Path) -> None:
     statusline = render_statusline(tmp_path)
 
     assert "task=Validate status line" in statusline
+    assert "next=/refresh" in statusline
     assert "integration/in_progress" in statusline
     assert "route=execution-controller-coding+1" in statusline
     assert "others=0" in statusline

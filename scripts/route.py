@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from scripts.rust_binary_runner import latest_crate_source_mtime, resolve_binary_candidate
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -33,29 +35,9 @@ def _discover_codex_home(start_path: Path) -> Path:
     return start_path
 
 
-def _resolve_router_binary_candidate(*candidates: Path) -> Path | None:
-    """Prefer the freshest router-rs binary, keeping call order as the tiebreaker."""
-
-    existing: list[tuple[float, int, Path]] = []
-    for index, candidate in enumerate(candidates):
-        if candidate.is_file():
-            existing.append((candidate.stat().st_mtime, -index, candidate))
-    if not existing:
-        return None
-    return max(existing)[2]
-
-
-def _latest_router_source_mtime(router_dir: Path) -> float:
-    candidates = [router_dir / "Cargo.toml"]
-    source_dir = router_dir / "src"
-    if source_dir.is_dir():
-        candidates.extend(source_dir.rglob("*.rs"))
-    return max((path.stat().st_mtime for path in candidates if path.exists()), default=0.0)
-
-
 def _ensure_router_binary_current(codex_home: Path) -> Path:
     router_dir = codex_home / "scripts" / "router-rs"
-    resolved_binary = _resolve_router_binary_candidate(
+    resolved_binary = resolve_binary_candidate(
         router_dir / "target" / "release" / "router-rs",
         router_dir / "target" / "debug" / "router-rs",
     )
@@ -63,7 +45,7 @@ def _ensure_router_binary_current(codex_home: Path) -> Path:
         raise RuntimeError(
             "router-rs requires a prebuilt binary; build scripts/router-rs before running the Python host runtime."
         )
-    latest_source_mtime = _latest_router_source_mtime(router_dir)
+    latest_source_mtime = latest_crate_source_mtime(router_dir)
     if resolved_binary.stat().st_mtime < latest_source_mtime:
         raise RuntimeError(
             "router-rs prebuilt binary is stale; rebuild scripts/router-rs before "

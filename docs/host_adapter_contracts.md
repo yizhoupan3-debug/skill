@@ -374,8 +374,8 @@ repo 内真实存在：
   machine continuity contract 继续以 `SESSION_SUMMARY.md`、`NEXT_ACTIONS.json`、
   `TRACE_METADATA.json`、`.supervisor_state.json` 为恢复真源；human closeout
   contract 只约束给用户看的最终收尾话术。
-- human closeout contract 默认应压缩成一小段人话，只讲“现在达到什么效果”与
-  “接下来还需要什么”；如果没有后续，就直接声明已完成。
+- human closeout contract 默认应压缩成一小段人话，或在内容天然成列表时压缩成很短的 bullet；只讲“做了什么 / 现在达到什么效果 / 接下来还需要什么”。如果没有后续，就直接声明已完成。
+- closeout 默认要讲得自然，不要写成 task artifact、审计日志、状态机播报或机器字段翻译。
 - `verification`、`open_blockers`、`next_actions`、artifact path 等字段仍可用于
   runtime / recovery / tooling，但宿主投影不得默认把这些机器字段逐项翻译成
   changelog、文件清单或冗长收尾。

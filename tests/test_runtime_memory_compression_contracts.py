@@ -125,18 +125,20 @@ def test_compression_zero_budget_returns_deterministic_omission_marker() -> None
     assert result.strategy == "truncate"
 
 
-def test_compression_prefers_head_tail_before_raw_truncation() -> None:
-    """Structured prompts should retain head/tail sections before truncation when possible."""
+def test_compression_prefers_dedupe_before_head_tail() -> None:
+    """Repeated sections should be removed before structured compression chooses survivors."""
 
-    prompt = "\n\n".join(f"S{index}" for index in range(1, 31))
-    result = ContextEngineer().compress_contract(prompt, token_limit=26)
+    repeated = "How to reply:\n- Lead with the answer or result.\n- Keep the default reply short."
+    prompt = "\n\n".join([
+        repeated,
+        "Section A",
+        repeated,
+        "Section B",
+        repeated,
+        "Section C",
+    ])
 
-    assert result.strategy == "head-tail"
-    assert result.truncated is False
-    assert result.omitted_sections == 25
-    assert "S1" in result.prompt
-    assert "S2" in result.prompt
-    assert "S3" in result.prompt
-    assert "S29" in result.prompt
-    assert "S30" in result.prompt
-    assert "Omitted 25 middle sections" in result.prompt
+    result = ContextEngineer().compress_contract(prompt, token_limit=20)
+
+    assert result.strategy.startswith("dedupe+")
+    assert result.prompt.count("How to reply:") == 1

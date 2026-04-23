@@ -2052,6 +2052,16 @@ fn render_framework_refresh_prompt(
     let recovery_hints = value_string_list(continuity.get("recovery_hints"));
     let continuity_next_actions = value_string_list(continuity.get("next_actions"));
     let continuity_blockers = value_string_list(continuity.get("blockers"));
+    let verification_status = value_text(continuity.get("verification_status"));
+    let effect_line = if state == "completed" {
+        if verification_status == "completed" {
+            "结果已经稳定，可以直接按已完成上下文来看。".to_string()
+        } else {
+            "这一轮已经收住，不用再把它当当前任务。".to_string()
+        }
+    } else {
+        String::new()
+    };
     let remaining_tasks = if state == "active" && !current.is_empty() {
         stable_line_items(
             contract
@@ -2071,7 +2081,7 @@ fn render_framework_refresh_prompt(
                 .collect(),
         )
     } else if state == "completed" && !completed.is_empty() {
-        value_string_list(completed.get("follow_up_notes"))
+        stable_line_items(vec!["最近一轮已经收尾".to_string()])
     } else if state == "inconsistent" {
         value_string_list(continuity.get("inconsistency_reasons"))
     } else {
@@ -2082,9 +2092,7 @@ fn render_framework_refresh_prompt(
         items.extend(continuity_next_actions.clone());
         stable_line_items(items)
     } else if state == "completed" && !completed.is_empty() {
-        let mut items = vec!["如需继续，先新开任务".to_string()];
-        items.extend(recovery_hints.clone());
-        stable_line_items(items)
+        stable_line_items(vec!["如果还要继续相关工作，先新开一个 standalone task".to_string()])
     } else if state == "stale" {
         let mut items = vec!["先重读锚点并重建上下文".to_string()];
         if continuity_next_actions.is_empty() {
@@ -2153,6 +2161,32 @@ fn render_framework_refresh_prompt(
             })
             .unwrap_or_default(),
     ]);
+
+    if state == "completed" && !completed.is_empty() {
+        let mut lines = vec!["最近一轮已经收尾：".to_string()];
+        lines.push(format!(
+            "- {}",
+            if task.is_empty() { "上一轮任务已完成" } else { &task }
+        ));
+        if !effect_line.is_empty() {
+            lines.push(format!("- {effect_line}"));
+        }
+        lines.extend(
+            next_steps
+                .into_iter()
+                .take(capped_max_lines)
+                .map(|item| format!("- {item}")),
+        );
+        lines.push("".to_string());
+        lines.push("先看这些恢复锚点：".to_string());
+        lines.extend(
+            anchors
+                .into_iter()
+                .take(capped_max_lines)
+                .map(|anchor| format!("- {anchor}")),
+        );
+        return lines.join("\n") + "\n";
+    }
 
     let mut lines = vec!["继续当前仓库，先看这些恢复锚点：".to_string()];
     lines.extend(
@@ -2255,8 +2289,8 @@ fn render_current_state_section(continuity: &Value) -> (String, Vec<String>) {
         return (
             "Task Snapshot".to_string(),
             stable_line_items(vec![
-                "no resumable active task".to_string(),
-                "resume: blocked; start a new task before reviving related work".to_string(),
+                "recent task: wrapped up".to_string(),
+                "next: start a new standalone task if related work needs to continue".to_string(),
             ]),
         );
     }

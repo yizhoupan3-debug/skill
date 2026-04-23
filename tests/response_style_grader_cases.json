@@ -3,7 +3,13 @@
   "cases": [
     {
       "id": "good_short_closeout",
-      "text": "现在能跑了，核心报错已经消失。还差一轮真实数据验证，过了这一步就可以放心继续用。",
+      "text": "这一轮已经收尾，结果已经稳定下来了。现在的效果是相关问题不再继续阻塞；如果你还要往前推进，下一步先新开一个任务。",
+      "should_pass": true,
+      "expected_findings": []
+    },
+    {
+      "id": "good_bullet_closeout",
+      "text": "最近一轮已经收尾：\n- 关键修改已经收住\n- 现在的效果是可以直接按已完成上下文来看\n- 如果还要继续，先新开一个任务",
       "should_pass": true,
       "expected_findings": []
     },

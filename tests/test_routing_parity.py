@@ -247,6 +247,51 @@ def test_route_contract_rejects_unknown_decision_authority_shape(
         )
 
 
+def test_background_state_uses_cold_json_runner_without_hot_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = _fixture_route_adapter()
+    calls = {"json_runner_calls": 0, "hot_runner_calls": 0}
+
+    def fake_run_json_command(command: list[str], *, failure_label: str) -> dict[str, object]:
+        calls["json_runner_calls"] += 1
+        return {
+            "schema_version": adapter.background_state_store_schema_version,
+            "authority": adapter.background_state_store_authority,
+            "status": "ok",
+        }
+
+    def fake_run_hot_json_command(*args, **kwargs):
+        calls["hot_runner_calls"] += 1
+        raise AssertionError("background_state should not use hot retry path")
+
+    monkeypatch.setattr(adapter, "_run_json_command", fake_run_json_command)
+    monkeypatch.setattr(adapter, "_run_hot_json_command", fake_run_hot_json_command)
+
+    payload = adapter.background_state({"operation": "set", "key": "job-1", "value": {"status": "queued"}})
+
+    assert calls["json_runner_calls"] == 1
+    assert calls["hot_runner_calls"] == 0
+    assert payload["schema_version"] == adapter.background_state_store_schema_version
+    assert payload["authority"] == adapter.background_state_store_authority
+
+
+
+
+def test_router_stdio_pool_defaults_to_rust_control_plane_size(monkeypatch: pytest.MonkeyPatch) -> None:
+    adapter = _fixture_route_adapter()
+    monkeypatch.delenv("CODEX_ROUTER_STDIO_POOL_SIZE", raising=False)
+
+    assert adapter._stdio_pool_size() == 4
+
+
+def test_router_stdio_pool_size_honors_environment_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    adapter = _fixture_route_adapter()
+    monkeypatch.setenv("CODEX_ROUTER_STDIO_POOL_SIZE", "7")
+
+    assert adapter._stdio_pool_size() == 7
+
+
 def test_search_skills_uses_route_adapter_hot_path(monkeypatch: pytest.MonkeyPatch) -> None:
     rows = [
         SearchMatchResult(
@@ -1579,7 +1624,40 @@ def test_rust_route_adapter_framework_contract_summary_handles_completed_snapsho
     assert summary["recent_completed_execution"]["task"] == "checklist-series final closeout"
 
 
-def test_rust_route_adapter_framework_refresh_builds_compact_prompt_and_copies_to_file(
+def test_rust_route_adapter_claude_lifecycle_hook_uses_hot_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    adapter = _fixture_route_adapter()
+    calls: dict[str, object] = {}
+
+    def fake_run_hot_json_command(operation: str, payload: dict[str, object], command: list[str], *, failure_label: str):
+        calls["operation"] = operation
+        calls["payload"] = payload
+        calls["command"] = command
+        calls["failure_label"] = failure_label
+        return {
+            "schema_version": adapter.claude_hook_schema_version,
+            "authority": adapter.claude_hook_authority,
+            "command": "session-end",
+        }
+
+    monkeypatch.setattr(adapter, "_run_hot_json_command", fake_run_hot_json_command)
+
+    payload = adapter.claude_lifecycle_hook(command="session-end", repo_root=tmp_path, max_lines=4)
+
+    assert calls["operation"] == "claude_lifecycle_hook"
+    assert calls["payload"] == {
+        "command": "session-end",
+        "repo_root": str(tmp_path),
+        "max_lines": 4,
+    }
+    assert calls["failure_label"] == "Claude lifecycle hook"
+    assert "--claude-hook-command" in calls["command"]
+    assert payload["schema_version"] == adapter.claude_hook_schema_version
+    assert payload["authority"] == adapter.claude_hook_authority
+
+def test_rust_route_adapter_framework_refresh_copies_prompt_to_clipboard(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

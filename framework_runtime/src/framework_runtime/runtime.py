@@ -50,16 +50,61 @@ from framework_runtime.services import (
     RouterService,
     StateService,
     TraceService,
+    _runtime_host_concurrency_contract,
     _runtime_host_contract,
     _runtime_rustification_health,
+    _runtime_subagent_limit_contract,
 )
 from framework_runtime.utils import build_session_id
 
 # Maximum number of concurrently running background jobs.
-_MAX_BACKGROUND_JOBS = int(os.environ.get("CODEX_MAX_BACKGROUND_JOBS", 16))
+_DEFAULT_MAX_BACKGROUND_JOBS = 16
 
 # Timeout (seconds) for a single background job run.
-_BACKGROUND_JOB_TIMEOUT = float(os.environ.get("CODEX_BACKGROUND_JOB_TIMEOUT", 600))
+_DEFAULT_BACKGROUND_JOB_TIMEOUT = 600.0
+
+
+def _runtime_background_defaults(control_plane_descriptor: dict[str, Any]) -> tuple[int, float]:
+    contract = _runtime_host_concurrency_contract(control_plane_descriptor)
+    max_background_jobs = contract.get("max_background_jobs", _DEFAULT_MAX_BACKGROUND_JOBS)
+    background_job_timeout = contract.get(
+        "background_job_timeout_seconds", _DEFAULT_BACKGROUND_JOB_TIMEOUT
+    )
+    try:
+        resolved_max_background_jobs = max(1, int(os.environ.get("CODEX_MAX_BACKGROUND_JOBS", max_background_jobs)))
+    except ValueError:
+        resolved_max_background_jobs = int(max_background_jobs)
+    try:
+        resolved_background_job_timeout = float(
+            os.environ.get("CODEX_BACKGROUND_JOB_TIMEOUT", background_job_timeout)
+        )
+    except ValueError:
+        resolved_background_job_timeout = float(background_job_timeout)
+    return resolved_max_background_jobs, resolved_background_job_timeout
+
+
+def _runtime_subagent_defaults(settings: RuntimeSettings, control_plane_descriptor: dict[str, Any]) -> tuple[int, int]:
+    contract = _runtime_subagent_limit_contract(control_plane_descriptor)
+    max_concurrent_subagents = contract.get(
+        "max_concurrent_subagents", settings.max_concurrent_subagents
+    )
+    timeout_seconds = contract.get("timeout_seconds", settings.subagent_timeout_seconds)
+    try:
+        resolved_max_concurrent = max(
+            1,
+            int(os.environ.get("CODEX_AGNO_MAX_CONCURRENT_SUBAGENTS", max_concurrent_subagents)),
+        )
+    except ValueError:
+        resolved_max_concurrent = int(max_concurrent_subagents)
+    try:
+        resolved_timeout_seconds = max(
+            1,
+            int(os.environ.get("CODEX_AGNO_SUBAGENT_TIMEOUT_SECONDS", timeout_seconds)),
+        )
+    except ValueError:
+        resolved_timeout_seconds = int(timeout_seconds)
+    return resolved_max_concurrent, resolved_timeout_seconds
+
 
 def _now_iso() -> str:
     """Return a canonical UTC timestamp."""
@@ -79,6 +124,9 @@ class CodexAgnoRuntime:
         )
         self.router_service = RouterService(settings, rust_adapter=self.rust_adapter)
         self.control_plane_descriptor = self.router_service.control_plane_descriptor
+        self._max_background_jobs, self._background_job_timeout = _runtime_background_defaults(
+            self.control_plane_descriptor
+        )
         self.checkpointer = FilesystemRuntimeCheckpointer(
             data_dir=self.settings.resolved_data_dir,
             trace_output_path=self.settings.resolved_trace_output_path,
@@ -99,8 +147,8 @@ class CodexAgnoRuntime:
         )
         self.execution_service = ExecutionEnvironmentService(
             settings,
-            max_background_jobs=_MAX_BACKGROUND_JOBS,
-            background_job_timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
+            max_background_jobs=self._max_background_jobs,
+            background_job_timeout_seconds=self._background_job_timeout,
             control_plane_descriptor=self.control_plane_descriptor,
             rust_adapter=self.rust_adapter,
         )
@@ -111,8 +159,8 @@ class CodexAgnoRuntime:
             background_control_provider=lambda: self.rust_adapter.background_control,
             background_control_schema_version=self.rust_adapter.background_control_schema_version,
             background_control_authority=self.rust_adapter.background_control_authority,
-            max_background_jobs=_MAX_BACKGROUND_JOBS,
-            background_job_timeout_seconds=_BACKGROUND_JOB_TIMEOUT,
+            max_background_jobs=self._max_background_jobs,
+            background_job_timeout_seconds=self._background_job_timeout,
             artifact_paths_provider=self._runtime_artifact_paths,
             supervisor_projection_provider=lambda: self._build_supervisor_projection().model_dump(mode="json"),
             control_plane_descriptor=self.control_plane_descriptor,
@@ -125,7 +173,7 @@ class CodexAgnoRuntime:
         self._trace = self.trace_service.recorder
         self._memory_store = self.memory_service.store
 
-        self._max_background_jobs = _MAX_BACKGROUND_JOBS
+        self._max_background_jobs = self.background_service._max_background_jobs
         self._jobs_lock = self.background_service.jobs_lock
         self._job_semaphore = self.background_service.job_semaphore
         self.background_jobs = self.background_service.background_jobs
@@ -287,6 +335,10 @@ class CodexAgnoRuntime:
         """Build the ordered middleware pipeline."""
 
         s = self.settings
+        max_concurrent_subagents, subagent_timeout_seconds = _runtime_subagent_defaults(
+            s,
+            self.control_plane_descriptor,
+        )
         middlewares = [
             MemoryMiddleware(self._memory_store) if s.memory_enabled else None,
             ContextCompressionMiddleware(
@@ -294,8 +346,8 @@ class CodexAgnoRuntime:
                 threshold=s.compression_threshold,
             ),
             SubagentLimitMiddleware(
-                max_concurrent=s.max_concurrent_subagents,
-                timeout_seconds=s.subagent_timeout_seconds,
+                max_concurrent=max_concurrent_subagents,
+                timeout_seconds=subagent_timeout_seconds,
             ),
         ]
         return MiddlewareChain(
@@ -335,6 +387,17 @@ class CodexAgnoRuntime:
 
         self.router_service.reload()
         self._apply_control_plane_descriptor(self.router_service.control_plane_descriptor)
+        self._max_background_jobs, self._background_job_timeout = _runtime_background_defaults(
+            self.control_plane_descriptor
+        )
+        self.background_service.configure_limits(
+            max_background_jobs=self._max_background_jobs,
+            job_semaphore=asyncio.Semaphore(self._max_background_jobs),
+        )
+        self.execution_service.max_background_jobs = self._max_background_jobs
+        self.execution_service.background_job_timeout_seconds = self._background_job_timeout
+        self._job_semaphore = self.background_service.job_semaphore
+        self._middleware_chain = self._build_middleware_chain()
         self.skills = self.router_service.skills
         self.router = None
 

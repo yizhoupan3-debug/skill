@@ -14,9 +14,9 @@ use crate::framework_runtime::{
     build_framework_recap_projection, build_framework_runtime_snapshot_envelope,
 };
 
-const CLAUDE_HOOK_SCHEMA_VERSION: &str = "router-rs-claude-hook-response-v1";
+pub(crate) const CLAUDE_HOOK_SCHEMA_VERSION: &str = "router-rs-claude-hook-response-v1";
 const CLAUDE_HOOK_AUDIT_SCHEMA_VERSION: &str = "router-rs-claude-hook-audit-response-v1";
-const CLAUDE_HOOK_AUTHORITY: &str = "rust-claude-hook";
+pub(crate) const CLAUDE_HOOK_AUTHORITY: &str = "rust-claude-hook";
 const CLAUDE_HOOK_AUDIT_AUTHORITY: &str = "rust-claude-hook-audit";
 const MEMORY_STATE_SCHEMA_VERSION: &str = "memory-state-v1";
 const MEMORY_STORE_SCHEMA_VERSION: &str = "1";
@@ -66,11 +66,12 @@ const CLAUDE_PRE_TOOL_USE_BASH_RULES: [&str; 12] = [
     "*.codex/host_entrypoints_sync_manifest.json*",
     "*.codex/memory/CLAUDE_MEMORY.md*",
 ];
-const CLAUDE_QUALITY_PRE_TOOL_USE_RULES: [&str; 4] = [
+const CLAUDE_QUALITY_PRE_TOOL_USE_RULES: [&str; 5] = [
     "/framework_runtime/src/**",
     "/scripts/router-rs/src/**",
-    "/tests/test_cli_host_entrypoints.py",
-    "/tests/test_codex_omx_hook_bridge.py",
+    "/scripts/materialize_cli_host_entrypoints.py",
+    "/tests/**",
+    "/.claude/hooks/**",
 ];
 const CLAUDE_STOP_FAILURE_MATCHER: &str =
     "invalid_request|server_error|max_output_tokens|rate_limit|authentication_failed|billing_error|unknown";
@@ -195,7 +196,7 @@ const USER_PROMPT_COMPAT_CONTEXT: &str =
 const USER_PROMPT_HOOK_CONTEXT: &str =
     "Hook 额外检查：让 hook 增加自动化，而不是只做阻拦；优先短上下文、窄触发、低开销，并尽量用 matcher/if 避免无谓触发。";
 const USER_PROMPT_CLOSEOUT_CONTEXT: &str =
-    "完成任务时默认只用一小段收尾：说清做了什么、达成了什么效果、下一步是什么；如果已经结束，就直接说已收尾。";
+    "收尾提醒：完成任务时默认用很短的收尾，跟着当前任务态自然收尾；如果这轮已经结束，就直接说已收尾，不要把完成态重新当成当前任务。";
 const USER_PROMPT_EXECUTION_INTENT_PREFIX: &str = "执行意图：";
 const USER_PROMPT_STATE_COMPACT_PREFIX: &str = "当前状态：";
 const USER_PROMPT_STATE_BUDGET_CHARS: usize = 120;
@@ -254,6 +255,35 @@ const TERMINAL_VERIFICATION_STATUSES: [&str; 6] = [
     "cancelled",
     "abandoned",
     "failed",
+];
+
+const CLAUDE_SETTINGS_SCHEMA_URL: &str = "https://json.schemastore.org/claude-code-settings.json";
+const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 25] = [
+    "Bash(ls)",
+    "Bash(pwd)",
+    "Bash(rg *)",
+    "Bash(cat *)",
+    "Bash(sed -n *)",
+    "Bash(git status)",
+    "Bash(git diff)",
+    "Bash(git show *)",
+    "Bash(git rev-parse *)",
+    "Bash(git ls-files *)",
+    "Bash(python3 scripts/check_skills.py --verify-sync)",
+    "Bash(python3 scripts/materialize_cli_host_entrypoints.py)",
+    "Bash(python3 -m pytest *)",
+    "Bash(python3 -m compileall *)",
+    "Bash(cargo test *)",
+    "Bash(cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- *)",
+    "Bash(./scripts/router-rs/target/release/router-rs *)",
+    "Bash(./scripts/router-rs/target/debug/router-rs *)",
+    "Bash(*scripts/router-rs/target/release/router-rs *)",
+    "Bash(*scripts/router-rs/target/debug/router-rs *)",
+    "Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)",
+    "Bash(python3 scripts/runtime_background_cli.py *)",
+    "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
+    "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
+    "Bash(bash ./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
 ];
 
 pub fn build_claude_hook_manifest() -> Value {
@@ -354,6 +384,71 @@ pub fn build_claude_hook_manifest() -> Value {
             ]
         }
     })
+}
+
+pub fn build_claude_project_settings(repo_root: &Path) -> Value {
+    let allowed_mcp_servers = load_runtime_registry_shared_project_mcp_servers(repo_root)
+        .into_iter()
+        .map(|server_name| json!({"serverName": server_name}))
+        .collect::<Vec<_>>();
+    json!({
+        "$schema": CLAUDE_SETTINGS_SCHEMA_URL,
+        "permissions": {
+            "allow": CLAUDE_PROJECT_ALLOW_PERMISSIONS,
+        },
+        "allowedMcpServers": allowed_mcp_servers,
+        "hooks": build_claude_hook_manifest()["settings_hooks"].clone(),
+    })
+}
+
+fn load_runtime_registry_shared_project_mcp_servers_from_path(registry_path: &Path) -> Vec<String> {
+    let Ok(raw) = fs::read_to_string(registry_path) else {
+        return Vec::new();
+    };
+    let Ok(payload) = serde_json::from_str::<Value>(&raw) else {
+        return Vec::new();
+    };
+    payload
+        .get("shared_project_mcp_servers")
+        .and_then(Value::as_array)
+        .map(|servers| {
+            servers
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|value| value.to_string())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn framework_runtime_registry_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("configs")
+        .join("framework")
+        .join("RUNTIME_REGISTRY.json")
+}
+
+fn load_runtime_registry_shared_project_mcp_servers(repo_root: &Path) -> Vec<String> {
+    let registry_path = repo_root
+        .join("configs")
+        .join("framework")
+        .join("RUNTIME_REGISTRY.json");
+    let servers = load_runtime_registry_shared_project_mcp_servers_from_path(&registry_path);
+    if !servers.is_empty() {
+        return servers;
+    }
+    let fallback_servers =
+        load_runtime_registry_shared_project_mcp_servers_from_path(&framework_runtime_registry_path());
+    if !fallback_servers.is_empty() {
+        return fallback_servers;
+    }
+    vec![
+        "browser-mcp".to_string(),
+        "framework-mcp".to_string(),
+        "openaiDeveloperDocs".to_string(),
+    ]
 }
 
 fn build_tool_path_hooks(rules: &[&str], command: &str, extras: Option<Value>) -> Vec<Value> {
@@ -1440,8 +1535,8 @@ fn compact_user_prompt_projection(repo_root: &Path, state_budget_chars: usize) -
             }
             let normalized = line.trim_start_matches("- ").trim();
             if normalized.starts_with("current:")
-                || normalized.starts_with("no resumable active task")
-                || normalized.starts_with("resume:")
+                || normalized.starts_with("recent task:")
+                || normalized.starts_with("next:")
                 || normalized.starts_with("continuity:")
                 || normalized.starts_with("last_known:")
             {
@@ -1624,8 +1719,8 @@ fn quality_target_context(path: &str) -> Option<String> {
         .any(|prefix| path.starts_with(prefix))
         || lowered_path.contains("hook");
     let is_test = path.starts_with("tests/");
-    if !(is_runtime || is_hook || is_test || path == "scripts/materialize_cli_host_entrypoints.py")
-    {
+    let is_materializer = path == "scripts/materialize_cli_host_entrypoints.py";
+    if !(is_runtime || is_hook || is_test || is_materializer) {
         return None;
     }
 
@@ -1636,10 +1731,10 @@ fn quality_target_context(path: &str) -> Option<String> {
     if path.ends_with(".rs") && is_runtime {
         parts.push(QUALITY_RUST_CONTEXT);
     }
-    if path.ends_with(".py") && (is_runtime || is_hook) {
+    if path.ends_with(".py") && (is_runtime || is_hook || is_materializer) {
         parts.push(QUALITY_PYTHON_CONTEXT);
     }
-    if is_hook || path.ends_with(".sh") {
+    if is_hook || path.ends_with(".sh") || is_materializer {
         parts.push(USER_PROMPT_HOOK_CONTEXT);
     }
     if is_test {
@@ -2401,80 +2496,95 @@ impl StringFallback for String {
 }
 
 #[cfg(test)]
+pub(crate) fn temp_repo_root(label: &str) -> PathBuf {
+    let base = std::env::temp_dir().join(format!(
+        "router-rs-claude-hooks-{label}-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time")
+            .as_nanos()
+    ));
+    fs::create_dir_all(base.join("artifacts/current/task-1")).expect("create temp repo");
+    fs::create_dir_all(base.join(".codex/memory")).expect("create memory dir");
+    fs::write(
+        base.join(".codex/memory/MEMORY.md"),
+        "# 项目长期记忆\n\n## Active Patterns\n\n- AP-1: Sync skills after skill edits\n\n## 稳定决策\n\n- SD-1: Shared CLI memory root lives under `./.codex/memory/`\n\n## Lessons\n\n- L-1: Do not let generated host files drift from runtime truth\n",
+    )
+    .expect("write shared memory");
+    fs::write(
+        base.join(".supervisor_state.json"),
+        serde_json::to_string_pretty(&json!({
+            "task_id": "task-1",
+            "task_summary": "repair claude hook",
+            "active_phase": "implementing",
+            "verification": {"verification_status": "in_progress"},
+            "continuity": {"story_state": "active", "resume_allowed": true},
+            "next_actions": ["finish rust hook"],
+            "execution_contract": {"scope": ["hooks"], "acceptance_criteria": ["smoke passes"]},
+            "blockers": {"open_blockers": []},
+            "controller": {"primary_owner": "claude-hook", "gate": "none"}
+        }))
+        .expect("serialize state"),
+    )
+    .expect("write state");
+    fs::write(
+        base.join("artifacts/current/active_task.json"),
+        serde_json::to_string_pretty(&json!({"task_id": "task-1"})).expect("serialize pointer"),
+    )
+    .expect("write pointer");
+    fs::write(
+        base.join("artifacts/current/task-1/SESSION_SUMMARY.md"),
+        "- task: repair claude hook\n- phase: implementing\n- status: in_progress\n",
+    )
+    .expect("write session summary");
+    fs::write(
+        base.join("artifacts/current/task-1/NEXT_ACTIONS.json"),
+        serde_json::to_string_pretty(&json!({
+            "schema_version": "next-actions-v2",
+            "next_actions": ["finish rust hook"]
+        }))
+        .expect("serialize next actions"),
+    )
+    .expect("write next actions");
+    fs::write(
+        base.join("artifacts/current/task-1/EVIDENCE_INDEX.json"),
+        serde_json::to_string_pretty(&json!({
+            "schema_version": "evidence-index-v2",
+            "artifacts": []
+        }))
+        .expect("serialize evidence"),
+    )
+    .expect("write evidence");
+    fs::write(
+        base.join("artifacts/current/task-1/TRACE_METADATA.json"),
+        serde_json::to_string_pretty(&json!({
+            "schema_version": "trace-metadata-v2",
+            "task": "repair claude hook",
+            "matched_skills": ["claude-hooks"]
+        }))
+        .expect("serialize trace"),
+    )
+    .expect("write trace");
+    base
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn temp_repo_root(label: &str) -> PathBuf {
-        let base = std::env::temp_dir().join(format!(
-            "router-rs-claude-hooks-{label}-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time")
-                .as_nanos()
-        ));
-        fs::create_dir_all(base.join("artifacts/current/task-1")).expect("create temp repo");
-        fs::create_dir_all(base.join(".codex/memory")).expect("create memory dir");
-        fs::write(
-            base.join(".codex/memory/MEMORY.md"),
-            "# 项目长期记忆\n\n## Active Patterns\n\n- AP-1: Sync skills after skill edits\n\n## 稳定决策\n\n- SD-1: Shared CLI memory root lives under `./.codex/memory/`\n\n## Lessons\n\n- L-1: Do not let generated host files drift from runtime truth\n",
-        )
-        .expect("write shared memory");
-        fs::write(
-            base.join(".supervisor_state.json"),
-            serde_json::to_string_pretty(&json!({
-                "task_id": "task-1",
-                "task_summary": "repair claude hook",
-                "active_phase": "implementing",
-                "verification": {"verification_status": "in_progress"},
-                "continuity": {"story_state": "active", "resume_allowed": true},
-                "next_actions": ["finish rust hook"],
-                "execution_contract": {"scope": ["hooks"], "acceptance_criteria": ["smoke passes"]},
-                "blockers": {"open_blockers": []},
-                "controller": {"primary_owner": "claude-hook", "gate": "none"}
-            }))
-            .expect("serialize state"),
-        )
-        .expect("write state");
-        fs::write(
-            base.join("artifacts/current/active_task.json"),
-            serde_json::to_string_pretty(&json!({"task_id": "task-1"})).expect("serialize pointer"),
-        )
-        .expect("write pointer");
-        fs::write(
-            base.join("artifacts/current/task-1/SESSION_SUMMARY.md"),
-            "- task: repair claude hook\n- phase: implementing\n- status: in_progress\n",
-        )
-        .expect("write session summary");
-        fs::write(
-            base.join("artifacts/current/task-1/NEXT_ACTIONS.json"),
-            serde_json::to_string_pretty(&json!({
-                "schema_version": "next-actions-v2",
-                "next_actions": ["finish rust hook"]
-            }))
-            .expect("serialize next actions"),
-        )
-        .expect("write next actions");
-        fs::write(
-            base.join("artifacts/current/task-1/EVIDENCE_INDEX.json"),
-            serde_json::to_string_pretty(&json!({
-                "schema_version": "evidence-index-v2",
-                "artifacts": []
-            }))
-            .expect("serialize evidence"),
-        )
-        .expect("write evidence");
-        fs::write(
-            base.join("artifacts/current/task-1/TRACE_METADATA.json"),
-            serde_json::to_string_pretty(&json!({
-                "schema_version": "trace-metadata-v2",
-                "task": "repair claude hook",
-                "matched_skills": ["claude-hooks"]
-            }))
-            .expect("serialize trace"),
-        )
-        .expect("write trace");
-        base
+    #[test]
+    fn claude_project_settings_fall_back_to_framework_runtime_registry_defaults() {
+        let repo_root = temp_repo_root("claude-project-settings-default-mcp");
+        let settings = build_claude_project_settings(&repo_root);
+        assert_eq!(
+            settings.get("allowedMcpServers").and_then(Value::as_array),
+            Some(&vec![
+                json!({"serverName": "browser-mcp"}),
+                json!({"serverName": "framework-mcp"}),
+                json!({"serverName": "openaiDeveloperDocs"}),
+            ])
+        );
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
     #[test]
@@ -2702,12 +2812,41 @@ mod tests {
             assert!(context.contains("当前状态："), "missing compact state for {prompt}");
             assert!(!context.contains("Task Snapshot"), "unexpected long state block for {prompt}");
             assert!(!context.contains("实现要求"), "unexpected old code nudge for {prompt}");
-            assert!(
-                context.contains("完成任务时默认只用一小段收尾"),
-                "missing closeout reminder for {prompt}"
-            );
+            assert!(context.contains("收尾提醒："), "missing closeout reminder for {prompt}");
             assert!(context.chars().count() <= USER_PROMPT_CONTEXT_MAX_CHARS);
         }
+        fs::remove_dir_all(repo_root).expect("cleanup repo");
+    }
+
+    #[test]
+    fn user_prompt_submit_compacts_completed_state_with_plain_next_step() {
+        let repo_root = temp_repo_root("user-prompt-submit-completed-state");
+        fs::write(
+            repo_root.join(".supervisor_state.json"),
+            serde_json::to_string_pretty(&json!({
+                "task_id": "task-completed-1",
+                "task_summary": "bounded rerun",
+                "active_phase": "closeout",
+                "verification": {"verification_status": "completed"},
+                "continuity": {"story_state": "completed", "resume_allowed": false},
+                "next_actions": []
+            }))
+            .expect("serialize state"),
+        )
+        .expect("write state");
+
+        let payload = json!({
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "继续优化 AGENT.md 的收尾措辞"
+        });
+        let result = run_user_prompt_submit(&repo_root, &payload).expect("audit ok");
+        let context = result["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or("");
+
+        assert!(context.contains("当前状态：recent task: wrapped up"));
+        assert!(!context.contains("no resumable active task"));
+        assert!(!context.contains("resume: blocked"));
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
@@ -2724,7 +2863,7 @@ mod tests {
             .unwrap_or("");
         assert!(context.contains("增加自动化"));
         assert!(context.contains("matcher/if"));
-        assert!(context.contains("完成任务时默认只用一小段收尾"));
+        assert!(context.contains("收尾提醒："));
         assert_eq!(context.matches("Hook 额外检查").count(), 1);
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }

@@ -14,6 +14,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
+from scripts.rust_binary_runner import latest_crate_source_mtime, resolve_binary_candidate
+
 from framework_runtime.schemas import (
     RoutingEvalCases,
     RoutingEvalReport,
@@ -24,18 +26,6 @@ from framework_runtime.schemas import (
     SearchMatchesContract,
     SearchMatchResult,
 )
-
-
-def resolve_router_binary_candidate(*candidates: Path) -> Path | None:
-    """Prefer the freshest existing router-rs binary, keeping call order as the tiebreaker."""
-
-    existing: list[tuple[float, int, Path]] = []
-    for index, candidate in enumerate(candidates):
-        if candidate.is_file():
-            existing.append((candidate.stat().st_mtime, -index, candidate))
-    if not existing:
-        return None
-    return max(existing)[2]
 
 
 def _load_json_object(payload: str, *, source: str) -> dict[str, Any]:
@@ -240,9 +230,34 @@ class _RouterStdioClient:
                 pass
 
 
-_STDIO_CLIENTS: dict[tuple[str, ...], _RouterStdioClient] = {}
+class _RouterStdioClientPool:
+    """Pool router-rs stdio clients so independent requests are not serialized by one lock."""
+
+    def __init__(self, command: list[str], *, cwd: Path, timeout_seconds: float, size: int) -> None:
+        self._clients = [
+            _RouterStdioClient(command, cwd=cwd, timeout_seconds=timeout_seconds)
+            for _ in range(max(1, size))
+        ]
+        self._lease_lock = threading.Lock()
+        self._lease_index = 0
+
+    def request(self, operation: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        client = self._acquire_client()
+        return client.request(operation, payload)
+
+    def close(self) -> None:
+        for client in self._clients:
+            client.close()
+
+    def _acquire_client(self) -> _RouterStdioClient:
+        with self._lease_lock:
+            client = self._clients[self._lease_index]
+            self._lease_index = (self._lease_index + 1) % len(self._clients)
+            return client
+
+
+_STDIO_CLIENTS: dict[tuple[str, ...], _RouterStdioClientPool] = {}
 _STDIO_CLIENTS_LOCK = threading.Lock()
-_ROUTER_BINARY_CACHE_UNSET = object()
 
 
 def _close_router_stdio_clients() -> None:
@@ -486,7 +501,6 @@ class RustRouteAdapter:
         self.router_dir = codex_home / "scripts" / "router-rs"
         self.release_bin = self.router_dir / "target" / "release" / "router-rs"
         self.debug_bin = self.router_dir / "target" / "debug" / "router-rs"
-        self._cached_runtime_binary: Path | None | object = _ROUTER_BINARY_CACHE_UNSET
         self._cached_latest_source_mtime: float | None = None
 
     def execute(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1330,7 +1344,13 @@ class RustRouteAdapter:
             "--claude-hook-max-lines",
             str(max_lines),
         ]
-        payload = self._run_json_command(
+        payload = self._run_hot_json_command(
+            "claude_lifecycle_hook",
+            {
+                "command": command,
+                "repo_root": str(repo_root),
+                "max_lines": max_lines,
+            },
             [*self._binary_command(), *args],
             failure_label="Claude lifecycle hook",
         )
@@ -1905,7 +1925,7 @@ class RustRouteAdapter:
         return args
 
     def _resolved_binary(self) -> Path | None:
-        return resolve_router_binary_candidate(self.release_bin, self.debug_bin)
+        return resolve_binary_candidate(self.release_bin, self.debug_bin)
 
     def _fresh_resolved_binary(self) -> Path | None:
         resolved_binary = self._resolved_binary()
@@ -1928,21 +1948,8 @@ class RustRouteAdapter:
             "running the Python host runtime."
         )
 
-    def _cached_resolved_binary(self) -> Path | None:
-        cached = self._cached_runtime_binary
-        if cached is not _ROUTER_BINARY_CACHE_UNSET:
-            return cached if isinstance(cached, Path) else None
-        resolved_binary = self._resolved_binary()
-        if resolved_binary is not None:
-            self._cached_runtime_binary = resolved_binary
-        return resolved_binary
-
     def _latest_source_mtime(self) -> float:
-        candidates = [self.router_dir / "Cargo.toml"]
-        source_dir = self.router_dir / "src"
-        if source_dir.is_dir():
-            candidates.extend(source_dir.rglob("*.rs"))
-        return max((path.stat().st_mtime for path in candidates if path.exists()), default=0.0)
+        return latest_crate_source_mtime(self.router_dir)
 
     def _cached_source_mtime(self) -> float:
         cached = self._cached_latest_source_mtime
@@ -1952,7 +1959,6 @@ class RustRouteAdapter:
         return cached
 
     def _invalidate_binary_cache(self) -> None:
-        self._cached_runtime_binary = _ROUTER_BINARY_CACHE_UNSET
         self._cached_latest_source_mtime = None
 
     def _run_json_command(self, command: list[str], *, failure_label: str) -> dict[str, Any]:
@@ -1993,16 +1999,17 @@ class RustRouteAdapter:
             self._reset_stdio_client()
             return self._stdio_client().request(operation, payload)
 
-    def _stdio_client(self) -> _RouterStdioClient:
+    def _stdio_client(self) -> _RouterStdioClientPool:
         command = self._stdio_command()
         key = self._stdio_client_key(command)
         with _STDIO_CLIENTS_LOCK:
             client = _STDIO_CLIENTS.get(key)
             if client is None:
-                client = _RouterStdioClient(
+                client = _RouterStdioClientPool(
                     command,
                     cwd=self.codex_home,
                     timeout_seconds=self.timeout_seconds,
+                    size=self._stdio_pool_size(),
                 )
                 _STDIO_CLIENTS[key] = client
             return client
@@ -2020,7 +2027,16 @@ class RustRouteAdapter:
             binary_path = Path(command[0])
             if binary_path.exists():
                 binary_mtime = str(binary_path.stat().st_mtime_ns)
-        return (*command, f"binary-mtime={binary_mtime}", str(self.codex_home))
+        return (*command, f"binary-mtime={binary_mtime}", str(self.codex_home), f"pool-size={self._stdio_pool_size()}")
+
+    def _stdio_pool_size(self) -> int:
+        raw = os.environ.get("CODEX_ROUTER_STDIO_POOL_SIZE")
+        if raw is not None:
+            try:
+                return max(1, int(raw))
+            except ValueError:
+                pass
+        return 4
 
     def _uses_default_json_runner(self) -> bool:
         return getattr(self._run_json_command, "__func__", None) is RustRouteAdapter._run_json_command

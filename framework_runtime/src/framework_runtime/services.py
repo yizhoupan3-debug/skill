@@ -298,6 +298,10 @@ def _runtime_background_orchestration_contract(
         "queue_model": "bounded-async-host",
         "session_takeover_model": "state-store-lease-arbitration",
         "state_artifact": "runtime_background_jobs.json",
+        "max_background_jobs": 16,
+        "background_job_timeout_seconds": 600.0,
+        "admission_owner": "rust-background-control-policy",
+        "queue_concurrency_owner": "rust-control-plane",
         "active_statuses": list(_DEFAULT_BACKGROUND_ACTIVE_STATUSES),
         "terminal_statuses": list(_DEFAULT_BACKGROUND_TERMINAL_STATUSES),
         "policy_operations": [
@@ -486,6 +490,22 @@ class SandboxCapabilityViolation(RuntimeError):
 
 class SandboxBudgetExceeded(RuntimeError):
     """Raised when runtime sandbox budget enforcement rejects one execution."""
+
+
+def _runtime_host_concurrency_contract(control_plane_descriptor: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return the Rust-owned runtime concurrency contract when available."""
+
+    runtime_host = _runtime_host_contract(control_plane_descriptor)
+    contract = runtime_host.get("concurrency_contract")
+    return dict(contract) if isinstance(contract, Mapping) else {}
+
+
+def _runtime_subagent_limit_contract(control_plane_descriptor: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return the Rust-owned subagent limit contract projected through middleware."""
+
+    service_descriptor = _runtime_control_plane_service_descriptor(control_plane_descriptor, "middleware")
+    contract = service_descriptor.get("subagent_limit_contract")
+    return dict(contract) if isinstance(contract, Mapping) else {}
 
 
 @dataclass(slots=True)
@@ -1209,6 +1229,7 @@ class StateService:
             storage_backend=getattr(checkpointer, "storage_backend", None),
             control_plane_descriptor=control_plane_descriptor,
         )
+        self._session_release_events: dict[str, asyncio.Event] = {}
 
     def refresh_control_plane(self, control_plane_descriptor: Mapping[str, Any] | None) -> None:
         self._control_plane_descriptor = dict(control_plane_descriptor or {})
@@ -1267,6 +1288,22 @@ class StateService:
             operation=operation,
         )
 
+    def _session_release_event(self, session_id: str) -> asyncio.Event:
+        event = self._session_release_events.get(session_id)
+        if event is None or event.is_set():
+            event = asyncio.Event()
+            self._session_release_events[session_id] = event
+        return event
+
+    def notify_session_release(self, session_id: str | None) -> None:
+        """Wake any waiters watching the release of one background session."""
+
+        if session_id is None:
+            return
+        event = self._session_release_events.get(session_id)
+        if event is not None:
+            event.set()
+
     async def wait_for_session_release(
         self,
         *,
@@ -1276,11 +1313,20 @@ class StateService:
     ) -> None:
         """Wait until the session reservation is released by the active job."""
 
+        if self.get_active_job(session_id) is None:
+            return
         deadline = asyncio.get_running_loop().time() + timeout_seconds
-        while asyncio.get_running_loop().time() < deadline:
+        while True:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                break
+            event = self._session_release_event(session_id)
+            try:
+                await asyncio.wait_for(event.wait(), timeout=min(remaining, poll_interval_seconds))
+            except TimeoutError:
+                pass
             if self.get_active_job(session_id) is None:
                 return
-            await asyncio.sleep(poll_interval_seconds)
         raise RuntimeError(
             f"Timed out waiting for background session {session_id!r} to become available."
         )
@@ -1884,8 +1930,8 @@ class BackgroundRuntimeHost:
         self._jobs_lock: asyncio.Lock = asyncio.Lock()
         self._job_semaphore: asyncio.Semaphore = asyncio.Semaphore(self._max_background_jobs)
         self.background_jobs: dict[str, BackgroundRunStatus] = self.state_service.snapshot()
-        self._background_tasks: dict[str, asyncio.Task[None]] = {}
         self.background_requests: dict[str, BackgroundRunRequest] = {}
+        self._background_tasks: dict[str, asyncio.Task[None]] = {}
 
     @property
     def jobs_lock(self) -> asyncio.Lock:
@@ -2557,6 +2603,9 @@ class BackgroundRuntimeHost:
                 operation=operation,
             )
 
+    def _notify_session_release(self, session_id: str | None) -> None:
+        self.state_service.notify_session_release(session_id)
+
     async def _wait_for_session_release(self, session_id: str, *, timeout_seconds: float = 5.0) -> None:
         """Wait until a session is no longer reserved by active background work."""
 
@@ -2787,6 +2836,7 @@ class BackgroundRuntimeHost:
                             ),
                         },
                     )
+                    self._notify_session_release(completed.session_id)
                     self._flush_background_trace_metadata(
                         request=request,
                         result=result,
@@ -3026,6 +3076,7 @@ class BackgroundRuntimeHost:
                 **self._background_trace_context(interrupted),
             },
         )
+        self._notify_session_release(interrupted.session_id)
         request = self.background_requests.get(job_id)
         if request is not None:
             self._flush_background_terminal_trace_metadata(
