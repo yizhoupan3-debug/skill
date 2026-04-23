@@ -18,20 +18,6 @@ const pptx = new pptxgen();
 pptx.layout = "LAYOUT_WIDE";
 pptx.title = "Auto-Pagination 压力测试";
 pptx.lang = "zh-CN";
-pptx.defineSlideMaster({
-  title: "OFFICECLI_SEMANTIC",
-  background: { color: palette?.stage || "000000" },
-  objects: [
-    {
-      placeholder: {
-        options: {
-          name: "officecli_title",
-          type: "title",
-        },
-      },
-    },
-  ],
-});
 
 const palette = {
   "stage": "000000",
@@ -45,6 +31,21 @@ const palette = {
   "chip": "F4F4EF",
   "chipText": "111111"
 };
+
+pptx.defineSlideMaster({
+  title: "OFFICECLI_SEMANTIC",
+  background: { color: palette.stage },
+  objects: [
+    {
+      placeholder: {
+        options: {
+          name: "officecli_title",
+          type: "title",
+        },
+      },
+    },
+  ],
+});
 
 // ── Reusable helpers ──
 function addTopLabel(slide, text) {

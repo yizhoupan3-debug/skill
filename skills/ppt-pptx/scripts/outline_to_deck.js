@@ -144,6 +144,8 @@ function generatePreamble(outline, palette, dynamicGlow) {
   if (dynamicGlow) p.glow = dynamicGlow;
 
   return `const fs = require("fs");
+const path = require("path");
+const { spawnSync } = require("child_process");
 const pptxgen = require("pptxgenjs");
 const {
   imageSizingCrop,
@@ -164,6 +166,21 @@ pptx.lang = "zh-CN";
 
 const palette = ${JSON.stringify(p, null, 2)};
 
+pptx.defineSlideMaster({
+  title: "OFFICECLI_SEMANTIC",
+  background: { color: palette.stage },
+  objects: [
+    {
+      placeholder: {
+        options: {
+          name: "officecli_title",
+          type: "title",
+        },
+      },
+    },
+  ],
+});
+
 // ── Reusable helpers ──
 function addTopLabel(slide, text) {
   slide.addText(text, { x: 0.9, y: 0.38, w: 2.0, h: 0.12, ...getTypography("overline", { color: palette.textMute, charSpace: 1.2 }) });
@@ -181,7 +198,7 @@ function addMetricChip(slide, x, y, w, value, label, delay = 0) {
 
 function addSectionTitle(slide, cn, en, x, y, w) {
   let cnW = Math.min(w * 0.62, 4.4);
-  slide.addText(cn, { x, y, w: cnW, h: 0.24, ...getSmartTypography("h2", cn, cnW, 0.24, { color: palette.text, animate: { type: "fade", prop: "in" } }) });
+  slide.addText(cn, { x, y, w: cnW, h: 0.24, placeholder: "officecli_title", ...getSmartTypography("h2", cn, cnW, 0.24, { color: palette.text, animate: { type: "fade", prop: "in" } }) });
   if (en) slide.addText(en, { x, y: y + 0.34, w, h: 0.14, ...getSmartTypography("body2", en, w, 0.14, { color: palette.textSoft, bold: true, animate: { type: "fade", prop: "in", delay: 0.1 } }) });
 }
 
@@ -227,6 +244,15 @@ function addOptionalImage(slide, assetPath, sizingFactory, fallback = {}) {
 }
 
 const totalSlides = ${outline.totalSlides || (outline.slides || []).length + 2};
+
+function sanitizeGeneratedDeck(fileName) {
+  const script = path.resolve(process.cwd(), "sanitize_pptx.py");
+  if (!fs.existsSync(script)) return;
+  const completed = spawnSync("python3", [script, fileName], { stdio: "inherit" });
+  if (completed.status !== 0) {
+    throw new Error(\`sanitize_pptx.py failed for \${fileName}\`);
+  }
+}
 `;
 }
 
@@ -234,7 +260,7 @@ function generateCover(outline) {
   const coverImage = outline.coverImage || "./assets/cover.jpg";
   return `
 // ── Cover ──
-const cover = pptx.addSlide();
+const cover = pptx.addSlide({ masterName: "OFFICECLI_SEMANTIC" });
 cover.background = { color: palette.stage };
 addOptionalImage(cover, ${JSON.stringify(coverImage)}, (assetPath) => imageSizingCrop(assetPath, 0, 0, 13.333, 7.5), {
   x: 0, y: 0, w: 13.333, h: 7.5, fill: palette.panelSoft, transparency: 0, label: "COVER IMAGE OPTIONAL"
@@ -242,7 +268,7 @@ addOptionalImage(cover, ${JSON.stringify(coverImage)}, (assetPath) => imageSizin
 cover.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.333, h: 7.5, line: { color: palette.stage, transparency: 100 }, fill: { color: palette.stage, transparency: 40 } });
 cover.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 6.1, h: 7.5, line: { color: palette.stage, transparency: 100 }, fill: { color: palette.stage, transparency: 22 } });
 addTopLabel(cover, "PRESENTATION");
-cover.addText(${JSON.stringify(outline.title || "Title")}, { x: 0.92, y: 1.76, w: 4.64, h: 1.06, ...getTypography("display", { color: palette.text, animate: { type: "fade", prop: "in", delay: 0.1 } }) });
+cover.addText(${JSON.stringify(outline.title || "Title")}, { x: 0.92, y: 1.76, w: 4.64, h: 1.06, placeholder: "officecli_title", ...getTypography("display", { color: palette.text, animate: { type: "fade", prop: "in", delay: 0.1 } }) });
 ${outline.subtitle ? `cover.addText(${JSON.stringify(outline.subtitle)}, { x: 0.96, y: 3.02, w: 4.48, h: 0.66, ...getTypography("body1", { color: palette.textSoft, animate: { type: "fade", prop: "in", delay: 0.3 } }) });` : ""}
 ${outline.presenter || outline.date ? `cover.addText(${JSON.stringify([outline.presenter, outline.date].filter(Boolean).join(" / "))}, { x: 0.96, y: 4.48, w: 3.0, h: 0.14, ...getTypography("body2", { color: palette.textSoft, animate: { type: "fade", prop: "in", delay: 0.5 } }) });` : ""}
 cover.addText("01 / " + String(totalSlides).padStart(2, "0"), { x: 12.2, y: 7.03, w: 0.4, h: 0.12, ...getTypography("caption", { color: palette.textMute, align: "right" }) });
@@ -271,7 +297,7 @@ function generateContentSlide(slide, index, sectionNum) {
 
   let code = `
 // ── Slide ${index + 2}: ${slide.title || "Untitled"} (${pattern}) ──
-const slide${index} = pptx.addSlide();
+const slide${index} = pptx.addSlide({ masterName: "OFFICECLI_SEMANTIC" });
 slide${index}.background = { color: palette.stage };
 addTopLabel(slide${index}, "SECTION ${String(sectionNum).padStart(2, "0")}");
 addSectionTitle(slide${index}, ${JSON.stringify(cleanSlide.title || "")}, ${JSON.stringify(cleanSlide.subtitle || "")}, 0.92, 0.96, 5.0);
@@ -407,14 +433,14 @@ function generateClosing(outline) {
   const coverImage = outline.coverImage || "./assets/cover.jpg";
   return `
 // ── Closing ──
-const closing = pptx.addSlide();
+const closing = pptx.addSlide({ masterName: "OFFICECLI_SEMANTIC" });
 closing.background = { color: palette.stage };
 addOptionalImage(closing, ${JSON.stringify(coverImage)}, (assetPath) => imageSizingCrop(assetPath, 0, 0, 13.333, 7.5), {
   x: 0, y: 0, w: 13.333, h: 7.5, fill: palette.panelSoft, transparency: 0, label: "COVER IMAGE OPTIONAL"
 });
 closing.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.333, h: 7.5, line: { color: palette.stage, transparency: 100 }, fill: { color: palette.stage, transparency: 52 } });
 addTopLabel(closing, "FINAL SLIDE");
-closing.addText("THANK YOU", { x: 4.18, y: 2.1, w: 4.98, h: 0.42, ...getTypography("display", { color: palette.text, align: "center", animate: { type: "fade", prop: "in", delay: 0.2 } }) });
+closing.addText("THANK YOU", { x: 4.18, y: 2.1, w: 4.98, h: 0.42, placeholder: "officecli_title", ...getTypography("display", { color: palette.text, align: "center", animate: { type: "fade", prop: "in", delay: 0.2 } }) });
 closing.addText("" + String(totalSlides).padStart(2, "0") + " / " + String(totalSlides).padStart(2, "0"), { x: 12.2, y: 7.03, w: 0.4, h: 0.12, ...getTypography("caption", { color: palette.textMute, align: "right" }) });
 addBottomGlow(closing);
 finalizeSlide(closing, { skipOverlap: true });
@@ -473,7 +499,7 @@ async function main() {
   }
 
   code += generateClosing(outline);
-  code += `\npptx.writeFile({ fileName: "deck.pptx" });\n`;
+  code += `\nasync function writeDeck() {\n  await pptx.writeFile({ fileName: "deck.pptx" });\n  sanitizeGeneratedDeck("deck.pptx");\n}\n\nwriteDeck().catch((error) => {\n  console.error(error);\n  process.exit(1);\n});\n`;
 
   fs.writeFileSync(outputFile, code, "utf8");
   console.log(`✅ Generated ${outputFile} with ${slides.length + 2} slides (cover + ${slides.length} content + closing)`);
