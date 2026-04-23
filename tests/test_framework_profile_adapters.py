@@ -28,14 +28,6 @@ from framework_runtime.framework_artifact_contracts import (
     build_cli_family_capability_discovery as rust_build_cli_family_capability_discovery,
     build_codex_dual_entry_parity_snapshot as rust_build_codex_dual_entry_parity_snapshot,
 )
-from framework_runtime.control_plane_contracts import (
-    build_control_plane_contract_descriptors,
-    build_delegation_contract,
-    build_execution_controller_contract,
-    build_execution_kernel_live_fallback_retirement_status,
-    build_execution_kernel_live_response_serialization_contract,
-    build_supervisor_state_contract,
-)
 from framework_runtime.framework_profile import (
     CORE_CAPABILITIES,
     FRAMEWORK_SHARED_CONTRACT_FIELDS,
@@ -93,6 +85,10 @@ ROUTER_RS_MAIN = PROJECT_ROOT / "scripts" / "router-rs" / "src" / "main.rs"
 ROUTER_RS_PROFILE_MOD = PROJECT_ROOT / "scripts" / "router-rs" / "src" / "framework_profile.rs"
 ROUTER_RS_DEBUG_BIN = PROJECT_ROOT / "scripts" / "router-rs" / "target" / "debug" / "router-rs"
 ROUTER_RS_RELEASE_BIN = PROJECT_ROOT / "scripts" / "router-rs" / "target" / "release" / "router-rs"
+
+
+def _control_plane_contracts() -> dict[str, Any]:
+    return RustRouteAdapter(PROJECT_ROOT).control_plane_contract_descriptors()
 
 
 def _router_rs_command() -> list[str]:
@@ -351,6 +347,30 @@ def test_rust_route_adapter_health_reuses_cached_source_mtime() -> None:
         second = adapter.health()
 
         assert first["latest_source_mtime"] == second["latest_source_mtime"]
+
+
+def test_rust_route_adapter_binary_resolution_reuses_cached_source_mtime() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        codex_home = Path(tmpdir)
+        router_dir = codex_home / "scripts" / "router-rs"
+        source_dir = router_dir / "src"
+        debug_bin = router_dir / "target" / "debug" / "router-rs"
+        source_dir.mkdir(parents=True)
+        debug_bin.parent.mkdir(parents=True)
+        (router_dir / "Cargo.toml").write_text("[package]\nname='router-rs'\nversion='0.1.0'\n", encoding="utf-8")
+        (source_dir / "main.rs").write_text("fn main() {}\n", encoding="utf-8")
+        debug_bin.write_text("debug", encoding="utf-8")
+
+        os.utime(router_dir / "Cargo.toml", (1_700_000_050, 1_700_000_050))
+        os.utime(source_dir / "main.rs", (1_700_000_100, 1_700_000_100))
+        os.utime(debug_bin, (1_700_000_200, 1_700_000_200))
+
+        adapter = RustRouteAdapter(codex_home)
+        assert adapter._binary_command() == [str(debug_bin)]
+        adapter._latest_source_mtime = lambda: (_ for _ in ()).throw(
+            AssertionError("binary resolution should reuse cached source mtime")
+        )
+        assert adapter._binary_command() == [str(debug_bin)]
 
 
 def test_rust_route_adapter_requires_prebuilt_binary_when_none_exists() -> None:
@@ -1930,13 +1950,19 @@ def test_legacy_codex_desktop_alias_compiler_drops_the_old_compatibility_escape_
     assert not hasattr(root_package, "build_upgrade_compatibility_matrix")
     assert not hasattr(root_package, "compile_codex_common_adapter")
     assert not hasattr(root_package, "build_codex_desktop_alias_retirement_status")
+    assert not hasattr(root_package, "build_execution_controller_contract")
+    assert not hasattr(root_package, "build_delegation_contract")
+    assert not hasattr(root_package, "build_supervisor_state_contract")
+    assert not hasattr(root_package, "build_execution_kernel_live_fallback_retirement_status")
+    assert not hasattr(root_package, "build_execution_kernel_live_response_serialization_contract")
     assert not compatibility_module_path.exists()
 
 
 def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> None:
-    execution = build_execution_controller_contract()
-    delegation = build_delegation_contract()
-    supervisor = build_supervisor_state_contract()
+    contracts = _control_plane_contracts()
+    execution = contracts["execution_controller_contract"]
+    delegation = contracts["delegation_contract"]
+    supervisor = contracts["supervisor_state_contract"]
 
     assert execution["framework_truth"] == "framework_core"
     assert execution["status_contract"] == "execution_controller_contract_v1"
@@ -2042,8 +2068,7 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert supervisor["compatibility_rules"]["rust_may_validate_or_emit"] is True
     assert supervisor["compatibility_rules"]["no_shadow_replacement_artifact"] is True
 
-
-    status = build_execution_kernel_live_fallback_retirement_status()
+    status = contracts["execution_kernel_live_fallback_retirement_status"]
 
     assert status["framework_truth"] == "framework_core"
     assert status["status_contract"] == "execution_kernel_live_fallback_retirement_status_v1"
@@ -2099,23 +2124,26 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
         status["guardrails"]["claude_host_runtime_semantics_remain_host_owned"] is True
     )
 
+def test_control_plane_contract_descriptors_come_from_rust() -> None:
+    descriptors = _control_plane_contracts()
 
-def test_control_plane_contract_descriptors_share_one_python_source() -> None:
-    descriptors = build_control_plane_contract_descriptors()
-
-    assert descriptors["execution_controller_contract"] == build_execution_controller_contract()
-    assert descriptors["delegation_contract"] == build_delegation_contract()
-    assert descriptors["supervisor_state_contract"] == build_supervisor_state_contract()
-    assert descriptors["execution_kernel_live_fallback_retirement_status"] == (
-        build_execution_kernel_live_fallback_retirement_status()
+    assert descriptors["execution_controller_contract"]["status_contract"] == (
+        "execution_controller_contract_v1"
     )
-    assert descriptors["execution_kernel_live_response_serialization_contract"] == (
-        build_execution_kernel_live_response_serialization_contract()
+    assert descriptors["delegation_contract"]["status_contract"] == "delegation_contract_v4"
+    assert descriptors["supervisor_state_contract"]["status_contract"] == (
+        "supervisor_state_contract_v3"
     )
+    assert descriptors["execution_kernel_live_fallback_retirement_status"]["status_contract"] == (
+        "execution_kernel_live_fallback_retirement_status_v1"
+    )
+    assert descriptors["execution_kernel_live_response_serialization_contract"][
+        "status_contract"
+    ] == "execution_kernel_live_response_serialization_contract_v1"
 
 
 def test_execution_kernel_live_response_serialization_contract_stays_contract_only() -> None:
-    status = build_execution_kernel_live_response_serialization_contract()
+    status = _control_plane_contracts()["execution_kernel_live_response_serialization_contract"]
     core_contract = build_execution_kernel_live_response_serialization_contract_core()
 
     assert status["framework_truth"] == "framework_core"

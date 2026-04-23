@@ -15,10 +15,10 @@ if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
 from framework_runtime.config import RuntimeSettings
-from framework_runtime.execution_kernel import ExecutionKernelRequest
 from framework_runtime.runtime import CodexAgnoRuntime
 from framework_runtime.schemas import (
     BackgroundRunRequest,
+    ExecutionKernelRequest,
     RoutingResult,
     RunTaskResponse,
     SkillMetadata,

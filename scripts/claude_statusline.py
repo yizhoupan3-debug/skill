@@ -12,11 +12,7 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.memory_support import classify_runtime_continuity, load_runtime_snapshot
-
-
-def _read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8") if path.is_file() else ""
+from framework_runtime.rust_router import get_cached_route_adapter
 
 
 def _read_json(path: Path) -> dict:
@@ -25,58 +21,24 @@ def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _task_scoped_runtime_roots(repo_root: Path) -> list[Path]:
-    """Return task-scoped and compatibility-mirror roots in preferred order."""
-
-    current_root = repo_root / "artifacts" / "current"
-    roots: list[Path] = []
-    seen: set[Path] = set()
-    for pointer_name in ("focus_task.json", "active_task.json"):
-        pointer = _read_json(current_root / pointer_name)
-        task_id = str(pointer.get("task_id") or "").strip()
-        if not task_id:
-            continue
-        task_root = current_root / task_id
-        if task_root.is_dir() and task_root not in seen:
-            roots.append(task_root)
-            seen.add(task_root)
-    if current_root.is_dir():
-        roots.append(current_root)
-    return roots
+def _adapter(repo_root: Path):
+    framework_root = Path(__file__).resolve().parents[1]
+    return get_cached_route_adapter(framework_root)
 
 
-def _first_runtime_text(paths: list[Path]) -> str:
-    """Return the first non-empty runtime text payload."""
-
-    for path in paths:
-        text = _read_text(path).strip()
-        if text:
-            return text
-    return ""
-
-
-def _first_runtime_json(paths: list[Path]) -> dict:
-    """Return the first non-empty runtime JSON payload."""
-
-    for path in paths:
-        payload = _read_json(path)
-        if payload:
-            return payload
-    return {}
-
-
-def _parse_summary(summary_text: str) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for line in summary_text.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("- "):
-            continue
-        key, _, value = stripped[2:].partition(":")
-        key = key.strip()
-        value = value.strip()
-        if key and value:
-            result[key] = value
-    return result
+def _route_from_snapshot_payload(snapshot: dict) -> list[str]:
+    continuity = snapshot.get("continuity", {})
+    if isinstance(continuity, dict):
+        route = continuity.get("route")
+        if isinstance(route, list) and route:
+            return [str(item).strip() for item in route if str(item).strip()]
+    current_root = Path(str(snapshot.get("current_root") or ""))
+    if current_root:
+        trace_payload = _read_json(current_root / "TRACE_METADATA.json")
+        skills = trace_payload.get("matched_skills")
+        if isinstance(skills, list):
+            return [str(item).strip() for item in skills if str(item).strip()]
+    return []
 
 
 def _short_route(skills: list[str]) -> str:
@@ -138,26 +100,18 @@ def _decision_hint(blockers: list[str], next_actions: list[str], *, git_state: s
 
 
 def render_statusline(repo_root: Path) -> str:
-    runtime_roots = _task_scoped_runtime_roots(repo_root)
-    snapshot = load_runtime_snapshot(
-        repo_root,
-        repair=False,
-        include_contract_snapshots=False,
-    )
-    continuity = classify_runtime_continuity(snapshot)
-    supervisor_state = snapshot.supervisor_state if isinstance(snapshot.supervisor_state, dict) else {}
-
-    fallback_summary = _parse_summary(_read_text(repo_root / "SESSION_SUMMARY.md"))
-    fallback_trace = _read_json(repo_root / "TRACE_METADATA.json")
-    fallback_next_actions = _read_json(repo_root / "NEXT_ACTIONS.json")
-    use_root_fallback = not runtime_roots and (
-        bool(fallback_summary) or bool(fallback_trace) or bool(fallback_next_actions)
+    snapshot = _adapter(repo_root).framework_runtime_snapshot(repo_root=repo_root)
+    continuity = snapshot.get("continuity", {}) if isinstance(snapshot.get("continuity"), dict) else {}
+    supervisor_state = (
+        snapshot.get("supervisor_state", {})
+        if isinstance(snapshot.get("supervisor_state"), dict)
+        else {}
     )
 
     task = str(continuity.get("task") or supervisor_state.get("task_summary") or "none")
     phase = str(continuity.get("phase") or supervisor_state.get("active_phase") or "idle")
     status = str(continuity.get("status") or "unknown")
-    route = _short_route(continuity.get("route") or [])
+    route = _short_route(_route_from_snapshot_payload(snapshot))
     git_state, branch = _git_state(repo_root)
     blockers_list = [
         str(item).strip()
@@ -171,36 +125,11 @@ def render_statusline(repo_root: Path) -> str:
     ]
     blockers = len(blockers_list)
     next_count = len(next_actions_list)
-    if use_root_fallback:
-        task = str(
-            fallback_summary.get("task")
-            or fallback_trace.get("task")
-            or supervisor_state.get("task_summary")
-            or "none"
-        )
-        phase = str(fallback_summary.get("phase") or supervisor_state.get("active_phase") or "idle")
-        status = str(
-            fallback_summary.get("status")
-            or fallback_trace.get("verification_status")
-            or supervisor_state.get("verification", {}).get("verification_status")
-            or "unknown"
-        )
-        route = _short_route(fallback_trace.get("matched_skills") or [])
-        next_actions_list = [
-            str(item).strip()
-            for item in fallback_next_actions.get("next_actions", [])
-            if str(item).strip()
-        ]
-        next_count = len(next_actions_list)
 
-    focus_task_id = getattr(snapshot, "focus_task_id", "") or ""
-    known_task_ids = [
-        str(item).strip() for item in getattr(snapshot, "known_task_ids", []) if str(item).strip()
-    ]
+    focus_task_id = str(snapshot.get("focus_task_id") or "")
+    known_task_ids = [str(item).strip() for item in snapshot.get("known_task_ids", []) if str(item).strip()]
     recoverable_task_ids = [
-        str(item).strip()
-        for item in getattr(snapshot, "recoverable_task_ids", [])
-        if str(item).strip()
+        str(item).strip() for item in snapshot.get("recoverable_task_ids", []) if str(item).strip()
     ]
     other_known_count = max(len(known_task_ids) - (1 if focus_task_id else 0), 0)
     other_recoverable_count = sum(1 for item in recoverable_task_ids if item != focus_task_id)

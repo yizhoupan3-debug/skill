@@ -239,9 +239,9 @@ The implemented runtime control-plane surface in this wave is:
 
 One additional Rust-authority slice is now implemented in this wave:
 
-- `scripts/route.py` is now a Rust transport shim for search / route output,
-  so the non-runtime CLI surface no longer carries a second Python route
-  authority
+- the old `scripts/route.py` Python shim is retired; route/search CLI calls go
+  directly to `router-rs`, so the non-runtime CLI surface no longer carries a
+  second Python route authority
 - `router-rs` now also emits a stable route-policy payload for
   `python/shadow/verify/rust` plus rollback activation, so route mode /
   rollback / primary-authority decisions are no longer hardcoded in Python
@@ -281,9 +281,8 @@ One additional Rust-authority slice is now implemented in this wave:
 
 ### 下一 safe slice
 
-- finish turning route-side compatibility helpers into typed-first seams, so
-  `scripts/route.py` and adjacent evaluation/test helpers stop acting like
-  privileged raw-JSON consumers
+- keep route-side compatibility helpers retired, so adjacent evaluation/test
+  helpers cannot reintroduce privileged raw-JSON Python consumers
 - keep pushing execution-kernel metadata / naming bridge canonicalization
   toward Rust without reopening a Python live authority path
 - keep the native install/bootstrap lane closed: a fresh machine should keep

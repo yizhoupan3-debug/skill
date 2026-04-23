@@ -25,13 +25,6 @@ import framework_runtime.services as runtime_services
 
 from framework_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
 from framework_runtime.config import RuntimeSettings
-from framework_runtime.execution_kernel import (
-    ExecutionKernelRequest,
-    RouterRsInfrastructureError,
-    SandboxExecutionPolicy,
-    SandboxResourceBudget,
-    SandboxRuntimeProbe,
-)
 from framework_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
@@ -42,10 +35,15 @@ from framework_runtime.execution_kernel_contracts import (
 )
 from framework_runtime.middleware import MiddlewareContext
 from framework_runtime.memory import FactMemoryStore
+from framework_runtime.rust_router import RouterRsInfrastructureError
 from framework_runtime.schemas import (
+    ExecutionKernelRequest,
     RouteDecisionContract,
     RouteDiagnosticReport,
     RunTaskResponse,
+    SandboxExecutionPolicy,
+    SandboxResourceBudget,
+    SandboxRuntimeProbe,
     UsageMetrics,
 )
 from framework_runtime.services import (
@@ -62,7 +60,7 @@ from framework_runtime.trace import JsonlTraceEventSink
 
 
 _MINIMAL_SUPERVISOR_STATE = {
-    "version": 1,
+    "schema_version": "supervisor-state-v2",
     "controller": "execution-controller-coding",
     "active_phase": "completed",
     "delegation": {

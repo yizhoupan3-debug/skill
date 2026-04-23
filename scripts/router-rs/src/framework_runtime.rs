@@ -100,8 +100,12 @@ pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String
     Ok(base.canonicalize().unwrap_or(base))
 }
 
-pub fn build_framework_runtime_snapshot_envelope(repo_root: &Path) -> Result<Value, String> {
-    let snapshot = load_framework_runtime_view(repo_root, None, None);
+pub fn build_framework_runtime_snapshot_envelope(
+    repo_root: &Path,
+    artifact_root_override: Option<&Path>,
+    task_id_override: Option<&str>,
+) -> Result<Value, String> {
+    let snapshot = load_framework_runtime_view(repo_root, artifact_root_override, task_id_override);
     let continuity = classify_runtime_continuity(&snapshot);
     let continuity_route = continuity
         .get("route")
@@ -3120,10 +3124,10 @@ fn default_runbooks() -> String {
         "",
         "## 标准操作",
         "",
-        "- 统一维护入口：python3 scripts/run_memory_automation.py --workspace <workspace>",
-        "- 需要迁移旧 artifact 布局时显式执行：python3 scripts/run_memory_automation.py --workspace <workspace> --apply-artifact-migrations",
-        "- 合并稳定记忆：python3 scripts/consolidate_memory.py --workspace <workspace>",
-        "- 召回上下文：python3 scripts/retrieve_memory.py --workspace <workspace> --mode stable|active|history|debug --topic <关键词>",
+        "- 统一维护入口：cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace>",
+        "- 需要迁移旧 artifact 布局时显式执行：cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace> --apply-artifact-migrations",
+        "- 合并稳定记忆：cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4",
+        "- 召回上下文：cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --framework-memory-recall-json --repo-root <repo_root> --framework-memory-mode stable|active|history|debug --query <关键词> --limit <N>",
         "- 生命周期收口：./scripts/router-rs/target/release/router-rs --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4",
         "- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。",
         "",

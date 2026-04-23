@@ -1553,38 +1553,42 @@ class RuntimeTraceRecorder:
             retry_count if retry_count is not None else self._count_retries_in(events)
         )
 
+        trace_event_sink_schema_version = (
+            self.event_sink.schema_version if self.event_sink is not None else None
+        )
+        control_plane = self._control_plane.model_dump(mode="json")
+        serialized_events = [event.model_dump(mode="json") for event in events]
+
         payload = {
-            "version": 1,
-            "schema_version": self.metadata_schema_version,
-            "metadata_schema_version": self.metadata_schema_version,
-            "ts": _now_iso(),
+            "output_path": str(self.output_path),
             "task": task,
-            "framework_version": self.framework_version,
-            "trace_event_schema_version": self.event_schema_version,
-            "trace_event_sink_schema_version": self.event_sink.schema_version if self.event_sink is not None else None,
-            "routing_runtime_version": _load_routing_runtime_version(),
             "matched_skills": matched_skills,
-            "decision": {
-                "owner": owner,
-                "gate": gate,
-                "overlay": overlay,
-            },
+            "owner": owner,
+            "gate": gate,
+            "overlay": overlay,
             "reroute_count": resolved_reroute_count,
             "retry_count": resolved_retry_count,
             "artifact_paths": artifact_paths,
             "verification_status": verification_status,
+            "framework_version": self.framework_version,
+            "metadata_schema_version": self.metadata_schema_version,
+            "runtime_path": str(_default_routing_runtime_path()),
+            "trace_event_schema_version": self.event_schema_version,
+            "trace_event_sink_schema_version": trace_event_sink_schema_version,
             "parallel_group": parallel_group,
             "supervisor_projection": supervisor_projection,
-            "control_plane": self._control_plane.model_dump(mode="json"),
+            "control_plane": control_plane,
             "stream": stream_state,
-            "events": [event.model_dump() for event in events],
+            "events": serialized_events,
         }
-        serialized = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
-        if self.storage_backend is None:
-            self.output_path.parent.mkdir(parents=True, exist_ok=True)
-            self.output_path.write_text(serialized, encoding="utf-8")
-        else:
-            self.storage_backend.write_text(self.output_path, serialized)
+        if self.storage_backend is not None:
+            payload["write_outputs"] = False
+        resolved = self._rust_adapter.write_trace_metadata(payload)
+        if self.storage_backend is not None:
+            payload_text = resolved.get("payload_text")
+            if not isinstance(payload_text, str):
+                raise RuntimeError("Rust trace metadata writer returned a missing payload_text.")
+            self.storage_backend.write_text(self.output_path, payload_text)
 
     def describe_stream(self) -> dict[str, Any]:
         """Describe the resumable event stream seam exposed by the recorder."""

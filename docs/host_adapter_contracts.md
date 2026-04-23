@@ -275,8 +275,9 @@ continuity lane 里保留。
 - `emit_framework_contract_artifacts(...)`: emits the core bridge / contract artifact set under `default/`; fallback host artifacts (`aionrs_companion_adapter`, `aionui_host_adapter`, `generic_host_adapter`) go to `fallback/`, legacy alias inventory / retirement status go to `continuity/`, and Rust companion outputs go to `rust/`, all behind explicit opt-in lanes where applicable.
 - `router-rs --profile-json --framework-profile <path>` for Rust-side profile compilation
 - thin projection / validation helpers used by the adapter contract and tests
-- `scripts/materialize_cli_host_entrypoints.py` for repo-level `AGENTS.md` /
-  `CLAUDE.md` / `GEMINI.md` materialization plus `.claude/` / `.gemini/` bootstrap
+- `router-rs --sync-host-entrypoints-json --repo-root <repo_root>` for repo-level
+  `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` materialization plus `.claude/` /
+  `.gemini/` bootstrap
 
 这为下一步继续把 CLI-family parity、artifact layout、Rust contract lane 收口到
 跨宿主 CLI 主线打下接口基础，并保持 adapter 只做编译与投影，不承接

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import sys
 from dataclasses import dataclass, field
@@ -14,15 +15,8 @@ from typing import Any, Mapping
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.memory_support import (
-    DEFAULT_MEMORY_ROOT,
-    current_local_timestamp,
-    ensure_workspace_memory_dir,
-    safe_slug,
-    workspace_sqlite_path,
-)
-
 SCHEMA_VERSION = "1"
+DEFAULT_MEMORY_ROOT = Path.home() / ".codex" / "memories"
 DEFAULT_DB_FILENAME = "memory.sqlite3"
 DEFAULT_STATUS = "active"
 ALLOWED_STATUSES = {"active", "superseded", "deprecated"}
@@ -115,7 +109,27 @@ def _normalize_mapping(value: Any) -> dict[str, Any]:
 
 
 def _now() -> str:
-    return current_local_timestamp()
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _safe_slug(value: str, fallback: str = "unknown") -> str:
+    slug = re.sub(r"[^\w.-]+", "-", value, flags=re.UNICODE)
+    slug = re.sub(r"-{2,}", "-", slug).strip("._-")
+    return slug or fallback
+
+
+def _workspace_dir(workspace: str, memory_root: Path | None = None) -> Path:
+    return (memory_root or DEFAULT_MEMORY_ROOT).expanduser().resolve() / _safe_slug(workspace)
+
+
+def _workspace_sqlite_path(workspace: str, memory_root: Path | None = None) -> Path:
+    return _workspace_dir(workspace, memory_root) / DEFAULT_DB_FILENAME
+
+
+def _ensure_workspace_memory_dir(workspace: str, memory_root: Path | None = None) -> Path:
+    path = _workspace_dir(workspace, memory_root)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def _tokenize(query: str) -> list[str]:
@@ -187,8 +201,8 @@ class MemoryStore:
             ws_dir = resolved_dir.expanduser().resolve()
             ws_dir.mkdir(parents=True, exist_ok=True)
             return cls(ws_dir / db_filename, workspace)
-        ensure_workspace_memory_dir(workspace, memory_root)
-        return cls(workspace_sqlite_path(workspace, memory_root), workspace)
+        _ensure_workspace_memory_dir(workspace, memory_root)
+        return cls(_workspace_sqlite_path(workspace, memory_root), workspace)
 
     def connect(self) -> sqlite3.Connection:
         """Create a configured SQLite connection."""

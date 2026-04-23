@@ -16,14 +16,6 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-from framework_runtime.execution_kernel import (
-    ExecutionKernelRequest,
-    RouterRsInfrastructureError,
-    build_router_rs_execution_request_payload,
-    decode_router_rs_execution_payload,
-    execute_router_rs_request,
-    preview_router_rs_request_prompt,
-)
 from framework_runtime.execution_kernel_contracts import (
     DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS,
     EXECUTION_KERNEL_BRIDGE_AUTHORITY,
@@ -56,8 +48,8 @@ from framework_runtime.execution_kernel_contracts import (
     validate_router_rs_execution_metadata,
     validate_execution_kernel_steady_state_metadata,
 )
-from framework_runtime.rust_router import RustRouteAdapter
-from framework_runtime.schemas import RoutingResult, SkillMetadata
+from framework_runtime.rust_router import RouterRsInfrastructureError, RustRouteAdapter
+from framework_runtime.schemas import ExecutionKernelRequest, RoutingResult, SkillMetadata
 
 
 def _routing_result() -> RoutingResult:
@@ -332,7 +324,7 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
     monkeypatch.setattr(adapter, "execute", fake_execute)
     monkeypatch.setattr(adapter, "runtime_control_plane", _runtime_control_plane_payload)
 
-    response = asyncio.run(execute_router_rs_request(_request(), settings=settings, rust_adapter=adapter))
+    response = asyncio.run(adapter.execute_runtime_request(_request(), settings=settings))
 
     assert response.live_run is True
     assert response.content == "router-rs content"
@@ -368,7 +360,7 @@ def test_router_rs_execution_kernel_decodes_cli_contract(monkeypatch) -> None:
 def test_router_rs_execution_request_ignores_python_prompt_preview_even_for_dry_run() -> None:
     settings = _settings()
 
-    payload = build_router_rs_execution_request_payload(
+    payload = _adapter(settings).build_execution_request_payload(
         _request(dry_run=True),
         settings=settings,
     )
@@ -399,7 +391,7 @@ def test_router_rs_execution_request_prefers_rust_route_snapshot_reasons() -> No
         }
     )
 
-    payload = build_router_rs_execution_request_payload(request, settings=settings)
+    payload = _adapter(settings).build_execution_request_payload(request, settings=settings)
 
     assert payload["reasons"] == ["Trigger phrase matched: 直接做代码."]
 
@@ -441,10 +433,9 @@ def test_preview_router_rs_request_prompt_uses_dry_run_contract(monkeypatch) -> 
     monkeypatch.setattr(adapter, "execute", fake_execute)
     monkeypatch.setattr(adapter, "runtime_control_plane", _runtime_control_plane_payload)
 
-    prompt_preview = preview_router_rs_request_prompt(
+    prompt_preview = adapter.preview_runtime_request_prompt(
         _request(dry_run=True),
         settings=settings,
-        rust_adapter=adapter,
     )
 
     assert prompt_preview == "Rust-owned dry-run prompt"
@@ -489,7 +480,7 @@ def test_router_rs_execution_kernel_rejects_missing_steady_state_metadata(monkey
     monkeypatch.setattr(adapter, "runtime_control_plane", _runtime_control_plane_payload)
 
     with pytest.raises(RuntimeError, match="execution_kernel_delegate_authority"):
-        asyncio.run(execute_router_rs_request(_request(), settings=settings, rust_adapter=adapter))
+        asyncio.run(adapter.execute_runtime_request(_request(), settings=settings))
 
 
 def test_router_rs_execution_kernel_rejects_legacy_delegate_first_metadata(monkeypatch) -> None:
@@ -533,11 +524,7 @@ def test_router_rs_execution_kernel_rejects_legacy_delegate_first_metadata(monke
 
     with pytest.raises(RuntimeError, match="execution_kernel='router-rs'"):
         asyncio.run(
-            execute_router_rs_request(
-                _request(),
-                settings=settings,
-                rust_adapter=adapter,
-            )
+            adapter.execute_runtime_request(_request(), settings=settings)
         )
 
 
@@ -758,7 +745,7 @@ def test_router_rs_execution_kernel_rejects_retired_python_fallback_metadata(
         RouterRsInfrastructureError,
         match=rf"retired compatibility fallback field: {metadata_field}",
     ):
-        asyncio.run(execute_router_rs_request(_request(), settings=settings, rust_adapter=adapter))
+        asyncio.run(adapter.execute_runtime_request(_request(), settings=settings))
 
 
 def test_decode_router_rs_execution_payload_rejects_runtime_renaming_without_contract() -> None:
@@ -797,7 +784,7 @@ def test_decode_router_rs_execution_payload_rejects_runtime_renaming_without_con
     }
 
     with pytest.raises(RuntimeError, match="execution_kernel='rust-runtime-owned-kernel'"):
-        decode_router_rs_execution_payload(payload)
+        _adapter(_settings()).decode_execution_payload(payload)
 
 
 def test_decode_router_rs_execution_payload_accepts_runtime_contract_bundle() -> None:
@@ -846,7 +833,7 @@ def test_decode_router_rs_execution_payload_accepts_runtime_contract_bundle() ->
         ),
     }
 
-    response = decode_router_rs_execution_payload(
+    response = _adapter(_settings()).decode_execution_payload(
         payload,
         kernel_contract=live_contract,
         metadata_bridge=_default_metadata_bridge(),
@@ -916,7 +903,7 @@ def test_execute_router_rs_request_prefers_runtime_control_plane_contract_bundle
         lambda: _runtime_control_plane_payload(live_contract=live_contract),
     )
 
-    response = asyncio.run(execute_router_rs_request(_request(), settings=settings, rust_adapter=adapter))
+    response = asyncio.run(adapter.execute_runtime_request(_request(), settings=settings))
 
     assert response.content == "runtime-owned live result"
     assert response.metadata["execution_kernel"] == "rust-runtime-owned-kernel"

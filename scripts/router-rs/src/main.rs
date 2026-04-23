@@ -1,5 +1,6 @@
 #![recursion_limit = "256"]
 
+use chrono::Utc;
 use clap::{ArgAction, Parser};
 use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -18,18 +19,21 @@ use strsim::jaro_winkler;
 
 mod background_state;
 mod claude_hooks;
+mod framework_mcp;
 mod framework_profile;
 mod framework_runtime;
+mod host_integration;
 mod session_supervisor;
 
 use background_state::handle_background_state_operation;
 use claude_hooks::{
     build_claude_hook_manifest, build_claude_hook_projection, build_claude_project_settings,
-    run_claude_audit_hook, run_claude_lifecycle_hook, run_codex_audit_hook,
+    run_claude_audit_hook, run_claude_lifecycle_hook, run_codex_audit_hook, sync_host_entrypoints,
 };
+use framework_mcp::run_framework_mcp_stdio_loop;
 use framework_profile::{
-    build_codex_artifact_bundle, build_profile_bundle, build_profile_bundle_with_legacy_alias,
-    load_framework_profile,
+    build_codex_artifact_bundle, build_control_plane_contract_descriptors, build_profile_bundle,
+    build_profile_bundle_with_legacy_alias, load_framework_profile,
 };
 use framework_runtime::{
     build_framework_alias_envelope, build_framework_contract_summary_envelope,
@@ -37,6 +41,7 @@ use framework_runtime::{
     build_framework_runtime_snapshot_envelope, resolve_repo_root_arg,
     write_framework_session_artifacts,
 };
+use host_integration::run_host_integration_from_args;
 use session_supervisor::handle_session_supervisor_operation;
 
 #[cfg(test)]
@@ -88,7 +93,9 @@ const TRACE_STREAM_REPLAY_SCHEMA_VERSION: &str = "router-rs-trace-stream-replay-
 const TRACE_STREAM_INSPECT_SCHEMA_VERSION: &str = "router-rs-trace-stream-inspect-v1";
 const TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION: &str =
     "router-rs-trace-compaction-delta-write-v1";
+const TRACE_METADATA_WRITE_SCHEMA_VERSION: &str = "router-rs-trace-metadata-write-v1";
 const TRACE_STREAM_IO_AUTHORITY: &str = "rust-runtime-trace-io";
+const TRACE_METADATA_WRITE_AUTHORITY: &str = "rust-runtime-trace-metadata-writer";
 const RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION: &str = "runtime-observability-exporter-v1";
 const RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION: &str =
     "runtime-observability-metric-record-v1";
@@ -139,6 +146,10 @@ struct Cli {
     #[arg(long)]
     stdio_json: bool,
     #[arg(long)]
+    framework_mcp_stdio: bool,
+    #[arg(long)]
+    framework_mcp_output_dir: Option<PathBuf>,
+    #[arg(long)]
     route_json: bool,
     #[arg(long)]
     route_policy_json: bool,
@@ -187,6 +198,8 @@ struct Cli {
     #[arg(long)]
     write_trace_compaction_delta_json: bool,
     #[arg(long)]
+    write_trace_metadata_json: bool,
+    #[arg(long)]
     framework_runtime_snapshot_json: bool,
     #[arg(long)]
     framework_contract_summary_json: bool,
@@ -200,6 +213,8 @@ struct Cli {
     framework_session_artifact_write_json: bool,
     #[arg(long)]
     framework_alias_json: bool,
+    #[arg(long)]
+    control_plane_contracts_json: bool,
     #[arg(long)]
     framework_alias: Option<String>,
     #[arg(long)]
@@ -225,9 +240,17 @@ struct Cli {
     #[arg(long)]
     claude_project_settings_json: bool,
     #[arg(long)]
+    sync_host_entrypoints_json: bool,
+    #[arg(long)]
+    check_host_entrypoints_json: bool,
+    #[arg(long, num_args = 1.., trailing_var_arg = true, allow_hyphen_values = true)]
+    host_integration: Option<Vec<String>>,
+    #[arg(long)]
     claude_hook_command: Option<String>,
     #[arg(long)]
     claude_hook_audit_command: Option<String>,
+    #[arg(long)]
+    claude_host_hook_command: Option<String>,
     #[arg(long)]
     codex_hook_command: Option<String>,
     #[arg(long, default_value_t = 4)]
@@ -290,6 +313,8 @@ struct Cli {
     trace_stream_inspect_input_json: Option<String>,
     #[arg(long)]
     write_trace_compaction_delta_input_json: Option<String>,
+    #[arg(long)]
+    write_trace_metadata_input_json: Option<String>,
     #[arg(long)]
     route_resolution_input_json: Option<String>,
     #[arg(long)]
@@ -788,6 +813,49 @@ struct TraceCompactionDeltaWriteResponsePayload {
     bytes_written: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TraceMetadataWriteRequestPayload {
+    output_path: String,
+    #[serde(default)]
+    mirror_paths: Vec<String>,
+    #[serde(default = "default_true")]
+    write_outputs: bool,
+    task: String,
+    #[serde(default)]
+    matched_skills: Vec<String>,
+    owner: String,
+    gate: String,
+    overlay: Option<String>,
+    reroute_count: usize,
+    retry_count: usize,
+    #[serde(default)]
+    artifact_paths: Vec<String>,
+    verification_status: String,
+    framework_version: Option<String>,
+    metadata_schema_version: Option<String>,
+    routing_runtime_version: Option<u64>,
+    runtime_path: Option<String>,
+    ts: Option<String>,
+    trace_event_schema_version: Option<String>,
+    trace_event_sink_schema_version: Option<String>,
+    parallel_group: Option<Value>,
+    supervisor_projection: Option<Value>,
+    control_plane: Option<Value>,
+    stream: Option<Value>,
+    events: Option<Vec<Value>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TraceMetadataWriteResponsePayload {
+    schema_version: String,
+    authority: String,
+    output_path: String,
+    mirror_paths: Vec<String>,
+    bytes_written: usize,
+    routing_runtime_version: u64,
+    payload_text: String,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct StdioJsonRequestPayload {
     id: Value,
@@ -938,8 +1006,147 @@ fn default_skill_session_start() -> String {
     "n/a".to_string()
 }
 
+fn default_true() -> bool {
+    true
+}
+
 fn default_skill_health() -> f64 {
     100.0
+}
+
+fn default_trace_metadata_schema_version() -> String {
+    "trace-metadata-v2".to_string()
+}
+
+fn default_trace_framework_version() -> String {
+    "phase1".to_string()
+}
+
+fn timestamp_now() -> String {
+    Utc::now().to_rfc3339()
+}
+
+fn default_trace_runtime_path() -> PathBuf {
+    std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("skills")
+        .join("SKILL_ROUTING_RUNTIME.json")
+}
+
+fn load_trace_routing_runtime_version(runtime_path: Option<&str>) -> u64 {
+    let resolved_path = runtime_path
+        .map(PathBuf::from)
+        .unwrap_or_else(default_trace_runtime_path);
+    let raw = match fs::read_to_string(&resolved_path) {
+        Ok(value) => value,
+        Err(_) => return 1,
+    };
+    match serde_json::from_str::<Value>(&raw) {
+        Ok(Value::Object(payload)) => payload.get("version").and_then(Value::as_u64).unwrap_or(1),
+        _ => 1,
+    }
+}
+
+fn write_trace_metadata(
+    payload: TraceMetadataWriteRequestPayload,
+) -> Result<TraceMetadataWriteResponsePayload, String> {
+    let routing_runtime_version = payload
+        .routing_runtime_version
+        .unwrap_or_else(|| load_trace_routing_runtime_version(payload.runtime_path.as_deref()));
+    let metadata_schema_version = payload
+        .metadata_schema_version
+        .unwrap_or_else(default_trace_metadata_schema_version);
+    let framework_version = payload
+        .framework_version
+        .unwrap_or_else(default_trace_framework_version);
+    let timestamp = payload.ts.unwrap_or_else(|| timestamp_now());
+
+    let mut document = Map::new();
+    document.insert("version".to_string(), json!(1));
+    document.insert(
+        "schema_version".to_string(),
+        json!(metadata_schema_version.clone()),
+    );
+    document.insert(
+        "metadata_schema_version".to_string(),
+        json!(metadata_schema_version),
+    );
+    document.insert("ts".to_string(), json!(timestamp));
+    document.insert("task".to_string(), json!(payload.task));
+    document.insert("framework_version".to_string(), json!(framework_version));
+    document.insert(
+        "routing_runtime_version".to_string(),
+        json!(routing_runtime_version),
+    );
+    document.insert("matched_skills".to_string(), json!(payload.matched_skills));
+    document.insert(
+        "decision".to_string(),
+        json!({
+            "owner": payload.owner,
+            "gate": payload.gate,
+            "overlay": payload.overlay,
+        }),
+    );
+    document.insert("reroute_count".to_string(), json!(payload.reroute_count));
+    document.insert("retry_count".to_string(), json!(payload.retry_count));
+    document.insert("artifact_paths".to_string(), json!(payload.artifact_paths));
+    document.insert(
+        "verification_status".to_string(),
+        json!(payload.verification_status),
+    );
+    if let Some(value) = payload.trace_event_schema_version {
+        document.insert("trace_event_schema_version".to_string(), json!(value));
+    }
+    if let Some(value) = payload.trace_event_sink_schema_version {
+        document.insert("trace_event_sink_schema_version".to_string(), json!(value));
+    }
+    if let Some(value) = payload.parallel_group {
+        document.insert("parallel_group".to_string(), value);
+    }
+    if let Some(value) = payload.supervisor_projection {
+        document.insert("supervisor_projection".to_string(), value);
+    }
+    if let Some(value) = payload.control_plane {
+        document.insert("control_plane".to_string(), value);
+    }
+    if let Some(value) = payload.stream {
+        document.insert("stream".to_string(), value);
+    }
+    if let Some(value) = payload.events {
+        document.insert("events".to_string(), Value::Array(value));
+    }
+
+    let serialized = serde_json::to_string_pretty(&Value::Object(document))
+        .map_err(|err| format!("serialize trace metadata failed: {err}"))?
+        + "\n";
+    if payload.write_outputs {
+        let outputs =
+            std::iter::once(payload.output_path.clone()).chain(payload.mirror_paths.clone());
+        for output in outputs {
+            let path = PathBuf::from(&output);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).map_err(|err| {
+                    format!(
+                        "create trace metadata parent failed for {}: {err}",
+                        parent.display()
+                    )
+                })?;
+            }
+            fs::write(&path, &serialized).map_err(|err| {
+                format!("write trace metadata failed for {}: {err}", path.display())
+            })?;
+        }
+    }
+
+    Ok(TraceMetadataWriteResponsePayload {
+        schema_version: TRACE_METADATA_WRITE_SCHEMA_VERSION.to_string(),
+        authority: TRACE_METADATA_WRITE_AUTHORITY.to_string(),
+        output_path: payload.output_path,
+        mirror_paths: payload.mirror_paths,
+        bytes_written: serialized.as_bytes().len(),
+        routing_runtime_version,
+        payload_text: serialized,
+    })
 }
 
 fn main() -> Result<(), String> {
@@ -947,6 +1154,7 @@ fn main() -> Result<(), String> {
     if [
         args.json,
         args.stdio_json,
+        args.framework_mcp_stdio,
         args.route_json,
         args.route_policy_json,
         args.route_snapshot_json,
@@ -971,12 +1179,14 @@ fn main() -> Result<(), String> {
         args.trace_stream_replay_json,
         args.trace_stream_inspect_json,
         args.write_trace_compaction_delta_json,
+        args.write_trace_metadata_json,
         args.framework_runtime_snapshot_json,
         args.framework_contract_summary_json,
         args.framework_memory_recall_json,
         args.framework_refresh_json,
         args.framework_session_artifact_write_json,
         args.framework_alias_json,
+        args.control_plane_contracts_json,
         args.profile_json,
         args.profile_artifacts_json,
         args.routing_eval_json,
@@ -986,8 +1196,12 @@ fn main() -> Result<(), String> {
         args.claude_hook_manifest_json,
         args.claude_hook_projection_json,
         args.claude_project_settings_json,
+        args.sync_host_entrypoints_json,
+        args.check_host_entrypoints_json,
+        args.host_integration.is_some(),
         args.claude_hook_command.is_some(),
         args.claude_hook_audit_command.is_some(),
+        args.claude_host_hook_command.is_some(),
         args.codex_hook_command.is_some(),
     ]
     .into_iter()
@@ -996,13 +1210,30 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-session-artifact-write-json, --framework-alias-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --claude-hook-command, --claude-hook-audit-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
+            "choose only one output mode among --json, --stdio-json, --framework-mcp-stdio, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --write-trace-metadata-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-session-artifact-write-json, --framework-alias-json, --control-plane-contracts-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --sync-host-entrypoints-json, --check-host-entrypoints-json, --host-integration, --claude-hook-command, --claude-hook-audit-command, --claude-host-hook-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
                 .to_string(),
         );
     }
 
     if args.stdio_json {
         return run_stdio_json_loop();
+    }
+
+    if let Some(host_args) = args.host_integration.as_ref() {
+        let payload = run_host_integration_from_args(host_args)?;
+        println!(
+            "{}",
+            serde_json::to_string(&payload)
+                .map_err(|err| format!("serialize host-integration output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.framework_mcp_stdio {
+        return run_framework_mcp_stdio_loop(
+            args.repo_root.as_deref(),
+            args.framework_mcp_output_dir.as_deref(),
+        );
     }
 
     if args.sandbox_control_json {
@@ -1320,12 +1551,34 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.write_trace_metadata_json {
+        let payload = serde_json::from_str::<TraceMetadataWriteRequestPayload>(
+            args.write_trace_metadata_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--write-trace-metadata-input-json is required with --write-trace-metadata-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse trace metadata write input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&write_trace_metadata(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
     if args.framework_runtime_snapshot_json {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
         println!(
             "{}",
-            serde_json::to_string(&build_framework_runtime_snapshot_envelope(&repo_root)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
+            serde_json::to_string(&build_framework_runtime_snapshot_envelope(
+                &repo_root,
+                args.framework_artifact_source_dir.as_deref(),
+                args.framework_task_id.as_deref(),
+            )?)
+            .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());
     }
@@ -1424,6 +1677,15 @@ fn main() -> Result<(), String> {
                 args.framework_host_id.as_deref(),
             )?)
             .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.control_plane_contracts_json {
+        println!(
+            "{}",
+            serde_json::to_string(&build_control_plane_contract_descriptors())
+                .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());
     }
@@ -1554,6 +1816,19 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.sync_host_entrypoints_json || args.check_host_entrypoints_json {
+        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+        println!(
+            "{}",
+            serde_json::to_string(&sync_host_entrypoints(
+                &repo_root,
+                args.sync_host_entrypoints_json,
+            )?)
+            .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
     if let Some(command) = args.claude_hook_command.as_deref() {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
         println!(
@@ -1575,6 +1850,12 @@ fn main() -> Result<(), String> {
             serde_json::to_string(&run_claude_audit_hook(command, &repo_root)?)
                 .map_err(|err| format!("serialize output failed: {err}"))?
         );
+        return Ok(());
+    }
+
+    if let Some(command) = args.claude_host_hook_command.as_deref() {
+        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+        run_claude_host_hook(command, &repo_root, args.claude_hook_max_lines)?;
         return Ok(());
     }
 
@@ -1877,11 +2158,21 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
             serde_json::to_value(write_trace_compaction_delta(request)?)
                 .map_err(|err| format!("serialize trace compaction delta output failed: {err}"))
         }
+        "write_trace_metadata" => {
+            let request = serde_json::from_value::<TraceMetadataWriteRequestPayload>(payload)
+                .map_err(|err| format!("parse trace metadata write input failed: {err}"))?;
+            serde_json::to_value(write_trace_metadata(request)?)
+                .map_err(|err| format!("serialize trace metadata output failed: {err}"))
+        }
         "framework_runtime_snapshot" => dispatch_stdio_framework_runtime_snapshot(payload),
         "framework_contract_summary" => dispatch_stdio_framework_contract_summary(payload),
         "framework_memory_recall" => dispatch_stdio_framework_memory_recall(payload),
         "framework_session_artifact_write" => write_framework_session_artifacts(payload),
         "framework_alias" => dispatch_stdio_framework_alias(payload),
+        "control_plane_contracts" => {
+            serde_json::to_value(build_control_plane_contract_descriptors())
+                .map_err(|err| format!("serialize control plane contracts output failed: {err}"))
+        }
         "claude_lifecycle_hook" => dispatch_stdio_claude_lifecycle_hook(payload),
         _ => Err(format!("unsupported stdio operation: {op}")),
     }
@@ -1897,6 +2188,54 @@ fn dispatch_stdio_claude_lifecycle_hook(payload: Value) -> Result<Value, String>
         .and_then(|value| usize::try_from(value).ok())
         .unwrap_or(6);
     run_claude_lifecycle_hook(&command, Path::new(&repo_root), max_lines)
+}
+
+fn run_claude_host_hook(command: &str, repo_root: &Path, max_lines: usize) -> Result<(), String> {
+    match command {
+        "session-end" => {
+            run_claude_lifecycle_hook(command, repo_root, max_lines)?;
+        }
+        "config-change" | "stop-failure" => {
+            run_claude_audit_hook(command, repo_root)?;
+        }
+        "pre-tool-use" => {
+            let payload = run_claude_audit_hook(command, repo_root)?;
+            if payload
+                .get("hookSpecificOutput")
+                .and_then(|hook| hook.get("permissionDecision"))
+                .and_then(Value::as_str)
+                == Some("deny")
+            {
+                println!(
+                    "{}",
+                    serde_json::to_string(&payload)
+                        .map_err(|err| format!("serialize output failed: {err}"))?
+                );
+            }
+        }
+        "user-prompt-submit" => {
+            let payload = run_claude_audit_hook(command, repo_root)?;
+            if payload.get("hookSpecificOutput").is_some() {
+                println!(
+                    "{}",
+                    serde_json::to_string(&payload)
+                        .map_err(|err| format!("serialize output failed: {err}"))?
+                );
+            }
+        }
+        "pre-tool-use-quality" | "post-tool-audit" => {
+            let payload = run_claude_audit_hook(command, repo_root)?;
+            if payload.get("hookSpecificOutput").is_some() {
+                println!(
+                    "{}",
+                    serde_json::to_string(&payload)
+                        .map_err(|err| format!("serialize output failed: {err}"))?
+                );
+            }
+        }
+        _ => return Err(format!("Unsupported Claude host hook command: {command}")),
+    }
+    Ok(())
 }
 
 fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
@@ -2018,9 +2357,13 @@ fn dispatch_stdio_route_snapshot(payload: Value) -> Result<Value, String> {
 fn dispatch_stdio_framework_runtime_snapshot(payload: Value) -> Result<Value, String> {
     let repo_root =
         required_non_empty_string(&payload, "repo_root", "stdio framework runtime snapshot")?;
-    serde_json::to_value(build_framework_runtime_snapshot_envelope(Path::new(
-        &repo_root,
-    ))?)
+    let artifact_root = optional_non_empty_string(&payload, "artifact_source_dir");
+    let task_id = optional_non_empty_string(&payload, "task_id");
+    serde_json::to_value(build_framework_runtime_snapshot_envelope(
+        Path::new(&repo_root),
+        artifact_root.as_deref().map(Path::new),
+        task_id.as_deref(),
+    )?)
     .map_err(|err| format!("serialize framework runtime snapshot output failed: {err}"))
 }
 
@@ -2466,10 +2809,6 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
             Some(trimmed.to_string())
         }
     })
-}
-
-fn default_true() -> bool {
-    true
 }
 
 fn value_to_string(value: &Value) -> String {
@@ -4419,10 +4758,7 @@ fn perform_live_execute(
     prompt_preview: &str,
 ) -> Result<LiveExecuteResult, String> {
     let endpoint = normalize_chat_completions_endpoint(&payload.aggregator_base_url);
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|err| format!("build reqwest client failed: {err}"))?;
+    let client = live_execute_http_client()?;
     let mut messages = Vec::new();
     if !prompt_preview.trim().is_empty() {
         messages.push(serde_json::json!({
@@ -4493,6 +4829,21 @@ fn perform_live_execute(
         output_tokens,
         total_tokens,
     })
+}
+
+fn live_execute_http_client() -> Result<&'static reqwest::blocking::Client, String> {
+    static CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client);
+    }
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|err| format!("build reqwest client failed: {err}"))?;
+    let _ = CLIENT.set(client);
+    CLIENT
+        .get()
+        .ok_or_else(|| "build reqwest client failed: client cache was not initialized".to_string())
 }
 
 fn build_live_execute_response(
@@ -8525,7 +8876,7 @@ mod tests {
                 "primary_owner":"skill-framework-developer",
                 "execution_contract":{
                     "goal":"Repair stale bootstrap injection",
-                    "scope":["scripts/memory_support.py"],
+                    "scope":["scripts/router-rs/src/framework_runtime.rs"],
                     "acceptance_criteria":["completed tasks never appear as current execution"]
                 },
                 "blockers":{"open_blockers":["Need regression coverage"]}
@@ -10684,6 +11035,14 @@ mod tests {
     }
 
     #[test]
+    fn live_execute_http_client_is_process_cached() {
+        let first = live_execute_http_client().expect("first client");
+        let second = live_execute_http_client().expect("second client");
+
+        assert!(std::ptr::eq(first, second));
+    }
+
+    #[test]
     fn trace_stream_replay_unwraps_wrapped_events_and_supports_resume() {
         let trace_path = temp_trace_path("trace-replay");
         fs::write(
@@ -11453,5 +11812,82 @@ mod tests {
         let persisted = fs::read_to_string(&delta_path).expect("read stdio delta");
         assert!(persisted.contains("\"delta_id\":\"delta-stdio\""));
         fs::remove_file(&delta_path).expect("cleanup stdio delta path");
+    }
+
+    #[test]
+    fn write_trace_metadata_persists_primary_and_mirror_outputs() {
+        let output_path = temp_json_path("trace-metadata-write");
+        let mirror_path = output_path
+            .parent()
+            .expect("output parent")
+            .join("artifacts")
+            .join("current")
+            .join("TRACE_METADATA.json");
+        let response = write_trace_metadata(TraceMetadataWriteRequestPayload {
+            output_path: output_path.display().to_string(),
+            mirror_paths: vec![mirror_path.display().to_string()],
+            write_outputs: true,
+            task: "trace metadata rustification".to_string(),
+            matched_skills: vec!["execution-controller-coding".to_string()],
+            owner: "execution-controller-coding".to_string(),
+            gate: "none".to_string(),
+            overlay: None,
+            reroute_count: 0,
+            retry_count: 1,
+            artifact_paths: vec!["artifacts/current/SESSION_SUMMARY.md".to_string()],
+            verification_status: "passed".to_string(),
+            framework_version: Some("phase1".to_string()),
+            metadata_schema_version: Some("trace-metadata-v2".to_string()),
+            routing_runtime_version: Some(9),
+            runtime_path: None,
+            ts: Some("2026-04-23T00:00:00Z".to_string()),
+            trace_event_schema_version: None,
+            trace_event_sink_schema_version: None,
+            parallel_group: None,
+            supervisor_projection: None,
+            control_plane: None,
+            stream: None,
+            events: None,
+        })
+        .expect("write trace metadata");
+
+        assert_eq!(response.schema_version, TRACE_METADATA_WRITE_SCHEMA_VERSION);
+        assert_eq!(response.authority, TRACE_METADATA_WRITE_AUTHORITY);
+        assert_eq!(response.output_path, output_path.display().to_string());
+        assert_eq!(response.routing_runtime_version, 9);
+        assert!(response.payload_text.contains("\"version\": 1"));
+        let primary = fs::read_to_string(&output_path).expect("read primary trace metadata");
+        let mirror = fs::read_to_string(&mirror_path).expect("read mirror trace metadata");
+        assert_eq!(primary, mirror);
+        assert!(primary.contains("\"schema_version\": \"trace-metadata-v2\""));
+        assert!(primary.contains("\"task\": \"trace metadata rustification\""));
+
+        fs::remove_file(&output_path).expect("cleanup primary trace metadata");
+        fs::remove_file(&mirror_path).expect("cleanup mirror trace metadata");
+        fs::remove_dir_all(
+            mirror_path
+                .parent()
+                .and_then(Path::parent)
+                .expect("cleanup mirror root"),
+        )
+        .expect("cleanup mirror directories");
+    }
+
+    #[test]
+    fn stdio_request_dispatches_write_trace_metadata_payload() {
+        let output_path = temp_json_path("trace-metadata-write-stdio");
+        let response = handle_stdio_json_line(&format!(
+            "{{\"id\":3,\"op\":\"write_trace_metadata\",\"payload\":{{\"output_path\":\"{}\",\"task\":\"trace metadata stdio\",\"matched_skills\":[\"execution-controller-coding\"],\"owner\":\"execution-controller-coding\",\"gate\":\"none\",\"overlay\":null,\"reroute_count\":0,\"retry_count\":0,\"artifact_paths\":[],\"verification_status\":\"passed\",\"metadata_schema_version\":\"trace-metadata-v2\",\"routing_runtime_version\":11}}}}",
+            output_path.display()
+        ));
+        assert!(response.ok);
+        assert_eq!(response.id, json!(3));
+        assert_eq!(
+            response.payload.expect("payload")["schema_version"],
+            json!(TRACE_METADATA_WRITE_SCHEMA_VERSION)
+        );
+        let persisted = fs::read_to_string(&output_path).expect("read stdio trace metadata");
+        assert!(persisted.contains("\"routing_runtime_version\": 11"));
+        fs::remove_file(&output_path).expect("cleanup stdio trace metadata");
     }
 }

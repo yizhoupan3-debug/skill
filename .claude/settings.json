@@ -16,7 +16,7 @@
       {
         "hooks": [
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh config-change",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command config-change --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "type": "command"
           }
         ],
@@ -28,105 +28,126 @@
         "hooks": [
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/framework_runtime/src/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/framework_runtime/src/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/framework_runtime/src/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/scripts/router-rs/src/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/scripts/router-rs/src/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/scripts/router-rs/src/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
-            "if": "Edit(/scripts/materialize_cli_host_entrypoints.py)",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
+            "if": "Edit(/scripts/host-integration-rs/src/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
-            "if": "MultiEdit(/scripts/materialize_cli_host_entrypoints.py)",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
+            "if": "MultiEdit(/scripts/host-integration-rs/src/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
-            "if": "Write(/scripts/materialize_cli_host_entrypoints.py)",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
+            "if": "Write(/scripts/host-integration-rs/src/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
+            "if": "Edit(/scripts/install_skills.sh)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
+            "if": "MultiEdit(/scripts/install_skills.sh)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
+            "if": "Write(/scripts/install_skills.sh)",
+            "timeout": 8,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/tests/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/tests/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/tests/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/.claude/hooks/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/.claude/hooks/**)",
             "timeout": 8,
             "type": "command"
           },
           {
             "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh post-tool-audit",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command post-tool-audit --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/.claude/hooks/**)",
             "timeout": 8,
             "type": "command"
@@ -139,197 +160,197 @@
       {
         "hooks": [
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/AGENT.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/AGENT.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/AGENT.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/AGENTS.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/AGENTS.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/AGENTS.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/CLAUDE.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/CLAUDE.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/CLAUDE.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/GEMINI.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/GEMINI.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/GEMINI.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/.gemini/settings.json)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/.gemini/settings.json)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/.gemini/settings.json)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/.claude/settings.json)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/.claude/settings.json)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/.claude/settings.json)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/.claude/agents/README.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/.claude/agents/README.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/.claude/agents/README.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/.claude/hooks/README.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/.claude/hooks/README.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/.claude/hooks/README.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/.claude/hooks/*.sh)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/.claude/hooks/*.sh)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/.claude/hooks/*.sh)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/.claude/commands/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/.claude/commands/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/.claude/commands/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/.codex/hooks.json)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/.codex/hooks.json)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/.codex/hooks.json)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/.codex/host_entrypoints_sync_manifest.json)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/.codex/host_entrypoints_sync_manifest.json)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/.codex/host_entrypoints_sync_manifest.json)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/.codex/memory/CLAUDE_MEMORY.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/.codex/memory/CLAUDE_MEMORY.md)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/.codex/memory/CLAUDE_MEMORY.md)",
             "type": "command"
           }
@@ -339,62 +360,62 @@
       {
         "hooks": [
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Bash(*AGENT.md*)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Bash(*AGENTS.md*)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Bash(*CLAUDE.md*)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Bash(*GEMINI.md*)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Bash(*.gemini/settings.json*)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Bash(*.claude/settings.json*)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Bash(*.claude/agents/README.md*)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Bash(*.claude/hooks/*)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Bash(*.claude/commands/*)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Bash(*.codex/hooks.json*)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Bash(*.codex/host_entrypoints_sync_manifest.json*)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Bash(*.codex/memory/CLAUDE_MEMORY.md*)",
             "type": "command"
           }
@@ -404,77 +425,92 @@
       {
         "hooks": [
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/framework_runtime/src/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/framework_runtime/src/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/framework_runtime/src/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/scripts/router-rs/src/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/scripts/router-rs/src/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/scripts/router-rs/src/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
-            "if": "Edit(/scripts/materialize_cli_host_entrypoints.py)",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
+            "if": "Edit(/scripts/host-integration-rs/src/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
-            "if": "MultiEdit(/scripts/materialize_cli_host_entrypoints.py)",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
+            "if": "MultiEdit(/scripts/host-integration-rs/src/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
-            "if": "Write(/scripts/materialize_cli_host_entrypoints.py)",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
+            "if": "Write(/scripts/host-integration-rs/src/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
+            "if": "Edit(/scripts/install_skills.sh)",
+            "type": "command"
+          },
+          {
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
+            "if": "MultiEdit(/scripts/install_skills.sh)",
+            "type": "command"
+          },
+          {
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
+            "if": "Write(/scripts/install_skills.sh)",
+            "type": "command"
+          },
+          {
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/tests/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/tests/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/tests/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Edit(/.claude/hooks/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "MultiEdit(/.claude/hooks/**)",
             "type": "command"
           },
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh pre-tool-use-quality",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command pre-tool-use-quality --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "if": "Write(/.claude/hooks/**)",
             "type": "command"
           }
@@ -486,7 +522,7 @@
       {
         "hooks": [
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh session-end",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command session-end --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "type": "command"
           }
         ]
@@ -496,7 +532,7 @@
       {
         "hooks": [
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh stop-failure",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command stop-failure --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "type": "command"
           }
         ],
@@ -507,7 +543,7 @@
       {
         "hooks": [
           {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run.sh user-prompt-submit",
+            "command": "CLAUDE_PROJECT_DIR=\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}\"; ROUTER_RS_RELEASE_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/release/router-rs\"; ROUTER_RS_DEBUG_BIN=\"$CLAUDE_PROJECT_DIR/scripts/router-rs/target/debug/router-rs\"; ROUTER_RS_BIN=\"\"; if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; \"$ROUTER_RS_BIN\" --claude-host-hook-command user-prompt-submit --repo-root \"$CLAUDE_PROJECT_DIR\"",
             "type": "command"
           }
         ]
@@ -527,7 +563,6 @@
       "Bash(git rev-parse *)",
       "Bash(git ls-files *)",
       "Bash(python3 scripts/check_skills.py --verify-sync)",
-      "Bash(python3 scripts/materialize_cli_host_entrypoints.py)",
       "Bash(python3 -m pytest *)",
       "Bash(python3 -m compileall *)",
       "Bash(cargo test *)",

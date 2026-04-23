@@ -53,85 +53,27 @@ def test_host_adapter_specs_are_materialized_from_runtime_registry() -> None:
     ]
 
 
-def test_runtime_registry_falls_back_when_generated_file_is_missing(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    baseline_payload = runtime_registry.load_runtime_registry()
-    baseline_host_adapters = host_adapter_records(include_legacy_aliases=True)
-    baseline_peer_set = default_host_peer_set()
-    baseline_project_mcp_servers = shared_project_mcp_servers()
-    baseline_plugins = plugin_records()
-    baseline_bootstrap_defaults = workspace_bootstrap_defaults()
-
-    missing_registry = tmp_path / "configs" / "framework" / "RUNTIME_REGISTRY.json"
-    monkeypatch.setattr(runtime_registry, "_DEFAULT_REGISTRY_PATH", missing_registry)
-
-    assert tuple(DEFAULT_HOST_PEER_SET) == default_host_peer_set()
-    assert default_host_peer_set() == baseline_peer_set
-    assert shared_project_mcp_servers() == baseline_project_mcp_servers
-    assert host_adapter_records(include_legacy_aliases=True) == baseline_host_adapters
-
-    assert plugin_records() == baseline_plugins
-    assert plugin_records() == tuple(baseline_payload["plugins"])
-
-    assert workspace_bootstrap_defaults() == baseline_bootstrap_defaults
-    assert workspace_bootstrap_defaults() == baseline_payload["workspace_bootstrap_defaults"]
-    assert shared_project_mcp_servers() == tuple(baseline_payload["shared_project_mcp_servers"])
-
-    claude_record = host_adapter_record("claude_code_adapter")
-    claude_spec = get_host_adapter("claude_code_adapter")
-    assert claude_record["host_id"] == claude_spec.host_id
-    assert claude_record["transport"] == claude_spec.transport
-    assert claude_record["protocol_hints"]["plugin_hook_manifest_paths"] == list(
-        claude_spec.protocol_hints["plugin_hook_manifest_paths"]
-    )
-
-
-def test_runtime_registry_missing_file_uses_embedded_snapshot_before_host_adapter_bridge(
+def test_runtime_registry_missing_file_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     missing_registry = tmp_path / "configs" / "framework" / "RUNTIME_REGISTRY.json"
     monkeypatch.setattr(runtime_registry, "_DEFAULT_REGISTRY_PATH", missing_registry)
 
-    def _unexpected_last_resort() -> tuple[dict[str, object], ...]:
-        raise AssertionError("runtime registry fallback should not re-materialize host adapters")
-
-    monkeypatch.setattr(
-        runtime_registry,
-        "_last_resort_fallback_host_adapter_rows",
-        _unexpected_last_resort,
-    )
-
-    legacy_ids = [row["adapter_id"] for row in host_adapter_records(include_legacy_aliases=True)]
-
-    assert "codex_desktop_host_adapter" in legacy_ids
-    assert "claude_code_adapter" in legacy_ids
+    with pytest.raises(FileNotFoundError, match="Missing runtime registry"):
+        runtime_registry.load_runtime_registry()
 
 
-def test_runtime_registry_fallback_preserves_default_visibility_boundary(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    baseline_default_ids = [
-        row["adapter_id"] for row in host_adapter_records() if row["registry_lane"] == "default"
-    ]
-    missing_registry = tmp_path / "configs" / "framework" / "RUNTIME_REGISTRY.json"
-    monkeypatch.setattr(runtime_registry, "_DEFAULT_REGISTRY_PATH", missing_registry)
+def test_runtime_registry_uses_rust_only_export_without_python_fallback_snapshot() -> None:
+    source = Path(runtime_registry.__file__).read_text(encoding="utf-8")
 
-    default_ids = [row["adapter_id"] for row in host_adapter_records()]
-    legacy_ids = [row["adapter_id"] for row in host_adapter_records(include_legacy_aliases=True)]
-
-    assert "codex_desktop_host_adapter" not in default_ids
-    assert "codex_desktop_host_adapter" in legacy_ids
-    assert default_ids == baseline_default_ids
+    assert "subprocess" not in source
+    assert "host-integration-rs" not in source
+    assert "_run_host_integration_command" not in source
+    assert "embedded_runtime_registry" not in source
 
 
-def test_runtime_registry_prefers_rust_export_for_explicit_repo_root(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
+def test_runtime_registry_prefers_repo_local_registry_for_explicit_repo_root(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     (repo_root / "configs" / "framework").mkdir(parents=True)
     registry_path = repo_root / "configs" / "framework" / "RUNTIME_REGISTRY.json"
@@ -153,30 +95,15 @@ def test_runtime_registry_prefers_rust_export_for_explicit_repo_root(
         encoding="utf-8",
     )
 
-    captured: list[str] = []
-
-    def _fake_run_host_integration_command(*args: str) -> dict[str, object]:
-        captured.extend(args)
-        return json.loads(registry_path.read_text(encoding="utf-8"))
-
-    monkeypatch.setattr(runtime_registry, "_run_host_integration_command", _fake_run_host_integration_command)
-
     payload = runtime_registry.load_runtime_registry(repo_root=repo_root)
 
     assert payload["plugins"][0]["plugin_name"] == "repo-plugin"
     assert payload["shared_project_mcp_servers"] == []
-    assert shared_project_mcp_servers(repo_root=repo_root) == (
-        "browser-mcp",
-        "framework-mcp",
-        "openaiDeveloperDocs",
-    )
-    assert captured[:3] == ["export-runtime-registry", "--repo-root", str(repo_root.resolve())]
-    assert len(captured) % 3 == 0
+    assert shared_project_mcp_servers(repo_root=repo_root) == ()
+    assert runtime_registry.runtime_registry_path(repo_root) == registry_path
 
 
-def test_runtime_registry_empty_shared_project_mcp_servers_falls_back_only_in_helper(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_runtime_registry_empty_shared_project_mcp_servers_stays_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = {
         "schema_version": "framework-runtime-registry-v1",
         "shared_project_mcp_servers": [],
@@ -184,15 +111,10 @@ def test_runtime_registry_empty_shared_project_mcp_servers_falls_back_only_in_he
     monkeypatch.setattr(runtime_registry, "_load_runtime_registry_or_none", lambda repo_root=None: payload)
 
     assert tuple(payload["shared_project_mcp_servers"]) == ()
-    assert shared_project_mcp_servers() == (
-        "browser-mcp",
-        "framework-mcp",
-        "openaiDeveloperDocs",
-    )
+    assert shared_project_mcp_servers() == ()
 
 
 def test_runtime_registry_nonempty_shared_project_mcp_servers_do_not_fall_back(
-    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     repo_root = tmp_path / "repo"
@@ -215,11 +137,6 @@ def test_runtime_registry_nonempty_shared_project_mcp_servers_do_not_fall_back(
         ),
         encoding="utf-8",
     )
-
-    def _fake_run_host_integration_command(*args: str) -> dict[str, object]:
-        return json.loads(registry_path.read_text(encoding="utf-8"))
-
-    monkeypatch.setattr(runtime_registry, "_run_host_integration_command", _fake_run_host_integration_command)
 
     assert shared_project_mcp_servers(repo_root=repo_root) == ("framework-mcp",)
 

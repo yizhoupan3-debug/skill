@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -8,11 +9,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+ROUTER_RS_ROOT = PROJECT_ROOT / "scripts" / "router-rs"
+ROUTER_RS_DEBUG_BIN = ROUTER_RS_ROOT / "target" / "debug" / "router-rs"
+ROUTER_RS_RELEASE_BIN = ROUTER_RS_ROOT / "target" / "release" / "router-rs"
+
 from scripts.consolidate_memory import archive_legacy_memory_bundle, persist_memory_bundle
-from scripts.default_bootstrap import run_default_bootstrap
 from scripts.memory_store import MemoryItem, MemoryStore
 from framework_runtime.rust_router import RustRouteAdapter
-from scripts.memory_support import build_memory_state, load_runtime_snapshot
 from scripts.run_memory_automation import (
     migrate_current_artifact_clutter,
     migrate_legacy_artifact_roots,
@@ -31,6 +34,29 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
 
 def _rust_adapter() -> RustRouteAdapter:
     return RustRouteAdapter(PROJECT_ROOT)
+
+
+def _router_rs_binary() -> Path:
+    candidates = [path for path in (ROUTER_RS_RELEASE_BIN, ROUTER_RS_DEBUG_BIN) if path.is_file()]
+    assert candidates
+    return max(candidates, key=lambda path: (path.stat().st_mtime, path.name))
+
+
+def run_host_integration(*args: str) -> dict[str, object]:
+    completed = subprocess.run(
+        [
+            str(_router_rs_binary()),
+            "--host-integration",
+            *args,
+        ],
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(completed.stdout)
+    assert isinstance(payload, dict)
+    return payload
 
 
 def _seed_runtime(repo_root: Path, artifact_base: Path, *, task_id: str, task: str) -> None:
@@ -65,8 +91,6 @@ def test_framework_memory_recall_respects_artifact_source_dir_and_task_id(tmp_pa
     _seed_runtime(tmp_path, repo_artifacts, task_id="repo-task-20260418210000", task="repo default task")
     _seed_runtime(tmp_path, isolated_artifacts, task_id="isolated-task-20260418220000", task="isolated active task")
     _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
-    snapshot = load_runtime_snapshot(tmp_path, artifact_root=isolated_artifacts)
-    _write_json(tmp_path / ".codex" / "memory" / "state.json", build_memory_state(snapshot))
     payload = _rust_adapter().framework_memory_recall(
         repo_root=tmp_path,
         query="isolated active task",
@@ -384,7 +408,15 @@ def test_default_bootstrap_compacts_evolution_payload(tmp_path: Path) -> None:
     )
     _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
 
-    result = run_default_bootstrap(repo_root=tmp_path, output_dir=tmp_path / "out", workspace=tmp_path.name)
+    result = run_host_integration(
+        "build-default-bootstrap",
+        "--repo-root",
+        str(tmp_path),
+        "--output-dir",
+        str(tmp_path / "out"),
+        "--workspace",
+        tmp_path.name,
+    )
 
     payload = result["payload"]["evolution-proposals"]
     assert set(payload) == {"proposal_count", "proposals"}
@@ -399,11 +431,16 @@ def test_default_bootstrap_uses_prompt_safe_memory_payload(tmp_path: Path) -> No
     )
     _write_text(tmp_path / ".codex" / "memory" / "MEMORY.md", "# 项目长期记忆\n")
 
-    result = run_default_bootstrap(
-        repo_root=tmp_path,
-        output_dir=tmp_path / "out",
-        workspace=tmp_path.name,
-        query="artifact anchors",
+    result = run_host_integration(
+        "build-default-bootstrap",
+        "--repo-root",
+        str(tmp_path),
+        "--output-dir",
+        str(tmp_path / "out"),
+        "--workspace",
+        tmp_path.name,
+        "--query",
+        "artifact anchors",
     )
 
     payload = result["payload"]["memory-bootstrap"]

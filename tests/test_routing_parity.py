@@ -169,7 +169,7 @@ def test_route_decision_contract_live_matches_python_for_knobbed_inputs(
     assert rust_decision["layer"] == layer
 
 
-def test_route_contract_falls_back_to_default_runner_when_stdio_reports_unsupported_operation(
+def test_route_contract_fails_closed_when_stdio_reports_unsupported_operation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     adapter = RustRouteAdapter(
@@ -185,26 +185,16 @@ def test_route_contract_falls_back_to_default_runner_when_stdio_reports_unsuppor
         def close(self) -> None:
             pass
 
-    calls = {"json_runner_calls": 0}
-
-    def fake_run_json_command(command: list[str], *, failure_label: str) -> dict[str, object]:
-        calls["json_runner_calls"] += 1
-        return _fallback_route_contract_payload(adapter=adapter)
-
     monkeypatch.setattr(adapter, "_stdio_client", lambda: _UnsupportedOperationClient())
     monkeypatch.setattr(adapter, "_reset_stdio_client", lambda: None)
-    monkeypatch.setattr(adapter, "_run_json_command", fake_run_json_command)
 
-    contract = adapter.route_contract(
-        query="这个仓库的修复你直接 gsd，推进到底，别停，主线程保持简短并给我验证证据",
-        session_id="route-contract-fallback-session",
-        allow_overlay=True,
-        first_turn=False,
-    )
-
-    assert calls["json_runner_calls"] == 1
-    assert contract.selected_skill == "execution-controller-coding"
-    assert contract.overlay_skill is None
+    with pytest.raises(RuntimeError, match="does not support 'route'"):
+        adapter.route_contract(
+            query="这个仓库的修复你直接 gsd，推进到底，别停，主线程保持简短并给我验证证据",
+            session_id="route-contract-fallback-session",
+            allow_overlay=True,
+            first_turn=False,
+        )
 
 
 def test_route_contract_rejects_unknown_decision_schema_shape(
@@ -625,7 +615,7 @@ def _seed_framework_runtime_artifacts(repo_root: Path, *, terminal: bool) -> Non
             "primary_owner": "skill-framework-developer",
             "execution_contract": {
                 "goal": "Repair stale bootstrap injection",
-                "scope": ["scripts/memory_support.py"],
+                "scope": ["scripts/router-rs/src/framework_runtime.rs"],
                 "acceptance_criteria": [
                     "completed tasks never appear as current execution"
                 ],
@@ -961,12 +951,22 @@ def test_rust_route_adapter_write_methods_validate_schema_authority_and_ack(monk
         "path": "/tmp/TRACE_RESUME_MANIFEST.json",
         "bytes_written": 768,
     }
+    trace_metadata_ack = {
+        "schema_version": adapter.trace_metadata_write_schema_version,
+        "authority": adapter.trace_metadata_write_authority,
+        "output_path": "/tmp/TRACE_METADATA.json",
+        "mirror_paths": ["/tmp/artifacts/current/TRACE_METADATA.json"],
+        "bytes_written": 1024,
+        "routing_runtime_version": 7,
+    }
 
     def fake_run_json(command: list[str], *, failure_label: str) -> dict[str, object]:
         if "--write-transport-binding-json" in command:
             return transport_ack
         if "--write-checkpoint-resume-manifest-json" in command:
             return manifest_ack
+        if "--write-trace-metadata-json" in command:
+            return trace_metadata_ack
         raise AssertionError(f"unexpected command: {command}")
 
     monkeypatch.setattr(adapter, "_run_json_command", fake_run_json)
@@ -985,6 +985,20 @@ def test_rust_route_adapter_write_methods_validate_schema_authority_and_ack(monk
             "status": "running",
         }
     ) == manifest_ack
+    assert adapter.write_trace_metadata(
+        {
+            "output_path": trace_metadata_ack["output_path"],
+            "task": "trace metadata parity",
+            "matched_skills": ["execution-controller-coding"],
+            "owner": "execution-controller-coding",
+            "gate": "none",
+            "overlay": None,
+            "reroute_count": 0,
+            "retry_count": 0,
+            "artifact_paths": [],
+            "verification_status": "passed",
+        }
+    ) == trace_metadata_ack
 
 ROUTE_FIXTURE_PATH = PROJECT_ROOT / "tests" / "routing_route_fixtures.json"
 MISSING_RUNTIME_PATH = PROJECT_ROOT / "tests" / "_routing_missing_runtime.json"

@@ -11,7 +11,6 @@ from framework_runtime.framework_artifact_contracts import (
     build_cli_family_parity_snapshot,
     build_codex_dual_entry_parity_snapshot,
 )
-from framework_runtime.control_plane_contracts import build_control_plane_contract_descriptors
 from framework_runtime.framework_profile import (
     FRAMEWORK_SHARED_CONTRACT_FIELDS,
     FrameworkProfile,
@@ -362,6 +361,7 @@ def _build_python_artifacts(
     *,
     host_overrides: Mapping[str, Any] | None = None,
     include_compatibility_inventory: bool = False,
+    rust_adapter: RustRouteAdapter | None = None,
 ) -> dict[str, Any]:
     artifacts = {
         "framework_profile": profile.to_dict(),
@@ -415,7 +415,7 @@ def _build_python_artifacts(
                 alias_inventory_summary=alias_inventory["summary"]
             )
         )
-    artifacts.update(build_control_plane_contract_descriptors())
+    artifacts.update((rust_adapter or RustRouteAdapter(PROJECT_ROOT)).control_plane_contract_descriptors())
     return artifacts
 
 
@@ -809,6 +809,7 @@ def emit_framework_contract_artifacts(
         profile,
         host_overrides=host_overrides,
         include_compatibility_inventory=emit_compatibility_inventory,
+        rust_adapter=rust_adapter,
     )
     effective_default_artifacts = dict(python_artifacts)
     rust_codex_artifacts: dict[str, Any] | None = None

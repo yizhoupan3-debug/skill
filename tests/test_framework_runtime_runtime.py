@@ -49,7 +49,7 @@ from framework_runtime.state import (
 
 
 _MINIMAL_SUPERVISOR_STATE = {
-    "version": 1,
+    "schema_version": "supervisor-state-v2",
     "controller": "execution-controller-coding",
     "active_phase": "completed",
     "delegation": {
@@ -168,13 +168,8 @@ def test_runtime_uses_rust_control_plane_defaults_over_settings(tmp_path: Path) 
     assert runtime.execution_service.max_background_jobs == 16
     assert runtime.execution_service.background_job_timeout_seconds == 600.0
     assert runtime.background_service._max_background_jobs == 16
-    subagent_middleware = next(
-        middleware
-        for middleware in runtime._middleware_chain.middlewares
-        if middleware.__class__.__name__ == "SubagentLimitMiddleware"
-    )
-    assert subagent_middleware._max_concurrent == 8
-    assert subagent_middleware._timeout == 900
+    assert runtime._max_concurrent_subagents == 8
+    assert runtime._subagent_timeout_seconds == 900
 
 
 def test_runtime_shares_one_rust_adapter_across_route_and_execute(tmp_path: Path) -> None:
@@ -396,13 +391,16 @@ def test_runtime_dry_run_emits_empty_supervisor_projection_without_state_file(tm
     assert str((isolated_home / ".supervisor_state.json").resolve()) not in resume_manifest["artifact_paths"]
 
 
-def test_runtime_supervisor_projection_summarizes_top_level_verification_status_dict(tmp_path: Path) -> None:
-    """Top-level verification dictionaries should reduce to a stable overall verdict."""
+def test_runtime_supervisor_projection_summarizes_structured_verification_status_dict(tmp_path: Path) -> None:
+    """Structured verification dictionaries should reduce to a stable overall verdict."""
 
     supervisor_state = {
+        "schema_version": "supervisor-state-v2",
         "active_phase": "background-policy-rustified-still-not-full-done",
-        "delegated_sidecars": [{"nickname": "Euler"}, {"nickname": "Gibbs"}],
-        "verification_status": {
+        "delegation": {
+            "delegated_sidecars": [{"nickname": "Euler"}, {"nickname": "Gibbs"}],
+        },
+        "verification": {
             "cargo_test_router_rs": "passed",
             "pytest_targeted_suite": "background/runtime/services targeted passed",
             "compileall_runtime": "passed",
@@ -495,6 +493,7 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
 
     async def fake_execute(*, ctx, dry_run: bool, trace_event_count: int, trace_output_path: str | None):
         seen["prompt"] = ctx.prompt
+        seen["metadata"] = dict(ctx.metadata)
         seen["dry_run"] = dry_run
         seen["trace_event_count"] = trace_event_count
         seen["trace_output_path"] = trace_output_path
@@ -525,11 +524,9 @@ def test_runtime_run_task_delegates_execution_to_service_kernel(tmp_path: Path) 
         )
         assert response.content == "delegated"
         assert seen["dry_run"] is True
-        assert isinstance(seen["prompt"], str)
-        if seen["prompt"]:
-            assert "[Sub-Agent Limits] Hard limit:" in seen["prompt"]
-            assert "programmatically enforce these limits." in seen["prompt"]
-        assert "Help with the user's request directly." not in seen["prompt"]
+        assert seen["prompt"] == ""
+        assert seen["metadata"]["max_concurrent_subagents"] == 8
+        assert seen["metadata"]["subagent_timeout_seconds"] == 900
         assert seen["trace_event_count"] >= 4
         assert seen["trace_output_path"] == str(trace_path)
         assert response.prompt_preview == "Rust-owned dry-run prompt"

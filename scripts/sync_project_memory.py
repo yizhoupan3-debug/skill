@@ -7,22 +7,14 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.memory_support import (
-    DEFAULT_CODEX_ROOT,
-    current_local_timestamp,
-    get_repo_root,
-    read_text_if_exists,
-    resolve_effective_memory_dir,
-    safe_slug,
-    workspace_name_from_root,
-    write_text_if_changed,
-)
+DEFAULT_CODEX_ROOT = Path.home() / ".codex"
 
 EXPORTS_ROOT = DEFAULT_CODEX_ROOT / "memory_exports"
 SYNC_HEADER_TEMPLATE = """---
@@ -31,6 +23,48 @@ synced_at: {timestamp}
 ---
 
 """
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _current_local_timestamp() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _read_text_if_exists(path: Path) -> str:
+    return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
+def _safe_slug(value: str, fallback: str = "unknown") -> str:
+    slug = re.sub(r"[^\w.-]+", "-", value, flags=re.UNICODE)
+    slug = re.sub(r"-{2,}", "-", slug).strip("._-")
+    return slug or fallback
+
+
+def _workspace_name_from_root(repo_root: Path) -> str:
+    return repo_root.name
+
+
+def _resolve_effective_memory_dir(
+    *,
+    workspace: str | None = None,
+    repo_root: Path | None = None,
+) -> Path:
+    if repo_root is not None:
+        return repo_root.expanduser().resolve() / ".codex" / "memory"
+    root = (Path.home() / ".codex" / "memories").expanduser().resolve()
+    return root / _safe_slug(workspace or "")
+
+
+def _write_text_if_changed(path: Path, content: str) -> bool:
+    existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if existing == content:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return True
 
 
 def _extract_section(text: str, heading: str) -> str:
@@ -67,7 +101,7 @@ def _collect_recent_logs(memory_dir: Path, days: int = 7) -> str:
     sections: list[str] = []
     session_paths = sorted(archive_root.rglob("sessions/*.md"))[-days:]
     for path in session_paths:
-        contents = read_text_if_exists(path).strip()
+        contents = _read_text_if_exists(path).strip()
         if contents:
             sections.append(f"## {path.stem}\n{contents}")
     return "\n\n".join(sections).strip()
@@ -78,15 +112,15 @@ def _read_auto_state(source_root: Path) -> str:
     if not ops_root.exists():
         return ""
     latest = sorted(ops_root.rglob("snapshot.md"))
-    return read_text_if_exists(latest[-1]).strip() if latest else ""
+    return _read_text_if_exists(latest[-1]).strip() if latest else ""
 
 
 def sync_project_memory(source_root: Path, *, dry_run: bool = False) -> dict[str, Any]:
     """One-way sync: project memory to Codex-local export directory."""
 
     repo_root = source_root.resolve()
-    workspace = workspace_name_from_root(repo_root)
-    memory_dir = resolve_effective_memory_dir(workspace=workspace, repo_root=repo_root)
+    workspace = _workspace_name_from_root(repo_root)
+    memory_dir = _resolve_effective_memory_dir(workspace=workspace, repo_root=repo_root)
     memory_md_path = memory_dir / "MEMORY.md"
     if not memory_md_path.is_file():
         return {
@@ -96,9 +130,9 @@ def sync_project_memory(source_root: Path, *, dry_run: bool = False) -> dict[str
             "files_planned": [],
             "dry_run": dry_run,
         }
-    memory_md = read_text_if_exists(memory_md_path)
-    timestamp = current_local_timestamp()
-    target_dir = EXPORTS_ROOT / safe_slug(workspace)
+    memory_md = _read_text_if_exists(memory_md_path)
+    timestamp = _current_local_timestamp()
+    target_dir = EXPORTS_ROOT / _safe_slug(workspace)
     output_files = {
         "project-memory.md": _extract_facts(memory_md),
         "project-lessons.md": _extract_lessons(memory_md),
@@ -126,7 +160,7 @@ def sync_project_memory(source_root: Path, *, dry_run: bool = False) -> dict[str
             continue
         final = SYNC_HEADER_TEMPLATE.format(timestamp=timestamp) + content.strip() + "\n"
         path = target_dir / name
-        if write_text_if_changed(path, final):
+        if _write_text_if_changed(path, final):
             written.append(str(path.resolve()))
     return {
         "status": "synced",
@@ -146,7 +180,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Print what would be synced without writing.")
     parser.add_argument("--json", action="store_true", dest="json_output", help="Output result as JSON.")
     args = parser.parse_args()
-    result = sync_project_memory((args.source_root or get_repo_root()).resolve(), dry_run=args.dry_run)
+    result = sync_project_memory((args.source_root or _repo_root()).resolve(), dry_run=args.dry_run)
     if args.json_output:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:

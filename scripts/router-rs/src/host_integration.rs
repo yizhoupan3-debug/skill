@@ -17,15 +17,28 @@ const FRAMEWORK_START_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_START -->";
 const FRAMEWORK_END_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_END -->";
 const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v1";
 const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
-const DEFAULT_TUI_STATUS_ITEMS: [&str; 3] = [
-    "model-with-reasoning",
-    "context-remaining",
-    "git-branch",
-];
+const DEFAULT_TUI_STATUS_ITEMS: [&str; 3] =
+    ["model-with-reasoning", "context-remaining", "git-branch"];
 const DEFAULT_SHARED_PROJECT_MCP_SERVERS: [&str; 3] =
     ["browser-mcp", "framework-mcp", "openaiDeveloperDocs"];
 const OPENAI_DEVELOPER_DOCS_MCP_URL: &str = "https://developers.openai.com/mcp";
 const PERSONAL_PLUGIN_LIVE_PROJECTION_EXCLUDES: [&str; 2] = ["skills", ".mcp.json"];
+const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 7] = [
+    "SESSION_SUMMARY.md",
+    "NEXT_ACTIONS.json",
+    "EVIDENCE_INDEX.json",
+    "TRACE_METADATA.json",
+    "active_task.json",
+    "focus_task.json",
+    "task_registry.json",
+];
+const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 5] = [
+    "SESSION_SUMMARY.md",
+    "NEXT_ACTIONS.json",
+    "EVIDENCE_INDEX.json",
+    "TRACE_METADATA.json",
+    ".supervisor_state.json",
+];
 
 #[derive(Deserialize)]
 struct SyncSectionManifest {
@@ -99,9 +112,97 @@ enum Commands {
         #[arg(long)]
         repo_root: PathBuf,
     },
+    ResolveSkillBridgeSource {
+        #[arg(long)]
+        repo_root: PathBuf,
+    },
+    ValidateDefaultBootstrap {
+        #[arg(long)]
+        bootstrap_path: PathBuf,
+        #[arg(long)]
+        repo_root: PathBuf,
+    },
+    ValidateMarketplacePlugin {
+        #[arg(long)]
+        marketplace_path: PathBuf,
+        #[arg(long)]
+        plugin_name: String,
+    },
+    ValidateHomeClaudeMcp {
+        #[arg(long)]
+        config_path: PathBuf,
+        #[arg(long)]
+        repo_root: PathBuf,
+    },
+    ValidatePersonalPluginMcp {
+        #[arg(long)]
+        config_path: PathBuf,
+        #[arg(long)]
+        repo_root: PathBuf,
+    },
+    BuildDefaultBootstrap {
+        #[arg(long)]
+        repo_root: PathBuf,
+        #[arg(long)]
+        output_dir: Option<PathBuf>,
+        #[arg(long, default_value = "")]
+        query: String,
+        #[arg(long)]
+        memory_root: Option<PathBuf>,
+        #[arg(long)]
+        artifact_source_dir: Option<PathBuf>,
+        #[arg(long)]
+        workspace: Option<String>,
+        #[arg(long, default_value_t = 8)]
+        top: usize,
+    },
+    RunMemoryAutomation {
+        #[arg(long)]
+        repo_root: PathBuf,
+        #[arg(long)]
+        output_dir: Option<PathBuf>,
+        #[arg(long)]
+        memory_root: Option<PathBuf>,
+        #[arg(long)]
+        artifact_source_dir: Option<PathBuf>,
+        #[arg(long)]
+        workspace: Option<String>,
+        #[arg(long, default_value = "")]
+        query: String,
+        #[arg(long, default_value_t = 8)]
+        top: usize,
+        #[arg(long)]
+        apply_artifact_migrations: bool,
+    },
+    PlanCurrentArtifactClutter {
+        #[arg(long)]
+        repo_root: PathBuf,
+        #[arg(long)]
+        active_task_id: String,
+    },
+    MigrateCurrentArtifactClutter {
+        #[arg(long)]
+        repo_root: PathBuf,
+        #[arg(long)]
+        active_task_id: String,
+    },
+    PlanLegacyArtifactRoots {
+        #[arg(long)]
+        repo_root: PathBuf,
+    },
+    MigrateLegacyArtifactRoots {
+        #[arg(long)]
+        repo_root: PathBuf,
+    },
+    EnsureDefaultBootstrap {
+        #[arg(long)]
+        repo_root: PathBuf,
+        #[arg(long)]
+        output_dir: Option<PathBuf>,
+    },
     InstallNativeIntegration {
         #[arg(long)]
-        template_root: PathBuf,
+        template_root: Option<PathBuf>,
         #[arg(long)]
         repo_root: PathBuf,
         #[arg(long)]
@@ -163,8 +264,18 @@ struct SingleSyncReport {
     created_dirs: Vec<String>,
 }
 
-fn main() -> Result<(), String> {
-    let cli = Cli::parse();
+pub fn run_host_integration_from_args(args: &[String]) -> Result<Value, String> {
+    let forwarded_args = if matches!(args.first().map(String::as_str), Some("--")) {
+        &args[1..]
+    } else {
+        args
+    };
+    let iter = std::iter::once("router-rs-host-integration".to_string())
+        .chain(forwarded_args.iter().cloned());
+    run_host_integration_payload(Cli::parse_from(iter))
+}
+
+fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
     let payload = match cli.command {
         Commands::SyncHostEntrypoints {
             template_root,
@@ -177,8 +288,100 @@ fn main() -> Result<(), String> {
             serde_json::to_value(load_runtime_registry_payload(&repo_root)?)
                 .map_err(|err| err.to_string())?
         }
+        Commands::ResolveSkillBridgeSource { repo_root } => json!({
+            "path": normalize_path(&repo_root)?
+                .join(skill_bridge_source_rel(&repo_root)?)
+                .to_string_lossy(),
+        }),
+        Commands::ValidateDefaultBootstrap {
+            bootstrap_path,
+            repo_root,
+        } => json!({
+            "ok": validate_default_bootstrap(&bootstrap_path, &repo_root)?,
+        }),
+        Commands::ValidateMarketplacePlugin {
+            marketplace_path,
+            plugin_name,
+        } => json!({
+            "ok": validate_marketplace_plugin(&marketplace_path, &plugin_name)?,
+        }),
+        Commands::ValidateHomeClaudeMcp {
+            config_path,
+            repo_root,
+        } => json!({
+            "ok": validate_home_claude_mcp(&config_path, &repo_root)?,
+        }),
+        Commands::ValidatePersonalPluginMcp {
+            config_path,
+            repo_root,
+        } => json!({
+            "ok": validate_personal_plugin_mcp(&config_path, &repo_root)?,
+        }),
+        Commands::BuildDefaultBootstrap {
+            repo_root,
+            output_dir,
+            query,
+            memory_root,
+            artifact_source_dir,
+            workspace,
+            top,
+        } => build_default_bootstrap_payload(
+            &repo_root,
+            output_dir.as_deref(),
+            &query,
+            memory_root.as_deref(),
+            artifact_source_dir.as_deref(),
+            workspace.as_deref(),
+            top,
+        )?,
+        Commands::RunMemoryAutomation {
+            repo_root,
+            output_dir,
+            memory_root,
+            artifact_source_dir,
+            workspace,
+            query,
+            top,
+            apply_artifact_migrations,
+        } => run_memory_automation(
+            &repo_root,
+            output_dir.as_deref(),
+            memory_root.as_deref(),
+            artifact_source_dir.as_deref(),
+            workspace.as_deref(),
+            &query,
+            top,
+            apply_artifact_migrations,
+        )?,
+        Commands::PlanCurrentArtifactClutter {
+            repo_root,
+            active_task_id,
+        } => json!({
+            "plans": migration_plan_values(&plan_current_artifact_clutter_migrations(
+                &normalize_path(&repo_root)?,
+                &active_task_id,
+            )?),
+        }),
+        Commands::MigrateCurrentArtifactClutter {
+            repo_root,
+            active_task_id,
+        } => json!({
+            "moved": migrate_current_artifact_clutter(&normalize_path(&repo_root)?, &active_task_id)?,
+        }),
+        Commands::PlanLegacyArtifactRoots { repo_root } => json!({
+            "plans": migration_plan_values(&plan_legacy_artifact_root_migrations(
+                &normalize_path(&repo_root)?,
+            )?),
+        }),
+        Commands::MigrateLegacyArtifactRoots { repo_root } => json!({
+            "moved": migrate_legacy_artifact_roots(&normalize_path(&repo_root)?)?,
+        }),
+        Commands::EnsureDefaultBootstrap {
+            repo_root,
+            output_dir,
+        } => ensure_default_bootstrap(&repo_root, output_dir.as_deref())?,
         Commands::InstallNativeIntegration {
-            template_root,
+            template_root: _,
             repo_root,
             home_config_path,
             home_plugin_root,
@@ -201,7 +404,6 @@ fn main() -> Result<(), String> {
             skip_home_claude_mcp_sync,
             skip_default_bootstrap,
         } => install_native_integration(
-            &template_root,
             &repo_root,
             &home_config_path,
             &home_plugin_root,
@@ -225,9 +427,23 @@ fn main() -> Result<(), String> {
             !skip_default_bootstrap,
         )?,
     };
-    let stdout = serde_json::to_string_pretty(&payload).map_err(|err| err.to_string())?;
-    println!("{stdout}");
-    Ok(())
+    Ok(payload)
+}
+
+fn consolidate_shared_memory(repo_root: &Path) -> Result<Value, String> {
+    let payload = run_router_rs_json(
+        repo_root,
+        &[
+            "--claude-hook-command".to_string(),
+            "session-end".to_string(),
+            "--claude-hook-max-lines".to_string(),
+            "4".to_string(),
+        ],
+    )?;
+    payload
+        .get("consolidation")
+        .cloned()
+        .ok_or_else(|| "router-rs session-end payload missing consolidation object".to_string())
 }
 
 fn sync_host_entrypoints(
@@ -462,7 +678,12 @@ fn load_runtime_registry_payload(repo_root: &Path) -> Result<Value, String> {
     let schema_version = parsed
         .get("schema_version")
         .and_then(Value::as_str)
-        .ok_or_else(|| format!("Runtime registry missing schema_version at {}", path.to_string_lossy()))?;
+        .ok_or_else(|| {
+            format!(
+                "Runtime registry missing schema_version at {}",
+                path.to_string_lossy()
+            )
+        })?;
     if schema_version != RUNTIME_REGISTRY_SCHEMA_VERSION {
         return Err(format!(
             "Unsupported runtime registry schema_version {:?} at {}",
@@ -519,7 +740,7 @@ fn router_rs_binary_candidates() -> Vec<PathBuf> {
     ]
 }
 
-fn run_router_rs_json(repo_root: &Path, args: &[&str]) -> Result<Value, String> {
+fn run_router_rs_json(repo_root: &Path, args: &[String]) -> Result<Value, String> {
     for candidate in router_rs_binary_candidates() {
         if !candidate.is_file() {
             continue;
@@ -562,6 +783,18 @@ fn run_router_rs_json(repo_root: &Path, args: &[&str]) -> Result<Value, String> 
     })
 }
 
+fn load_claude_refresh_command_text(repo_root: &Path) -> Result<String, String> {
+    let args = vec!["--claude-hook-projection-json".to_string()];
+    let payload = run_router_rs_json(repo_root, &args)?;
+    payload
+        .get("claude_commands")
+        .and_then(Value::as_object)
+        .and_then(|commands| commands.get("refresh"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| "router-rs hook projection missing claude_commands.refresh".to_string())
+}
+
 fn describe_path(report_root: &Path, target_root: &Path, path: &Path) -> String {
     if let Ok(relative) = path.strip_prefix(report_root) {
         return relative.to_string_lossy().into_owned();
@@ -577,7 +810,6 @@ fn describe_path(report_root: &Path, target_root: &Path, path: &Path) -> String 
 }
 
 fn install_native_integration(
-    template_root: &Path,
     repo_root: &Path,
     home_config_path: &Path,
     home_plugin_root: &Path,
@@ -600,7 +832,6 @@ fn install_native_integration(
     install_home_claude_mcp_sync: bool,
     install_default_bootstrap: bool,
 ) -> Result<Value, String> {
-    let template_root = normalize_path(template_root)?;
     let repo_root = normalize_path(repo_root)?;
     let plugin_registration = primary_plugin_registration(&repo_root)?;
     let plugin_name = plugin_registration
@@ -619,6 +850,7 @@ fn install_native_integration(
     let home_claude_refresh_path = normalize_path(home_claude_refresh_path)?;
     let home_claude_mcp_config_path = normalize_path(home_claude_mcp_config_path)?;
     let bootstrap_output_dir = bootstrap_output_dir.map(normalize_path).transpose()?;
+    let claude_refresh_command = load_claude_refresh_command_text(&repo_root)?;
 
     let created_config = ensure_config_file(&home_config_path)?;
     let codex_hooks_feature_changed = ensure_codex_hooks_feature(&home_config_path)?;
@@ -680,15 +912,9 @@ fn install_native_integration(
         retire_home_skills_link(&repo_root, &home_claude_skills_path)?
     };
     let home_claude_refresh_changed = if install_home_claude_refresh_command {
-        ensure_home_claude_refresh_command(
-            &template_root.join(".claude/commands/refresh.md"),
-            &home_claude_refresh_path,
-        )?
+        ensure_home_claude_refresh_command(&claude_refresh_command, &home_claude_refresh_path)?
     } else {
-        retire_home_claude_refresh_command(
-            &template_root.join(".claude/commands/refresh.md"),
-            &home_claude_refresh_path,
-        )?
+        retire_home_claude_refresh_command(&claude_refresh_command, &home_claude_refresh_path)?
     };
     let home_claude_mcp_config_changed = if install_home_claude_mcp_sync {
         ensure_home_claude_mcp_servers(&repo_root, &home_claude_mcp_config_path)?
@@ -701,7 +927,7 @@ fn install_native_integration(
         Value::Null
     };
     let default_bootstrap = if install_default_bootstrap {
-        ensure_default_bootstrap(&template_root, &repo_root, bootstrap_output_dir.as_deref())?
+        ensure_default_bootstrap(&repo_root, bootstrap_output_dir.as_deref())?
     } else {
         Value::Null
     };
@@ -815,16 +1041,48 @@ fn compact_evolution_proposals(payload: &Value) -> Value {
     })
 }
 
-fn build_default_bootstrap_payload(repo_root: &Path, output_dir: &Path) -> Result<Value, String> {
-    let repo_root = repo_root.canonicalize().unwrap_or_else(|_| repo_root.to_path_buf());
-    let memory = run_router_rs_json(
-        &repo_root,
-        &["--framework-memory-recall-json", "--framework-memory-mode", "active", "--limit", "8"],
-    )?;
+fn build_default_bootstrap_payload(
+    repo_root: &Path,
+    output_dir: Option<&Path>,
+    query: &str,
+    memory_root: Option<&Path>,
+    artifact_source_dir: Option<&Path>,
+    workspace_override: Option<&str>,
+    top: usize,
+) -> Result<Value, String> {
+    let repo_root = repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root.to_path_buf());
+    let resolved_output_dir = output_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| default_bootstrap_output_dir(&repo_root));
+    fs::create_dir_all(&resolved_output_dir).map_err(|err| err.to_string())?;
+    let mut memory_args = vec![
+        "--framework-memory-recall-json".to_string(),
+        "--framework-memory-mode".to_string(),
+        "active".to_string(),
+        "--limit".to_string(),
+        top.to_string(),
+    ];
+    if !query.trim().is_empty() {
+        memory_args.push("--query".to_string());
+        memory_args.push(query.to_string());
+    }
+    if let Some(path) = memory_root {
+        memory_args.push("--framework-memory-root".to_string());
+        memory_args.push(path.to_string_lossy().into_owned());
+    }
+    if let Some(path) = artifact_source_dir {
+        memory_args.push("--framework-artifact-source-dir".to_string());
+        memory_args.push(path.to_string_lossy().into_owned());
+    }
+    let memory = run_router_rs_json(&repo_root, &memory_args)?;
     let memory_recall = memory
         .get("memory_recall")
         .and_then(Value::as_object)
-        .ok_or_else(|| "router-rs memory recall payload missing memory_recall object".to_string())?;
+        .ok_or_else(|| {
+            "router-rs memory recall payload missing memory_recall object".to_string()
+        })?;
     let prompt_payload = memory_recall
         .get("prompt_payload")
         .cloned()
@@ -834,10 +1092,14 @@ fn build_default_bootstrap_payload(repo_root: &Path, output_dir: &Path) -> Resul
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
-    let workspace = prompt_payload
-        .get("workspace")
-        .and_then(Value::as_str)
+    let workspace = workspace_override
         .map(str::to_owned)
+        .or_else(|| {
+            prompt_payload
+                .get("workspace")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
         .unwrap_or_else(|| workspace_name_from_root(&repo_root));
     let created_at = current_local_timestamp();
     let task_id = continuity_decision
@@ -845,7 +1107,13 @@ fn build_default_bootstrap_payload(repo_root: &Path, output_dir: &Path) -> Resul
         .and_then(Value::as_str)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
-        .unwrap_or_else(|| build_framework_task_id(&workspace));
+        .unwrap_or_else(|| {
+            build_framework_task_id(if query.trim().is_empty() {
+                &workspace
+            } else {
+                query
+            })
+        });
     let runtime = json!({
         "skills": [],
         "count": 0,
@@ -860,7 +1128,7 @@ fn build_default_bootstrap_payload(repo_root: &Path, output_dir: &Path) -> Resul
         "memory-bootstrap": prompt_payload,
         "evolution-proposals": proposals,
         "bootstrap": {
-            "query": "",
+            "query": query,
             "workspace": workspace,
             "repo_root": repo_root.to_string_lossy(),
             "task_id": task_id,
@@ -876,16 +1144,16 @@ fn build_default_bootstrap_payload(repo_root: &Path, output_dir: &Path) -> Resul
                 .unwrap_or(false),
         }
     });
-    let task_output_dir = output_dir.join(&task_id);
+    let task_output_dir = resolved_output_dir.join(&task_id);
     fs::create_dir_all(&task_output_dir).map_err(|err| err.to_string())?;
     let bootstrap_path = task_output_dir.join("framework_default_bootstrap.json");
-    let mirror_bootstrap_path = default_bootstrap_mirror_path(output_dir);
+    let mirror_bootstrap_path = default_bootstrap_mirror_path(&resolved_output_dir);
     write_json_if_changed(&bootstrap_path, &payload)?;
     write_json_if_changed(&mirror_bootstrap_path, &payload)?;
     Ok(json!({
         "bootstrap_path": bootstrap_path.to_string_lossy(),
         "paths": {
-            "output_dir": output_dir.to_string_lossy(),
+            "output_dir": resolved_output_dir.to_string_lossy(),
             "task_output_dir": task_output_dir.to_string_lossy(),
             "repo_root": repo_root.to_string_lossy(),
             "memory_root": memory_recall
@@ -911,6 +1179,616 @@ fn build_default_bootstrap_payload(repo_root: &Path, output_dir: &Path) -> Resul
     }))
 }
 
+fn run_memory_automation(
+    repo_root: &Path,
+    output_dir: Option<&Path>,
+    memory_root: Option<&Path>,
+    artifact_source_dir: Option<&Path>,
+    workspace_override: Option<&str>,
+    query: &str,
+    top: usize,
+    apply_artifact_migrations: bool,
+) -> Result<Value, String> {
+    let repo_root = normalize_path(repo_root)?;
+    let resolved_memory_root = memory_root
+        .map(normalize_path)
+        .transpose()?
+        .unwrap_or_else(|| repo_root.join(".codex").join("memory"));
+    let resolved_artifact_source_dir = artifact_source_dir.map(normalize_path).transpose()?;
+    let workspace = workspace_override
+        .map(str::to_owned)
+        .unwrap_or_else(|| workspace_name_from_root(&repo_root));
+
+    let mut runtime_args = vec!["--framework-runtime-snapshot-json".to_string()];
+    if let Some(path) = resolved_artifact_source_dir.as_ref() {
+        runtime_args.push("--framework-artifact-source-dir".to_string());
+        runtime_args.push(path.to_string_lossy().into_owned());
+    }
+    let runtime_payload = run_router_rs_json(&repo_root, &runtime_args)?;
+    let runtime_snapshot = runtime_payload
+        .get("runtime_snapshot")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "router-rs runtime snapshot missing runtime_snapshot object".to_string())?;
+    let active_task_id = runtime_snapshot
+        .get("active_task_id")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    let planned_current_artifact_migrations = if resolved_artifact_source_dir.is_some() {
+        Vec::new()
+    } else {
+        plan_current_artifact_clutter_migrations(&repo_root, &active_task_id)?
+    };
+    let planned_legacy_root_migrations = if resolved_artifact_source_dir.is_some() {
+        Vec::new()
+    } else {
+        plan_legacy_artifact_root_migrations(&repo_root)?
+    };
+    let moved_current_artifacts =
+        if apply_artifact_migrations && resolved_artifact_source_dir.is_none() {
+            migrate_current_artifact_clutter(&repo_root, &active_task_id)?
+        } else {
+            Vec::new()
+        };
+    let moved_legacy_roots = if apply_artifact_migrations && resolved_artifact_source_dir.is_none()
+    {
+        migrate_legacy_artifact_roots(&repo_root)?
+    } else {
+        Vec::new()
+    };
+
+    let consolidation = run_router_rs_json(
+        &repo_root,
+        &[
+            "--claude-hook-command".to_string(),
+            "session-end".to_string(),
+            "--claude-hook-max-lines".to_string(),
+            "4".to_string(),
+        ],
+    )?;
+    let consolidation_payload = consolidation
+        .get("consolidation")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "router-rs session-end payload missing consolidation object".to_string())?;
+    let changed_files = consolidation_payload
+        .get("changed_files")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let archive = consolidation_payload
+        .get("archive")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let sqlite_result = consolidation_payload
+        .get("sqlite_result")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+
+    let report = collect_storage_report(&default_codex_root(), top)?;
+    let retrieval = run_framework_memory_recall(
+        &repo_root,
+        query,
+        top,
+        "stable",
+        Some(&resolved_memory_root),
+        resolved_artifact_source_dir.as_deref(),
+    )?;
+
+    let generated_at = current_local_timestamp();
+    let run_id = build_framework_task_id(&format!("{workspace}-memory-automation"));
+    let resolved_output_dir = output_dir
+        .map(normalize_path)
+        .transpose()?
+        .unwrap_or_else(|| ops_memory_automation_root(&repo_root).join(&run_id));
+    fs::create_dir_all(&resolved_output_dir).map_err(|err| err.to_string())?;
+
+    let changed_file_list = changed_files
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let report_object = report
+        .as_object()
+        .ok_or_else(|| "storage report must be an object".to_string())?;
+    let sqlite_object = sqlite_result
+        .as_object()
+        .ok_or_else(|| "sqlite_result must be an object".to_string())?;
+    let archive_object = archive
+        .as_object()
+        .ok_or_else(|| "archive result must be an object".to_string())?;
+    let snapshot_md = render_memory_automation_snapshot(
+        &workspace,
+        &generated_at,
+        &resolved_memory_root,
+        &default_codex_root(),
+        report_object,
+        sqlite_object,
+        &changed_file_list,
+        archive_object,
+        &planned_current_artifact_migrations,
+        &planned_legacy_root_migrations,
+        apply_artifact_migrations,
+    );
+
+    write_json_if_changed(&resolved_output_dir.join("storage_audit.json"), &report)?;
+    write_text_if_changed(&resolved_output_dir.join("snapshot.md"), &snapshot_md)?;
+    write_json_if_changed(
+        &resolved_output_dir.join("snapshot.json"),
+        &json!({
+            "workspace": workspace,
+            "generated_at": generated_at,
+            "archive": archive,
+            "changed_files": changed_files,
+            "planned_current_artifact_migrations": migration_plan_values(&planned_current_artifact_migrations),
+            "planned_legacy_root_migrations": migration_plan_values(&planned_legacy_root_migrations),
+            "moved_current_artifacts": moved_current_artifacts,
+            "moved_legacy_roots": moved_legacy_roots,
+            "retrieval": retrieval,
+            "apply_artifact_migrations": apply_artifact_migrations,
+        }),
+    )?;
+
+    let bootstrap = build_default_bootstrap_payload(
+        &repo_root,
+        None,
+        query,
+        Some(&resolved_memory_root),
+        resolved_artifact_source_dir.as_deref(),
+        Some(&workspace),
+        top,
+    )?;
+    let run_summary = json!({
+        "workspace": workspace,
+        "generated_at": generated_at,
+        "run_date": current_local_date(),
+        "run_id": run_id,
+        "sqlite_path": sqlite_result.get("db_path").cloned().unwrap_or(Value::Null),
+        "memory_root": resolved_memory_root.to_string_lossy(),
+        "output_dir": resolved_output_dir.to_string_lossy(),
+        "changed_files": changed_files,
+        "archive": archive,
+        "planned_current_artifact_migrations": migration_plan_values(&planned_current_artifact_migrations),
+        "planned_legacy_root_migrations": migration_plan_values(&planned_legacy_root_migrations),
+        "moved_current_artifacts": moved_current_artifacts,
+        "moved_legacy_roots": moved_legacy_roots,
+        "apply_artifact_migrations": apply_artifact_migrations,
+        "sqlite_result": sqlite_result,
+        "storage_total_mib": report.get("total_mib").cloned().unwrap_or(Value::Null),
+        "top_storage_entries": report.get("top_entries").cloned().unwrap_or_else(|| json!([])),
+        "retrieval": retrieval,
+    });
+    write_json_if_changed(&resolved_output_dir.join("run_summary.json"), &run_summary)?;
+
+    Ok(json!({
+        "workspace": workspace,
+        "memory_root": resolved_memory_root.to_string_lossy(),
+        "changed_files": changed_files,
+        "archive": archive,
+        "planned_current_artifact_migrations": migration_plan_values(&planned_current_artifact_migrations),
+        "planned_legacy_root_migrations": migration_plan_values(&planned_legacy_root_migrations),
+        "moved_current_artifacts": moved_current_artifacts,
+        "moved_legacy_roots": moved_legacy_roots,
+        "apply_artifact_migrations": apply_artifact_migrations,
+        "report": report,
+        "sqlite_result": sqlite_result,
+        "retrieval": retrieval,
+        "bootstrap": bootstrap,
+        "output_dir": resolved_output_dir.to_string_lossy(),
+    }))
+}
+
+#[derive(Clone)]
+struct MigrationPlan {
+    source: String,
+    destination: String,
+}
+
+fn migration_plan_values(plans: &[MigrationPlan]) -> Value {
+    Value::Array(
+        plans.iter()
+            .map(|plan| {
+                json!({
+                    "source": plan.source,
+                    "destination": plan.destination,
+                })
+            })
+            .collect(),
+    )
+}
+
+fn current_local_date() -> String {
+    Local::now().format("%Y-%m-%d").to_string()
+}
+
+fn default_codex_root() -> PathBuf {
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".codex")
+}
+
+fn ops_memory_automation_root(repo_root: &Path) -> PathBuf {
+    repo_root.join("artifacts").join("ops").join("memory_automation")
+}
+
+fn evidence_artifact_root(repo_root: &Path, task_id: Option<&str>) -> PathBuf {
+    let root = repo_root.join("artifacts").join("evidence");
+    task_id
+        .map(|value| root.join(safe_slug(value)))
+        .unwrap_or(root)
+}
+
+fn scratch_artifact_root(repo_root: &Path, run_id: Option<&str>) -> PathBuf {
+    let root = repo_root.join("artifacts").join("scratch");
+    run_id
+        .map(|value| root.join(safe_slug(value)))
+        .unwrap_or(root)
+}
+
+fn render_memory_automation_snapshot(
+    workspace: &str,
+    generated_at: &str,
+    memory_root: &Path,
+    storage_root: &Path,
+    report: &Map<String, Value>,
+    sqlite_result: &Map<String, Value>,
+    changed_files: &[String],
+    archive_result: &Map<String, Value>,
+    planned_current_artifact_migrations: &[MigrationPlan],
+    planned_legacy_root_migrations: &[MigrationPlan],
+    apply_artifact_migrations: bool,
+) -> String {
+    let mut lines = vec![
+        "# CLI-common memory automation pipeline".to_string(),
+        "".to_string(),
+        format!("- workspace: {workspace}"),
+        format!("- generated_at: {generated_at}"),
+        format!("- memory_root: {}", memory_root.display()),
+        format!("- storage_root: {}", storage_root.display()),
+        format!(
+            "- total_mib: {}",
+            report.get("total_mib").and_then(Value::as_f64).unwrap_or(0.0)
+        ),
+        format!("- memory_changed: {}", !changed_files.is_empty()),
+        format!(
+            "- sqlite_path: {}",
+            sqlite_result
+                .get("db_path")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+        ),
+        format!(
+            "- sqlite_memory_items: {}",
+            sqlite_result
+                .get("memory_items")
+                .and_then(Value::as_i64)
+                .unwrap_or(0)
+        ),
+        format!(
+            "- legacy_rows_archived: {}",
+            archive_result
+                .get("legacy_row_count")
+                .and_then(Value::as_i64)
+                .unwrap_or(0)
+        ),
+        format!(
+            "- legacy_memory_items_archived: {}",
+            archive_result
+                .get("legacy_memory_item_count")
+                .and_then(Value::as_i64)
+                .unwrap_or(0)
+        ),
+        format!("- apply_artifact_migrations: {apply_artifact_migrations}"),
+        format!(
+            "- planned_current_artifact_migrations: {}",
+            planned_current_artifact_migrations.len()
+        ),
+        format!(
+            "- planned_legacy_root_migrations: {}",
+            planned_legacy_root_migrations.len()
+        ),
+    ];
+    if changed_files.is_empty() {
+        lines.push("- changed_files: none".to_string());
+    } else {
+        lines.push("- changed_files:".to_string());
+        lines.extend(changed_files.iter().map(|path| format!("  - {path}")));
+    }
+    lines.push("".to_string());
+    lines.push("## recommendations".to_string());
+    lines.push("".to_string());
+    let recommendations = top_storage_recommendations(report);
+    if recommendations.is_empty() {
+        lines.push("- none".to_string());
+    } else {
+        lines.extend(recommendations.into_iter().map(|line| format!("- {line}")));
+    }
+    lines.join("\n") + "\n"
+}
+
+fn top_storage_recommendations(report: &Map<String, Value>) -> Vec<String> {
+    report
+        .get("top_entries")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .take(5)
+        .filter_map(|entry| entry.get("path").and_then(Value::as_str))
+        .filter_map(|path| {
+            if path.contains("__pycache__") {
+                Some(format!("consider pruning cache: {path}"))
+            } else if path.ends_with("logs_1.sqlite") || path.ends_with("logs_2.sqlite") {
+                Some(format!("rotate or compact trace database: {path}"))
+            } else if path.contains("/sessions/") && path.ends_with(".jsonl") {
+                Some(format!("archive or compress old session trace: {path}"))
+            } else if path.contains("/tmp/arg0/") {
+                Some(format!("clean stale tmp runtime wrappers: {path}"))
+            } else if path.ends_with(".sqlite3") {
+                Some(format!("monitor sqlite growth: {path}"))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn run_framework_memory_recall(
+    repo_root: &Path,
+    query: &str,
+    top: usize,
+    mode: &str,
+    memory_root: Option<&Path>,
+    artifact_source_dir: Option<&Path>,
+) -> Result<Value, String> {
+    let mut args = vec![
+        "--framework-memory-recall-json".to_string(),
+        "--framework-memory-mode".to_string(),
+        mode.to_string(),
+        "--limit".to_string(),
+        top.to_string(),
+    ];
+    if !query.trim().is_empty() {
+        args.push("--query".to_string());
+        args.push(query.to_string());
+    }
+    if let Some(path) = memory_root {
+        args.push("--framework-memory-root".to_string());
+        args.push(path.to_string_lossy().into_owned());
+    }
+    if let Some(path) = artifact_source_dir {
+        args.push("--framework-artifact-source-dir".to_string());
+        args.push(path.to_string_lossy().into_owned());
+    }
+    let payload = run_router_rs_json(repo_root, &args)?;
+    payload
+        .get("memory_recall")
+        .cloned()
+        .ok_or_else(|| "router-rs memory recall payload missing memory_recall object".to_string())
+}
+
+fn collect_storage_report(root: &Path, top: usize) -> Result<Value, String> {
+    let mut entries = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    let mut total_bytes = 0u64;
+    while let Some(path) = stack.pop() {
+        if !path.exists() {
+            continue;
+        }
+        for entry in fs::read_dir(&path).map_err(|err| err.to_string())? {
+            let entry = entry.map_err(|err| err.to_string())?;
+            let candidate = entry.path();
+            let metadata = entry.metadata().map_err(|err| err.to_string())?;
+            if metadata.is_dir() {
+                stack.push(candidate);
+            } else if metadata.is_file() {
+                total_bytes += metadata.len();
+                entries.push((metadata.len(), candidate));
+            }
+        }
+    }
+    entries.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
+    Ok(json!({
+        "root": root.to_string_lossy(),
+        "total_mib": round_mib(total_bytes),
+        "top_entries": entries
+            .into_iter()
+            .take(top)
+            .map(|(bytes, path)| {
+                json!({
+                    "path": path.to_string_lossy(),
+                    "bytes": bytes,
+                    "mib": round_mib(bytes),
+                })
+            })
+            .collect::<Vec<_>>(),
+    }))
+}
+
+fn round_mib(bytes: u64) -> f64 {
+    let mib = bytes as f64 / (1024.0 * 1024.0);
+    (mib * 1000.0).round() / 1000.0
+}
+
+fn move_path(source: &Path, destination: &Path) -> Result<String, String> {
+    let mut resolved_destination = destination.to_path_buf();
+    if resolved_destination.exists() {
+        let suffix = current_local_timestamp().replace(':', "").replace('+', "_");
+        let stem = resolved_destination
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("moved");
+        let extension = resolved_destination
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| format!(".{value}"))
+            .unwrap_or_default();
+        resolved_destination =
+            resolved_destination.with_file_name(format!("{stem}-{suffix}{extension}"));
+    }
+    if let Some(parent) = resolved_destination.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    fs::rename(source, &resolved_destination).map_err(|err| err.to_string())?;
+    Ok(resolved_destination.to_string_lossy().into_owned())
+}
+
+fn destination_for_current_artifact(
+    repo_root: &Path,
+    path: &Path,
+    active_task_id: &str,
+) -> Option<PathBuf> {
+    let current_root = repo_root.join("artifacts").join("current");
+    let task_root = current_root.join(active_task_id);
+    if !path.exists() || (path.parent() != Some(current_root.as_path()) && path.parent() != Some(task_root.as_path())) {
+        return None;
+    }
+    if CURRENT_ALLOWED_ARTIFACT_NAMES.contains(&path.file_name()?.to_str()?)
+        || path.file_name()?.to_str()? == active_task_id
+    {
+        return None;
+    }
+    if path.parent() == Some(task_root.as_path())
+        && TASK_ALLOWED_ARTIFACT_NAMES.contains(&path.file_name()?.to_str()?)
+    {
+        return None;
+    }
+    let name = path.file_name()?.to_str()?;
+    if name == "framework_default_bootstrap.json" || name == "hermes_default_bootstrap.json" {
+        let suffix = if path.parent() == Some(current_root.as_path()) {
+            PathBuf::from(name)
+        } else {
+            PathBuf::from(active_task_id).join(name)
+        };
+        return Some(
+            repo_root
+                .join("artifacts")
+                .join("bootstrap")
+                .join("legacy-current")
+                .join(suffix),
+        );
+    }
+    if name == "run_summary.json"
+        || name == "storage_audit.json"
+        || name == "snapshot.json"
+        || name == "snapshot.md"
+    {
+        let suffix = if path.parent() == Some(current_root.as_path()) {
+            PathBuf::from(name)
+        } else {
+            PathBuf::from(active_task_id).join(name)
+        };
+        return Some(ops_memory_automation_root(repo_root).join("legacy-current").join(suffix));
+    }
+    if name.starts_with("tmp-") {
+        return Some(if path.parent() == Some(current_root.as_path()) {
+            scratch_artifact_root(repo_root, None).join(name)
+        } else {
+            scratch_artifact_root(repo_root, Some("legacy-current"))
+                .join(active_task_id)
+                .join(name)
+        });
+    }
+    let suffix = if path.parent() == Some(current_root.as_path()) {
+        PathBuf::from(name)
+    } else {
+        PathBuf::from(active_task_id).join(name)
+    };
+    Some(evidence_artifact_root(repo_root, Some("legacy-current")).join(suffix))
+}
+
+fn plan_current_artifact_clutter_migrations(
+    repo_root: &Path,
+    active_task_id: &str,
+) -> Result<Vec<MigrationPlan>, String> {
+    let current_root = repo_root.join("artifacts").join("current");
+    if !current_root.exists() {
+        return Ok(Vec::new());
+    }
+    let mut plans = Vec::new();
+    for entry in fs::read_dir(&current_root).map_err(|err| err.to_string())? {
+        let path = entry.map_err(|err| err.to_string())?.path();
+        if let Some(destination) = destination_for_current_artifact(repo_root, &path, active_task_id)
+        {
+            plans.push(MigrationPlan {
+                source: path.to_string_lossy().into_owned(),
+                destination: destination.to_string_lossy().into_owned(),
+            });
+        }
+    }
+    let task_root = current_root.join(active_task_id);
+    if task_root.is_dir() {
+        for entry in fs::read_dir(&task_root).map_err(|err| err.to_string())? {
+            let path = entry.map_err(|err| err.to_string())?.path();
+            if let Some(destination) = destination_for_current_artifact(repo_root, &path, active_task_id)
+            {
+                plans.push(MigrationPlan {
+                    source: path.to_string_lossy().into_owned(),
+                    destination: destination.to_string_lossy().into_owned(),
+                });
+            }
+        }
+    }
+    plans.sort_by(|left, right| left.source.cmp(&right.source));
+    Ok(plans)
+}
+
+fn migrate_current_artifact_clutter(
+    repo_root: &Path,
+    active_task_id: &str,
+) -> Result<Vec<String>, String> {
+    let plans = plan_current_artifact_clutter_migrations(repo_root, active_task_id)?;
+    let mut moved = Vec::new();
+    for plan in plans {
+        moved.push(move_path(Path::new(&plan.source), Path::new(&plan.destination))?);
+    }
+    Ok(moved)
+}
+
+fn plan_legacy_artifact_root_migrations(repo_root: &Path) -> Result<Vec<MigrationPlan>, String> {
+    let artifacts_root = repo_root.join("artifacts");
+    if !artifacts_root.exists() {
+        return Ok(Vec::new());
+    }
+    let mut plans = Vec::new();
+    let legacy_memory_root = artifacts_root.join("memory_automation");
+    if legacy_memory_root.exists() {
+        plans.push(MigrationPlan {
+            source: legacy_memory_root.to_string_lossy().into_owned(),
+            destination: ops_memory_automation_root(repo_root)
+                .join("legacy-root")
+                .to_string_lossy()
+                .into_owned(),
+        });
+    }
+    for entry in fs::read_dir(&artifacts_root).map_err(|err| err.to_string())? {
+        let path = entry.map_err(|err| err.to_string())?.path();
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if name.starts_with("tmp-") {
+            plans.push(MigrationPlan {
+                source: path.to_string_lossy().into_owned(),
+                destination: scratch_artifact_root(repo_root, None)
+                    .join(name)
+                    .to_string_lossy()
+                    .into_owned(),
+            });
+        }
+    }
+    plans.sort_by(|left, right| left.source.cmp(&right.source));
+    Ok(plans)
+}
+
+fn migrate_legacy_artifact_roots(repo_root: &Path) -> Result<Vec<String>, String> {
+    let plans = plan_legacy_artifact_root_migrations(repo_root)?;
+    let mut moved = Vec::new();
+    for plan in plans {
+        moved.push(move_path(Path::new(&plan.source), Path::new(&plan.destination))?);
+    }
+    Ok(moved)
+}
+
 fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> bool {
     payload
         .get("bootstrap")
@@ -934,11 +1812,7 @@ fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> bool
         .unwrap_or(false)
 }
 
-fn ensure_default_bootstrap(
-    _template_root: &Path,
-    repo_root: &Path,
-    output_dir: Option<&Path>,
-) -> Result<Value, String> {
+fn ensure_default_bootstrap(repo_root: &Path, output_dir: Option<&Path>) -> Result<Value, String> {
     let resolved_output_dir = output_dir
         .map(Path::to_path_buf)
         .unwrap_or_else(|| default_bootstrap_output_dir(repo_root));
@@ -962,7 +1836,15 @@ fn ensure_default_bootstrap(
         }));
     }
 
-    let parsed = build_default_bootstrap_payload(repo_root, &resolved_output_dir)?;
+    let parsed = build_default_bootstrap_payload(
+        repo_root,
+        Some(&resolved_output_dir),
+        "",
+        None,
+        None,
+        None,
+        8,
+    )?;
     let output_dir_value = parsed
         .get("paths")
         .and_then(|value| value.get("output_dir"))
@@ -1004,6 +1886,16 @@ fn ensure_default_bootstrap(
     }))
 }
 
+fn validate_default_bootstrap(bootstrap_path: &Path, repo_root: &Path) -> Result<bool, String> {
+    let path = normalize_path(bootstrap_path)?;
+    let repo_root = normalize_path(repo_root)?;
+    let Some(content) = read_text_if_exists(&path)? else {
+        return Ok(false);
+    };
+    let payload = serde_json::from_str::<Value>(&content).map_err(|err| err.to_string())?;
+    Ok(bootstrap_payload_matches_contract(&payload, &repo_root))
+}
+
 fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
@@ -1025,9 +1917,17 @@ fn build_browser_server_block(repo_root: &Path) -> String {
 }
 
 fn build_framework_server_block(repo_root: &Path) -> String {
+    let binary_path = repo_root
+        .join("scripts")
+        .join("router-rs")
+        .join("target")
+        .join("release")
+        .join("router-rs");
     format!(
-        "[mcp_servers.framework-mcp]\ncommand = \"python3\"\nargs = [\"-m\", \"scripts.framework_mcp\"]\ncwd = \"{}\"",
-        repo_root.to_string_lossy()
+        "[mcp_servers.framework-mcp]\ncommand = \"{}\"\nargs = [\"--framework-mcp-stdio\", \"--repo-root\", \"{}\"]\ncwd = \"{}\"",
+        binary_path.to_string_lossy(),
+        repo_root.to_string_lossy(),
+        repo_root.to_string_lossy(),
     )
 }
 
@@ -1190,11 +2090,7 @@ fn format_status_line() -> String {
     format!("status_line = [{items}]")
 }
 
-fn sync_directory(
-    source: &Path,
-    destination: &Path,
-    skip_names: &[&str],
-) -> Result<bool, String> {
+fn sync_directory(source: &Path, destination: &Path, skip_names: &[&str]) -> Result<bool, String> {
     if !source.is_dir() {
         return Err(format!(
             "Plugin source directory not found: {}",
@@ -1310,7 +2206,10 @@ fn ensure_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool,
 }
 
 fn retire_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool, String> {
-    let source = repo_root.join(skill_bridge_source_rel(repo_root)?).canonicalize().map_err(|err| err.to_string())?;
+    let source = repo_root
+        .join(skill_bridge_source_rel(repo_root)?)
+        .canonicalize()
+        .map_err(|err| err.to_string())?;
     let metadata = match fs::symlink_metadata(target_path) {
         Ok(metadata) => metadata,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
@@ -1327,23 +2226,15 @@ fn retire_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool,
     Ok(true)
 }
 
-fn ensure_home_claude_refresh_command(
-    source_path: &Path,
-    command_path: &Path,
-) -> Result<bool, String> {
-    let content = fs::read_to_string(source_path).map_err(|err| err.to_string())?;
-    write_text_if_changed(command_path, &content)
+fn ensure_home_claude_refresh_command(content: &str, command_path: &Path) -> Result<bool, String> {
+    write_text_if_changed(command_path, content)
 }
 
-fn retire_home_claude_refresh_command(
-    source_path: &Path,
-    command_path: &Path,
-) -> Result<bool, String> {
+fn retire_home_claude_refresh_command(content: &str, command_path: &Path) -> Result<bool, String> {
     let Some(existing) = read_text_if_exists(command_path)? else {
         return Ok(false);
     };
-    let source = fs::read_to_string(source_path).map_err(|err| err.to_string())?;
-    if existing != source {
+    if existing != content {
         return Ok(false);
     }
     remove_path(command_path).map_err(|err| err.to_string())?;
@@ -1371,6 +2262,86 @@ fn ensure_home_claude_mcp_servers(repo_root: &Path, config_path: &Path) -> Resul
     write_json_if_changed(config_path, &Value::Object(payload))
 }
 
+fn validate_marketplace_plugin(marketplace_path: &Path, plugin_name: &str) -> Result<bool, String> {
+    let path = normalize_path(marketplace_path)?;
+    let Some(Value::Object(payload)) = read_json_value_if_exists(&path)? else {
+        return Ok(false);
+    };
+    let Some(Value::Array(plugins)) = payload.get("plugins") else {
+        return Ok(false);
+    };
+    Ok(plugins.iter().any(|plugin| {
+        plugin
+            .get("name")
+            .and_then(Value::as_str)
+            .is_some_and(|name| name == plugin_name)
+    }))
+}
+
+fn validate_home_claude_mcp(config_path: &Path, repo_root: &Path) -> Result<bool, String> {
+    let path = normalize_path(config_path)?;
+    let repo_root = normalize_path(repo_root)?;
+    let Some(Value::Object(payload)) = read_json_value_if_exists(&path)? else {
+        return Ok(false);
+    };
+    let Some(Value::Object(servers)) = payload.get("mcpServers") else {
+        return Ok(false);
+    };
+
+    let browser = servers.get("browser-mcp").and_then(Value::as_object);
+    let framework = servers.get("framework-mcp").and_then(Value::as_object);
+    let openai_docs = servers
+        .get("openaiDeveloperDocs")
+        .and_then(Value::as_object);
+    let Some(browser) = browser else {
+        return Ok(false);
+    };
+    let Some(framework) = framework else {
+        return Ok(false);
+    };
+    let Some(openai_docs) = openai_docs else {
+        return Ok(false);
+    };
+
+    let browser_ok = browser.get("command").and_then(Value::as_str) == Some("bash")
+        && browser.get("cwd").and_then(Value::as_str) == Some(repo_root.to_string_lossy().as_ref());
+    let expected_framework_command = repo_root
+        .join("scripts/router-rs/target/release/router-rs")
+        .to_string_lossy()
+        .into_owned();
+    let framework_ok = framework.get("command").and_then(Value::as_str)
+        == Some(expected_framework_command.as_str())
+        && framework.get("cwd").and_then(Value::as_str)
+            == Some(repo_root.to_string_lossy().as_ref())
+        && framework
+            .get("args")
+            .and_then(Value::as_array)
+            .is_some_and(|args| {
+                args == &vec![
+                    Value::String("--framework-mcp-stdio".to_string()),
+                    Value::String("--repo-root".to_string()),
+                    Value::String(repo_root.to_string_lossy().into_owned()),
+                ]
+            })
+        && framework
+            .get("env")
+            .and_then(Value::as_object)
+            .is_some_and(Map::is_empty);
+    let openai_docs_ok = openai_docs.get("type").and_then(Value::as_str) == Some("http")
+        && openai_docs.get("url").and_then(Value::as_str) == Some(OPENAI_DEVELOPER_DOCS_MCP_URL);
+
+    Ok(browser_ok && framework_ok && openai_docs_ok)
+}
+
+fn validate_personal_plugin_mcp(config_path: &Path, repo_root: &Path) -> Result<bool, String> {
+    let path = normalize_path(config_path)?;
+    let repo_root = normalize_path(repo_root)?;
+    let Some(payload) = read_json_value_if_exists(&path)? else {
+        return Ok(false);
+    };
+    Ok(payload == build_personal_plugin_mcp_payload(&repo_root))
+}
+
 fn managed_home_claude_mcp_server(repo_root: &Path, server_name: &str) -> Result<Value, String> {
     let repo_root_value = repo_root.to_string_lossy().into_owned();
     match server_name {
@@ -1383,12 +2354,10 @@ fn managed_home_claude_mcp_server(repo_root: &Path, server_name: &str) -> Result
         })),
         "framework-mcp" => Ok(json!({
             "type": "stdio",
-            "command": "python3",
-            "args": ["-m", "scripts.framework_mcp"],
+            "command": repo_root.join("scripts").join("router-rs").join("target").join("release").join("router-rs").to_string_lossy(),
+            "args": ["--framework-mcp-stdio", "--repo-root", repo_root_value],
             "cwd": repo_root_value,
-            "env": {
-                "PYTHONPATH": repo_root_value,
-            },
+            "env": {},
         })),
         "openaiDeveloperDocs" => Ok(json!({
             "type": "http",
@@ -1409,8 +2378,8 @@ fn build_personal_plugin_mcp_payload(repo_root: &Path) -> Value {
     json!({
         "mcpServers": {
             "framework-mcp": {
-                "command": "python3",
-                "args": ["-m", "scripts.framework_mcp"],
+                "command": repo_root.join("scripts").join("router-rs").join("target").join("release").join("router-rs").to_string_lossy(),
+                "args": ["--framework-mcp-stdio", "--repo-root", repo_root_value],
                 "cwd": repo_root_value,
             },
             "browser-mcp": {
@@ -1655,6 +2624,15 @@ fn read_json_map_if_exists(path: &Path) -> Result<Option<Map<String, Value>>, St
         Value::Object(map) => Ok(Some(map)),
         _ => Ok(None),
     }
+}
+
+fn read_json_value_if_exists(path: &Path) -> Result<Option<Value>, String> {
+    let Some(content) = read_text_if_exists(path)? else {
+        return Ok(None);
+    };
+    serde_json::from_str(&content)
+        .map(Some)
+        .map_err(|err| err.to_string())
 }
 
 fn remove_path(path: &Path) -> io::Result<()> {

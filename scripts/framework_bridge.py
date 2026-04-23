@@ -8,6 +8,7 @@ import os
 import sys
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,12 +16,6 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from framework_runtime.rust_router import get_cached_route_adapter
-from scripts.memory_support import (
-    current_local_timestamp,
-    get_repo_root,
-    write_json_if_changed,
-    write_text_if_changed,
-)
 
 RUNTIME_PATH = Path(
     os.environ.get(
@@ -79,6 +74,33 @@ def _read_json(path: Path) -> dict[str, Any] | list[Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return {}
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _current_local_timestamp() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _write_json_if_changed(path: Path, payload: dict[str, Any] | list[Any]) -> bool:
+    content = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if existing == content:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return True
+
+
+def _write_text_if_changed(path: Path, content: str) -> bool:
+    existing = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if existing == content:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return True
 
 def export_framework_skills(
     runtime_path: Path | None = None,
@@ -234,8 +256,8 @@ def export_supporting_files(
     """Write bridge-facing JSON helpers for external consumers."""
 
     payload = export_framework_skills()
-    repo_root = (source_root or get_repo_root()).resolve()
-    memory = get_cached_route_adapter(get_repo_root()).framework_memory_recall(
+    repo_root = (source_root or _repo_root()).resolve()
+    memory = get_cached_route_adapter(_repo_root()).framework_memory_recall(
         repo_root=repo_root,
         query=query,
         top=top,
@@ -246,11 +268,11 @@ def export_supporting_files(
     skills_path = output_dir / "framework_skills.json"
     memory_path = output_dir / "framework_memory_bootstrap.json"
     proposals_path = output_dir / "framework_evolution_proposals.json"
-    write_json_if_changed(skills_path, payload)
-    write_json_if_changed(memory_path, memory)
-    write_json_if_changed(proposals_path, proposals)
+    _write_json_if_changed(skills_path, payload)
+    _write_json_if_changed(memory_path, memory)
+    _write_json_if_changed(proposals_path, proposals)
     summary_path = output_dir / "framework_bridge_summary.md"
-    write_text_if_changed(
+    _write_text_if_changed(
         summary_path,
         "\n".join(
             [
@@ -258,7 +280,7 @@ def export_supporting_files(
                 "",
                 f"- workspace: {workspace}",
                 f"- query: {query or '(none)'}",
-                f"- generated_at: {current_local_timestamp()}",
+                f"- generated_at: {_current_local_timestamp()}",
                 f"- runtime_path: {payload['source']}",
                 f"- skills: {payload['count']}",
                 f"- proposal_count: {proposals['proposal_count']}",

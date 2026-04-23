@@ -1,16 +1,10 @@
-"""Pluggable middleware chain for the Codex Agno runtime.
-
-Inspired by DeerFlow 2.0's 11-layer middleware architecture.
-Each middleware can hook into before_agent and after_agent phases,
-enabling cross-cutting concerns like context compression, memory
-injection, and sub-agent limits without modifying the core loop.
-"""
+"""Pluggable middleware chain for the Codex Agno runtime."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Any, Callable, Awaitable
 
 from pydantic import BaseModel, Field
@@ -38,7 +32,6 @@ class MiddlewareContext(BaseModel):
     routing_result: RoutingResult
     prompt: str = ""
     memory_facts: list[str] = Field(default_factory=list)
-    active_subagent_count: int = 0
     metadata: dict[str, Any] = Field(default_factory=dict)
     execution_kernel: str | None = None
     execution_kernel_authority: str | None = None
@@ -242,79 +235,6 @@ class MiddlewareChain:
         return result
 
 
-# ---------------------------------------------------------------------------
-# Built-in middlewares
-# ---------------------------------------------------------------------------
-
-
-def _routing_prompt_preview(ctx: MiddlewareContext) -> str | None:
-    preview = ctx.metadata.get("routing_prompt_preview")
-    if preview is None:
-        return None
-    return str(preview)
-
-
-def _prompt_projection_enabled(ctx: MiddlewareContext) -> bool:
-    if "python_prompt_required" in ctx.metadata:
-        return bool(ctx.metadata["python_prompt_required"])
-    if ctx.prompt:
-        return True
-    return _routing_prompt_preview(ctx) is not None
-
-
-def _resolve_projection_prompt(
-    ctx: MiddlewareContext,
-    *,
-    prompt_builder: Any | None = None,
-) -> tuple[str, str]:
-    """Resolve Python-side prompt text from the Rust-first control plane."""
-
-    if ctx.prompt:
-        return ctx.prompt, "middleware-context"
-    preview = _routing_prompt_preview(ctx)
-    if preview:
-        return preview, "routing-metadata-preview"
-    if prompt_builder is None:
-        return "", "missing-prompt-source"
-    return prompt_builder.build_prompt(ctx.routing_result), "python-compatibility-builder"
-
-
-class SkillInjectionMiddleware(Middleware):
-    """Inject skill-based prompt into the context.
-
-    Replaces the inline PromptBuilder call that was previously in runtime.py.
-    """
-
-    def __init__(self, prompt_builder: Any) -> None:
-        """Initialize with a PromptBuilder instance.
-
-        Parameters:
-            prompt_builder: The PromptBuilder used for dynamic injection.
-
-        Returns:
-            None.
-        """
-        self._prompt_builder = prompt_builder
-
-    async def before_agent(self, ctx: MiddlewareContext) -> MiddlewareContext:
-        """Build and inject the skill-based prompt.
-
-        Parameters:
-            ctx: The middleware context.
-
-        Returns:
-            MiddlewareContext: Context with prompt populated.
-        """
-        if not _prompt_projection_enabled(ctx):
-            return ctx
-        ctx.prompt, source = _resolve_projection_prompt(
-            ctx,
-            prompt_builder=self._prompt_builder,
-        )
-        ctx.metadata["python_prompt_source"] = source
-        return ctx
-
-
 class ContextCompressionMiddleware(Middleware):
     """Compress context when approaching the token budget.
 
@@ -344,12 +264,8 @@ class ContextCompressionMiddleware(Middleware):
         Returns:
             MiddlewareContext: Context with potentially compressed prompt.
         """
-        if not _prompt_projection_enabled(ctx):
+        if not ctx.prompt:
             return ctx
-        preview = _routing_prompt_preview(ctx)
-        if not ctx.prompt and preview:
-            ctx.prompt = preview
-            ctx.metadata.setdefault("python_prompt_source", "routing-metadata-preview")
         from framework_runtime.context import ContextEngineer
 
         estimated = estimate_tokens(ctx.prompt)
@@ -391,20 +307,9 @@ class MemoryMiddleware(Middleware):
         Returns:
             MiddlewareContext: Context with memory facts injected.
         """
-        if not _prompt_projection_enabled(ctx):
-            return ctx
-        preview = _routing_prompt_preview(ctx)
-        if not ctx.prompt and preview:
-            ctx.prompt = preview
-            ctx.metadata.setdefault("python_prompt_source", "routing-metadata-preview")
         facts = self._store.load_facts(ctx.user_id)
         if facts:
             ctx.memory_facts = facts
-            memory_block = "\n".join(f"- {f}" for f in facts)
-            ctx.prompt = (
-                f"[Long-Term Memory]\nThe following facts are known about this user:\n"
-                f"{memory_block}\n\n{ctx.prompt}"
-            )
             logger.info("Injected %d memory facts for user %s", len(facts), ctx.user_id)
         return ctx
 
@@ -436,76 +341,6 @@ class MemoryMiddleware(Middleware):
                     "Extracted %d new facts for user %s", len(new_facts), ctx.user_id
                 )
         return result
-
-
-class SubagentLimitMiddleware(Middleware):
-    """Enforce hard limits on concurrent sub-agents.
-
-    Inspired by DeerFlow 2.0's programmatic enforcement — uses code, not prompts,
-    to prevent exceeding the sub-agent limit.
-    """
-
-    def __init__(self, max_concurrent: int = 3, timeout_seconds: int = 900) -> None:
-        """Initialize with limit parameters.
-
-        Parameters:
-            max_concurrent: Maximum concurrent sub-agents.
-            timeout_seconds: Timeout per sub-agent in seconds.
-
-        Returns:
-            None.
-        """
-        self._max_concurrent = max_concurrent
-        self._timeout = timeout_seconds
-        # Lazily initialized inside the event loop to avoid 'no current event loop' errors
-        # when the middleware is instantiated outside of an async context.
-        self._semaphore: asyncio.Semaphore | None = None
-        self._active_count = 0
-
-    def _get_semaphore(self) -> asyncio.Semaphore:
-        """Return or create the semaphore within the running event loop.
-
-        Returns:
-            asyncio.Semaphore: The rate-limiting semaphore.
-        """
-        if self._semaphore is None:
-            self._semaphore = asyncio.Semaphore(self._max_concurrent)
-        return self._semaphore
-
-    @property
-    def active_count(self) -> int:
-        """Current number of active sub-agents.
-
-        Returns:
-            int: Active count.
-        """
-        return self._active_count
-
-    async def before_agent(self, ctx: MiddlewareContext) -> MiddlewareContext:
-        """Track and enforce sub-agent limits.
-
-        Parameters:
-            ctx: The middleware context.
-
-        Returns:
-            MiddlewareContext: Context with updated sub-agent metadata.
-        """
-        ctx.active_subagent_count = self._active_count
-        ctx.metadata["max_concurrent_subagents"] = self._max_concurrent
-        ctx.metadata["subagent_timeout_seconds"] = self._timeout
-
-        if _prompt_projection_enabled(ctx):
-            preview = _routing_prompt_preview(ctx)
-            if not ctx.prompt and preview:
-                ctx.prompt = preview
-                ctx.metadata.setdefault("python_prompt_source", "routing-metadata-preview")
-            ctx.prompt += (
-                f"\n\n[Sub-Agent Limits] Hard limit: {self._max_concurrent} concurrent sub-agents. "
-                f"Timeout: {self._timeout}s per sub-agent. "
-                f"Currently active: {self._active_count}. "
-                f"The system will programmatically enforce these limits."
-            )
-        return ctx
 
 
 # ---------------------------------------------------------------------------

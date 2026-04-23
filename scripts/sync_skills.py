@@ -28,7 +28,6 @@ from build_skill_shadow_map import (
     load_source_manifest,
 )
 from build_skill_tiers import build_skill_tiers
-from materialize_cli_host_entrypoints import sync_repo_host_entrypoints
 
 
 def get_git_root() -> Path:
@@ -67,6 +66,7 @@ TIERS_PATH = SKILLS_ROOT / "SKILL_TIERS.json"
 FRAMEWORK_SURFACE_POLICY_PATH = ROOT / "configs" / "framework" / "FRAMEWORK_SURFACE_POLICY.json"
 HOOKS_PATH = ROOT / ".githooks"
 REQUIRED_ROUTING_FIELDS = ("routing_layer", "routing_owner", "routing_gate", "session_start")
+ROUTER_RS_MANIFEST_PATH = ROOT / "scripts" / "router-rs" / "Cargo.toml"
 
 INDEX_CHECKLIST = [
     "Extract object / action / constraints / deliverable first.",
@@ -118,6 +118,34 @@ def run_git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
     )
+
+
+def sync_repo_host_entrypoints(repo_root: Path, *, apply: bool) -> dict[str, Any]:
+    """Drive host-entrypoint sync directly through router-rs."""
+
+    command = "--sync-host-entrypoints-json" if apply else "--check-host-entrypoints-json"
+    completed = subprocess.run(
+        [
+            "cargo",
+            "run",
+            "--quiet",
+            "--manifest-path",
+            str(ROUTER_RS_MANIFEST_PATH),
+            "--release",
+            "--",
+            command,
+            "--repo-root",
+            str(repo_root),
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(completed.stdout)
+    if not isinstance(payload, dict):
+        raise ValueError("router-rs host-entrypoint sync must return a JSON object")
+    return payload
 
 
 def repo_relative(path: Path) -> str:
