@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
+RUNTIME_SRC = PROJECT_ROOT / "framework_runtime" / "src"
 RUST_ADAPTER_TIMEOUT_SECONDS = 120.0
 ROUTER_RS_CRATE_ROOT = PROJECT_ROOT / "scripts" / "router-rs"
 ROUTER_RS_RELEASE_BIN = ROUTER_RS_CRATE_ROOT / "target" / "release" / "router-rs"
@@ -18,15 +18,15 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-import codex_agno_runtime.profile_artifacts as profile_artifacts_module
-from codex_agno_runtime.framework_profile import build_framework_profile
-from codex_agno_runtime.host_adapters import compile_codex_common_adapter
-from codex_agno_runtime.profile_artifacts import (
+import framework_runtime.profile_artifacts as profile_artifacts_module
+from framework_runtime.framework_profile import build_framework_profile
+from framework_runtime.host_adapters import compile_codex_common_adapter
+from framework_runtime.profile_artifacts import (
     build_framework_shared_contract_projection_report,
     emit_framework_contract_artifacts,
 )
-from codex_agno_runtime.framework_profile import FrameworkProfile
-from codex_agno_runtime.rust_router import RustRouteAdapter
+from framework_runtime.framework_profile import FrameworkProfile
+from framework_runtime.rust_router import RustRouteAdapter
 
 
 def _load_json_payload(path: Path) -> dict[str, Any]:
@@ -61,13 +61,13 @@ def _rust_route_adapter() -> RustRouteAdapter:
 
 
 def test_profile_artifacts_avoids_internal_compatibility_escape_hatch_import() -> None:
-    module_path = PROJECT_ROOT / "codex_agno_runtime" / "src" / "codex_agno_runtime" / "profile_artifacts.py"
+    module_path = PROJECT_ROOT / "framework_runtime" / "src" / "framework_runtime" / "profile_artifacts.py"
     tree = ast.parse(module_path.read_text(encoding="utf-8"))
 
     cli_family_imports = [
         node
         for node in tree.body
-        if isinstance(node, ast.ImportFrom) and node.module == "codex_agno_runtime.cli_family_contracts"
+        if isinstance(node, ast.ImportFrom) and node.module == "framework_runtime.cli_family_contracts"
     ]
 
     assert cli_family_imports == []
@@ -75,7 +75,7 @@ def test_profile_artifacts_avoids_internal_compatibility_escape_hatch_import() -
     compatibility_imports = [
         node
         for node in tree.body
-        if isinstance(node, ast.ImportFrom) and node.module == "codex_agno_runtime.compatibility"
+        if isinstance(node, ast.ImportFrom) and node.module == "framework_runtime.host_adapter_compatibility"
     ]
 
     assert compatibility_imports == []
@@ -88,7 +88,7 @@ def test_profile_artifacts_avoids_internal_compatibility_escape_hatch_import() -
     }
     wrapper_imports = []
     for node in tree.body:
-        if not isinstance(node, ast.ImportFrom) or node.module != "codex_agno_runtime.host_adapters":
+        if not isinstance(node, ast.ImportFrom) or node.module != "framework_runtime.host_adapters":
             continue
         imported = {alias.name for alias in node.names}
         overlap = sorted(imported & host_adapter_wrapper_names)
@@ -99,7 +99,7 @@ def test_profile_artifacts_avoids_internal_compatibility_escape_hatch_import() -
 
 
 def test_internal_runtime_modules_avoid_host_adapters_wrapper_imports() -> None:
-    runtime_root = PROJECT_ROOT / "codex_agno_runtime" / "src" / "codex_agno_runtime"
+    runtime_root = PROJECT_ROOT / "framework_runtime" / "src" / "framework_runtime"
     banned_wrapper_names = {
         "build_cli_family_capability_discovery",
         "build_cli_family_parity_snapshot",
@@ -125,7 +125,7 @@ def test_internal_runtime_modules_avoid_host_adapters_wrapper_imports() -> None:
         tree = ast.parse(module_path.read_text(encoding="utf-8"))
         hits: set[str] = set()
         for node in tree.body:
-            if not isinstance(node, ast.ImportFrom) or node.module != "codex_agno_runtime.host_adapters":
+            if not isinstance(node, ast.ImportFrom) or node.module != "framework_runtime.host_adapters":
                 continue
             hits.update(alias.name for alias in node.names if alias.name in banned_wrapper_names)
         if hits:

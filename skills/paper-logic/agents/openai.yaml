@@ -1,4 +1,4 @@
 interface:
   display_name: "Paper Logic"
   short_description: "Check whether the paper's claims are supported"
-  default_prompt: "Use $paper-logic for scientific-defensibility questions: novelty level, claim ceiling, claim-vs-evidence alignment, experiment support, and whether an issue needs rephrasing or new evidence."
+  default_prompt: "Use $paper-logic as the scientific-defensibility specialist lane behind $paper-workbench, $paper-reviewer, or $paper-reviser. Focus on novelty level, claim ceiling, claim-vs-evidence alignment, experiment support, and whether an issue needs rephrasing or new evidence."

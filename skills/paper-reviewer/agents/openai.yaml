@@ -1,4 +1,4 @@
 interface:
   display_name: "Paper Reviewer"
   short_description: "Judge whether a paper is ready to submit"
-  default_prompt: "Use $paper-reviewer for paper review requests. Treat vague asks like '帮我审这篇 paper', '能不能投', or '投稿前把关' as strict whole-paper review. If the user explicitly names one dimension such as claim, math, references, figures, tables, language, or layout, review only that slice. Review and decide; do not drift into direct rewriting."
+  default_prompt: "Use $paper-reviewer as the review specialist lane behind $paper-workbench. Prefer it for explicit review-only requests or single-dimension review slices. Review and decide; do not drift into direct rewriting."

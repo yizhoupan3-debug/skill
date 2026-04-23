@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paper Workbench"
+  short_description: "One front door for paper review, revision, and polish"
+  default_prompt: "Use $paper-workbench as the default front door for manuscript-level work. First decide whether the request is whole-paper judgment, review-driven revision, a single-dimension consult, or local polish; then keep the workflow continuous without making the user switch skills. Route internally to $paper-reviewer, $paper-reviser, $paper-logic, $paper-writing, $paper-visuals, or $paper-notation-audit as needed."

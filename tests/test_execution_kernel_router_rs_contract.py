@@ -10,13 +10,13 @@ from types import SimpleNamespace
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
+RUNTIME_SRC = PROJECT_ROOT / "framework_runtime" / "src"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-from codex_agno_runtime.execution_kernel import (
+from framework_runtime.execution_kernel import (
     ExecutionKernelRequest,
     RouterRsInfrastructureError,
     build_router_rs_execution_request_payload,
@@ -24,7 +24,7 @@ from codex_agno_runtime.execution_kernel import (
     execute_router_rs_request,
     preview_router_rs_request_prompt,
 )
-from codex_agno_runtime.execution_kernel_contracts import (
+from framework_runtime.execution_kernel_contracts import (
     DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS,
     EXECUTION_KERNEL_BRIDGE_AUTHORITY,
     EXECUTION_KERNEL_BRIDGE_KIND,
@@ -56,8 +56,8 @@ from codex_agno_runtime.execution_kernel_contracts import (
     validate_router_rs_execution_metadata,
     validate_execution_kernel_steady_state_metadata,
 )
-from codex_agno_runtime.rust_router import RustRouteAdapter
-from codex_agno_runtime.schemas import RoutingResult, SkillMetadata
+from framework_runtime.rust_router import RustRouteAdapter
+from framework_runtime.schemas import RoutingResult, SkillMetadata
 
 
 def _routing_result() -> RoutingResult:
@@ -503,8 +503,11 @@ def test_execution_kernel_contract_core_can_follow_bridge_runtime_fields() -> No
         "trace_generation",
     ]
     assert contract_core["runtime_response_metadata_fields"]["live_primary"] == [
-        *LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS,
+        "run_id",
+        "status",
+        *LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS,
         "trace_generation",
+        EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY,
     ]
     assert contract_core["current_response_shape_truth"]["live_primary"][
         "pass_through_metadata_fields"

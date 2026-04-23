@@ -123,7 +123,8 @@ re-parsing the full diagnostics block.
 
 If you do not pass an explicit runtime attach input, the bundled
 `start_browser_mcp.sh` launcher now auto-discovers the newest replay-capable
-runtime attach input under `codex_agno_runtime/artifacts/scratch/`. It now
+runtime attach input under `framework_runtime/artifacts/scratch/` by default,
+while still accepting legacy `codex_agno_runtime/artifacts/scratch/`. It now
 keeps checkpoint resume manifests as canonical attach artifacts when they are
 the freshest recovery anchor, falls back to transport binding artifacts when
 needed, and also resolves sqlite-backed logical attach paths by reading

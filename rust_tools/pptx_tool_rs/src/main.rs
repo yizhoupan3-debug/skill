@@ -12,15 +12,18 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsStr;
 use std::fs::{self, File};
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
-use zip::ZipArchive;
+use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
 const EMU_PER_INCH: f64 = 914_400.0;
 const POINTS_PER_INCH: f64 = 72.0;
 const DEFAULT_PAD_PX: u32 = 100;
+const SOFFICE_PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Parser)]
 #[command(author, version, about = "Rust-first CLI for skills/ppt-pptx")]
@@ -37,6 +40,7 @@ enum Commands {
     CreateMontage(CreateMontageArgs),
     SlidesTest(SlidesTestArgs),
     DetectFonts(DetectFontsArgs),
+    SanitizePptx(SanitizePptxArgs),
 }
 
 #[derive(Args)]
@@ -124,6 +128,13 @@ struct DetectFontsArgs {
     include_missing: bool,
     #[arg(long, default_value_t = true)]
     include_substituted: bool,
+}
+
+#[derive(Args)]
+struct SanitizePptxArgs {
+    input_path: String,
+    #[arg(short, long)]
+    output: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -214,6 +225,7 @@ fn main() -> Result<()> {
         Commands::CreateMontage(args) => create_montage_command(args)?,
         Commands::SlidesTest(args) => slides_test_command(args)?,
         Commands::DetectFonts(args) => detect_fonts_command(args)?,
+        Commands::SanitizePptx(args) => sanitize_pptx_command(args)?,
     }
     Ok(())
 }
@@ -371,7 +383,13 @@ fn detect_fonts_command(args: DetectFontsArgs) -> Result<()> {
     let bundle = ZipBundle::from_path(&input)?;
     let requested = extract_requested_fonts_by_slide(&bundle)?;
     let installed = build_font_synonym_map()?;
-    let resolved = extract_resolved_fonts_from_odp(&input).unwrap_or_default();
+    let resolved = match extract_resolved_fonts_from_odp(&input) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("warning: resolved-font probe skipped: {err:#}");
+            BTreeSet::new()
+        }
+    };
 
     let mut missing_overall = BTreeSet::new();
     let mut substituted_overall = BTreeSet::new();
@@ -435,6 +453,58 @@ fn detect_fonts_command(args: DetectFontsArgs) -> Result<()> {
                 serde_json::to_string(&payload["font_substituted_by_slide"])?
             );
         }
+    }
+    Ok(())
+}
+
+fn sanitize_pptx_command(args: SanitizePptxArgs) -> Result<()> {
+    let input = expand_path(&args.input_path);
+    let output = args
+        .output
+        .as_deref()
+        .map(expand_path)
+        .unwrap_or_else(|| input.clone());
+    let temp_output = if output == input {
+        input.with_extension("sanitized.tmp.pptx")
+    } else {
+        output.clone()
+    };
+
+    let file = File::open(&input).with_context(|| format!("failed to open {}", input.display()))?;
+    let mut archive = ZipArchive::new(file).context("failed to read zip archive")?;
+    let writer = File::create(&temp_output)
+        .with_context(|| format!("failed to create {}", temp_output.display()))?;
+    let mut zip = ZipWriter::new(writer);
+
+    for idx in 0..archive.len() {
+        let mut entry = archive.by_index(idx)?;
+        let name = entry.name().to_string();
+        let options = SimpleFileOptions::default().compression_method(entry.compression());
+
+        if entry.is_dir() {
+            zip.add_directory(name, options)?;
+            continue;
+        }
+
+        let mut buf = Vec::new();
+        entry.read_to_end(&mut buf)?;
+        let data = if name == "ppt/presentation.xml" {
+            sanitize_presentation_xml(std::str::from_utf8(&buf)?)?.into_bytes()
+        } else {
+            buf
+        };
+        zip.start_file(name, options)?;
+        zip.write_all(&data)?;
+    }
+
+    zip.finish()?;
+    if output == input {
+        fs::rename(&temp_output, &input).with_context(|| {
+            format!(
+                "failed to replace {} with sanitized output",
+                input.display()
+            )
+        })?;
     }
     Ok(())
 }
@@ -680,6 +750,25 @@ fn run_command(command: &mut Command) -> Result<()> {
         bail!("command failed with status {:?}", status.code());
     }
     Ok(())
+}
+
+fn run_command_timeout(command: &mut Command, timeout: Duration) -> Result<()> {
+    let mut child = command.spawn()?;
+    let started_at = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            if !status.success() {
+                bail!("command failed with status {:?}", status.code());
+            }
+            return Ok(());
+        }
+        if started_at.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            bail!("command timed out after {} seconds", timeout.as_secs());
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
 }
 
 fn run_command_capture(command: &mut Command) -> Result<String> {
@@ -1470,18 +1559,20 @@ fn extract_resolved_fonts_from_odp(input: &Path) -> Result<BTreeSet<String>> {
     let profile = TempDir::new()?;
     let convert_dir = TempDir::new()?;
     let profile_flag = format!("file://{}", profile.path().display());
-    run_command(
-        Command::new("soffice")
-            .arg(format!("-env:UserInstallation={}", profile_flag))
-            .arg("--invisible")
-            .arg("--headless")
-            .arg("--norestore")
-            .arg("--convert-to")
-            .arg("odp")
-            .arg("--outdir")
-            .arg(convert_dir.path())
-            .arg(input),
-    )?;
+    let mut convert = Command::new("soffice");
+    convert
+        .arg(format!("-env:UserInstallation={}", profile_flag))
+        .arg("--invisible")
+        .arg("--headless")
+        .arg("--norestore")
+        .arg("--convert-to")
+        .arg("odp")
+        .arg("--outdir")
+        .arg(convert_dir.path())
+        .arg(input)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    run_command_timeout(&mut convert, SOFFICE_PROBE_TIMEOUT)?;
     let stem = input.file_stem().and_then(OsStr::to_str).unwrap_or("deck");
     let odp_path = convert_dir.path().join(format!("{}.odp", stem));
     let bundle = ZipBundle::from_path(&odp_path)?;
@@ -1502,6 +1593,33 @@ fn extract_resolved_fonts_from_odp(input: &Path) -> Result<BTreeSet<String>> {
         }
     }
     Ok(fonts)
+}
+
+fn sanitize_presentation_xml(xml: &str) -> Result<String> {
+    let notes_master_re = Regex::new(r#"(?s)<p:notesMasterIdLst>.*?</p:notesMasterIdLst>"#)?;
+    let notes_sz_re = Regex::new(r#"<p:notesSz\b[^>]*/>"#)?;
+    let sld_sz_re = Regex::new(r#"<p:sldSz\b[^>]*/>"#)?;
+
+    let notes_master = match notes_master_re.find(xml) {
+        Some(value) => value.as_str().to_string(),
+        None => return Ok(xml.to_string()),
+    };
+    let without_notes_master = notes_master_re.replace(xml, "").to_string();
+    if let Some(notes_sz) = notes_sz_re.find(&without_notes_master) {
+        let mut rebuilt = String::with_capacity(without_notes_master.len() + notes_master.len());
+        rebuilt.push_str(&without_notes_master[..notes_sz.end()]);
+        rebuilt.push_str(&notes_master);
+        rebuilt.push_str(&without_notes_master[notes_sz.end()..]);
+        return Ok(rebuilt);
+    }
+    if let Some(sld_sz) = sld_sz_re.find(&without_notes_master) {
+        let mut rebuilt = String::with_capacity(without_notes_master.len() + notes_master.len());
+        rebuilt.push_str(&without_notes_master[..sld_sz.end()]);
+        rebuilt.push_str(&notes_master);
+        rebuilt.push_str(&without_notes_master[sld_sz.end()..]);
+        return Ok(rebuilt);
+    }
+    Ok(without_notes_master)
 }
 
 fn join_display_list(value: Option<&Vec<Value>>) -> String {
@@ -1528,5 +1646,12 @@ mod tests {
     fn normalize_font_names() {
         assert_eq!(normalize_font_family_name("Helvetica Neue (Body)"), "helvetica neue");
         assert_eq!(normalize_font_family_name("PingFang-SC"), "pingfang sc");
+    }
+
+    #[test]
+    fn sanitize_presentation_xml_reorders_notes_master_after_notes_size() {
+        let input = r#"<p:presentation><p:sldIdLst/><p:notesMasterIdLst><p:notesMasterId r:id="rId4"/></p:notesMasterIdLst><p:sldSz cx="1" cy="2"/><p:notesSz cx="2" cy="1"/><p:defaultTextStyle/></p:presentation>"#;
+        let output = sanitize_presentation_xml(input).unwrap();
+        assert!(output.contains(r#"<p:sldSz cx="1" cy="2"/><p:notesSz cx="2" cy="1"/><p:notesMasterIdLst>"#));
     }
 }

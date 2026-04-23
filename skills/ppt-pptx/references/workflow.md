@@ -47,6 +47,7 @@ Optional:
 project/
 └── scripts/
     ├── officecli_bridge.py
+    ├── hybrid_pipeline.py
     ├── render_slides.py
     ├── slides_test.py
     ├── create_montage.py
@@ -156,6 +157,24 @@ Use this lane for:
 - batch patch plans against an existing artifact when you are not ready to fully rebuild the source
 
 Do not let OfficeCLI replace `deck.js` as the source of truth for new-code-authored decks. It is the inspection / patch / preview boost, not the authoring core.
+
+## Hybrid Default
+
+The strongest default in this skill is now a hybrid lane:
+
+- `deck.js` / PptxGenJS remains the authoring source of truth
+- Rust tools handle render / structure / image-side QA
+- OfficeCLI handles issue discovery, schema validation, stable path lookup, and watch preview
+
+Recommended commands:
+
+```bash
+python3 scripts/hybrid_pipeline.py build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json
+python3 scripts/hybrid_pipeline.py qa deck.pptx --rendered-dir rendered --json
+python3 scripts/hybrid_pipeline.py intake old_deck.pptx --json
+```
+
+Use `build-qa` for code-authored decks and `intake` for existing-deck rebuilds.
 
 For a full regression pass from the skill root, run:
 

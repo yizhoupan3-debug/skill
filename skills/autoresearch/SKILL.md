@@ -193,6 +193,7 @@ slices as follows before expensive runs.
 
 `{project}/`
 `research-state.yaml` central state
+`CURRENT_CONTEXT.md` current working view with freshness guardrails
 `research-log.md` timeline
 `findings.md` narrative synthesis
 `BOOTSTRAP_BRIEF.md` scoped research brief
@@ -212,7 +213,8 @@ slices as follows before expensive runs.
 - File resync: `python3 skills/autoresearch/scripts/research_ctl.py sync --workspace <project>`
 - Claim drafting lane: `python3 skills/autoresearch/scripts/research_ctl.py draft-claims --workspace <project>`
 - Novelty comparison lane: `python3 skills/autoresearch/scripts/research_ctl.py compare-claim --workspace <project> ...`
-- Search-plan lane: `python3 skills/autoresearch/scripts/research_ctl.py plan-search --workspace <project>`
+- Search-plan refresh: `python3 skills/autoresearch/scripts/research_ctl.py plan-search --workspace <project>`; this refreshes the managed search view from structured claims instead of creating a new persisted truth surface
+- First-claim brief refresh: `python3 skills/autoresearch/scripts/research_ctl.py brief-first-claim --workspace <project>`; the brief lives inside `CURRENT_CONTEXT.md`, and legacy `literature/NOVELTY_BRIEF.md` is treated as removable stale output
 
 ## Git Protocol
 

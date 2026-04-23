@@ -1518,6 +1518,22 @@
       "shadowed_by": [],
       "has_shadow": false
     },
+    "paper-workbench": {
+      "winning_rule": "highest-position-wins",
+      "winner": {
+        "slug": "paper-workbench",
+        "path": "skills/paper-workbench",
+        "source": "project",
+        "source_position": 3,
+        "routing_layer": "L2",
+        "routing_owner": "owner",
+        "routing_gate": "none",
+        "session_start": "n/a"
+      },
+      "shadowed": [],
+      "shadowed_by": [],
+      "has_shadow": false
+    },
     "paper-writing": {
       "winning_rule": "highest-position-wins",
       "winner": {

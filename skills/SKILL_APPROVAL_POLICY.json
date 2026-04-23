@@ -1118,6 +1118,15 @@
       "bridge_behavior": "default",
       "artifact_outputs": []
     },
+    "paper-workbench": {
+      "allowed_tools": [],
+      "approval_required_tools": [],
+      "filesystem_scope": [],
+      "network_access": "unspecified",
+      "destructive_risk": "unspecified",
+      "bridge_behavior": "default",
+      "artifact_outputs": []
+    },
     "paper-writing": {
       "allowed_tools": [],
       "approval_required_tools": [],

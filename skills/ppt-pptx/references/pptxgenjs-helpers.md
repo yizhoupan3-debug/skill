@@ -53,6 +53,7 @@ System tools used by the Python scripts:
 - `detect_font.py`: Distinguish between fonts that are missing entirely and fonts that are installed but substituted during rendering.
 - `ensure_raster_image.py`: Produce a PNG from common vector or unusual raster formats so you can inspect or place the asset easily.
 - `officecli_bridge.py`: Use local `officecli` as an optional deep inspection / preview / patch layer for existing decks and rebuild input analysis.
+- `hybrid_pipeline.py`: Orchestrate the default mixed lane: author in `deck.js`, run Rust QA, then fold in OfficeCLI audit / intake results.
 
 ## Practical Rules
 

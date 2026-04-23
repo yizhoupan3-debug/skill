@@ -1,7 +1,10 @@
 # Humanization Quality Scoring System
 
-Use this 100-point rubric to explicitly grade long rewrites before delivery.
+Use this 100-point rubric to explicitly grade rewritten text before delivery.
 For short snippets, use this mentally. For documents >300 words, show the score calculation explicitly.
+
+This file is the **document-level gate**.
+For sentence-by-sentence audit and action judgment, use `sentence-risk-rubric.md` first.
 
 ---
 

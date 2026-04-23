@@ -1,29 +1,21 @@
 ---
 name: paper-reviewer
 description: |
-  Judge whether a paper is ready to submit. Use for requests like "帮我审这篇
-  paper", "能不能投", "投稿前把关", "整篇严审", "paper review", "review 这篇
-  paper", or "只看某个维度能不能过". Default to a strict whole-paper review; if
-  the user explicitly names one dimension such as claim, math, references,
-  figures, tables, language, or layout, review only that slice. This skill
+  Specialist review lane behind `$paper-workbench`. Use when the user clearly
+  wants review-only judgment, or explicitly asks for one review dimension such
+  as claim, math, references, figures, tables, language, or layout. This skill
   reviews and decides; it does not directly rewrite.
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
 session_start: n/a
 trigger_hints:
-  - 帮我审这篇 paper
-  - 帮我审这篇论文
-  - review 这篇 paper
-  - review this paper
-  - paper review
-  - paper review 一下这篇稿子
-  - 能不能投
-  - 投稿前把关
-  - 整篇严审
-  - 整篇 review
+  - $paper-reviewer
+  - paper-reviewer
+  - 只做整篇严审不改稿
+  - 只做投稿判断
+  - 单独做 reviewer lane
   - 全文审核
-  - 全流程审稿
   - 只审 claim
   - 只审图表
   - 只审排版
@@ -54,9 +46,11 @@ source: local
 
 # Paper Reviewer
 
-This skill owns the paper-facing judgment step: can this manuscript survive
-review, what are the real blockers, and which parts should be cut, narrowed, or
-left alone.
+This skill is the review specialist lane behind `$paper-workbench`.
+
+It owns the paper-facing judgment step: can this manuscript survive review,
+what are the real blockers, and which parts should be cut, narrowed, or left
+alone.
 
 The execution model is:
 
@@ -66,14 +60,14 @@ The execution model is:
 
 ## Use this when
 
-- The user wants a submission-facing review, not direct editing
+- The user explicitly wants review-only judgment, not a continuous review-to-edit workflow
 - The user asks whether the paper is ready, risky, or worth submitting
-- The user uses mixed phrasing like `paper review`, `review this paper`, or `整篇 review`
-- The user wants a strict whole-paper pass before revision
+- The user wants a strict whole-paper pass before any edit decisions are opened
 - The user explicitly wants only one review dimension judged
 
 ## Do not use
 
+- The user wants the front door for a paper task -> use `$paper-workbench`
 - The user wants the paper changed now -> use `$paper-reviser`
 - The user wants only local wording polish -> use `$paper-writing`
 - The user wants only science-level defensibility or claim-vs-evidence analysis -> use `$paper-logic`

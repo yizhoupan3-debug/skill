@@ -9,6 +9,9 @@
     "check:overflow": "python3 scripts/slides_test.py deck.pptx",
     "check:fonts": "python3 scripts/detect_font.py deck.pptx --json",
     "check:officecli": "python3 scripts/officecli_bridge.py doctor deck.pptx --json",
+    "check:hybrid": "python3 scripts/hybrid_pipeline.py qa deck.pptx --rendered-dir rendered --json",
+    "build:hybrid": "python3 scripts/hybrid_pipeline.py build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json",
+    "intake:hybrid": "python3 scripts/hybrid_pipeline.py intake deck.pptx --json",
     "inspect:outline": "python3 scripts/officecli_bridge.py outline deck.pptx --json",
     "watch:officecli": "python3 scripts/officecli_bridge.py watch deck.pptx --port 18080"
   },

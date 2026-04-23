@@ -67,7 +67,7 @@
 | `gitx` | Active | P1 | L2 | owner | none | project | ✓ 100.0 | Run the safe Git review-fix-tidy-commit-merge-push workflow end to end. |
 | `go-pro` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Deliver safe concurrent Go code with managed goroutine lifecycles, composable in |
 | `graphviz-expert` | Active | P2 | L3 | owner | none | project | ✓ 92.8 | Create Graphviz/DOT diagrams for precise, orthogonal, publication-quality flowch |
-| `humanizer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Naturalize existing prose into clearer, more human-sounding text. Use for: 精修, 文 |
+| `humanizer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Audit existing prose for machine-like writing signals, then naturalize only wher |
 | `i18n-l10n` | Active | P2 | L3 | overlay | none | project | ✓ 96.8 | Internationalization and localization overlay for web/mobile projects. Use for m |
 | `idea-to-plan` | Active | P0 | L-1 | @strategic-orchestrator | delegation | project | ✓ 100.0 | Turn ambiguous ideas into evidence-backed plans with branch routing and compress |
 | `imagegen` | Active | P2 | L1 | owner | none | project | ✓ 98.7 | Generate or edit raster images through VibeProxy Local /v1/responses using the b |
@@ -94,9 +94,10 @@
 | `paper-length-tuner` | Active | P2 | L4 | owner | none | project | ✓ 97.8 | Diagnose paper length vs target page/word budget and produce a section-level exp |
 | `paper-logic` | Active | P2 | L2 | owner | none | project | ✓ 95.7 | Check whether a paper's claims are actually supported. Use for requests like "看论 |
 | `paper-notation-audit` | Active | P2 | L4 | owner | none | project | ✓ 97.1 | Audit and enforce notation consistency across an academic paper: abbreviations,  |
-| `paper-reviewer` | Active | P2 | L2 | owner | none | project | ✓ 95.8 | Judge whether a paper is ready to submit. Use for requests like "帮我审这篇 paper", " |
-| `paper-reviser` | Active | P2 | L2 | owner | none | project | ✓ 97.3 | Change a paper based on reviewer comments, known findings, or a clear decision t |
+| `paper-reviewer` | Active | P2 | L2 | owner | none | project | ✓ 95.8 | Specialist review lane behind `$paper-workbench`. Use when the user clearly want |
+| `paper-reviser` | Active | P2 | L2 | owner | none | project | ✓ 97.3 | Specialist revision lane behind `$paper-workbench`. Use when the route is alread |
 | `paper-visuals` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Audit and improve paper figures, tables, captions, legends, axes, notes, and res |
+| `paper-workbench` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Unified front door for paper work. Use when the user has a manuscript-level task |
 | `paper-writing` | Active | P2 | L2 | owner | none | project | ✓ 95.7 | Polish local paper text after the claim and evidence boundary is already fixed.  |
 | `pdf` | Active | P1 | L3 | gate | artifact | project | ✓ 94.8 | Read, create, edit, repair, and review PDFs when rendering and page layout matte |
 | `performance-expert` | Active | P2 | L3 | owner | none | project | ✓ 94.2 | Audit and improve web performance with emphasis on Core Web Vitals, asset weight |

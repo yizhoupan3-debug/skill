@@ -1,9 +1,9 @@
 ---
 name: humanizer
 description: |
-  Naturalize existing prose into clearer, more human-sounding text.
-  Use for: 精修, 文本精修, humanize, 自然化改写, 去模板腔, 降 AI 味/AIGC 率, 去 AI 感, 像人写的, anti-AI.
-  Acts as a **Core Style Naturalizer** for existing text. Focuses on preserving facts, register, and authorial voice while reducing templated or machine-like structure.
+  Audit existing prose for machine-like writing signals, then naturalize only where needed.
+  Use for: 逐句评估 AIGC, 逐句判断是否要改, 精修, 文本精修, humanize, 自然化改写, 去模板腔, 降 AI 味/AIGC 率, 去 AI 感, 像人写的, anti-AI.
+  Acts as a **Sentence-First AIGC Auditor and Style Naturalizer**. It scores each sentence for machine-like signals before any rewrite, preserving facts, register, and authorial voice.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
@@ -15,10 +15,20 @@ trigger_hints:
   - naturalization
   - style
   - voice
+  - 逐句评估
+  - 逐句判断是否要改
+  - 逐句判断 aigc
+  - 哪些句子像 ai 写的
+  - 句子 ai 味
+  - 降低 aigc
+  - 降 ai 味
+  - 去 ai 感
+  - 不要直接重写
+  - 先评估再改
 metadata:
-  version: "3.1.0"
+  version: "3.3.0"
   platforms: [codex, antigravity]
-  tags: [writing, rewrite, prose, naturalization, style, voice, humanize, anti-aigc, aigc-reduction]
+  tags: [writing, rewrite, prose, naturalization, style, voice, humanize, anti-aigc, aigc-reduction, sentence-audit, sentence-grading]
 risk: medium
 source: local
 ---
@@ -30,6 +40,7 @@ source: local
 ## References
 
 - [naturalization-rules.md](references/naturalization-rules.md) — rewrite rules + 5 core speed rules + detection-aware tactics
+- [sentence-risk-rubric.md](references/sentence-risk-rubric.md) — 逐句评估与动作判定标准，含官方/论文边界
 - [de-aigc-standards.md](../writing-skills/resources/de-aigc-standards.md) — shared universal de-AIGC rules
 - [ai-patterns-checklist.md](references/ai-patterns-checklist.md) — 27 AI patterns + CN/EN phrase tables
 - [register-presets.md](references/register-presets.md) — 7 register presets (EN + CN)
@@ -42,34 +53,68 @@ source: local
 
 | Request type | Route to |
 |---|---|
-| Generic prose naturalization, 降 AI 味, 降 AIGC 率 | `$humanizer` (this skill) |
+| Generic prose naturalization, 降 AI 味, 降 AIGC 率, 逐句评估 AIGC | `$humanizer` (this skill) |
 | Paper-specific prose revision | `$paper-writing` |
 | Scientific logic / novelty / evidence review | `$paper-logic` or `$paper-reviewer` |
 | Translation or summarization only | Do not use this skill |
 
 ## When to use
 
+- User wants sentence-by-sentence AIGC assessment before rewriting
 - User wants existing text to sound more natural, less robotic, or less templated
 - User says "humanize", "去模板腔", "降 AI 味", "降低 AIGC 率", "降 aigc", "去 AI 感", "像人写的", "不像机器", "anti-AI", or "精修" (as a style overlay)
+- User says "逐句评估", "先别改写", "先判断哪些句子 AI 味重", "逐句判断 AIGC", "哪些句子不用改 / 哪些要重写"
 - Draft contains chatbot artifacts, vague praise, filler, repetitive rhythm, or generic conclusions
 - Target is a paragraph, email, statement, blog, post, docs snippet, or other prose slice
 - User explicitly wants to lower AIGC signals through quality improvement
+- User wants a practical action table such as "不需要改 / 需要自然话改写 / 需要完全重写" per sentence
 - End when the point is made — no mandatory wrap-up
 
-## Output Format: Revision Record (修改意见)
+## Work modes
 
-When providing a "精修" or "humanizer" result, use this format to explain changes:
+Choose the narrowest mode that matches the request:
 
-### 1. Polished Text
-[Deliver the full rewritten text here]
+| Mode | When to use | Default output |
+|---|---|---|
+| **Audit-only** | User wants judgment first, says "逐句评估/分级/先别改" | Sentence table + overall judgment |
+| **Audit + Patch** | User wants risky sentences fixed but does not want a full rewrite | Sentence table + only rewritten risky lines |
+| **Full Rewrite** | User explicitly asks for full naturalization or full anti-AIGC rewrite | Sentence table + full revised text + revision record |
 
-### 2. Revision Record (修改意见)
+If the request is ambiguous, start with **Audit-only**.
+
+## Default mode
+
+Default to **audit first, rewrite second**:
+
+1. Split the text into sentences.
+2. Judge each sentence with the rubric in `references/sentence-risk-rubric.md`.
+3. Only rewrite the sentences marked `需要自然话改写` or `需要完全重写`, or when the user explicitly asks for a full rewrite.
+
+Do **not** jump straight into a full "降 AIGC" rewrite unless the user clearly asks for rewriting rather than evaluation.
+
+## Output Format: Sentence Audit Record (逐句评估记录)
+
+When the user asks to lower AIGC, evaluate sentence-by-sentence first unless they explicitly ask to skip the audit.
+
+### 1. Sentence Audit Table
+| # | Sentence | Judgment | Signals | Why | Action |
+|---|---|---|---|---|---|
+| 1 | [Original sentence] | 不需要改 / 需要自然话改写 / 需要完全重写 | [2-4 concrete signals] | [why it reads human/AI-like] | keep / patch / rebuild |
+
+### 2. Overall Judgment
+- [Short conclusion: where the main AIGC concentration is]
+- [Whether the text should be partially revised or fully rewritten]
+
+### 3. Revised Text
+[Deliver only if the user asked for rewriting, or if high-risk sentences clearly need repair]
+
+### 4. Revision Record (修改意见)
 | Target | Change Made | Strategy/Reason | Logic (Why this works) |
 |---|---|---|---|
-| [Sentence/Phrase] | [New Version] | [e.g., Rhythm variance] | [e.g., Breaks the 20-word AI repetition; raises burstiness score] |
-| [Technical claim] | [Grounded narr.] | [Pragmatic Grounding] | [Replaces sterile 'success' with human 'decision' signal] |
+| [Sentence/Phrase] | [New Version] | [e.g., Rhythm variance] | [e.g., Breaks the uniform clause pattern] |
+| [Technical claim] | [Grounded narr.] | [Pragmatic Grounding] | [Replaces generic importance talk with a concrete mechanism] |
 
-### 3. Remaining Risks / Next Steps
+### 5. Remaining Risks / Next Steps
 - [Any remaining AI-ness or suggestions for further humanization]
 
 ## Do not use
@@ -79,21 +124,23 @@ When providing a "精修" or "humanizer" result, use this format to explain chan
 - Task is only translation or summarization
 - User wants entirely new content ghostwritten from zero (no existing text to naturalize)
 - User wants fake authorship or fabricated personal experience
+- User asks for guaranteed detector outcomes, pass guarantees, or bypass claims
 
 ## Handoff & Orchestration
 
-This skill acts as the **style naturalization layer**. Once the text is cleaned up, it hands off to:
+This skill acts as the **sentence-level audit and style naturalization layer**. Once the text is audited and, if needed, cleaned up, it hands off to:
 
 - **$paper-writing**: For academic papers that need professional scientific polishing after the AI structure is broken.
 - **$copywriting**: For marketing/social copy that needs commercial frameworks (AIDA/PAS) after naturalization.
 - **$writing-skills**: For repository-level skill documentation consistency.
 
-If the user asks for "精修" (polishing) alongside humanization, perform the humanizer pass first to break the AI patterns, then invoke the downstream skill.
+If the user asks for "精修" (polishing) alongside humanization, perform the sentence audit first, then repair only the risky sentences before invoking the downstream skill.
 Only consult `references/claim-safety.md` when the user explicitly asks about detector scores, Turnitin, or guarantee-style wording.
+For a worked sentence-by-sentence example, see `examples/sentence-audit-demo.md`.
 
 ## Workflow
 
-A single integrated pipeline. Depth scales automatically — short text does this mentally; long or heavily templated text shows each step explicitly.
+A single integrated pipeline. Depth scales automatically — short text can be audited mentally; long or heavily templated text should show the sentence table explicitly.
 
 ### Step 1 — Lock constraints (C.A.R.E. Framework)
 
@@ -103,17 +150,31 @@ A single integrated pipeline. Depth scales automatically — short text does thi
 - **Examples**: Identify 1-2 examples of the target "voice" if provided.
 - Preserve: facts, citations, numbers, causal logic, domain terminology.
 - Identify register: academic / professional / technical / casual / founder / storytelling / social.
-- Confirm whether the goal is style naturalization, register matching, or integrity-safe polishing.
+- Confirm whether the goal is sentence-level audit, style naturalization, register matching, or integrity-safe polishing.
 - For Chinese text, also check CN subsections in `references/register-presets.md`.
 
-### Step 2 — Scan & diagnose
+### Step 2 — Sentence audit first
 
-Scan against `references/ai-patterns-checklist.md` (27 patterns). For Chinese text, also scan the Appendix CN phrase tables.
+Split the text sentence-by-sentence and score each sentence against `references/sentence-risk-rubric.md`.
 
+Use `references/ai-patterns-checklist.md` as the signal bank when deciding the grade.
 Prioritize the patterns that most damage the specific text — don't enumerate all 27.
 Use `references/claim-safety.md` only when the request explicitly pulls in detectors, scores, Turnitin, or AIGC percentage claims.
 
+The audit should answer:
+- Which sentences are already acceptable (`不需要改`)
+- Which sentences need a natural-language patch (`需要自然话改写`)
+- Which sentences are so templated that they should be rebuilt (`需要完全重写`)
+- Whether the text's problem is local (a few sentences) or structural (whole paragraph rhythm / discourse)
+
+Fast decision rule:
+- Mostly `不需要改` -> keep structure, patch only wording if needed
+- Several `需要自然话改写` in one paragraph -> partial paragraph rewrite
+- Any `需要完全重写` plus repeated rhythm across neighbors -> rebuild the paragraph, not just the sentence
+
 ### Step 3 — Rewrite
+
+Rewrite only the flagged sentences by default. Move to a full-paragraph rewrite only when the audit shows the structure itself is the problem.
 
 Apply all of these as a **single integrated pass**, not sequential layers:
 
@@ -134,6 +195,7 @@ Apply all of these as a **single integrated pass**, not sequential layers:
 
 Rules:
 - Rewrite long inputs paragraph-by-paragraph, not as a uniform blob.
+- Preserve low-risk sentences when they already read naturally.
 - Never insert fake anecdotes, fake opinions, or fake sourcing.
 - **Quality guard**: never reduce information density, specificity, or professional tone to lower a detector score. If a rewrite trades accuracy for "naturalness", revert.
 - Do not force extra personality as a default tactic. Prefer clarity, specificity, honest limits, and natural rhythm.
@@ -158,7 +220,10 @@ Fix the remaining tells. One focused revision pass — not a full rewrite.
 
 ### Step 5 — Quality gate & Iteration
 
-Score against `references/quality-scoring.md` (100pt scale):
+Use both gates:
+
+1. Sentence gate: no obvious `需要完全重写` sentences remain unless the user asked for audit-only output.
+2. Document gate: score against `references/quality-scoring.md` (100pt scale) when a rewrite was actually performed.
 
 - **≥ 85/100**: Deliver.
 - **70–84**: Focused revision on the specific weak dimension.
@@ -187,10 +252,12 @@ When the user asks for "优化5轮" or "优化10轮", execute with **Dimension R
 
 When the user explicitly asks to lower AIGC detection rate:
 
-1. Treat it as a direct rewrite task: make the prose less templated, less symmetric, and more grounded.
-2. Push on clarity, specificity, rhythm, register, and local idiosyncrasy instead of talking about detectors.
-3. Use detector-aware heuristics only as an internal editing aid when needed.
-4. Keep the output focused on the rewritten text and the concrete revision record.
+1. Treat it as an **audit-first task**, not an auto-rewrite task.
+2. Grade sentences first, then explain where the strongest machine-like signals concentrate.
+3. Push on clarity, specificity, rhythm, register, and local idiosyncrasy instead of talking about detectors.
+4. Use detector-aware heuristics only as an internal editing aid when needed.
+5. Keep detector claims heuristic and tool-dependent; do not present sentence judgments as ground truth.
+6. Rewrite only after the grading step, unless the user explicitly skips the audit.
 
 ## Overlay compatibility
 
@@ -202,6 +269,7 @@ When the user explicitly asks to lower AIGC detection rate:
 
 - Never fabricate facts, references, data, experiments, quotes, or personal experience.
 - Do not promise detector scores or guaranteed pass outcomes when the user explicitly asks about them.
+- Do not present sentence-level grades as objective percentages or official detector outputs.
 - Never optimize by making the text worse, less specific, or less accurate.
 - Prefer clearer, more specific prose over ornamental rewriting.
 - Quality comes first — no rewrite should make the text worse to achieve a detector score.

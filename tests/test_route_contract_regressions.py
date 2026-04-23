@@ -7,15 +7,15 @@ from pathlib import Path
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
+RUNTIME_SRC = PROJECT_ROOT / "framework_runtime" / "src"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-from codex_agno_runtime.router import SkillRouter
-from codex_agno_runtime.rust_router import RustRouteAdapter
-from codex_agno_runtime.schemas import SkillMetadata
+from framework_runtime.router import SkillRouter
+from framework_runtime.rust_router import RustRouteAdapter
+from framework_runtime.schemas import SkillMetadata
 
 
 ROUTE_FIXTURE_PATH = PROJECT_ROOT / "tests" / "routing_route_fixtures.json"

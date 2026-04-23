@@ -5,8 +5,8 @@ description: |
   with focus on module boundaries, scalability, maintainability, reliability and
   long-term evolution. Covers Clean Architecture, microservices, event-driven
   systems, and DDD. Use proactively when the user asks for 架构评审、系统设计、
-  技术选型、服务拆分、重构方案、边界划分, or tradeoff analysis for major structural
-  decisions rather than local code-style feedback.
+  技术选型、服务拆分、重构方案、边界划分、架构风险, or tradeoff analysis for major
+  structural decisions rather than local code-style feedback.
 metadata:
   version: "2.1.0"
   platforms: [codex, antigravity, claude-code]
@@ -39,6 +39,10 @@ trigger_hints:
   - 服务拆分
   - 重构方案
   - 边界划分
+  - 架构风险
+  - 系统 review
+  - 设计 review
+  - architecture review
   - architecture
   - system design
   - clean architecture
@@ -62,11 +66,13 @@ the output may feed a downstream planning or refactoring step.
 - Evaluating scalability, resilience, or maintainability impact
 - Assessing architecture conformance to patterns and principles
 - Providing architecture guidance for complex systems
+- Reviewing repo-level implementation quality when the main concern is structural risk
 - Best for requests like:
   - "架构评审一下这个设计"
   - "帮我做技术选型分析"
   - "这个服务拆分方案合理吗"
   - "重构方案的 tradeoff 分析"
+  - "做一次系统 review，重点看架构风险"
 
 ## Do not use
 

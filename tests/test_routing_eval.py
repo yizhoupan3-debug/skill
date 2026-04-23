@@ -4,17 +4,17 @@ import json
 import sys
 from pathlib import Path
 
-import codex_agno_runtime.rust_router as rust_router_module
+import framework_runtime.rust_router as rust_router_module
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_SRC = PROJECT_ROOT / "codex_agno_runtime" / "src"
+RUNTIME_SRC = PROJECT_ROOT / "framework_runtime" / "src"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
-from codex_agno_runtime.rust_router import evaluate_routing_cases, load_routing_eval_cases
-from codex_agno_runtime.schemas import RoutingEvalReport
+from framework_runtime.rust_router import evaluate_routing_cases, load_routing_eval_cases
+from framework_runtime.schemas import RoutingEvalReport
 
 
 def test_routing_eval_baseline_is_actionable() -> None:

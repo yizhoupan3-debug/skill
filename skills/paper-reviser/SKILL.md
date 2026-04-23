@@ -1,11 +1,9 @@
 ---
 name: paper-reviser
 description: |
-  Change a paper based on reviewer comments, known findings, or a clear decision
-  to narrow scope. Use for requests like "根据 reviewer comments 修改", "按审稿意见
-  改论文", "按评审意见改论文", "修到能投", "该删就删", "藏到附录", or "降 claim".
-  Default to revising the current blocking slice; if the user explicitly names
-  one dimension, revise only that slice. This skill may repair, narrow,
+  Specialist revision lane behind `$paper-workbench`. Use when the route is
+  already clearly "change the paper now" based on reviewer comments, known
+  findings, or a fixed decision to narrow scope. This skill may repair, narrow,
   delete, de-emphasize, or move material to the appendix when that is the
   honest fix.
 routing_layer: L2
@@ -13,17 +11,11 @@ routing_owner: owner
 routing_gate: none
 session_start: n/a
 trigger_hints:
-  - 根据 reviewer comments 修改
-  - 根据审稿意见修改
-  - 按审稿意见改论文
-  - 按 reviewer comments 改论文
-  - 按评审意见改论文
-  - review 改论文
-  - review 修改论文
-  - 修到能投
-  - 该删就删
-  - 藏到附录
-  - 降 claim
+  - $paper-reviser
+  - paper-reviser
+  - 只进改稿 lane
+  - 按现有 findings 直接改稿
+  - 直接改稿不要先审
   - 缩口径
   - 按这个维度改
   - 只改摘要
@@ -50,8 +42,10 @@ source: local
 
 # Paper Reviser
 
-This skill owns the paper-facing execution step: after the problems are known,
-actually change the manuscript in the most honest direction.
+This skill is the revision specialist lane behind `$paper-workbench`.
+
+It owns the paper-facing execution step: after the problems are known, actually
+change the manuscript in the most honest direction.
 
 The execution model is:
 
@@ -61,14 +55,15 @@ The execution model is:
 
 ## Use this when
 
-- The user wants edits, not judgment
+- The user explicitly wants edits now, not the front door
 - The task is driven by reviewer comments, a review checklist, or a known blocker
-- The user says things like `按审稿意见改论文` or `根据 review 修改论文`
+- The route is already clearly revise-only
 - The paper needs claim downgrade, appendix routing, de-emphasis, or deletion instead of forced repair
 - The user wants rebuttal or response-letter work tied to real manuscript edits
 
 ## Do not use
 
+- The user wants one front door for the paper task -> use `$paper-workbench`
 - The user is still asking "能不能投" or wants the first review pass -> use `$paper-reviewer`
 - The user wants only local wording polish with fixed scientific scope -> use `$paper-writing`
 - The user wants only science-level critique -> use `$paper-logic`

@@ -14,7 +14,7 @@ if _SRC_PACKAGE.is_dir():
 
 from .config import RuntimeSettings
 from .framework_profile import FrameworkProfile
-from .codex_artifact_contracts import (
+from .framework_artifact_contracts import (
     build_cli_family_capability_discovery,
     build_codex_dual_entry_parity_snapshot,
 )

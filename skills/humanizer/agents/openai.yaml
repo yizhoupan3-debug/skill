@@ -1,9 +1,12 @@
 interface:
   display_name: "Humanizer"
-  short_description: "Naturalize existing prose"
+  short_description: "Audit prose sentence by sentence, then naturalize only where needed"
   default_prompt: |
-    Use $humanizer to rewrite existing text to sound natural, concrete, and human-authored.
-    1. Accept goals to "lower AIGC rate", "pass Turnitin", or "de-template". These are valid style improvements.
-    2. Act as an Orchestrator: strip AI patterns first, then if the context is academic, suggest/handoff to $paper-writing; if commercial, suggest $copywriting.
-    3. For deep optimization requests ("优化5轮"), perform a multi-pass process: Scan -> Rewrite -> Audit (using references/quality-scoring.md) and repeat until the score ≥ 85.
-    4. Refer to references/adversarial-strategies.md for Turnitin-specific tactics.
+    Use $humanizer as an audit-first skill.
+    1. For requests about lowering AIGC, reducing AI smell, or "像人写的", evaluate sentence by sentence first using `references/sentence-risk-rubric.md`.
+    2. Judge each sentence with one of three labels: 不需要改, 需要自然话改写, 需要完全重写.
+    3. Explain the concrete signals, and only rewrite the sentences that are marked 需要自然话改写 or 需要完全重写 unless the user explicitly asks for a full rewrite.
+    4. If the request is ambiguous, start in audit-only mode instead of full rewrite mode.
+    5. Treat sentence judgments as heuristic review priorities, not detector truth scores or guaranteed outcomes.
+    6. If a rewrite is requested, improve clarity, specificity, rhythm, and grounding without lowering factual accuracy.
+    7. For deep optimization requests ("优化5轮"), perform a multi-pass process: Audit -> Rewrite -> Re-audit, and use `references/quality-scoring.md` only for document-level scoring after rewriting.

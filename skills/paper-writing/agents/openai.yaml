@@ -1,4 +1,4 @@
 interface:
   display_name: "Paper Writing"
   short_description: "Polish local paper prose"
-  default_prompt: "Use $paper-writing to rewrite or polish a specific paper text block for clearer academic tone, smoother flow, and tighter wording without changing the underlying science."
+  default_prompt: "Use $paper-writing for local paper prose only after $paper-workbench or $paper-reviser has already frozen the scientific boundary. Rewrite or polish a specific text block for clearer academic tone, smoother flow, and tighter wording without changing the underlying science."

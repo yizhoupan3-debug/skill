@@ -295,9 +295,9 @@
   `docs/rust_contracts.md`、`docs/upgrade_compatibility_matrix.md` 也先不机械重写，只有
   regenerate 后出现文档口径缺口时再补。
 - lane5 集成时应配套跑的 targeted verification：
-  `tests/test_routing_parity.py`、`tests/test_codex_agno_runtime_rust_projection.py`、
+  `tests/test_routing_parity.py`、`tests/test_framework_runtime_rust_projection.py`、
   `tests/test_execution_kernel_router_rs_contract.py`、
-  `tests/test_codex_agno_runtime_services.py`、
+  `tests/test_framework_runtime_services.py`、
   `tests/test_framework_profile_adapters.py`、
   `tests/test_framework_contract_artifacts.py`、
   `tests/test_install_codex_native_integration.py`、

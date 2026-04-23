@@ -7,18 +7,29 @@ import { fileURLToPath } from 'node:url';
 
 const TRACE_RESUME_MANIFEST_SCHEMA_VERSION = 'runtime-resume-manifest-v1';
 const RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION = 'runtime-event-transport-v1';
-const DEFAULT_SEARCH_ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
-  '..',
-  'codex_agno_runtime',
-  'artifacts',
-  'scratch',
-);
+const DEFAULT_SEARCH_ROOTS = [
+  path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    '..',
+    'framework_runtime',
+    'artifacts',
+    'scratch',
+  ),
+  path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    '..',
+    'codex_agno_runtime',
+    'artifacts',
+    'scratch',
+  ),
+];
 
 function parseArgs(argv) {
-  let searchRoot = DEFAULT_SEARCH_ROOT;
+  let searchRoot = null;
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === '--search-root' && index + 1 < argv.length) {
       searchRoot = path.resolve(argv[index + 1]);
@@ -229,14 +240,17 @@ function compareCandidates(left, right) {
 }
 
 function resolveRuntimeAttachArtifact(searchRoot) {
+  const searchRoots = Array.isArray(searchRoot) ? searchRoot : [searchRoot];
   const deduped = new Map();
-  for (const candidate of [
-    ...iterFilesystemCandidates(searchRoot),
-    ...iterSqliteCandidates(searchRoot),
-  ]) {
-    const current = deduped.get(candidate.attachPath);
-    if (!current || compareCandidates(candidate, current) > 0) {
-      deduped.set(candidate.attachPath, candidate);
+  for (const root of searchRoots) {
+    for (const candidate of [
+      ...iterFilesystemCandidates(root),
+      ...iterSqliteCandidates(root),
+    ]) {
+      const current = deduped.get(candidate.attachPath);
+      if (!current || compareCandidates(candidate, current) > 0) {
+        deduped.set(candidate.attachPath, candidate);
+      }
     }
   }
   let selected = null;
@@ -249,7 +263,7 @@ function resolveRuntimeAttachArtifact(searchRoot) {
 }
 
 const { searchRoot } = parseArgs(process.argv.slice(2));
-const attachPath = resolveRuntimeAttachArtifact(searchRoot);
+const attachPath = resolveRuntimeAttachArtifact(searchRoot || DEFAULT_SEARCH_ROOTS);
 if (!attachPath) {
   process.exit(1);
 }

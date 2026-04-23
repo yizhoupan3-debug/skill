@@ -8,6 +8,7 @@ Do not repeat this note in ordinary humanizer deliveries that are simply asking 
 - Say `may reduce obvious machine-like signals`, not `will pass the detector`
 - Say `tool-dependent and contextual`, not `objective` or `guaranteed`
 - Say `heuristic feedback`, not `ground truth`
+- Say `sentence judgments are review priorities`, not `sentence truth scores`
 - Say `quality-first editing`, not `detector evasion`
 - Say `the result varies by tool, language, length, and domain`
 
@@ -34,5 +35,6 @@ If a detector claim is not directly supported by the source text or by a cited s
 - `may reduce obvious machine-like signals` is safer than `will pass`
 - `tool-dependent and contextual` is safer than `guaranteed`
 - `heuristic feedback` is safer than `proof`
+- `sentence-level judgment is a triage aid` is safer than `sentence-level certainty`
 - `quality-first editing` is safer than `detector evasion`
 - `the result varies by tool, language, length, and domain` is safer than a universal claim

@@ -35,6 +35,8 @@ SEARCH_PLAN_BLOCK_START = "<!-- autoresearch:search-plan:start -->"
 SEARCH_PLAN_BLOCK_END = "<!-- autoresearch:search-plan:end -->"
 CLAIMS_BLOCK_START = "<!-- autoresearch:claims:start -->"
 CLAIMS_BLOCK_END = "<!-- autoresearch:claims:end -->"
+CONTEXT_BLOCK_START = "<!-- autoresearch:context:start -->"
+CONTEXT_BLOCK_END = "<!-- autoresearch:context:end -->"
 STOPWORDS = {
     "a",
     "an",
@@ -96,10 +98,34 @@ AXIS_REVIEWER_WEIGHTS = {
     "setting": 2,
     "claim": 3,
 }
+STALE_STATE_DAYS = 10
+RECENT_ACTIVITY_DAYS = 14
+FALLBACK_ACTIVITY_LIMIT = 3
 
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def parse_iso_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def days_since(value: str | None) -> int | None:
+    parsed = parse_iso_timestamp(value)
+    if parsed is None:
+        return None
+    delta = datetime.now(timezone.utc) - parsed
+    return max(0, delta.days)
 
 
 def slugify(text: str) -> str:
@@ -404,6 +430,218 @@ def prioritize_claims(claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return prioritized
 
 
+def top_priority_claim(state: dict[str, Any]) -> dict[str, Any] | None:
+    novelty_gate = state.get("novelty_gate", {})
+    for key in ("claim_records", "draft_claims"):
+        entries = novelty_gate.get(key, [])
+        if not entries:
+            continue
+        ranked = sorted(
+            entries,
+            key=lambda item: (
+                int(item.get("recommended_order", 999) or 999),
+                -int(item.get("priority_score", 0) or 0),
+                item.get("claim_id", ""),
+            ),
+        )
+        return ranked[0]
+    return None
+
+
+def current_recommended_focus(state: dict[str, Any]) -> str | None:
+    top_claim = top_priority_claim(state)
+    if top_claim is None:
+        return None
+    return f"{top_claim.get('claim_id', 'C?')}: {top_claim.get('claim', '_No claim recorded._')}"
+
+
+def current_search_plan(state: dict[str, Any]) -> list[dict[str, Any]]:
+    novelty_gate = state.get("novelty_gate", {})
+    claim_records = novelty_gate.get("claim_records", [])
+    if claim_records:
+        source_records = claim_records
+    elif novelty_gate.get("draft_claims"):
+        source_records = novelty_gate["draft_claims"]
+    else:
+        source_records = []
+    plan = [build_search_plan_entry(record) for record in source_records]
+    return sorted(
+        plan,
+        key=lambda item: (
+            int(item.get("recommended_order", 999) or 999),
+            -int(item.get("priority_score", 0) or 0),
+            item.get("claim_id", ""),
+        ),
+    )
+
+
+def current_brief(state: dict[str, Any]) -> dict[str, Any] | None:
+    return build_novelty_brief(state)
+
+
+def sort_entries_by_recency(entries: list[dict[str, Any]], *, timestamp_field: str) -> list[dict[str, Any]]:
+    return sorted(
+        entries,
+        key=lambda item: parse_iso_timestamp(str(item.get(timestamp_field) or "")) or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+
+
+def recent_entries(
+    entries: list[dict[str, Any]],
+    *,
+    timestamp_field: str,
+    max_age_days: int = RECENT_ACTIVITY_DAYS,
+    limit: int = FALLBACK_ACTIVITY_LIMIT,
+    hypothesis_id: str | None = None,
+) -> list[dict[str, Any]]:
+    filtered: list[dict[str, Any]] = []
+    for entry in sort_entries_by_recency(entries, timestamp_field=timestamp_field):
+        if hypothesis_id is not None and entry.get("hypothesis_id") != hypothesis_id:
+            continue
+        age_days = days_since(str(entry.get(timestamp_field) or ""))
+        if age_days is None or age_days > max_age_days:
+            continue
+        filtered.append(entry)
+        if len(filtered) >= limit:
+            break
+    return filtered
+
+
+def current_context_runs(state: dict[str, Any]) -> list[dict[str, Any]]:
+    runs = state.get("run_history", [])
+    active_id = state.get("active_hypothesis")
+    active_recent = recent_entries(
+        runs,
+        timestamp_field="recorded_at",
+        hypothesis_id=active_id,
+    ) if active_id else []
+    if active_recent:
+        return active_recent
+    global_recent = recent_entries(runs, timestamp_field="recorded_at")
+    if global_recent:
+        return global_recent
+    return sort_entries_by_recency(runs, timestamp_field="recorded_at")[:FALLBACK_ACTIVITY_LIMIT]
+
+
+def current_context_decisions(state: dict[str, Any]) -> list[dict[str, Any]]:
+    decisions = state.get("decisions", [])
+    active_id = state.get("active_hypothesis")
+    active_recent = recent_entries(
+        decisions,
+        timestamp_field="recorded_at",
+        hypothesis_id=active_id,
+    ) if active_id else []
+    if active_recent:
+        return active_recent
+    global_recent = recent_entries(decisions, timestamp_field="recorded_at")
+    if global_recent:
+        return global_recent
+    return sort_entries_by_recency(decisions, timestamp_field="recorded_at")[:FALLBACK_ACTIVITY_LIMIT]
+
+
+def state_freshness(state: dict[str, Any]) -> dict[str, Any]:
+    updated_days = days_since(str(state.get("updated_at") or ""))
+    recent_runs = current_context_runs(state)
+    recent_decisions = current_context_decisions(state)
+    stale = updated_days is not None and updated_days > STALE_STATE_DAYS
+    history_bias_risk = stale or (
+        bool(state.get("run_history") or state.get("decisions"))
+        and not recent_runs
+        and not recent_decisions
+    )
+    return {
+        "updated_days": updated_days,
+        "stale": stale,
+        "history_bias_risk": history_bias_risk,
+        "recent_runs": recent_runs,
+        "recent_decisions": recent_decisions,
+    }
+
+
+def expected_baselines_for_axis(axis: str) -> list[str]:
+    axis_lower = axis.lower()
+    if axis_lower in {"method", "workflow"}:
+        return [
+            "Closest simple baseline implementation",
+            "Nearest orchestration or workflow framework baseline",
+            "A stripped-down version without the claimed mechanism",
+        ]
+    if axis_lower == "task":
+        return [
+            "Closest task-specific prior method",
+            "Simple transfer baseline without the claimed novelty",
+            "Recent strongest competitor from the last 3 years",
+        ]
+    if axis_lower == "setting":
+        return [
+            "Same method in an adjacent setting",
+            "Simple baseline in the same constraint",
+            "Closest unconstrained baseline to show what the setting changes",
+        ]
+    if axis_lower == "comparison":
+        return [
+            "Closest simple baseline the reviewer will ask about first",
+            "A stronger but obvious comparator",
+            "An ablated version removing the claimed differentiator",
+        ]
+    if axis_lower == "framing":
+        return [
+            "Closest paper making a similar framing claim",
+            "A simpler framing that could explain the same result",
+            "The baseline narrative a reviewer would default to",
+        ]
+    return [
+        "Closest prior work the reviewer will expect",
+        "A simple baseline explanation",
+        "The strongest recent competitor in the same area",
+    ]
+
+
+def verification_standard_for_priority(label: str) -> str:
+    if label == "first":
+        return "You should be able to decide proceed vs reframe after one focused search pass."
+    if label == "next":
+        return "This should be checked after the first claim is clarified, not before."
+    return "Useful later, but not strong enough to spend the first search budget on."
+
+
+def build_novelty_brief(state: dict[str, Any]) -> dict[str, Any] | None:
+    top_claim = top_priority_claim(state)
+    if top_claim is None:
+        return None
+    search_plan = current_search_plan(state)
+    matching_plan = next(
+        (entry for entry in search_plan if entry.get("claim_id") == top_claim.get("claim_id")),
+        None,
+    )
+    axis = str(top_claim.get("axis", "claim"))
+    sources = matching_plan.get("sources", []) if matching_plan is not None else [
+        "Semantic Scholar",
+        "arXiv",
+        "Google Scholar",
+    ]
+    queries = matching_plan.get("queries", []) if matching_plan is not None else build_search_queries(
+        str(top_claim.get("claim", "")),
+        axis,
+    )
+    required_evidence = matching_plan.get("required_evidence", []) if matching_plan is not None else default_required_evidence(axis)
+    return {
+        "claim_id": top_claim.get("claim_id", "C?"),
+        "claim": top_claim.get("claim", "_No claim recorded._"),
+        "axis": axis,
+        "priority_label": top_claim.get("priority_label", "later"),
+        "priority_score": top_claim.get("priority_score", 0),
+        "priority_reason": top_claim.get("priority_reason", "_No reason recorded._"),
+        "decision_goal": "Decide whether this claim is safe to keep, should be reframed, or should be dropped.",
+        "verification_standard": verification_standard_for_priority(str(top_claim.get("priority_label", "later"))),
+        "sources": sources,
+        "queries": queries,
+        "required_evidence": required_evidence,
+        "expected_baselines": expected_baselines_for_axis(axis),
+    }
+
+
 def cleanup_question_text(question: str) -> str:
     cleaned = question.strip().rstrip("?.!")
     cleaned = QUESTION_PREFIX_RE.sub("", cleaned)
@@ -560,7 +798,7 @@ def strongest_current_claim(state: dict[str, Any]) -> str:
 def summarize_rules_in(state: dict[str, Any]) -> list[str]:
     lines = [
         f"{record['run_id']}: {record.get('summary', '_No summary_')}"
-        for record in state.get("run_history", [])[-3:]
+        for record in current_context_runs(state)
     ]
     return lines or ["_No run-backed support recorded yet._"]
 
@@ -568,7 +806,7 @@ def summarize_rules_in(state: dict[str, Any]) -> list[str]:
 def summarize_rules_out(state: dict[str, Any]) -> list[str]:
     lines = [
         f"{record['run_id']}: {record.get('summary', '_No summary_')}"
-        for record in state.get("run_history", [])
+        for record in current_context_runs(state)
         if record.get("outcome") in {"failed", "ambiguous"}
     ]
     return lines or ["_No ruled-out branch has been recorded yet._"]
@@ -665,7 +903,7 @@ def render_novelty_gate_summary(state: dict[str, Any]) -> str:
 
 
 def render_search_plan_summary(state: dict[str, Any]) -> str:
-    plan_entries = state.get("novelty_gate", {}).get("search_plan", [])
+    plan_entries = current_search_plan(state)
     top_entry = next(
         (entry for entry in plan_entries if entry.get("recommended_order") == 1),
         None,
@@ -747,6 +985,67 @@ def render_claims_summary(state: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip()
 
 
+def render_current_context_summary(state: dict[str, Any]) -> str:
+    freshness = state_freshness(state)
+    recent_runs = freshness["recent_runs"]
+    recent_decisions = freshness["recent_decisions"]
+    brief = current_brief(state)
+    lines = [
+        "## Managed Current Context",
+        "",
+        "- source of truth: `research-state.yaml`",
+        f"- state updated_at: {state.get('updated_at', '-')}",
+        f"- freshness: {'stale' if freshness['stale'] else 'fresh'}",
+        f"- history bias risk: {'high' if freshness['history_bias_risk'] else 'low'}",
+        f"- active hypothesis: {state.get('active_hypothesis') or '-'}",
+        f"- recommended focus: {current_recommended_focus(state) or '-'}",
+        "- guardrail: treat `research-log.md` and older notes as background only unless they reappear in the current context window.",
+        "",
+        "### Recent Activity Window",
+        f"- window policy: prefer the active hypothesis and the last {RECENT_ACTIVITY_DAYS} days; otherwise fall back to the latest few entries.",
+        "",
+        "### Recent Runs",
+    ]
+    if not recent_runs:
+        lines.append("- _No recent runs in the current context window._")
+    else:
+        for record in recent_runs:
+            lines.append(
+                f"- {record.get('run_id', '-')}: {record.get('summary', '_No summary_')}"
+            )
+    lines.extend(["", "### Recent Decisions"])
+    if not recent_decisions:
+        lines.append("- _No recent decisions in the current context window._")
+    else:
+        for decision in recent_decisions:
+            lines.append(
+                f"- {decision.get('run_id') or 'no-run'}: {decision.get('direction', '-')} because {decision.get('reason', '_No reason_')}"
+            )
+    if brief is not None:
+        lines.extend(
+            [
+                "",
+                "### Active Novelty Brief",
+                f"- claim: {brief.get('claim_id')} — {brief.get('claim')}",
+                f"- decision goal: {brief.get('decision_goal')}",
+                f"- verification standard: {brief.get('verification_standard')}",
+                "- expected baselines:",
+            ]
+        )
+        for baseline in brief.get("expected_baselines", []):
+            lines.append(f"- {baseline}")
+    if freshness["history_bias_risk"]:
+        lines.extend(
+            [
+                "",
+                "### Reconcile First",
+                "- Confirm the active hypothesis is still the real target before trusting old notes.",
+                "- Re-check live data, code, or current artifacts before extending any older conclusion.",
+            ]
+        )
+    return "\n".join(lines)
+
+
 def sync_search_plan_file(workspace: Path, state: dict[str, Any]) -> None:
     path = workspace / "literature" / "NOVELTY_SEARCH_PLAN.md"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -771,6 +1070,27 @@ def sync_claims_file(workspace: Path, state: dict[str, Any]) -> None:
         render_claims_summary(state),
     )
     path.write_text(updated, encoding="utf-8")
+
+
+def sync_current_context_file(workspace: Path, state: dict[str, Any]) -> None:
+    path = workspace / "CURRENT_CONTEXT.md"
+    text = path.read_text(encoding="utf-8") if path.exists() else "# Current Context\n\n"
+    updated = upsert_managed_block(
+        text,
+        CONTEXT_BLOCK_START,
+        CONTEXT_BLOCK_END,
+        render_current_context_summary(state),
+    )
+    path.write_text(updated, encoding="utf-8")
+
+
+def remove_legacy_context_files(workspace: Path) -> None:
+    legacy_paths = [
+        workspace / "literature" / "NOVELTY_BRIEF.md",
+    ]
+    for path in legacy_paths:
+        if path.exists():
+            path.unlink()
 
 
 def sync_findings_file(workspace: Path, state: dict[str, Any]) -> None:
@@ -913,6 +1233,7 @@ def materialize_reflection_note(workspace: Path, decision: dict[str, Any]) -> Pa
 
 
 def sync_workspace_files(workspace: Path, state: dict[str, Any]) -> None:
+    remove_legacy_context_files(workspace)
     for hypothesis in state.get("hypotheses", []):
         materialize_hypothesis_workspace(workspace, hypothesis)
     for record in state.get("run_history", []):
@@ -924,6 +1245,7 @@ def sync_workspace_files(workspace: Path, state: dict[str, Any]) -> None:
     sync_novelty_gate_file(workspace, state)
     sync_claims_file(workspace, state)
     sync_search_plan_file(workspace, state)
+    sync_current_context_file(workspace, state)
     sync_findings_file(workspace, state)
 
 
@@ -943,11 +1265,9 @@ def default_state(project: str, question: str, mode: str) -> dict[str, Any]:
             "claims": [],
             "claim_records": [],
             "draft_claims": [],
-            "search_plan": [],
             "overlap_summary": None,
             "differentiation_strategy": None,
             "decision": None,
-            "recommended_focus": None,
         },
         "hypotheses": [],
         "hypothesis_backlog": [],
@@ -976,11 +1296,12 @@ def ensure_state_defaults(state: dict[str, Any]) -> dict[str, Any]:
     novelty_gate.setdefault("claims", [])
     novelty_gate.setdefault("claim_records", [])
     novelty_gate.setdefault("draft_claims", [])
-    novelty_gate.setdefault("search_plan", [])
     novelty_gate.setdefault("overlap_summary", None)
     novelty_gate.setdefault("differentiation_strategy", None)
     novelty_gate.setdefault("decision", None)
-    novelty_gate.setdefault("recommended_focus", None)
+    novelty_gate.pop("search_plan", None)
+    novelty_gate.pop("recommended_focus", None)
+    novelty_gate.pop("brief", None)
     hydrated.setdefault("hypotheses", [])
     hydrated.setdefault("hypothesis_backlog", [])
     hydrated.setdefault("run_history", [])
@@ -1006,6 +1327,11 @@ def load_state(path: Path) -> dict[str, Any]:
 
 def dump_state(path: Path, state: dict[str, Any]) -> None:
     state_to_write = deepcopy(state)
+    novelty_gate = state_to_write.get("novelty_gate", {})
+    if isinstance(novelty_gate, dict):
+        novelty_gate.pop("search_plan", None)
+        novelty_gate.pop("recommended_focus", None)
+        novelty_gate.pop("brief", None)
     state_to_write["updated_at"] = now_iso()
     state_to_write["next_actions"] = recommend_next_actions(state_to_write)
     if yaml is not None:
@@ -1087,6 +1413,14 @@ def latest_decision_for_hypothesis(state: dict[str, Any], hypothesis_id: str) ->
 
 
 def recommend_next_actions(state: dict[str, Any]) -> list[str]:
+    freshness = state_freshness(state)
+    if freshness["history_bias_risk"]:
+        return [
+            "先刷新当前上下文：确认 active hypothesis 和当前目标，旧日志只当背景。",
+            "先看 CURRENT_CONTEXT.md 和 research-state.yaml，不要直接沿用更早的 findings 或 research-log 结论。",
+            "重查一遍当前代码、数据或最新实验输出，再决定要不要继续旧方向。",
+        ]
+
     if state.get("status") == "concluded":
         return [
             "Freeze the final narrative in findings.md and to_human/.",
@@ -1388,42 +1722,6 @@ def add_claim_comparison(
     novelty_gate["overlap_summary"] = ", ".join(
         f"{item['claim_id']}={item['overlap']}" for item in prioritized_records
     )
-    top_record = prioritized_records[0] if prioritized_records else None
-    novelty_gate["recommended_focus"] = (
-        f"{top_record['claim_id']}: {top_record['claim']}" if top_record is not None else None
-    )
-    return next_state
-
-
-def generate_search_plan(state: dict[str, Any]) -> dict[str, Any]:
-    next_state = ensure_state_defaults(state)
-    novelty_gate = next_state["novelty_gate"]
-    claim_records = novelty_gate.get("claim_records", [])
-    synthesized_records: list[dict[str, Any]]
-    if claim_records:
-        synthesized_records = claim_records
-    elif novelty_gate.get("draft_claims"):
-        synthesized_records = novelty_gate["draft_claims"]
-    else:
-        synthesized_records = [
-            {
-                "claim_id": f"C{index + 1}",
-                "claim": claim,
-                "axis": "claim",
-            }
-            for index, claim in enumerate(novelty_gate.get("claims", []))
-        ]
-    novelty_gate["search_plan"] = [
-        build_search_plan_entry(record) for record in synthesized_records
-    ]
-    novelty_gate["search_plan"] = sorted(
-        novelty_gate["search_plan"],
-        key=lambda item: (
-            int(item.get("recommended_order", 999) or 999),
-            -int(item.get("priority_score", 0) or 0),
-            item.get("claim_id", ""),
-        ),
-    )
     return next_state
 
 
@@ -1438,11 +1736,7 @@ def draft_claims_from_state(
     drafts = prioritize_claims(propose_claims_from_question(question, count=count))
     next_state["novelty_gate"]["draft_claims"] = drafts
     next_state["novelty_gate"]["claims"] = [draft["claim"] for draft in drafts]
-    top_draft = drafts[0] if drafts else None
-    next_state["novelty_gate"]["recommended_focus"] = (
-        f"{top_draft['claim_id']}: {top_draft['claim']}" if top_draft is not None else None
-    )
-    return generate_search_plan(next_state)
+    return next_state
 
 
 def format_status(state: dict[str, Any]) -> str:
@@ -1469,14 +1763,21 @@ def format_status(state: dict[str, Any]) -> str:
 
 def format_resume(state: dict[str, Any]) -> str:
     active_id = state.get("active_hypothesis")
-    latest_run = latest_run_for_hypothesis(state, active_id) if active_id else None
-    latest_decision = latest_decision_for_hypothesis(state, active_id) if active_id else None
+    freshness = state_freshness(state)
+    recent_runs = freshness["recent_runs"]
+    recent_decisions = freshness["recent_decisions"]
+    latest_run = recent_runs[0] if recent_runs else None
+    latest_decision = recent_decisions[0] if recent_decisions else None
+    brief = current_brief(state)
     lines = [
         f"question: {state.get('question', '-')}",
         f"stage: {state.get('stage', '-')}",
         f"novelty_gate: {state.get('novelty_gate', {}).get('status', '-')}",
         f"novelty_assessment: {overall_novelty_assessment(state)}",
-        f"recommended_focus: {state.get('novelty_gate', {}).get('recommended_focus') or '-'}",
+        f"freshness: {'stale' if freshness['stale'] else 'fresh'}",
+        f"history_bias_risk: {'high' if freshness['history_bias_risk'] else 'low'}",
+        f"recommended_focus: {current_recommended_focus(state) or '-'}",
+        f"novelty_brief_claim: {brief.get('claim_id') if brief else '-'}",
         f"active_hypothesis: {active_id or '-'}",
     ]
     if active_id:
@@ -1491,8 +1792,9 @@ def format_resume(state: dict[str, Any]) -> str:
         lines.append(f"latest_reason: {latest_decision.get('reason', '-')}")
     draft_claims = state.get("novelty_gate", {}).get("draft_claims", [])
     lines.append(f"draft_claims: {len(draft_claims)}")
-    search_plan = state.get("novelty_gate", {}).get("search_plan", [])
+    search_plan = current_search_plan(state)
     lines.append(f"search_plan_entries: {len(search_plan)}")
+    lines.append("guardrail: trust CURRENT_CONTEXT.md and research-state.yaml first; treat older logs as background.")
     lines.append("next_actions:")
     for action in state.get("next_actions", [])[:3]:
         lines.append(f"- {action}")
@@ -1526,8 +1828,11 @@ def parse_args() -> argparse.Namespace:
     draft_parser.add_argument("--question")
     draft_parser.add_argument("--count", type=int, default=4)
 
-    plan_parser = subparsers.add_parser("plan-search", help="Generate a novelty search checklist from current claims.")
+    plan_parser = subparsers.add_parser("plan-search", help="Refresh the novelty search view from structured claims.")
     plan_parser.add_argument("--workspace", required=True)
+
+    brief_parser = subparsers.add_parser("brief-first-claim", help="Refresh the top-priority novelty brief inside CURRENT_CONTEXT.md.")
+    brief_parser.add_argument("--workspace", required=True)
 
     compare_parser = subparsers.add_parser("compare-claim", help="Record one novelty claim comparison.")
     compare_parser.add_argument("--workspace", required=True)
@@ -1629,18 +1934,34 @@ def main() -> None:
         return
 
     if args.command == "plan-search":
-        updated = generate_search_plan(state)
+        updated = ensure_state_defaults(state)
         dump_state(state_path, updated)
         sync_workspace_files(workspace, updated)
         append_research_log(
             workspace,
-            "Novelty search plan generated",
+            "Novelty search view refreshed",
             [
-                f"entries: {len(updated['novelty_gate'].get('search_plan', []))}",
+                f"entries: {len(current_search_plan(updated))}",
                 "source priority: Semantic Scholar -> arXiv -> Google Scholar",
             ],
         )
-        print(f"Generated novelty search plan for {workspace}")
+        print(f"Refreshed novelty search plan for {workspace}")
+        return
+
+    if args.command == "brief-first-claim":
+        updated = ensure_state_defaults(state)
+        dump_state(state_path, updated)
+        sync_workspace_files(workspace, updated)
+        brief = current_brief(updated)
+        append_research_log(
+            workspace,
+            "Novelty brief refreshed",
+            [
+                f"claim: {brief.get('claim_id') if brief else '_not set_'}",
+                "scope: top-priority novelty claim",
+            ],
+        )
+        print(f"Refreshed novelty brief for {workspace}")
         return
 
     if args.command == "compare-claim":

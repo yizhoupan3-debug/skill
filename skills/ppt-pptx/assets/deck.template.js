@@ -1,4 +1,6 @@
 const fs = require("fs");
+const path = require("path");
+const { spawnSync } = require("child_process");
 const pptxgen = require("pptxgenjs");
 const {
   imageSizingCrop,
@@ -59,6 +61,14 @@ pptx.defineSlideMaster({
         h: 7.5,
         line: { color: palette.stage, transparency: 100 },
         fill: { color: palette.stage },
+      },
+    },
+    {
+      placeholder: {
+        options: {
+          name: "officecli_title",
+          type: "title",
+        },
       },
     },
   ],
@@ -228,6 +238,7 @@ function addSectionTitle(slide, cn, en, x, y, w) {
     y,
     w: Math.min(w * 0.62, 4.4),
     h: 0.24,
+    placeholder: "officecli_title",
     ...getTypography("h2", { color: palette.text, animate: { type: "fade", prop: "in" } }),
   });
   slide.addText(en, {
@@ -244,6 +255,15 @@ function finalizeSlide(slide, options = {}) {
     warnIfSlideHasOverlaps(slide, pptx);
   }
   warnIfSlideElementsOutOfBounds(slide, pptx);
+}
+
+function sanitizeGeneratedDeck(fileName) {
+  const script = path.resolve(process.cwd(), "sanitize_pptx.py");
+  if (!fs.existsSync(script)) return;
+  const completed = spawnSync("python3", [script, fileName], { stdio: "inherit" });
+  if (completed.status !== 0) {
+    throw new Error(`sanitize_pptx.py failed for ${fileName}`);
+  }
 }
 
 const cover = pptx.addSlide({ masterName: "BLACK_LUXURY" });
@@ -275,6 +295,7 @@ cover.addText("课程汇报标题", {
   y: 1.76,
   w: 4.64,
   h: 1.06,
+  placeholder: "officecli_title",
   fontFace: "Arial",
   fontSize: 28,
   color: palette.text,
@@ -548,6 +569,7 @@ closing.addText("THANK YOU", {
   y: 2.1,
   w: 4.98,
   h: 0.42,
+  placeholder: "officecli_title",
   fontFace: "Arial",
   fontSize: 30,
   color: palette.text,
@@ -569,4 +591,12 @@ closing.addText("黑底高级感来自清晰的层次、足够强的对比，以
 addBottomGlow(closing);
 finalizeSlide(closing, { skipOverlap: true });
 
-pptx.writeFile({ fileName: "deck.pptx" });
+async function writeDeck() {
+  await pptx.writeFile({ fileName: "deck.pptx" });
+  sanitizeGeneratedDeck("deck.pptx");
+}
+
+writeDeck().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
