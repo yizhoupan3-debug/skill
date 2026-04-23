@@ -13,6 +13,7 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from framework_runtime.rust_router import get_cached_route_adapter
 from scripts.audit_codex_storage import collect_storage_report
 from scripts.consolidate_memory import (
     archive_legacy_memory_bundle,
@@ -38,7 +39,6 @@ from scripts.memory_support import (
     write_json_if_changed,
     write_text_if_changed,
 )
-from scripts.retrieve_memory import render_context
 
 
 def _summary_lines(
@@ -229,14 +229,17 @@ def run_pipeline(
         changed_files.append(state_path)
     sqlite_result = persist_memory_bundle(workspace, documents, memory_root=memory_root, resolved_dir=resolved_dir)
     report = collect_storage_report(DEFAULT_CODEX_ROOT, top=top)
-    retrieval = render_context(
-        workspace=workspace,
-        topic=topic,
-        max_items=top,
+    retrieval_payload = get_cached_route_adapter(get_repo_root()).framework_memory_recall(
         repo_root=repo_root,
-        artifact_root=artifact_source_dir,
+        query=topic,
+        top=top,
         mode="stable",
+        memory_root=memory_root,
+        artifact_source_dir=artifact_source_dir,
     )
+    retrieval = retrieval_payload.get("retrieval")
+    if not isinstance(retrieval, dict):
+        raise RuntimeError("Rust memory recall returned a missing retrieval payload.")
     generated_at = current_local_timestamp()
     run_id = build_task_id(f"{workspace}-memory-automation", created_at=generated_at)
     out_dir = (output_dir or (ops_memory_automation_root(repo_root) / run_id)).resolve()

@@ -14,246 +14,31 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.host_integration_rs import export_runtime_registry, run_host_integration_rs
+from framework_runtime.runtime_registry import (
+    framework_native_aliases as load_framework_native_aliases,
+)
+from framework_runtime.runtime_registry import load_runtime_registry
+from framework_runtime.runtime_registry import (
+    shared_project_mcp_servers as load_shared_project_mcp_servers,
+)
+from scripts.host_integration_runner import run_host_integration as _shared_run_host_integration
 from scripts.rust_binary_runner import ensure_rust_binary
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-
-SHARED_AGENT_POLICY ="""# Shared Agent Policy
-
-This repository is designed to be entered from `AGENTS.md` (Codex), `CLAUDE.md`
-(Claude Code), or `GEMINI.md` (Gemini CLI). These files must project one shared
-framework policy instead of forking per-host routing or memory rules.
-
-## Default Behavior
-
-- Reply in Chinese unless the user asks for another language.
-- Keep answers direct, concise, and easy to scan.
-- Execute safe read/search/test/build commands directly when the runtime allows.
-- Default to a get-shit-done posture for clear local tasks: auto-continue safe,
-  reversible work, keep ownership local, and verify before handoff.
-- Do not silently choose an ambiguous interpretation when it would materially
-  change the code, output, or risk surface; surface the assumption or ask.
-- Prefer the smallest solution that fully solves the stated problem; do not add
-  speculative abstractions, options, or future-proofing that was not requested.
-- Keep edits surgical: touch only what the task requires, match local style,
-  and clean up only the mess created by the current change.
-- For non-trivial work, define success in a verifiable way before
-  implementation and use that definition to drive execution.
-- Ask before destructive actions, external publishing, or account-impacting work.
-
-## Simplify First
-
-- Prefer simplification before expansion: delete, merge, inline, or narrow an
-  existing path before adding a new layer, branch, helper, or adapter.
-- If two approaches both solve the task, prefer the one with fewer moving
-  parts, fewer branching paths, and fewer files or surfaces to keep in sync.
-- Prefer removing obsolete compatibility, transition, or fallback logic over
-  wrapping it again, unless a real caller or rollout constraint still needs it.
-- Keep hot paths simple: avoid repeated parse/serialize loops, repeated file
-  I/O, copy-heavy data flow, and wrapper-on-wrapper structure when a direct path
-  will do.
-- Keep `AGENT.md` short and high-signal; if a rule only matters for one
-  workflow, move it into the task-specific doc instead of bloating shared
-  policy.
-
-## Repo Landmarks
-
-- `skills/` holds the shared routing and workflow bodies; read the selected
-  `SKILL.md` before acting.
-- `scripts/materialize_cli_host_entrypoints.py` renders shared host-entrypoint files and consumes the Rust Claude hook manifest from `scripts/router-rs/`.
-- `scripts/router-rs/` owns the Rust hook bridge, lifecycle commands, and
-  generated-surface audits.
-- `artifacts/current/<task_id>/`, `artifacts/current/task_registry.json`, and
-  `.supervisor_state.json` are the durable task-state surfaces; do not treat
-  chat text as the only recovery source.
-
-## Communication Style
-
-- Lead with the answer or result, not status reports, greetings, or self-talk.
-- Use plain Chinese and everyday words by default.
-- Explain things in plain language first; give internal terms only if they help.
-- Avoid internal runtime, routing, framework, or tool jargon unless the user
-  explicitly asks for it.
-- If a technical term is necessary, explain it in simple words the first time.
-- Keep the default reply to one short paragraph; use lists only when the content
-  is genuinely list-shaped.
-- Do not force personality, performative style, jokes, or deliberate roughness
-  by default; sounding natural matters more than sounding theatrical.
-- Keep the tone calm, friendly, and practical.
-
-## Output Compaction
-
-- For high-output local commands where exact raw output is not required, follow
-  `RTK.md` and prefer the corresponding `rtk ...` wrapper.
-- Treat `RTK.md` as repo-local operator guidance only; shared routing and
-  policy truth still lives in this file plus the generated routing artifacts.
-
-## Verification Defaults
-
-- Verify the narrowest meaningful slice before handoff.
-- For shared policy, host entrypoint, routing, or hook changes, prefer this
-  order unless the task says otherwise: `python3 scripts/check_skills.py
-  --verify-sync`, targeted `python3 -m pytest ...`, `python3 -m compileall
-  ...`, and `cargo test --manifest-path ./scripts/router-rs/Cargo.toml` when
-  Rust hook or runtime code changed.
-- If you skip a verification step that would normally matter, say so plainly in
-  the closeout.
-
-## Task Closeout
-
-- Keep end-of-task user-facing closeouts in plain Chinese by default.
-- Default the closeout to one short paragraph that covers exactly three points:
-  what was done, what effect was achieved, and what still needs to happen next
-  or that the work is finished.
-- Keep the wording plain and natural; do not make the default closeout sound
-  like a task artifact, audit log, or status machine.
-- Prefer user-visible effect over implementation narration in the default
-  closeout.
-- If no further work is needed, say that directly instead of inventing follow-up
-  tasks.
-- Do not default to changed-file inventories, evidence lists, path dumps,
-  changelog-style recaps, or step-by-step implementation retellings in the
-  final user-facing closeout.
-- Machine continuity artifacts such as `NEXT_ACTIONS.json`,
-  `.supervisor_state.json`, and verification or blocker fields remain the
-  recovery truth; do not mirror them verbatim into the user-facing closeout
-  unless they materially affect the user's next decision.
-
-## Policy Placement
-
-- Put durable response policy in this file: answer-first phrasing, plain-language
-  explanation, tone, closeout shape, and routing posture.
-- Put deterministic runtime safeguards and narrow execution-time coding nudges
-  in hooks: generated-surface protection, lifecycle refresh, environment
-  reloads, failure alerts, and cheap repo-specific implementation reminders.
-- Keep user-specific notifications, personal approvals, and machine-local
-  preferences in `~/.claude/settings.json` or `.claude/settings.local.json`,
-  not in committed project hooks.
-- Do not use hooks to inject personality, carry general writing policy, or
-  rewrite broad prompts when `AGENT.md` or `CLAUDE.md` can express the rule
-  directly.
-- Keep this file compact and factual. If a rule turns into a long workflow,
-  move the procedure into `skills/`, `code_review.md`, or another task-specific
-  doc and reference it instead of bloating this file.
-- Add or tighten durable rules only after repeated real mistakes or verified
-  friction.
-
-## Turn-Start Routing
-
-1. Extract `object / action / constraints / deliverable`.
-2. Surface any ambiguity that would materially change the route or result.
-3. Check gates before owners.
-4. Use the narrowest matching skill and read its `SKILL.md` before acting.
-5. For non-trivial execution, state the minimum success criteria and intended
-   verification path before coding.
-6. If no skill matches, consult `skills/SKILL_ROUTING_RUNTIME.json` first, then
-   `skills/SKILL_ROUTING_INDEX.md`.
-7. Keep one primary owner and at most one overlay.
-8. Use `execution-controller-coding` for high-load or long-running work, and
-   check `subagent-delegation` before splitting bounded sidecars.
-9. Treat explicit `gsd` / `get shit done` / “推进到底” requests as a posture
-   boost for `execution-controller-coding` plus `anti-laziness`, not as an
-   external workflow.
-
-## Shared Runtime Contract
-
-- Runtime truth lives in `skills/`, task artifacts, and
-  `.supervisor_state.json`.
-- Host-specific entry files are thin projections only; they must not fork
-  routing, memory schema, or artifact rules.
-- Complex tasks externalize state into `SESSION_SUMMARY.md`,
-  `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`,
-  `.supervisor_state.json`, and `artifacts/current/task_registry.json`.
-- `artifacts/current/<task_id>/` is task-local continuity and the primary task
-  truth. Keep bootstrap, ops, evidence, and scratch outputs in their own roots.
-- Root-level mirrors plus `artifacts/current/active_task.json` /
-  `artifacts/current/focus_task.json` are focus-task projections only, not a
-  parallel write surface.
-- Shared continuity files are a single-writer surface: only the active
-  integrator writes the shared focus projection; parallel lanes emit local deltas.
-
-## Memory Contract
-
-- Framework memory lives at `./.codex/memory/`; in this repo it resolves to
-  `./memory/`, and both paths are one shared root.
-- Default recall reads only the stable layer: `MEMORY.md`, `preferences.md`,
-  `decisions.md`, `lessons.md`, `runbooks.md`, plus an active task summary only
-  when clearly needed.
-- Historical or debug snapshots belong under `memory/archive/` or
-  `artifacts/ops/memory_automation/`, not the normal prompt path.
-- Host entry files may reference framework memory, but must not redefine its
-  schema or ownership.
-
-## Workspace Binding
-
-- When the user says `绑定xx目录` and the path is relative, resolve it under
-  `/Users/joe/Documents`.
-- Example: `绑定research/made` means `/Users/joe/Documents/research/made`.
-- If the relative path does not exist there, ask for clarification instead of
-  guessing across other roots.
-
-## Runtime Sources Of Truth
-
-- Default routing truth:
-  `skills/SKILL_ROUTING_RUNTIME.json` and `skills/SKILL_ROUTING_INDEX.md`.
-- Open the extended generated references only when you need ambiguity or audit
-  detail: `skills/SKILL_ROUTING_LAYERS.md`,
-  `skills/SKILL_SOURCE_MANIFEST.json`, `skills/SKILL_SHADOW_MAP.json`,
-  `skills/SKILL_LOADOUTS.json`,
-  `configs/framework/FRAMEWORK_SURFACE_POLICY.json`, and
-  `skills/SKILL_APPROVAL_POLICY.json`.
-
-## Host Entry Files
-
-- Default host entrypoints: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`.
-- Host-private overlays: `.claude/settings.json`, `.gemini/settings.json`.
-- These files stay thin and point back to this shared policy.
-"""
-
-ROOT_AGENTS_PROXY = """# Codex Entry Proxy
-
-This file exists because Codex discovers `AGENTS.md`.
-
-- Shared framework policy source of truth: [AGENT.md](AGENT.md)
-
-Do not fork routing, memory, or artifact policy in this file.
-"""
-
-ROOT_CLAUDE_PROXY = """# Claude Code Entry Proxy
-
-This file exists because Claude Code discovers `CLAUDE.md`.
-
-Keep startup lean. Do not add `@...` imports here.
-
-Treat `.claude/**` as host-shell glue, not repository truth.
-The recovery projection lives at `.codex/memory/CLAUDE_MEMORY.md` for `/refresh`
-or manual resume, not default startup injection.
-
-Generated-first maintenance rule:
-
-- Edit `scripts/materialize_cli_host_entrypoints.py` first for host-entrypoint rendering, and update `scripts/router-rs/` first for Claude hook rules and contracts.
-- Treat those files as materialized outputs, not hand-authored truth.
-- `.claude/agents/*.md` stays manually maintained unless a file says otherwise.
-- Event-level lifecycle decisions live in `.claude/hooks/README.md`.
-"""
-
-ROOT_GEMINI_PROXY = """# Gemini CLI Entry Proxy
-
-This file exists because Gemini CLI discovers `GEMINI.md`.
-
-- Shared framework policy source of truth: [AGENT.md](AGENT.md)
-- Gemini local settings root: [.gemini/settings.json](.gemini/settings.json)
-
-Gemini-specific config belongs in `.gemini/`, but the shared routing, memory,
-and artifact rules still come from `AGENT.md`.
-"""
-
 CLAUDE_ROUTER_RS_RELEASE_BINARY = "./scripts/router-rs/target/release/router-rs"
 CLAUDE_ROUTER_RS_DEBUG_BINARY = "./scripts/router-rs/target/debug/router-rs"
 CLAUDE_ROUTER_RS_MANIFEST_PATH = "./scripts/router-rs/Cargo.toml"
+
+ROUTER_RS_PROJECTION_SOURCES = (
+    PROJECT_ROOT / "AGENT.md",
+    PROJECT_ROOT / "AGENTS.md",
+    PROJECT_ROOT / "CLAUDE.md",
+    PROJECT_ROOT / "GEMINI.md",
+    PROJECT_ROOT / ".claude" / "hooks" / "README.md",
+    PROJECT_ROOT / ".claude" / "hooks" / "run.sh",
+)
 
 
 def _ensure_router_rs_binary() -> Path:
@@ -266,6 +51,7 @@ def _ensure_router_rs_binary() -> Path:
         allow_stale_fallback=False,
         allow_cross_profile_fallback=False,
         cwd=project_root,
+        extra_source_paths=ROUTER_RS_PROJECTION_SOURCES,
     )
 
 
@@ -385,24 +171,19 @@ Do not invent batch state that the command did not return.
 """
 
 def _runtime_registry_payload() -> dict[str, Any]:
-    payload = export_runtime_registry(PROJECT_ROOT)
-    if not isinstance(payload, dict):
-        raise ValueError("Rust runtime registry export must be a JSON object")
-    return payload
+    return load_runtime_registry(repo_root=PROJECT_ROOT)
+
+
+def _run_host_integration_command(*args: str) -> dict[str, Any]:
+    return _shared_run_host_integration(*args, cwd=PROJECT_ROOT)
 
 
 def _framework_native_aliases() -> dict[str, Any]:
-    aliases = _runtime_registry_payload().get("framework_native_aliases")
-    if not isinstance(aliases, dict):
-        raise ValueError("runtime registry missing framework_native_aliases")
-    return aliases
+    return load_framework_native_aliases(repo_root=PROJECT_ROOT)
 
 
 def _shared_project_mcp_servers() -> tuple[str, ...]:
-    servers = _runtime_registry_payload().get("shared_project_mcp_servers")
-    if not isinstance(servers, list):
-        raise ValueError("runtime registry missing shared_project_mcp_servers")
-    return tuple(str(server) for server in servers)
+    return load_shared_project_mcp_servers(repo_root=PROJECT_ROOT)
 
 
 def _framework_alias_payload(alias_name: str) -> dict[str, Any]:
@@ -616,14 +397,14 @@ Generated-first maintenance:
 - Treat `.claude/settings.json`, this README, and `.claude/hooks/*.sh` as
   materialized outputs.
 - Manual Claude host guidance belongs in `.claude/agents/*.md` unless noted.
-- Codex repo hooks stay disabled here by default; keep shared hook logic scoped
-  to Claude unless the project explicitly re-enables a Codex-specific layer.
+- Codex uses `.codex/hooks.json` for a separate silent preflight guardrail
+  layer on `Edit`/`MultiEdit`/`Write`/`Bash`; do not mirror Claude prompt hooks onto Codex.
 
 Active hooks:
 
 | Event | Runner | Purpose |
 | --- | --- | --- |
-| `UserPromptSubmit` | `run.sh user-prompt-submit` | Inject the repo-local shared memory and continuity truth on every real prompt, and only add a one-line closeout reminder on execution turns. |
+| `UserPromptSubmit` | `run.sh user-prompt-submit` | Inject the repo-local shared memory and continuity truth on every real prompt, plus narrow execution-time hints when the current prompt clearly needs them. |
 | `PreToolUse` | `run.sh pre-tool-use-quality` | Add a short path-aware implementation reminder before editing runtime, materializer, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |
 | `PreToolUse` | `run.sh pre-tool-use` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
 | `PostToolUse` | `run.sh post-tool-audit` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
@@ -636,9 +417,8 @@ Everything else stays intentionally uninstalled here so startup and tool turns r
 `./.codex/memory/` plus continuity artifacts, so prompt-time injection is the
 lowest-friction way to keep Claude aligned with repo-local state instead of stale
 host-global recall.
-For execution turns it may add one short closeout reminder, but reply tone,
-"讲人话" rules, closeout shape, and broad implementation philosophy still live in
-`AGENT.md`, not in hooks.
+Reply tone, "讲人话" rules, closeout shape, and broad implementation philosophy
+still live in `AGENT.md`, not in hooks.
 Static behavior rules belong in `AGENT.md` or `CLAUDE.md`; these hooks exist
 for deterministic guardrails, lightweight execution-time context, and lifecycle
 maintenance.
@@ -695,8 +475,8 @@ Validation commands:
 - `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}\n' | ./scripts/router-rs/target/debug/router-rs --claude-hook-audit-command config-change --repo-root "$PWD"`
   Expected: JSON on stdout plus audit-only stderr guidance; exit 0.
 - In Claude Code, run `/hooks`
-  Expected: the project shows `PreToolUse`, `PostToolUse`, `SessionEnd`,
-  `ConfigChange`, and `StopFailure` from `.claude/settings.json`.
+  Expected: the project shows `PreToolUse`, `PostToolUse`, `UserPromptSubmit`,
+  `SessionEnd`, `ConfigChange`, and `StopFailure` from `.claude/settings.json`.
 
 Shared routing policy still comes from `../../AGENT.md`.
 """
@@ -743,79 +523,36 @@ case "$command_name" in
     ;;
 esac
 """
-
-
-def _codex_hook_bridge_command(event: str) -> str:
-    return (
-        'CODEX_PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; '
-        'ROUTER_RS_RELEASE_BIN="$CODEX_PROJECT_ROOT/scripts/router-rs/target/release/router-rs"; '
-        'ROUTER_RS_DEBUG_BIN="$CODEX_PROJECT_ROOT/scripts/router-rs/target/debug/router-rs"; '
-        'ROUTER_RS_CRATE_ROOT="$CODEX_PROJECT_ROOT/scripts/router-rs"; '
-        'router_rs_is_fresh() { '
-        'bin_path="$1"; '
-        '[ -x "$bin_path" ] || return 1; '
-        '[ "$ROUTER_RS_CRATE_ROOT/Cargo.toml" -nt "$bin_path" ] && return 1; '
-        'find "$ROUTER_RS_CRATE_ROOT/src" -type f -newer "$bin_path" | grep -q . && return 1; '
-        'return 0; '
-        '}; '
-        'run_router_rs() { '
-        'if router_rs_is_fresh "$ROUTER_RS_RELEASE_BIN"; then "$ROUTER_RS_RELEASE_BIN" "$@"; return; fi; '
-        'if router_rs_is_fresh "$ROUTER_RS_DEBUG_BIN"; then "$ROUTER_RS_DEBUG_BIN" "$@"; return; fi; '
-        'if [ -x "$ROUTER_RS_RELEASE_BIN" ]; then "$ROUTER_RS_RELEASE_BIN" "$@"; return; fi; '
-        'if [ -x "$ROUTER_RS_DEBUG_BIN" ]; then "$ROUTER_RS_DEBUG_BIN" "$@"; return; fi; '
-        'echo "Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN" >&2; '
-        'exit 1; '
-        '}; '
-        f'run_router_rs --codex-hook-command {event} --repo-root "$CODEX_PROJECT_ROOT"'
-    )
-
-
-CODEX_PROJECT_HOOKS = {
-    "hooks": {
-        # Keep Codex hooks quiet by default. The current Codex runtime surfaces
-        # UserPromptSubmit `systemMessage` as a visible warning and does not yet
-        # honor `suppressOutput`, so we only install silent Bash guardrails here.
-        "PreToolUse": [
-            {
-                "matcher": "Bash",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": _codex_hook_bridge_command("pre-tool-use"),
-                        "timeout": 8,
-                    }
-                ],
-            }
-        ],
-        "PermissionRequest": [
-            {
-                "matcher": "Bash",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": _codex_hook_bridge_command("permission-request"),
-                        "timeout": 8,
-                    }
-                ],
-            }
-        ],
-    }
-}
-
 HOST_ENTRYPOINT_SYNC_MANIFEST_PATH = ".codex/host_entrypoints_sync_manifest.json"
 
 
 def _host_entrypoint_text_files() -> dict[str, str]:
     hook_projection = _load_claude_hook_projection()
+    agent_policy = hook_projection.get("agent_policy")
+    root_agents_proxy = hook_projection.get("root_agents_proxy")
+    root_claude_proxy = hook_projection.get("root_claude_proxy")
+    root_gemini_proxy = hook_projection.get("root_gemini_proxy")
     hooks_readme = hook_projection.get("hooks_readme")
     hook_runner = hook_projection.get("hook_runner")
-    if not isinstance(hooks_readme, str) or not isinstance(hook_runner, str):
-        raise ValueError("Rust hook projection must include hooks_readme and hook_runner strings")
+    if not all(
+        isinstance(value, str)
+        for value in (
+            agent_policy,
+            root_agents_proxy,
+            root_claude_proxy,
+            root_gemini_proxy,
+            hooks_readme,
+            hook_runner,
+        )
+    ):
+        raise ValueError(
+            "Rust hook projection must include AGENT/proxy text plus hooks_readme and hook_runner strings"
+        )
     return {
-        "AGENT.md": SHARED_AGENT_POLICY,
-        "AGENTS.md": ROOT_AGENTS_PROXY,
-        "CLAUDE.md": ROOT_CLAUDE_PROXY,
-        "GEMINI.md": ROOT_GEMINI_PROXY,
+        "AGENT.md": agent_policy,
+        "AGENTS.md": root_agents_proxy,
+        "CLAUDE.md": root_claude_proxy,
+        "GEMINI.md": root_gemini_proxy,
         ".claude/agents/README.md": CLAUDE_AGENTS_README,
         ".claude/commands/refresh.md": CLAUDE_REFRESH_COMMAND,
         ".claude/commands/background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
@@ -828,11 +565,6 @@ def _host_entrypoint_text_files() -> dict[str, str]:
     }
 
 
-HOST_ENTRYPOINT_STATIC_JSON_FILES = {
-    ".codex/hooks.json": CODEX_PROJECT_HOOKS,
-    ".gemini/settings.json": {},
-}
-
 HOST_ENTRYPOINT_JSON_RELATIVE_PATHS = (
     ".codex/hooks.json",
     ".claude/settings.json",
@@ -841,8 +573,13 @@ HOST_ENTRYPOINT_JSON_RELATIVE_PATHS = (
 
 
 def _host_entrypoint_json_files(repo_root: Path) -> dict[str, dict[str, Any]]:
+    hook_projection = _load_claude_hook_projection()
+    codex_hooks = hook_projection.get("codex_hooks")
+    if not isinstance(codex_hooks, dict):
+        raise ValueError("Rust hook projection must include codex_hooks object")
     return {
-        **HOST_ENTRYPOINT_STATIC_JSON_FILES,
+        ".codex/hooks.json": codex_hooks,
+        ".gemini/settings.json": {},
         ".claude/settings.json": _load_claude_project_settings(repo_root),
     }
 
@@ -957,7 +694,7 @@ def sync_repo_host_entrypoints(
     with TemporaryDirectory() as temp_dir:
         template_root = Path(temp_dir)
         write_host_entrypoint_template(template_root, repo_root=root)
-        return run_host_integration_rs(
+        return _run_host_integration_command(
             "sync-host-entrypoints",
             "--template-root",
             str(template_root),

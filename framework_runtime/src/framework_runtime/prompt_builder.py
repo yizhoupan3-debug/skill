@@ -112,7 +112,11 @@ class PromptBuilder:
 
         selected = routing_result.selected_skill
         overlay_name = routing_result.overlay_skill.name if routing_result.overlay_skill else "none"
-        reasons = routing_result.reasons or ["Rust route decision already resolved upstream."]
+        reasons = (
+            list(routing_result.route_snapshot.reasons)
+            if routing_result.route_snapshot is not None and routing_result.route_snapshot.reasons
+            else list(routing_result.reasons)
+        ) or ["Rust route decision already resolved upstream."]
         reason_block = "\n".join(f"- {reason}" for reason in reasons[:3])
         if routing_result.route_engine == "rust":
             return dedent(

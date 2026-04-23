@@ -8,14 +8,13 @@ import os
 import sys
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from framework_runtime.rust_router import RustRouteAdapter
+from framework_runtime.rust_router import get_cached_route_adapter
 from scripts.memory_support import (
     current_local_timestamp,
     get_repo_root,
@@ -80,12 +79,6 @@ def _read_json(path: Path) -> dict[str, Any] | list[Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return {}
-
-@lru_cache(maxsize=1)
-def _framework_rust_adapter() -> RustRouteAdapter:
-    """Return the shared Rust adapter used by thin Python bridge paths."""
-
-    return RustRouteAdapter(get_repo_root())
 
 def export_framework_skills(
     runtime_path: Path | None = None,
@@ -242,7 +235,7 @@ def export_supporting_files(
 
     payload = export_framework_skills()
     repo_root = (source_root or get_repo_root()).resolve()
-    memory = _framework_rust_adapter().framework_memory_recall(
+    memory = get_cached_route_adapter(get_repo_root()).framework_memory_recall(
         repo_root=repo_root,
         query=query,
         top=top,

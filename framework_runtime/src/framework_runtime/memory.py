@@ -23,7 +23,7 @@ _MEMORY_SERVICE_NAME = "memory"
 _DEFAULT_MEMORY_SERVICE_DESCRIPTOR = {
     "authority": "rust-runtime-control-plane",
     "role": "memory-lifecycle",
-    "projection": "python-thin-projection",
+    "projection": "rust-native-projection",
     "delegate_kind": "fact-memory-store",
 }
 

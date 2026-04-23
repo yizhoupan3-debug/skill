@@ -11,6 +11,10 @@ routing_priority: P1
 session_start: required
 short_description: Decide whether a complex task should stay local, use bounded subagents, or preserve the same structure locally
 trigger_hints:
+  - multiagent
+  - multi-agent
+  - multiagent routing
+  - 多 agent 路由
   - 子代理派发
   - sidecar
   - 并行 sidecar
@@ -38,6 +42,7 @@ metadata:
     - runtime-delegation
     - local-supervisor
     - first-turn-routing
+    - multiagent
 risk: medium
 source: local
 allowed_tools:
@@ -62,6 +67,12 @@ bridge_behavior: mobile_complete_once
 # subagent-delegation
 
 This skill owns the **runtime multi-agent routing decision** inside the current Codex session. It decides whether a task should stay local, split into bounded subagents, or escalate into full team orchestration, while preserving the same execution structure even when the current runtime policy does not permit spawning.
+
+## Distinction
+
+- `local`: immediate blocker stays on the main thread; no real sidecar lane is worth the overhead
+- `subagent`: bounded sidecars help throughput, but orchestration, integration, QA, and final judgment still stay local
+- `team`: supervisor-led orchestration is itself part of the task, including worker lifecycle, integration, QA, cleanup, and resume/recovery
 
 ## When to use
 
@@ -134,6 +145,13 @@ Escalate beyond local execution when at least two are true, or one is true at hi
 4. clear read/write boundaries exist
 5. non-blocking search burden is high
 6. validation burden is non-trivial
+
+## Routing defaults
+
+- If the user asks for `sidecar`, `bounded subagent`, `delegation plan`, or `local-supervisor queue`, default to `subagent`
+- If the user explicitly rejects `team`, do not escalate to `team`
+- If worker lifecycle management, integration, QA, cleanup, and resume/recovery all need to stay supervisor-led, escalate to `team`
+- If the immediate blocker is tight, urgent, or easier to solve locally, stay `local`
 
 ## Required workflow
 

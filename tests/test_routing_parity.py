@@ -726,7 +726,7 @@ def test_rust_route_adapter_trace_descriptor_methods_validate_schema_and_authori
             },
             "control_plane_authority": "rust-runtime-control-plane",
             "control_plane_role": "trace-and-handoff",
-            "control_plane_projection": "python-thin-projection",
+            "control_plane_projection": "rust-native-projection",
             "control_plane_delegate_kind": "filesystem-trace-store",
             "transport_health": {
                 "backend_family": "filesystem",
@@ -779,7 +779,7 @@ def test_rust_route_adapter_trace_descriptor_methods_validate_schema_and_authori
                 "trace_service": {
                     "authority": "rust-runtime-control-plane",
                     "role": "trace-and-handoff",
-                    "projection": "python-thin-projection",
+                    "projection": "rust-native-projection",
                     "delegate_kind": "filesystem-trace-store",
                 },
             },
@@ -827,7 +827,7 @@ def test_rust_route_adapter_trace_descriptor_methods_validate_schema_and_authori
                 "trace_service": {
                     "authority": "rust-runtime-control-plane",
                     "role": "trace-and-handoff",
-                    "projection": "python-thin-projection",
+                    "projection": "rust-native-projection",
                     "delegate_kind": "filesystem-trace-store",
                 },
             },
@@ -844,7 +844,7 @@ def test_rust_route_adapter_trace_descriptor_methods_validate_schema_and_authori
                 "trace_service": {
                     "authority": "rust-runtime-control-plane",
                     "role": "trace-and-handoff",
-                    "projection": "python-thin-projection",
+                    "projection": "rust-native-projection",
                     "delegate_kind": "filesystem-trace-store",
                 },
             },
@@ -891,7 +891,7 @@ def test_rust_route_adapter_checkpoint_resume_manifest_validates_contract(monkey
             "trace_service": {
                 "authority": "rust-runtime-control-plane",
                 "role": "trace-and-handoff",
-                "projection": "python-thin-projection",
+                "projection": "rust-native-projection",
                 "delegate_kind": "filesystem-trace-store",
             },
         },
@@ -939,7 +939,7 @@ def test_rust_route_adapter_checkpoint_resume_manifest_validates_contract(monkey
                 "trace_service": {
                     "authority": "rust-runtime-control-plane",
                     "role": "trace-and-handoff",
-                    "projection": "python-thin-projection",
+                    "projection": "rust-native-projection",
                     "delegate_kind": "filesystem-trace-store",
                 },
             },
@@ -1281,6 +1281,34 @@ def test_framework_alias_strong_team_orchestration_signals_can_route_team_implic
 
     assert rust_decision == python_decision
     assert rust_decision["selected_skill"] == "team"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "这是多阶段任务，但只需要 bounded sidecars，不要 team orchestration",
+        "这个任务要多 agent 并行，但只是 sidecar，不要进入 team",
+        "先做 delegation plan，再决定 stay local 还是 subagent",
+    ],
+)
+def test_bounded_multiagent_requests_prefer_subagent_over_team(query: str) -> None:
+    python_decision = route_decision_contract(
+        query,
+        codex_home=PROJECT_ROOT,
+        session_id="bounded-subagent-route-session",
+        allow_overlay=True,
+        first_turn=True,
+    ).model_dump(mode="json")
+    rust_decision = _live_route_adapter().route_contract(
+        query=query,
+        session_id="bounded-subagent-route-session",
+        allow_overlay=True,
+        first_turn=True,
+    ).model_dump(mode="json")
+
+    assert rust_decision == python_decision
+    assert rust_decision["selected_skill"] == "subagent-delegation"
+    assert rust_decision["overlay_skill"] == "anti-laziness"
 
 
 @pytest.mark.parametrize(

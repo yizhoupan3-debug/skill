@@ -33,13 +33,13 @@ CONTROL_PLANE_DESCRIPTOR = {
         "state": {
             "authority": "rust-runtime-control-plane",
             "role": "durable-background-state",
-            "projection": "python-thin-projection",
+            "projection": "rust-native-projection",
             "delegate_kind": "filesystem-state-store",
         },
         "trace": {
             "authority": "rust-runtime-control-plane",
             "role": "trace-and-handoff",
-            "projection": "python-thin-projection",
+            "projection": "rust-native-projection",
             "delegate_kind": "filesystem-trace-store",
         },
     },
@@ -58,7 +58,7 @@ def test_background_state_persists_control_plane_descriptor(tmp_path: Path) -> N
 
     payload = json.loads(state_path.read_text(encoding="utf-8"))
     assert payload["control_plane"]["authority"] == "rust-runtime-control-plane"
-    assert payload["control_plane"]["projection"] == "python-thin-projection"
+    assert payload["control_plane"]["projection"] == "rust-native-projection"
     assert payload["control_plane"]["delegate_kind"] == "filesystem-state-store"
     assert payload["control_plane"]["supports_atomic_replace"] is True
     assert payload["control_plane"]["supports_compaction"] is False
@@ -71,7 +71,7 @@ def test_background_state_persists_control_plane_descriptor(tmp_path: Path) -> N
     assert store.health()["supports_remote_event_transport"] is True
 
     recovered = BackgroundJobStore(state_path=state_path)
-    assert recovered.control_plane_descriptor().projection == "python-thin-projection"
+    assert recovered.control_plane_descriptor().projection == "rust-native-projection"
     assert recovered.control_plane_descriptor().delegate_kind == "filesystem-state-store"
     assert recovered.control_plane_descriptor().supports_atomic_replace is True
     assert recovered.control_plane_descriptor().supports_snapshot_delta is False
@@ -95,7 +95,7 @@ def test_checkpointer_embeds_control_plane_into_manifest_and_transport(tmp_path:
     assert binding_path is not None
     binding_payload = json.loads(binding_path.read_text(encoding="utf-8"))
     assert binding_payload["control_plane_authority"] == "rust-runtime-control-plane"
-    assert binding_payload["control_plane_projection"] == "python-thin-projection"
+    assert binding_payload["control_plane_projection"] == "rust-native-projection"
     assert binding_payload["transport_health"]["backend_family"] == "filesystem"
     assert binding_payload["transport_health"]["supports_atomic_replace"] is True
     assert binding_payload["transport_health"]["supports_compaction"] is False
@@ -112,7 +112,7 @@ def test_checkpointer_embeds_control_plane_into_manifest_and_transport(tmp_path:
     )
     assert manifest is not None
     assert manifest.control_plane is not None
-    assert manifest.control_plane["trace_service"]["projection"] == "python-thin-projection"
+    assert manifest.control_plane["trace_service"]["projection"] == "rust-native-projection"
     assert manifest.control_plane["state_service"]["delegate_kind"] == "filesystem-state-store"
     assert manifest.control_plane["supports_atomic_replace"] is True
     assert manifest.control_plane["supports_compaction"] is False

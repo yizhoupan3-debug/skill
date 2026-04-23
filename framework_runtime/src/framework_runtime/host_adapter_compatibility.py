@@ -158,12 +158,12 @@ def build_codex_desktop_alias_retirement_status(
         else {
             "inventory_complete": False,
             "primary_identity_risk_occurrences": None,
-            "translation_shim_required": None,
+            "legacy_alias_shim_required": None,
         }
     )
     inventory_complete = bool(inventory_summary.get("inventory_complete", False))
     primary_identity_risk_occurrences = inventory_summary.get("primary_identity_risk_occurrences")
-    translation_shim_required = inventory_summary.get("translation_shim_required")
+    legacy_alias_shim_required = inventory_summary.get("legacy_alias_shim_required")
     runtime_primary_identity_consumers_cleared = (
         primary_identity_risk_occurrences == 0 if inventory_complete else None
     )
@@ -171,11 +171,11 @@ def build_codex_desktop_alias_retirement_status(
     return {
         "canonical_adapter_id": CODEX_DESKTOP_ADAPTER_ID,
         "legacy_alias_id": LEGACY_CODEX_DESKTOP_ADAPTER_ID,
-        "alias_lifecycle": "compatibility-only",
+        "alias_lifecycle": "retired-alias-only",
         "alias_mode": "mirror-only",
         "framework_truth": "framework_core",
         "primary_regression_artifact": PARITY_BASELINE_ARTIFACT_ID,
-        "codex_dual_entry_compatibility_artifact": "codex_dual_entry_parity_snapshot",
+        "codex_dual_entry_parity_artifact": "codex_dual_entry_parity_snapshot",
         "secondary_inventory_artifact": COMPATIBILITY_INVENTORY_ARTIFACT_ID,
         "emitter_contract": {
             "python_emits_alias_artifact": False,
@@ -187,10 +187,10 @@ def build_codex_desktop_alias_retirement_status(
         "retirement_gates": {
             "canonical_desktop_identity_locked": True,
             "parity_snapshot_is_primary_baseline": True,
-            "compatibility_matrix_is_secondary_inventory": True,
+            "legacy_alias_inventory_is_secondary": True,
             "runtime_primary_identity_consumers_cleared": runtime_primary_identity_consumers_cleared,
-            "translation_shim_required": translation_shim_required,
-            "translation_shim_ready_if_needed": False if translation_shim_required else True,
+            "legacy_alias_shim_required": legacy_alias_shim_required,
+            "legacy_alias_shim_ready_if_needed": False if legacy_alias_shim_required else True,
         },
         "inventory_summary": inventory_summary,
     }

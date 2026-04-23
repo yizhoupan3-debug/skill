@@ -1909,11 +1909,14 @@ class ExecutionEnvironmentService:
         self,
         request: ExecutionKernelRequest,
     ) -> RunTaskResponse:
+        snapshot = self._execution_kernel_descriptor_snapshot()
         kernel_contract = self.describe_kernel_contract(dry_run=request.dry_run)
         return await execute_router_rs_request(
             request,
             settings=self.settings,
             rust_adapter=self._rust_adapter,
+            kernel_contract=kernel_contract,
+            metadata_bridge=snapshot["metadata_bridge"],
         )
 
 

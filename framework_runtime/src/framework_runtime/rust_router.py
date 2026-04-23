@@ -365,6 +365,32 @@ def route_decision_contract(
     )
 
 
+def _inline_skill_route_payload(skill: Any) -> dict[str, Any]:
+    """Serialize one loaded skill into the Rust inline-routing payload."""
+
+    if hasattr(skill, "model_dump"):
+        payload = skill.model_dump(mode="json")
+    elif isinstance(skill, Mapping):
+        payload = dict(skill)
+    else:
+        raise TypeError(f"unsupported inline route skill payload: {type(skill).__name__}")
+    return {
+        "name": str(payload.get("name") or ""),
+        "description": str(payload.get("description") or ""),
+        "short_description": str(payload.get("short_description") or ""),
+        "when_to_use": str(payload.get("when_to_use") or ""),
+        "do_not_use": str(payload.get("do_not_use") or ""),
+        "routing_layer": str(payload.get("routing_layer") or "L3"),
+        "routing_owner": str(payload.get("routing_owner") or "owner"),
+        "routing_gate": str(payload.get("routing_gate") or "none"),
+        "routing_priority": str(payload.get("routing_priority") or "P2"),
+        "session_start": str(payload.get("session_start") or "n/a"),
+        "tags": [str(item) for item in payload.get("tags") or []],
+        "trigger_hints": [str(item) for item in payload.get("trigger_hints") or payload.get("trigger_phrases") or []],
+        "health": float(payload.get("health") or 100.0),
+    }
+
+
 def load_routing_eval_cases(path: Path) -> RoutingEvalCases:
     """Load offline routing evaluation cases from JSON."""
 
@@ -467,6 +493,9 @@ class RustRouteAdapter:
     framework_contract_summary_schema_version = "router-rs-framework-contract-summary-v1"
     framework_memory_recall_schema_version = "router-rs-framework-memory-recall-v1"
     framework_refresh_schema_version = "router-rs-framework-refresh-v1"
+    framework_session_artifact_write_schema_version = (
+        "router-rs-framework-session-artifact-write-v1"
+    )
     framework_alias_schema_version = "router-rs-framework-alias-v1"
     claude_hook_schema_version = "router-rs-claude-hook-response-v1"
     routing_eval_schema_version = "routing-eval-v1"
@@ -483,6 +512,7 @@ class RustRouteAdapter:
     checkpoint_manifest_write_authority = "rust-runtime-checkpoint-manifest-writer"
     trace_stream_io_authority = "rust-runtime-trace-io"
     framework_runtime_authority = "rust-framework-runtime-read-model"
+    framework_session_artifact_write_authority = "rust-framework-session-artifact-writer"
     claude_hook_authority = "rust-claude-hook"
     runtime_storage_authority = "rust-runtime-storage"
 
@@ -573,6 +603,45 @@ class RustRouteAdapter:
         if payload.get("authority") != self.route_authority:
             raise RuntimeError(
                 "Rust route engine returned an unexpected authority marker: "
+                f"{payload.get('authority')!r}"
+            )
+        return RouteDecisionContract.model_validate(payload)
+
+    def route_inline_contract(
+        self,
+        *,
+        query: str,
+        session_id: str,
+        allow_overlay: bool,
+        first_turn: bool,
+        skills: list[Any],
+    ) -> RouteDecisionContract:
+        """Route against one inline skill catalog while router-rs stays authoritative."""
+
+        if not self._uses_default_json_runner():
+            raise RuntimeError(
+                "router-rs inline routing requires the default stdio runner; rebuild scripts/router-rs before using the local projection shell."
+            )
+        payload = self._run_hot_json_command(
+            "route",
+            {
+                "query": query,
+                "session_id": session_id,
+                "allow_overlay": allow_overlay,
+                "first_turn": first_turn,
+                "skills": [_inline_skill_route_payload(skill) for skill in skills],
+            },
+            [*self._binary_command(), "--stdio-json"],
+            failure_label="inline route engine",
+        )
+        if payload.get("decision_schema_version") != self.route_decision_schema_version:
+            raise RuntimeError(
+                "Rust inline route engine returned an unknown decision schema: "
+                f"{payload.get('decision_schema_version')!r}"
+            )
+        if payload.get("authority") != self.route_authority:
+            raise RuntimeError(
+                "Rust inline route engine returned an unexpected authority marker: "
                 f"{payload.get('authority')!r}"
             )
         return RouteDecisionContract.model_validate(payload)
@@ -1277,6 +1346,43 @@ class RustRouteAdapter:
                 "Rust framework refresh compiler returned a missing refresh payload."
             )
         return refresh
+
+    def write_framework_session_artifacts(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Write continuity session artifacts through the Rust-owned writer."""
+
+        args = [
+            "--framework-session-artifact-write-json",
+            "--framework-session-artifact-write-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        resolved = self._run_hot_json_command(
+            "framework_session_artifact_write",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="framework session artifact writer",
+        )
+        if resolved.get("schema_version") != self.framework_session_artifact_write_schema_version:
+            raise RuntimeError(
+                "Rust framework session artifact writer returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
+            )
+        if resolved.get("authority") != self.framework_session_artifact_write_authority:
+            raise RuntimeError(
+                "Rust framework session artifact writer returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        for key in ("summary", "next_actions", "evidence", "task_id"):
+            value = resolved.get(key)
+            if not isinstance(value, str) or not value:
+                raise RuntimeError(
+                    f"Rust framework session artifact writer returned a missing {key}."
+                )
+        changed_paths = resolved.get("changed_paths")
+        if not isinstance(changed_paths, list):
+            raise RuntimeError(
+                "Rust framework session artifact writer returned invalid changed_paths."
+            )
+        return resolved
 
     def framework_alias(
         self,

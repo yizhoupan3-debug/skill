@@ -155,11 +155,11 @@ def test_runtime_registry_prefers_rust_export_for_explicit_repo_root(
 
     captured: list[str] = []
 
-    def _fake_run_host_integration_rs(*args: str) -> dict[str, object]:
+    def _fake_run_host_integration_command(*args: str) -> dict[str, object]:
         captured.extend(args)
         return json.loads(registry_path.read_text(encoding="utf-8"))
 
-    monkeypatch.setattr(runtime_registry, "run_host_integration_rs", _fake_run_host_integration_rs)
+    monkeypatch.setattr(runtime_registry, "_run_host_integration_command", _fake_run_host_integration_command)
 
     payload = runtime_registry.load_runtime_registry(repo_root=repo_root)
 
@@ -216,10 +216,10 @@ def test_runtime_registry_nonempty_shared_project_mcp_servers_do_not_fall_back(
         encoding="utf-8",
     )
 
-    def _fake_run_host_integration_rs(*args: str) -> dict[str, object]:
+    def _fake_run_host_integration_command(*args: str) -> dict[str, object]:
         return json.loads(registry_path.read_text(encoding="utf-8"))
 
-    monkeypatch.setattr(runtime_registry, "run_host_integration_rs", _fake_run_host_integration_rs)
+    monkeypatch.setattr(runtime_registry, "_run_host_integration_command", _fake_run_host_integration_command)
 
     assert shared_project_mcp_servers(repo_root=repo_root) == ("framework-mcp",)
 

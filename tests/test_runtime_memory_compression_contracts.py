@@ -45,12 +45,12 @@ def test_memory_contract_fixture(tmp_path: Path) -> None:
     assert [row["rank"] for row in retrieval] == [1, 2]
     assert all(row["provenance"]["kind"] == MEMORY_PROVENANCE_KIND for row in retrieval)
     assert all(row["provenance"]["control_plane_authority"] == "rust-runtime-control-plane" for row in retrieval)
-    assert all(row["provenance"]["control_plane_projection"] == "python-thin-projection" for row in retrieval)
+    assert all(row["provenance"]["control_plane_projection"] == "rust-native-projection" for row in retrieval)
 
     snapshot = store.contract_snapshot(fixture["user_id"])
     assert snapshot["schema_version"] == MEMORY_STORE_SCHEMA_VERSION
     assert snapshot["control_plane"]["authority"] == "rust-runtime-control-plane"
-    assert snapshot["control_plane"]["projection"] == "python-thin-projection"
+    assert snapshot["control_plane"]["projection"] == "rust-native-projection"
     assert len(snapshot["facts"]) == len(fixture["expected_merged"])
 
     persisted = json.loads(Path(snapshot["storage_path"]).read_text(encoding="utf-8"))

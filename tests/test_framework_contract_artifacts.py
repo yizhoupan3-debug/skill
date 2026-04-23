@@ -238,23 +238,23 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
 
     claude = json.loads(Path(paths["claude_code_adapter"]).read_text(encoding="utf-8"))
     assert claude["host_adapter_payload"] == claude["host_projection"]
-    assert claude["host_projection"]["context_files"] == [
+    assert claude["host_adapter_payload"]["context_files"] == [
         "CLAUDE.md",
         "CLAUDE.local.md",
     ]
-    assert claude["host_projection"]["settings_scope_order"] == [
+    assert claude["host_adapter_payload"]["settings_scope_order"] == [
         "managed",
         "command_line",
         "local",
         "project",
         "user",
     ]
-    assert claude["host_projection"]["config_root_env_var"] == "CLAUDE_CONFIG_DIR"
-    assert claude["host_projection"]["subagent_paths"] == [
+    assert claude["host_adapter_payload"]["config_root_env_var"] == "CLAUDE_CONFIG_DIR"
+    assert claude["host_adapter_payload"]["subagent_paths"] == [
         "~/.claude/agents/",
         ".claude/agents/",
     ]
-    assert claude["host_projection"]["hook_event_names"] == [
+    assert claude["host_adapter_payload"]["hook_event_names"] == [
         "PreToolUse",
         "PostToolUse",
         "Notification",
@@ -282,26 +282,26 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "Elicitation",
         "ElicitationResult",
     ]
-    assert claude["host_projection"]["hook_control_settings"] == [
+    assert claude["host_adapter_payload"]["hook_control_settings"] == [
         "disableAllHooks",
         "allowManagedHooksOnly",
         "allowedHttpHookUrls",
         "httpHookAllowedEnvVars",
     ]
-    assert claude["host_projection"]["hook_inspection_commands"] == ["/hooks"]
-    assert claude["host_projection"]["plugin_hook_manifest_paths"] == ["hooks/hooks.json"]
-    assert claude["host_projection"]["hook_environment_markers"] == [
+    assert claude["host_adapter_payload"]["hook_inspection_commands"] == ["/hooks"]
+    assert claude["host_adapter_payload"]["plugin_hook_manifest_paths"] == ["hooks/hooks.json"]
+    assert claude["host_adapter_payload"]["hook_environment_markers"] == [
         "CLAUDE_ENV_FILE",
         "CLAUDE_PROJECT_DIR",
         "CLAUDE_PLUGIN_ROOT",
         "CLAUDE_PLUGIN_DATA",
         "CLAUDE_CODE_REMOTE",
     ]
-    assert claude["host_projection"]["checkpointing_supported"] is True
+    assert claude["host_adapter_payload"]["checkpointing_supported"] is True
 
     gemini = json.loads(Path(paths["gemini_cli_adapter"]).read_text(encoding="utf-8"))
     assert gemini["host_adapter_payload"] == gemini["host_projection"]
-    assert gemini["host_projection"]["structured_output_modes"] == ["json", "stream-json"]
+    assert gemini["host_adapter_payload"]["structured_output_modes"] == ["json", "stream-json"]
 
     cli_discovery = json.loads(
         Path(paths["cli_family_capability_discovery"]).read_text(encoding="utf-8")
@@ -365,12 +365,15 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert execution_controller["boundaries"]["runtime_branching_changes_required"] is False
 
     delegation = json.loads(Path(paths["delegation_contract"]).read_text(encoding="utf-8"))
-    assert delegation["status_contract"] == "delegation_contract_v3"
+    assert delegation["status_contract"] == "delegation_contract_v4"
     assert delegation["gate"]["gate_type"] == "multi_agent_routing"
     assert delegation["gate"]["decision_before_spawn"] is True
     assert delegation["gate"]["route_outcomes"] == ["local", "subagent", "team"]
     assert delegation["gate"]["team_route_skill"] == "team"
     assert delegation["local_supervisor_mode"]["preserves_output_contracts"] is True
+    assert delegation["selection_matrix"]["subagent_when"][0] == (
+        "bounded sidecars exist with non-overlapping write scopes"
+    )
     assert delegation["lane_contract_fields"] == [
         "lane_id",
         "lane_owner",
@@ -643,10 +646,13 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     rust_delegation = json.loads(
         Path(paths["rust_delegation_contract"]).read_text(encoding="utf-8")
     )
-    assert rust_delegation["status_contract"] == "delegation_contract_v3"
+    assert rust_delegation["status_contract"] == "delegation_contract_v4"
     assert rust_delegation["gate"]["gate_type"] == "multi_agent_routing"
     assert rust_delegation["gate"]["route_outcomes"] == ["local", "subagent", "team"]
     assert rust_delegation["gate"]["team_route_skill"] == "team"
+    assert rust_delegation["selection_matrix"]["team_when"][0] == (
+        "supervisor-led worker lifecycle management is part of the task"
+    )
     assert rust_delegation["local_supervisor_mode"]["allowed_when_runtime_blocks_spawning"] is True
     assert rust_delegation["lane_contract_fields"] == [
         "lane_id",
@@ -782,7 +788,7 @@ def test_emit_framework_contract_artifacts_requires_explicit_opt_in_for_continui
         "summary": {
             "inventory_complete": False,
             "primary_identity_risk_occurrences": 3,
-            "translation_shim_required": True,
+            "legacy_alias_shim_required": True,
         },
         "references": [],
     }
@@ -1057,11 +1063,13 @@ def test_emit_framework_contract_artifacts_can_opt_in_continuity_alias_outputs(
     assert alias_inventory["canonical_adapter_id"] == "codex_desktop_adapter"
     assert alias_inventory["summary"]["inventory_complete"] is True
     assert alias_inventory["summary"]["primary_identity_risk_occurrences"] == 0
+    assert alias_inventory["summary"]["legacy_alias_only_occurrences"] >= 0
 
     alias_retirement = json.loads(
         Path(paths["codex_desktop_alias_retirement_status"]).read_text(encoding="utf-8")
     )
     assert alias_retirement["legacy_alias_id"] == "codex_desktop_host_adapter"
+    assert alias_retirement["alias_lifecycle"] == "retired-alias-only"
     assert alias_retirement["emitter_contract"]["legacy_alias_artifact_opt_in"] is True
     assert Path(paths["codex_common_adapter"]).parent.name == "continuity"
     assert json.loads(Path(paths["codex_common_adapter"]).read_text(encoding="utf-8")) == json.loads(

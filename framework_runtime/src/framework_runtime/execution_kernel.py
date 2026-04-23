@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Mapping
 
 from framework_runtime.config import RuntimeSettings
 from framework_runtime.execution_kernel_contracts import (
@@ -15,7 +15,12 @@ from framework_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
     EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
     EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION,
+    EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
+    EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
     decode_router_rs_execution_response,
+    normalize_execution_kernel_metadata_bridge,
+    resolve_execution_kernel_expectations,
+    validate_execution_kernel_steady_state_metadata,
 )
 from framework_runtime.rust_router import RustRouteAdapter
 from framework_runtime.schemas import RoutingResult, RunTaskResponse
@@ -130,6 +135,18 @@ def build_router_rs_execution_request_payload(
     """Serialize one execution request into the Rust router-rs request payload."""
 
     routing_result = request.routing_result
+    route_snapshot = routing_result.route_snapshot
+    snapshot_reasons: list[str] = []
+    if route_snapshot is not None:
+        if hasattr(route_snapshot, "reasons"):
+            snapshot_reasons = [str(reason) for reason in route_snapshot.reasons]
+        elif isinstance(route_snapshot, dict):
+            snapshot_reasons = [str(reason) for reason in route_snapshot.get("reasons") or []]
+    prompt_reasons = (
+        snapshot_reasons
+        if snapshot_reasons
+        else [str(reason) for reason in routing_result.reasons]
+    )
     return {
         "schema_version": EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION,
         "task": request.task,
@@ -140,7 +157,7 @@ def build_router_rs_execution_request_payload(
         "layer": routing_result.layer,
         "route_engine": routing_result.route_engine,
         "diagnostic_route_mode": routing_result.diagnostic_route_mode,
-        "reasons": [str(reason) for reason in routing_result.reasons],
+        "reasons": prompt_reasons,
         # Prompt construction is Rust-owned on both steady-state paths.
         "prompt_preview": None,
         "dry_run": request.dry_run,
@@ -153,17 +170,128 @@ def build_router_rs_execution_request_payload(
     }
 
 
-def decode_router_rs_execution_payload(payload: dict[str, Any]) -> RunTaskResponse:
+def decode_router_rs_execution_payload(
+    payload: Mapping[str, Any],
+    *,
+    kernel_contract: Mapping[str, Any] | None = None,
+    metadata_bridge: Mapping[str, Any] | None = None,
+) -> RunTaskResponse:
     """Decode one router-rs execution payload through the shared bridge contract."""
 
+    return decode_router_rs_execution_payload_with_contract(
+        payload,
+        kernel_contract=kernel_contract,
+        metadata_bridge=metadata_bridge,
+    )
+
+
+def decode_router_rs_execution_payload_with_contract(
+    payload: Mapping[str, Any],
+    *,
+    kernel_contract: Mapping[str, Any] | None = None,
+    metadata_bridge: Mapping[str, Any] | None = None,
+) -> RunTaskResponse:
+    """Decode one router-rs payload against the Rust-owned kernel contract bundle."""
+
+    resolved_bridge = (
+        normalize_execution_kernel_metadata_bridge(metadata_bridge)
+        if metadata_bridge is not None
+        else None
+    )
+    expectations = resolve_execution_kernel_expectations(kernel_contract)
     return decode_router_rs_execution_response(
         payload,
-        execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
-        execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
-        execution_kernel_delegate=EXECUTION_KERNEL_PRIMARY_DELEGATE_KIND,
-        execution_kernel_delegate_authority=EXECUTION_KERNEL_PRIMARY_DELEGATE_AUTHORITY,
-        execution_kernel_delegate_family=EXECUTION_KERNEL_PRIMARY_DELEGATE_FAMILY,
-        execution_kernel_delegate_impl=EXECUTION_KERNEL_PRIMARY_DELEGATE_IMPL,
+        execution_kernel=expectations["execution_kernel"],
+        execution_kernel_authority=expectations["execution_kernel_authority"],
+        execution_kernel_delegate=expectations["execution_kernel_delegate"],
+        execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
+        execution_kernel_delegate_family=expectations["execution_kernel_delegate_family"],
+        execution_kernel_delegate_impl=expectations["execution_kernel_delegate_impl"],
+        metadata_bridge=resolved_bridge,
+    )
+
+
+def _resolve_runtime_execution_contract_bundle(
+    *,
+    rust_adapter: RustRouteAdapter,
+    dry_run: bool,
+    kernel_contract: Mapping[str, Any] | None = None,
+    metadata_bridge: Mapping[str, Any] | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Resolve the Rust-owned execution-kernel contract bundle for one response shape."""
+
+    resolved_contract = dict(kernel_contract) if isinstance(kernel_contract, Mapping) else None
+    resolved_bridge = (
+        normalize_execution_kernel_metadata_bridge(metadata_bridge)
+        if metadata_bridge is not None
+        else None
+    )
+    if resolved_contract is not None and resolved_bridge is not None:
+        response_shape = (
+            EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
+            if dry_run
+            else EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
+        )
+        expectations = resolve_execution_kernel_expectations(resolved_contract)
+        validated_contract = validate_execution_kernel_steady_state_metadata(
+            metadata=resolved_contract,
+            execution_kernel=expectations["execution_kernel"],
+            execution_kernel_authority=expectations["execution_kernel_authority"],
+            execution_kernel_delegate=expectations["execution_kernel_delegate"],
+            execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
+            response_shape=response_shape,
+            metadata_bridge=resolved_bridge,
+        )
+        return dict(validated_contract), resolved_bridge
+
+    control_plane_descriptor = rust_adapter.runtime_control_plane()
+    services = control_plane_descriptor.get("services")
+    if not isinstance(services, Mapping):
+        raise RuntimeError("runtime control plane is missing services.")
+    service_descriptor = services.get("execution")
+    if not isinstance(service_descriptor, Mapping):
+        raise RuntimeError("runtime control plane is missing execution service descriptor.")
+
+    if resolved_bridge is None:
+        bridge_payload = service_descriptor.get("kernel_metadata_bridge")
+        if bridge_payload is not None:
+            if not isinstance(bridge_payload, Mapping):
+                raise RuntimeError(
+                    "runtime control plane execution descriptor returned an invalid kernel_metadata_bridge."
+                )
+            resolved_bridge = normalize_execution_kernel_metadata_bridge(bridge_payload)
+
+    if resolved_contract is None:
+        response_shape = (
+            EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
+            if dry_run
+            else EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
+        )
+        contract_modes = service_descriptor.get("kernel_contract_by_mode")
+        contract_payload = (
+            contract_modes.get(response_shape)
+            if isinstance(contract_modes, Mapping)
+            else None
+        )
+        if not isinstance(contract_payload, Mapping):
+            raise RuntimeError(
+                "runtime control plane execution descriptor is missing "
+                f"kernel_contract_by_mode.{response_shape}."
+            )
+        expectations = resolve_execution_kernel_expectations(contract_payload)
+        resolved_contract = validate_execution_kernel_steady_state_metadata(
+            metadata=contract_payload,
+            execution_kernel=expectations["execution_kernel"],
+            execution_kernel_authority=expectations["execution_kernel_authority"],
+            execution_kernel_delegate=expectations["execution_kernel_delegate"],
+            execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
+            response_shape=response_shape,
+            metadata_bridge=resolved_bridge,
+        )
+
+    return (
+        dict(resolved_contract) if resolved_contract is not None else None,
+        resolved_bridge,
     )
 
 
@@ -188,6 +316,8 @@ async def execute_router_rs_request(
     *,
     settings: RuntimeSettings,
     rust_adapter: RustRouteAdapter,
+    kernel_contract: Mapping[str, Any] | None = None,
+    metadata_bridge: Mapping[str, Any] | None = None,
 ) -> RunTaskResponse:
     """Execute one normalized request through router-rs and decode the result."""
 
@@ -198,7 +328,18 @@ async def execute_router_rs_request(
         rust_adapter=rust_adapter,
     )
     try:
-        return decode_router_rs_execution_payload(response_payload)
+        resolved_contract, resolved_bridge = await asyncio.to_thread(
+            _resolve_runtime_execution_contract_bundle,
+            rust_adapter=rust_adapter,
+            dry_run=request.dry_run,
+            kernel_contract=kernel_contract,
+            metadata_bridge=metadata_bridge,
+        )
+        return decode_router_rs_execution_payload_with_contract(
+            response_payload,
+            kernel_contract=resolved_contract,
+            metadata_bridge=resolved_bridge,
+        )
     except RuntimeError as exc:
         raise RouterRsInfrastructureError(str(exc)) from exc
 
@@ -208,6 +349,8 @@ def preview_router_rs_request_prompt(
     *,
     settings: RuntimeSettings,
     rust_adapter: RustRouteAdapter,
+    kernel_contract: Mapping[str, Any] | None = None,
+    metadata_bridge: Mapping[str, Any] | None = None,
 ) -> str | None:
     """Synchronously resolve the Rust-owned dry-run prompt preview for one request."""
 
@@ -216,6 +359,16 @@ def preview_router_rs_request_prompt(
     payload = build_router_rs_execution_request_payload(request, settings=settings)
     response_payload = run_router_rs_execution_payload(payload, rust_adapter=rust_adapter)
     try:
-        return decode_router_rs_execution_payload(response_payload).prompt_preview
+        resolved_contract, resolved_bridge = _resolve_runtime_execution_contract_bundle(
+            rust_adapter=rust_adapter,
+            dry_run=True,
+            kernel_contract=kernel_contract,
+            metadata_bridge=metadata_bridge,
+        )
+        return decode_router_rs_execution_payload_with_contract(
+            response_payload,
+            kernel_contract=resolved_contract,
+            metadata_bridge=resolved_bridge,
+        ).prompt_preview
     except RuntimeError as exc:
         raise RouterRsInfrastructureError(str(exc)) from exc

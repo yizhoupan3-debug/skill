@@ -11,10 +11,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.host_integration_rs import export_runtime_registry
 from scripts.claude_statusline import render_statusline
+from scripts import materialize_cli_host_entrypoints
 from scripts.materialize_cli_host_entrypoints import (
-    CODEX_PROJECT_HOOKS,
     CLAUDE_AUTOPILOT_COMMAND,
     CLAUDE_BACKGROUND_BATCH_COMMAND,
     CLAUDE_DEEPINTERVIEW_COMMAND,
@@ -31,9 +30,18 @@ from scripts.materialize_cli_host_entrypoints import (
 from scripts.rust_binary_runner import ensure_rust_binary
 from scripts.sync_skills import write_generated_files
 
+ROUTER_RS_PROJECTION_SOURCES = (
+    PROJECT_ROOT / "AGENT.md",
+    PROJECT_ROOT / "AGENTS.md",
+    PROJECT_ROOT / "CLAUDE.md",
+    PROJECT_ROOT / "GEMINI.md",
+    PROJECT_ROOT / ".claude" / "hooks" / "README.md",
+    PROJECT_ROOT / ".claude" / "hooks" / "run.sh",
+)
+
 
 def _framework_native_aliases() -> dict[str, object]:
-    payload = export_runtime_registry(PROJECT_ROOT)
+    payload = materialize_cli_host_entrypoints._runtime_registry_payload()
     aliases = payload.get("framework_native_aliases")
     assert isinstance(aliases, dict)
     return aliases
@@ -163,6 +171,7 @@ def _ensure_router_rs_binaries() -> None:
         allow_stale_fallback=False,
         allow_cross_profile_fallback=False,
         cwd=PROJECT_ROOT,
+        extra_source_paths=ROUTER_RS_PROJECTION_SOURCES,
     )
     ensure_rust_binary(
         crate_root=crate_root,
@@ -171,6 +180,7 @@ def _ensure_router_rs_binaries() -> None:
         allow_stale_fallback=False,
         allow_cross_profile_fallback=False,
         cwd=PROJECT_ROOT,
+        extra_source_paths=ROUTER_RS_PROJECTION_SOURCES,
     )
 
 
@@ -183,6 +193,7 @@ def _run_router_rs_hook_manifest() -> dict[str, object]:
         allow_stale_fallback=False,
         allow_cross_profile_fallback=False,
         cwd=PROJECT_ROOT,
+        extra_source_paths=ROUTER_RS_PROJECTION_SOURCES,
     )
     completed = subprocess.run(
         [str(binary_path), "--claude-hook-manifest-json"],
@@ -203,6 +214,7 @@ def _run_router_rs_claude_project_settings(repo_root: Path) -> dict[str, object]
         allow_stale_fallback=False,
         allow_cross_profile_fallback=False,
         cwd=PROJECT_ROOT,
+        extra_source_paths=ROUTER_RS_PROJECTION_SOURCES,
     )
     completed = subprocess.run(
         [
@@ -228,6 +240,7 @@ def _run_router_rs_claude_hook_projection() -> dict[str, object]:
         allow_stale_fallback=False,
         allow_cross_profile_fallback=False,
         cwd=PROJECT_ROOT,
+        extra_source_paths=ROUTER_RS_PROJECTION_SOURCES,
     )
     completed = subprocess.run(
         [str(binary_path), "--claude-hook-projection-json"],
@@ -248,6 +261,22 @@ def _run_router_rs_claude_audit(
     debug_bin = PROJECT_ROOT / "scripts" / "router-rs" / "target" / "debug" / "router-rs"
     return subprocess.run(
         [str(debug_bin), "--claude-hook-audit-command", command, "--repo-root", str(repo_root)],
+        input=json.dumps(payload, ensure_ascii=False),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def _run_router_rs_codex_audit(
+    command: str,
+    repo_root: Path,
+    payload: dict[str, object],
+) -> subprocess.CompletedProcess[str]:
+    _ensure_router_rs_binaries()
+    debug_bin = PROJECT_ROOT / "scripts" / "router-rs" / "target" / "debug" / "router-rs"
+    return subprocess.run(
+        [str(debug_bin), "--codex-hook-command", command, "--repo-root", str(repo_root)],
         input=json.dumps(payload, ensure_ascii=False),
         text=True,
         capture_output=True,
@@ -440,6 +469,10 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     expected_settings = _run_router_rs_claude_project_settings(tmp_path)
     hook_projection = _run_router_rs_claude_hook_projection()
     codex_hooks = json.loads((tmp_path / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+    assert agent_policy == hook_projection["agent_policy"]
+    assert (tmp_path / "AGENTS.md").read_text(encoding="utf-8") == hook_projection["root_agents_proxy"]
+    assert claude_entry == hook_projection["root_claude_proxy"]
+    assert (tmp_path / "GEMINI.md").read_text(encoding="utf-8") == hook_projection["root_gemini_proxy"]
     assert settings == expected_settings
     assert settings["$schema"] == "https://json.schemastore.org/claude-code-settings.json"
     assert settings["allowedMcpServers"] == [
@@ -448,12 +481,17 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         {"serverName": "openaiDeveloperDocs"},
     ]
     assert "statusLine" not in settings
-    assert codex_hooks == CODEX_PROJECT_HOOKS
+    assert codex_hooks == hook_projection["codex_hooks"]
     assert set(codex_hooks["hooks"]) == {
         "PreToolUse",
         "PermissionRequest",
     }
-    assert codex_hooks["hooks"]["PreToolUse"][0]["matcher"] == "Bash"
+    assert [entry["matcher"] for entry in codex_hooks["hooks"]["PreToolUse"]] == [
+        "Edit",
+        "MultiEdit",
+        "Write",
+        "Bash",
+    ]
     assert codex_hooks["hooks"]["PermissionRequest"][0]["matcher"] == "Bash"
     pre_tool_command = codex_hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
     permission_command = codex_hooks["hooks"]["PermissionRequest"][0]["hooks"][0]["command"]
@@ -687,7 +725,8 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert (tmp_path / ".claude" / "hooks" / "README.md").is_file()
     hooks_readme = (tmp_path / ".claude" / "hooks" / "README.md").read_text(encoding="utf-8")
     assert "Generated-first maintenance" in hooks_readme
-    assert "update `scripts/router-rs/` first for Claude hook rules and contracts" in hooks_readme
+    assert "host-entrypoint projections" in hooks_readme
+    assert "thin materializer" in hooks_readme
     assert "Event-level lifecycle decisions live in `.claude/hooks/README.md`." in claude_entry
     assert hooks_readme == hook_projection["hooks_readme"]
     for marker in (
@@ -697,14 +736,15 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         "`StopFailure` | `run.sh stop-failure`",
         "generated-surface guard",
         "intentionally uninstalled",
-        "broad implementation philosophy still live in",
         "repo-specific invariants only",
         "Use `matcher` first and `if` to narrow further",
         "`UserPromptSubmit` is installed here on purpose",
-        "only add a one-line closeout reminder",
+        "narrow execution-time hints",
         "permissionDecision: deny",
     ):
         assert marker in hooks_readme
+    assert "broad implementation philosophy" in hooks_readme
+    assert "still live in `AGENT.md`, not in hooks." in hooks_readme
     assert (tmp_path / ".claude" / "hooks" / "run.sh").is_file()
     assert not (tmp_path / ".claude" / "hooks" / "session_start.sh").exists()
     assert not (tmp_path / ".claude" / "hooks" / "stop.sh").exists()
@@ -853,7 +893,6 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     telemetry = user_prompt_payload["contextTelemetry"]
     assert "repo-local shared memory" in context
     assert "当前状态：" in context
-    assert "收尾提醒：" in context
     assert "热路径" in context
     assert "Task Snapshot" not in context
     assert len(context) <= 420
@@ -972,10 +1011,16 @@ def test_materialized_codex_hooks_match_codex_supported_event_surface(tmp_path: 
     materialize_repo_host_entrypoints(tmp_path)
 
     hooks = json.loads((tmp_path / ".codex" / "hooks.json").read_text(encoding="utf-8"))
-    assert hooks == CODEX_PROJECT_HOOKS
+    assert hooks == _run_router_rs_claude_hook_projection()["codex_hooks"]
     assert set(hooks["hooks"]) == {"PreToolUse", "PermissionRequest"}
     assert "UserPromptSubmit" not in hooks["hooks"]
-    assert hooks["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"] == 8
+    assert [entry["matcher"] for entry in hooks["hooks"]["PreToolUse"]] == [
+        "Edit",
+        "MultiEdit",
+        "Write",
+        "Bash",
+    ]
+    assert all(entry["hooks"][0]["timeout"] == 8 for entry in hooks["hooks"]["PreToolUse"])
     assert hooks["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"] == 8
 
 
@@ -1001,7 +1046,11 @@ def test_materialized_codex_hooks_execute_via_router_rs_without_python_bridge(tm
     os.chmod(cargo_bin_dir / "cargo", 0o755)
 
     hooks = json.loads((tmp_path / ".codex" / "hooks.json").read_text(encoding="utf-8"))
-    command = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    command = next(
+        entry["hooks"][0]["command"]
+        for entry in hooks["hooks"]["PreToolUse"]
+        if entry["matcher"] == "Bash"
+    )
     env = os.environ.copy()
     env["PATH"] = f"{cargo_bin_dir}{os.pathsep}{env.get('PATH', '')}"
 
@@ -1019,6 +1068,7 @@ def test_materialized_codex_hooks_execute_via_router_rs_without_python_bridge(tm
     payload = json.loads(result.stdout)
     assert payload["decision"] == "block"
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert payload["hookSpecificOutput"]["permissionDecisionReason"].startswith("[codex-pre-tool-use]")
     assert ".claude/settings.json" in payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert result.stderr == ""
     assert not cargo_log.exists()
@@ -1121,6 +1171,96 @@ def test_user_prompt_submit_hook_avoids_cargo_bootstrap_on_hot_path(tmp_path: Pa
     assert result.returncode == 0
     assert "repo-local shared memory" in result.stdout
     assert not cargo_log.exists()
+
+
+def test_codex_user_prompt_submit_compat_path_stays_silent(tmp_path: Path) -> None:
+    _seed_runtime_artifacts(tmp_path)
+    _seed_shared_memory(tmp_path)
+
+    result = _run_router_rs_codex_audit(
+        "user-prompt-submit",
+        tmp_path,
+        {
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "继续优化 runtime，去掉补丁式保底并顺手看内存和速度",
+        },
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert result.stderr == ""
+
+
+def test_codex_pre_tool_use_blocks_patch_artifact_write(tmp_path: Path) -> None:
+    result = _run_router_rs_codex_audit(
+        "pre-tool-use",
+        tmp_path,
+        {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": str(tmp_path / "tmp" / "fix.patch"),
+                "content": "diff --git a/a b/a\n",
+            },
+        },
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "block"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "patch artifact write" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_codex_pre_tool_use_blocks_patchy_runtime_edit(tmp_path: Path) -> None:
+    target = tmp_path / "scripts" / "router-rs" / "src" / "claude_hooks.rs"
+    _write_text(target, "fn main() {}\n")
+
+    result = _run_router_rs_codex_audit(
+        "pre-tool-use",
+        tmp_path,
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "new_string": "\n".join(
+                    [
+                        "let a = foo.clone();",
+                        "let b = bar.clone();",
+                        "let c = baz.clone();",
+                        "let g = serde_json::to_string(&x)?;",
+                        "// legacy fallback compatibility patch",
+                    ]
+                ),
+            },
+        },
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["decision"] == "block"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "patchy Rust edit" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_codex_pre_tool_use_keeps_clean_quality_lane_edit_silent(tmp_path: Path) -> None:
+    target = tmp_path / "tests" / "test_clean.py"
+    _write_text(target, "assert True\n")
+
+    result = _run_router_rs_codex_audit(
+        "pre-tool-use",
+        tmp_path,
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "new_string": "assert render_statusline() == 'ok'\n",
+            },
+        },
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert result.stderr == ""
 
 
 def test_user_prompt_submit_hook_emits_stderr_notice_when_router_response_has_no_hook_specific_output(

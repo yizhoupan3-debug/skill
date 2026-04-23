@@ -81,7 +81,7 @@ def build_delegation_contract() -> Dict[str, Any]:
     return {
         "framework_truth": "framework_core",
         "contract_artifact": DELEGATION_CONTRACT_ARTIFACT_ID,
-        "status_contract": "delegation_contract_v3",
+        "status_contract": "delegation_contract_v4",
         "artifact_role": "shared-contract-evidence",
         "gate": {
             "gate_skill": "subagent-delegation",
@@ -95,6 +95,23 @@ def build_delegation_contract() -> Dict[str, Any]:
             "preserves_sidecar_boundaries": True,
             "preserves_output_contracts": True,
             "allowed_when_runtime_blocks_spawning": True,
+        },
+        "selection_matrix": {
+            "local_when": [
+                "immediate blocker is faster to solve on the main thread",
+                "task is tightly coupled and sidecar boundaries are weak",
+                "delegation overhead would exceed throughput gains",
+            ],
+            "subagent_when": [
+                "bounded sidecars exist with non-overlapping write scopes",
+                "search, audit, implementation, or verification can run as lane-local outputs",
+                "integration and final judgment should still stay local",
+            ],
+            "team_when": [
+                "supervisor-led worker lifecycle management is part of the task",
+                "integration, qa, cleanup, or resume/recovery are first-class workflow phases",
+                "shared continuity must remain supervisor-owned while multiple lanes stay active",
+            ],
         },
         "delegation_state_fields": [
             "routing_decision",

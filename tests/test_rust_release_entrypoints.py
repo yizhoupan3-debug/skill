@@ -8,10 +8,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts import host_integration_rs, router_rs_runner, rust_binary_runner, sync_skills
+from scripts import (
+    host_integration_runner,
+    materialize_cli_host_entrypoints,
+    router_rs_runner,
+    rust_binary_runner,
+    sync_skills,
+)
 
 
-def test_host_integration_rs_uses_release_binary_when_present(tmp_path: Path, monkeypatch) -> None:
+def test_host_integration_runner_uses_release_binary_when_present(
+    tmp_path: Path, monkeypatch
+) -> None:
     crate_root = tmp_path / "host-integration-rs"
     release_bin = crate_root / "target" / "release" / "host-integration-rs"
     captured: dict[str, object] = {}
@@ -20,11 +28,11 @@ def test_host_integration_rs_uses_release_binary_when_present(tmp_path: Path, mo
         captured.update(kwargs)
         return release_bin
 
-    monkeypatch.setattr(host_integration_rs, "CRATE_ROOT", crate_root)
-    monkeypatch.setattr(host_integration_rs, "PROJECT_ROOT", tmp_path)
-    monkeypatch.setattr(host_integration_rs, "ensure_rust_binary", fake_ensure_rust_binary)
+    monkeypatch.setattr(host_integration_runner, "CRATE_ROOT", crate_root)
+    monkeypatch.setattr(host_integration_runner, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(host_integration_runner, "ensure_rust_binary", fake_ensure_rust_binary)
 
-    assert host_integration_rs._ensure_binary() == release_bin
+    assert host_integration_runner.ensure_host_integration_binary() == release_bin
     assert captured["crate_root"] == crate_root
     assert captured["binary_name"] == "host-integration-rs"
     assert captured["release"] is True

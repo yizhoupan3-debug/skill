@@ -17,11 +17,12 @@ def resolve_binary_candidate(*candidates: Path) -> Path | None:
     return max(existing)[2]
 
 
-def latest_crate_source_mtime(crate_root: Path) -> float:
+def latest_crate_source_mtime(crate_root: Path, *, extra_source_paths: tuple[Path, ...] = ()) -> float:
     candidates = [
         crate_root / "Cargo.toml",
         crate_root / "Cargo.lock",
         *crate_root.joinpath("src").rglob("*.rs"),
+        *extra_source_paths,
     ]
     return max((path.stat().st_mtime for path in candidates if path.is_file()), default=0.0)
 
@@ -34,6 +35,7 @@ def ensure_rust_binary(
     allow_stale_fallback: bool = True,
     allow_cross_profile_fallback: bool = True,
     cwd: Path | None = None,
+    extra_source_paths: tuple[Path, ...] = (),
 ) -> Path:
     manifest_path = crate_root / "Cargo.toml"
     profile = "release" if release else "debug"
@@ -45,7 +47,10 @@ def ensure_rust_binary(
         else (primary_candidate,)
     )
     existing_binary = resolve_binary_candidate(*candidate_paths)
-    latest_source_mtime = latest_crate_source_mtime(crate_root)
+    latest_source_mtime = latest_crate_source_mtime(
+        crate_root,
+        extra_source_paths=extra_source_paths,
+    )
 
     if existing_binary is not None and existing_binary.stat().st_mtime >= latest_source_mtime:
         return existing_binary

@@ -12,7 +12,6 @@ routing_priority: P1
 session_start: n/a
 short_description: Patch routing misses with the smallest safe skill fix
 trigger_hints:
-  - skill-routing-repair-codex
   - skill-routing-repair
   - 路由修复
   - 触发修复
@@ -43,7 +42,6 @@ metadata:
   version: "1.2.0"
   platforms: [codex]
   tags:
-    - skill-routing-repair-codex
     - codex
     - routing-repair
     - trigger-repair

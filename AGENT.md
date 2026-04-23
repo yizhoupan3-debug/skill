@@ -40,9 +40,10 @@ framework policy instead of forking per-host routing or memory rules.
 
 - `skills/` holds the shared routing and workflow bodies; read the selected
   `SKILL.md` before acting.
-- `scripts/materialize_cli_host_entrypoints.py` renders shared host-entrypoint files and consumes the Rust Claude hook manifest from `scripts/router-rs/`.
-- `scripts/router-rs/` owns the Rust hook bridge, lifecycle commands, and
-  generated-surface audits.
+- `scripts/router-rs/` owns the Rust hook bridge, lifecycle commands, host-entrypoint
+  projections, and generated-surface audits.
+- `scripts/materialize_cli_host_entrypoints.py` is the thin materializer for
+  those Rust-owned host-entrypoint projections.
 - `artifacts/current/<task_id>/`, `artifacts/current/task_registry.json`, and
   `.supervisor_state.json` are the durable task-state surfaces; do not treat
   chat text as the only recovery source.

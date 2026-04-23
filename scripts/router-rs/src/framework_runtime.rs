@@ -12,7 +12,11 @@ pub const FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION: &str =
     "router-rs-framework-contract-summary-v1";
 pub const FRAMEWORK_MEMORY_RECALL_SCHEMA_VERSION: &str = "router-rs-framework-memory-recall-v1";
 pub const FRAMEWORK_ALIAS_SCHEMA_VERSION: &str = "router-rs-framework-alias-v1";
+pub const FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION: &str =
+    "router-rs-framework-session-artifact-write-v1";
 pub const FRAMEWORK_RUNTIME_AUTHORITY: &str = "rust-framework-runtime-read-model";
+pub const FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY: &str =
+    "rust-framework-session-artifact-writer";
 
 const CURRENT_ARTIFACT_DIR: &str = "current";
 const ACTIVE_TASK_POINTER_NAME: &str = "active_task.json";
@@ -532,8 +536,8 @@ fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) ->
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or("codex-cli");
-    let host_entrypoints = alias_value_at_path(alias_record, &["host_entrypoints"])
-        .and_then(Value::as_object);
+    let host_entrypoints =
+        alias_value_at_path(alias_record, &["host_entrypoints"]).and_then(Value::as_object);
     if let Some(entrypoint) = host_entrypoints
         .and_then(|entrypoints| entrypoints.get(requested_host))
         .and_then(Value::as_str)
@@ -937,11 +941,7 @@ fn team_resume_action(current_state: &str) -> (&'static str, &'static str, &'sta
             "start_new_task",
             "start-new-task",
         ),
-        _ => (
-            "fresh_team_entry",
-            "start_team_supervision",
-            "fresh-start",
-        ),
+        _ => ("fresh_team_entry", "start_team_supervision", "fresh-start"),
     }
 }
 
@@ -1012,8 +1012,8 @@ fn build_framework_alias_entry_contract(
         && !task.is_empty()
         && !next_actions.is_empty()
         && missing_recovery_anchors.is_empty();
-    let needs_recovery = alias_name == "autopilot"
-        && matches!(continuity_state.as_str(), "stale" | "inconsistent");
+    let needs_recovery =
+        alias_name == "autopilot" && matches!(continuity_state.as_str(), "stale" | "inconsistent");
     let needs_verification = alias_name == "autopilot"
         && evidence_missing
         && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES);
@@ -1057,7 +1057,8 @@ fn build_framework_alias_entry_contract(
             route_rules.push(format!("根因未知 -> `{root_cause}`"));
             route_rules.push(format!("其他情况 -> `{owner}`"));
             if evidence_missing {
-                route_rules.push("缺少验证证据 -> 先补 QA / Validation，再决定是否 closeout".to_string());
+                route_rules
+                    .push("缺少验证证据 -> 先补 QA / Validation，再决定是否 closeout".to_string());
             }
             if !missing_recovery_anchors.is_empty() {
                 route_rules.push(format!(
@@ -1087,9 +1088,12 @@ fn build_framework_alias_entry_contract(
             let owner = alias_record_text(alias_record, &["canonical_owner"]);
             let delegation_gate = alias_record_text(alias_record, &["delegation_gate"]);
             let execution_owners = alias_record_list(alias_record, &["execution_owners"]);
-            let transition_states = alias_record_list(alias_record, &["official_workflow", "transition_states"]);
-            let recovery_states = alias_record_list(alias_record, &["official_workflow", "recovery_states"]);
-            let lane_fields = alias_record_list(alias_record, &["lane_contract", "required_fields"]);
+            let transition_states =
+                alias_record_list(alias_record, &["official_workflow", "transition_states"]);
+            let recovery_states =
+                alias_record_list(alias_record, &["official_workflow", "recovery_states"]);
+            let lane_fields =
+                alias_record_list(alias_record, &["lane_contract", "required_fields"]);
             let supervisor_write_scope =
                 alias_record_text(alias_record, &["supervisor_contract", "worker_write_scope"]);
             let requires_recovery_anchor = alias_record_bool(
@@ -1106,10 +1110,16 @@ fn build_framework_alias_entry_contract(
                 route_rules.push("恢复续跑必须保留 recovery anchor".to_string());
             }
             if !execution_owners.is_empty() {
-                route_rules.push(format!("execution lanes -> {}", execution_owners.join(", ")));
+                route_rules.push(format!(
+                    "execution lanes -> {}",
+                    execution_owners.join(", ")
+                ));
             }
             if !transition_states.is_empty() {
-                route_rules.push(format!("transition states -> {}", transition_states.join(", ")));
+                route_rules.push(format!(
+                    "transition states -> {}",
+                    transition_states.join(", ")
+                ));
             }
             if !recovery_states.is_empty() {
                 route_rules.push(format!("recovery states -> {}", recovery_states.join(", ")));
@@ -1124,8 +1134,10 @@ fn build_framework_alias_entry_contract(
         "latex-compile-acceleration" => {
             let owner = alias_record_text(alias_record, &["canonical_owner"]);
             let delegation_gate = alias_record_text(alias_record, &["delegation_gate"]);
-            let lane_defaults = alias_record_list(alias_record, &["official_workflow", "lane_defaults"]);
-            let parallelism_gate = alias_record_list(alias_record, &["lane_contract", "parallelism_gate"]);
+            let lane_defaults =
+                alias_record_list(alias_record, &["official_workflow", "lane_defaults"]);
+            let parallelism_gate =
+                alias_record_list(alias_record, &["lane_contract", "parallelism_gate"]);
             route_rules.push(format!("主 owner -> `{owner}`"));
             route_rules.push(format!("bounded analysis lanes -> `{delegation_gate}`"));
             route_rules.push("先测量 clean / warm / watch，再决定是否并行".to_string());
@@ -1134,7 +1146,10 @@ fn build_framework_alias_entry_contract(
                 route_rules.push(format!("default lanes -> {}", lane_defaults.join(", ")));
             }
             if !parallelism_gate.is_empty() {
-                route_rules.push(format!("parallelism gate -> {}", parallelism_gate.join("; ")));
+                route_rules.push(format!(
+                    "parallelism gate -> {}",
+                    parallelism_gate.join("; ")
+                ));
             }
             "进入 latex-compile-acceleration。先做测量与瓶颈分类，只在编译单元边界明确时才进入并行 lane，并保留串行 full-build 作为最终验证。".to_string()
         }
@@ -1222,11 +1237,15 @@ fn build_framework_alias_state_machine(
         let current_state = team_current_state(continuity);
         let (_resume_state, action, mode) = team_resume_action(&current_state);
         let reason = match current_state.as_str() {
-            "delegation-planned" => "worker split exists but still needs supervisor admission or fallback",
+            "delegation-planned" => {
+                "worker split exists but still needs supervisor admission or fallback"
+            }
             "worker-running" => "active worker lanes require supervision before integration",
             "integration-pending" => "lane outputs are ready but not yet integrated",
             "qa-in-progress" => "integrated result still needs verification evidence",
-            "cleanup-completed" => "completed team execution should stay historical; start a new bounded task",
+            "cleanup-completed" => {
+                "completed team execution should stay historical; start a new bounded task"
+            }
             "stale-continuity" => "stale continuity cannot be resumed directly",
             "inconsistent-continuity" => "continuity artifacts disagree and must be repaired first",
             _ => "no active continuity is available; enter as a fresh team task",
@@ -1239,12 +1258,18 @@ fn build_framework_alias_state_machine(
         )
     } else if alias_name == "autopilot" {
         match state.as_str() {
-            "active" if evidence_missing && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES) => (
-                "resume_active_needs_verification".to_string(),
-                "verify_before_done".to_string(),
-                "continue-current-task".to_string(),
-                "implementation is active but verification evidence is still missing".to_string(),
-            ),
+            "active"
+                if evidence_missing
+                    && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES) =>
+            {
+                (
+                    "resume_active_needs_verification".to_string(),
+                    "verify_before_done".to_string(),
+                    "continue-current-task".to_string(),
+                    "implementation is active but verification evidence is still missing"
+                        .to_string(),
+                )
+            }
             "active" if !missing_recovery_anchors.is_empty() => (
                 "resume_active_missing_anchors".to_string(),
                 "repair_recovery_anchors_then_resume".to_string(),
@@ -1597,7 +1622,9 @@ fn load_framework_runtime_view(
             .and_then(Value::as_object)
             .and_then(|continuity| value_bool_or_none(continuity.get("resume_allowed")))
             == Some(true)
-            && !recoverable_task_ids.iter().any(|existing| existing == &task_id)
+            && !recoverable_task_ids
+                .iter()
+                .any(|existing| existing == &task_id)
         {
             recoverable_task_ids.push(task_id);
         }
@@ -1746,8 +1773,8 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
     let acceptance_criteria = value_string_list(contract.get("acceptance_criteria"));
     let evidence_required = value_string_list(contract.get("evidence_required"));
     let evidence_count = normalize_evidence_index(&snapshot.evidence_index).len();
-    let evidence_missing = evidence_count == 0
-        && (!evidence_required.is_empty() || !acceptance_criteria.is_empty());
+    let evidence_missing =
+        evidence_count == 0 && (!evidence_required.is_empty() || !acceptance_criteria.is_empty());
     let missing_recovery_anchors = stable_line_items(vec![
         if snapshot.session_summary_text.trim().is_empty() {
             "SESSION_SUMMARY".to_string()
@@ -2137,7 +2164,9 @@ fn render_framework_refresh_prompt(
         items.extend(continuity_next_actions.clone());
         stable_line_items(items)
     } else if state == "completed" && !completed.is_empty() {
-        stable_line_items(vec!["如果还要继续相关工作，先新开一个 standalone task".to_string()])
+        stable_line_items(vec![
+            "如果还要继续相关工作，先新开一个 standalone task".to_string()
+        ])
     } else if state == "stale" {
         let mut items = vec!["先重读锚点并重建上下文".to_string()];
         if continuity_next_actions.is_empty() {
@@ -2211,7 +2240,11 @@ fn render_framework_refresh_prompt(
         let mut lines = vec!["最近一轮已经收尾：".to_string()];
         lines.push(format!(
             "- {}",
-            if task.is_empty() { "上一轮任务已完成" } else { &task }
+            if task.is_empty() {
+                "上一轮任务已完成"
+            } else {
+                &task
+            }
         ));
         if !effect_line.is_empty() {
             lines.push(format!("- {effect_line}"));
@@ -2820,7 +2853,7 @@ fn list_sqlite_memory_items(
 ) -> Vec<std::collections::BTreeMap<String, String>> {
     let rows = list_sqlite_rows(
         conn,
-        "SELECT summary, source, category, status, notes, metadata_json FROM memory_items WHERE workspace = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 500",
+        "SELECT summary, source, category, status, notes, metadata_json FROM memory_items WHERE workspace = ? AND status = 'active' ORDER BY updated_at DESC LIMIT ?",
         workspace,
         500,
     );
@@ -3456,6 +3489,15 @@ fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
     Ok(true)
 }
 
+fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
+    let serialized = format!(
+        "{}\n",
+        serde_json::to_string_pretty(payload)
+            .map_err(|err| format!("serialize JSON payload failed: {err}"))?
+    );
+    write_text_if_changed(path, &serialized)
+}
+
 fn extract_markdown_section(text: &str, headings: &[&str]) -> String {
     let mut capture = false;
     let mut lines = Vec::new();
@@ -3538,6 +3580,39 @@ fn current_local_timestamp() -> String {
     Local::now().to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 
+fn render_session_summary(task: &str, phase: &str, status: &str, summary: &str) -> String {
+    [
+        "# SESSION_SUMMARY".to_string(),
+        String::new(),
+        format!("- task: {task}"),
+        format!("- phase: {phase}"),
+        format!("- status: {status}"),
+        String::new(),
+        "## Summary".to_string(),
+        if summary.trim().is_empty() {
+            "No summary provided.".to_string()
+        } else {
+            summary.trim().to_string()
+        },
+        String::new(),
+    ]
+    .join("\n")
+}
+
+fn build_next_actions_payload(actions: Vec<String>) -> Value {
+    json!({
+        "schema_version": NEXT_ACTIONS_SCHEMA_VERSION,
+        "next_actions": actions,
+    })
+}
+
+fn build_evidence_index_payload(entries: Vec<Value>) -> Value {
+    json!({
+        "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
+        "artifacts": entries,
+    })
+}
+
 fn read_json_if_exists(path: &Path) -> Value {
     if !path.is_file() {
         return Value::Object(Map::new());
@@ -3566,6 +3641,25 @@ fn safe_slug(value: &str) -> String {
     }
     slug.trim_matches(|ch| matches!(ch, '.' | '_' | '-'))
         .to_string()
+}
+
+fn build_task_id(task: &str, created_at: Option<&str>) -> String {
+    let stamp = created_at
+        .unwrap_or(&current_local_timestamp())
+        .chars()
+        .filter(|value| value.is_ascii_alphanumeric())
+        .collect::<String>();
+    let slug = safe_slug(task);
+    if stamp.is_empty() {
+        slug
+    } else {
+        let suffix = if stamp.len() > 14 {
+            &stamp[stamp.len() - 14..]
+        } else {
+            &stamp
+        };
+        format!("{slug}-{suffix}")
+    }
 }
 
 fn value_text(value: Option<&Value>) -> String {
@@ -3669,7 +3763,9 @@ fn normalized_task_registry(payload: &Value) -> (Value, Vec<String>, Vec<String>
                 known_task_ids.push(task_id.clone());
             }
             if value_bool_or_none(row.get("resume_allowed")) == Some(true)
-                && !recoverable_task_ids.iter().any(|existing| existing == &task_id)
+                && !recoverable_task_ids
+                    .iter()
+                    .any(|existing| existing == &task_id)
             {
                 recoverable_task_ids.push(task_id.clone());
             }
@@ -3708,6 +3804,241 @@ fn normalized_task_registry(payload: &Value) -> (Value, Vec<String>, Vec<String>
         known_task_ids,
         recoverable_task_ids,
     )
+}
+
+fn write_focus_task_pointer(
+    mirror_root: &Path,
+    task_id: &str,
+    task: &str,
+    updated_at: &str,
+) -> Result<bool, String> {
+    write_json_if_changed(
+        &mirror_root.join(FOCUS_TASK_POINTER_NAME),
+        &json!({
+            "task_id": task_id,
+            "task": task,
+            "updated_at": updated_at,
+        }),
+    )
+}
+
+fn write_task_registry_entry(
+    mirror_root: &Path,
+    task_id: &str,
+    task: &str,
+    phase: &str,
+    status: &str,
+    resume_allowed: Option<bool>,
+    updated_at: &str,
+    focus_task_id: Option<&str>,
+) -> Result<bool, String> {
+    let existing = read_json_if_exists(&mirror_root.join(TASK_REGISTRY_NAME));
+    let mut normalized = normalized_task_registry(&existing).0;
+    let registry = normalized
+        .as_object_mut()
+        .ok_or_else(|| "normalized task registry must be an object".to_string())?;
+    registry.insert(
+        "schema_version".to_string(),
+        Value::String("task-registry-v1".to_string()),
+    );
+    if let Some(focus_task_id) = focus_task_id {
+        registry.insert(
+            "focus_task_id".to_string(),
+            Value::String(focus_task_id.to_string()),
+        );
+    }
+    let tasks = registry
+        .entry("tasks".to_string())
+        .or_insert_with(|| Value::Array(Vec::new()));
+    let rows = tasks
+        .as_array_mut()
+        .ok_or_else(|| "task registry tasks must be an array".to_string())?;
+    let mut replaced = false;
+    for row in rows.iter_mut() {
+        let Some(map) = row.as_object_mut() else {
+            continue;
+        };
+        if safe_slug(&value_text(map.get("task_id"))) != task_id {
+            continue;
+        }
+        map.insert("task_id".to_string(), Value::String(task_id.to_string()));
+        map.insert("task".to_string(), Value::String(task.to_string()));
+        map.insert(
+            "updated_at".to_string(),
+            Value::String(updated_at.to_string()),
+        );
+        map.insert("status".to_string(), Value::String(status.to_string()));
+        map.insert("phase".to_string(), Value::String(phase.to_string()));
+        map.insert(
+            "resume_allowed".to_string(),
+            resume_allowed.map(Value::Bool).unwrap_or(Value::Null),
+        );
+        replaced = true;
+        break;
+    }
+    if !replaced {
+        rows.push(json!({
+            "task_id": task_id,
+            "task": task,
+            "updated_at": updated_at,
+            "status": status,
+            "phase": phase,
+            "resume_allowed": resume_allowed,
+        }));
+    }
+    write_json_if_changed(&mirror_root.join(TASK_REGISTRY_NAME), &normalized)
+}
+
+pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
+    let output_dir = value_text(payload.get("output_dir"));
+    if output_dir.is_empty() {
+        return Err("framework session artifact writer requires output_dir".to_string());
+    }
+    let task = value_text(payload.get("task"));
+    if task.is_empty() {
+        return Err("framework session artifact writer requires task".to_string());
+    }
+    let phase = {
+        let value = value_text(payload.get("phase"));
+        if value.is_empty() {
+            "implementation".to_string()
+        } else {
+            value
+        }
+    };
+    let status = {
+        let value = value_text(payload.get("status"));
+        if value.is_empty() {
+            "in_progress".to_string()
+        } else {
+            value
+        }
+    };
+    let summary = value_text(payload.get("summary"));
+    let next_actions = payload
+        .get("next_actions")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|item| value_text(Some(&item)))
+        .filter(|item| !item.is_empty())
+        .collect::<Vec<_>>();
+    let evidence = payload
+        .get("evidence")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|item| item.is_object())
+        .collect::<Vec<_>>();
+    let task_id = {
+        let direct = safe_slug(&value_text(payload.get("task_id")));
+        if direct.is_empty() {
+            build_task_id(&task, None)
+        } else {
+            direct
+        }
+    };
+    let focus = value_bool_or_none(payload.get("focus")).unwrap_or(false);
+    let repo_root = value_text(payload.get("repo_root"));
+    let mirror_output_dir = value_text(payload.get("mirror_output_dir"));
+    let output_root = PathBuf::from(&output_dir);
+    let primary_dir = if payload.get("task_id").is_some() || !repo_root.is_empty() {
+        output_root.join(&task_id)
+    } else {
+        output_root.clone()
+    };
+    let summary_path = primary_dir.join(SESSION_SUMMARY_FILENAME);
+    let next_actions_path = primary_dir.join(NEXT_ACTIONS_FILENAME);
+    let evidence_path = primary_dir.join(EVIDENCE_INDEX_FILENAME);
+    let summary_text = render_session_summary(&task, &phase, &status, &summary);
+    let next_actions_payload = build_next_actions_payload(next_actions);
+    let evidence_payload = build_evidence_index_payload(evidence);
+
+    let mut changed_paths = Vec::new();
+    if write_text_if_changed(&summary_path, &summary_text)? {
+        changed_paths.push(summary_path.display().to_string());
+    }
+    if write_json_if_changed(&next_actions_path, &next_actions_payload)? {
+        changed_paths.push(next_actions_path.display().to_string());
+    }
+    if write_json_if_changed(&evidence_path, &evidence_payload)? {
+        changed_paths.push(evidence_path.display().to_string());
+    }
+
+    if !mirror_output_dir.is_empty() && focus {
+        let mirror_root = PathBuf::from(mirror_output_dir);
+        let mirror_summary = mirror_root.join(SESSION_SUMMARY_FILENAME);
+        let mirror_next_actions = mirror_root.join(NEXT_ACTIONS_FILENAME);
+        let mirror_evidence = mirror_root.join(EVIDENCE_INDEX_FILENAME);
+        if write_text_if_changed(&mirror_summary, &summary_text)? {
+            changed_paths.push(mirror_summary.display().to_string());
+        }
+        if write_json_if_changed(&mirror_next_actions, &next_actions_payload)? {
+            changed_paths.push(mirror_next_actions.display().to_string());
+        }
+        if write_json_if_changed(&mirror_evidence, &evidence_payload)? {
+            changed_paths.push(mirror_evidence.display().to_string());
+        }
+    }
+
+    if !repo_root.is_empty() {
+        let repo_root = PathBuf::from(repo_root);
+        let mirror_root = repo_root.join("artifacts").join(CURRENT_ARTIFACT_DIR);
+        let updated_at = current_local_timestamp();
+        if write_task_registry_entry(
+            &mirror_root,
+            &task_id,
+            &task,
+            &phase,
+            &status,
+            None,
+            &updated_at,
+            if focus { Some(task_id.as_str()) } else { None },
+        )? {
+            changed_paths.push(mirror_root.join(TASK_REGISTRY_NAME).display().to_string());
+        }
+        if focus {
+            let root_summary = repo_root.join(SESSION_SUMMARY_FILENAME);
+            let root_next_actions = repo_root.join(NEXT_ACTIONS_FILENAME);
+            let root_evidence = repo_root.join(EVIDENCE_INDEX_FILENAME);
+            let active_pointer = mirror_root.join(ACTIVE_TASK_POINTER_NAME);
+            if write_text_if_changed(&root_summary, &summary_text)? {
+                changed_paths.push(root_summary.display().to_string());
+            }
+            if write_json_if_changed(&root_next_actions, &next_actions_payload)? {
+                changed_paths.push(root_next_actions.display().to_string());
+            }
+            if write_json_if_changed(&root_evidence, &evidence_payload)? {
+                changed_paths.push(root_evidence.display().to_string());
+            }
+            if write_json_if_changed(
+                &active_pointer,
+                &json!({
+                    "task_id": task_id,
+                    "task": task,
+                    "updated_at": updated_at,
+                }),
+            )? {
+                changed_paths.push(active_pointer.display().to_string());
+            }
+            let focus_pointer = mirror_root.join(FOCUS_TASK_POINTER_NAME);
+            if write_focus_task_pointer(&mirror_root, &task_id, &task, &updated_at)? {
+                changed_paths.push(focus_pointer.display().to_string());
+            }
+        }
+    }
+
+    Ok(json!({
+        "schema_version": FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
+        "authority": FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
+        "summary": summary_path.display().to_string(),
+        "next_actions": next_actions_path.display().to_string(),
+        "evidence": evidence_path.display().to_string(),
+        "task_id": task_id,
+        "changed_paths": changed_paths,
+    }))
 }
 
 fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value>> {

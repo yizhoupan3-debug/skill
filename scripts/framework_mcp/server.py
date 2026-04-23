@@ -11,17 +11,6 @@ from framework_runtime.rust_router import RustRouteAdapter
 
 from scripts.default_bootstrap import resolve_bootstrap_path, run_default_bootstrap
 from scripts.framework_bridge import export_framework_skills
-from scripts.memory_support import (
-    bootstrap_artifact_root,
-    get_repo_root,
-    load_runtime_snapshot,
-    normalize_evidence_index,
-    normalize_next_actions,
-    normalize_trace_skills,
-    parse_session_summary,
-    supervisor_contract,
-    workspace_name_from_root,
-)
 
 JSONDict = dict[str, Any]
 PROTOCOL_VERSION = "2024-11-05"
@@ -32,6 +21,18 @@ STABLE_MEMORY_FILENAMES = (
     "lessons.md",
     "runbooks.md",
 )
+
+
+def _framework_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _workspace_name_from_root(repo_root: Path) -> str:
+    return repo_root.name
+
+
+def _bootstrap_artifact_root(repo_root: Path) -> Path:
+    return repo_root / "artifacts" / "bootstrap"
 
 
 class FrameworkServerError(Exception):
@@ -73,10 +74,10 @@ class FrameworkMcpServer:
         server_name: str = "skill-framework-mcp",
         server_version: str = "0.1.0",
     ) -> None:
-        self._repo_root = (repo_root or get_repo_root()).resolve()
-        self._framework_root = get_repo_root()
-        self._workspace = workspace_name_from_root(self._repo_root)
-        self._output_dir = (output_dir or bootstrap_artifact_root(self._repo_root)).resolve()
+        self._repo_root = (repo_root or _framework_root()).resolve()
+        self._framework_root = _framework_root()
+        self._workspace = _workspace_name_from_root(self._repo_root)
+        self._output_dir = (output_dir or _bootstrap_artifact_root(self._repo_root)).resolve()
         self._server_name = server_name
         self._server_version = server_version
         self._rust_adapter = RustRouteAdapter(self._framework_root)
@@ -469,16 +470,17 @@ class FrameworkMcpServer:
             text = self._read_text_file(path=path, missing_message="Supervisor state file not found.")
             return {"uri": uri, "mimeType": "application/json", "text": text}
         if uri == "framework://artifacts/index":
-            snapshot = load_runtime_snapshot(self._repo_root)
+            snapshot = self._runtime_snapshot()
+            contract = self._contract_summary()
             payload = {
                 "workspace": self._workspace,
-                "collected_at": snapshot.collected_at,
-                "current_root": str(snapshot.current_root),
-                "session_summary": parse_session_summary(snapshot.session_summary_text),
-                "next_actions": normalize_next_actions(snapshot.next_actions),
-                "trace_skills": normalize_trace_skills(snapshot.trace_metadata),
-                "evidence": normalize_evidence_index(snapshot.evidence_index),
-                "snapshots": [str(path) for path in snapshot.snapshots],
+                "collected_at": snapshot.get("collected_at"),
+                "current_root": snapshot.get("current_root"),
+                "continuity": snapshot.get("continuity", {}),
+                "next_actions": contract.get("next_actions", []),
+                "trace_skills": contract.get("trace_skills", []),
+                "evidence_count": snapshot.get("evidence_count", 0),
+                "paths": snapshot.get("paths", {}),
             }
             return {"uri": uri, "mimeType": "application/json", "text": json.dumps(payload, ensure_ascii=False, indent=2)}
         raise FrameworkServerError(
