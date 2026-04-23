@@ -71,48 +71,6 @@
           {
             "async": true,
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
-            "if": "Edit(/scripts/claude_hook_*.py)",
-            "timeout": 8,
-            "type": "command"
-          },
-          {
-            "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
-            "if": "MultiEdit(/scripts/claude_hook_*.py)",
-            "timeout": 8,
-            "type": "command"
-          },
-          {
-            "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
-            "if": "Write(/scripts/claude_hook_*.py)",
-            "timeout": 8,
-            "type": "command"
-          },
-          {
-            "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
-            "if": "Edit(/tests/test_claude_hook_automation.py)",
-            "timeout": 8,
-            "type": "command"
-          },
-          {
-            "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
-            "if": "MultiEdit(/tests/test_claude_hook_automation.py)",
-            "timeout": 8,
-            "type": "command"
-          },
-          {
-            "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
-            "if": "Write(/tests/test_claude_hook_automation.py)",
-            "timeout": 8,
-            "type": "command"
-          },
-          {
-            "async": true,
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.sh",
             "if": "Edit(/tests/test_cli_host_entrypoints.py)",
             "timeout": 8,
             "type": "command"
@@ -452,36 +410,6 @@
           {
             "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
             "if": "Write(/scripts/router-rs/src/**)",
-            "type": "command"
-          },
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
-            "if": "Edit(/scripts/claude_hook_*.py)",
-            "type": "command"
-          },
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
-            "if": "MultiEdit(/scripts/claude_hook_*.py)",
-            "type": "command"
-          },
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
-            "if": "Write(/scripts/claude_hook_*.py)",
-            "type": "command"
-          },
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
-            "if": "Edit(/tests/test_claude_hook_automation.py)",
-            "type": "command"
-          },
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
-            "if": "MultiEdit(/tests/test_claude_hook_automation.py)",
-            "type": "command"
-          },
-          {
-            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_quality.sh",
-            "if": "Write(/tests/test_claude_hook_automation.py)",
             "type": "command"
           },
           {

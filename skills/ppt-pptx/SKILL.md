@@ -47,6 +47,8 @@ metadata:
 
 Build presentations as reusable `deck.js` sources that emit real editable `.pptx` decks. Use PptxGenJS, explicit theme fonts, reusable layout helpers, and rendered review so the delivered deck stays editable while the authoring workflow stays reproducible.
 
+When an existing `.pptx` is the rebuild input, this skill can also use local `officecli` as an optional deep inspection / preview / patch layer before or alongside the rebuild.
+
 Do not claim generic "PPT / PowerPoint / pptx" intake. Let `$slides` absorb those requests first, then use this owner only when the task is explicitly the code-authored `deck.js` lane or a rebuild into that lane.
 
 Quick lane rule:
@@ -97,6 +99,12 @@ the full style guidance.
 5. Build in PptxGenJS from the bundled templates/helpers and keep everything editable.
 6. Render, test overflow/fonts, and audit slide PNGs with `$visual-review`.
 7. Deliver the `.pptx`, authoring `.js`, local assets, and source log together.
+
+Optional boost for rebuild / audit work:
+
+- use `scripts/officecli_bridge.py doctor` for outline + issues + validation in one pass
+- use `scripts/officecli_bridge.py get/query` when you need stable `shape[@id=...]` addressing from an old deck
+- use `scripts/officecli_bridge.py watch` for live HTML preview of an already-generated `.pptx`
 
 For the detailed source-first workflow, rebuild path for existing decks, notes /
 transitions guidance, and QA sequence, see [references/workflow.md](./references/workflow.md).

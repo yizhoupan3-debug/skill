@@ -642,8 +642,6 @@ def _build_claude_tool_path_hooks(
 CLAUDE_QUALITY_PRE_TOOL_USE_RULES = (
     "/codex_agno_runtime/src/**",
     "/scripts/router-rs/src/**",
-    "/scripts/claude_hook_*.py",
-    "/tests/test_claude_hook_automation.py",
     "/tests/test_cli_host_entrypoints.py",
     "/tests/test_codex_omx_hook_bridge.py",
 )

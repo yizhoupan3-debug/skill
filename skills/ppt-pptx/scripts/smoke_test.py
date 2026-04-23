@@ -50,6 +50,10 @@ def rust_tool_env() -> dict[str, str]:
     return env
 
 
+def officecli_available() -> bool:
+    return shutil.which("officecli") is not None
+
+
 def run(
     cmd: list[str],
     cwd: Path,
@@ -94,6 +98,17 @@ def count_pngs(path: Path) -> int:
     return len(list(path.glob("*.png")))
 
 
+def officecli_doctor(workdir: Path) -> dict | None:
+    if not officecli_available():
+        return None
+    proc = run(
+        [sys.executable, str(SCRIPTS / "officecli_bridge.py"), "doctor", "deck.pptx", "--json"],
+        workdir,
+        "officecli doctor",
+    )
+    return json.loads(proc.stdout)
+
+
 def scenario_outline(root: Path) -> dict:
     workdir = root / "outline"
     workdir.mkdir(parents=True, exist_ok=True)
@@ -127,13 +142,18 @@ def scenario_outline(root: Path) -> dict:
         env=env,
     )
 
-    return {
+    result = {
         "name": "outline_flow",
         "workdir": str(workdir),
         "deck_exists": (workdir / "deck.pptx").exists(),
         "rendered_pngs": count_pngs(workdir / "rendered"),
         "structure_json": (workdir / "structure.json").exists(),
     }
+    doctor = officecli_doctor(workdir)
+    if doctor:
+        result["officecli_issue_count"] = doctor["issues"]["count"]
+        result["officecli_validation_ok"] = doctor["validation"]["ok"]
+    return result
 
 
 def scenario_template(root: Path) -> dict:
@@ -163,12 +183,17 @@ def scenario_template(root: Path) -> dict:
         env=env,
     )
 
-    return {
+    result = {
         "name": "template_flow",
         "workdir": str(workdir),
         "deck_exists": (workdir / "deck.pptx").exists(),
         "rendered_pngs": count_pngs(workdir / "rendered"),
     }
+    doctor = officecli_doctor(workdir)
+    if doctor:
+        result["officecli_issue_count"] = doctor["issues"]["count"]
+        result["officecli_validation_ok"] = doctor["validation"]["ok"]
+    return result
 
 
 def scenario_sample_deck(root: Path) -> dict:
@@ -190,18 +215,28 @@ def scenario_sample_deck(root: Path) -> dict:
         env=env,
     )
 
-    return {
+    result = {
         "name": "sample_deck_flow",
         "workdir": str(workdir),
         "deck_exists": (workdir / "deck.pptx").exists(),
         "rendered_pngs": count_pngs(workdir / "rendered"),
     }
+    doctor = officecli_doctor(workdir)
+    if doctor:
+        result["officecli_issue_count"] = doctor["issues"]["count"]
+        result["officecli_validation_ok"] = doctor["validation"]["ok"]
+    return result
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run end-to-end smoke tests for skills/ppt-pptx.")
     parser.add_argument("--keep-workdir", action="store_true", help="Keep the temporary workspace.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON summary.")
+    parser.add_argument(
+        "--strict-officecli",
+        action="store_true",
+        help="Fail if optional OfficeCLI doctor finds issues or validation failures.",
+    )
     args = parser.parse_args()
 
     temp_dir_obj = tempfile.TemporaryDirectory(prefix="pptx-smoke-")
@@ -221,8 +256,14 @@ def main() -> int:
         payload = {
             "status": "pass",
             "root": str(temp_root),
+            "officecli_available": officecli_available(),
             "results": results,
         }
+        if args.strict_officecli and any(
+            item.get("officecli_issue_count", 0) > 0 or item.get("officecli_validation_ok") is False
+            for item in results
+        ):
+            raise RuntimeError("OfficeCLI strict audit found deck issues or validation failures")
         if args.json:
             print(json.dumps(payload, ensure_ascii=False, indent=2))
         else:
