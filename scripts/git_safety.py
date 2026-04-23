@@ -49,7 +49,6 @@ VERIFY_PRESET_CONFIGS: dict[str, dict[str, Any]] = {
             },
         ],
         "path_rules": (
-            "scripts/router-rs/src/",
             "scripts/router-rs/src/host_integration.rs",
             "scripts/install_skills.sh",
             "tests/test_cli_host_entrypoints.py",

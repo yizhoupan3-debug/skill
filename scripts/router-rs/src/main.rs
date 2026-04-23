@@ -57,11 +57,9 @@ const ROUTE_AUTHORITY: &str = "rust-route-core";
 const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
 const EXECUTION_SCHEMA_VERSION: &str = "router-rs-execute-response-v1";
 const EXECUTION_METADATA_SCHEMA_VERSION: &str = "router-rs-execution-kernel-metadata-v1";
-const EXECUTION_METADATA_BRIDGE_SCHEMA_VERSION: &str =
-    "router-rs-execution-kernel-metadata-bridge-v1";
 const EXECUTION_AUTHORITY: &str = "rust-execution-cli";
-const EXECUTION_KERNEL_BRIDGE_KIND: &str = "rust-execution-kernel-slice";
-const EXECUTION_KERNEL_BRIDGE_AUTHORITY: &str = "rust-execution-kernel-authority";
+const EXECUTION_KERNEL_KIND: &str = "rust-execution-kernel-slice";
+const EXECUTION_KERNEL_AUTHORITY: &str = "rust-execution-kernel-authority";
 const EXECUTION_KERNEL_CONTRACT_MODE: &str = "rust-live-primary";
 const EXECUTION_KERNEL_FALLBACK_POLICY: &str = "infrastructure-only-explicit";
 const EXECUTION_KERNEL_DELEGATE_FAMILY: &str = "rust-cli";
@@ -4547,11 +4545,11 @@ fn build_steady_state_execution_kernel_metadata(response_shape: &str) -> Map<Str
     );
     metadata.insert(
         "execution_kernel".to_string(),
-        Value::String(EXECUTION_KERNEL_BRIDGE_KIND.to_string()),
+        Value::String(EXECUTION_KERNEL_KIND.to_string()),
     );
     metadata.insert(
         "execution_kernel_authority".to_string(),
-        Value::String(EXECUTION_KERNEL_BRIDGE_AUTHORITY.to_string()),
+        Value::String(EXECUTION_KERNEL_AUTHORITY.to_string()),
     );
     metadata.insert(
         "execution_kernel_contract_mode".to_string(),
@@ -4598,76 +4596,6 @@ fn build_steady_state_execution_kernel_metadata(response_shape: &str) -> Map<Str
         Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string()),
     );
     metadata
-}
-
-fn build_execution_kernel_metadata_bridge() -> Value {
-    serde_json::json!({
-        "schema_version": EXECUTION_METADATA_BRIDGE_SCHEMA_VERSION,
-        "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-        "projection": "rust-native-projection",
-        "steady_state_fields": [
-            "execution_kernel_metadata_schema_version",
-            "execution_kernel",
-            "execution_kernel_authority",
-            "execution_kernel_contract_mode",
-            "execution_kernel_fallback_policy",
-            "execution_kernel_in_process_replacement_complete",
-            "execution_kernel_delegate",
-            "execution_kernel_delegate_authority",
-            "execution_kernel_delegate_family",
-            "execution_kernel_delegate_impl",
-            "execution_kernel_live_primary",
-            "execution_kernel_live_primary_authority",
-            "execution_kernel_response_shape",
-            "execution_kernel_prompt_preview_owner",
-        ],
-        "runtime_fields": {
-            "shared": [
-                "trace_event_count",
-                "trace_output_path",
-            ],
-            "live_primary_required": [
-                "run_id",
-                "status",
-                "execution_kernel_model_id_source",
-                "trace_event_count",
-                "trace_output_path",
-            ],
-            "live_primary_passthrough": [
-                "execution_mode",
-                "route_engine",
-                "diagnostic_route_mode",
-            ],
-            "dry_run_required": [
-                "reason",
-                "execution_kernel_contract_mode",
-                "execution_kernel_fallback_policy",
-                "trace_event_count",
-                "trace_output_path",
-            ],
-        },
-        "metadata_keys": {
-            "metadata_schema_version": "execution_kernel_metadata_schema_version",
-            "contract_mode": "execution_kernel_contract_mode",
-            "fallback_policy": "execution_kernel_fallback_policy",
-            "response_shape": "execution_kernel_response_shape",
-            "prompt_preview_owner": "execution_kernel_prompt_preview_owner",
-            "model_id_source": "execution_kernel_model_id_source",
-        },
-        "defaults": {
-            "contract_mode": EXECUTION_KERNEL_CONTRACT_MODE,
-            "fallback_policy": EXECUTION_KERNEL_FALLBACK_POLICY,
-            "prompt_preview_owner_by_mode": {
-                EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY: EXECUTION_PROMPT_PREVIEW_OWNER,
-                EXECUTION_RESPONSE_SHAPE_DRY_RUN: EXECUTION_PROMPT_PREVIEW_OWNER,
-            },
-            "live_primary_model_id_source": EXECUTION_MODEL_ID_SOURCE,
-            "supported_response_shapes": [
-                EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
-                EXECUTION_RESPONSE_SHAPE_DRY_RUN,
-            ],
-        },
-    })
 }
 
 fn build_execution_kernel_contracts_by_mode() -> Map<String, Value> {
@@ -5094,8 +5022,8 @@ fn build_trace_transport_payload(
         "stream_id": format!("stream::{stream_key}"),
         "session_id": session_id,
         "job_id": job_id,
-        "bridge_kind": optional_non_empty_string(payload, "bridge_kind").unwrap_or_else(|| "runtime_event_bridge".to_string()),
-        "transport_family": optional_non_empty_string(payload, "transport_family").unwrap_or_else(|| "host-facing-bridge".to_string()),
+        "transport_contract_kind": optional_non_empty_string(payload, "transport_contract_kind").unwrap_or_else(|| "runtime_event_stream".to_string()),
+        "transport_family": optional_non_empty_string(payload, "transport_family").unwrap_or_else(|| "host-facing-transport".to_string()),
         "transport_kind": optional_non_empty_string(payload, "transport_kind").unwrap_or_else(|| "poll".to_string()),
         "endpoint_kind": endpoint_kind,
         "ownership_lane": optional_non_empty_string(payload, "ownership_lane").unwrap_or_else(|| "rust-contract-lane".to_string()),
@@ -5121,10 +5049,10 @@ fn build_trace_transport_payload(
         "binding_artifact_path": optional_non_empty_string(payload, "binding_artifact_path"),
         "resume_mode": resume_mode,
         "heartbeat_supported": optional_bool(payload, "heartbeat_supported").unwrap_or(true),
-        "cleanup_semantics": optional_non_empty_string(payload, "cleanup_semantics").unwrap_or_else(|| "bridge_cache_only".to_string()),
+        "cleanup_semantics": optional_non_empty_string(payload, "cleanup_semantics").unwrap_or_else(|| "stream_cache_only".to_string()),
         "cleanup_preserves_replay": optional_bool(payload, "cleanup_preserves_replay").unwrap_or(true),
         "replay_reseed_supported": optional_bool(payload, "replay_reseed_supported").unwrap_or(true),
-        "chunk_schema_version": optional_non_empty_string(payload, "chunk_schema_version").unwrap_or_else(|| "runtime-event-bridge-v1".to_string()),
+        "chunk_schema_version": optional_non_empty_string(payload, "chunk_schema_version").unwrap_or_else(|| "runtime-event-stream-v1".to_string()),
         "cursor_schema_version": optional_non_empty_string(payload, "cursor_schema_version").unwrap_or_else(|| "runtime-trace-cursor-v1".to_string()),
         "latest_cursor": latest_cursor,
         "replay_supported": replay_supported,
@@ -6483,7 +6411,7 @@ fn subscribe_attached_runtime_events(payload: Value) -> Result<Value, String> {
             .cloned()
     });
     Ok(json!({
-        "schema_version": "runtime-event-bridge-v1",
+        "schema_version": "runtime-event-stream-v1",
         "session_id": session_id,
         "job_id": job_id,
         "events": events,
@@ -6492,8 +6420,8 @@ fn subscribe_attached_runtime_events(payload: Value) -> Result<Value, String> {
         "after_event_id": optional_non_empty_string(&payload, "after_event_id"),
         "heartbeat": if heartbeat && replay.events.is_empty() {
             json!({
-                "schema_version": "runtime-event-bridge-heartbeat-v1",
-                "kind": "bridge.heartbeat",
+                "schema_version": "runtime-event-stream-heartbeat-v1",
+                "kind": "runtime.stream.heartbeat",
                 "status": "idle",
             })
         } else {
@@ -6551,7 +6479,7 @@ fn build_runtime_control_plane_payload() -> Value {
                 "limit_owner": "rust-control-plane",
                 "max_concurrent_subagents": DEFAULT_MAX_CONCURRENT_SUBAGENTS,
                 "timeout_seconds": DEFAULT_SUBAGENT_TIMEOUT_SECONDS,
-                "enforcement_mode": "rust-owned-policy-python-enforced",
+                "enforcement_mode": "rust-owned-policy-native-enforced",
             },
         },
         "state": {
@@ -6583,7 +6511,6 @@ fn build_runtime_control_plane_payload() -> Value {
             "role": "execution-kernel-control",
             "projection": "rust-native-projection",
             "delegate_kind": "rust-execution-kernel-slice",
-            "kernel_metadata_bridge": build_execution_kernel_metadata_bridge(),
             "kernel_contract": Value::Object(build_steady_state_execution_kernel_metadata(
                 EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
             )),
@@ -6643,7 +6570,7 @@ fn build_runtime_control_plane_payload() -> Value {
         "agent_factory": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "role": "retired-compatibility-agent-contract-handle",
-            "projection": "python-retired-request-surface",
+            "projection": "retired-request-surface",
             "delegate_kind": "execution-kernel-compatibility-agent-v1",
         },
         "background": {
@@ -6703,13 +6630,9 @@ fn build_runtime_control_plane_payload() -> Value {
         "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
         "default_route_mode": "rust",
         "default_route_authority": ROUTE_AUTHORITY,
-        "python_authority_default": false,
-        "python_host_role": "thin-projection",
         "rustification_status": {
             "runtime_primary_owner": "rust-control-plane",
             "runtime_primary_owner_authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-            "python_runtime_role": "compatibility-host",
-            "steady_state_python_allowed": false,
             "hot_path_projection_mode": "descriptor-driven",
         },
         "runtime_host": {
@@ -6857,7 +6780,7 @@ fn build_runtime_observability_exporter_descriptor() -> Value {
         "signal_vocabulary": RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY,
         "export_path": "jsonl-plus-otel",
         "jsonl_sink_schema_version": "runtime-event-sink-v1",
-        "trace_bridge_schema_version": "runtime-event-bridge-v1",
+        "trace_stream_schema_version": "runtime-event-stream-v1",
         "trace_handoff_schema_version": "runtime-event-handoff-v1",
         "ownership_lane": "rust-contract-lane",
         "producer_owner": "rust-control-plane",
@@ -9966,14 +9889,13 @@ mod tests {
             payload["default_route_authority"],
             Value::String(ROUTE_AUTHORITY.to_string())
         );
-        assert_eq!(payload["python_authority_default"], Value::Bool(false));
         assert_eq!(
             payload["rustification_status"]["runtime_primary_owner"],
             Value::String("rust-control-plane".to_string())
         );
         assert_eq!(
-            payload["rustification_status"]["python_runtime_role"],
-            Value::String("compatibility-host".to_string())
+            payload["rustification_status"]["hot_path_projection_mode"],
+            Value::String("descriptor-driven".to_string())
         );
         assert_eq!(
             payload["runtime_host"]["role"],
@@ -10007,43 +9929,6 @@ mod tests {
         assert_eq!(
             payload["services"]["execution"]["kernel_contract"]["execution_kernel_fallback_policy"],
             Value::String(EXECUTION_KERNEL_FALLBACK_POLICY.to_string())
-        );
-        assert_eq!(
-            payload["services"]["execution"]["kernel_metadata_bridge"]["schema_version"],
-            Value::String(EXECUTION_METADATA_BRIDGE_SCHEMA_VERSION.to_string())
-        );
-        assert_eq!(
-            payload["services"]["execution"]["kernel_metadata_bridge"]["authority"],
-            Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
-        );
-        assert_eq!(
-            payload["services"]["execution"]["kernel_metadata_bridge"]["metadata_keys"]
-                ["prompt_preview_owner"],
-            Value::String("execution_kernel_prompt_preview_owner".to_string())
-        );
-        assert_eq!(
-            payload["services"]["execution"]["kernel_metadata_bridge"]["defaults"]
-                ["live_primary_model_id_source"],
-            Value::String(EXECUTION_MODEL_ID_SOURCE.to_string())
-        );
-        let supported_shapes = payload["services"]["execution"]["kernel_metadata_bridge"]
-            ["defaults"]["supported_response_shapes"]
-            .as_array()
-            .expect("supported_response_shapes");
-        let supported_shape_values: Vec<String> = supported_shapes
-            .iter()
-            .map(|value| value.as_str().unwrap_or_default().to_string())
-            .collect();
-        assert_eq!(
-            supported_shape_values,
-            vec![
-                EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY.to_string(),
-                EXECUTION_RESPONSE_SHAPE_DRY_RUN.to_string(),
-            ]
-        );
-        assert_eq!(
-            payload["services"]["execution"]["kernel_metadata_bridge"]["steady_state_fields"][0],
-            Value::String("execution_kernel_metadata_schema_version".to_string())
         );
         assert_eq!(
             payload["services"]["execution"]["kernel_contract"]["execution_kernel_response_shape"],
@@ -10807,7 +10692,7 @@ mod tests {
             snapshot_schema_version: ROUTE_SNAPSHOT_SCHEMA_VERSION.to_string(),
             authority: ROUTE_AUTHORITY.to_string(),
             route_snapshot: build_route_snapshot(
-                "python",
+                "legacy",
                 "plan-to-code",
                 Some("anti-laziness"),
                 "L2",
@@ -10824,7 +10709,7 @@ mod tests {
             ROUTE_SNAPSHOT_SCHEMA_VERSION
         );
         assert_eq!(snapshot.authority, ROUTE_AUTHORITY);
-        assert_eq!(snapshot.route_snapshot.engine, "python");
+        assert_eq!(snapshot.route_snapshot.engine, "legacy");
         assert_eq!(snapshot.route_snapshot.selected_skill, "plan-to-code");
         assert_eq!(
             snapshot.route_snapshot.overlay_skill.as_deref(),
@@ -10850,7 +10735,7 @@ mod tests {
         assert_eq!(response.model_id, None);
         assert_eq!(
             response.metadata["execution_kernel"],
-            EXECUTION_KERNEL_BRIDGE_KIND
+            EXECUTION_KERNEL_KIND
         );
         assert_eq!(
             response.metadata["execution_kernel_metadata_schema_version"],
@@ -10858,7 +10743,7 @@ mod tests {
         );
         assert_eq!(
             response.metadata["execution_kernel_authority"],
-            EXECUTION_KERNEL_BRIDGE_AUTHORITY
+            EXECUTION_KERNEL_AUTHORITY
         );
         assert_eq!(
             response.metadata["execution_kernel_response_shape"],
@@ -10943,7 +10828,7 @@ mod tests {
     fn live_execute_ignores_caller_supplied_prompt_preview() {
         let mut payload = sample_execute_request();
         payload.dry_run = false;
-        payload.prompt_preview = Some("Python supplied live prompt".to_string());
+        payload.prompt_preview = Some("Native supplied live prompt".to_string());
 
         let prompt = build_live_execute_prompt(&payload);
         let response = build_live_execute_response(
@@ -10963,15 +10848,15 @@ mod tests {
         assert_eq!(response.prompt_preview.as_deref(), Some(prompt.as_str()));
         assert_ne!(
             response.prompt_preview.as_deref(),
-            Some("Python supplied live prompt")
+            Some("Native supplied live prompt")
         );
         assert_eq!(
             response.metadata["execution_kernel"],
-            EXECUTION_KERNEL_BRIDGE_KIND
+            EXECUTION_KERNEL_KIND
         );
         assert_eq!(
             response.metadata["execution_kernel_authority"],
-            EXECUTION_KERNEL_BRIDGE_AUTHORITY
+            EXECUTION_KERNEL_AUTHORITY
         );
         assert_eq!(
             response.metadata["execution_kernel_metadata_schema_version"],

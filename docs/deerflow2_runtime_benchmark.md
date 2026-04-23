@@ -135,8 +135,9 @@ round:
 - that descriptor now explicitly advertises a host-facing/remote-capable seam
   and documents that cleanup clears only bridge cache while replay can reseed
   resumability from persisted events
-- `scripts/route.py` is now a Rust transport shim for route/search output, so
-  the CLI surface no longer carries a parallel Python scoring authority
+- the old `scripts/route.py` Python shim is retired; route/search CLI calls go
+  directly to `router-rs`, so the CLI surface no longer carries a parallel
+  Python scoring authority
 - runtime route mode / rollback / primary-authority policy now also comes from
   `router-rs`, so Python no longer hardcodes which route engine is primary for
   health or execution handoff

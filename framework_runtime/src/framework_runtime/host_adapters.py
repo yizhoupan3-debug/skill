@@ -16,7 +16,7 @@ from .framework_profile import (
 )
 from .runtime_registry import framework_native_aliases
 from .trace import (
-    TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
+    TRACE_EVENT_STREAM_SCHEMA_VERSION,
     TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
     TRACE_REPLAY_CURSOR_SCHEMA_VERSION,
 )
@@ -349,8 +349,8 @@ def _default_event_translation() -> Dict[str, str]:
 def _default_event_transport() -> Dict[str, Any]:
     return {
         "schema_version": TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
-        "bridge_kind": "runtime_event_bridge",
-        "transport_family": "host-facing-bridge",
+        "transport_contract_kind": "runtime_event_stream",
+        "transport_family": "host-facing-transport",
         "transport_kind": "poll",
         "endpoint_kind": "runtime_method",
         "remote_capable": True,
@@ -364,10 +364,10 @@ def _default_event_transport() -> Dict[str, Any]:
         "binding_artifact_format": "json",
         "resume_mode": "after_event_id",
         "heartbeat_supported": True,
-        "cleanup_semantics": "bridge_cache_only",
+        "cleanup_semantics": "stream_cache_only",
         "cleanup_preserves_replay": True,
         "replay_reseed_supported": True,
-        "chunk_schema_version": TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
+        "chunk_schema_version": TRACE_EVENT_STREAM_SCHEMA_VERSION,
         "cursor_schema_version": TRACE_REPLAY_CURSOR_SCHEMA_VERSION,
         "replay_supported": True,
     }

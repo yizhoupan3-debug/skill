@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""CLI for financial market-data fetching, fundamentals, holders, and capital metrics."""
+"""Hybrid CLI: Rust for OHLCV/export hot paths, Python for fundamentals surfaces."""
 from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -13,13 +14,15 @@ if str(ROOT) not in sys.path:
 
 from financial_data import MarketDataClient  # noqa: E402
 
+REPO_ROOT = ROOT.parents[1]
+RUST_MANIFEST = REPO_ROOT / "rust_tools/financial_data_rs/Cargo.toml"
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Build argument parser with all subcommands."""
     parser = argparse.ArgumentParser(description="Reusable financial market-data CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    # ── ohlcv ───────────────────────────────────────────────────
     ohlcv = sub.add_parser("ohlcv", help="Fetch OHLCV data")
     ohlcv.add_argument("--market", choices=["crypto", "us", "cn-index"], required=True)
     ohlcv.add_argument("--symbol", required=True)
@@ -31,17 +34,14 @@ def build_parser() -> argparse.ArgumentParser:
     ohlcv.add_argument("--adjusted", action="store_true")
     ohlcv.add_argument("--format", choices=["json", "csv"], default="json")
 
-    # ── constituents ────────────────────────────────────────────
     cons = sub.add_parser("constituents", help="Fetch China index constituents")
     cons.add_argument("--index", required=True)
     cons.add_argument("--format", choices=["json", "csv"], default="json")
 
-    # ── weights ─────────────────────────────────────────────────
     weights = sub.add_parser("weights", help="Fetch China index weights")
     weights.add_argument("--index", required=True)
     weights.add_argument("--format", choices=["json", "csv"], default="json")
 
-    # ── export ──────────────────────────────────────────────────
     export = sub.add_parser("export", help="Fetch data and export unified backtest format")
     export.add_argument("--market", choices=["crypto", "us", "cn-index"], required=True)
     export.add_argument("--symbol", required=True)
@@ -56,7 +56,6 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--output", required=True)
     export.add_argument("--metadata-output")
 
-    # ── fundamentals ────────────────────────────────────────────
     fund = sub.add_parser("fundamentals", help="Fetch financial statements or key metrics")
     fund.add_argument("--market", choices=["us", "cn"], required=True)
     fund.add_argument("--symbol", required=True)
@@ -64,14 +63,12 @@ def build_parser() -> argparse.ArgumentParser:
     fund.add_argument("--freq", choices=["yearly", "quarterly"], default="yearly")
     fund.add_argument("--format", choices=["json", "csv"], default="json")
 
-    # ── holders ─────────────────────────────────────────────────
     hold = sub.add_parser("holders", help="Fetch shareholder / institutional holder data")
     hold.add_argument("--market", choices=["us", "cn"], required=True)
     hold.add_argument("--symbol", required=True)
     hold.add_argument("--type", choices=["major", "institutional", "top10"], default="major", dest="holder_type")
     hold.add_argument("--format", choices=["json", "csv"], default="json")
 
-    # ── capital ─────────────────────────────────────────────────
     cap = sub.add_parser("capital", help="Fetch capital / valuation metrics")
     cap.add_argument("--market", choices=["us", "cn"], required=True)
     cap.add_argument("--symbol", required=True)
@@ -92,9 +89,105 @@ def emit_result(result, fmt: str) -> None:
     print(json.dumps(payload, ensure_ascii=False, default=str, indent=2))
 
 
+def should_use_rust(args: argparse.Namespace) -> bool:
+    """Route network-heavy paths to Rust when the feature set matches."""
+    if args.command == "ohlcv":
+        return args.market in {"crypto", "us"} and not (args.market == "us" and args.source == "yfinance" and args.adjusted)
+    if args.command == "export":
+        return (
+            args.market in {"crypto", "us"}
+            and args.file_format in {"csv", "json"}
+            and not (args.market == "us" and args.source == "yfinance" and args.adjusted)
+        )
+    return False
+
+
+def run_rust_cli(extra_args: list[str]) -> None:
+    """Run the Rust core CLI and forward its output."""
+    cmd = [
+        "cargo",
+        "run",
+        "--quiet",
+        "--manifest-path",
+        str(RUST_MANIFEST),
+        "--",
+        *extra_args,
+    ]
+    completed = subprocess.run(cmd, check=False)
+    if completed.returncode != 0:
+        raise SystemExit(completed.returncode)
+
+
+def rust_args_for_ohlcv(args: argparse.Namespace) -> list[str]:
+    """Translate argparse Namespace to Rust CLI flags."""
+    out = [
+        "ohlcv",
+        "--market",
+        args.market,
+        "--symbol",
+        args.symbol,
+        "--exchange",
+        args.exchange,
+        "--interval",
+        args.interval,
+        "--limit",
+        str(args.limit),
+        "--period",
+        args.period,
+        "--source",
+        "yahoo" if args.source == "yfinance" else args.source,
+        "--format",
+        args.format,
+    ]
+    if args.adjusted:
+        out.append("--adjusted")
+    return out
+
+
+def rust_args_for_export(args: argparse.Namespace) -> list[str]:
+    """Translate export arguments to Rust CLI flags."""
+    out = [
+        "export",
+        "--market",
+        args.market,
+        "--symbol",
+        args.symbol,
+        "--exchange",
+        args.exchange,
+        "--interval",
+        args.interval,
+        "--limit",
+        str(args.limit),
+        "--period",
+        args.period,
+        "--source",
+        "yahoo" if args.source == "yfinance" else args.source,
+        "--schema",
+        args.schema,
+        "--file-format",
+        args.file_format,
+        "--output",
+        args.output,
+    ]
+    if args.adjusted:
+        out.append("--adjusted")
+    if args.metadata_output:
+        out.extend(["--metadata-output", args.metadata_output])
+    return out
+
+
 def main() -> None:
     """Entry point for the CLI."""
     args = build_parser().parse_args()
+
+    if should_use_rust(args):
+        if args.command == "ohlcv":
+            run_rust_cli(rust_args_for_ohlcv(args))
+            return
+        if args.command == "export":
+            run_rust_cli(rust_args_for_export(args))
+            return
+
     client = MarketDataClient()
 
     if args.command == "ohlcv":

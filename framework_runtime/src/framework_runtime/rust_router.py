@@ -1,4 +1,4 @@
-"""Rust route-engine adapter used by the Python host runtime."""
+"""Rust route-engine adapter used by the host runtime."""
 
 from __future__ import annotations
 
@@ -15,18 +15,23 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
+from pydantic import ValidationError
+
 from framework_runtime.config import RuntimeSettings
 from framework_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION,
     EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
     EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
     decode_router_rs_execution_response,
-    normalize_execution_kernel_metadata_bridge,
     resolve_execution_kernel_expectations,
     validate_execution_kernel_steady_state_metadata,
 )
 from framework_runtime.schemas import (
     ExecutionKernelRequest,
+    ROUTE_AUTHORITY,
+    ROUTE_COMPILE_AUTHORITY,
+    ROUTE_DECISION_SCHEMA_VERSION,
+    SEARCH_RESULTS_SCHEMA_VERSION,
     RoutingEvalCases,
     RoutingEvalReport,
     RouteDecisionContract,
@@ -503,8 +508,8 @@ def run_framework_contract_artifacts_cli(
 class RustRouteAdapter:
     """Call the repository Rust route engine for final route decisions."""
 
-    search_schema_version = "router-rs-search-results-v1"
-    route_decision_schema_version = "router-rs-route-decision-v1"
+    search_schema_version = SEARCH_RESULTS_SCHEMA_VERSION
+    route_decision_schema_version = ROUTE_DECISION_SCHEMA_VERSION
     execution_schema_version = "router-rs-execute-response-v1"
     route_policy_schema_version = "router-rs-route-policy-v1"
     route_resolution_schema_version = "router-rs-route-resolution-v1"
@@ -538,9 +543,9 @@ class RustRouteAdapter:
     framework_alias_schema_version = "router-rs-framework-alias-v1"
     claude_hook_schema_version = "router-rs-claude-hook-response-v1"
     routing_eval_schema_version = "routing-eval-v1"
-    route_authority = "rust-route-core"
+    route_authority = ROUTE_AUTHORITY
     execution_authority = "rust-execution-cli"
-    compile_authority = "rust-route-compiler"
+    compile_authority = ROUTE_COMPILE_AUTHORITY
     runtime_control_plane_authority = "rust-runtime-control-plane"
     sandbox_control_authority = "rust-sandbox-control"
     background_control_authority = "rust-background-control"
@@ -658,33 +663,25 @@ class RustRouteAdapter:
         *,
         dry_run: bool,
         kernel_contract: Mapping[str, Any] | None = None,
-        metadata_bridge: Mapping[str, Any] | None = None,
-    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-        """Resolve the Rust-owned execution contract bundle for one response shape."""
+    ) -> dict[str, Any] | None:
+        """Resolve the Rust-owned execution contract for one response shape."""
 
         resolved_contract = dict(kernel_contract) if isinstance(kernel_contract, Mapping) else None
-        resolved_bridge = (
-            normalize_execution_kernel_metadata_bridge(metadata_bridge)
-            if metadata_bridge is not None
-            else None
-        )
         response_shape = (
             EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
             if dry_run
             else EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
         )
-        if resolved_contract is not None and resolved_bridge is not None:
+        if resolved_contract is not None:
             expectations = resolve_execution_kernel_expectations(resolved_contract)
-            validated_contract = validate_execution_kernel_steady_state_metadata(
+            return validate_execution_kernel_steady_state_metadata(
                 metadata=resolved_contract,
                 execution_kernel=expectations["execution_kernel"],
                 execution_kernel_authority=expectations["execution_kernel_authority"],
                 execution_kernel_delegate=expectations["execution_kernel_delegate"],
                 execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
                 response_shape=response_shape,
-                metadata_bridge=resolved_bridge,
             )
-            return dict(validated_contract), resolved_bridge
 
         control_plane_descriptor = self.runtime_control_plane()
         services = control_plane_descriptor.get("services")
@@ -694,41 +691,25 @@ class RustRouteAdapter:
         if not isinstance(service_descriptor, Mapping):
             raise RuntimeError("runtime control plane is missing execution service descriptor.")
 
-        if resolved_bridge is None:
-            bridge_payload = service_descriptor.get("kernel_metadata_bridge")
-            if bridge_payload is not None:
-                if not isinstance(bridge_payload, Mapping):
-                    raise RuntimeError(
-                        "runtime control plane execution descriptor returned an invalid kernel_metadata_bridge."
-                    )
-                resolved_bridge = normalize_execution_kernel_metadata_bridge(bridge_payload)
-
-        if resolved_contract is None:
-            contract_modes = service_descriptor.get("kernel_contract_by_mode")
-            contract_payload = (
-                contract_modes.get(response_shape)
-                if isinstance(contract_modes, Mapping)
-                else None
+        contract_modes = service_descriptor.get("kernel_contract_by_mode")
+        contract_payload = (
+            contract_modes.get(response_shape)
+            if isinstance(contract_modes, Mapping)
+            else None
+        )
+        if not isinstance(contract_payload, Mapping):
+            raise RuntimeError(
+                "runtime control plane execution descriptor is missing "
+                f"kernel_contract_by_mode.{response_shape}."
             )
-            if not isinstance(contract_payload, Mapping):
-                raise RuntimeError(
-                    "runtime control plane execution descriptor is missing "
-                    f"kernel_contract_by_mode.{response_shape}."
-                )
-            expectations = resolve_execution_kernel_expectations(contract_payload)
-            resolved_contract = validate_execution_kernel_steady_state_metadata(
-                metadata=contract_payload,
-                execution_kernel=expectations["execution_kernel"],
-                execution_kernel_authority=expectations["execution_kernel_authority"],
-                execution_kernel_delegate=expectations["execution_kernel_delegate"],
-                execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
-                response_shape=response_shape,
-                metadata_bridge=resolved_bridge,
-            )
-
-        return (
-            dict(resolved_contract) if resolved_contract is not None else None,
-            resolved_bridge,
+        expectations = resolve_execution_kernel_expectations(contract_payload)
+        return validate_execution_kernel_steady_state_metadata(
+            metadata=contract_payload,
+            execution_kernel=expectations["execution_kernel"],
+            execution_kernel_authority=expectations["execution_kernel_authority"],
+            execution_kernel_delegate=expectations["execution_kernel_delegate"],
+            execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
+            response_shape=response_shape,
         )
 
     def decode_execution_payload(
@@ -737,16 +718,14 @@ class RustRouteAdapter:
         *,
         dry_run: bool | None = None,
         kernel_contract: Mapping[str, Any] | None = None,
-        metadata_bridge: Mapping[str, Any] | None = None,
     ) -> RunTaskResponse:
         """Decode one router-rs execution payload against the runtime contract bundle."""
 
         if dry_run is None:
             dry_run = not bool(payload.get("live_run"))
-        resolved_contract, resolved_bridge = self._resolve_runtime_execution_contract_bundle(
+        resolved_contract = self._resolve_runtime_execution_contract_bundle(
             dry_run=dry_run,
             kernel_contract=kernel_contract,
-            metadata_bridge=metadata_bridge,
         )
         expectations = resolve_execution_kernel_expectations(resolved_contract)
         return decode_router_rs_execution_response(
@@ -757,7 +736,6 @@ class RustRouteAdapter:
             execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
             execution_kernel_delegate_family=expectations["execution_kernel_delegate_family"],
             execution_kernel_delegate_impl=expectations["execution_kernel_delegate_impl"],
-            metadata_bridge=resolved_bridge,
         )
 
     async def execute_runtime_request(
@@ -766,7 +744,6 @@ class RustRouteAdapter:
         *,
         settings: RuntimeSettings,
         kernel_contract: Mapping[str, Any] | None = None,
-        metadata_bridge: Mapping[str, Any] | None = None,
     ) -> RunTaskResponse:
         """Execute one normalized runtime request through router-rs."""
 
@@ -778,7 +755,6 @@ class RustRouteAdapter:
                 response_payload,
                 dry_run=request.dry_run,
                 kernel_contract=kernel_contract,
-                metadata_bridge=metadata_bridge,
             )
         except RuntimeError as exc:
             raise RouterRsInfrastructureError(str(exc)) from exc
@@ -789,7 +765,6 @@ class RustRouteAdapter:
         *,
         settings: RuntimeSettings,
         kernel_contract: Mapping[str, Any] | None = None,
-        metadata_bridge: Mapping[str, Any] | None = None,
     ) -> str | None:
         """Resolve the Rust-owned dry-run prompt preview for one request."""
 
@@ -802,7 +777,6 @@ class RustRouteAdapter:
                 response_payload,
                 dry_run=True,
                 kernel_contract=kernel_contract,
-                metadata_bridge=metadata_bridge,
             ).prompt_preview
         except RuntimeError as exc:
             raise RouterRsInfrastructureError(str(exc)) from exc
@@ -831,17 +805,10 @@ class RustRouteAdapter:
             [*self._binary_command(), *args],
             failure_label="route engine",
         )
-        if payload.get("decision_schema_version") != self.route_decision_schema_version:
-            raise RuntimeError(
-                "Rust route engine returned an unknown decision schema: "
-                f"{payload.get('decision_schema_version')!r}"
-            )
-        if payload.get("authority") != self.route_authority:
-            raise RuntimeError(
-                "Rust route engine returned an unexpected authority marker: "
-                f"{payload.get('authority')!r}"
-            )
-        return RouteDecisionContract.model_validate(payload)
+        return self._route_decision_contract_from_payload(
+            payload,
+            failure_label="Rust route engine",
+        )
 
     def route_inline_contract(
         self,
@@ -870,17 +837,10 @@ class RustRouteAdapter:
             [*self._binary_command(), "--stdio-json"],
             failure_label="inline route engine",
         )
-        if payload.get("decision_schema_version") != self.route_decision_schema_version:
-            raise RuntimeError(
-                "Rust inline route engine returned an unknown decision schema: "
-                f"{payload.get('decision_schema_version')!r}"
-            )
-        if payload.get("authority") != self.route_authority:
-            raise RuntimeError(
-                "Rust inline route engine returned an unexpected authority marker: "
-                f"{payload.get('authority')!r}"
-            )
-        return RouteDecisionContract.model_validate(payload)
+        return self._route_decision_contract_from_payload(
+            payload,
+            failure_label="Rust inline route engine",
+        )
 
     def search_skill_matches_contract(
         self,
@@ -906,17 +866,10 @@ class RustRouteAdapter:
             raise RuntimeError(
                 f"Rust search engine returned an unexpected payload: {resolved!r}"
             )
-        contract = SearchMatchesContract.model_validate(resolved)
-        if contract.search_schema_version != self.search_schema_version:
-            raise RuntimeError(
-                "Rust search engine returned an unknown schema: "
-                f"{contract.search_schema_version!r}"
-            )
-        if contract.authority != self.route_authority:
-            raise RuntimeError(
-                "Rust search engine returned an unexpected authority marker: "
-                f"{contract.authority!r}"
-            )
+        contract = self._search_matches_contract_from_payload(
+            resolved,
+            failure_label="Rust search engine",
+        )
         if contract.query != query:
             raise RuntimeError(
                 "Rust search engine returned an unexpected query echo: "
@@ -934,8 +887,34 @@ class RustRouteAdapter:
 
         return self.search_skill_matches_contract(query=query, limit=limit).matches
 
+    def _route_decision_contract_from_payload(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        failure_label: str,
+    ) -> RouteDecisionContract:
+        try:
+            return RouteDecisionContract.model_validate(payload)
+        except ValidationError as exc:
+            raise RuntimeError(
+                f"{failure_label} returned an invalid typed decision contract"
+            ) from exc
+
+    def _search_matches_contract_from_payload(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        failure_label: str,
+    ) -> SearchMatchesContract:
+        try:
+            return SearchMatchesContract.model_validate(payload)
+        except ValidationError as exc:
+            raise RuntimeError(
+                f"{failure_label} returned an invalid typed search contract"
+            ) from exc
+
     def compiled_binary(self) -> Path | None:
-        """Expose the resolved router binary for thin Python CLI shims."""
+        """Expose the resolved router binary for thin host CLI shims."""
 
         return self._resolved_binary()
 
@@ -1284,21 +1263,21 @@ class RustRouteAdapter:
             "runtime_storage",
             request_payload,
             [*self._binary_command(), *args],
-            failure_label="runtime storage bridge",
+            failure_label="runtime storage transport",
         )
         if resolved.get("schema_version") != self.runtime_storage_schema_version:
             raise RuntimeError(
-                "Rust runtime storage bridge returned an unknown schema: "
+                "Rust runtime storage transport returned an unknown schema: "
                 f"{resolved.get('schema_version')!r}"
             )
         if resolved.get("authority") != self.runtime_storage_authority:
             raise RuntimeError(
-                "Rust runtime storage bridge returned an unexpected authority marker: "
+                "Rust runtime storage transport returned an unexpected authority marker: "
                 f"{resolved.get('authority')!r}"
             )
         if resolved.get("operation") != operation:
             raise RuntimeError(
-                "Rust runtime storage bridge returned an unexpected operation echo: "
+                "Rust runtime storage transport returned an unexpected operation echo: "
                 f"{resolved.get('operation')!r}"
             )
         return resolved
@@ -1311,7 +1290,7 @@ class RustRouteAdapter:
         sqlite_db_path: Path | None = None,
         storage_root: Path | None = None,
     ) -> bool:
-        """Check one runtime storage object through the Rust storage bridge."""
+        """Check one runtime storage object through the Rust storage stream."""
 
         resolved = self._runtime_storage_contract(
             operation="exists",
@@ -1322,7 +1301,7 @@ class RustRouteAdapter:
         )
         exists = resolved.get("exists")
         if not isinstance(exists, bool):
-            raise RuntimeError("Rust runtime storage bridge returned an invalid exists flag.")
+            raise RuntimeError("Rust runtime storage transport returned an invalid exists flag.")
         return exists
 
     def runtime_storage_read_text(
@@ -1333,7 +1312,7 @@ class RustRouteAdapter:
         sqlite_db_path: Path | None = None,
         storage_root: Path | None = None,
     ) -> str:
-        """Read one UTF-8 runtime storage payload through the Rust storage bridge."""
+        """Read one UTF-8 runtime storage payload through the Rust storage stream."""
 
         resolved = self._runtime_storage_contract(
             operation="read_text",
@@ -1344,7 +1323,7 @@ class RustRouteAdapter:
         )
         payload_text = resolved.get("payload_text")
         if not isinstance(payload_text, str):
-            raise RuntimeError("Rust runtime storage bridge returned a missing payload_text.")
+            raise RuntimeError("Rust runtime storage transport returned a missing payload_text.")
         return payload_text
 
     def runtime_storage_write_text(
@@ -1356,7 +1335,7 @@ class RustRouteAdapter:
         sqlite_db_path: Path | None = None,
         storage_root: Path | None = None,
     ) -> int:
-        """Write one UTF-8 runtime storage payload through the Rust storage bridge."""
+        """Write one UTF-8 runtime storage payload through the Rust storage stream."""
 
         resolved = self._runtime_storage_contract(
             operation="write_text",
@@ -1368,7 +1347,7 @@ class RustRouteAdapter:
         )
         bytes_written = resolved.get("bytes_written")
         if not isinstance(bytes_written, int) or bytes_written < 0:
-            raise RuntimeError("Rust runtime storage bridge returned invalid bytes_written.")
+            raise RuntimeError("Rust runtime storage transport returned invalid bytes_written.")
         return bytes_written
 
     def runtime_storage_append_text(
@@ -1380,7 +1359,7 @@ class RustRouteAdapter:
         sqlite_db_path: Path | None = None,
         storage_root: Path | None = None,
     ) -> int:
-        """Append UTF-8 runtime storage payload text through the Rust storage bridge."""
+        """Append UTF-8 runtime storage payload text through the Rust storage stream."""
 
         resolved = self._runtime_storage_contract(
             operation="append_text",
@@ -1392,7 +1371,7 @@ class RustRouteAdapter:
         )
         bytes_written = resolved.get("bytes_written")
         if not isinstance(bytes_written, int) or bytes_written < 0:
-            raise RuntimeError("Rust runtime storage bridge returned invalid bytes_written.")
+            raise RuntimeError("Rust runtime storage transport returned invalid bytes_written.")
         return bytes_written
 
     def compile_codex_profile_artifacts(
@@ -2120,7 +2099,7 @@ class RustRouteAdapter:
             [*self._binary_command(), *args],
             failure_label="attached runtime event replay",
         )
-        if resolved.get("schema_version") != "runtime-event-bridge-v1":
+        if resolved.get("schema_version") != "runtime-event-stream-v1":
             raise RuntimeError(
                 "Rust attached runtime event replay returned an unknown schema: "
                 f"{resolved.get('schema_version')!r}"
@@ -2322,7 +2301,7 @@ class RustRouteAdapter:
         resolved_binary = self._ensure_binary_current()
         if resolved_binary is None:
             raise RuntimeError(
-                "router-rs requires a prebuilt binary; build scripts/router-rs before running the Python host runtime."
+                "router-rs requires a prebuilt binary; build scripts/router-rs before running the host runtime."
             )
         return [str(resolved_binary)]
 
@@ -2365,7 +2344,7 @@ class RustRouteAdapter:
             return None
         raise RuntimeError(
             "router-rs prebuilt binary is stale; rebuild scripts/router-rs before "
-            "running the Python host runtime."
+            "running the host runtime."
         )
 
     def _latest_source_mtime(self) -> float:

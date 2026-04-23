@@ -11,7 +11,7 @@
   - Python router facade / projection
   - runtime health / control-plane 聚合层
   - runtime registry / host-entrypoint materialization
-  - hook bridge / session artifact / memory-support 这类脚本型 glue
+  - hook bridge / session artifact 这类脚本型 glue
 - 当前代码里还能直接看到这些残余面：
   - `framework_runtime/src/framework_runtime/router.py`
   - `framework_runtime/src/framework_runtime/runtime.py`
@@ -19,7 +19,6 @@
   - `framework_runtime/src/framework_runtime/runtime_registry.py`
   - `scripts/framework_hook_bridge.py`
   - `scripts/write_session_artifacts.py`
-  - `scripts/memory_support.py`
   - `scripts/materialize_cli_host_entrypoints.py`
   - `scripts/install_codex_native_integration.py`
 - 本轮目标不是“一次性删光所有 Python 文件”，而是把**framework/runtime/control-plane 的事实主权**继续推给 Rust，让 Python 不再持有关键路径事实来源。
@@ -38,7 +37,7 @@
 | 2 | Runtime control-plane 聚合去 Python 主面 | 把 `runtime.py` / `services.py` 中 control-plane、health、service-descriptor 聚合继续下沉到 Rust | `framework_runtime/src/framework_runtime/runtime.py`, `framework_runtime/src/framework_runtime/services.py`, runtime/trace/service 相关测试 |
 | 3 | Runtime registry / host-entrypoint materialization Rust-owned | 把 runtime registry 读取、framework alias entrypoint、materialization 真源继续推向 Rust，减少 Python 物化器的事实权 | `framework_runtime/src/framework_runtime/runtime_registry.py`, `scripts/materialize_cli_host_entrypoints.py`, `scripts/install_codex_native_integration.py`, `scripts/router-rs/src/main.rs`, `scripts/host-integration-rs/src/main.rs`, registry/materialization 相关测试 |
 | 4 | Hook bridge / artifact writer 脚本 Rust-first 化 | 把 hook dispatch、session artifact 写入、部分 deterministic audit/bridge 逻辑从 Python 脚本切到 Rust/更薄包装 | `scripts/framework_hook_bridge.py`, `scripts/write_session_artifacts.py`, `scripts/router-rs/src/main.rs`, hook/artifact 相关测试 |
-| 5 | Memory-support / continuity glue 再收口 | 把 deterministic continuity / memory-support 辅助面继续压薄，减少 Python 对恢复锚点和 shared memory 结构的手工拼装 | `scripts/memory_support.py`, `scripts/install_codex_native_integration.py`, continuity/memory 相关测试 |
+| 5 | Continuity 读写彻底 Rust 化 | 把 deterministic continuity / shared memory 结构主面彻底收口到 Rust，移除旧 Python helper 与其专属测试入口 | `scripts/install_codex_native_integration.py`, continuity/memory 相关测试 |
 | 6 | Python 残余面最终清点与退场 | 在前五项完成后做一次系统性退场：删掉不再需要的 Python compatibility shim，只保留必要薄包装与宿主私有脚本 | 仅限本轮新增或确认可删除的 Python shim 文件、相关 docs、退场测试 |
 
 ---
@@ -206,22 +205,20 @@
 
 ---
 
-## 5. Memory-support / continuity glue 再收口
+## 5. Continuity 读写彻底 Rust 化
 
 ### 当前状态
 
-- `scripts/memory_support.py` 仍承担 shared memory / continuity 相关辅助逻辑。
-- 这部分不是要把 memory policy 搬进 Rust，而是把 deterministic 的恢复锚点、结构拼装、安装 glue 压薄。
+- 连续性主路径已经切到 Rust runtime snapshot / memory recall / session artifact writer。
+- 剩余工作重点是删除旧 Python continuity helper 的遗留入口与文案，不再保留双轨真源。
 
 ### 目标
 
-继续压缩 deterministic continuity/memory-support glue，让 Python 不再手工持有恢复锚点结构与安装逻辑的主面。
+保持 memory policy 边界不变，但让 deterministic continuity / shared memory 结构只由 Rust 主面负责。
 
 ### 独占写入范围
 
-- `scripts/memory_support.py`
 - `scripts/install_codex_native_integration.py`（仅限 memory/continuity glue）
-- `tests/test_memory_support.py`
 - 必要时新增 continuity / recovery 定向测试
 
 ### 禁止越界
@@ -233,15 +230,15 @@
 
 ### 交付物
 
-- 更薄的 memory-support / continuity glue
+- Rust-owned continuity / shared memory read-write path
 - recovery / continuity regression tests
-- 明确区分 deterministic structure 与 policy surface
+- 删除旧 Python helper 与专属测试入口
 
 ### 验收标准
 
-- shared memory / continuity 的 deterministic structure 不再主要靠 Python 手工拼装
+- shared memory / continuity 的 deterministic structure 只由 Rust 主面承担
 - policy 仍明确留在非 Rust policy 面，不会混淆边界
-- 恢复锚点读取 / 结构校验 / 安装 glue 继续 fail-closed
+- 恢复锚点读取 / 结构校验 / 安装 glue 继续 fail-closed，且不再依赖旧 Python helper
 
 ---
 

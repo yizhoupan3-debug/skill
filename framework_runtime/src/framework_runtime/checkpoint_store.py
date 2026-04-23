@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from framework_runtime.rust_router import RustRouteAdapter
 from framework_runtime.trace import (
     JsonlTraceEventSink,
-    RuntimeEventBridge,
+    RuntimeEventStream,
     RuntimeEventHandoff,
     RuntimeEventTransport,
     RuntimeTraceRecorder,
@@ -493,7 +493,7 @@ class FilesystemRuntimeCheckpointer:
 
         return self.storage_backend.capabilities()
 
-    def build_trace_recorder(self, *, event_bridge: RuntimeEventBridge | None = None) -> RuntimeTraceRecorder:
+    def build_trace_recorder(self, *, event_stream: RuntimeEventStream | None = None) -> RuntimeTraceRecorder:
         """Construct the recorder against the current backend paths."""
 
         paths = self.describe_paths()
@@ -509,7 +509,7 @@ class FilesystemRuntimeCheckpointer:
         return RuntimeTraceRecorder(
             output_path=paths.trace_output_path,
             event_sink=event_sink,
-            event_bridge=event_bridge,
+            event_stream=event_stream,
             storage_backend=self.storage_backend,
             control_plane_descriptor=self._control_plane.trace_service,
             rust_adapter=self._rust_adapter,
@@ -726,7 +726,7 @@ class FilesystemRuntimeCheckpointer:
         """Return the canonical recovery artifact set for the current runtime.
 
         This recovery surface intentionally lists the root continuity artifacts.
-        `artifacts/current/*` remains the bridge-facing mirror and should stay in
+        `artifacts/current/*` remains the stream-facing mirror and should stay in
         sync, but it is not the recovery anchor returned here.
         """
 

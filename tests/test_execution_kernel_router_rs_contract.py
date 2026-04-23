@@ -18,8 +18,7 @@ if str(RUNTIME_SRC) not in sys.path:
 
 from framework_runtime.execution_kernel_contracts import (
     DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS,
-    EXECUTION_KERNEL_BRIDGE_AUTHORITY,
-    EXECUTION_KERNEL_BRIDGE_KIND,
+    EXECUTION_KERNEL_AUTHORITY,
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_AUTHORITY_METADATA_KEY,
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_METADATA_KEY,
     EXECUTION_KERNEL_COMPATIBILITY_AGENT_CONTRACT_VERSION,
@@ -28,6 +27,7 @@ from framework_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
     EXECUTION_KERNEL_FALLBACK_REASON_METADATA_KEY,
     EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
+    EXECUTION_KERNEL_KIND,
     EXECUTION_KERNEL_METADATA_SCHEMA_VERSION,
     EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY,
     EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY,
@@ -50,6 +50,9 @@ from framework_runtime.execution_kernel_contracts import (
 )
 from framework_runtime.rust_router import RouterRsInfrastructureError, RustRouteAdapter
 from framework_runtime.schemas import ExecutionKernelRequest, RoutingResult, SkillMetadata
+
+EXECUTION_KERNEL_BRIDGE_KIND = EXECUTION_KERNEL_KIND
+EXECUTION_KERNEL_BRIDGE_AUTHORITY = EXECUTION_KERNEL_AUTHORITY
 
 
 def _routing_result() -> RoutingResult:
@@ -127,51 +130,16 @@ def _steady_state_kernel_contract(
     }
 
 
-def _default_metadata_bridge() -> dict[str, object]:
-    return {
-        "steady_state_fields": [*EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS],
-        "runtime_fields": {
-            "shared": ["trace_event_count", "trace_output_path"],
-            "live_primary_required": [*LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS],
-            "live_primary_passthrough": [*LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS],
-            "dry_run_required": [*DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS],
-        },
-        "metadata_keys": {
-            "metadata_schema_version": EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY,
-            "contract_mode": EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
-            "fallback_policy": EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
-            "response_shape": EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
-            "prompt_preview_owner": EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY,
-            "model_id_source": EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY,
-        },
-        "defaults": {
-            "contract_mode": EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
-            "fallback_policy": EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
-            "prompt_preview_owner_by_mode": {
-                EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY: LIVE_PRIMARY_PROMPT_PREVIEW_OWNER,
-                EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN: LIVE_PRIMARY_PROMPT_PREVIEW_OWNER,
-            },
-            "live_primary_model_id_source": LIVE_PRIMARY_MODEL_ID_SOURCE,
-            "supported_response_shapes": [
-                EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
-                EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
-            ],
-        },
-    }
-
-
 def _runtime_control_plane_payload(
     *,
     live_contract: dict[str, object] | None = None,
     dry_run_contract: dict[str, object] | None = None,
-    metadata_bridge: dict[str, object] | None = None,
 ) -> dict[str, object]:
     return {
         "schema_version": RustRouteAdapter.runtime_control_plane_schema_version,
         "authority": RustRouteAdapter.runtime_control_plane_authority,
         "services": {
             "execution": {
-                "kernel_metadata_bridge": metadata_bridge or _default_metadata_bridge(),
                 "kernel_contract_by_mode": {
                     EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY: (
                         live_contract
@@ -190,38 +158,6 @@ def _runtime_control_plane_payload(
         },
     }
 
-
-def _metadata_bridge_with_trace_generation() -> dict[str, object]:
-    return {
-        "steady_state_fields": [*EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS],
-        "runtime_fields": {
-            "shared": [*build_trace_runtime_metadata(trace_event_count=0, trace_output_path="").keys(), "trace_generation"],
-            "live_primary_required": [*LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS, "trace_generation"],
-            "live_primary_passthrough": [*LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS, "trace_generation"],
-            "dry_run_required": [*DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS, "trace_generation"],
-        },
-        "metadata_keys": {
-            "metadata_schema_version": EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY,
-            "contract_mode": EXECUTION_KERNEL_CONTRACT_MODE_METADATA_KEY,
-            "fallback_policy": EXECUTION_KERNEL_FALLBACK_POLICY_METADATA_KEY,
-            "response_shape": EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
-            "prompt_preview_owner": EXECUTION_KERNEL_PROMPT_PREVIEW_OWNER_METADATA_KEY,
-            "model_id_source": EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY,
-        },
-        "defaults": {
-            "contract_mode": EXECUTION_KERNEL_RUST_PRIMARY_CONTRACT_MODE,
-            "fallback_policy": EXECUTION_KERNEL_COMPATIBILITY_FALLBACK_POLICY,
-            "prompt_preview_owner_by_mode": {
-                EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY: LIVE_PRIMARY_PROMPT_PREVIEW_OWNER,
-                EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN: LIVE_PRIMARY_PROMPT_PREVIEW_OWNER,
-            },
-            "live_primary_model_id_source": LIVE_PRIMARY_MODEL_ID_SOURCE,
-            "supported_response_shapes": [
-                EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
-                EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
-            ],
-        },
-    }
 
 def _settings() -> SimpleNamespace:
     return SimpleNamespace(
@@ -610,48 +546,36 @@ def test_execution_kernel_contract_helpers_stay_rust_primary() -> None:
     )
 
 
-def test_execution_kernel_contract_core_can_follow_bridge_runtime_fields() -> None:
-    bridge = _metadata_bridge_with_trace_generation()
-
-    contract_core = build_execution_kernel_live_response_serialization_contract_core(
-        metadata_bridge=bridge
-    )
+def test_execution_kernel_contract_core_uses_fixed_rust_runtime_fields() -> None:
+    contract_core = build_execution_kernel_live_response_serialization_contract_core()
 
     assert contract_core["runtime_response_metadata_fields"]["shared"] == [
         "trace_event_count",
         "trace_output_path",
-        "trace_generation",
     ]
     assert contract_core["runtime_response_metadata_fields"]["live_primary"] == [
         "run_id",
         "status",
         *LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS,
-        "trace_generation",
         EXECUTION_KERNEL_MODEL_ID_SOURCE_METADATA_KEY,
     ]
     assert contract_core["current_response_shape_truth"]["live_primary"][
         "pass_through_metadata_fields"
-    ] == [
-        *LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS,
-        "trace_generation",
-    ]
+    ] == [*LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS]
     assert contract_core["current_response_shape_truth"]["dry_run"][
         "required_metadata_fields"
     ] == [
         *EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
         *DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS,
-        "trace_generation",
     ]
 
 
-def test_validate_router_rs_execution_metadata_uses_bridge_runtime_fields() -> None:
-    bridge = _metadata_bridge_with_trace_generation()
+def test_validate_router_rs_execution_metadata_uses_fixed_rust_runtime_fields() -> None:
     metadata = _steady_state_kernel_metadata(
-        run_id="run-bridge",
+        run_id="run-direct",
         status="completed",
         trace_event_count=9,
         trace_output_path="/tmp/TRACE_METADATA.json",
-        trace_generation=3,
         execution_mode="live",
         route_engine="rust",
         diagnostic_route_mode="none",
@@ -663,19 +587,17 @@ def test_validate_router_rs_execution_metadata_uses_bridge_runtime_fields() -> N
         usage_mode="live",
         execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
         execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
-        metadata_bridge=bridge,
     )
-    assert validated["trace_generation"] == 3
+    assert "trace_generation" not in validated
 
-    metadata.pop("trace_generation")
-    with pytest.raises(RuntimeError, match="trace_generation"):
+    metadata.pop("trace_event_count")
+    with pytest.raises(RuntimeError, match="trace_event_count"):
         validate_router_rs_execution_metadata(
             metadata=metadata,
             live_run=True,
             usage_mode="live",
             execution_kernel=EXECUTION_KERNEL_BRIDGE_KIND,
             execution_kernel_authority=EXECUTION_KERNEL_BRIDGE_AUTHORITY,
-            metadata_bridge=bridge,
         )
 
 @pytest.mark.parametrize(
@@ -836,7 +758,6 @@ def test_decode_router_rs_execution_payload_accepts_runtime_contract_bundle() ->
     response = _adapter(_settings()).decode_execution_payload(
         payload,
         kernel_contract=live_contract,
-        metadata_bridge=_default_metadata_bridge(),
     )
 
     assert response.metadata["execution_kernel"] == "rust-runtime-owned-kernel"

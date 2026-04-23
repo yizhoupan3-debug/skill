@@ -2,7 +2,7 @@
 
 ## When To Read This
 
-Read this file when you need helper API details, command examples for the bundled Python scripts, or dependency notes for a slide-generation task.
+Read this file when you need helper API details, command examples for the bundled Rust tooling, or dependency notes for a slide-generation task.
 
 ## Helper Modules
 
@@ -30,30 +30,22 @@ JavaScript helpers expect these packages when you use the corresponding features
 - Syntax highlighting: `prismjs`
 - LaTeX rendering: `mathjax-full`
 
-Python scripts expect these packages:
-
-- `Pillow`
-- `pdf2image`
-- `python-pptx`
-- `numpy`
-
-System tools used by the Python scripts:
+System tools used by Rust tooling:
 
 - `soffice` / LibreOffice for PPTX to PDF conversion
-- Poppler tools for PDF size/raster support used by `pdf2image`
+- Poppler tools for PDF size/raster support used in render paths
 - `fc-list` for font inspection
-- Optional rasterization tools for `ensure_raster_image.py`: Inkscape, ImageMagick, Ghostscript, `heif-convert`, `JxrDecApp`
+- Optional raster conversion tools for vector/unusual assets: Inkscape, ImageMagick, Ghostscript, `heif-convert`, `JxrDecApp`
 - Optional deep inspection layer: `officecli` for `outline`, `issues`, `validate`, `get`, `query`, `watch`, and batch edits against existing `.pptx`
 
 ## Script Notes
 
-- `render_slides.py`: Convert a deck to PNGs. Good for visual review and diffing.
-- `slides_test.py`: Add a gray border outside the original canvas, render, and check whether any content leaks into the border.
-- `create_montage.py`: Combine multiple rendered slide images into a single overview image.
-- `detect_font.py`: Distinguish between fonts that are missing entirely and fonts that are installed but substituted during rendering.
-- `ensure_raster_image.py`: Produce a PNG from common vector or unusual raster formats so you can inspect or place the asset easily.
-- `officecli_bridge.py`: Use local `officecli` as an optional deep inspection / preview / patch layer for existing decks and rebuild input analysis.
-- `hybrid_pipeline.py`: Orchestrate the default mixed lane: author in `deck.js`, run Rust QA, then fold in OfficeCLI audit / intake results.
+- `node scripts/pptx_tool.js render <deck>`: Convert a deck to PNGs. Good for visual review and diffing.
+- `node scripts/pptx_tool.js slides-test <deck>`: Add a gray border outside the original canvas, render, and check whether any content leaks into the border.
+- `node scripts/pptx_tool.js create-montage --input-file ...`: Combine multiple rendered slide images into a single overview image.
+- `node scripts/pptx_tool.js detect-fonts <deck>`: Distinguish between fonts that are missing entirely and fonts that are installed but substituted during rendering.
+- `node scripts/pptx_tool.js office ...`: Use local `officecli` as an optional deep inspection / preview / patch layer for existing decks and rebuild input analysis.
+- `node scripts/pptx_tool.js build-qa|qa|intake`: Orchestrate the default mixed lane: author in `deck.js`, run Rust QA, then fold in OfficeCLI audit / intake results.
 
 ## Practical Rules
 
@@ -64,4 +56,4 @@ System tools used by the Python scripts:
 - Use `valign: "top"` for content boxes that may grow.
 - Prefer native PowerPoint charts over rendered images when the chart is simple and likely to be edited later.
 - Use SVG instead of PNG for diagrams whenever possible.
-- When rebuilding from an existing `.pptx`, use `officecli_bridge.py doctor` or `officecli view/get/query` first instead of guessing the deck structure by hand.
+- When rebuilding from an existing `.pptx`, use `node scripts/pptx_tool.js office doctor` or `node scripts/pptx_tool.js office view/get/query` first instead of guessing the deck structure by hand.

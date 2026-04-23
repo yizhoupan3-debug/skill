@@ -46,13 +46,7 @@ Optional:
 ```text
 project/
 └── scripts/
-    ├── officecli_bridge.py
-    ├── hybrid_pipeline.py
-    ├── render_slides.py
-    ├── slides_test.py
-    ├── create_montage.py
-    ├── detect_font.py
-    └── ensure_raster_image.py
+    └── pptx_tool.js
 ```
 
 ## Engine Choice
@@ -71,7 +65,7 @@ When the input is an existing `.pptx`, choose one of two modes:
 2. Rebuild mode
    - Best for major redesign, consistent visual system, repeated generation, or a deck that should become reproducible from code.
    - Extract structure/assets if helpful, then rebuild in PptxGenJS and keep `deck.js` as the source of truth.
-   - Use `officecli_bridge.py doctor|get|query` first when you need stable IDs, shape paths, or a quick structural map from the old deck.
+   - Use `pptx_tool.js office doctor|get|query` first when you need stable IDs, shape paths, or a quick structural map from the old deck.
 
 Use the rebuild path when the current deck is just raw material and the real goal is a cleaner long-term authoring workflow.
 
@@ -127,10 +121,10 @@ Beauty comes from repeated visual logic, not from piling effects onto isolated s
 ## QA Loop
 
 1. Generate the `.pptx`.
-2. Run `slides_test.py` when the slide is dense or edge-tight.
-3. Render the deck to PNGs with `render_slides.py`.
-4. Build a montage with `create_montage.py` when the deck is long.
-5. Run `detect_font.py` when typography is part of the design.
+2. Run `node scripts/pptx_tool.js slides-test` when the slide is dense or edge-tight.
+3. Render the deck to PNGs with `node scripts/pptx_tool.js render`.
+4. Build a montage with `node scripts/pptx_tool.js create-montage` when the deck is long.
+5. Run `node scripts/pptx_tool.js detect-fonts` when typography is part of the design.
 6. Call `$visual-review` on suspicious slides or the montage.
 7. Fix the source `.js` and repeat.
 
@@ -143,10 +137,10 @@ Use the optional OfficeCLI lane when the deck already exists and you need strong
 Recommended commands:
 
 ```bash
-python3 scripts/officecli_bridge.py doctor deck.pptx --json
-python3 scripts/officecli_bridge.py get deck.pptx '/slide[1]' --depth 2 --json
-python3 scripts/officecli_bridge.py query deck.pptx 'shape[font=Arial]' --json
-python3 scripts/officecli_bridge.py watch deck.pptx --port 18080
+node scripts/pptx_tool.js office doctor deck.pptx --json
+node scripts/pptx_tool.js office get deck.pptx '/slide[1]' --depth 2 --json
+node scripts/pptx_tool.js office query deck.pptx 'shape[font=Arial]' --json
+node scripts/pptx_tool.js office watch deck.pptx --port 18080
 ```
 
 Use this lane for:
@@ -169,9 +163,9 @@ The strongest default in this skill is now a hybrid lane:
 Recommended commands:
 
 ```bash
-python3 scripts/hybrid_pipeline.py build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json
-python3 scripts/hybrid_pipeline.py qa deck.pptx --rendered-dir rendered --json
-python3 scripts/hybrid_pipeline.py intake old_deck.pptx --json
+node scripts/pptx_tool.js build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json
+node scripts/pptx_tool.js qa deck.pptx --rendered-dir rendered --json
+node scripts/pptx_tool.js intake old_deck.pptx --json
 ```
 
 Use `build-qa` for code-authored decks and `intake` for existing-deck rebuilds.
@@ -179,7 +173,7 @@ Use `build-qa` for code-authored decks and `intake` for existing-deck rebuilds.
 For a full regression pass from the skill root, run:
 
 ```bash
-python3 scripts/smoke_test.py
+node scripts/smoke_test.js
 ```
 
 ## What To Look For In Rendered Slides

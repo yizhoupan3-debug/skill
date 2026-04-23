@@ -9,6 +9,12 @@ from typing import Any, Literal
 from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
 
+ROUTE_AUTHORITY = "rust-route-core"
+ROUTE_COMPILE_AUTHORITY = "rust-route-compiler"
+ROUTE_DECISION_SCHEMA_VERSION = "router-rs-route-decision-v1"
+SEARCH_RESULTS_SCHEMA_VERSION = "router-rs-search-results-v1"
+
+
 def _now_iso() -> str:
     """Return a canonical UTC ISO timestamp."""
 
@@ -74,8 +80,8 @@ class SearchMatchResult(BaseModel):
 class SearchMatchesContract(BaseModel):
     """Stable Rust-owned search envelope consumed by Python route helpers."""
 
-    search_schema_version: str
-    authority: str
+    search_schema_version: Literal["router-rs-search-results-v1"]
+    authority: Literal["rust-route-core"]
     query: str
     matches: list[SearchMatchResult]
 
@@ -134,7 +140,7 @@ class RoutingResult(BaseModel):
 class RouteDecisionSnapshot(BaseModel):
     """Stable route snapshot used by shadow/verify comparisons."""
 
-    engine: str
+    engine: Literal["rust"]
     selected_skill: str
     overlay_skill: str | None = None
     layer: str
@@ -147,9 +153,9 @@ class RouteDecisionSnapshot(BaseModel):
 class RouteDecisionContract(BaseModel):
     """Stable Rust-owned route decision envelope consumed by the Python host."""
 
-    decision_schema_version: str
-    authority: str
-    compile_authority: str
+    decision_schema_version: Literal["router-rs-route-decision-v1"]
+    authority: Literal["rust-route-core"]
+    compile_authority: Literal["rust-route-compiler"]
     task: str
     session_id: str
     selected_skill: str

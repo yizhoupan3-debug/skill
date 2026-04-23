@@ -26,7 +26,7 @@
 
 | ID | 任务 | 主要目标 | 独占写入范围 |
 |---|---|---|---|
-| 1 | Route Consumer Typed-First Cutover | 让 route CLI / adjacent helpers 不再做特权 raw-JSON consumer，而是稳定消费 Rust-owned typed contract | `scripts/route.py`, `framework_runtime/src/framework_runtime/rust_router.py`, `framework_runtime/src/framework_runtime/schemas.py`, 相关 route/parity 测试 |
+| 1 | Route Consumer Typed-First Cutover | 让 route CLI / adjacent helpers 不再做特权 raw-JSON consumer，而是稳定消费 Rust-owned typed contract | `scripts/router-rs/`, `framework_runtime/src/framework_runtime/rust_router.py`, `framework_runtime/src/framework_runtime/schemas.py`, 相关 route/parity 测试 |
 | 2 | Execution Kernel Metadata Canonicalization Phase B | 把 execution-kernel metadata / naming bridge 的真源继续交给 Rust，压缩 Python compatibility projection | `framework_runtime/src/framework_runtime/execution_kernel.py`, `framework_runtime/src/framework_runtime/execution_kernel_contracts.py`, `framework_runtime/src/framework_runtime/services.py`, `scripts/router-rs/src/main.rs`, 相关 execution-kernel 测试 |
 | 3 | Workspace Bootstrap / Shared Contract Parity | 把 `workspace_bootstrap` 与 host-adapter shared contract 的 Python / Rust 双实现继续锁成一条 truth | `framework_runtime/src/framework_runtime/framework_profile.py`, `framework_runtime/src/framework_runtime/host_adapters.py`, `scripts/router-rs/src/framework_profile.rs`, `docs/framework_profile_contract.md`, 相关 framework-profile / contract-artifact 测试 |
 | 4 | Process-External Attach Surface Hardening | 把 attach descriptor / replay / cleanup 的 process-external surface 再收口一层，避免 consumer 各自补第二套协议 | `framework_runtime/src/framework_runtime/event_transport.py`, `framework_runtime/src/framework_runtime/runtime.py`, 必要时 `tools/browser-mcp/src/runtime.ts`, 相关 runtime/browser-mcp 测试 |
@@ -38,7 +38,7 @@
 
 ### 当前状态
 
-- `scripts/route.py` 已经是 Rust transport shim，不再是第二套 route authority。
+- 旧 `scripts/route.py` Python shim 已退休，route/search CLI 直接走 `router-rs`。
 - 但 route-side compatibility helpers、非 runtime CLI surface、以及一些测试辅助路径，仍有 raw JSON / ad hoc hydration 的影子。
 
 ### 目标
@@ -47,7 +47,7 @@
 
 ### 独占写入范围
 
-- `scripts/route.py`
+- `scripts/router-rs/`
 - `framework_runtime/src/framework_runtime/rust_router.py`
 - `framework_runtime/src/framework_runtime/schemas.py`
 - route/parity 相关测试文件
@@ -72,7 +72,7 @@
 
 ### 任务覆盖
 
-1. 盘点 `scripts/route.py` 里仍在直接信任 payload shape 的入口。
+1. 防止 route/search CLI 重新引入 Python shim 或 raw-JSON 特权入口。
 2. 把可结构化的 route decision / match result / diff report 收口到 shared schema。
 3. 给 fixture/live parity 两条路补同一套 typed-first regression。
 

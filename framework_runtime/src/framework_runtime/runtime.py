@@ -236,7 +236,7 @@ class CodexAgnoRuntime:
         limit: int | None = 100,
         heartbeat: bool = False,
     ) -> dict[str, Any]:
-        """Expose the live event-bridge seam to host adapters and local callers."""
+        """Expose the live event-stream seam to host adapters and local callers."""
 
         return self.trace_service.subscribe(
             session_id=session_id,
@@ -247,7 +247,7 @@ class CodexAgnoRuntime:
         ).model_dump(mode="json")
 
     def cleanup_runtime_events(self, *, session_id: str | None = None, job_id: str | None = None) -> None:
-        """Release cached event-bridge state for one stream or the entire runtime."""
+        """Release cached event-stream state for one stream or the entire runtime."""
 
         self.trace_service.cleanup_stream(session_id=session_id, job_id=job_id)
 
@@ -279,7 +279,7 @@ class CodexAgnoRuntime:
         handoff_path: str | None = None,
         resume_manifest_path: str | None = None,
     ) -> dict[str, Any]:
-        """Resolve a process-external attach bridge from persisted runtime artifacts."""
+        """Resolve a process-external transport attachment from persisted runtime artifacts."""
 
         return resolve_external_runtime_event_transport(
             adapter=self.rust_adapter,
@@ -300,7 +300,7 @@ class CodexAgnoRuntime:
         limit: int | None = 100,
         heartbeat: bool = False,
     ) -> dict[str, Any]:
-        """Replay runtime events through the process-external attach bridge."""
+        """Replay runtime events through the process-external attach stream."""
 
         return subscribe_external_runtime_event_transport(
             adapter=self.rust_adapter,
@@ -321,7 +321,7 @@ class CodexAgnoRuntime:
         handoff_path: str | None = None,
         resume_manifest_path: str | None = None,
     ) -> dict[str, Any]:
-        """Describe cleanup semantics for the process-external attach bridge."""
+        """Describe cleanup semantics for the process-external attach stream."""
 
         return cleanup_external_runtime_event_transport(
             adapter=self.rust_adapter,
@@ -714,8 +714,8 @@ class CodexAgnoRuntime:
                 "trace_resume_manifest_role": handoff.resume_manifest_role,
                 "trace_resume_manifest_binding_path": transport.binding_artifact_path,
                 "trace_event_transport_path": transport.binding_artifact_path,
-                "trace_event_bridge_supported": True,
-                "trace_event_bridge_schema_version": self.trace_service.event_bridge.schema_version,
+                "trace_event_stream_supported": True,
+                "trace_event_stream_schema_version": self.trace_service.event_stream.schema_version,
                 "trace_event_transport_schema_version": TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
                 "trace_event_transport_family": transport.transport_family,
                 "trace_event_transport_endpoint_kind": transport.endpoint_kind,

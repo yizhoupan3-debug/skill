@@ -93,24 +93,18 @@ npm install pptxgenjs skia-canvas linebreak fontkit prismjs mathjax-full js-yaml
 mkdir -p assets rendered scripts
 ```
 
-Then install the QA-side Python dependencies:
-
-```bash
-python3 -m pip install --user pdf2image python-pptx
-```
-
 Optional smoke test from the skill root:
 
 ```bash
-python3 scripts/smoke_test.py
+node scripts/smoke_test.js
 ```
 
 Then copy into the workspace:
 
 - `assets/deck.template.js` as `deck.js`
 - `assets/pptxgenjs_helpers/`
-- any needed Python QA scripts from `scripts/`
-- optionally `scripts/officecli_bridge.py` when you want OfficeCLI-backed inspection or watch preview
+- `scripts/pptx_tool.js`
+- optional OfficeCLI-backed inspection helpers: call via `node scripts/pptx_tool.js office ...` when needed
 
 Optional images:
 
@@ -154,17 +148,7 @@ Cross-platform font default:
 
 - check `officecli --version`
 - if unavailable, the deck can still build and render; only the deeper OfficeCLI audit / watch path is unavailable
-- `officecli_bridge.py probe --json` is the quickest local check
-
-### `ModuleNotFoundError: No module named 'pdf2image'`
-
-- install `pdf2image`
-- ensure the same `python3` that runs the script is the one where the package was installed
-
-### `ModuleNotFoundError: No module named 'pptx'`
-
-- install `python-pptx`
-- the package name is `python-pptx`, but the import is `pptx`
+- `node scripts/pptx_tool.js office probe --json` is the quickest local check
 
 ## Smoke-Test Result
 
@@ -174,20 +158,20 @@ Verified locally on this machine on March 18, 2026:
 - `soffice --version` reports `LibreOffice 26.2.1.2`
 - `python3 -m pip install --user pdf2image python-pptx` succeeded
 - the template generated a real `.pptx`
-- `render_slides.py` successfully rendered that `.pptx` into slide PNGs
+- `node scripts/pptx_tool.js render` successfully rendered that `.pptx` into slide PNGs
 
 Useful OfficeCLI audit commands after generation:
 
 ```bash
-python3 scripts/officecli_bridge.py doctor deck.pptx --json
-python3 scripts/officecli_bridge.py outline deck.pptx --json
-python3 scripts/officecli_bridge.py watch deck.pptx --port 18080
+node scripts/pptx_tool.js office doctor deck.pptx --json
+node scripts/pptx_tool.js office outline deck.pptx --json
+node scripts/pptx_tool.js office watch deck.pptx --port 18080
 ```
 
 Recommended mixed-lane commands:
 
 ```bash
-python3 scripts/hybrid_pipeline.py build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json
-python3 scripts/hybrid_pipeline.py qa deck.pptx --rendered-dir rendered --json
-python3 scripts/hybrid_pipeline.py intake old_deck.pptx --json
+node scripts/pptx_tool.js build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json
+node scripts/pptx_tool.js qa deck.pptx --rendered-dir rendered --json
+node scripts/pptx_tool.js intake old_deck.pptx --json
 ```

@@ -32,9 +32,14 @@ This skill owns **data acquisition, validation, normalization, and export only**
 - **Capital / valuation metrics** (market cap, PE, PB, dividend yield, beta, etc.)
 - Backtest export files
 
-### Verified no-token sources
-- Crypto: `CCXT`
-- U.S. stocks: `yfinance` (OHLCV + fundamentals + holders + capital), `Stooq` (OHLCV only)
+### Runtime split
+- Rust core: OHLCV fetching, retries/timeouts, probe concurrency, backtest export
+- Python layer: fundamentals, holders, capital metrics, China index / A-share data
+
+### Current source status
+- Crypto: Rust native HTTP clients for `binance`, `kraken`, `coinbase`
+- U.S. stocks: Rust native Yahoo chart fetcher for OHLCV; Python `yfinance` still owns fundamentals / holders / capital
+- U.S. `Stooq`: keep as optional fallback only; in this workspace it currently returns an apikey gate instead of public CSV
 - China: `AKShare` (OHLCV + index data + fundamentals + holders + capital)
 
 ---
@@ -43,6 +48,7 @@ This skill owns **data acquisition, validation, normalization, and export only**
 
 - Skill doc: `/Users/joe/Documents/skill/skills/financial-data-fetching/SKILL.md`
 - README: `/Users/joe/Documents/skill/skills/financial-data-fetching/README.md`
+- Rust core: `/Users/joe/Documents/skill/rust_tools/financial_data_rs/`
 - Python package: `/Users/joe/Documents/skill/skills/financial-data-fetching/financial_data/`
 - CLI: `/Users/joe/Documents/skill/skills/financial-data-fetching/scripts/financial_data_cli.py`
 - Probe script: `/Users/joe/Documents/skill/skills/financial-data-fetching/scripts/validate_financial_data_sources.py`

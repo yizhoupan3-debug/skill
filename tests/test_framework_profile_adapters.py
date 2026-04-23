@@ -75,7 +75,7 @@ from framework_runtime.rust_router import RustRouteAdapter
 import framework_runtime.rust_router as rust_router_module
 from framework_runtime.runtime_registry import framework_native_aliases
 from framework_runtime.trace import (
-    TRACE_EVENT_BRIDGE_SCHEMA_VERSION,
+    TRACE_EVENT_STREAM_SCHEMA_VERSION,
     TRACE_EVENT_TRANSPORT_SCHEMA_VERSION,
     TRACE_REPLAY_CURSOR_SCHEMA_VERSION,
 )
@@ -1339,8 +1339,8 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     assert aionui.host_payload["legacy_boundary"]["default_host_peer_set_member"] is False
     event_transport = aionui.host_payload["host_runtime_contract"]["event_transport"]
     assert event_transport["schema_version"] == TRACE_EVENT_TRANSPORT_SCHEMA_VERSION
-    assert event_transport["bridge_kind"] == "runtime_event_bridge"
-    assert event_transport["transport_family"] == "host-facing-bridge"
+    assert event_transport["transport_contract_kind"] == "runtime_event_stream"
+    assert event_transport["transport_family"] == "host-facing-transport"
     assert event_transport["transport_kind"] == "poll"
     assert event_transport["endpoint_kind"] == "runtime_method"
     assert event_transport["remote_capable"] is True
@@ -1354,10 +1354,10 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     assert event_transport["binding_artifact_format"] == "json"
     assert event_transport["resume_mode"] == "after_event_id"
     assert event_transport["heartbeat_supported"] is True
-    assert event_transport["cleanup_semantics"] == "bridge_cache_only"
+    assert event_transport["cleanup_semantics"] == "stream_cache_only"
     assert event_transport["cleanup_preserves_replay"] is True
     assert event_transport["replay_reseed_supported"] is True
-    assert event_transport["chunk_schema_version"] == TRACE_EVENT_BRIDGE_SCHEMA_VERSION
+    assert event_transport["chunk_schema_version"] == TRACE_EVENT_STREAM_SCHEMA_VERSION
     assert event_transport["cursor_schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
     assert event_transport["replay_supported"] is True
     assert aionui.host_payload["host_runtime_contract"]["event_stream_binding"] == event_transport
@@ -1913,7 +1913,7 @@ def test_codex_desktop_alias_retirement_status_tracks_parity_first_exit_gate() -
     assert status["primary_regression_artifact"] == "cli_family_parity_snapshot"
     assert status["codex_dual_entry_parity_artifact"] == "codex_dual_entry_parity_snapshot"
     assert status["secondary_inventory_artifact"] == "upgrade_compatibility_matrix"
-    assert status["emitter_contract"]["python_emits_alias_artifact"] is False
+    assert status["emitter_contract"]["native_emits_alias_artifact"] is False
     assert status["emitter_contract"]["rust_emits_alias_artifact"] is False
     assert status["emitter_contract"]["legacy_alias_artifact_opt_in"] is True
     assert status["retirement_gates"]["runtime_primary_identity_consumers_cleared"] is True
@@ -2110,7 +2110,7 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert status["current_response_metadata_truth"]["live_delegate_family"] == "rust-cli"
     assert status["current_response_metadata_truth"]["dry_run_delegate_family"] == "rust-cli"
     assert status["current_response_metadata_truth"]["dry_run_delegate_impl"] == "router-rs"
-    assert status["remaining_python_owned_surfaces"] == []
+    assert status["remaining_native_owned_surfaces"] == []
     assert status["retirement_readiness"]["ready"] is True
     assert status["retirement_readiness"]["runtime_control_flow_change_required"] is False
     assert status["retirement_gates"]["public_runtime_contract_externalized"] is True
@@ -2119,7 +2119,7 @@ def test_execution_and_supervisor_contract_artifacts_stay_contract_only() -> Non
     assert status["retirement_gates"]["dry_run_delegate_still_python_owned"] is False
     assert status["retirement_gates"]["compatibility_fallback_runtime_path_removed"] is True
     assert status["retirement_gates"]["explicit_compatibility_requests_rejected"] is True
-    assert status["retirement_gates"]["compatibility_fallback_agent_factory_still_python_owned"] is False
+    assert status["retirement_gates"]["compatibility_fallback_agent_factory_still_native_owned"] is False
     assert (
         status["guardrails"]["claude_host_runtime_semantics_remain_host_owned"] is True
     )
@@ -2185,7 +2185,7 @@ def test_execution_kernel_live_response_serialization_contract_stays_contract_on
     assert status["current_response_shape_truth"] == core_contract["current_response_shape_truth"]
     assert status["retirement_gates"]["response_shape_contract_externalized"] is True
     assert (
-        status["retirement_gates"]["compatibility_live_response_serialization_still_python_owned"]
+        status["retirement_gates"]["compatibility_live_response_serialization_still_native_owned"]
         is False
     )
     assert status["guardrails"]["claude_host_runtime_semantics_remain_host_owned"] is True
@@ -2479,7 +2479,7 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
         "execution_kernel_delegate_impl",
     ]
     assert payload["execution_kernel_live_fallback_retirement_status"][
-        "remaining_python_owned_surfaces"
+        "remaining_native_owned_surfaces"
     ] == []
     assert payload["execution_kernel_live_fallback_retirement_status"]["retirement_readiness"][
         "ready"
@@ -2497,7 +2497,7 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
         "trace_output_path",
     ]
     assert payload["execution_kernel_live_response_serialization_contract"]["retirement_gates"][
-        "compatibility_live_response_serialization_still_python_owned"
+        "compatibility_live_response_serialization_still_native_owned"
     ] is False
 
 

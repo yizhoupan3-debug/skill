@@ -189,7 +189,7 @@ def test_runtime_shares_one_rust_adapter_across_route_and_execute(tmp_path: Path
 
 
 def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> None:
-    """Verify the runtime remains usable when the Python-backed kernel delegate is unavailable."""
+    """Verify the runtime remains usable when the native-backed kernel delegate is unavailable."""
 
     with _project_supervisor_state() as supervisor_state_path:
         trace_path = tmp_path / "TRACE_METADATA.json"
@@ -218,7 +218,6 @@ def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> 
             "state",
             "router",
         ]
-        assert health["rustification"]["python_host_role"] == "thin-projection"
         assert health["rustification"]["rustification_status"]["runtime_primary_owner"] == "rust-control-plane"
         assert health["rustification"]["rust_owned_service_count"] >= 8
         assert health["execution_environment"]["sandbox"]["contract"]["authority"] == "rust-runtime-control-plane"
@@ -251,10 +250,10 @@ def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> 
             assert response.metadata["trace_event_sink_schema_version"] == TRACE_EVENT_SINK_SCHEMA_VERSION
             assert response.metadata["trace_replay_cursor_schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
             assert response.metadata["trace_replay_supported"] is True
-            assert response.metadata["trace_event_bridge_supported"] is True
-            assert response.metadata["trace_event_bridge_schema_version"] == "runtime-event-bridge-v1"
+            assert response.metadata["trace_event_stream_supported"] is True
+            assert response.metadata["trace_event_stream_schema_version"] == "runtime-event-stream-v1"
             assert response.metadata["trace_event_transport_schema_version"] == TRACE_EVENT_TRANSPORT_SCHEMA_VERSION
-            assert response.metadata["trace_event_transport_family"] == "host-facing-bridge"
+            assert response.metadata["trace_event_transport_family"] == "host-facing-transport"
             assert response.metadata["trace_event_transport_endpoint_kind"] == "runtime_method"
             assert response.metadata["trace_event_transport_remote_capable"] is True
             assert response.metadata["trace_event_transport_handoff_supported"] is True
@@ -308,8 +307,8 @@ def test_runtime_dry_run_works_without_agno_and_writes_trace(tmp_path: Path) -> 
             "sidecar_count": len(supervisor_state["delegation"]["delegated_sidecars"]),
         }
         assert data["stream"]["replay_supported"] is True
-        assert data["stream"]["event_bridge_supported"] is True
-        assert data["stream"]["event_bridge_schema_version"] == "runtime-event-bridge-v1"
+        assert data["stream"]["event_stream_supported"] is True
+        assert data["stream"]["event_stream_schema_version"] == "runtime-event-stream-v1"
         assert data["stream"]["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
         assert any(event["kind"] == "route.selected" for event in data["events"])
         assert any(event["kind"] == "middleware.enter" for event in data["events"])
@@ -443,7 +442,7 @@ def test_runtime_health_respects_rust_like_runtime_host_descriptor(tmp_path: Pat
             "runtime_host": {
                 "authority": "rust-runtime-control-plane",
                 "role": "runtime-orchestration",
-                "projection": "python-diagnosis-only-projection",
+                "projection": "host-diagnosis-only-projection",
                 "delegate_kind": "rust-runtime-control-plane",
                 "startup_order": ["router", "trace", "state", "memory", "execution", "background"],
                 "shutdown_order": ["background", "execution", "memory", "state", "trace", "router"],
@@ -579,8 +578,8 @@ def test_runtime_write_resume_manifest_reuses_resolved_transport(tmp_path: Path)
     assert resume_manifest["event_transport_path"] == transport.binding_artifact_path
 
 
-def test_runtime_live_path_tolerates_empty_python_prompt_context(tmp_path: Path) -> None:
-    """Live execution should not require Python middleware to populate prompt text."""
+def test_runtime_live_path_tolerates_empty_native_prompt_context(tmp_path: Path) -> None:
+    """Live execution should not require native middleware to populate prompt text."""
 
     trace_path = tmp_path / "TRACE_METADATA.json"
     runtime = CodexAgnoRuntime(
@@ -650,7 +649,7 @@ def test_runtime_live_path_tolerates_empty_python_prompt_context(tmp_path: Path)
 
 
 def test_runtime_dry_run_keeps_working_when_live_fallback_is_disabled(tmp_path: Path) -> None:
-    """Dry-run should stay available even when the Python live fallback is turned off."""
+    """Dry-run should stay available even when the native live fallback is turned off."""
 
     trace_path = tmp_path / "TRACE_METADATA.json"
     runtime = CodexAgnoRuntime(
@@ -682,8 +681,8 @@ def test_runtime_dry_run_keeps_working_when_live_fallback_is_disabled(tmp_path: 
     asyncio.run(_run())
 
 
-def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -> None:
-    """Runtime should expose the event bridge for host-adapter style consumption."""
+def test_runtime_event_stream_can_subscribe_resume_and_cleanup(tmp_path: Path) -> None:
+    """Runtime should expose the event stream for host-adapter style consumption."""
 
     with _project_supervisor_state() as supervisor_state_path:
         trace_path = tmp_path / "TRACE_METADATA.json"
@@ -700,13 +699,13 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             response = await runtime.run_task(
                 RunTaskRequest(
                     task="帮我写一个 Rust CLI 工具",
-                    session_id="bridge-session",
+                    session_id="stream-session",
                     user_id="tester",
                     dry_run=True,
                 )
             )
             first_window = runtime.subscribe_runtime_events(session_id=response.session_id, limit=2)
-            assert first_window["schema_version"] == "runtime-event-bridge-v1"
+            assert first_window["schema_version"] == "runtime-event-stream-v1"
             assert len(first_window["events"]) == 2
             assert first_window["has_more"] is True
 
@@ -757,7 +756,7 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
                 after_event_id=first_window["events"][-1]["event_id"],
                 limit=20,
             )
-            assert resumed_via_binding["schema_version"] == "runtime-event-bridge-v1"
+            assert resumed_via_binding["schema_version"] == "runtime-event-stream-v1"
             assert resumed_via_binding["events"]
             assert resumed_via_binding["after_event_id"] == first_window["events"][-1]["event_id"]
 
@@ -815,7 +814,7 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             assert transport["schema_version"] == TRACE_EVENT_TRANSPORT_SCHEMA_VERSION
             assert transport["session_id"] == response.session_id
             assert transport["transport_kind"] == "poll"
-            assert transport["transport_family"] == "host-facing-bridge"
+            assert transport["transport_family"] == "host-facing-transport"
             assert transport["endpoint_kind"] == "runtime_method"
             assert transport["remote_capable"] is True
             assert transport["remote_attach_supported"] is True
@@ -837,7 +836,7 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
             assert transport["describe_method"] == "describe_runtime_event_transport"
             assert transport["subscribe_method"] == "subscribe_runtime_events"
             assert transport["cleanup_method"] == "cleanup_runtime_events"
-            assert transport["cleanup_semantics"] == "bridge_cache_only"
+            assert transport["cleanup_semantics"] == "stream_cache_only"
             assert transport["cleanup_preserves_replay"] is True
             assert transport["replay_reseed_supported"] is True
             assert transport["latest_cursor"]["schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
@@ -887,7 +886,7 @@ def test_runtime_event_bridge_can_subscribe_resume_and_cleanup(tmp_path: Path) -
                 heartbeat=True,
             )
             assert idle["events"] == []
-            assert idle["heartbeat"]["kind"] == "bridge.heartbeat"
+            assert idle["heartbeat"]["kind"] == "runtime.stream.heartbeat"
             assert idle["heartbeat"]["status"] == "idle"
 
             resumed_after_cleanup = runtime.subscribe_runtime_events(

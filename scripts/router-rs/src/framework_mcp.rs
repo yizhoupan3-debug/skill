@@ -21,6 +21,12 @@ const STABLE_MEMORY_FILENAMES: &[&str] = &[
     "runbooks.md",
 ];
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FrameworkMcpTransportMode {
+    ContentLength,
+    NewlineDelimited,
+}
+
 pub fn run_framework_mcp_stdio_loop(
     repo_root: Option<&Path>,
     output_dir: Option<&Path>,
@@ -35,27 +41,119 @@ pub fn run_framework_mcp_stdio_loop(
 }
 
 pub fn run_framework_mcp_stdio<R: BufRead, W: Write>(
-    input: R,
+    mut input: R,
     mut output: W,
     repo_root: &Path,
     output_dir: &Path,
 ) -> Result<(), String> {
-    for line_result in input.lines() {
-        let line =
-            line_result.map_err(|err| format!("read framework MCP request failed: {err}"))?;
-        if line.trim().is_empty() {
-            continue;
-        }
-        if let Some(response) = handle_framework_mcp_line(&line, repo_root, output_dir) {
-            let encoded = serde_json::to_string(&response)
-                .map_err(|err| format!("serialize framework MCP response failed: {err}"))?;
-            writeln!(output, "{encoded}")
-                .map_err(|err| format!("write framework MCP response failed: {err}"))?;
-            output
-                .flush()
-                .map_err(|err| format!("flush framework MCP response failed: {err}"))?;
+    let mut transport_mode = None;
+    while let Some(message) = read_framework_mcp_message(&mut input, &mut transport_mode)? {
+        if let Some(response) = handle_framework_mcp_line(&message, repo_root, output_dir) {
+            write_framework_mcp_response(
+                &mut output,
+                transport_mode.unwrap_or(FrameworkMcpTransportMode::NewlineDelimited),
+                &response,
+            )?;
         }
     }
+    Ok(())
+}
+
+fn read_framework_mcp_message<R: BufRead>(
+    input: &mut R,
+    transport_mode: &mut Option<FrameworkMcpTransportMode>,
+) -> Result<Option<String>, String> {
+    let mut first_line = String::new();
+    loop {
+        first_line.clear();
+        let bytes = input
+            .read_line(&mut first_line)
+            .map_err(|err| format!("read framework MCP request failed: {err}"))?;
+        if bytes == 0 {
+            return Ok(None);
+        }
+        if !first_line.trim().is_empty() {
+            break;
+        }
+    }
+
+    if first_line
+        .trim_start()
+        .to_ascii_lowercase()
+        .starts_with("content-length:")
+    {
+        *transport_mode = Some(FrameworkMcpTransportMode::ContentLength);
+        return read_content_length_message(input, &first_line).map(Some);
+    }
+
+    *transport_mode = Some(FrameworkMcpTransportMode::NewlineDelimited);
+    Ok(Some(
+        first_line
+            .trim_end_matches(&['\r', '\n'][..])
+            .to_string(),
+    ))
+}
+
+fn read_content_length_message<R: BufRead>(
+    input: &mut R,
+    first_header_line: &str,
+) -> Result<String, String> {
+    let mut content_length = parse_content_length_header(first_header_line)?;
+    let mut header_line = String::new();
+    loop {
+        header_line.clear();
+        let bytes = input
+            .read_line(&mut header_line)
+            .map_err(|err| format!("read framework MCP header failed: {err}"))?;
+        if bytes == 0 {
+            return Err("framework MCP header ended before blank line".to_string());
+        }
+        let trimmed = header_line.trim();
+        if trimmed.is_empty() {
+            break;
+        }
+        if trimmed.to_ascii_lowercase().starts_with("content-length:") {
+            content_length = parse_content_length_header(trimmed)?;
+        }
+    }
+
+    let mut body = vec![0_u8; content_length];
+    input
+        .read_exact(&mut body)
+        .map_err(|err| format!("read framework MCP body failed: {err}"))?;
+    String::from_utf8(body).map_err(|err| format!("decode framework MCP body failed: {err}"))
+}
+
+fn parse_content_length_header(line: &str) -> Result<usize, String> {
+    let (_, value) = line
+        .split_once(':')
+        .ok_or_else(|| format!("invalid framework MCP header: {line}"))?;
+    value
+        .trim()
+        .parse::<usize>()
+        .map_err(|err| format!("invalid framework MCP content length '{value}': {err}"))
+}
+
+fn write_framework_mcp_response<W: Write>(
+    output: &mut W,
+    transport_mode: FrameworkMcpTransportMode,
+    response: &Value,
+) -> Result<(), String> {
+    let encoded = serde_json::to_string(response)
+        .map_err(|err| format!("serialize framework MCP response failed: {err}"))?;
+    match transport_mode {
+        FrameworkMcpTransportMode::ContentLength => {
+            write!(output, "Content-Length: {}\r\n\r\n{encoded}", encoded.len())
+                .map_err(|err| format!("write framework MCP response failed: {err}"))?;
+        }
+        FrameworkMcpTransportMode::NewlineDelimited => {
+            writeln!(output, "{encoded}")
+                .map_err(|err| format!("write framework MCP response failed: {err}"))?;
+        }
+    }
+    output
+        .flush()
+        .map_err(|err| format!("flush framework MCP response failed: {err}"))?;
     Ok(())
 }
 
@@ -931,6 +1029,11 @@ mod tests {
         );
     }
 
+    fn frame_message(payload: &Value) -> String {
+        let body = serde_json::to_string(payload).expect("serialize frame");
+        format!("Content-Length: {}\r\n\r\n{body}", body.len())
+    }
+
     fn seed_runtime_artifacts(repo_root: &Path, terminal: bool) {
         let task_id = if terminal {
             "checklist-series-final-closeout-20260418210000"
@@ -1083,6 +1186,46 @@ mod tests {
             .expect("resources")
             .iter()
             .any(|item| item["uri"] == "framework://memory/project"));
+    }
+
+    #[test]
+    fn framework_mcp_stdio_supports_content_length_transport() {
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root");
+        let output_dir = temp_root("framework-mcp-content-length");
+        let input = Cursor::new(format!(
+            "{}{}",
+            frame_message(&json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})),
+            frame_message(&json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}))
+        ));
+        let mut output = Vec::new();
+        run_framework_mcp_stdio(input, &mut output, &repo_root, &output_dir).expect("run mcp");
+        let text = String::from_utf8(output).expect("utf8");
+        let parts = text
+            .split("Content-Length: ")
+            .filter(|part| !part.trim().is_empty())
+            .collect::<Vec<_>>();
+        assert_eq!(parts.len(), 2);
+        let initialize = parts[0]
+            .split_once("\r\n\r\n")
+            .map(|(_, body)| body)
+            .expect("initialize body");
+        let tool_list = parts[1]
+            .split_once("\r\n\r\n")
+            .map(|(_, body)| body)
+            .expect("tool list body");
+        let initialize_payload =
+            serde_json::from_str::<Value>(initialize).expect("parse initialize response");
+        let tools_payload =
+            serde_json::from_str::<Value>(tool_list).expect("parse tool response");
+        assert_eq!(initialize_payload["result"]["serverInfo"]["name"], SERVER_NAME);
+        assert!(tools_payload["result"]["tools"]
+            .as_array()
+            .expect("tools")
+            .iter()
+            .any(|tool| tool["name"] == "framework_bootstrap_refresh"));
     }
 
     #[test]

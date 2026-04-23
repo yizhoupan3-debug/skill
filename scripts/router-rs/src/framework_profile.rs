@@ -3053,7 +3053,7 @@ fn build_codex_desktop_alias_retirement_status() -> Map<String, Value> {
 
     let mut emitter_contract = Map::new();
     emitter_contract.insert(
-        "python_emits_alias_artifact".to_string(),
+        "native_emits_alias_artifact".to_string(),
         Value::Bool(false),
     );
     emitter_contract.insert("rust_emits_alias_artifact".to_string(), Value::Bool(false));
@@ -3746,7 +3746,7 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         Value::String("router-rs".to_string()),
     );
 
-    let remaining_python_owned_surfaces = Value::Array(vec![]);
+    let remaining_native_owned_surfaces = Value::Array(vec![]);
 
     let mut retirement_readiness = Map::new();
     retirement_readiness.insert("ready".to_string(), Value::Bool(true));
@@ -3814,23 +3814,23 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         Value::Bool(true),
     );
     retirement_gates.insert(
-        "dry_run_prompt_preview_still_python_owned".to_string(),
+        "dry_run_prompt_preview_still_native_owned".to_string(),
         Value::Bool(false),
     );
     retirement_gates.insert(
-        "compatibility_fallback_agent_factory_still_python_owned".to_string(),
+        "compatibility_fallback_agent_factory_still_native_owned".to_string(),
         Value::Bool(false),
     );
     retirement_gates.insert(
-        "compatibility_live_response_serialization_still_python_owned".to_string(),
+        "compatibility_live_response_serialization_still_native_owned".to_string(),
         Value::Bool(false),
     );
     retirement_gates.insert(
-        "compatibility_fallback_reason_metadata_still_python_owned".to_string(),
+        "compatibility_fallback_reason_metadata_still_native_owned".to_string(),
         Value::Bool(false),
     );
     retirement_gates.insert(
-        "default_runtime_python_fallback_retired".to_string(),
+        "default_runtime_native_fallback_retired".to_string(),
         Value::Bool(true),
     );
     retirement_gates.insert(
@@ -3886,8 +3886,8 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         Value::Object(current_response_metadata_truth),
     );
     payload.insert(
-        "remaining_python_owned_surfaces".to_string(),
-        remaining_python_owned_surfaces,
+        "remaining_native_owned_surfaces".to_string(),
+        remaining_native_owned_surfaces,
     );
     payload.insert(
         "retirement_readiness".to_string(),
@@ -4095,7 +4095,7 @@ fn build_execution_kernel_live_response_serialization_contract() -> Map<String, 
         Value::Bool(true),
     );
     retirement_gates.insert(
-        "compatibility_live_response_serialization_still_python_owned".to_string(),
+        "compatibility_live_response_serialization_still_native_owned".to_string(),
         Value::Bool(false),
     );
     retirement_gates.insert(
@@ -4598,7 +4598,7 @@ mod tests {
         );
         assert_eq!(
             bundle.execution_kernel_live_fallback_retirement_status
-                ["remaining_python_owned_surfaces"],
+                ["remaining_native_owned_surfaces"],
             json!([])
         );
         assert_eq!(
@@ -5083,7 +5083,7 @@ mod tests {
         );
         assert_eq!(
             artifacts["execution_kernel_live_fallback_retirement_status"]["retirement_gates"]
-                ["compatibility_fallback_reason_metadata_still_python_owned"],
+                ["compatibility_fallback_reason_metadata_still_native_owned"],
             Value::Bool(false)
         );
         assert_eq!(
@@ -5093,7 +5093,7 @@ mod tests {
         );
         assert_eq!(
             artifacts["execution_kernel_live_response_serialization_contract"]["retirement_gates"]
-                ["compatibility_live_response_serialization_still_python_owned"],
+                ["compatibility_live_response_serialization_still_native_owned"],
             Value::Bool(false)
         );
         assert_eq!(
