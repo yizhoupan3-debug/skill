@@ -199,6 +199,19 @@ def install_codex_hooks_feature(config_path: Path) -> bool:
         return write_text_if_changed(config_path, updated)
 
     lines = match.group(0).rstrip("\n").splitlines()
+    saw_key = False
+    needs_change = False
+    for line in lines:
+        if not re.match(r"^\s*codex_hooks\s*=", line):
+            continue
+        saw_key = True
+        if line.strip() != "codex_hooks = true":
+            needs_change = True
+    if not saw_key:
+        needs_change = True
+    if not needs_change:
+        return False
+
     replaced = False
     updated_lines: list[str] = []
     for line in lines:

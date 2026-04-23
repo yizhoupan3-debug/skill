@@ -43,6 +43,7 @@ System tools used by the Python scripts:
 - Poppler tools for PDF size/raster support used by `pdf2image`
 - `fc-list` for font inspection
 - Optional rasterization tools for `ensure_raster_image.py`: Inkscape, ImageMagick, Ghostscript, `heif-convert`, `JxrDecApp`
+- Optional deep inspection layer: `officecli` for `outline`, `issues`, `validate`, `get`, `query`, `watch`, and batch edits against existing `.pptx`
 
 ## Script Notes
 
@@ -51,6 +52,7 @@ System tools used by the Python scripts:
 - `create_montage.py`: Combine multiple rendered slide images into a single overview image.
 - `detect_font.py`: Distinguish between fonts that are missing entirely and fonts that are installed but substituted during rendering.
 - `ensure_raster_image.py`: Produce a PNG from common vector or unusual raster formats so you can inspect or place the asset easily.
+- `officecli_bridge.py`: Use local `officecli` as an optional deep inspection / preview / patch layer for existing decks and rebuild input analysis.
 
 ## Practical Rules
 
@@ -61,3 +63,4 @@ System tools used by the Python scripts:
 - Use `valign: "top"` for content boxes that may grow.
 - Prefer native PowerPoint charts over rendered images when the chart is simple and likely to be edited later.
 - Use SVG instead of PNG for diagrams whenever possible.
+- When rebuilding from an existing `.pptx`, use `officecli_bridge.py doctor` or `officecli view/get/query` first instead of guessing the deck structure by hand.
