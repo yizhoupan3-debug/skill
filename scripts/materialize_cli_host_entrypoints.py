@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,6 +15,7 @@ if __package__ in {None, ""}:
 
 from framework_runtime.runtime_registry import framework_native_aliases, shared_project_mcp_servers
 from scripts.host_integration_rs import run_host_integration_rs
+from scripts.rust_binary_runner import ensure_rust_binary
 
 
 SHARED_AGENT_POLICY = """# Shared Agent Policy
@@ -58,8 +60,7 @@ framework policy instead of forking per-host routing or memory rules.
 
 - `skills/` holds the shared routing and workflow bodies; read the selected
   `SKILL.md` before acting.
-- `scripts/materialize_cli_host_entrypoints.py` is the source of truth for
-  `AGENT.md`, `CLAUDE.md`, `.claude/settings.json`, and `.claude/hooks/*.sh`.
+- `scripts/materialize_cli_host_entrypoints.py` renders shared host-entrypoint files and consumes the Rust Claude hook manifest from `scripts/router-rs/`.
 - `scripts/router-rs/` owns the Rust hook bridge, lifecycle commands, and
   generated-surface audits.
 - `artifacts/current/` plus `.supervisor_state.json` are the durable task-state
@@ -222,9 +223,7 @@ or manual resume, not default startup injection.
 
 Generated-first maintenance rule:
 
-- Edit `scripts/materialize_cli_host_entrypoints.py` first for
-  `.claude/settings.json`, `.claude/commands/*.md`, `.claude/hooks/README.md`,
-  and `.claude/hooks/*.sh`.
+- Edit `scripts/materialize_cli_host_entrypoints.py` first for host-entrypoint rendering, and update `scripts/router-rs/` first for Claude hook rules and contracts.
 - Treat those files as materialized outputs, not hand-authored truth.
 - `.claude/agents/*.md` stays manually maintained unless a file says otherwise.
 - Event-level lifecycle decisions live in `.claude/hooks/README.md`.
@@ -244,6 +243,35 @@ and artifact rules still come from `AGENT.md`.
 CLAUDE_ROUTER_RS_RELEASE_BINARY = "./scripts/router-rs/target/release/router-rs"
 CLAUDE_ROUTER_RS_DEBUG_BINARY = "./scripts/router-rs/target/debug/router-rs"
 CLAUDE_ROUTER_RS_MANIFEST_PATH = "./scripts/router-rs/Cargo.toml"
+
+
+def _ensure_router_rs_binary() -> Path:
+    project_root = Path(__file__).resolve().parents[1]
+    crate_root = project_root / "scripts" / "router-rs"
+    return ensure_rust_binary(
+        crate_root=crate_root,
+        binary_name="router-rs",
+        release=True,
+        allow_stale_fallback=False,
+        allow_cross_profile_fallback=True,
+        cwd=project_root,
+    )
+
+
+def _load_claude_hook_manifest() -> dict[str, Any]:
+    binary_path = _ensure_router_rs_binary()
+    completed = __import__("subprocess").run(
+        [str(binary_path), "--claude-hook-manifest-json"],
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    payload = json.loads(completed.stdout)
+    if not isinstance(payload, dict):
+        raise ValueError("router-rs hook manifest must be a JSON object")
+    return payload
+
 CLAUDE_PROJECT_DIR_SNIPPET = 'PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"'
 CLAUDE_ROUTER_RS_ALLOWED_TOOLS = """allowed-tools:
   - Bash(git rev-parse *)
@@ -375,8 +403,13 @@ def _build_claude_deepinterview_command() -> str:
     return _build_claude_framework_alias_command("deepinterview")
 
 
+def _build_claude_team_command() -> str:
+    return _build_claude_framework_alias_command("team")
+
+
 CLAUDE_AUTOPILOT_COMMAND = _build_claude_autopilot_command()
 CLAUDE_DEEPINTERVIEW_COMMAND = _build_claude_deepinterview_command()
+CLAUDE_TEAM_COMMAND = _build_claude_team_command()
 
 
 CLAUDE_AGENTS_README = """# Claude Agents Directory
@@ -461,7 +494,7 @@ Claude Code project hooks live here.
 
 Generated-first maintenance:
 
-- Edit `scripts/materialize_cli_host_entrypoints.py` first.
+- Edit `scripts/materialize_cli_host_entrypoints.py` for host-entrypoint rendering, and update `scripts/router-rs/` first for Claude hook rules and contracts.
 - Treat `.claude/settings.json`, this README, and `.claude/hooks/*.sh` as
   materialized outputs.
 - Manual Claude host guidance belongs in `.claude/agents/*.md` unless noted.
@@ -470,15 +503,15 @@ Generated-first maintenance:
 
 Active hooks:
 
-| Event | Script | Purpose |
+| Event | Runner | Purpose |
 | --- | --- | --- |
-| `UserPromptSubmit` | `user_prompt_submit.sh` | Inject the repo-local shared memory and continuity truth on every real prompt so Claude starts from the project’s own memory root instead of stale host-global recall. |
-| `PreToolUse` | `pre_tool_use_quality.sh` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |
-| `PreToolUse` | `pre_tool_use.sh` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
-| `PostToolUse` | `post_tool_use_audit.sh` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
-| `SessionEnd` | `session_end.sh` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |
-| `ConfigChange` | `config_change.sh` | Warn when generated Claude host files were edited directly instead of regenerated from source. |
-| `StopFailure` | `stop_failure.sh` | Emit a host-private hint for selected Claude stop failures without mutating shared continuity. |
+| `UserPromptSubmit` | `run.sh user-prompt-submit` | Inject the repo-local shared memory and continuity truth on every real prompt so Claude starts from the project’s own memory root instead of stale host-global recall. |
+| `PreToolUse` | `run.sh pre-tool-use-quality` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |
+| `PreToolUse` | `run.sh pre-tool-use` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
+| `PostToolUse` | `run.sh post-tool-audit` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
+| `SessionEnd` | `run.sh session-end` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |
+| `ConfigChange` | `run.sh config-change` | Warn when generated Claude host files were edited directly instead of regenerated from source. |
+| `StopFailure` | `run.sh stop-failure` | Emit a host-private hint for selected Claude stop failures without mutating shared continuity. |
 
 Everything else stays intentionally uninstalled here so startup and tool turns remain lean.
 `UserPromptSubmit` is installed here on purpose: this repo keeps memory truth under
@@ -515,23 +548,23 @@ Project hook principles:
 
 Validation commands:
 
-- `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use_quality.sh`
+- `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh pre-tool-use-quality`
   Expected: stdout returns a JSON `permissionDecision: allow` payload with `additionalContext`.
-- `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/post_tool_use_audit.sh`
+- `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh post-tool-audit`
   Expected: stdout is empty for clean edits, or JSON with top-level `additionalContext` when the new delta still looks patchy, compatibility-heavy, or wasteful.
-- `printf '{"tool_name":"MultiEdit","tool_input":{"file_path":".claude/settings.json"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use.sh`
+- `printf '{"tool_name":"MultiEdit","tool_input":{"file_path":".claude/settings.json"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh pre-tool-use`
   Expected: stdout returns a JSON `permissionDecision: deny` payload.
-- `printf '{"tool_name":"Bash","tool_input":{"command":"cp tmp .claude/settings.json"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use.sh`
+- `printf '{"tool_name":"Bash","tool_input":{"command":"cp tmp .claude/settings.json"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh pre-tool-use`
   Expected: stdout returns a JSON `permissionDecision: deny` payload for the targeted write.
-- `printf '{"tool_name":"Bash","tool_input":{"command":"printf x > .claude/settings.json"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use.sh`
+- `printf '{"tool_name":"Bash","tool_input":{"command":"printf x > .claude/settings.json"}}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh pre-tool-use`
   Expected: stdout returns a JSON `permissionDecision: deny` payload for shell redirection into a protected generated file.
-- `printf '{"hook_event_name":"UserPromptSubmit","prompt":"继续修复这个仓库的共享记忆和 runtime"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/user_prompt_submit.sh`
+- `printf '{"hook_event_name":"UserPromptSubmit","prompt":"继续修复这个仓库的共享记忆和 runtime"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh user-prompt-submit`
   Expected: stdout returns JSON with `hookSpecificOutput.additionalContext` containing repo-local memory and continuity reminders.
-- `CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/session_end.sh`
+- `CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh session-end`
   Expected: project-local memory bundle refresh plus projection refresh; may repair stale terminal resume state in `.supervisor_state.json`.
-- `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/config_change.sh`
+- `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh config-change`
   Expected: audit-only stderr guidance about regenerating generated Claude host files; exit 0.
-- `printf '{"hook_event_name":"StopFailure","error":"server_error"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/stop_failure.sh`
+- `printf '{"hook_event_name":"StopFailure","error":"server_error"}\n' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/run.sh stop-failure`
   Expected: host-private failure classification hint on stderr; exit 0.
 - `./scripts/router-rs/target/debug/router-rs --claude-hook-command session-end --repo-root "$PWD" --claude-hook-max-lines 4`
   Expected: compatibility alias for `session-end`; same consolidation and projection contract.
@@ -544,225 +577,94 @@ Validation commands:
 Shared routing policy still comes from `../../AGENT.md`.
 """
 
-CLAUDE_SESSION_END_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
-run_router_rs --claude-hook-command session-end --repo-root "$PROJECT_DIR" >/dev/null
-"""
-
-CLAUDE_CONFIG_CHANGE_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
-run_router_rs --claude-hook-audit-command config-change --repo-root "$PROJECT_DIR" >/dev/null
-"""
-
-CLAUDE_PRE_TOOL_USE_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
-response="$(run_router_rs --claude-hook-audit-command pre-tool-use --repo-root "$PROJECT_DIR")"
-if printf '%s' "$response" | grep -Eq '"permissionDecision"[[:space:]]*:[[:space:]]*"deny"'; then
-  printf '%s\\n' "$response"
+CLAUDE_HOOK_RUNNER = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
+command_name="${1:-}"
+if [ -z "$command_name" ]; then
+  echo "Missing Claude hook command name" >&2
+  exit 1
 fi
+
+case "$command_name" in
+  session-end)
+    run_router_rs --claude-hook-command session-end --repo-root "$PROJECT_DIR" >/dev/null
+    ;;
+  config-change|stop-failure)
+    run_router_rs --claude-hook-audit-command "$command_name" --repo-root "$PROJECT_DIR" >/dev/null
+    ;;
+  pre-tool-use)
+    response="$(run_router_rs --claude-hook-audit-command pre-tool-use --repo-root "$PROJECT_DIR")"
+    if printf '%s' "$response" | grep -Eq '"permissionDecision"[[:space:]]*:[[:space:]]*"deny"'; then
+      printf '%s\\n' "$response"
+    fi
+    ;;
+  user-prompt-submit)
+    response="$(run_router_rs --claude-hook-audit-command "$command_name" --repo-root "$PROJECT_DIR")"
+    if [ -n "$response" ]; then
+      if printf '%s' "$response" | grep -Eq '"hookSpecificOutput"[[:space:]]*:'; then
+        printf '%s\\n' "$response"
+      else
+        printf '[claude-user-prompt-submit] shared hook returned no hookSpecificOutput; continuing with degraded context.\\n' >&2
+      fi
+    fi
+    ;;
+  pre-tool-use-quality|post-tool-audit)
+    response="$(run_router_rs --claude-hook-audit-command "$command_name" --repo-root "$PROJECT_DIR")"
+    if printf '%s' "$response" | grep -Eq '"hookSpecificOutput"[[:space:]]*:'; then
+      printf '%s\\n' "$response"
+    fi
+    ;;
+  *)
+    echo "Unsupported Claude hook command: $command_name" >&2
+    exit 1
+    ;;
+esac
 """
 
-CLAUDE_USER_PROMPT_SUBMIT_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
-response="$(run_router_rs --claude-hook-audit-command user-prompt-submit --repo-root "$PROJECT_DIR")"
-if printf '%s' "$response" | grep -Eq '"hookSpecificOutput"[[:space:]]*:'; then
-  printf '%s\\n' "$response"
-fi
-"""
 
-CLAUDE_PRE_TOOL_USE_QUALITY_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
-response="$(run_router_rs --claude-hook-audit-command pre-tool-use-quality --repo-root "$PROJECT_DIR")"
-if printf '%s' "$response" | grep -Eq '"hookSpecificOutput"[[:space:]]*:'; then
-  printf '%s\\n' "$response"
-fi
-"""
-
-CLAUDE_POST_TOOL_USE_AUDIT_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
-response="$(run_router_rs --claude-hook-audit-command post-tool-audit --repo-root "$PROJECT_DIR")"
-if printf '%s' "$response" | grep -Eq '"hookSpecificOutput"[[:space:]]*:'; then
-  printf '%s\\n' "$response"
-fi
-"""
-
-CLAUDE_STOP_FAILURE_HOOK = CLAUDE_ROUTER_RS_HOOK_RUNNER + """
-run_router_rs --claude-hook-audit-command stop-failure --repo-root "$PROJECT_DIR" >/dev/null
-"""
-
-CLAUDE_PRE_TOOL_USE_RULES = [
-    "/AGENT.md",
-    "/AGENTS.md",
-    "/CLAUDE.md",
-    "/GEMINI.md",
-    "/.gemini/settings.json",
-    "/.claude/settings.json",
-    "/.claude/agents/README.md",
-    "/.claude/hooks/README.md",
-    "/.claude/hooks/*.sh",
-    "/.claude/commands/**",
-    "/.codex/hooks.json",
-    "/.codex/host_entrypoints_sync_manifest.json",
-    "/.codex/memory/CLAUDE_MEMORY.md",
-]
-
-
-def _claude_pre_tool_use_hooks() -> list[dict[str, Any]]:
-    command = 'sh "$CLAUDE_PROJECT_DIR"/.claude/hooks/pre_tool_use.sh'
-    return _build_claude_tool_path_hooks(command, CLAUDE_PRE_TOOL_USE_RULES)
-
-
-def _claude_pre_tool_use_bash_hooks() -> list[dict[str, str]]:
-    command = 'sh "$CLAUDE_PROJECT_DIR"/.claude/hooks/pre_tool_use.sh'
-    hooks: list[dict[str, str]] = []
-    for rule in (
-        "*AGENT.md*",
-        "*AGENTS.md*",
-        "*CLAUDE.md*",
-        "*GEMINI.md*",
-        "*.gemini/settings.json*",
-        "*.claude/settings.json*",
-        "*.claude/agents/README.md*",
-        "*.claude/hooks/*",
-        "*.claude/commands/*",
-        "*.codex/hooks.json*",
-        "*.codex/host_entrypoints_sync_manifest.json*",
-        "*.codex/memory/CLAUDE_MEMORY.md*",
-    ):
-        hooks.append({"type": "command", "if": f"Bash({rule})", "command": command})
-    return hooks
-
-
-def _build_claude_tool_path_hooks(
-    command: str,
-    rules: tuple[str, ...] | list[str],
-    *,
-    extras: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    hooks: list[dict[str, Any]] = []
-    for rule in rules:
-        for tool_name in ("Edit", "MultiEdit", "Write"):
-            hook = {"type": "command", "if": f"{tool_name}({rule})", "command": command}
-            if extras:
-                hook.update(extras)
-            hooks.append(hook)
-    return hooks
-
-
-CLAUDE_QUALITY_PRE_TOOL_USE_RULES = (
-    "/framework_runtime/src/**",
-    "/scripts/router-rs/src/**",
-    "/tests/test_cli_host_entrypoints.py",
-    "/tests/test_codex_omx_hook_bridge.py",
-)
-
-
-def _claude_quality_pre_tool_use_hooks() -> list[dict[str, Any]]:
-    command = 'sh "$CLAUDE_PROJECT_DIR"/.claude/hooks/pre_tool_use_quality.sh'
-    return _build_claude_tool_path_hooks(command, CLAUDE_QUALITY_PRE_TOOL_USE_RULES)
-
-
-def _claude_quality_post_tool_use_hooks() -> list[dict[str, Any]]:
-    command = 'sh "$CLAUDE_PROJECT_DIR"/.claude/hooks/post_tool_use_audit.sh'
-    return _build_claude_tool_path_hooks(
-        command,
-        CLAUDE_QUALITY_PRE_TOOL_USE_RULES,
-        extras={"async": True, "timeout": 8},
-    )
-
-CLAUDE_PROJECT_SETTINGS = {
-    "$schema": "https://json.schemastore.org/claude-code-settings.json",
-    "permissions": {
-        "allow": [
-            "Bash(ls)",
-            "Bash(pwd)",
-            "Bash(rg *)",
-            "Bash(cat *)",
-            "Bash(sed -n *)",
-            "Bash(git status)",
-            "Bash(git diff)",
-            "Bash(git show *)",
-            "Bash(git rev-parse *)",
-            "Bash(git ls-files *)",
-            "Bash(python3 scripts/check_skills.py --verify-sync)",
-            "Bash(python3 scripts/materialize_cli_host_entrypoints.py)",
-            "Bash(python3 -m pytest *)",
-            "Bash(python3 -m compileall *)",
-            "Bash(cargo test *)",
-            f"Bash(cargo run --manifest-path {CLAUDE_ROUTER_RS_MANIFEST_PATH} --release -- *)",
-            "Bash(./scripts/router-rs/target/release/router-rs *)",
-            "Bash(./scripts/router-rs/target/debug/router-rs *)",
-            "Bash(*scripts/router-rs/target/release/router-rs *)",
-            "Bash(*scripts/router-rs/target/debug/router-rs *)",
-            "Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)",
-            "Bash(python3 scripts/runtime_background_cli.py *)",
-            "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
-            "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
-            "Bash(bash ./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
-        ]
-    },
-    "allowedMcpServers": [
-        {"serverName": server_name} for server_name in shared_project_mcp_servers()
-    ],
-    "hooks": {
-        "PreToolUse": [
-            {
-                "matcher": "Edit|MultiEdit|Write",
-                "hooks": _claude_pre_tool_use_hooks(),
-            },
-            {
-                "matcher": "Bash",
-                "hooks": _claude_pre_tool_use_bash_hooks(),
-            },
-            {
-                "matcher": "Edit|MultiEdit|Write",
-                "hooks": _claude_quality_pre_tool_use_hooks(),
-            },
+def _claude_project_settings() -> dict[str, Any]:
+    hook_manifest = _load_claude_hook_manifest()
+    settings_hooks = hook_manifest.get("settings_hooks")
+    if not isinstance(settings_hooks, dict):
+        raise ValueError("router-rs hook manifest missing settings_hooks")
+    return {
+        "$schema": "https://json.schemastore.org/claude-code-settings.json",
+        "permissions": {
+            "allow": [
+                "Bash(ls)",
+                "Bash(pwd)",
+                "Bash(rg *)",
+                "Bash(cat *)",
+                "Bash(sed -n *)",
+                "Bash(git status)",
+                "Bash(git diff)",
+                "Bash(git show *)",
+                "Bash(git rev-parse *)",
+                "Bash(git ls-files *)",
+                "Bash(python3 scripts/check_skills.py --verify-sync)",
+                "Bash(python3 scripts/materialize_cli_host_entrypoints.py)",
+                "Bash(python3 -m pytest *)",
+                "Bash(python3 -m compileall *)",
+                "Bash(cargo test *)",
+                f"Bash(cargo run --manifest-path {CLAUDE_ROUTER_RS_MANIFEST_PATH} --release -- *)",
+                "Bash(./scripts/router-rs/target/release/router-rs *)",
+                "Bash(./scripts/router-rs/target/debug/router-rs *)",
+                "Bash(*scripts/router-rs/target/release/router-rs *)",
+                "Bash(*scripts/router-rs/target/debug/router-rs *)",
+                "Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)",
+                "Bash(python3 scripts/runtime_background_cli.py *)",
+                "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
+                "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
+                "Bash(bash ./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
+            ]
+        },
+        "allowedMcpServers": [
+            {"serverName": server_name} for server_name in shared_project_mcp_servers()
         ],
-        "PostToolUse": [
-            {
-                "matcher": "Edit|MultiEdit|Write",
-                "hooks": _claude_quality_post_tool_use_hooks(),
-            }
-        ],
-        "UserPromptSubmit": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/user_prompt_submit.sh",
-                    }
-                ]
-            }
-        ],
-        "SessionEnd": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_end.sh",
-                    }
-                ],
-            }
-        ],
-        "ConfigChange": [
-            {
-                "matcher": "project_settings",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/config_change.sh",
-                    }
-                ],
-            }
-        ],
-        "StopFailure": [
-            {
-                "matcher": "invalid_request|server_error|max_output_tokens|rate_limit|authentication_failed|billing_error|unknown",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stop_failure.sh",
-                    }
-                ],
-            }
-        ],
-    },
-}
+        "hooks": settings_hooks,
+    }
+
+
+CLAUDE_PROJECT_SETTINGS = _claude_project_settings()
 
 
 CODEX_PROJECT_HOOKS = {"hooks": {}}
@@ -779,14 +681,9 @@ HOST_ENTRYPOINT_TEXT_FILES = {
     ".claude/commands/background_batch.md": CLAUDE_BACKGROUND_BATCH_COMMAND,
     ".claude/commands/autopilot.md": CLAUDE_AUTOPILOT_COMMAND,
     ".claude/commands/deepinterview.md": CLAUDE_DEEPINTERVIEW_COMMAND,
+    ".claude/commands/team.md": CLAUDE_TEAM_COMMAND,
     ".claude/hooks/README.md": CLAUDE_HOOKS_README,
-    ".claude/hooks/user_prompt_submit.sh": CLAUDE_USER_PROMPT_SUBMIT_HOOK,
-    ".claude/hooks/pre_tool_use_quality.sh": CLAUDE_PRE_TOOL_USE_QUALITY_HOOK,
-    ".claude/hooks/post_tool_use_audit.sh": CLAUDE_POST_TOOL_USE_AUDIT_HOOK,
-    ".claude/hooks/pre_tool_use.sh": CLAUDE_PRE_TOOL_USE_HOOK,
-    ".claude/hooks/session_end.sh": CLAUDE_SESSION_END_HOOK,
-    ".claude/hooks/config_change.sh": CLAUDE_CONFIG_CHANGE_HOOK,
-    ".claude/hooks/stop_failure.sh": CLAUDE_STOP_FAILURE_HOOK,
+    ".claude/hooks/run.sh": CLAUDE_HOOK_RUNNER,
 }
 
 HOST_ENTRYPOINT_JSON_FILES = {
@@ -820,6 +717,13 @@ RETIRED_HOST_ENTRYPOINT_PATHS = (
     ".claude/hooks/stop.sh",
     ".claude/hooks/pre_compact.sh",
     ".claude/hooks/subagent_stop.sh",
+    ".claude/hooks/user_prompt_submit.sh",
+    ".claude/hooks/pre_tool_use_quality.sh",
+    ".claude/hooks/post_tool_use_audit.sh",
+    ".claude/hooks/pre_tool_use.sh",
+    ".claude/hooks/session_end.sh",
+    ".claude/hooks/config_change.sh",
+    ".claude/hooks/stop_failure.sh",
 )
 
 def _write_text(path: Path, content: str) -> bool:
