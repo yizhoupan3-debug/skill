@@ -26,11 +26,11 @@
 
 | ID | 任务 | 主要目标 | 独占写入范围 |
 |---|---|---|---|
-| 1 | SQLite backend steady-state 强化 | 把已存在的非-filesystem backend 从“可用能力面”推进到更强的 steady-state runtime backend | `codex_agno_runtime/src/codex_agno_runtime/checkpoint_store.py`, `codex_agno_runtime/src/codex_agno_runtime/state.py`, `codex_agno_runtime/src/codex_agno_runtime/config.py`, `tests/test_framework_runtime_state_checkpoint_control_plane.py`，必要时新增 backend-family 定向测试 |
-| 2 | Runtime event transport 外部 attach bridge 落地 | 把当前本地/内存 transport seam 推进到 process-external attach / handoff / replay-capable bridge | `codex_agno_runtime/src/codex_agno_runtime/runtime.py`，必要时新增 `codex_agno_runtime/src/codex_agno_runtime/event_transport.py`，`tests/test_framework_runtime_runtime.py`，必要时新增 transport 定向测试 |
-| 3 | Route diagnostic lane 继续 de-Pythonization | 继续缩小 verify / shadow / rollback 语义对 Python route execution 的依赖 | `codex_agno_runtime/src/codex_agno_runtime/services.py`, `codex_agno_runtime/src/codex_agno_runtime/schemas.py`, `codex_agno_runtime/src/codex_agno_runtime/rust_router.py`, `scripts/router-rs/src/main.rs`, route-policy / parity 相关测试文件 |
-| 4 | Desktop continuity artifact surface 再收口 | 继续压缩 alias / continuity artifact 的默认暴露面，只保留 continuity-only 最小证据 | `codex_agno_runtime/src/codex_agno_runtime/host_adapters.py`, `codex_agno_runtime/src/codex_agno_runtime/profile_artifacts.py`, `codex_agno_runtime/src/codex_agno_runtime/compatibility.py`, `docs/host_adapter_contracts.md`, `docs/upgrade_compatibility_matrix.md`, `tests/test_framework_profile_adapters.py`, `tests/test_framework_contract_artifacts.py` |
-| 5 | Observability exporter / metrics concrete implementation | 把已冻结的 observability contract 落到更具体的 exporter / metric path，而不是只停在 vocabulary ownership | `docs/runtime_observability_contract.md`，必要时新增 `codex_agno_runtime/src/codex_agno_runtime/observability.py`，`tests/test_runtime_observability_contracts.py`，必要时新增 exporter / metrics 定向测试 |
+| 1 | SQLite backend steady-state 强化 | 把已存在的非-filesystem backend 从“可用能力面”推进到更强的 steady-state runtime backend | `framework_runtime/src/framework_runtime/checkpoint_store.py`, `framework_runtime/src/framework_runtime/state.py`, `framework_runtime/src/framework_runtime/config.py`, `tests/test_framework_runtime_state_checkpoint_control_plane.py`，必要时新增 backend-family 定向测试 |
+| 2 | Runtime event transport 外部 attach bridge 落地 | 把当前本地/内存 transport seam 推进到 process-external attach / handoff / replay-capable bridge | `framework_runtime/src/framework_runtime/runtime.py`，必要时新增 `framework_runtime/src/framework_runtime/event_transport.py`，`tests/test_framework_runtime_runtime.py`，必要时新增 transport 定向测试 |
+| 3 | Route diagnostic lane 继续 de-Pythonization | 继续缩小 verify / shadow / rollback 语义对 Python route execution 的依赖 | `framework_runtime/src/framework_runtime/services.py`, `framework_runtime/src/framework_runtime/schemas.py`, `framework_runtime/src/framework_runtime/rust_router.py`, `scripts/router-rs/src/main.rs`, route-policy / parity 相关测试文件 |
+| 4 | Desktop continuity artifact surface 再收口 | 继续压缩 alias / continuity artifact 的默认暴露面，只保留 continuity-only 最小证据 | `framework_runtime/src/framework_runtime/host_adapters.py`, `framework_runtime/src/framework_runtime/profile_artifacts.py`, `framework_runtime/src/framework_runtime/host_adapter_compatibility.py`, `docs/host_adapter_contracts.md`, `docs/upgrade_compatibility_matrix.md`, `tests/test_framework_profile_adapters.py`, `tests/test_framework_contract_artifacts.py` |
+| 5 | Observability exporter / metrics concrete implementation | 把已冻结的 observability contract 落到更具体的 exporter / metric path，而不是只停在 vocabulary ownership | `docs/runtime_observability_contract.md`，必要时新增 `framework_runtime/src/framework_runtime/observability.py`，`tests/test_runtime_observability_contracts.py`，必要时新增 exporter / metrics 定向测试 |
 
 ---
 
@@ -47,9 +47,9 @@
 
 ### 独占写入范围
 
-- `codex_agno_runtime/src/codex_agno_runtime/checkpoint_store.py`
-- `codex_agno_runtime/src/codex_agno_runtime/state.py`
-- `codex_agno_runtime/src/codex_agno_runtime/config.py`
+- `framework_runtime/src/framework_runtime/checkpoint_store.py`
+- `framework_runtime/src/framework_runtime/state.py`
+- `framework_runtime/src/framework_runtime/config.py`
 - `tests/test_framework_runtime_state_checkpoint_control_plane.py`
 - 如确有必要，可新增一个只覆盖 backend family / sqlite lane 的定向测试文件
 
@@ -89,8 +89,8 @@
 
 ### 独占写入范围
 
-- `codex_agno_runtime/src/codex_agno_runtime/runtime.py`
-- 如确有必要，可新增 `codex_agno_runtime/src/codex_agno_runtime/event_transport.py`
+- `framework_runtime/src/framework_runtime/runtime.py`
+- 如确有必要，可新增 `framework_runtime/src/framework_runtime/event_transport.py`
 - `tests/test_framework_runtime_runtime.py`
 - 如确有必要，可新增 transport / handoff / attach 定向测试文件
 
@@ -130,9 +130,9 @@
 
 ### 独占写入范围
 
-- `codex_agno_runtime/src/codex_agno_runtime/services.py`
-- `codex_agno_runtime/src/codex_agno_runtime/schemas.py`
-- `codex_agno_runtime/src/codex_agno_runtime/rust_router.py`
+- `framework_runtime/src/framework_runtime/services.py`
+- `framework_runtime/src/framework_runtime/schemas.py`
+- `framework_runtime/src/framework_runtime/rust_router.py`
 - `scripts/router-rs/src/main.rs`
 - route-policy / route-parity 相关测试文件
 
@@ -172,9 +172,9 @@
 
 ### 独占写入范围
 
-- `codex_agno_runtime/src/codex_agno_runtime/host_adapters.py`
-- `codex_agno_runtime/src/codex_agno_runtime/profile_artifacts.py`
-- `codex_agno_runtime/src/codex_agno_runtime/compatibility.py`
+- `framework_runtime/src/framework_runtime/host_adapters.py`
+- `framework_runtime/src/framework_runtime/profile_artifacts.py`
+- `framework_runtime/src/framework_runtime/host_adapter_compatibility.py`
 - `docs/host_adapter_contracts.md`
 - `docs/upgrade_compatibility_matrix.md`
 - `tests/test_framework_profile_adapters.py`
@@ -217,7 +217,7 @@
 ### 独占写入范围
 
 - `docs/runtime_observability_contract.md`
-- 如确有必要，可新增 `codex_agno_runtime/src/codex_agno_runtime/observability.py`
+- 如确有必要，可新增 `framework_runtime/src/framework_runtime/observability.py`
 - `tests/test_runtime_observability_contracts.py`
 - 如确有必要，可新增 exporter / metrics 定向测试文件
 
