@@ -14,9 +14,8 @@ from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "codex_agno_runtime" / "src"))
 
-from codex_agno_runtime.runtime_registry import primary_plugin_record, workspace_bootstrap_defaults
+from framework_runtime.runtime_registry import primary_plugin_record, workspace_bootstrap_defaults
 
 from scripts.default_bootstrap import resolve_bootstrap_path, run_default_bootstrap
 from scripts.materialize_cli_host_entrypoints import (
@@ -53,6 +52,7 @@ DEFAULT_TUI_STATUS_ITEMS = (
 PERSONAL_PLUGIN_LIVE_PROJECTION_EXCLUDES = frozenset({"skills", ".mcp.json"})
 FRAMEWORK_SERVER_PATTERN = re.compile(r"(?ms)^\[mcp_servers\.framework-mcp\]\n.*?(?=^\[|\Z)")
 OPENAI_DEVELOPER_DOCS_SERVER_PATTERN = re.compile(r"(?ms)^\[mcp_servers\.openaiDeveloperDocs\]\n.*?(?=^\[|\Z)")
+FEATURES_BLOCK_PATTERN = re.compile(r"(?ms)^\[features\]\n.*?(?=^\[|\Z)")
 
 
 def _bootstrap_payload_matches_contract(payload: dict[str, Any], repo_root: Path) -> bool:
@@ -172,6 +172,46 @@ def build_openai_developer_docs_server_block() -> str:
             f'url = "{OPENAI_DEVELOPER_DOCS_MCP_URL}"',
         ]
     )
+
+
+def build_codex_hooks_feature_block() -> str:
+    """Build the Codex experimental hooks feature block."""
+
+    return "\n".join(
+        [
+            "[features]",
+            "codex_hooks = true",
+        ]
+    )
+
+
+def install_codex_hooks_feature(config_path: Path) -> bool:
+    """Ensure Codex experimental hooks are enabled in a config file."""
+
+    content = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+    block = build_codex_hooks_feature_block()
+    match = FEATURES_BLOCK_PATTERN.search(content)
+    if not match:
+        updated = content.rstrip()
+        if updated:
+            updated += "\n\n"
+        updated += block + "\n"
+        return write_text_if_changed(config_path, updated)
+
+    lines = match.group(0).rstrip("\n").splitlines()
+    replaced = False
+    updated_lines: list[str] = []
+    for line in lines:
+        if re.match(r"^\s*codex_hooks\s*=", line):
+            updated_lines.append("codex_hooks = true")
+            replaced = True
+            continue
+        updated_lines.append(line)
+    if not replaced:
+        updated_lines.append("codex_hooks = true")
+    new_block = "\n".join(updated_lines) + "\n"
+    updated = content[: match.start()] + new_block + content[match.end() :]
+    return write_text_if_changed(config_path, updated)
 
 
 def install_openai_developer_docs_server(config_path: Path) -> bool:

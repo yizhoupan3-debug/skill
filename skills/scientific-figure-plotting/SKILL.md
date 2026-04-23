@@ -31,7 +31,7 @@ risk: medium
 source: local
 ---
 
-- **Dual-Dimension Audit (Pre: Plotting-Logic, Post: Visual-Fidelity/Overlap Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Plotting-Logic, Post: Visual-Fidelity/Overlap Results)** → `$execution-audit` [Overlay]
 
 # Scientific Figure Plotting
 
@@ -217,7 +217,7 @@ Use `出图改进建议` or `出图实现记录` depending on the request:
 - Do not increase density by adding redundant encodings
 - Do not leave overlap unresolved just because it is slight
 - Do not accept default plotting-library aesthetics as publication-ready without review.
-- **Superior Quality Audit**: For publication-grade figures, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For publication-grade figures, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 - When rendered evidence is available, do not skip `$visual-review`
 
 ## References
@@ -264,4 +264,4 @@ To test CJK font rendering on this machine, run
 - "图表用中文标题和轴标签"
 - "Use Chinese labels for this matplotlib figure."
 - "强制进行科研出图深度审计 / 检查图表排版与视觉还原结果。"
-- "Use $execution-audit-codex to audit this scientific figure for visual-fidelity idealism."
+- "Use $execution-audit to audit this scientific figure for visual-fidelity idealism."

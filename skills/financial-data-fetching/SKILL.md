@@ -105,7 +105,7 @@ This skill owns:
 This skill does **not** own:
 - trading signal design
 - portfolio construction logic
-- **Dual-Dimension Audit (Pre: Provider/Probe, Post: Data-Fidelity/Normalization Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Provider/Probe, Post: Data-Fidelity/Normalization Results)** → `$execution-audit` [Overlay]
 - live execution architecture beyond data ingress
 
 ## Safety and data-integrity rules
@@ -227,7 +227,7 @@ python /Users/joe/Documents/skill/skills/financial-data-fetching/scripts/validat
 ```
 
 - Only call a source **verified here** if its probe returns `ok: true`.
-- **Superior Quality Audit**: For research-grade financial pipelines, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For research-grade financial pipelines, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -242,4 +242,4 @@ python /Users/joe/Documents/skill/skills/financial-data-fetching/scripts/validat
 - "查看美股机构持仓"
 - "获取 A 股市值和 PE"
 - "强制进行金融数据审计 / 检查行情数据真实性与标准化结果。"
-- "Use $execution-audit-codex to audit this data fetcher for normalization-fidelity idealism."
+- "Use $execution-audit to audit this data fetcher for normalization-fidelity idealism."

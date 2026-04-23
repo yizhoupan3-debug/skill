@@ -27,6 +27,7 @@ from codex_agno_runtime.schemas import (
     RouteDecisionSnapshot,
     RouteDiagnosticReport,
     RouteExecutionPolicy,
+    SearchMatchesContract,
     SearchMatchResult,
     SkillMetadata,
 )
@@ -56,7 +57,7 @@ def _live_route_adapter() -> RustRouteAdapter:
 ROUTE_DECISION_KNOB_CASES = [
     (
         "深度review现在的路由系统和 skill 边界。",
-        "skill-developer-codex",
+        "skill-framework-developer",
         None,
         "L0",
         False,
@@ -246,53 +247,6 @@ def test_route_contract_rejects_unknown_decision_authority_shape(
         )
 
 
-def test_run_route_cli_stays_rust_only_and_never_falls_back_to_python_rendering(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[dict[str, object]] = []
-
-    class _FakeAdapter:
-        def exec_query_cli(self, **kwargs) -> None:
-            calls.append(dict(kwargs))
-
-    monkeypatch.setattr(rust_router_module, "route_adapter", lambda **kwargs: _FakeAdapter())
-
-    assert (
-        rust_router_module.run_route_cli(
-            codex_home=PROJECT_ROOT,
-            argv=["--query", "typed first route cli", "--route-json", "--limit", "7"],
-        )
-        == 0
-    )
-    assert calls == [
-        {
-            "query": "typed first route cli",
-            "limit": 7,
-            "json_output": False,
-            "route_json": True,
-            "session_id": "route-cli",
-            "allow_overlay": True,
-            "first_turn": True,
-        }
-    ]
-
-
-def test_run_route_cli_requires_prebuilt_rust_binary_instead_of_python_fallback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class _FakeAdapter:
-        def exec_query_cli(self, **kwargs) -> None:
-            raise RuntimeError("router-rs requires a prebuilt binary")
-
-    monkeypatch.setattr(rust_router_module, "route_adapter", lambda **kwargs: _FakeAdapter())
-
-    with pytest.raises(RuntimeError, match="requires a prebuilt binary"):
-        rust_router_module.run_route_cli(
-            codex_home=PROJECT_ROOT,
-            argv=["--query", "typed first route cli"],
-        )
-
-
 def test_search_skills_uses_route_adapter_hot_path(monkeypatch: pytest.MonkeyPatch) -> None:
     rows = [
         SearchMatchResult(
@@ -330,19 +284,21 @@ def test_search_skills_uses_route_adapter_hot_path(monkeypatch: pytest.MonkeyPat
     assert results[0].score == 9.5
 
 
-def test_search_match_result_round_trips_transport_row() -> None:
-    row = {
-        "slug": "iterative-optimizer",
-        "description": "Iterative optimization loop",
-        "layer": "L2",
-        "gate": "none",
-        "owner": "codex",
-        "score": 9.5,
-        "matched_terms": 2,
-        "total_terms": 2,
-    }
-
-    match = SearchMatchResult.from_transport_row(row)
+def test_search_match_result_accepts_typed_record_payload() -> None:
+    match = SearchMatchResult.model_validate(
+        {
+            "record": {
+                "name": "iterative-optimizer",
+                "description": "Iterative optimization loop",
+                "routing_layer": "L2",
+                "routing_gate": "none",
+                "routing_owner": "codex",
+            },
+            "score": 9.5,
+            "matched_terms": 2,
+            "total_terms": 2,
+        }
+    )
 
     assert match.record.name == "iterative-optimizer"
     assert match.record.routing_layer == "L2"
@@ -410,6 +366,67 @@ def test_search_skill_matches_contract_rejects_rows_only_payload(
 
     with pytest.raises(ValidationError, match="matches"):
         adapter.search_skill_matches_contract(query="typed first", limit=1)
+
+
+def test_search_matches_contract_rejects_transport_rows_outside_adapter_boundary() -> None:
+    with pytest.raises(ValidationError, match="record"):
+        SearchMatchesContract.model_validate(
+            {
+                "search_schema_version": "router-rs-search-results-v1",
+                "authority": "rust-route-core",
+                "query": "typed first",
+                "matches": [
+                    {
+                        "slug": "iterative-optimizer",
+                        "description": "Iterative optimization loop",
+                        "layer": "L2",
+                        "gate": "none",
+                        "owner": "codex",
+                        "score": 9.5,
+                        "matched_terms": 2,
+                        "total_terms": 2,
+                    }
+                ],
+            }
+        )
+
+
+def test_search_skill_matches_contract_accepts_typed_matches_without_legacy_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = RustRouteAdapter(
+        PROJECT_ROOT,
+        runtime_path=MISSING_RUNTIME_PATH,
+        manifest_path=ROUTE_FIXTURE_PATH,
+    )
+    monkeypatch.setattr(
+        adapter,
+        "_run_hot_json_command",
+        lambda *args, **kwargs: {
+            "search_schema_version": adapter.search_schema_version,
+            "authority": adapter.route_authority,
+            "query": "typed first",
+            "matches": [
+                {
+                    "record": {
+                        "name": "iterative-optimizer",
+                        "description": "Iterative optimization loop",
+                        "routing_layer": "L2",
+                        "routing_gate": "none",
+                        "routing_owner": "codex",
+                    },
+                    "score": 9.5,
+                    "matched_terms": 2,
+                    "total_terms": 2,
+                }
+            ],
+        },
+    )
+
+    contract = adapter.search_skill_matches_contract(query="typed first", limit=1)
+
+    assert contract.matches[0].record.name == "iterative-optimizer"
+    assert contract.matches[0].record.routing_layer == "L2"
 
 
 def test_route_decision_contract_stays_typed_first_transport_payload(
@@ -490,14 +507,14 @@ def test_route_decision_contract_exports_transport_payload_from_typed_contract(
             "compile_authority": "rust-route-compiler",
             "task": "route cli typed first",
             "session_id": "route-cli-typed-session",
-            "selected_skill": "skill-developer-codex",
+            "selected_skill": "skill-framework-developer",
             "overlay_skill": "anti-laziness",
             "layer": "L2",
             "score": 55.0,
             "reasons": ["Trigger phrase matched: route."],
             "route_snapshot": {
                 "engine": "rust",
-                "selected_skill": "skill-developer-codex",
+                "selected_skill": "skill-framework-developer",
                 "overlay_skill": "anti-laziness",
                 "layer": "L2",
                 "score": 55.0,
@@ -556,7 +573,7 @@ def _seed_framework_runtime_artifacts(repo_root: Path, *, terminal: bool) -> Non
             "active_phase": "implementation",
             "verification": {"verification_status": "in_progress"},
             "continuity": {"story_state": "active", "resume_allowed": True},
-            "primary_owner": "skill-developer-codex",
+            "primary_owner": "skill-framework-developer",
             "execution_contract": {
                 "goal": "Repair stale bootstrap injection",
                 "scope": ["scripts/memory_support.py"],
@@ -570,7 +587,7 @@ def _seed_framework_runtime_artifacts(repo_root: Path, *, terminal: bool) -> Non
             "task": "active bootstrap repair",
             "matched_skills": [
                 "execution-controller-coding",
-                "skill-developer-codex",
+                "skill-framework-developer",
             ],
         }
         next_actions = {"next_actions": ["Patch classifier", "Run MCP regression tests"]}
@@ -943,7 +960,7 @@ REAL_TASK_REPLAY_QUERIES = [
     ],
 )
 def test_rust_search_contract_matches_python_search_results(query: str, limit: int) -> None:
-    """Verify the search consumer path stays typed-first even when the CLI still prints rows."""
+    """Verify the search consumer path stays typed-first with one Rust-owned match contract."""
 
     contract = route_adapter(
         codex_home=PROJECT_ROOT,
@@ -1025,12 +1042,12 @@ def test_real_task_replay_queries_match_shadow_diff_fields(query: str) -> None:
     [
         (
             "深度review现在的路由系统和 skill 边界。",
-            "skill-developer-codex",
+            "skill-framework-developer",
             "code-review",
         ),
         (
             "framework-review",
-            "skill-developer-codex",
+            "skill-framework-developer",
             "code-review",
         ),
         (
@@ -1398,7 +1415,7 @@ def test_rust_route_adapter_framework_runtime_snapshot_reads_workspace_artifacts
     assert snapshot["workspace"] == tmp_path.name
     assert snapshot["continuity"]["state"] == "active"
     assert snapshot["continuity"]["current_execution"]["task"] == "active bootstrap repair"
-    assert snapshot["supervisor_state"]["primary_owner"] == "skill-developer-codex"
+    assert snapshot["supervisor_state"]["primary_owner"] == "skill-framework-developer"
     assert snapshot["paths"]["supervisor_state"].endswith(".supervisor_state.json")
 
 

@@ -192,7 +192,7 @@ This skill does not own:
 - Do not reuse artifacts without an explicit completeness contract for the shard, seed, or summary being reused.
 - Do not validate behavior or speed against stale pre-run config when runtime produces an effective config that can diverge from the input config.
 - If the performance issue is not reproducible, say so and define the missing evidence.
-- For critical acceleration work, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- For critical acceleration work, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 

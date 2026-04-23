@@ -48,7 +48,7 @@
 ## 分层概览
 
 ```text
-L0  execution-controller-coding, skill-writer, skill-developer-codex, skill-routing-repair-codex, writing-skills,
+L0  execution-controller-coding, skill-writer, skill-framework-developer, skill-routing-repair, writing-skills,
     gh-address-comments, gh-fix-ci, sentry, subagent-delegation,
     systematic-debugging, iterative-optimizer
 L1  checklist-writting, tdd-workflow, test-engineering, refactoring,
@@ -57,7 +57,7 @@ L1  checklist-writting, tdd-workflow, test-engineering, refactoring,
     citation-management, coding-standards, prompt-engineer,
     information-retrieval, skill-scout, anti-laziness
 L2  build-tooling, plan-to-code, api-integration-debugging,
-    datastore-cache-queue, observability, web-platform-basics, git-workflow,
+    datastore-cache-queue, observability, web-platform-basics, gitx,
     css-pro, shell-cli, data-wrangling, dependency-migration,
     checklist-normalizer, checklist-fixer, env-config-management, code-review,
     architect-review, sustech-mailer, github-investigator
@@ -84,7 +84,7 @@ L4  nextjs, node-backend, auth-implementation, chatgpt-apps, react, vue, svelte,
     youtube-summarizer, copywriting, research-engineer, math-derivation
 Overlays  coding-standards, tdd-workflow, error-handling-patterns, code-review,
           frontend-code-quality, writing-skills, iterative-optimizer,
-          skill-routing-repair-codex, security-audit, i18n-l10n,
+          skill-routing-repair, security-audit, i18n-l10n,
           vercel-react-best-practices, anti-laziness
 ```
 
@@ -102,7 +102,7 @@ Overlays  coding-standards, tdd-workflow, error-handling-patterns, code-review,
 
 ## 易混淆边界
 
-- `skill-developer-codex` vs `skill-routing-repair-codex` → 框架 redesign vs 事后最小修补
+- `skill-framework-developer` vs `skill-routing-repair` → 框架 redesign vs 事后最小修补
 - `skill-writer` vs `skill-creator` → 写法指导 vs 实际改 skill 包
 - `skill-creator` vs `skill-installer` → 本地 authoring vs 新 skill intake / relink
 - `systematic-debugging` vs 领域 owner → 根因未知 vs 根因已知

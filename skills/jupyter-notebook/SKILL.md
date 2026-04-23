@@ -32,7 +32,7 @@ metadata:
     - tutorial
 ---
 
-- **Dual-Dimension Audit (Pre: Cell-Flow, Post: Run-Success/Reproducibility Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Cell-Flow, Post: Run-Success/Reproducibility Results)** → `$execution-audit` [Overlay]
 # Jupyter Notebook Skill
 
 Create clean, reproducible Jupyter notebooks for two primary modes:
@@ -115,7 +115,7 @@ If you must edit raw JSON, review `references/notebook-structure.md` first.
 6. Validate the result.
 Run the notebook top-to-bottom when the environment allows.
 - If execution is not possible, say so explicitly and call out how to validate locally.
-- **Superior Quality Audit**: For production notebooks or shared experiments, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production notebooks or shared experiments, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 - Use the final pass checklist in `references/quality-checklist.md`.
 
 ## Templates and helper script
@@ -158,4 +158,4 @@ No required environment variables.
 - The task is data cleaning/ETL without notebook requirement → use `$data-wrangling`
 - The task is scientific figure plotting without notebook context → use `$scientific-figure-plotting`
 - "强制进行 Notebook 深度审计 / 检查单元格执行顺序与运行结果一致性。"
-- "Use $execution-audit-codex to audit this notebook for run-success idealism."
+- "Use $execution-audit to audit this notebook for run-success idealism."

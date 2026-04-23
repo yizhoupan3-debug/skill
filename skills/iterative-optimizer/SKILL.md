@@ -71,8 +71,8 @@ laziness immunity** (not stacked; fused into every step).
 
 ## Do not use
 
-- Framework design / skill governance → `$skill-developer-codex`
-- Post-task routing repair only → `$skill-routing-repair-codex`
+- Framework design / skill governance → `$skill-framework-developer`
+- Post-task routing repair only → `$skill-routing-repair`
 - One-pass execution with no round budget → domain owner alone
 - Single-pass laziness correction without iteration → `$anti-laziness` standalone
 

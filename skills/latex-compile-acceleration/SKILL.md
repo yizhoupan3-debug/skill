@@ -53,7 +53,7 @@ risk: low
 source: local
 ---
 
-- **Dual-Dimension Audit (Pre: Tex-Structure/Logic, Post: PDF-Fidelity/Build-Speed Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Tex-Structure/Logic, Post: PDF-Fidelity/Build-Speed Results)** → `$execution-audit` [Overlay]
 
 # latex-compile-acceleration
 
@@ -139,8 +139,8 @@ Default Detect → Plan → Execute → Verify mapping:
 ## Resource Guide
 
 - Read [references/techniques.md](./references/techniques.md) for the sourced tool / technique matrix, concrete command patterns, `.latexmkrc` best practices, stability strategies, and CI optimization recipes.
-- **Superior Quality Audit**: For large-scale production LaTeX build systems, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For large-scale production LaTeX build systems, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 - "强制进行 LaTeX 构建深度审计 / 检查编译速度与 PDF 渲染结果。"
-- "Use $execution-audit-codex to audit this build pipeline for speed-fidelity idealism."
+- "Use $execution-audit to audit this build pipeline for speed-fidelity idealism."

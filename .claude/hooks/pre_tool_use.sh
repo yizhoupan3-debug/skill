@@ -47,6 +47,6 @@ run_router_rs() {
 }
 
 response="$(run_router_rs --claude-hook-audit-command pre-tool-use --repo-root "$PROJECT_DIR")"
-if printf '%s' "$response" | grep -q '"permissionDecision":"deny"'; then
+if printf '%s' "$response" | grep -Eq '"permissionDecision"[[:space:]]*:[[:space:]]*"deny"'; then
   printf '%s\n' "$response"
 fi

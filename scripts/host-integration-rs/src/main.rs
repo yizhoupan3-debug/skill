@@ -549,6 +549,7 @@ fn install_native_integration(
     let bootstrap_output_dir = bootstrap_output_dir.map(normalize_path).transpose()?;
 
     let created_config = ensure_config_file(&home_config_path)?;
+    let codex_hooks_feature_changed = ensure_codex_hooks_feature(&home_config_path)?;
     let browser_changed = if install_browser_mcp {
         install_mcp_block(
             &home_config_path,
@@ -642,6 +643,7 @@ fn install_native_integration(
         "home_claude_mcp_config_path": home_claude_mcp_config_path.to_string_lossy(),
         "repo_marketplace_path": repo_root.join(".agents/plugins/marketplace.json").to_string_lossy(),
         "created_config": created_config,
+        "codex_hooks_feature_changed": codex_hooks_feature_changed,
         "browser_mcp_changed": browser_changed,
         "framework_mcp_changed": framework_changed,
         "openai_developer_docs_mcp_changed": openai_developer_docs_changed,
@@ -818,6 +820,37 @@ fn build_openai_developer_docs_server_block() -> String {
     )
 }
 
+fn ensure_codex_hooks_feature(config_path: &Path) -> Result<bool, String> {
+    let content = read_text_if_exists(config_path)?.unwrap_or_default();
+    let feature_line = "codex_hooks = true";
+    if let Some((start, end)) = find_named_block_bounds(&content, "[features]") {
+        let block = content[start..end].trim_end_matches('\n');
+        let mut replaced = false;
+        let mut updated_lines = Vec::new();
+        for line in block.lines() {
+            if is_named_setting(line, "codex_hooks") {
+                updated_lines.push(feature_line.to_string());
+                replaced = true;
+            } else {
+                updated_lines.push(line.to_string());
+            }
+        }
+        if !replaced {
+            updated_lines.push(feature_line.to_string());
+        }
+        let new_block = format!("{}\n", updated_lines.join("\n"));
+        let updated = format!("{}{}{}", &content[..start], new_block, &content[end..]);
+        return write_text_if_changed(config_path, &updated);
+    }
+
+    let updated = if content.trim().is_empty() {
+        "[features]\ncodex_hooks = true\n".to_string()
+    } else {
+        format!("{}\n\n[features]\ncodex_hooks = true\n", content.trim_end())
+    };
+    write_text_if_changed(config_path, &updated)
+}
+
 fn find_named_block_bounds(content: &str, marker: &str) -> Option<(usize, usize)> {
     let mut offset = 0usize;
     let mut start: Option<usize> = None;
@@ -905,8 +938,12 @@ fn find_tui_block_bounds(content: &str) -> Option<(usize, usize)> {
 }
 
 fn is_status_line(line: &str) -> bool {
+    is_named_setting(line, "status_line")
+}
+
+fn is_named_setting(line: &str, key: &str) -> bool {
     let trimmed = line.trim_start();
-    trimmed.starts_with("status_line") && trimmed.contains('=')
+    trimmed.starts_with(key) && trimmed.contains('=')
 }
 
 fn format_status_line() -> String {

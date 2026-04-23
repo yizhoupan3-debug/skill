@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Compatibility no-op for stale Codex OMX hook sessions.
 
-This repository no longer enables project-level Codex hooks. Older live Codex
-sessions may still have a cached stop-hook command that points at this path.
-Keep this file as a silent no-op so those stale sessions do not keep surfacing
-file-not-found or missing-hook-script noise while new sessions remain hook-free.
+This repository now uses `.codex/hooks.json` for live Codex hooks. Older Codex
+sessions may still have a cached stop-hook command that points at this legacy
+bridge path. Keep this file as a silent no-op so those stale sessions do not
+surface file-not-found or missing-hook-script noise while new sessions migrate
+to the shared hook manifest.
 """
 
 from __future__ import annotations

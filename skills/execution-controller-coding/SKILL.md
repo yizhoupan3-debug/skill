@@ -126,7 +126,7 @@ bridge_behavior: mobile_complete_once
 - 未知根因优先：reroute to `$systematic-debugging`
 - 方案仍模糊：reroute to `$idea-to-plan`
 - checklist 边界还不稳定：reroute to `$checklist-normalizer`
-- 进入强验收：add `$execution-audit-codex`
+- 进入强验收：add `$execution-audit`
 - 能并行且边界清晰：先过 `$subagent-delegation`
 
 ## References

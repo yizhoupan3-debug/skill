@@ -34,7 +34,7 @@ risk: low
 source: local
 ---
 
-- **Dual-Dimension Audit (Pre: Layout-Spec/Logic, Post: Visual-Fidelity/Responsive Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Layout-Spec/Logic, Post: Visual-Fidelity/Responsive Results)** → `$execution-audit` [Overlay]
 
 # frontend-design
 
@@ -78,7 +78,7 @@ look and feel like, not the low-level CSS or framework mechanics.
 - Favor memorable hierarchy over generic “AI-looking” defaults.
 - Respect accessibility and implementation constraints even when visual quality is primary.
 - Push style catalogs and long checklists into references.
-- **Superior Quality Audit**: For premium UI development, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For premium UI development, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## References
 
@@ -95,4 +95,4 @@ look and feel like, not the low-level CSS or framework mechanics.
 ## Trigger examples
 - "这个设计规范里的配色和阴影怎么在 CSS 里精确还原？"
 - "强制进行前端设计深度审计 / 检查布局规范与多端渲染结果。"
-- "Use $execution-audit-codex to audit this UI for visual-fidelity idealism."
+- "Use $execution-audit to audit this UI for visual-fidelity idealism."

@@ -84,7 +84,7 @@ This skill does not own:
 - Language-idiomatic error handling (try/catch patterns, Promise rejection) is owned by this skill
 - Cross-language error **architecture** (error taxonomies, retry/circuit-breaker, error code systems) → `$error-handling-patterns`
 - Web frontend performance audits → `$performance-expert`
-- **Critical implementation auditing (Memory, Speed, Platform-native)** → `$execution-audit-codex` [Overlay]
+- **Critical implementation auditing (Memory, Speed, Platform-native)** → `$execution-audit` [Overlay]
 
 If the task shifts to adjacent skill territory, route to:
 - `$typescript-pro`

@@ -559,7 +559,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "architect-review",
                 "security-audit",
                 "test-engineering",
-                "execution-audit-codex"
+                "execution-audit"
             ],
             "host_entrypoints": {"claude-code": "/deepinterview"}
         })),

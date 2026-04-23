@@ -1086,6 +1086,43 @@ describe('BrowserRuntime', () => {
     }
   });
 
+  it('fails closed when a direct attach descriptor drifts on cleanup or resume vocabulary', async () => {
+    const { tempRoot, traceStreamPath } = await createAttachedRuntimeFixture();
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeAttachDescriptor: {
+        schema_version: 'runtime-event-attach-descriptor-v1',
+        attach_mode: 'process_external_artifact_replay',
+        artifact_backend_family: 'filesystem',
+        attach_capabilities: {
+          artifact_replay: true,
+          live_remote_stream: false,
+          cleanup_preserves_replay: false,
+        },
+        cleanup_method: 'cleanup_runtime_events',
+        resume_mode: 'cursor_index',
+        resolved_artifacts: {
+          trace_stream_path: traceStreamPath,
+        },
+      },
+      screenshotDir: path.join(tempRoot, 'screenshots'),
+    });
+
+    try {
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.attachedRuntime.status).toBe('invalid_descriptor');
+      expect(diagnostics.attachedRuntime.warning).toContain(
+        'cleanup_method=cleanup_attached_runtime_event_transport',
+      );
+      await expect(attachedRuntime.getAttachedRuntimeEvents({ limit: 5 })).rejects.toMatchObject({
+        code: 'ATTACHED_RUNTIME_INVALID_DESCRIPTOR',
+      });
+    } finally {
+      await attachedRuntime.shutdown();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it('supports attached runtime diagnostics and replay from a sqlite attach descriptor', async () => {
     const { tempRoot, descriptorPath, traceStreamPath } = await createAttachedRuntimeSqliteFixture();
     const attachedRuntime = new BrowserRuntime({
@@ -1102,7 +1139,7 @@ describe('BrowserRuntime', () => {
       expect(diagnostics.attachedRuntime.sourceTransportMethod).toBe('describe_runtime_event_transport');
       expect(diagnostics.attachedRuntime.sourceHandoffMethod).toBe('describe_runtime_event_handoff');
       expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
-      expect(diagnostics.attachedRuntime.bindingArtifactSource).toBe('explicit_request');
+      expect(diagnostics.attachedRuntime.bindingArtifactSource).toBeNull();
       expect(diagnostics.attachedRuntime.traceStreamSource).toBe('handoff_manifest');
       expect(diagnostics.attachedRuntime.eventCount).toBe(2);
       expect(diagnostics.attachedRuntime.latestEventId).toBe('evt-sqlite-2');

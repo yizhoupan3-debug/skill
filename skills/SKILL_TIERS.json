@@ -32,16 +32,16 @@
     }
   },
   "summary": {
-    "total_skills": 150,
+    "total_skills": 149,
     "tier_counts": {
       "core": 20,
-      "optional": 128,
+      "optional": 127,
       "experimental": 2,
       "deprecated": 0
     },
     "activation_counts": {
       "default": 26,
-      "explicit_opt_in": 124,
+      "explicit_opt_in": 123,
       "disabled": 0
     }
   },
@@ -51,7 +51,7 @@
       "claude-api",
       "design-agent",
       "doc",
-      "execution-audit-codex",
+      "execution-audit",
       "execution-controller-app",
       "execution-controller-coding",
       "gh-address-comments",
@@ -61,7 +61,7 @@
       "pdf",
       "playwright",
       "sentry",
-      "skill-developer-codex",
+      "skill-framework-developer",
       "slides",
       "spreadsheets",
       "subagent-delegation",
@@ -117,7 +117,6 @@
       "frontend-debugging",
       "frontend-design",
       "gh-pr-triage",
-      "git-workflow",
       "github-actions-authoring",
       "gitx",
       "go-pro",
@@ -175,8 +174,8 @@
       "skill-developer",
       "skill-installer",
       "skill-installer-antigravity",
-      "skill-maintenance-codex",
-      "skill-routing-repair-codex",
+      "skill-library-maintenance",
+      "skill-routing-repair",
       "skill-scout",
       "skill-writer",
       "slides-source-first",
@@ -1557,7 +1556,7 @@
         "loadouts": []
       }
     },
-    "execution-audit-codex": {
+    "execution-audit": {
       "tier": "core",
       "reasons": [
         "loadout:framework"
@@ -1903,48 +1902,6 @@
         "loadouts": []
       }
     },
-    "git-workflow": {
-      "tier": "optional",
-      "reasons": [
-        "usage_30d:1"
-      ],
-      "surface": {
-        "activation_mode": "default",
-        "default_surface_enabled": true,
-        "default_loadout_memberships": [
-          {
-            "loadout": "default_surface_loadout",
-            "bucket": "owners"
-          }
-        ]
-      },
-      "signals": {
-        "layer": "L2",
-        "owner": "owner",
-        "gate": "none",
-        "priority": "P1",
-        "session_start": "n/a",
-        "source": "project",
-        "source_position": 3,
-        "health": {
-          "dynamic_score": 100.0,
-          "static_score": 100.0,
-          "usage_30d": 1,
-          "reroutes_30d": 0,
-          "health_status": "Healthy"
-        },
-        "loadouts": [
-          {
-            "loadout": "default_surface_loadout",
-            "bucket": "owners"
-          },
-          {
-            "loadout": "ops_loadout",
-            "bucket": "owners"
-          }
-        ]
-      }
-    },
     "github-actions-authoring": {
       "tier": "optional",
       "reasons": [
@@ -2019,9 +1976,14 @@
         "specialist-opt-in"
       ],
       "surface": {
-        "activation_mode": "explicit_opt_in",
-        "default_surface_enabled": false,
-        "default_loadout_memberships": []
+        "activation_mode": "default",
+        "default_surface_enabled": true,
+        "default_loadout_memberships": [
+          {
+            "loadout": "default_surface_loadout",
+            "bucket": "owners"
+          }
+        ]
       },
       "signals": {
         "layer": "L2",
@@ -2038,7 +2000,16 @@
           "reroutes_30d": 0,
           "health_status": "Healthy"
         },
-        "loadouts": []
+        "loadouts": [
+          {
+            "loadout": "default_surface_loadout",
+            "bucket": "owners"
+          },
+          {
+            "loadout": "ops_loadout",
+            "bucket": "owners"
+          }
+        ]
       }
     },
     "go-pro": {
@@ -2844,7 +2815,7 @@
         "default_loadout_memberships": []
       },
       "signals": {
-        "layer": "L4",
+        "layer": "L2",
         "owner": "owner",
         "gate": "none",
         "priority": "P2",
@@ -2900,7 +2871,7 @@
         "default_loadout_memberships": []
       },
       "signals": {
-        "layer": "L4",
+        "layer": "L2",
         "owner": "owner",
         "gate": "none",
         "priority": "P2",
@@ -2928,7 +2899,7 @@
         "default_loadout_memberships": []
       },
       "signals": {
-        "layer": "L4",
+        "layer": "L2",
         "owner": "owner",
         "gate": "none",
         "priority": "P2",
@@ -2984,7 +2955,7 @@
         "default_loadout_memberships": []
       },
       "signals": {
-        "layer": "L4",
+        "layer": "L2",
         "owner": "owner",
         "gate": "none",
         "priority": "P2",
@@ -3810,7 +3781,7 @@
         "loadouts": []
       }
     },
-    "skill-developer-codex": {
+    "skill-framework-developer": {
       "tier": "core",
       "reasons": [
         "loadout:framework",
@@ -3901,7 +3872,7 @@
         "loadouts": []
       }
     },
-    "skill-maintenance-codex": {
+    "skill-library-maintenance": {
       "tier": "optional",
       "reasons": [
         "specialist-opt-in"
@@ -3929,7 +3900,7 @@
         "loadouts": []
       }
     },
-    "skill-routing-repair-codex": {
+    "skill-routing-repair": {
       "tier": "optional",
       "reasons": [
         "layer:L0"

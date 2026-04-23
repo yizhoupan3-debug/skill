@@ -38,9 +38,9 @@ into the shared library without creating a second live source of truth.
 
 ## Do not use
 
-- Designing a new skill from scratch → use `$skill-developer` or `$skill-developer-codex`
+- Designing a new skill from scratch → use `$skill-developer` or `$skill-framework-developer`
 - Rewriting or standardizing existing local skill docs → use `$writing-skills`
-- Post-task routing repair → use `$skill-routing-repair-codex`
+- Post-task routing repair → use `$skill-routing-repair`
 
 ## Core workflow
 

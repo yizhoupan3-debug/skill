@@ -62,7 +62,7 @@ This skill owns:
 - session/JWT/OAuth integration at the application layer
 - route guards, middleware, and identity propagation
 - token/cookie/session lifecycle decisions tied to app behavior
-- **Dual-Dimension Audit (Pre: Flow/Logic, Post: Token/Session Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Flow/Logic, Post: Token/Session Results)** → `$execution-audit` [Overlay]
 
 This skill does not own:
 - exploit-focused security auditing by itself
@@ -140,7 +140,7 @@ Recommended structure:
 - Do not hand-wave cookie storage, CSRF, or token persistence decisions.
 - Do not mix authentication and authorization into one vague middleware concept.
 - If a security-sensitive assumption remains unverified, say so explicitly.
-- **Superior Quality Audit**: For auth-critical flows, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For auth-critical flows, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -148,4 +148,4 @@ Recommended structure:
 - "帮我实现登录、权限控制和 route guard。"
 - "这个项目应该用 JWT 还是 session，顺便落代码。"
 - "强制进行 Auth 深度审计 / 检查登录逻辑与 Token 生命周期结果。"
-- "Use $execution-audit-codex to audit this auth implementation for zero-token-leak idealism."
+- "Use $execution-audit to audit this auth implementation for zero-token-leak idealism."

@@ -1,4 +1,4 @@
 interface:
   display_name: "Paper Reviser"
-  short_description: "Gate-execution manuscript revision workflow"
-  default_prompt: "Use $paper-reviser for paper-change requests driven by reviewer comments, gate files, or explicit strategic narrowing. Map requests like '根据 reviewer comments 修改', '按 review 改', '修到能投', '该删就删', '藏到附录', or '降 claim' to gate execution rather than generic writing polish. If the user explicitly scopes the task to one gate or dimension, execute only that gate; otherwise execute the current active gate in sequence. Treat the markdown packet as the source of truth, and when re-review is needed, hand only that markdown packet to a fresh isolated reviewer worker rather than relying on stale thread memory. Decision gates may choose ideal/hide/abandon; quality gates may only reach ideal or backjump upstream, and each bounded advancement should still produce exactly one new non-overwriting gate checklist file."
+  short_description: "Revise a paper from review findings"
+  default_prompt: "Use $paper-reviser when the user wants the paper changed based on reviewer comments, review findings, or a decision to narrow scope. If the user explicitly names one dimension, revise only that slice. Honest fixes may include repair, narrowing, deletion, de-emphasis, or moving material to the appendix."

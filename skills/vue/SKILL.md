@@ -65,7 +65,7 @@ This skill does not own:
 - React, Svelte, or other framework code
 - pure TypeScript type design → `$typescript-pro`
 - general backend API design → `$node-backend`
-- **Dual-Dimension Audit (Pre: Reactivity/Spec, Post: Hydration/Component Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Reactivity/Spec, Post: Hydration/Component Results)** → `$execution-audit` [Overlay]
 
 If the task shifts to adjacent skill territory, route to:
 - `$react` / `$svelte` for other UI frameworks
@@ -199,7 +199,7 @@ Recommended structure:
 - Keep component files ≤150 lines; extract composables or subcomponents when exceeded.
 - Use constants with arrow functions over function declarations (e.g., `const toggle = () =>`).
 - Prioritize early returns and guard clauses to reduce nesting.
-- **Superior Quality Audit**: For complex reactivity or Nuxt routes, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For complex reactivity or Nuxt routes, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -209,4 +209,4 @@ Recommended structure:
 - "用 Nuxt 3 搭建 SSR 项目。"
 - "写一个可复用的 composable。"
 - "强制进行 Vue 深度审计 / 检查响应式链与组件渲染结果。"
-- "Use $execution-audit-codex to audit this Vue/Nuxt implementation for result idealism."
+- "Use $execution-audit to audit this Vue/Nuxt implementation for result idealism."

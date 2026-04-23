@@ -101,7 +101,7 @@ For each proposed change, verify:
 |---|---|---|---|---|
 | 1 | [skill-name] | [file path] | P1/P2/P3 | [none / affects X] |
 
-### Create Actions (propose new skills — handoff to skill-developer-codex)
+### Create Actions (propose new skills — handoff to skill-framework-developer)
 
 | # | Proposed Name | Brief | Priority | Replaces/Extends |
 |---|---|---|---|---|

@@ -10,6 +10,7 @@ skill-library repo.
 
 - `paper_ref/`
 - `paper_review_v<N>/`
+- `paper_review_v<N>/lanes/`
 
 `paper_ref/` is the reusable target-journal-first benchmark pool:
 
@@ -25,6 +26,14 @@ non-overwriting gate checklist files:
 - `g02_core_evidence_r2.md`
 - `g11_figure_gate_r1.md`
 
+`paper_review_v<N>/lanes/` is the bounded sidecar workspace for parallel-only
+work that supports one active main gate:
+
+- `lanes/g02_batch_a/lane_manifest.md`
+- `lanes/g05_refs_a/lane_manifest.md`
+- `lanes/g11_figures_a/lane_manifest.md`
+- `lanes/g14_layout_a/lane_manifest.md`
+
 Rules:
 
 1. Start a new `paper_review_v<N>` only for a new whole-paper review cycle.
@@ -35,6 +44,8 @@ Rules:
 5. If the current gate passes, create the next gate's `r1` file.
 6. If the current gate fails, or a later quality gate backjumps upstream, create
    the same or earlier gate's next round file.
+7. Parallel lane artifacts may be appended under `lanes/`, but they do not
+   replace the one-main-gate-file rule.
 
 ## 2. Shared Fields
 
@@ -52,6 +63,14 @@ Rules:
 | `transport_docs` | Markdown packet files allowed to carry the review state |
 | `automation_wrapper` | Wrapper mode such as `heartbeat_5m_full_chain` for autonomous review execution |
 | `automation_tick_goal` | What one heartbeat tick is allowed to complete, normally one gate-round advancement |
+| `parallel_group_id` | Stable id for one bounded sidecar batch attached to the current main gate |
+| `lane_id` | Stable id for one sidecar lane inside that parallel batch |
+| `lane_kind` | `evidence_extract`, `citation_verify`, `figure_audit`, `table_audit`, `notation_audit`, `layout_audit`, `mirror_cleanup`, or `prose_local` |
+| `lane_scope` | Concrete slice owned by that lane, such as `figure:F3-F6` or `citation_cluster:C5-C11` |
+| `lane_owner` | Specialist skill or worker responsible for that lane |
+| `lane_status` | `queued`, `running`, `merged`, `blocked`, or `dropped` |
+| `lane_outputs` | Artifacts produced by the lane before merge-back |
+| `merge_back_rule` | How the main thread is allowed to consume lane outputs without changing frozen upstream decisions |
 | `gate_id` | `G0` through `G14` |
 | `gate_order` | Stable integer order for freeze / backjump rules |
 | `gate_kind` | `setup`, `decision`, or `quality` |
@@ -156,6 +175,9 @@ Rules:
    demand a backjump.
 5. Decision gates are the only place where strategic narrowing, appendix moves,
    or abandonment are chosen.
+6. Sidecar lanes may collect evidence or propose local edits, but they may not
+   independently freeze a gate, advance the chain, or override the main-thread
+   decision.
 
 ## 7. Scope Modes
 
@@ -202,20 +224,144 @@ Recommended markdown packet:
 - upstream gate files named in `Frozen Inputs`
 - any manuscript-path note required to locate the paper artifacts
 
-## 9. Automation Wrapper Contract
+## 9. Main Chain vs Parallel Lanes
+
+The paper workflow is intentionally hybrid:
+
+- main chain = serial
+- sidecar lanes = bounded parallel
+- merge-back = local and serial
+
+Why:
+
+- `G0-G6` decide what the paper is honestly allowed to claim
+- later quality surfaces depend on those earlier decisions being frozen
+- parallelism is useful for evidence collection and local inspection, not for
+  replacing one main judgment with many conflicting judgments
+
+### 9.1 Main chain rules
+
+The following remain serial:
+
+- choosing the active gate
+- selecting `ideal / hide / abandon`
+- freezing a gate
+- opening a backjump
+- creating the next main gate file
+
+### 9.2 Allowed parallel lane families
+
+Parallel lanes are allowed only when they are bounded and feed one active gate.
+
+Recommended families:
+
+- `G0`: target-venue-near paper collection and local PDF inventory
+- `G2`: table/figure/result extraction, strongest-baseline checks, ablation inventory
+- `G5`: citation existence checks, claim-to-citation precision checks, venue calibration sweeps
+- `G7-G9`: mirror-surface diffing across abstract / intro / conclusion / captions / rebuttal
+- `G10`: notation and abbreviation consistency scans
+- `G11-G12`: per-figure and per-table audits at final scale
+- `G13`: local prose smoothing only after claim boundaries are frozen
+- `G14`: layout, float, and page-economy checks
+
+### 9.3 Forbidden parallel patterns
+
+Do not parallelize:
+
+- multiple decision gates at once
+- many reviewers each deciding claim ceiling independently
+- sidecar lanes that directly mutate the main gate file
+- lane-local choices of `hide` or `abandon` without main-thread confirmation
+- free-form sidecar chat state as merge truth
+
+## 10. Lane Manifest Contract
+
+Each parallel batch should create one manifest:
+
+- `paper_review_v<N>/lanes/<parallel_group_id>/lane_manifest.md`
+
+The manifest should include:
+
+1. `Main Gate`
+2. `Batch Goal`
+3. `Frozen Inputs`
+4. `Lane Table`
+5. `Merge Back Rule`
+6. `Stop Condition`
+
+The `Lane Table` should track:
+
+- `lane_id`
+- `lane_kind`
+- `lane_scope`
+- `lane_owner`
+- `status`
+- `output_artifact`
+- `blocked_by`
+
+Rules:
+
+- one manifest per bounded batch
+- each lane owns a disjoint slice
+- lane output is advisory until merged by the main thread
+- lane artifacts are append-only or replace-only within the lane root, not the main gate root
+
+Bundled scaffold helper:
+
+```bash
+python3 /Users/joe/Documents/skill/scripts/paper_lane_scaffold.py \
+  --workspace /path/to/manuscript \
+  --review-dir paper_review_v3 \
+  --batch-id g11_figures_a \
+  --main-gate G11 \
+  --batch-goal "Audit final-scale figures before gate closeout." \
+  --frozen-input "G2 passed" \
+  --frozen-input "G3 selected_claim_level locked" \
+  --lane "fig_a|figure_audit|figure:F1-F2|paper-visuals" \
+  --lane "fig_b|figure_audit|figure:F3-F4|paper-visuals"
+```
+
+## 11. Merge-Back Contract
+
+Merge-back is always local to the main thread.
+
+The main thread may:
+
+- accept a lane result as evidence
+- reject a lane result
+- request one rerun for a blocked lane
+- drop a lane if its slice is no longer relevant after a decision change
+
+The main thread may not:
+
+- let a lane silently redefine frozen inputs
+- merge contradictory lane outputs without explicit adjudication
+- advance the main chain before merge-critical lanes are resolved or waived
+
+Default merge policy:
+
+- decision gates: merge evidence first, decide second
+- quality gates: merge local audit findings, then emit one pass or backjump decision
+
+## 12. Automation Wrapper Contract
 
 For autonomous full-chain review mode, use:
 
 - `automation_wrapper = heartbeat_5m_full_chain`
-- `automation_tick_goal = advance_at_most_one_gate_round`
+- `automation_tick_goal = advance_at_most_one_main_gate_or_one_parallel_batch`
 
 Per heartbeat tick:
 
 1. Read the markdown packet only.
 2. Resolve the active gate from the latest gate files.
-3. Launch a fresh isolated reviewer worker for that gate.
-4. Write exactly one new non-overwriting gate markdown file.
-5. Exit without carrying hidden state into the next tick.
+3. Choose one of two legal actions:
+   - advance the main gate once
+   - launch or merge one bounded parallel batch for the active gate
+4. If a parallel batch is launched, write or update only the lane manifest and
+   lane-local artifacts.
+5. If the main gate is advanced, write exactly one new non-overwriting gate
+   markdown file.
+6. Exit without carrying hidden state into the next tick.
 
 The heartbeat wrapper is part of the skill contract; it does not authorize
 overwriting old markdown files or carrying free-form hidden state between ticks.

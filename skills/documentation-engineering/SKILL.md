@@ -45,7 +45,7 @@ risk: low
 source: local
 ---
 
-- **Dual-Dimension Audit (Pre: Doc-Structure/Logic, Post: Links-Freshness/Completeness Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Doc-Structure/Logic, Post: Links-Freshness/Completeness Results)** → `$execution-audit` [Overlay]
 
 # documentation-engineering
 
@@ -72,7 +72,7 @@ and automating developer-facing documentation artifacts.
 
 - The task is academic paper writing → use `$paper-writing`
 - The task is `.docx` Word document editing → use `$doc`
-- The task is `SKILL.md` or skill documentation → use `$skill-developer-codex` or `$writing-skills`
+- The task is `SKILL.md` or skill documentation → use `$skill-framework-developer` or `$writing-skills`
 - The task is code comment style enforcement only → use `$coding-standards`
 - The task is API interface design (not its documentation) → use `$api-design`
 - The task is PDF generation or manipulation → use `$pdf`
@@ -159,8 +159,8 @@ This skill does not own:
 - Use the project's existing documentation conventions if they exist
 - Flag any documentation that contradicts the current codebase
 - ADRs should be immutable once accepted; create new ADRs to supersede old ones
-- **Superior Quality Audit**: For production-grade documentation, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production-grade documentation, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 - "强制进行文档工程深度审计 / 检查内容完整性与链接有效性。"
-- "Use $execution-audit-codex to audit this README for completeness idealism."
+- "Use $execution-audit to audit this README for completeness idealism."

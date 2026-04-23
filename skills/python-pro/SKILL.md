@@ -73,7 +73,7 @@ This skill does not own:
 - Cross-language error **architecture** (error taxonomies, retry/circuit-breaker, error code systems) → `$error-handling-patterns`
 - Python-specific profiling and optimization (cProfile, async, caching) is owned by this skill unless the task is performance-first acceleration dominated by hot-path rewrites or faster-library substitution, in which case use `$code-acceleration`
 - Web frontend performance audits → `$performance-expert`
-- **Dual-Dimension Audit (Pre: Pyproject-Config/Typing, Post: Package-Integrity/Perf-Metric Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Pyproject-Config/Typing, Post: Package-Integrity/Perf-Metric Results)** → `$execution-audit` [Overlay]
 
 If the task shifts to adjacent skill territory, route to:
 - `$sql-pro`
@@ -192,7 +192,7 @@ Recommended structure:
 - Do not use bare `except:` or `except Exception:` without re-raising or logging.
 - In this repository, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) for noisy `pytest`, lint, or tooling runs when compact output is enough.
 - Preserve public module contracts unless the user asks to break them.
-- **Superior Quality Audit**: For production-grade Python services, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For production-grade Python services, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -201,4 +201,4 @@ Recommended structure:
 - "这个 Python 项目怎么配 uv + ruff + pytest？"
 - "优化这段 Python 服务代码的结构和运行方式。"
 - "强制进行 Python 库/服务深度审计 / 检查配置完整性与运行性能结果。"
-- "Use $execution-audit-codex to audit this Python service for performance-metric idealism."
+- "Use $execution-audit to audit this Python service for performance-metric idealism."

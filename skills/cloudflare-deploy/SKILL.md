@@ -29,7 +29,7 @@ metadata:
     - deploy
 ---
 
-- **Dual-Dimension Audit (Pre: Bindings/Config, Post: Live-URL/Edge-latency Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Bindings/Config, Post: Live-URL/Edge-latency Results)** → `$execution-audit` [Overlay]
 
 # Cloudflare Deploy
 
@@ -256,7 +256,7 @@ The deploy failed due to an environment/network issue. I captured the exact erro
 - **Destructive Operations**: Require explicit user confirmation before running commands that delete data or drop tables (e.g., `wrangler kv:key delete`, `wrangler d1 execute --remote` with DROP/DELETE, `wrangler r2 object delete`).
 - **Production Overwrites**: Warn the user before deploying over an existing production environment if the changes are significant.
 - **Token Security**: Never log or echo `CLOUDFLARE_API_TOKEN` in chat or terminal output.
-- **Superior Quality Audit**: For critical edge deployments, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For critical edge deployments, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## When to use
 
@@ -275,4 +275,4 @@ The deploy failed due to an environment/network issue. I captured the exact erro
 
 ## Trigger examples
 - "强制进行 Cloudflare 部署审计 / 检查 Workers 绑定与线上运行结果。"
-- "Use $execution-audit-codex to audit this Cloudflare deployment for edge-resilience idealism."
+- "Use $execution-audit to audit this Cloudflare deployment for edge-resilience idealism."

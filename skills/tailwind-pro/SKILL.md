@@ -66,7 +66,7 @@ This skill owns:
 This skill does not own:
 - general CSS layout, Grid, Flexbox without Tailwind context → `$css-pro`
 - framework-specific component patterns
-- **Dual-Dimension Audit (Pre: Config/Tokens, Post: Purge/Conflict Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Config/Tokens, Post: Purge/Conflict Results)** → `$execution-audit` [Overlay]
 
 ## Capabilities
 
@@ -119,7 +119,7 @@ This skill does not own:
 - When class lists become unreadable, extract into `cva` variants or component abstractions.
 - Always configure content/purge paths to avoid bloated production CSS.
 - Prefer `twMerge` when dynamically combining class strings to avoid conflicts.
-- **Superior Quality Audit**: For design-system-level changes, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For design-system-level changes, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -128,4 +128,4 @@ This skill does not own:
 - "写一个自定义 Tailwind 插件。"
 - "Tailwind v3 怎么迁移到 v4？"
 - "强制进行 Tailwind 深度审计 / 检查 Config 逻辑与样式复现结果。"
-- "Use $execution-audit-codex to audit this design system for superior theme integrity."
+- "Use $execution-audit to audit this design system for superior theme integrity."

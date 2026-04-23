@@ -74,7 +74,7 @@ This skill does not own:
 - API client implementation → `$api-integration-debugging`
 - data cleaning of already-extracted datasets → `$data-wrangling`
 - legal/compliance advice on scraping (flag concerns but do not provide legal counsel)
-- **Dual-Dimension Audit (Pre: Selectors/Flow, Post: Extraction-Fidelity/Anti-bot Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Selectors/Flow, Post: Extraction-Fidelity/Anti-bot Results)** → `$execution-audit` [Overlay]
 
 If the task shifts to adjacent skill territory, route to:
 - `$playwright` for browser automation beyond extraction
@@ -188,7 +188,7 @@ for (let page = 1; page <= maxPages; page++) {
 - Prefer API endpoints over HTML scraping when available.
 - Always handle errors gracefully: retry on transient failures, skip and log on persistent ones.
 - Validate extracted data before outputting: check for empty fields, duplicates, malformed entries.
-- **Superior Quality Audit**: For large-scale or high-fidelity scraping, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For large-scale or high-fidelity scraping, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -197,4 +197,4 @@ for (let page = 1; page <= maxPages; page++) {
 - "Scrape this page and save the results as CSV."
 - "批量提取这些页面的价格和标题。"
 - "强制进行爬虫深度审计 / 检查字段提取完整性与防封结果。"
-- "Use $execution-audit-codex to audit this scraper for extraction-fidelity idealism."
+- "Use $execution-audit to audit this scraper for extraction-fidelity idealism."

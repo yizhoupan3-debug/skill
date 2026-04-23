@@ -33,7 +33,7 @@ risk: low
 source: local
 ---
 
-- **Dual-Dimension Audit (Pre: Easing-Logic/Curve, Post: Frame-Rate/Interaction Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Easing-Logic/Curve, Post: Frame-Rate/Interaction Results)** → `$execution-audit` [Overlay]
 
 # motion-design
 
@@ -52,7 +52,7 @@ This skill owns **motion strategy and high-level implementation**: how the inter
 - Basic CSS layouts or simple `:hover` transitions → use `$css-pro`
 - Performance optimization of existing animations → use `$performance-expert`
 - Visual review of animation timing → `$visual-review`
-- **Dual-Dimension Audit (Pre: Physics/Logic, Post: Smoothness/Timing Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Physics/Logic, Post: Smoothness/Timing Results)** → `$execution-audit` [Overlay]
 
 ## Core workflow
 
@@ -80,4 +80,4 @@ This skill owns **motion strategy and high-level implementation**: how the inter
 
 - [references/spring-presets.md](references/spring-presets.md)
 - [references/stagger-patterns.md](references/stagger-patterns.md)
-- [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md)
+- [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md)

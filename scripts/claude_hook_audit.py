@@ -26,6 +26,7 @@ PROTECTED_GENERATED_PATHS = {
     ".gemini/settings.json",
     ".claude/settings.json",
     ".claude/agents/README.md",
+    ".codex/hooks.json",
     ".codex/host_entrypoints_sync_manifest.json",
     ".codex/memory/CLAUDE_MEMORY.md",
 }
@@ -41,9 +42,9 @@ PROTECTED_BASH_PATH_HINTS = (
     ".gemini/settings.json",
     ".claude/settings.json",
     ".claude/agents/README.md",
+    ".codex/hooks.json",
     ".claude/hooks/",
     ".claude/commands/",
-    ".claude/",
     ".codex/host_entrypoints_sync_manifest.json",
     ".codex/memory/CLAUDE_MEMORY.md",
 )
@@ -170,8 +171,6 @@ def _find_bash_generated_write(payload: dict[str, Any]) -> str | None:
             if hint not in segment:
                 continue
             if looks_mutating or _segment_redirects_to_protected_path(segment, hint):
-                if hint == ".claude/":
-                    return ".claude/**"
                 return hint
     return None
 

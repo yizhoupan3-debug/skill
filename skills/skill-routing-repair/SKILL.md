@@ -1,7 +1,7 @@
 ---
-name: skill-routing-repair-codex
+name: skill-routing-repair
 description: |
-  Patch Codex routing misses after a task with the smallest safe skill fix.
+  Patch routing misses after a task with the smallest safe skill fix.
   Use when the task is a post-task repair request such as 顺手修一下 skill, 这次为什么没触发,
   新加入 skill 没有走维护流程, 边界重叠后修改旧 skill, or gate 顺序修复.
   This is for concrete miss repair, not full framework redesign.
@@ -12,6 +12,8 @@ routing_priority: P1
 session_start: n/a
 short_description: Patch routing misses with the smallest safe skill fix
 trigger_hints:
+  - skill-routing-repair-codex
+  - skill-routing-repair
   - 路由修复
   - 触发修复
   - 自提升
@@ -41,6 +43,7 @@ metadata:
   version: "1.2.0"
   platforms: [codex]
   tags:
+    - skill-routing-repair-codex
     - codex
     - routing-repair
     - trigger-repair
@@ -50,9 +53,9 @@ metadata:
 risk: low
 source: local
 ---
-- **Dual-Dimension Audit (Pre: Miss-Root/Logic, Post: Patch-Stability/Sync Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Miss-Root/Logic, Post: Patch-Stability/Sync Results)** → `$execution-audit` [Overlay]
 
-# skill-routing-repair-codex
+# skill-routing-repair
 
 This skill owns **post-task routing repair**: turn one observed miss into the
 smallest safe library patch.
@@ -69,7 +72,7 @@ smallest safe library patch.
 
 ## Do not use
 
-- The task is broad framework redesign or x-round framework optimization → use [`$skill-developer-codex`](/Users/joe/Documents/skill/skills/skill-developer-codex/SKILL.md)
+- The task is broad framework redesign or x-round framework optimization → use [`$skill-framework-developer`](/Users/joe/Documents/skill/skills/skill-framework-developer/SKILL.md)
 - The task is direct creation or heavy rewriting of a skill package with no concrete miss anchor → use [`$skill-creator`](/Users/joe/Documents/skill/skills/.system/skill-creator/SKILL.md)
 - The task is import/install/relink of a new skill → use [`$skill-installer`](/Users/joe/Documents/skill/skills/.system/skill-installer/SKILL.md)
 - The task is Antigravity-only self-improvement → use `$skill-developer`
@@ -82,7 +85,7 @@ smallest safe library patch.
    - patch opening-turn wording next
    - patch routing docs only if discovery really changed
    - split only if the incumbent skill cannot stay precise
-- **Superior Quality Audit**: For critical routing repairs, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For critical routing repairs, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 3. Re-run validation and sync.
 
 ## Validation

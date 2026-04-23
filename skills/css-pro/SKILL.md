@@ -80,7 +80,7 @@ This skill owns:
 This skill does not own:
 - HTML semantics and accessibility → `$web-platform-basics`
 - JavaScript logic and framework state
-- **Dual-Dimension Audit (Pre: Layout/Spec, Post: Cross-browser/Visual Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Layout/Spec, Post: Cross-browser/Visual Results)** → `$execution-audit` [Overlay]
 
 ## Required workflow
 
@@ -186,7 +186,7 @@ Recommended structure:
 - Prefer logical properties (`inline-start`, `block-end`) over physical when i18n matters.
 - CSS methodology decision tree: CSS Modules / BEM for large-scale apps needing strict specificity control; CSS-in-JS for tightly-coupled component logic+style. For utility-first (Tailwind), route to `$tailwind-pro`.
 - When Tailwind questions arise, route to `$tailwind-pro` rather than providing in-line guidance.
-- **Superior Quality Audit**: For "Premium" or layout-critical designs, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For "Premium" or layout-critical designs, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 
@@ -195,4 +195,4 @@ Recommended structure:
 - "这个动画在移动端卡顿怎么优化？"
 - "配置 Tailwind 主题和 design tokens。"
 - "强制进行 CSS 深度审计 / 检查布局逻辑与视觉复现结果。"
-- "Use $execution-audit-codex to audit this layout for pixel-perfect result idealism."
+- "Use $execution-audit to audit this layout for pixel-perfect result idealism."

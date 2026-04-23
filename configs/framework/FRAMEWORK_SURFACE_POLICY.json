@@ -31,7 +31,7 @@
       "plan-to-code",
       "python-pro",
       "typescript-pro",
-      "git-workflow",
+      "gitx",
       "shell-cli"
     ],
     "default_overlays": [
@@ -49,13 +49,13 @@
     "loadout_catalog_path": "skills/SKILL_LOADOUTS.json",
     "tier_counts": {
       "core": 20,
-      "optional": 128,
+      "optional": 127,
       "experimental": 2,
       "deprecated": 0
     },
     "activation_counts": {
       "default": 26,
-      "explicit_opt_in": 124,
+      "explicit_opt_in": 123,
       "disabled": 0
     }
   },

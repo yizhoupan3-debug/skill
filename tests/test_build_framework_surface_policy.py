@@ -47,7 +47,7 @@ def test_framework_surface_policy_keeps_kernel_small_and_default_surface_explici
         "plan-to-code",
         "python-pro",
         "typescript-pro",
-        "git-workflow",
+        "gitx",
         "shell-cli",
     ]
     assert [metric["id"] for metric in payload["outcome_metrics"]] == [

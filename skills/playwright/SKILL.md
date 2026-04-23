@@ -37,7 +37,7 @@ artifact_outputs:
   - EVIDENCE_INDEX.json
 bridge_behavior: mobile_complete_once
 ---
-- **Dual-Dimension Audit (Pre: Selector-Logic/Flow, Post: Trace-Fidelity/Visual-Regression Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Selector-Logic/Flow, Post: Trace-Fidelity/Visual-Regression Results)** → `$execution-audit` [Overlay]
 # Playwright CLI Skill
 
 At conversation start or first turn, check this execution gate before abstract advice whenever the task requires a live browser session to obtain evidence.
@@ -229,7 +229,7 @@ Open only what you need:
 - Use `--headed` when a visual check will help.
 - When capturing artifacts in this repo, use `output/playwright/` and avoid introducing new top-level artifact folders.
 - Default to CLI commands and workflows, not Playwright test specs.
-- **Superior Quality Audit**: For mission-critical browser automation, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For mission-critical browser automation, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## When to use
 
@@ -237,7 +237,7 @@ Open only what you need:
 - The task involves browser testing, page interaction, or automated screenshots
 - The user says "Playwright", "E2E 测试", "浏览器自动化", "headless browser"
 - "强制进行 Playwright 深度审计 / 检查选择器稳定性与视觉回归结果。"
-- "Use $execution-audit-codex to audit this browser script for trace-fidelity idealism."
+- "Use $execution-audit to audit this browser script for trace-fidelity idealism."
 - The user wants to automate web interactions programmatically
 
 ## Do not use

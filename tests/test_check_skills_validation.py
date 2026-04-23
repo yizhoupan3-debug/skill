@@ -80,7 +80,7 @@ def test_iter_skill_dirs_discovers_nested_bundles_and_skips_containers(tmp_path:
     skills_root = tmp_path / "skills"
     _write_skill(skills_root / "top-skill", "top-skill")
     _write_skill(
-        skills_root / "codex-primary-runtime" / "spreadsheets",
+        skills_root / "primary-runtime" / "spreadsheets",
         "spreadsheets",
     )
     _write_skill(skills_root / ".system" / "openai-docs", "openai-docs")
@@ -93,7 +93,7 @@ def test_iter_skill_dirs_discovers_nested_bundles_and_skips_containers(tmp_path:
     discovered_paths = {path.relative_to(skills_root).as_posix() for _, path in discovered}
 
     assert discovered_paths == {
-        "codex-primary-runtime/spreadsheets",
+        "primary-runtime/spreadsheets",
         "top-skill",
     }
 
@@ -102,7 +102,7 @@ def test_iter_skill_dirs_discovers_nested_bundles_and_skips_containers(tmp_path:
     assert sorted(report.slug for report in reports) == ["spreadsheets", "top-skill"]
     assert "openai-docs" in {document.slug for document in documents}
     assert all("missing SKILL.md" not in report.errors for report in reports)
-    assert all(report.path != skills_root / "codex-primary-runtime" for report in reports)
+    assert all(report.path != skills_root / "primary-runtime" for report in reports)
     assert all(report.path != container for report in reports)
 
     discovered_with_system = iter_skill_dirs(skills_root, include_system=True)

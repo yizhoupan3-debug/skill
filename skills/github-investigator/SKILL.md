@@ -61,7 +61,7 @@ evolution, or code-history evidence are central to the answer.
 
 - General web research with no repository-history center of gravity → use `$information-retrieval`
 - External skill-ecosystem benchmarking for local skill improvement → use `$skill-scout`
-- Triaging local git status or local branch safety → use `$git-workflow`
+- Triaging local git status or local branch safety → use `$gitx`
 - Directly resolving CI failures without research → use `$gh-fix-ci`
 - Only responding to PR review comments → use `$gh-address-comments`
 

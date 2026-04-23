@@ -97,9 +97,9 @@ INDEX_COMMON_LANES = [
     ("前端运行时问题", "frontend-debugging"),
     ("README / ADR / 项目文档", "documentation-engineering"),
     ("构建 / 打包 / 工具链", "build-tooling"),
-    ("Git 流程 / 合并 / 推送", "git-workflow"),
+    ("Git 流程 / 合并 / 推送", "gitx"),
     ("多轮调研 / 对比 / 检索", "information-retrieval"),
-    ("skill 库 / 路由框架自身", "skill-developer-codex"),
+    ("skill 库 / 路由框架自身", "skill-framework-developer"),
 ]
 
 INDEX_OVERLAY_SHORTCUTS = [

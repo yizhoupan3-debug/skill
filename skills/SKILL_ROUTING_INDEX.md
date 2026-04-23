@@ -34,9 +34,9 @@
 | 前端运行时问题 | `frontend-debugging` | Diagnose frontend runtime bugs with a five-layer model ( |
 | README / ADR / 项目文档 | `documentation-engineering` | Write, review, and maintain project documentation such a |
 | 构建 / 打包 / 工具链 | `build-tooling` | Debug and design JS/TS/Python build tooling across packa |
-| Git 流程 / 合并 / 推送 | `git-workflow` | Safely execute Git operations and remote sync |
+| Git 流程 / 合并 / 推送 | `gitx` | Run the safe Git review-fix-tidy-commit-merge-push workf |
 | 多轮调研 / 对比 / 检索 | `information-retrieval` | Run multi-round research before acting or recommending |
-| skill 库 / 路由框架自身 | `skill-developer-codex` | Design and tune Codex skill routing/framework behavior |
+| skill 库 / 路由框架自身 | `skill-framework-developer` | Design and tune Codex skill routing/framework behavior |
 
 ## Optional overlays
 | Add when... | Overlay | Why |

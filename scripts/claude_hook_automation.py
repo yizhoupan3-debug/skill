@@ -14,8 +14,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-PROMPT_PATH_RE = re.compile(r"(?<!\w)(?:[\w./-]+\.(?:py|rs|sh|json|md))(?!\w)", re.IGNORECASE)
+PROMPT_PATH_RE = re.compile(r"(?<!\w)(?:[\w./-]+\.(?:py|rs|sh|json))(?!\w)", re.IGNORECASE)
 CODE_PATH_RE = re.compile(r"(?<!\w)(?:[\w./-]+\.(?:py|rs|sh))(?!\w)", re.IGNORECASE)
+MARKDOWN_PATH_RE = re.compile(r"(?<!\w)(?:[\w./-]+\.md)(?!\w)", re.IGNORECASE)
 STRONG_ACTION_TERMS = (
     "修复",
     "实现",
@@ -54,8 +55,6 @@ CODE_TARGET_TERMS = (
     "runtime",
     "hook",
     "hooks",
-    "agent.md",
-    "claude.md",
     "脚本",
     "router",
     "路由",
@@ -80,14 +79,15 @@ NON_CODE_EDIT_TERMS = (
     "邮件",
     "口语化",
     "人话",
+    "readme",
+    "文档",
+    "说明",
 )
 PERF_TERMS = ("加速", "性能", "内存", "热区", "热路径", "performance", "memory", "latency")
 COMPAT_TERMS = ("保底", "补丁", "兼容", "fallback", "shim", "wrapper", "patch")
-HOOK_TERMS = ("hook", "hooks", "agent.md", "claude.md", "pretooluse", "userpromptsubmit")
-COMMON_CONTEXT = "实现要求：优先直接落目标行为，不要先叠兼容层、补丁分支、保底开关或 keep-old-and-add-new。"
-SIMPLIFY_CONTEXT = "简化优先：先判断能不能删、合并、内联或收窄；如果两种实现都能完成需求，选层级更少、分支更少、拷贝更少的。"
+HOOK_TERMS = ("hook", "hooks", "pretooluse", "userpromptsubmit")
 PERF_CONTEXT = "顺手看热路径上的重复 I/O、重复序列化、无谓 clone、临时对象和多余包装层。"
-COMPAT_CONTEXT = "如果旧兼容/过渡逻辑已经没有真实必要，优先删掉而不是继续包一层。"
+COMPAT_CONTEXT = "如果这次明确在收口兼容/补丁逻辑，顺手确认新增分支、wrapper 和 fallback 还有没有真实必要。"
 RUST_CONTEXT = "Rust 额外检查：盯住热循环里的分配、clone、String/Vec 复制和 serde_json 往返。"
 PYTHON_CONTEXT = "Python 额外检查：盯住重复解析、重复读文件、wrapper-on-wrapper 和兼容别名链。"
 HOOK_CONTEXT = "Hook 额外检查：让 hook 增加自动化，而不是只做阻拦；优先短上下文、窄触发、低开销，并尽量用 matcher/if 避免无谓触发。"
@@ -192,6 +192,8 @@ def _extract_path_hints(prompt_text: str) -> set[str]:
 
 def _looks_like_coding_request(prompt_text: str) -> bool:
     lowered = prompt_text.lower()
+    if MARKDOWN_PATH_RE.search(prompt_text) and not PROMPT_PATH_RE.search(prompt_text):
+        return False
     strong_actions = sum(token in lowered for token in STRONG_ACTION_TERMS)
     weak_actions = sum(token in prompt_text or token in lowered for token in WEAK_ACTION_TERMS)
     code_targets = sum(token in prompt_text or token in lowered for token in CODE_TARGET_TERMS)
@@ -212,7 +214,7 @@ def _prompt_context(prompt_text: str) -> str | None:
     if not _looks_like_coding_request(prompt_text):
         return None
     lowered = prompt_text.lower()
-    parts = [COMMON_CONTEXT, SIMPLIFY_CONTEXT]
+    parts: list[str] = []
     if any(token in prompt_text or token in lowered for token in PERF_TERMS):
         parts.append(PERF_CONTEXT)
     if any(token in prompt_text or token in lowered for token in COMPAT_TERMS):
@@ -222,6 +224,8 @@ def _prompt_context(prompt_text: str) -> str | None:
     path_hints = _extract_path_hints(prompt_text)
     if any("hook" in hint.lower() for hint in path_hints):
         parts.append(HOOK_CONTEXT)
+    if not parts:
+        return None
     return _join_unique_context(parts)
 
 
@@ -247,7 +251,7 @@ def run_user_prompt_submit(_repo_root: Path, payload: dict[str, Any]) -> int:
 def _quality_target_context(path: str) -> str | None:
     if not path.endswith(QUALITY_TARGET_SUFFIXES):
         return None
-    parts = [COMMON_CONTEXT, SIMPLIFY_CONTEXT]
+    parts: list[str] = []
     is_runtime = any(path.startswith(prefix) for prefix in RUNTIME_PREFIXES)
     is_hook = any(path.startswith(prefix) for prefix in HOOK_PREFIXES) or "hook" in path
     is_test = path.startswith("tests/")
@@ -257,12 +261,14 @@ def _quality_target_context(path: str) -> str | None:
         parts.append(PERF_CONTEXT)
     if path.endswith(".rs") and is_runtime:
         parts.append(RUST_CONTEXT)
-    if path.endswith(".py"):
+    if path.endswith(".py") and (is_runtime or is_hook):
         parts.append(PYTHON_CONTEXT)
     if is_hook or path.endswith(".sh"):
         parts.append(HOOK_CONTEXT)
     if is_test:
         parts.append(TEST_CONTEXT)
+    if not parts:
+        return None
     return _join_unique_context(parts)
 
 
@@ -413,7 +419,7 @@ def _build_async_audit_context(path: str, text: str, source_mode: str) -> str | 
             parts.append(
                 f"`{path}` 的新增片段有实现复查信号：{source_label}, compat={compat_hits}, clone={clone_hits}, serde={serde_hits}, string_copy={string_hits}。"
             )
-            parts.append("如果这轮还在继续，优先通过删除、合并、内联或收窄解决；先删过渡逻辑，再压缩热路径里的 clone 和序列化往返。")
+            parts.append("如果这轮还在继续，先看新增兼容分支或中转层能不能直接收掉，再压缩热路径里的 clone 和序列化往返。")
     elif path.endswith(".py"):
         json_hits = text.count("json.loads(") + text.count("json.dumps(")
         io_hits = text.count(".read_text(") + text.count(".read_bytes(") + text.count(".write_text(")
@@ -422,19 +428,19 @@ def _build_async_audit_context(path: str, text: str, source_mode: str) -> str | 
             parts.append(
                 f"`{path}` 的新增片段有实现复查信号：{source_label}, compat={compat_hits}, json_roundtrip={json_hits}, file_io={io_hits}。"
             )
-            parts.append("优先通过删除、合并、内联或收窄解决；先删兼容/补丁分支，再减少重复解析、重复读写和 wrapper-on-wrapper。")
+            parts.append("如果这轮还在继续，先看新增兼容/补丁分支能不能直接收掉，再减少重复解析、重复读写和 wrapper-on-wrapper。")
         elif "hook" in lowered_path and compat_hits >= 1:
             parts.append(
                 f"`{path}` 的新增片段仍带有明显的 hook 过渡信号：{source_label}, compat={compat_hits}, helper_defs={wrapper_hits}。"
             )
-            parts.append("确认这层是在增加自动化，而不是只多加一道阻拦或中转包装；能删、能并、能收窄就别再包一层。")
+            parts.append("确认这层是在增加自动化，而不是只多加一道阻拦或中转包装；优先把新增中转层收回到更短路径。")
     elif path.endswith(".sh"):
         deny_hits = text.count("permissionDecision")
         if "hook" in lowered_path and (compat_hits >= 1 or deny_hits >= 1):
             parts.append(
                 f"`{path}` 的新增片段有 hook 复查信号：{source_label}, compat={compat_hits}, deny_rules={deny_hits}。"
             )
-            parts.append("确认这层仍然是短路径、低开销、加自动化；能删规则、合并判断、收窄 matcher/if，就不要继续堆阻拦脚本。")
+            parts.append("确认这层仍然是短路径、低开销、加自动化；优先删掉新增阻拦规则或合并重复判断。")
 
     if not parts:
         return None

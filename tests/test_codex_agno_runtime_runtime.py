@@ -1280,6 +1280,65 @@ def test_runtime_attached_replay_rejects_descriptor_that_drifts_from_canonical_t
         asyncio.run(_run())
 
 
+def test_runtime_event_attach_rejects_descriptor_with_noncanonical_cleanup_resume_contract(
+    tmp_path: Path,
+) -> None:
+    """External attach should fail closed when cleanup/resume vocabulary drifts from the Rust-owned contract."""
+
+    with _project_supervisor_state():
+        trace_path = tmp_path / "TRACE_METADATA.json"
+        runtime = CodexAgnoRuntime(
+            RuntimeSettings(
+                codex_home=PROJECT_ROOT,
+                data_dir=tmp_path / "runtime-data",
+                trace_output_path=trace_path,
+                live_model_override=False,
+            )
+        )
+
+        async def _run() -> None:
+            response = await runtime.run_task(
+                RunTaskRequest(
+                    task="帮我写一个 Rust CLI 工具",
+                    session_id="attach-contract-drift-session",
+                    user_id="tester",
+                    dry_run=True,
+                )
+            )
+            transport = runtime.describe_runtime_event_transport(session_id=response.session_id)
+            attached_runtime = CodexAgnoRuntime(
+                RuntimeSettings(
+                    codex_home=PROJECT_ROOT,
+                    data_dir=tmp_path / "attached-runtime-data",
+                    trace_output_path=tmp_path / "ATTACHED_TRACE_METADATA.json",
+                    live_model_override=False,
+                )
+            )
+            attach_descriptor = attached_runtime.attach_runtime_event_transport(
+                binding_artifact_path=transport["binding_artifact_path"]
+            )["attach_descriptor"]
+            attach_descriptor["cleanup_method"] = "cleanup_runtime_events"
+
+            with pytest.raises(
+                ValueError,
+                match="cleanup_method='cleanup_attached_runtime_event_transport'",
+            ):
+                attached_runtime.attach_runtime_event_transport(attach_descriptor=attach_descriptor)
+
+            attach_descriptor = attached_runtime.attach_runtime_event_transport(
+                binding_artifact_path=transport["binding_artifact_path"]
+            )["attach_descriptor"]
+            attach_descriptor["resume_mode"] = "event_index"
+
+            with pytest.raises(ValueError, match="resume_mode='after_event_id'"):
+                attached_runtime.subscribe_attached_runtime_events(
+                    attach_descriptor=attach_descriptor,
+                    limit=5,
+                )
+
+        asyncio.run(_run())
+
+
 def test_runtime_tracks_reroute_count_for_reused_session(tmp_path: Path) -> None:
     """Reuse of one session should increment reroute_count from trace history."""
 

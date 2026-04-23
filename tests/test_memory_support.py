@@ -170,7 +170,7 @@ def test_classify_runtime_continuity_active_snapshot_stays_resumable(tmp_path: P
         tmp_path,
         session_summary="- task: Active routing repair\n- phase: implementation\n- status: in_progress\n",
         next_actions={"next_actions": ["Patch classifier", "Run pytest"]},
-        trace_metadata={"matched_skills": ["execution-controller-coding", "skill-developer-codex"]},
+        trace_metadata={"matched_skills": ["execution-controller-coding", "skill-framework-developer"]},
         supervisor_state={
             "task_summary": "Active routing repair",
             "active_phase": "implementation",
@@ -242,7 +242,7 @@ def test_classify_runtime_continuity_detects_inconsistent_task_identity(tmp_path
     snapshot = _snapshot(
         tmp_path,
         session_summary="- task: bootstrap repair A\n- phase: implementation\n- status: in_progress\n",
-        trace_metadata={"task": "bootstrap repair B", "matched_skills": ["skill-developer-codex"]},
+        trace_metadata={"task": "bootstrap repair B", "matched_skills": ["skill-framework-developer"]},
         supervisor_state={
             "task_summary": "bootstrap repair A",
             "active_phase": "implementation",
@@ -312,7 +312,7 @@ def test_load_runtime_snapshot_prefers_task_scoped_current_root(tmp_path: Path) 
     (task_root / "SESSION_SUMMARY.md").write_text("- task: task scoped\n", encoding="utf-8")
     (task_root / "NEXT_ACTIONS.json").write_text('{"next_actions":["task root"]}\n', encoding="utf-8")
     (task_root / "EVIDENCE_INDEX.json").write_text('{"artifacts":[]}\n', encoding="utf-8")
-    (task_root / "TRACE_METADATA.json").write_text('{"matched_skills":["skill-developer-codex"]}\n', encoding="utf-8")
+    (task_root / "TRACE_METADATA.json").write_text('{"matched_skills":["skill-framework-developer"]}\n', encoding="utf-8")
     (mirror_root / "SESSION_SUMMARY.md").write_text("- task: mirror only\n", encoding="utf-8")
     (tmp_path / ".supervisor_state.json").write_text(
         '{"task_id":"codex-first-convergence-20260418210000","task_summary":"task scoped"}\n',
@@ -336,7 +336,7 @@ def test_load_runtime_snapshot_uses_active_task_pointer_when_supervisor_task_id_
     (task_root / "SESSION_SUMMARY.md").write_text("- task: pointer task\n", encoding="utf-8")
     (task_root / "NEXT_ACTIONS.json").write_text('{"next_actions":["task root"]}\n', encoding="utf-8")
     (task_root / "EVIDENCE_INDEX.json").write_text('{"artifacts":[]}\n', encoding="utf-8")
-    (task_root / "TRACE_METADATA.json").write_text('{"matched_skills":["skill-developer-codex"]}\n', encoding="utf-8")
+    (task_root / "TRACE_METADATA.json").write_text('{"matched_skills":["skill-framework-developer"]}\n', encoding="utf-8")
     (tmp_path / "artifacts" / "current" / "active_task.json").write_text(
         '{"task_id":"pointer-task-20260418210000","task":"pointer task"}\n',
         encoding="utf-8",
@@ -423,7 +423,7 @@ def test_repair_runtime_continuity_artifacts_uses_current_routing_runtime_versio
             '{"task_id":"route-audit-20260419","task_summary":"route audit",'
             '"active_phase":"completed","verification":{"verification_status":"completed"},'
             '"continuity":{"story_state":"completed","resume_allowed":false},'
-            '"controller":{"primary_owner":"skill-developer-codex","gate":"subagent-delegation"}}\n'
+            '"controller":{"primary_owner":"skill-framework-developer","gate":"subagent-delegation"}}\n'
         ),
         encoding="utf-8",
     )

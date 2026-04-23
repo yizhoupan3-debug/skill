@@ -1,4 +1,0 @@
-interface:
-  display_name: "Git Workflow"
-  short_description: "Set up, commit, branch, and push safely."
-  default_prompt: "Use $git-workflow to initialize a repository, organize commits, configure remotes, and push safely."

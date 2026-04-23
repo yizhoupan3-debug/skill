@@ -47,10 +47,10 @@ and proposes absorbable improvements for the local library.
 
 - Generic research with no skill-library angle → use `$information-retrieval`
 - Repo architecture, issue/PR history, or code evolution deep dives → use `$github-investigator`
-- Direct Codex framework redesign or routing governance → use `$skill-developer-codex`
+- Direct Codex framework redesign or routing governance → use `$skill-framework-developer`
 - One-skill wording or boundary rewriting → use `$skill-writer`
 - Actual skill-file editing or packaging → use `$skill-creator`
-- Post-task routing miss repair → use `$skill-routing-repair-codex`
+- Post-task routing miss repair → use `$skill-routing-repair`
 
 ## Core workflow
 

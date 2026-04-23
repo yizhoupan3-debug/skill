@@ -35,7 +35,7 @@ artifact_outputs:
   - EVIDENCE_INDEX.json
 bridge_behavior: mobile_complete_once
 ---
-- **Dual-Dimension Audit (Pre: Memory-Schema/Logic, Post: Recall-Accuracy/Context-Injection Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Memory-Schema/Logic, Post: Recall-Accuracy/Context-Injection Results)** → `$execution-audit` [Overlay]
 # agent-memory
 
 ## Overview
@@ -80,11 +80,11 @@ bridge_behavior: mobile_complete_once
 - 用户只想把几条偏好手工写进 README，这时不需要完整 memory system
 
 ## Hard Constraints
-- **Superior Quality Audit**: For persistent memory systems, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For persistent memory systems, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Trigger examples
 - "强制进行 Agent 记忆深度审计 / 检查召回准确性与上下文注入结果。"
-- "Use $execution-audit-codex to audit this memory layer for recall-accuracy idealism."
+- "Use $execution-audit to audit this memory layer for recall-accuracy idealism."
 
 ## Reference
 

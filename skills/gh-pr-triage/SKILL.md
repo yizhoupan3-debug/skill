@@ -47,4 +47,4 @@ This skill owns lightweight GitHub PR triage and summary work.
 - Review-thread resolution work -> use `$gh-address-comments`
 - Broken GitHub Actions analysis -> use `$gh-fix-ci`
 - Repository history or timeline research -> use `$github-investigator`
-- Generic framework / routing / skill-boundary review -> use `$skill-developer-codex` with `$code-review`
+- Generic framework / routing / skill-boundary review -> use `$skill-framework-developer` with `$code-review`

@@ -42,7 +42,7 @@ activation quality.
 
 ## Do not use
 
-- Codex routing policy or Codex activation behavior → use `$skill-developer-codex`
+- Codex routing policy or Codex activation behavior → use `$skill-framework-developer`
 - Multi-skill batch standardization → use `$writing-skills`
 - Installing/importing Antigravity skills from elsewhere → use `$skill-installer-antigravity`
 - Generic prompt engineering unrelated to skill files

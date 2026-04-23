@@ -21,4 +21,4 @@ Use Git as a **research trace layer**, not as the owner of research routing.
 
 ## Boundary rule
 
-Do **not** route to `$git-workflow` just because the research process benefits from Git hygiene. Route there only when the user actually needs Git operations, repository-state repair, or branch strategy help.
+Do **not** route to `$gitx` just because the research process benefits from Git hygiene. Route there only when the user actually needs Git operations, repository-state repair, or branch strategy help.

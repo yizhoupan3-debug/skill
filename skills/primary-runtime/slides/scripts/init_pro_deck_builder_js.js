@@ -105,7 +105,7 @@ function defaultRuntimeNodeModules() {
     os.homedir(),
     ".cache",
     "codex-runtimes",
-    "codex-primary-runtime",
+    "primary-runtime",
     "dependencies",
     "node",
     "node_modules",

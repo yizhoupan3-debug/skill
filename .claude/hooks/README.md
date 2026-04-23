@@ -8,13 +8,15 @@ Generated-first maintenance:
 - Treat `.claude/settings.json`, this README, and `.claude/hooks/*.sh` as
   materialized outputs.
 - Manual Claude host guidance belongs in `.claude/agents/*.md` unless noted.
+- Codex experimental hooks reuse `pre_tool_use.sh` and `user_prompt_submit.sh`
+  through `.codex/hooks.json`; keep the shared logic here instead of forking a
+  second host-only script set.
 
 Active hooks:
 
 | Event | Script | Purpose |
 | --- | --- | --- |
-| `UserPromptSubmit` | `user_prompt_submit.sh` | Inject a short coding-only `additionalContext` block before Claude starts planning, using intent-based matching instead of broad keyword spam. |
-| `PreToolUse` | `pre_tool_use_quality.sh` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code, and capture a lightweight pre-edit baseline for later delta-aware review. |
+| `PreToolUse` | `pre_tool_use_quality.sh` | Add a short path-aware implementation reminder before editing runtime, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |
 | `PreToolUse` | `pre_tool_use.sh` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
 | `PostToolUse` | `post_tool_use_audit.sh` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
 | `SessionEnd` | `session_end.sh` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |
@@ -22,6 +24,8 @@ Active hooks:
 | `StopFailure` | `stop_failure.sh` | Emit a host-private hint for selected Claude stop failures without mutating shared continuity. |
 
 Everything else stays intentionally uninstalled here so startup and tool turns remain lean.
+`UserPromptSubmit` is intentionally not installed here: broad per-turn prompt hooks cost
+more than they help once `PreToolUse` and `PostToolUse` are already narrow.
 Reply tone, "讲人话" rules, and closeout style live in `AGENT.md`, not in hooks.
 Static behavior rules belong in `AGENT.md` or `CLAUDE.md`; these hooks exist
 for deterministic guardrails, lightweight execution-time context, and lifecycle
@@ -36,9 +40,8 @@ Project hook principles:
   on unrelated tool calls and normal edits stay fast.
 - Automation hooks should be additive and short: inject narrow repo context or
   launch cheap follow-up work, not essay-length prompt rewrites.
-- Let hooks reinforce simplify-first execution: prefer short reminders to
-  delete, merge, inline, or narrow code paths instead of nudging toward another
-  wrapper or orchestration layer.
+- Keep durable implementation philosophy in `AGENT.md`; hook-time nudges should
+  stay concrete, local to the current path, and local to the current delta.
 - Prefer async `PostToolUse` for cheap quality follow-up that should not block
   the main turn.
 - Put personal notifications and local approval shortcuts in `~/.claude/settings.json`
@@ -53,9 +56,6 @@ Project hook principles:
 
 Validation commands:
 
-- `printf '{"hook_event_name":"UserPromptSubmit","prompt":"继续优化这个 runtime，去掉补丁式保底并顺手看下内存和速度"}
-' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/user_prompt_submit.sh`
-  Expected: stdout emits JSON with a short coding-only `additionalContext` block.
 - `printf '{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs"}}
 ' | CLAUDE_PROJECT_DIR="$PWD" sh .claude/hooks/pre_tool_use_quality.sh`
   Expected: stdout returns a JSON `permissionDecision: allow` payload with `additionalContext`.
@@ -85,7 +85,7 @@ Validation commands:
 ' | ./scripts/router-rs/target/debug/router-rs --claude-hook-audit-command config-change --repo-root "$PWD"`
   Expected: JSON on stdout plus audit-only stderr guidance; exit 0.
 - In Claude Code, run `/hooks`
-  Expected: the project shows `UserPromptSubmit`, `PreToolUse`, `PostToolUse`,
-  `SessionEnd`, `ConfigChange`, and `StopFailure` from `.claude/settings.json`.
+  Expected: the project shows `PreToolUse`, `PostToolUse`, `SessionEnd`,
+  `ConfigChange`, and `StopFailure` from `.claude/settings.json`.
 
 Shared routing policy still comes from `../../AGENT.md`.

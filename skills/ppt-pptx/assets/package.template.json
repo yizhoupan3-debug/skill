@@ -7,7 +7,10 @@
     "build": "node deck.js",
     "render": "python3 scripts/render_slides.py deck.pptx --output_dir rendered",
     "check:overflow": "python3 scripts/slides_test.py deck.pptx",
-    "check:fonts": "python3 scripts/detect_font.py deck.pptx --json"
+    "check:fonts": "python3 scripts/detect_font.py deck.pptx --json",
+    "check:officecli": "python3 scripts/officecli_bridge.py doctor deck.pptx --json",
+    "inspect:outline": "python3 scripts/officecli_bridge.py outline deck.pptx --json",
+    "watch:officecli": "python3 scripts/officecli_bridge.py watch deck.pptx --port 18080"
   },
   "dependencies": {
     "fontkit": "2.0.4",

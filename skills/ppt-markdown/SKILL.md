@@ -37,7 +37,7 @@ metadata:
     - ppt
 ---
 
-- **Dual-Dimension Audit (Pre: Slide-Structure/Logic, Post: Layout-Fidelity/PDF-Export Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Slide-Structure/Logic, Post: Layout-Fidelity/PDF-Export Results)** → `$execution-audit` [Overlay]
 
 # PPT Markdown
 
@@ -130,7 +130,7 @@ Two engines are supported. Choose based on the user's needs:
 - Cite every quantitative claim and every external image source.
 - Never fabricate experimental results or data.
 - Prefer fewer words and larger text over dense small-font slides.
-- **Superior Quality Audit**: For high-impact presentations, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For high-impact presentations, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Practical Defaults
 
@@ -159,4 +159,4 @@ Two engines are supported. Choose based on the user's needs:
 - Confirm no Chinese orphan lines; titles balanced; mixed-language tokens intact.
 - Confirm the export format matches the user's stated need (PDF / PPTX / HTML).
 - "强制进行 PPT 深度审计 / 检查页面布局与导出结果一致性。"
-- "Use $execution-audit-codex to audit this slide deck for layout-fidelity idealism."
+- "Use $execution-audit to audit this slide deck for layout-fidelity idealism."

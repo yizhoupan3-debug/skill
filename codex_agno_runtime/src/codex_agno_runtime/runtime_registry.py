@@ -78,7 +78,7 @@ _FALLBACK_FRAMEWORK_NATIVE_ALIASES = {
         "execution_owners": [
             "plan-to-code",
             "subagent-delegation",
-            "execution-audit-codex",
+            "execution-audit",
         ],
         "host_entrypoints": {"codex-cli": "$autopilot", "claude-code": "/autopilot"},
         "omc_dependency": False,
@@ -119,7 +119,7 @@ _FALLBACK_FRAMEWORK_NATIVE_ALIASES = {
             "architect-review",
             "security-audit",
             "test-engineering",
-            "execution-audit-codex",
+            "execution-audit",
         ],
         "host_entrypoints": {"codex-cli": "$deepinterview", "claude-code": "/deepinterview"},
         "omc_dependency": False,

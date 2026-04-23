@@ -93,7 +93,7 @@ def test_validate_loadouts_rejects_overlay_only_skill_in_owners() -> None:
         "version": 1,
         "loadouts": {
             "bad_loadout": {
-                "owners": ["execution-audit-codex"],
+                "owners": ["execution-audit"],
                 "overlays": [],
                 "exclude": [],
                 "purpose": "invalid owner bucket",

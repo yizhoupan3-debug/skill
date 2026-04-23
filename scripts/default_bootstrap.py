@@ -13,7 +13,7 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from codex_agno_runtime.rust_router import RustRouteAdapter
+from framework_runtime.rust_router import RustRouteAdapter
 from scripts.framework_bridge import (
     build_evolution_proposals,
     export_framework_skills,

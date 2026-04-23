@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Literal, Mapping
+from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
@@ -47,25 +47,6 @@ class SkillMetadata(BaseModel):
         return self.trigger_hints
 
 
-class SearchMatchTransportRow(BaseModel):
-    """Raw transport row shape for route match results."""
-
-    slug: str
-    description: str
-    layer: str
-    gate: str
-    owner: str
-    score: float = Field(ge=0.0)
-    matched_terms: int = Field(ge=0)
-    total_terms: int = Field(ge=0)
-
-    @model_validator(mode="after")
-    def _validate_match_counts(self) -> "SearchMatchTransportRow":
-        if self.matched_terms > self.total_terms:
-            raise ValueError("matched_terms cannot exceed total_terms")
-        return self
-
-
 class ScoredSkill(BaseModel):
     """Scored routing candidate."""
 
@@ -88,24 +69,6 @@ class SearchMatchResult(BaseModel):
             raise ValueError("matched_terms cannot exceed total_terms")
         return self
 
-    @classmethod
-    def from_transport_row(cls, row: Mapping[str, Any]) -> "SearchMatchResult":
-        """Hydrate one Rust search transport row into the shared typed contract."""
-
-        payload = SearchMatchTransportRow.model_validate(row)
-        return cls(
-            record=SkillMetadata(
-                name=payload.slug,
-                description=payload.description,
-                routing_layer=payload.layer,
-                routing_gate=payload.gate,
-                routing_owner=payload.owner,
-            ),
-            score=payload.score,
-            matched_terms=payload.matched_terms,
-            total_terms=payload.total_terms,
-        )
-
 
 class SearchMatchesContract(BaseModel):
     """Stable Rust-owned search envelope consumed by Python route helpers."""
@@ -114,19 +77,6 @@ class SearchMatchesContract(BaseModel):
     authority: str
     query: str
     matches: list[SearchMatchResult]
-
-    @field_validator("matches", mode="before")
-    @classmethod
-    def _coerce_transport_rows(cls, value: Any) -> Any:
-        if not isinstance(value, list):
-            return value
-        resolved: list[Any] = []
-        for item in value:
-            if isinstance(item, Mapping) and "record" not in item and "slug" in item:
-                resolved.append(SearchMatchResult.from_transport_row(item))
-            else:
-                resolved.append(item)
-        return resolved
 
 
 class RouteContractDiffField(BaseModel):

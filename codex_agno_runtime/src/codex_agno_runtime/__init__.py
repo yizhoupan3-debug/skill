@@ -1,4 +1,4 @@
-"""Public package exports for the local Codex Agno runtime."""
+"""Public package exports for the local framework runtime."""
 
 from codex_agno_runtime.config import RuntimeSettings
 from codex_agno_runtime.codex_artifact_contracts import (
@@ -19,9 +19,11 @@ from codex_agno_runtime.control_plane_contracts import (
 from codex_agno_runtime.framework_profile import FrameworkProfile
 from codex_agno_runtime.profile_artifacts import emit_framework_contract_artifacts
 from codex_agno_runtime.runtime import CodexAgnoRuntime
+FrameworkRuntime = CodexAgnoRuntime
 
 __all__ = [
     "CodexAgnoRuntime",
+    "FrameworkRuntime",
     "RuntimeSettings",
     "FrameworkProfile",
     "compile_codex_desktop_adapter",

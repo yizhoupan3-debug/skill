@@ -4317,13 +4317,11 @@ mod tests {
                 "gemini_cli_adapter"
             ])
         );
-        assert!(
-            bundle.codex_common_adapter["parity_contract"]
-                .as_object()
-                .expect("parity contract object")
-                .get("legacy_codex_common_adapter")
-                .is_none()
-        );
+        assert!(bundle.codex_common_adapter["parity_contract"]
+            .as_object()
+            .expect("parity contract object")
+            .get("legacy_codex_common_adapter")
+            .is_none());
         assert_eq!(
             bundle.claude_code_adapter["host_projection"]["context_files"],
             json!(["CLAUDE.md", "CLAUDE.local.md"])
@@ -4812,8 +4810,7 @@ mod tests {
         );
         assert_eq!(
             artifacts["execution_kernel_live_fallback_retirement_status"]
-                ["current_response_metadata_truth"]
-                ["dry_run_delegate_impl"],
+                ["current_response_metadata_truth"]["dry_run_delegate_impl"],
             Value::String("router-rs".to_string())
         );
         assert_eq!(

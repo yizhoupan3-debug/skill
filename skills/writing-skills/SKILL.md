@@ -3,7 +3,7 @@ name: writing-skills
 description: |
   Standardize and strengthen multiple `SKILL.md` files and shared skill-writing docs across a library.
   Use when the task is batch rewriting, template unification, or repository-wide wording cleanup for many skills.
-  For one-skill writing guidance use `$skill-writer`; for Codex routing policy use `$skill-developer-codex`.
+  For one-skill writing guidance use `$skill-writer`; for Codex routing policy use `$skill-framework-developer`.
 metadata:
   version: "2.1.0"
   platforms: [codex]
@@ -40,7 +40,7 @@ artifact_outputs:
   - TRACE_METADATA.json
 ---
 
-- **Dual-Dimension Audit (Pre: Batch-Logic/Template, Post: Consistency/Sync Results)** → `$execution-audit-codex` [Overlay]
+- **Dual-Dimension Audit (Pre: Batch-Logic/Template, Post: Consistency/Sync Results)** → `$execution-audit` [Overlay]
 
 # Writing Skills
 
@@ -56,7 +56,7 @@ reusable wording patterns, and batch documentation cleanup.
 ## Do not use
 
 - Single-skill wording, token budget, or boundary design → use `$skill-writer`
-- Codex routing diagnosis or framework behavior → use `$skill-developer-codex`
+- Codex routing diagnosis or framework behavior → use `$skill-framework-developer`
 - Antigravity-specific trigger debugging → use `$skill-developer`
 - Installing/importing skills → use `$skill-installer` / `$skill-installer-antigravity`
 
@@ -79,7 +79,7 @@ reusable wording patterns, and batch documentation cleanup.
 - Do not use this skill as a substitute for one-skill routing decisions.
 - Do not batch-copy vague wording.
 - Do not duplicate long standards across every skill when one shared resource is enough.
-- **Superior Quality Audit**: For batch documentation updates, trigger `$execution-audit-codex` to verify against [Superior Quality Bar](../execution-audit-codex/references/superior-quality-bar.md).
+- **Superior Quality Audit**: For batch documentation updates, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 
 ## Reference
 
@@ -87,4 +87,4 @@ reusable wording patterns, and batch documentation cleanup.
 
 ## Trigger examples
 - "强制进行 Skill 写作深度审计 / 检查批量对齐与模板一致性。"
-- "Use $execution-audit-codex to audit these skill files for consistency idealism."
+- "Use $execution-audit to audit these skill files for consistency idealism."

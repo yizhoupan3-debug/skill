@@ -109,7 +109,7 @@ approval_required_tools:
 3. 如果根因未知，先走 [`$systematic-debugging`](/Users/joe/Documents/skill/skills/systematic-debugging/SKILL.md)，再回到执行主线。
 4. 对清晰、低风险、可逆的本地步骤自动继续推进。
 5. 需要并行拆分时，使用 [`$subagent-delegation`](/Users/joe/Documents/skill/skills/subagent-delegation/SKILL.md)。
-6. 进入强验收时，加入 [`$execution-audit-codex`](/Users/joe/Documents/skill/skills/execution-audit-codex/SKILL.md)。
+6. 进入强验收时，加入 [`$execution-audit`](/Users/joe/Documents/skill/skills/execution-audit/SKILL.md)。
 7. 没有验证证据，不宣布完成。
 8. 如果执行被打断、限流或挂起，必须保留恢复锚点并优先续跑，不把中断当完成。
 9. 如果同一错误连续重复，必须上升为根因问题处理，而不是机械重试。

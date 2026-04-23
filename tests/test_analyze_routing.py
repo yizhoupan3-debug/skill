@@ -13,11 +13,11 @@ from scripts.analyze_routing import check_index_coverage, load_trigger_index_ski
 def test_load_trigger_index_skills_reads_live_routing_index() -> None:
     skills = load_trigger_index_skills()
 
-    assert "skill-developer-codex" in skills
+    assert "skill-framework-developer" in skills
     assert "gh-pr-triage" in skills
 
 
 def test_check_index_coverage_uses_live_routing_index() -> None:
-    entries = [{"expected": "skill-developer-codex"}, {"expected": "gh-pr-triage"}]
+    entries = [{"expected": "skill-framework-developer"}, {"expected": "gh-pr-triage"}]
 
     assert check_index_coverage(entries) == []
