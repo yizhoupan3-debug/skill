@@ -311,37 +311,6 @@ def test_launcher_auto_discovers_filesystem_resume_manifest_as_canonical_attach_
     ]
 
 
-def test_launcher_auto_discovers_legacy_runtime_scratch_root_as_fallback(tmp_path: Path) -> None:
-    repo_root = _prepare_repo(tmp_path)
-    manifest_path = (
-        repo_root
-        / "codex_agno_runtime"
-        / "artifacts"
-        / "scratch"
-        / "legacy-run"
-        / "TRACE_RESUME_MANIFEST.json"
-    )
-    _write_text(
-        manifest_path,
-        json.dumps(
-            {
-                "schema_version": "runtime-resume-manifest-v1",
-                "event_transport_path": "/auto/discovered/runtime_event_transports/legacy.json",
-                "updated_at": "2026-04-23T00:11:00+00:00",
-            }
-        )
-        + "\n",
-    )
-
-    result = _run_launcher(repo_root, env={})
-
-    assert result["argv"] == [
-        "dist/index.js",
-        "--runtime-attach-artifact-path",
-        str(manifest_path.resolve()),
-    ]
-
-
 def test_launcher_prefers_attach_artifact_env_over_compatibility_aliases(tmp_path: Path) -> None:
     repo_root = _prepare_repo(tmp_path)
 

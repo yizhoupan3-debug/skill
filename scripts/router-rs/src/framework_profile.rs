@@ -4194,7 +4194,6 @@ fn build_codex_desktop_alias_inventory_summary() -> Map<String, Value> {
     let scan_root = repo_scan_root();
     let search_roots = [
         scan_root.join("framework_runtime").join("src"),
-        scan_root.join("codex_agno_runtime").join("src"),
         scan_root.join("scripts"),
         scan_root.join("tests"),
         scan_root.join("docs"),

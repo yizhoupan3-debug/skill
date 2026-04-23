@@ -78,7 +78,7 @@ Primary sources:
 
 ### DeerFlow pattern -> Codex target
 
-- harness/app split -> `codex_agno_runtime` core vs future HTTP/CLI/channel adapters
+- harness/app split -> `framework_runtime` core vs future HTTP/CLI/channel adapters
 - `RunManager` -> our background job state machine and future run kernel
 - `StreamBridge` -> future resumable trace/stream transport for long runs
 - unified store/checkpointer -> first land a narrow runtime checkpointer seam,

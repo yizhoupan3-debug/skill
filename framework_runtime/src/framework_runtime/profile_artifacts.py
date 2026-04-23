@@ -288,7 +288,6 @@ def build_codex_desktop_alias_inventory(repo_root: Path | None = None) -> dict[s
     scan_root = repo_root or PROJECT_ROOT
     search_roots = (
         scan_root / "framework_runtime" / "src",
-        scan_root / "codex_agno_runtime" / "src",
         scan_root / "scripts",
         scan_root / "tests",
         scan_root / "docs",
