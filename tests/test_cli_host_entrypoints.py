@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -22,9 +23,11 @@ from scripts.materialize_cli_host_entrypoints import (
     CLAUDE_ROUTER_RS_MANIFEST_PATH,
     CLAUDE_ROUTER_RS_DEBUG_BINARY,
     CLAUDE_ROUTER_RS_RELEASE_BINARY,
+    CLAUDE_TEAM_COMMAND,
     materialize_repo_host_entrypoints,
     sync_repo_host_entrypoints,
 )
+from scripts.rust_binary_runner import ensure_rust_binary
 from scripts.sync_skills import write_generated_files
 
 
@@ -38,6 +41,27 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
 
 
 def _seed_runtime_artifacts(repo_root: Path) -> None:
+    task_id = "validate-claude-hooks-20260423010101"
+    _write_text(
+        repo_root / "artifacts" / "current" / task_id / "SESSION_SUMMARY.md",
+        "\n".join(
+            [
+                "- task: Validate Claude hooks",
+                "- phase: integration",
+                "- status: in_progress",
+            ]
+        )
+        + "\n",
+    )
+    _write_json(
+        repo_root / "artifacts" / "current" / task_id / "NEXT_ACTIONS.json",
+        {"next_actions": ["Wire hooks"]},
+    )
+    _write_json(repo_root / "artifacts" / "current" / task_id / "EVIDENCE_INDEX.json", {"artifacts": []})
+    _write_json(
+        repo_root / "artifacts" / "current" / task_id / "TRACE_METADATA.json",
+        {"matched_skills": ["checklist-fixer"]},
+    )
     _write_text(
         repo_root / "artifacts" / "current" / "SESSION_SUMMARY.md",
         "\n".join(
@@ -53,11 +77,37 @@ def _seed_runtime_artifacts(repo_root: Path) -> None:
     _write_json(repo_root / "artifacts" / "current" / "EVIDENCE_INDEX.json", {"artifacts": []})
     _write_json(repo_root / "artifacts" / "current" / "TRACE_METADATA.json", {"matched_skills": ["checklist-fixer"]})
     _write_json(
+        repo_root / "artifacts" / "current" / "active_task.json",
+        {"task_id": task_id, "task": "Validate Claude hooks"},
+    )
+    _write_json(
+        repo_root / "artifacts" / "current" / "focus_task.json",
+        {"task_id": task_id, "task": "Validate Claude hooks"},
+    )
+    _write_json(
+        repo_root / "artifacts" / "current" / "task_registry.json",
+        {
+            "schema_version": "task-registry-v1",
+            "focus_task_id": task_id,
+            "tasks": [
+                {
+                    "task_id": task_id,
+                    "task": "Validate Claude hooks",
+                    "phase": "integration",
+                    "status": "in_progress",
+                    "resume_allowed": True,
+                }
+            ],
+        },
+    )
+    _write_json(
         repo_root / ".supervisor_state.json",
         {
+            "task_id": task_id,
             "task_summary": "Validate Claude hooks",
             "active_phase": "integration",
             "verification": {"verification_status": "in_progress"},
+            "continuity": {"story_state": "active", "resume_allowed": True},
             "execution_contract": {
                 "scope": ["Claude hooks"],
                 "acceptance_criteria": ["Hooks refresh projection"],
@@ -112,6 +162,26 @@ def _ensure_router_rs_debug_binary() -> None:
     )
 
 
+def _run_router_rs_hook_manifest() -> dict[str, object]:
+    crate_root = PROJECT_ROOT / "scripts" / "router-rs"
+    binary_path = ensure_rust_binary(
+        crate_root=crate_root,
+        binary_name="router-rs",
+        release=True,
+        allow_stale_fallback=False,
+        allow_cross_profile_fallback=True,
+        cwd=PROJECT_ROOT,
+    )
+    completed = subprocess.run(
+        [str(binary_path), "--claude-hook-manifest-json"],
+        cwd=PROJECT_ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return json.loads(completed.stdout)
+
+
 def _run_router_rs_claude_audit(
     command: str,
     repo_root: Path,
@@ -147,6 +217,23 @@ def run_pre_tool_use(repo_root: Path, payload: dict[str, object]) -> int:
 
 def run_stop_failure(repo_root: Path, payload: dict[str, object]) -> int:
     return _relay_router_rs_claude_audit("stop-failure", repo_root, payload)
+
+
+def test_router_rs_exports_claude_hook_manifest() -> None:
+    manifest = _run_router_rs_hook_manifest()
+
+    assert manifest["schema_version"] == "router-rs-claude-hook-manifest-v1"
+    assert "/.claude/settings.json" in manifest["protected_paths"]["edit_write"]
+    assert "*.claude/settings.json*" in manifest["protected_paths"]["bash"]
+    assert "/scripts/router-rs/src/**" in manifest["protected_paths"]["quality"]
+    assert set(manifest["settings_hooks"]) == {
+        "PreToolUse",
+        "PostToolUse",
+        "SessionEnd",
+        "ConfigChange",
+        "StopFailure",
+        "UserPromptSubmit",
+    }
 
 
 def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxies(
@@ -245,7 +332,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     }
     assert (
         settings["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
-        == "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/user_prompt_submit.sh"
+        == 'sh "$CLAUDE_PROJECT_DIR"/.claude/hooks/run.sh user-prompt-submit'
     )
     assert settings["hooks"]["PreToolUse"][0]["matcher"] == "Edit|MultiEdit|Write"
     assert settings["hooks"]["PreToolUse"][1]["matcher"] == "Bash"
@@ -274,7 +361,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert any(item["if"] == "Edit(/scripts/router-rs/src/**)" for item in post_tool_hooks)
     assert any(item["if"] == "Write(/framework_runtime/src/**)" for item in post_tool_hooks)
     assert not any(item["if"] == "Edit(/scripts/**)" for item in post_tool_hooks)
-    assert all(item["command"].endswith("/.claude/hooks/post_tool_use_audit.sh") for item in post_tool_hooks)
+    assert all(item["command"].endswith('/.claude/hooks/run.sh post-tool-audit') for item in post_tool_hooks)
     assert all(item["async"] is True for item in post_tool_hooks)
     assert all(item["timeout"] == 8 for item in post_tool_hooks)
     assert settings["hooks"]["ConfigChange"][0]["matcher"] == "project_settings"
@@ -287,43 +374,17 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert (tmp_path / ".claude" / "commands" / "background_batch.md").is_file()
     assert (tmp_path / ".claude" / "commands" / "autopilot.md").is_file()
     assert (tmp_path / ".claude" / "commands" / "deepinterview.md").is_file()
-    assert (tmp_path / ".claude" / "hooks" / "user_prompt_submit.sh").is_file()
-    assert (tmp_path / ".claude" / "hooks" / "pre_tool_use_quality.sh").is_file()
-    assert (tmp_path / ".claude" / "hooks" / "post_tool_use_audit.sh").is_file()
-    pre_tool_use_script = (tmp_path / ".claude" / "hooks" / "pre_tool_use.sh").read_text(
-        encoding="utf-8"
-    )
-    user_prompt_script = (
-        tmp_path / ".claude" / "hooks" / "user_prompt_submit.sh"
-    ).read_text(encoding="utf-8")
-    pre_tool_quality_script = (
-        tmp_path / ".claude" / "hooks" / "pre_tool_use_quality.sh"
-    ).read_text(encoding="utf-8")
-    post_tool_audit_script = (
-        tmp_path / ".claude" / "hooks" / "post_tool_use_audit.sh"
-    ).read_text(encoding="utf-8")
-    config_change_script = (
-        tmp_path / ".claude" / "hooks" / "config_change.sh"
-    ).read_text(encoding="utf-8")
-    stop_failure_script = (
-        tmp_path / ".claude" / "hooks" / "stop_failure.sh"
-    ).read_text(encoding="utf-8")
-    for hook_script in (
-        pre_tool_use_script,
-        user_prompt_script,
-        pre_tool_quality_script,
-        post_tool_audit_script,
-        config_change_script,
-        stop_failure_script,
-    ):
-        assert "run_router_rs" in hook_script
-        assert "python3 \"$PROJECT_DIR/scripts/claude_hook" not in hook_script
-    assert "--claude-hook-audit-command pre-tool-use" in pre_tool_use_script
-    assert "--claude-hook-audit-command user-prompt-submit" in user_prompt_script
-    assert "--claude-hook-audit-command pre-tool-use-quality" in pre_tool_quality_script
-    assert "--claude-hook-audit-command post-tool-audit" in post_tool_audit_script
-    assert "--claude-hook-audit-command config-change" in config_change_script
-    assert "--claude-hook-audit-command stop-failure" in stop_failure_script
+    assert (tmp_path / ".claude" / "commands" / "team.md").is_file()
+    assert (tmp_path / ".claude" / "hooks" / "run.sh").is_file()
+    hook_runner_script = (tmp_path / ".claude" / "hooks" / "run.sh").read_text(encoding="utf-8")
+    assert "run_router_rs" in hook_runner_script
+    assert "python3 \"$PROJECT_DIR/scripts/claude_hook" not in hook_runner_script
+    assert "case \"$command_name\" in" in hook_runner_script
+    assert "--claude-hook-audit-command pre-tool-use" in hook_runner_script
+    assert "--claude-hook-audit-command \"$command_name\"" in hook_runner_script
+    assert "--claude-hook-command session-end" in hook_runner_script
+    assert "shared hook returned no hookSpecificOutput; continuing with degraded context" in hook_runner_script
+    assert 'config-change|stop-failure)\n    run_router_rs --claude-hook-audit-command "$command_name" --repo-root "$PROJECT_DIR" >/dev/null' in hook_runner_script
     assert not (tmp_path / ".claude" / "commands" / "deepreview.md").exists()
     refresh_command = (tmp_path / ".claude" / "commands" / "refresh.md").read_text(encoding="utf-8")
     background_batch_command = (
@@ -335,10 +396,14 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     deepinterview_command = (
         tmp_path / ".claude" / "commands" / "deepinterview.md"
     ).read_text(encoding="utf-8")
+    team_command = (
+        tmp_path / ".claude" / "commands" / "team.md"
+    ).read_text(encoding="utf-8")
     assert refresh_command == CLAUDE_REFRESH_COMMAND
     assert background_batch_command == CLAUDE_BACKGROUND_BATCH_COMMAND
     assert autopilot_command == CLAUDE_AUTOPILOT_COMMAND
     assert deepinterview_command == CLAUDE_DEEPINTERVIEW_COMMAND
+    assert team_command == CLAUDE_TEAM_COMMAND
     assert CLAUDE_PROJECT_DIR_SNIPPET in refresh_command
     assert (
         '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR"'
@@ -410,17 +475,38 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "python3 scripts/router_rs_runner.py" not in deepinterview_command
     assert aliases["deepinterview"]["upstream_source"]["official_skill_path"] in deepinterview_command
     assert "Only open" in deepinterview_command
+    assert "thin Rust-first alias" in team_command
+    assert aliases["team"]["host_entrypoints"]["claude-code"] in team_command
+    assert "--framework-alias-json" in team_command
+    assert "--framework-alias team" in team_command
+    assert "--compact-output" in team_command
+    assert "--claude-hook-max-lines 3" in team_command
+    assert "resident Rust binary directly" in team_command
+    assert "alias.state_machine" in team_command
+    assert "alias.entry_contract" in team_command
+    assert CLAUDE_PROJECT_DIR_SNIPPET in team_command
+    assert '"$PROJECT_DIR"/scripts/router-rs/target/release/router-rs' in team_command
+    assert '"$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs' in team_command
+    assert (
+        'cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-alias-json --framework-alias team --compact-output --claude-hook-max-lines 3 --repo-root "$PROJECT_DIR"'
+        in team_command
+    )
+    assert "python3 scripts/router_rs_runner.py" not in team_command
+    assert aliases["team"]["upstream_source"]["official_skill_path"] in team_command
+    assert "Only open" in team_command
     assert "Otherwise run" not in autopilot_command
     assert "Otherwise run" not in deepinterview_command
+    assert "Otherwise run" not in team_command
     assert (tmp_path / ".claude" / "hooks" / "README.md").is_file()
     hooks_readme = (tmp_path / ".claude" / "hooks" / "README.md").read_text(encoding="utf-8")
     assert "Generated-first maintenance" in hooks_readme
+    assert "update `scripts/router-rs/` first for Claude hook rules and contracts" in hooks_readme
     assert "Event-level lifecycle decisions live in `.claude/hooks/README.md`." in claude_entry
     for marker in (
-        "`PreToolUse` | `pre_tool_use.sh`",
-        "`SessionEnd` | `session_end.sh`",
-        "`ConfigChange` | `config_change.sh`",
-        "`StopFailure` | `stop_failure.sh`",
+        "`PreToolUse` | `run.sh pre-tool-use`",
+        "`SessionEnd` | `run.sh session-end`",
+        "`ConfigChange` | `run.sh config-change`",
+        "`StopFailure` | `run.sh stop-failure`",
         "generated-surface guard",
         "intentionally uninstalled",
         "live in `AGENT.md`, not in hooks",
@@ -430,10 +516,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
         "permissionDecision: deny",
     ):
         assert marker in hooks_readme
-    assert (tmp_path / ".claude" / "hooks" / "pre_tool_use.sh").is_file()
-    assert (tmp_path / ".claude" / "hooks" / "session_end.sh").is_file()
-    assert (tmp_path / ".claude" / "hooks" / "config_change.sh").is_file()
-    assert (tmp_path / ".claude" / "hooks" / "stop_failure.sh").is_file()
+    assert (tmp_path / ".claude" / "hooks" / "run.sh").is_file()
     assert not (tmp_path / ".claude" / "hooks" / "session_start.sh").exists()
     assert not (tmp_path / ".claude" / "hooks" / "stop.sh").exists()
     assert not (tmp_path / ".claude" / "hooks" / "pre_compact.sh").exists()
@@ -498,8 +581,7 @@ def test_materialize_repo_host_entrypoints_syncs_matching_worktrees(tmp_path: Pa
     assert str(peer_worktree.resolve()) in result["synced_worktrees"]
     assert (peer_worktree / ".claude" / "commands" / "refresh.md").is_file()
     assert (peer_worktree / ".claude" / "commands" / "background_batch.md").is_file()
-    assert (peer_worktree / ".claude" / "hooks" / "pre_tool_use.sh").is_file()
-    assert (peer_worktree / ".claude" / "hooks" / "session_end.sh").is_file()
+    assert (peer_worktree / ".claude" / "hooks" / "run.sh").is_file()
     assert json.loads((peer_worktree / ".claude" / "settings.json").read_text(encoding="utf-8"))["$schema"] == (
         "https://json.schemastore.org/claude-code-settings.json"
     )
@@ -514,46 +596,14 @@ def test_materialize_repo_host_entrypoints_syncs_matching_worktrees(tmp_path: Pa
 
 
 def test_write_generated_files_includes_shared_cli_entrypoints_when_repo_is_dirty(tmp_path: Path) -> None:
-    root = PROJECT_ROOT
-    managed_paths = [
-        root / "AGENT.md",
-        root / "AGENTS.md",
-        root / "CLAUDE.md",
-        root / "GEMINI.md",
-        root / ".claude" / "settings.json",
-        root / ".claude" / "agents" / "README.md",
-        root / ".claude" / "commands" / "refresh.md",
-        root / ".claude" / "commands" / "background_batch.md",
-        root / ".claude" / "hooks" / "README.md",
-        root / ".claude" / "hooks" / "user_prompt_submit.sh",
-        root / ".claude" / "hooks" / "pre_tool_use_quality.sh",
-        root / ".claude" / "hooks" / "post_tool_use_audit.sh",
-        root / ".claude" / "hooks" / "pre_tool_use.sh",
-        root / ".claude" / "hooks" / "session_end.sh",
-        root / ".claude" / "hooks" / "config_change.sh",
-        root / ".claude" / "hooks" / "stop_failure.sh",
-        root / ".codex" / "hooks.json",
-        root / ".gemini" / "settings.json",
-    ]
-    backups = {
-        path: path.read_text(encoding="utf-8") if path.exists() else None
-        for path in managed_paths
-    }
+    materialize_repo_host_entrypoints(tmp_path)
 
-    target = root / "CLAUDE.md"
+    target = tmp_path / "CLAUDE.md"
     original = target.read_text(encoding="utf-8")
     target.write_text(original + "\nDRIFT\n", encoding="utf-8")
-    try:
-        changed = write_generated_files(apply=False)
-        assert "CLAUDE.md" in changed
-    finally:
-        for path, content in backups.items():
-            if content is None:
-                if path.exists():
-                    path.unlink()
-                continue
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
+
+    result = sync_repo_host_entrypoints(tmp_path, apply=False)
+    assert "CLAUDE.md" in result["written"]
 
 
 def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None:
@@ -567,7 +617,7 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     env["CLAUDE_PROJECT_DIR"] = str(tmp_path)
 
     blocked = subprocess.run(
-        ["sh", str(tmp_path / ".claude" / "hooks" / "pre_tool_use.sh")],
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "pre-tool-use"],
         cwd=tmp_path,
         env=env,
         input='{"tool_name":"MultiEdit","tool_input":{"file_path":".claude/settings.json"}}\n',
@@ -580,7 +630,7 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert ".claude/settings.json" in blocked_payload["hookSpecificOutput"]["permissionDecisionReason"]
 
     user_prompt = subprocess.run(
-        ["sh", str(tmp_path / ".claude" / "hooks" / "user_prompt_submit.sh")],
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "user-prompt-submit"],
         cwd=tmp_path,
         env=env,
         input='{"hook_event_name":"UserPromptSubmit","prompt":"继续优化 runtime，去掉补丁式保底并顺手看内存和速度"}\n',
@@ -594,7 +644,7 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert "热路径" in user_prompt_payload["hookSpecificOutput"]["additionalContext"]
 
     quality_context = subprocess.run(
-        ["sh", str(tmp_path / ".claude" / "hooks" / "pre_tool_use_quality.sh")],
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "pre-tool-use-quality"],
         cwd=tmp_path,
         env=env,
         input='{"tool_name":"Edit","tool_input":{"file_path":"tests/test_cli_host_entrypoints.py"}}\n',
@@ -607,7 +657,7 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert "测试额外检查" in quality_payload["hookSpecificOutput"]["additionalContext"]
 
     allowed = subprocess.run(
-        ["sh", str(tmp_path / ".claude" / "hooks" / "pre_tool_use.sh")],
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "pre-tool-use"],
         cwd=tmp_path,
         env=env,
         input='{"tool_name":"Edit","tool_input":{"file_path":"notes/todo.md"}}\n',
@@ -619,7 +669,7 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert allowed.stderr == ""
 
     bash_blocked = subprocess.run(
-        ["sh", str(tmp_path / ".claude" / "hooks" / "pre_tool_use.sh")],
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "pre-tool-use"],
         cwd=tmp_path,
         env=env,
         input='{"tool_name":"Bash","tool_input":{"command":"cp tmp .claude/settings.json"}}\n',
@@ -632,7 +682,7 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert ".claude/settings.json" in bash_payload["hookSpecificOutput"]["permissionDecisionReason"]
 
     patchy_edit = subprocess.run(
-        ["sh", str(tmp_path / ".claude" / "hooks" / "post_tool_use_audit.sh")],
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "post-tool-audit"],
         cwd=tmp_path,
         env=env,
         input='{"tool_name":"Edit","tool_input":{"file_path":"scripts/router-rs/src/claude_hooks.rs","new_string":"let a = foo.clone();\\nlet b = bar.clone();\\nlet g = serde_json::to_string(&x)?;\\n// legacy fallback compatibility patch"}}\n',
@@ -644,14 +694,14 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
     assert patchy_payload["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
     assert "异步实现复查" in patchy_payload["additionalContext"]
 
-    for script_name in ("config_change.sh", "stop_failure.sh"):
+    for command_name in ("config-change", "stop-failure"):
         payload = None
-        if script_name == "config_change.sh":
+        if command_name == "config-change":
             payload = '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}\n'
-        elif script_name == "stop_failure.sh":
+        elif command_name == "stop-failure":
             payload = '{"hook_event_name":"StopFailure","error":"server_error"}\n'
         subprocess.run(
-            ["sh", str(tmp_path / ".claude" / "hooks" / script_name)],
+            ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), command_name],
             cwd=tmp_path,
             check=True,
             env=env,
@@ -661,7 +711,7 @@ def test_materialized_claude_hooks_execute_without_error(tmp_path: Path) -> None
         assert not (tmp_path / ".codex" / "memory" / "MEMORY_AUTO.md").exists()
 
     subprocess.run(
-        ["sh", str(tmp_path / ".claude" / "hooks" / "session_end.sh")],
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "session-end"],
         cwd=tmp_path,
         check=True,
         env=env,
@@ -700,7 +750,7 @@ def test_pre_tool_use_hook_uses_repo_local_audit_without_router_rs_bootstrap(tmp
     env["PATH"] = f"{cargo_bin_dir}{os.pathsep}{env.get('PATH', '')}"
 
     allowed = subprocess.run(
-        ["sh", str(tmp_path / ".claude" / "hooks" / "pre_tool_use.sh")],
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "pre-tool-use"],
         cwd=tmp_path,
         env=env,
         input='{"tool_name":"Edit","tool_input":{"file_path":"notes/todo.md"}}\n',
@@ -723,7 +773,7 @@ def test_pre_tool_use_hook_blocks_without_router_rs_binary(tmp_path: Path) -> No
     env["PATH"] = "/usr/bin:/bin"
 
     blocked = subprocess.run(
-        ["sh", str(tmp_path / ".claude" / "hooks" / "pre_tool_use.sh")],
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "pre-tool-use"],
         cwd=tmp_path,
         env=env,
         input='{"tool_name":"Edit","tool_input":{"file_path":".claude/settings.json"}}\n',
@@ -738,8 +788,45 @@ def test_pre_tool_use_hook_blocks_without_router_rs_binary(tmp_path: Path) -> No
     assert blocked.stderr == ""
 
 
+def test_user_prompt_submit_hook_emits_stderr_notice_when_router_response_has_no_hook_specific_output(
+    tmp_path: Path,
+) -> None:
+    materialize_repo_host_entrypoints(tmp_path)
+    scripts_root = tmp_path / "scripts"
+    (scripts_root / "router-rs").mkdir(parents=True)
+    _write_text(
+        scripts_root / "router-rs" / "Cargo.toml",
+        "[package]\nname = \"router-rs\"\nversion = \"0.0.0\"\n",
+    )
+    _write_text(
+        scripts_root / "router-rs" / "target" / "debug" / "router-rs",
+        "#!/bin/sh\nprintf '%s\\n' '{\"command\":\"user-prompt-submit\"}'\n",
+    )
+    os.chmod(scripts_root / "router-rs" / "target" / "debug" / "router-rs", 0o755)
+
+    env = os.environ.copy()
+    env["CLAUDE_PROJECT_DIR"] = str(tmp_path)
+    env["PATH"] = "/usr/bin:/bin"
+
+    result = subprocess.run(
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "user-prompt-submit"],
+        cwd=tmp_path,
+        env=env,
+        input='{"hook_event_name":"UserPromptSubmit","prompt":"继续优化 runtime"}\n',
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert "shared hook returned no hookSpecificOutput; continuing with degraded context" in result.stderr
+
+
 def test_session_end_projection_includes_preferences(tmp_path: Path) -> None:
     materialize_repo_host_entrypoints(tmp_path)
+    scripts_path = tmp_path / "scripts"
+    if scripts_path.exists() or scripts_path.is_symlink():
+        shutil.rmtree(scripts_path)
     (tmp_path / "scripts").symlink_to(PROJECT_ROOT / "scripts", target_is_directory=True)
     _seed_runtime_artifacts(tmp_path)
     _seed_shared_memory(tmp_path)
@@ -751,7 +838,7 @@ def test_session_end_projection_includes_preferences(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["CLAUDE_PROJECT_DIR"] = str(tmp_path)
     subprocess.run(
-        ["sh", str(tmp_path / ".claude" / "hooks" / "session_end.sh")],
+        ["sh", str(tmp_path / ".claude" / "hooks" / "run.sh"), "session-end"],
         cwd=tmp_path,
         check=True,
         env=env,

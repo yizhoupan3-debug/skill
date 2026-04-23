@@ -34,10 +34,15 @@ HOOK_SPECIFIC_FIELDS = {
     ),
 }
 
-SHARED_HOOK_SCRIPTS = {
-    "pre-tool-use": ".claude/hooks/pre_tool_use.sh",
-    "user-prompt-submit": ".claude/hooks/user_prompt_submit.sh",
+SHARED_HOOK_RUNNER = ".claude/hooks/run.sh"
+SHARED_HOOK_COMMANDS = {
+    "pre-tool-use": "pre-tool-use",
+    "user-prompt-submit": "user-prompt-submit",
 }
+USER_PROMPT_SUBMIT_DEGRADED_CONTEXT = (
+    "提示：repo-local hook 注入本轮降级，主流程继续；"
+    "如需恢复，请重新生成 .claude/hooks/run.sh 或检查 hook runner。"
+)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -46,7 +51,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--event",
         required=True,
-        choices=sorted(SHARED_HOOK_SCRIPTS),
+        choices=sorted(SHARED_HOOK_COMMANDS),
     )
     return parser.parse_args()
 
@@ -106,14 +111,25 @@ def _bridge_payload(event: str, payload: dict[str, Any]) -> dict[str, Any]:
     return bridged
 
 
+def _degraded_user_prompt_submit_payload(reason: str) -> dict[str, Any]:
+    context = f"{USER_PROMPT_SUBMIT_DEGRADED_CONTEXT}\n原因：{reason}"
+    return {
+        "systemMessage": context,
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": context,
+        },
+    }
+
+
 def _run_shared_hook(repo_root: Path, event: str, stdin_text: str) -> subprocess.CompletedProcess[str]:
-    script_path = repo_root / SHARED_HOOK_SCRIPTS[event]
+    script_path = repo_root / SHARED_HOOK_RUNNER
     if not script_path.is_file():
         raise FileNotFoundError(f"missing shared hook script: {script_path}")
     env = os.environ.copy()
     env["CLAUDE_PROJECT_DIR"] = str(repo_root)
     return subprocess.run(
-        ["sh", str(script_path)],
+        ["sh", str(script_path), SHARED_HOOK_COMMANDS[event]],
         cwd=repo_root,
         env=env,
         input=stdin_text,
@@ -131,6 +147,12 @@ def main() -> int:
         result = _run_shared_hook(repo_root, args.event, stdin_text)
     except FileNotFoundError as exc:
         if args.event == "user-prompt-submit":
+            json.dump(
+                _degraded_user_prompt_submit_payload(str(exc)),
+                sys.stdout,
+                ensure_ascii=False,
+            )
+            sys.stdout.write("\n")
             return 0
         print(str(exc), file=sys.stderr)
         return 1
@@ -139,6 +161,14 @@ def main() -> int:
         sys.stderr.write(result.stderr)
     if result.returncode != 0:
         if args.event == "user-prompt-submit":
+            json.dump(
+                _degraded_user_prompt_submit_payload(
+                    f"shared hook exited with status {result.returncode}"
+                ),
+                sys.stdout,
+                ensure_ascii=False,
+            )
+            sys.stdout.write("\n")
             return 0
         if result.stdout:
             sys.stdout.write(result.stdout)

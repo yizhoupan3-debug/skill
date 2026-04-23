@@ -35,10 +35,11 @@ def _run_bridge(repo_root: Path, event: str, payload: str) -> subprocess.Complet
 
 def test_pre_tool_use_bridge_filters_claude_audit_metadata(tmp_path: Path) -> None:
     _write_text(
-        tmp_path / ".claude" / "hooks" / "pre_tool_use.sh",
+        tmp_path / ".claude" / "hooks" / "run.sh",
         "\n".join(
             [
                 "#!/bin/sh",
+                "shift",
                 "cat >/dev/null",
                 "printf '%s\\n' '{\"schema_version\":\"v1\",\"authority\":\"claude\",\"command\":\"pre-tool-use\",\"decision\":\"deny\",\"path\":\".claude/settings.json\",\"message\":\"blocked\",\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"blocked\"}}'",
             ]
@@ -66,10 +67,11 @@ def test_pre_tool_use_bridge_filters_claude_audit_metadata(tmp_path: Path) -> No
 
 def test_pre_tool_use_bridge_stays_silent_when_shared_hook_is_silent(tmp_path: Path) -> None:
     _write_text(
-        tmp_path / ".claude" / "hooks" / "pre_tool_use.sh",
+        tmp_path / ".claude" / "hooks" / "run.sh",
         "\n".join(
             [
                 "#!/bin/sh",
+                "shift",
                 "cat >/dev/null",
             ]
         )
@@ -89,10 +91,11 @@ def test_pre_tool_use_bridge_stays_silent_when_shared_hook_is_silent(tmp_path: P
 
 def test_user_prompt_submit_bridge_filters_claude_audit_metadata(tmp_path: Path) -> None:
     _write_text(
-        tmp_path / ".claude" / "hooks" / "user_prompt_submit.sh",
+        tmp_path / ".claude" / "hooks" / "run.sh",
         "\n".join(
             [
                 "#!/bin/sh",
+                "shift",
                 "cat >/dev/null",
                 "printf '%s\\n' '{\"schema_version\":\"v1\",\"authority\":\"claude\",\"command\":\"user-prompt-submit\",\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"热路径优先\"}}'",
             ]
@@ -115,3 +118,30 @@ def test_user_prompt_submit_bridge_filters_claude_audit_metadata(tmp_path: Path)
             "additionalContext": "热路径优先",
         }
     }
+
+
+def test_user_prompt_submit_bridge_fails_open_with_visible_degraded_context_when_shared_hook_errors(tmp_path: Path) -> None:
+    _write_text(
+        tmp_path / ".claude" / "hooks" / "run.sh",
+        "\n".join(
+            [
+                "#!/bin/sh",
+                "shift",
+                "cat >/dev/null",
+                "exit 7",
+            ]
+        )
+        + "\n",
+    )
+
+    result = _run_bridge(
+        tmp_path,
+        "user-prompt-submit",
+        '{"hook_event_name":"UserPromptSubmit","prompt":"继续优化 runtime"}\n',
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    assert "repo-local hook 注入本轮降级" in payload["hookSpecificOutput"]["additionalContext"]
+    assert "status 7" in payload["hookSpecificOutput"]["additionalContext"]
