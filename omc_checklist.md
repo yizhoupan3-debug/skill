@@ -61,7 +61,7 @@
   - 已有 Rust-first background/control-plane 底座：
     - `scripts/router-rs/src/background_state.rs`
     - `scripts/runtime_background_cli.py`
-    - `codex_agno_runtime/src/codex_agno_runtime/control_plane_contracts.py`
+    - `framework_runtime/src/framework_runtime/control_plane_contracts.py`
   - 已有 continuity / resume / attach / replay seams：
     - `event_transport`
     - `checkpoint_resume_manifest`
@@ -129,7 +129,7 @@
 
 - **严禁继续使用 `.omc/**` 作为 steady-state state root**
 - 新能力应接入现有路径族：
-  - runtime durable state: `codex_agno_runtime/data/*` 或现有 background-state store
+  - runtime durable state: `framework_runtime/data/*` 或现有 background-state store
   - continuity / evidence: `SESSION_SUMMARY.md` `NEXT_ACTIONS.json` `EVIDENCE_INDEX.json` `TRACE_METADATA.json`
   - ops / debug evidence: `artifacts/ops/*`
 
@@ -151,10 +151,10 @@
 
 | ID | 任务 | 主要目标 | 独占写入范围 |
 |---|---|---|---|
-| 1 | OMC 退场 contract 与 capability discovery 收口 | 把 “删 OMC、保能力、Rust-first” 冻结成 shared contract | `docs/host_adapter_contracts.md`, `docs/rust_contracts.md`, `configs/framework/RUNTIME_REGISTRY.json`, `codex_agno_runtime/src/codex_agno_runtime/runtime_registry.py`, `codex_agno_runtime/src/codex_agno_runtime/framework_profile.py`, 相关 contract tests |
+| 1 | OMC 退场 contract 与 capability discovery 收口 | 把 “删 OMC、保能力、Rust-first” 冻结成 shared contract | `docs/host_adapter_contracts.md`, `docs/rust_contracts.md`, `configs/framework/RUNTIME_REGISTRY.json`, `framework_runtime/src/framework_runtime/runtime_registry.py`, `framework_runtime/src/framework_runtime/framework_profile.py`, 相关 contract tests |
 | 2 | Rust session-supervisor control plane | 新增共享 session supervisor 状态机与 durable store | `scripts/router-rs/src/background_state.rs`, `scripts/router-rs/src/framework_runtime.rs`, `scripts/router-rs/src/main.rs`, 必要时新增 `scripts/router-rs/src/session_supervisor.rs`, 对应 Rust tests |
 | 3 | tmux 外部会话管理与 host drivers | 落地 Codex/Claude 外部 worker session 生命周期 | `scripts/router-rs/src/main.rs`, 新增或更新 host-driver Rust 模块，必要时新增 `scripts/runtime_supervisor_cli.py` 作为 thin wrapper，`tests/test_framework_runtime_runtime.py`，background/session tests |
-| 4 | 限流后自动续跑 | 落地 host-neutral wait/resume daemon 与 rate-limit classifier | `scripts/router-rs/src/main.rs`, 必要时新增 `scripts/router-rs/src/rate_limit_wait.rs`, `codex_agno_runtime/src/codex_agno_runtime/event_transport.py` 仅限薄投影适配，相关 runtime/control-plane tests |
+| 4 | 限流后自动续跑 | 落地 host-neutral wait/resume daemon 与 rate-limit classifier | `scripts/router-rs/src/main.rs`, 必要时新增 `scripts/router-rs/src/rate_limit_wait.rs`, `framework_runtime/src/framework_runtime/event_transport.py` 仅限薄投影适配，相关 runtime/control-plane tests |
 | 5 | `autopilot` / `deepinterview` 保留但去 OMC 依赖 | 以 shared framework truth 重建两个能力面，并分别投影到 Claude `/` 和 Codex `$` | `skills/autopilot/SKILL.md`, `skills/deepinterview/SKILL.md`, `skills/SKILL_MANIFEST.json`, `scripts/materialize_cli_host_entrypoints.py`, `.claude/commands/autopilot.md`, `.claude/commands/deepinterview.md`, skill / host-entrypoint tests |
 | 6 | 宿主 cutover 与 OMC 残留清除 | 完成 Claude / Codex host 切换与 OMC 全面卸载 | `/Users/joe/.claude/CLAUDE.md`, `/Users/joe/.claude/settings.json`, `/Users/joe/.claude.json`, `/Users/joe/.claude/plugins/**`, `/Users/joe/.claude/.omc/**`, `/Users/joe/.claude/hud/omc-hud.mjs`, `/Users/joe/.npm-global/bin/{omc,omc-cli,oh-my-claudecode}`, `/Users/joe/.npm-global/lib/node_modules/oh-my-claude-sisyphus`, repo `.omc/`, `.gitignore`（仅当最终确认不再需要忽略 `.omc/`） |
 
@@ -185,8 +185,8 @@
 - `docs/host_adapter_contracts.md`
 - `docs/rust_contracts.md`
 - `configs/framework/RUNTIME_REGISTRY.json`
-- `codex_agno_runtime/src/codex_agno_runtime/runtime_registry.py`
-- `codex_agno_runtime/src/codex_agno_runtime/framework_profile.py`
+- `framework_runtime/src/framework_runtime/runtime_registry.py`
+- `framework_runtime/src/framework_runtime/framework_profile.py`
 - capability / contract 相关测试
 
 ### 禁止越界
@@ -339,7 +339,7 @@
 
 - `scripts/router-rs/src/main.rs`
 - 如确有必要，新增 `scripts/router-rs/src/rate_limit_wait.rs`
-- 仅在必要时更新 `codex_agno_runtime/src/codex_agno_runtime/event_transport.py` 的薄投影
+- 仅在必要时更新 `framework_runtime/src/framework_runtime/event_transport.py` 的薄投影
 - runtime / control-plane tests
 
 ### 禁止越界

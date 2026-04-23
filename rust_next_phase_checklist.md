@@ -26,10 +26,10 @@
 
 | ID | 任务 | 主要目标 | 独占写入范围 |
 |---|---|---|---|
-| 1 | Route Consumer Typed-First Cutover | 让 route CLI / adjacent helpers 不再做特权 raw-JSON consumer，而是稳定消费 Rust-owned typed contract | `scripts/route.py`, `codex_agno_runtime/src/codex_agno_runtime/rust_router.py`, `codex_agno_runtime/src/codex_agno_runtime/schemas.py`, 相关 route/parity 测试 |
-| 2 | Execution Kernel Metadata Canonicalization Phase B | 把 execution-kernel metadata / naming bridge 的真源继续交给 Rust，压缩 Python compatibility projection | `codex_agno_runtime/src/codex_agno_runtime/execution_kernel.py`, `codex_agno_runtime/src/codex_agno_runtime/execution_kernel_contracts.py`, `codex_agno_runtime/src/codex_agno_runtime/services.py`, `scripts/router-rs/src/main.rs`, 相关 execution-kernel 测试 |
-| 3 | Workspace Bootstrap / Shared Contract Parity | 把 `workspace_bootstrap` 与 host-adapter shared contract 的 Python / Rust 双实现继续锁成一条 truth | `codex_agno_runtime/src/codex_agno_runtime/framework_profile.py`, `codex_agno_runtime/src/codex_agno_runtime/host_adapters.py`, `scripts/router-rs/src/framework_profile.rs`, `docs/framework_profile_contract.md`, 相关 framework-profile / contract-artifact 测试 |
-| 4 | Process-External Attach Surface Hardening | 把 attach descriptor / replay / cleanup 的 process-external surface 再收口一层，避免 consumer 各自补第二套协议 | `codex_agno_runtime/src/codex_agno_runtime/event_transport.py`, `codex_agno_runtime/src/codex_agno_runtime/runtime.py`, 必要时 `tools/browser-mcp/src/runtime.ts`, 相关 runtime/browser-mcp 测试 |
+| 1 | Route Consumer Typed-First Cutover | 让 route CLI / adjacent helpers 不再做特权 raw-JSON consumer，而是稳定消费 Rust-owned typed contract | `scripts/route.py`, `framework_runtime/src/framework_runtime/rust_router.py`, `framework_runtime/src/framework_runtime/schemas.py`, 相关 route/parity 测试 |
+| 2 | Execution Kernel Metadata Canonicalization Phase B | 把 execution-kernel metadata / naming bridge 的真源继续交给 Rust，压缩 Python compatibility projection | `framework_runtime/src/framework_runtime/execution_kernel.py`, `framework_runtime/src/framework_runtime/execution_kernel_contracts.py`, `framework_runtime/src/framework_runtime/services.py`, `scripts/router-rs/src/main.rs`, 相关 execution-kernel 测试 |
+| 3 | Workspace Bootstrap / Shared Contract Parity | 把 `workspace_bootstrap` 与 host-adapter shared contract 的 Python / Rust 双实现继续锁成一条 truth | `framework_runtime/src/framework_runtime/framework_profile.py`, `framework_runtime/src/framework_runtime/host_adapters.py`, `scripts/router-rs/src/framework_profile.rs`, `docs/framework_profile_contract.md`, 相关 framework-profile / contract-artifact 测试 |
+| 4 | Process-External Attach Surface Hardening | 把 attach descriptor / replay / cleanup 的 process-external surface 再收口一层，避免 consumer 各自补第二套协议 | `framework_runtime/src/framework_runtime/event_transport.py`, `framework_runtime/src/framework_runtime/runtime.py`, 必要时 `tools/browser-mcp/src/runtime.ts`, 相关 runtime/browser-mcp 测试 |
 | 5 | Integrator / Regenerate / Verify | 只在前 4 项稳定后，统一刷新真正需要变更的 docs / generated outputs / evidence | `skills/SKILL_*`, 相关 docs, generated artifacts, targeted verification surfaces |
 
 ---
@@ -48,8 +48,8 @@
 ### 独占写入范围
 
 - `scripts/route.py`
-- `codex_agno_runtime/src/codex_agno_runtime/rust_router.py`
-- `codex_agno_runtime/src/codex_agno_runtime/schemas.py`
+- `framework_runtime/src/framework_runtime/rust_router.py`
+- `framework_runtime/src/framework_runtime/schemas.py`
 - route/parity 相关测试文件
 
 ### 禁止越界
@@ -91,9 +91,9 @@
 
 ### 独占写入范围
 
-- `codex_agno_runtime/src/codex_agno_runtime/execution_kernel.py`
-- `codex_agno_runtime/src/codex_agno_runtime/execution_kernel_contracts.py`
-- `codex_agno_runtime/src/codex_agno_runtime/services.py`
+- `framework_runtime/src/framework_runtime/execution_kernel.py`
+- `framework_runtime/src/framework_runtime/execution_kernel_contracts.py`
+- `framework_runtime/src/framework_runtime/services.py`
 - `scripts/router-rs/src/main.rs`
 - execution-kernel / runtime-service 相关测试
 
@@ -136,8 +136,8 @@
 
 ### 独占写入范围
 
-- `codex_agno_runtime/src/codex_agno_runtime/framework_profile.py`
-- `codex_agno_runtime/src/codex_agno_runtime/host_adapters.py`
+- `framework_runtime/src/framework_runtime/framework_profile.py`
+- `framework_runtime/src/framework_runtime/host_adapters.py`
 - `scripts/router-rs/src/framework_profile.rs`
 - `docs/framework_profile_contract.md`
 - framework-profile / framework-contract-artifact 相关测试
@@ -181,8 +181,8 @@
 
 ### 独占写入范围
 
-- `codex_agno_runtime/src/codex_agno_runtime/event_transport.py`
-- `codex_agno_runtime/src/codex_agno_runtime/runtime.py`
+- `framework_runtime/src/framework_runtime/event_transport.py`
+- `framework_runtime/src/framework_runtime/runtime.py`
 - 如确有必要，可改 `tools/browser-mcp/src/runtime.ts`
 - runtime/browser-mcp 相关测试
 

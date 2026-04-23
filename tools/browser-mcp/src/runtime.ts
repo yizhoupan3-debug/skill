@@ -128,7 +128,6 @@ interface RouterRsStdioResponse<T> {
 interface LoadedRuntimeAttachDescriptor {
   descriptor: RuntimeAttachDescriptor;
   inputArtifactKind: RuntimeAttachArtifactKind | null;
-  attachedPayload: Record<string, unknown> | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1038,9 +1037,7 @@ export class BrowserRuntime {
             descriptor: loaded.descriptor,
             inputArtifactKind: loaded.inputArtifactKind,
             traceStreamPath:
-              this.traceStreamPathFromAttachedPayload(loaded.attachedPayload) ??
-              loaded.descriptor.resolved_artifacts?.trace_stream_path ??
-              null,
+              loaded.descriptor.resolved_artifacts?.trace_stream_path ?? null,
           });
         } catch {
           // Keep the minimal base payload when descriptor hydration also fails.
@@ -1119,14 +1116,6 @@ export class BrowserRuntime {
     };
   }
 
-  private traceStreamPathFromAttachedPayload(
-    attachedPayload: Record<string, unknown> | null,
-  ): string | null {
-    return typeof attachedPayload?.trace_stream_path === 'string'
-      ? attachedPayload.trace_stream_path
-      : null;
-  }
-
   private async loadRuntimeAttachDescriptor(): Promise<LoadedRuntimeAttachDescriptor> {
     const configuredSource = this.getConfiguredRuntimeAttachSource();
     switch (configuredSource.source) {
@@ -1182,10 +1171,9 @@ export class BrowserRuntime {
     const descriptor = loaded.descriptor;
     const replaySupported = descriptor.attach_capabilities?.artifact_replay === true;
     const traceStreamPath =
-      this.traceStreamPathFromAttachedPayload(loaded.attachedPayload) ??
-      (typeof descriptor.resolved_artifacts?.trace_stream_path === 'string'
+      typeof descriptor.resolved_artifacts?.trace_stream_path === 'string'
         ? path.resolve(descriptor.resolved_artifacts.trace_stream_path)
-        : null);
+        : null;
     const diagnosticsBase = this.projectAttachedRuntimeDiagnostics({
       configuredSource,
       descriptor,
@@ -1430,7 +1418,6 @@ export class BrowserRuntime {
       return {
         descriptor,
         inputArtifactKind: 'attach_descriptor',
-        attachedPayload: null,
       };
     }
     this.assertAttachDescriptorMatchesCanonical(descriptor, hydrated.descriptor);
@@ -1642,7 +1629,6 @@ export class BrowserRuntime {
     return {
       descriptor: descriptor as unknown as RuntimeAttachDescriptor,
       inputArtifactKind,
-      attachedPayload: attached,
     };
   }
 

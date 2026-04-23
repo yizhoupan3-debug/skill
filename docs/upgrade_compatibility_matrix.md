@@ -57,7 +57,7 @@ following are true:
 - `build_cli_family_parity_snapshot(...)`: CLI-family shared-contract parity is emitted as the canonical CLI regression artifact.
 - `codex_desktop_alias_inventory.json`: current repo-side alias references are inventoried only on explicit continuity runs.
 - `codex_desktop_alias_retirement_status.json`: alias retirement gates are externalized as a contract only on the explicit continuity lane.
-- `codex_agno_runtime.host_adapter_compatibility.build_upgrade_compatibility_matrix(...)`: the upgrade lane is anchored in the outer-framework contract, not host internals.
+- `framework_runtime.host_adapter_compatibility.build_upgrade_compatibility_matrix(...)`: the upgrade lane is anchored in the outer-framework contract, not host internals.
 - `emit_framework_contract_artifacts(...)`: Python can now emit concrete bridge/contract artifacts for profile + default host adapters + dual-entry parity snapshot + the first-class control-plane contract artifacts `execution_controller_contract`, `delegation_contract`, and `supervisor_state_contract`; default outputs land under `default/`, fallback host artifacts under `fallback/`, legacy alias inventory/status under `continuity/`, and `upgrade_compatibility_matrix` itself is now an explicit compatibility-inventory output.
 - default Python artifact emission is parity-first: `codex_desktop_host_adapter` no longer has a
   direct Python-emitted artifact, and its inventory/status artifacts stay behind explicit continuity opt-in.
@@ -68,6 +68,6 @@ following are true:
 - default package export is parity-first: Python no longer exposes
   `compile_codex_desktop_host_adapter(...)`; the remaining compatibility surface stays limited to
   explicit inventory / retirement helpers.
-- the old `codex_agno_runtime.compatibility` shim is gone; internal artifact emitters now call the
+- the old retired-package compatibility shim is gone; internal artifact emitters now call the
   canonical runtime modules directly instead of bouncing through an extra escape hatch.
 - `router-rs --profile-json`: Rust lane validates and compiles the framework profile without touching `aionrs` or `AionUI`.

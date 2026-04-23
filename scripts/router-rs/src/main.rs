@@ -5544,23 +5544,30 @@ fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
         .unwrap_or_else(|| "after_event_id".to_string());
     let artifact_backend_family = optional_non_empty_string(&transport, "binding_backend_family")
         .unwrap_or_else(|| "filesystem".to_string());
+    let source_transport_method = "describe_runtime_event_transport";
+    let source_handoff_method = "describe_runtime_event_handoff";
+    let attach_method = "attach_runtime_event_transport";
+    let subscribe_method = "subscribe_attached_runtime_events";
+    let cleanup_method = "cleanup_attached_runtime_event_transport";
+    let cleanup_semantics = "no_persisted_state";
+    let recommended_entrypoint = "describe_runtime_event_handoff";
     let attach_descriptor = json!({
         "schema_version": "runtime-event-attach-descriptor-v1",
         "attach_mode": "process_external_artifact_replay",
-        "artifact_backend_family": artifact_backend_family,
-        "source_transport_method": "describe_runtime_event_transport",
-        "source_handoff_method": "describe_runtime_event_handoff",
-        "attach_method": "attach_runtime_event_transport",
-        "subscribe_method": "subscribe_attached_runtime_events",
-        "cleanup_method": "cleanup_attached_runtime_event_transport",
-        "resume_mode": resume_mode,
-        "cleanup_semantics": "no_persisted_state",
+        "artifact_backend_family": artifact_backend_family.clone(),
+        "source_transport_method": source_transport_method,
+        "source_handoff_method": source_handoff_method,
+        "attach_method": attach_method,
+        "subscribe_method": subscribe_method,
+        "cleanup_method": cleanup_method,
+        "resume_mode": resume_mode.clone(),
+        "cleanup_semantics": cleanup_semantics,
         "attach_capabilities": {
             "artifact_replay": true,
             "live_remote_stream": false,
             "cleanup_preserves_replay": true,
         },
-        "recommended_entrypoint": "describe_runtime_event_handoff",
+        "recommended_entrypoint": recommended_entrypoint,
         "requested_artifacts": {
             "binding_artifact_path": transport_path.as_ref().map(|path| path.display().to_string()),
             "handoff_path": handoff_file.as_ref().map(|path| path.display().to_string()),
@@ -5582,13 +5589,13 @@ fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
 
     Ok(json!({
         "attach_mode": "process_external_artifact_replay",
-        "artifact_backend_family": optional_non_empty_string(&transport, "binding_backend_family"),
-        "source_handoff_method": "describe_runtime_event_handoff",
-        "source_transport_method": "describe_runtime_event_transport",
-        "attach_method": "attach_runtime_event_transport",
-        "subscribe_method": "subscribe_attached_runtime_events",
-        "cleanup_method": "cleanup_attached_runtime_event_transport",
-        "resume_mode": optional_non_empty_string(&transport, "resume_mode"),
+        "artifact_backend_family": artifact_backend_family,
+        "source_handoff_method": source_handoff_method,
+        "source_transport_method": source_transport_method,
+        "attach_method": attach_method,
+        "subscribe_method": subscribe_method,
+        "cleanup_method": cleanup_method,
+        "resume_mode": resume_mode,
         "transport": transport,
         "handoff": handoff,
         "resume_manifest": resume_manifest,
@@ -5597,7 +5604,7 @@ fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
         "resume_manifest_path": resolved_resume_file.as_ref().map(|path| path.display().to_string()),
         "trace_stream_path": trace_stream_path.display().to_string(),
         "replay_supported": true,
-        "cleanup_semantics": "no_persisted_state",
+        "cleanup_semantics": cleanup_semantics,
         "cleanup_preserves_replay": true,
         "authority": ATTACHED_RUNTIME_EVENT_ATTACH_AUTHORITY,
         "attach_descriptor": attach_descriptor,

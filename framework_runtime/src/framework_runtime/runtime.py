@@ -12,6 +12,7 @@ from framework_runtime.checkpoint_store import FilesystemRuntimeCheckpointer
 from framework_runtime.event_transport import (
     cleanup_external_runtime_event_transport,
     resolve_external_runtime_event_transport,
+    subscribe_external_runtime_event_transport,
 )
 from framework_runtime.trace import (
     TRACE_EVENT_HANDOFF_SCHEMA_VERSION,
@@ -256,21 +257,16 @@ class CodexAgnoRuntime:
     ) -> dict[str, Any]:
         """Replay runtime events through the process-external attach bridge."""
 
-        attachment = resolve_external_runtime_event_transport(
+        return subscribe_external_runtime_event_transport(
             adapter=self.rust_adapter,
             attach_descriptor=attach_descriptor,
             binding_artifact_path=binding_artifact_path,
             handoff_path=handoff_path,
             resume_manifest_path=resume_manifest_path,
-        )
-        return self.rust_adapter.subscribe_attached_runtime_events(
-            {
-                "attach_descriptor": attachment.attach_descriptor.model_dump(mode="json"),
-                "after_event_id": after_event_id,
-                "limit": limit,
-                "heartbeat": heartbeat,
-            }
-        )
+            after_event_id=after_event_id,
+            limit=limit,
+            heartbeat=heartbeat,
+        ).model_dump(mode="json")
 
     def cleanup_attached_runtime_event_transport(
         self,

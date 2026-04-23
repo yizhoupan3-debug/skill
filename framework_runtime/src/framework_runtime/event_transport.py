@@ -400,6 +400,43 @@ def resolve_external_runtime_event_transport(
     return attachment
 
 
+def subscribe_external_runtime_event_transport(
+    *,
+    adapter: RustRouteAdapter,
+    attach_descriptor: Mapping[str, Any] | None = None,
+    binding_artifact_path: str | None = None,
+    handoff_path: str | None = None,
+    resume_manifest_path: str | None = None,
+    after_event_id: str | None = None,
+    limit: int | None = 100,
+    heartbeat: bool = False,
+) -> RuntimeEventStreamChunk:
+    """Replay runtime events through the canonical attach descriptor only."""
+
+    attachment = resolve_external_runtime_event_transport(
+        adapter=adapter,
+        attach_descriptor=attach_descriptor,
+        binding_artifact_path=binding_artifact_path,
+        handoff_path=handoff_path,
+        resume_manifest_path=resume_manifest_path,
+    )
+    try:
+        payload = adapter.subscribe_attached_runtime_events(
+            {
+                "attach_descriptor": attachment.attach_descriptor.model_dump(mode="json"),
+                "after_event_id": after_event_id,
+                "limit": limit,
+                "heartbeat": heartbeat,
+            }
+        )
+    except RuntimeError as exc:
+        attach_error = _unwrap_rust_attach_error(exc)
+        if attach_error is not None:
+            raise attach_error from exc
+        raise
+    return RuntimeEventStreamChunk.model_validate(payload)
+
+
 def cleanup_external_runtime_event_transport(
     *,
     adapter: RustRouteAdapter,
@@ -512,15 +549,13 @@ class ExternalRuntimeEventTransportBridge:
     ) -> RuntimeEventStreamChunk:
         """Replay a stream window from persisted artifacts in a new process."""
 
-        payload = self._adapter.subscribe_attached_runtime_events(
-            {
-                **_build_external_runtime_attach_request(attach_descriptor=self._attach_descriptor),
-                "after_event_id": after_event_id,
-                "limit": limit,
-                "heartbeat": heartbeat,
-            }
+        return subscribe_external_runtime_event_transport(
+            adapter=self._adapter,
+            attach_descriptor=self._attach_descriptor,
+            after_event_id=after_event_id,
+            limit=limit,
+            heartbeat=heartbeat,
         )
-        return RuntimeEventStreamChunk.model_validate(payload)
 
     def cleanup(self) -> dict[str, Any]:
         """Report cleanup semantics for artifact-backed external attach."""
