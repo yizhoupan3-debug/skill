@@ -181,6 +181,15 @@ def test_runtime_services_expose_health_boundaries(tmp_path: Path) -> None:
     assert metadata_bridge["metadata_keys"]["prompt_preview_owner"] == (
         "execution_kernel_prompt_preview_owner"
     )
+    assert metadata_bridge["runtime_fields"]["shared"] == (
+        "trace_event_count",
+        "trace_output_path",
+    )
+    assert metadata_bridge["runtime_fields"]["live_primary_passthrough"] == (
+        "execution_mode",
+        "route_engine",
+        "diagnostic_route_mode",
+    )
     assert (
         router_service.health()["rust_adapter"]["route_policy_schema_version"]
         == "router-rs-route-policy-v1"

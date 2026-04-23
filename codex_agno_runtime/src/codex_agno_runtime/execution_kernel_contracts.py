@@ -136,6 +136,50 @@ DRY_RUN_PROMPT_PREVIEW_OWNER = "rust-execution-cli"
 LIVE_PRIMARY_MODEL_ID_SOURCE = "aggregator-response.model"
 
 
+def _normalize_runtime_field_group(
+    runtime_fields_payload: Mapping[str, Any] | None,
+    *,
+    name: str,
+    fallback: tuple[str, ...],
+) -> tuple[str, ...]:
+    payload = fallback if runtime_fields_payload is None else runtime_fields_payload.get(name, fallback)
+    if not isinstance(payload, (list, tuple)) or any(
+        not isinstance(field, str) or not field.strip() for field in payload
+    ):
+        raise RuntimeError(
+            "execution-kernel metadata bridge returned an invalid runtime field group: "
+            f"{name}={payload!r}"
+        )
+    return tuple(str(field) for field in payload)
+
+
+def _normalize_execution_kernel_runtime_fields(
+    runtime_fields_payload: Mapping[str, Any] | None,
+) -> dict[str, tuple[str, ...]]:
+    return {
+        "shared": _normalize_runtime_field_group(
+            runtime_fields_payload,
+            name="shared",
+            fallback=RUNTIME_TRACE_METADATA_FIELDS,
+        ),
+        "live_primary_required": _normalize_runtime_field_group(
+            runtime_fields_payload,
+            name="live_primary_required",
+            fallback=LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS,
+        ),
+        "live_primary_passthrough": _normalize_runtime_field_group(
+            runtime_fields_payload,
+            name="live_primary_passthrough",
+            fallback=LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS,
+        ),
+        "dry_run_required": _normalize_runtime_field_group(
+            runtime_fields_payload,
+            name="dry_run_required",
+            fallback=DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS,
+        ),
+    }
+
+
 def resolve_execution_kernel_expectations(
     kernel_contract: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
@@ -187,6 +231,7 @@ def normalize_execution_kernel_metadata_bridge(
     if metadata_bridge is None:
         return {
             "steady_state_fields": EXECUTION_KERNEL_RUST_CANONICAL_STEADY_STATE_METADATA_FIELDS,
+            "runtime_fields": _normalize_execution_kernel_runtime_fields(None),
             "metadata_keys": {
                 "metadata_schema_version": (
                     EXECUTION_KERNEL_METADATA_SCHEMA_VERSION_METADATA_KEY
@@ -227,6 +272,9 @@ def normalize_execution_kernel_metadata_bridge(
     defaults_payload = metadata_bridge.get("defaults")
     if not isinstance(defaults_payload, Mapping):
         raise RuntimeError("execution-kernel metadata bridge is missing defaults.")
+    runtime_fields_payload = metadata_bridge.get("runtime_fields")
+    if runtime_fields_payload is not None and not isinstance(runtime_fields_payload, Mapping):
+        raise RuntimeError("execution-kernel metadata bridge returned invalid runtime_fields.")
     prompt_preview_owner_by_mode = defaults_payload.get("prompt_preview_owner_by_mode")
     if not isinstance(prompt_preview_owner_by_mode, Mapping):
         raise RuntimeError(
@@ -269,6 +317,7 @@ def normalize_execution_kernel_metadata_bridge(
 
     return {
         "steady_state_fields": tuple(str(field) for field in steady_state_fields),
+        "runtime_fields": _normalize_execution_kernel_runtime_fields(runtime_fields_payload),
         "metadata_keys": {
             "metadata_schema_version": _bridge_key(
                 "metadata_schema_version",
@@ -321,6 +370,19 @@ def execution_kernel_steady_state_fields(
 
     bridge = normalize_execution_kernel_metadata_bridge(metadata_bridge)
     return tuple(str(field) for field in bridge["steady_state_fields"])
+
+
+def execution_kernel_runtime_metadata_fields(
+    metadata_bridge: Mapping[str, Any] | None,
+) -> dict[str, tuple[str, ...]]:
+    """Return the Rust-owned runtime metadata field groups for one bridge payload."""
+
+    bridge = normalize_execution_kernel_metadata_bridge(metadata_bridge)
+    runtime_fields = bridge["runtime_fields"]
+    return {
+        str(name): tuple(str(field) for field in fields)
+        for name, fields in dict(runtime_fields).items()
+    }
 
 
 def build_trace_runtime_metadata(
@@ -395,9 +457,15 @@ def build_execution_kernel_runtime_metadata(
     return metadata
 
 
-def build_execution_kernel_live_response_serialization_contract_core() -> dict[str, Any]:
+def build_execution_kernel_live_response_serialization_contract_core(
+    metadata_bridge: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Return the shared execution-kernel response serialization contract core."""
 
+    bridge = normalize_execution_kernel_metadata_bridge(metadata_bridge)
+    defaults = dict(bridge["defaults"])
+    steady_state_fields = list(execution_kernel_steady_state_fields(bridge))
+    runtime_fields = execution_kernel_runtime_metadata_fields(bridge)
     return {
         "status_contract": EXECUTION_KERNEL_LIVE_RESPONSE_SERIALIZATION_STATUS_CONTRACT,
         "public_response_fields": [*EXECUTION_KERNEL_PUBLIC_RESPONSE_FIELDS],
@@ -407,20 +475,24 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
             "dry_run_mode": "estimated",
         },
         "runtime_response_metadata_fields": {
-            "shared": [*RUNTIME_TRACE_METADATA_FIELDS],
-            "steady_state_kernel": [*EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS],
-            "live_primary": [*LIVE_PRIMARY_RUNTIME_METADATA_FIELDS],
-            "dry_run": [*DRY_RUN_RUNTIME_METADATA_FIELDS],
+            "shared": [*runtime_fields["shared"]],
+            "steady_state_kernel": [*steady_state_fields],
+            "live_primary": [*runtime_fields["live_primary_required"]],
+            "dry_run": [*runtime_fields["dry_run_required"]],
         },
         "current_contract_truth": {
             "public_response_model": "RunTaskResponse",
             "execution_request_schema_version": EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION,
             "live_primary_schema_version": EXECUTION_KERNEL_LIVE_PRIMARY_SCHEMA_VERSION,
             "steady_state_metadata_schema_version": EXECUTION_KERNEL_METADATA_SCHEMA_VERSION,
-            "live_primary_prompt_preview_owner": LIVE_PRIMARY_PROMPT_PREVIEW_OWNER,
-            "steady_state_response_shapes": ["live_primary", "dry_run"],
-            "dry_run_prompt_preview_owner": DRY_RUN_PROMPT_PREVIEW_OWNER,
-            "live_primary_model_id_source": LIVE_PRIMARY_MODEL_ID_SOURCE,
+            "live_primary_prompt_preview_owner": defaults["prompt_preview_owner_by_mode"][
+                EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
+            ],
+            "steady_state_response_shapes": [*defaults["supported_response_shapes"]],
+            "dry_run_prompt_preview_owner": defaults["prompt_preview_owner_by_mode"][
+                EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN
+            ],
+            "live_primary_model_id_source": defaults["live_primary_model_id_source"],
         },
         "current_response_shape_truth": {
             "live_primary": {
@@ -430,14 +502,12 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
                 "prompt_preview_source": "rust-owned-live-prompt",
                 "model_id_present": True,
                 "required_metadata_fields": [
-                    *EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
-                    *LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS,
+                    *steady_state_fields,
+                    *runtime_fields["live_primary_required"],
                 ],
-                "steady_state_metadata_fields": [
-                    *EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS
-                ],
+                "steady_state_metadata_fields": [*steady_state_fields],
                 "pass_through_metadata_fields": [
-                    *LIVE_PRIMARY_PASSTHROUGH_RUNTIME_METADATA_FIELDS
+                    *runtime_fields["live_primary_passthrough"]
                 ],
             },
             "dry_run": {
@@ -447,12 +517,10 @@ def build_execution_kernel_live_response_serialization_contract_core() -> dict[s
                 "prompt_preview_source": "rust-owned-dry-run-prompt",
                 "model_id_present": False,
                 "required_metadata_fields": [
-                    *EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS,
-                    *DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS,
+                    *steady_state_fields,
+                    *runtime_fields["dry_run_required"],
                 ],
-                "steady_state_metadata_fields": [
-                    *EXECUTION_KERNEL_STEADY_STATE_METADATA_FIELDS
-                ],
+                "steady_state_metadata_fields": [*steady_state_fields],
                 "fallback_reason_present": False,
             },
         },
@@ -576,13 +644,10 @@ def validate_router_rs_execution_metadata(
         ),
         metadata_bridge=bridge,
     )
-    required_fields = (
-        *(
-            LIVE_PRIMARY_REQUIRED_RUNTIME_METADATA_FIELDS
-            if live_run
-            else DRY_RUN_REQUIRED_RUNTIME_METADATA_FIELDS
-        ),
-    )
+    runtime_fields = execution_kernel_runtime_metadata_fields(bridge)
+    required_fields = runtime_fields[
+        "live_primary_required" if live_run else "dry_run_required"
+    ]
     missing = [field for field in required_fields if field not in normalized]
     if missing:
         raise RuntimeError(
