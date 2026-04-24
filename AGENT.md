@@ -200,3 +200,5 @@ framework policy instead of forking per-host routing or memory rules.
 - Default host entrypoints: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`.
 - Host-private overlays: `.claude/settings.json`, `.gemini/settings.json`.
 - These files stay thin and point back to this shared policy.
+- Claude entrypoint maintenance map:
+  `docs/claude_entrypoint_maintenance.md`.

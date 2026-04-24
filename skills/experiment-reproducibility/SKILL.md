@@ -52,6 +52,7 @@ This skill owns **experiment reproducibility management** for research.
 
 ## Do not use
 
+- The user wants one front door for a research-project task rather than reproducibility only -> use `$research-workbench`
 - The task is about training models → use `$ai-research`
 - The task is about CI/CD pipeline → use `$github-actions-authoring`
 - The task is about general Docker setup → use `$docker`
@@ -59,6 +60,7 @@ This skill owns **experiment reproducibility management** for research.
 
 ## Cross-references
 
+- `$research-workbench` uses this skill as the rigor / reproducibility lane
 - `$autoresearch` inner-loop reproducibility requirements should route to this skill
 - `$ai-research` routes deep reproducibility management (beyond its built-in checklist) to this skill
 - Works with `$code-acceleration` when before/after benchmarks, throughput measurements, or peak-memory evidence must be reproducible across runs
@@ -155,6 +157,7 @@ Every experiment should log: experiment info, environment (Python/CUDA/GPU/OS/li
 - Do not use floating seeds (random seeds that change per run) in final results
 - Always commit code before running experiments (protocol locking)
 - Record negative results with the same rigor as positive results
+- If the user only asks "下一步做什么", do not turn that into a reproducibility-only task; route back to `$research-workbench`
 
 ## Trigger examples
 

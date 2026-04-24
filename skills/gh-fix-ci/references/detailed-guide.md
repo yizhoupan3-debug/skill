@@ -52,6 +52,7 @@ If the task shifts to adjacent skill territory, route to:
 - Use the helper first to fetch:
   - failing checks
   - run URLs
+  - failure type and marker line when detectable
   - log snippets
   - machine-readable JSON when useful
 - Manual fallback:

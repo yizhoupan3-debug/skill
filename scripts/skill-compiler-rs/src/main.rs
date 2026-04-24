@@ -66,7 +66,7 @@ const INDEX_GATE_SHORTCUTS: [(&str, &str); 9] = [
     ("截图 / 页面 / 图表可视核查", "visual-review"),
 ];
 
-const INDEX_COMMON_LANES: [(&str, &str); 10] = [
+const INDEX_COMMON_LANES: [(&str, &str); 12] = [
     ("已有方案，直接落代码", "plan-to-code"),
     ("重构但不想改行为", "refactoring"),
     ("测试设计 / flaky / 补测试", "test-engineering"),
@@ -76,6 +76,8 @@ const INDEX_COMMON_LANES: [(&str, &str); 10] = [
     ("构建 / 打包 / 工具链", "build-tooling"),
     ("Git 流程 / 合并 / 推送", "gitx"),
     ("多轮调研 / 对比 / 检索", "information-retrieval"),
+    ("科研项目 / 课题下一步", "research-workbench"),
+    ("文献梳理 / 搜论文 / novelty check", "literature-synthesis"),
     ("skill 库 / 路由框架自身", "skill-framework-developer"),
 ];
 

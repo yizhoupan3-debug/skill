@@ -1,43 +1,45 @@
-# SUSTech Mailer Script Reference
+# Browser and Paste-Ready Examples
 
-Below are execution examples for sending and composing emails using the provided helper scripts.
+## Browser compose
 
-### Default mode send
 ```bash
-python3 scripts/send_email.py --to prof@uni.edu --subject "..." --body "text"
+open "https://exmail.qq.com"
 ```
 
-### Homework mode send
-```bash
-python3 scripts/send_email.py --to ta@sustech.edu.cn --subject "..." --body-file /tmp/body.txt --mode homework --no-attachments --extra-attachment /path/to/hw.pdf
+Then paste:
+
+```text
+To: prof@uni.edu
+Subject: Inquiry regarding Research Opportunities - Yizhou Pan
+
+Dear Professor ...
+...
+Warm regards,
+Yizhou Pan
 ```
 
-### With CC
-```bash
-python3 scripts/send_email.py --to prof@uni.edu --subject "..." --body "text" --cc "ta@uni.edu"
+## Homework submission
+
+```text
+To: ta@sustech.edu.cn
+Subject: Fundamentals of Data Science A Assignment 3 Submission - Yizhou Pan 12312411
+Attachment: /path/to/hw3.pdf
+
+Dear TA,
+
+Please find attached my submission for Fundamentals of Data Science A Assignment 3.
+If you have any questions, please feel free to contact me.
+
+Thank you.
+
+Best regards,
+Yizhou Pan
 ```
 
-### Body from file
-```bash
-python3 scripts/send_email.py --to prof@uni.edu --subject "..." --body-file /tmp/body.txt
-```
+## System mail client fallback
 
-### Dry-run (connect + auth only, no send)
-```bash
-python3 scripts/send_email.py --to prof@uni.edu --subject "..." --body "text" --dry-run
-```
+Use only when the user accepts manual attachment handling:
 
-### Skip default attachments
 ```bash
-python3 scripts/send_email.py --to prof@uni.edu --subject "..." --body "text" --no-attachments
-```
-
-### Open exmail.qq.com web compose page (default)
-```bash
-python3 scripts/open_compose.py --to prof@uni.edu --subject "..." --body "text"
-```
-
-### Open system mail client via mailto:
-```bash
-python3 scripts/open_compose.py --to prof@uni.edu --subject "..." --body-file /tmp/body.txt --mailto
+open "mailto:prof@uni.edu?subject=Inquiry%20regarding%20Research%20Opportunities%20-%20Yizhou%20Pan&body=Dear%20Professor%20..."
 ```

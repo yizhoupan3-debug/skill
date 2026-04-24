@@ -1,6 +1,8 @@
 use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
+use regex::Regex;
 use rusqlite::{params, Connection};
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -15,9 +17,14 @@ pub const FRAMEWORK_MEMORY_RECALL_SCHEMA_VERSION: &str = "router-rs-framework-me
 pub const FRAMEWORK_ALIAS_SCHEMA_VERSION: &str = "router-rs-framework-alias-v1";
 pub const FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION: &str =
     "router-rs-framework-session-artifact-write-v1";
+pub const FRAMEWORK_MEMORY_POLICY_SCHEMA_VERSION: &str = "router-rs-framework-memory-policy-v1";
+pub const FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION: &str =
+    "router-rs-framework-prompt-compression-v1";
 pub const FRAMEWORK_RUNTIME_AUTHORITY: &str = "rust-framework-runtime-read-model";
 pub const FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY: &str =
     "rust-framework-session-artifact-writer";
+pub const FRAMEWORK_MEMORY_POLICY_AUTHORITY: &str = "rust-framework-memory-policy";
+pub const FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY: &str = "rust-framework-prompt-policy";
 
 const CURRENT_ARTIFACT_DIR: &str = "current";
 const ACTIVE_TASK_POINTER_NAME: &str = "active_task.json";
@@ -27,11 +34,14 @@ const SESSION_SUMMARY_FILENAME: &str = "SESSION_SUMMARY.md";
 const NEXT_ACTIONS_FILENAME: &str = "NEXT_ACTIONS.json";
 const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
 const TRACE_METADATA_FILENAME: &str = "TRACE_METADATA.json";
+const CONTINUITY_JOURNAL_FILENAME: &str = "CONTINUITY_JOURNAL.json";
 const SUPERVISOR_STATE_FILENAME: &str = ".supervisor_state.json";
 const NEXT_ACTIONS_SCHEMA_VERSION: &str = "next-actions-v2";
 const EVIDENCE_INDEX_SCHEMA_VERSION: &str = "evidence-index-v2";
 const TRACE_METADATA_SCHEMA_VERSION: &str = "trace-metadata-v2";
+const CONTINUITY_JOURNAL_SCHEMA_VERSION: &str = "continuity-journal-v1";
 const SUPERVISOR_STATE_SCHEMA_VERSION: &str = "supervisor-state-v2";
+const TASK_REGISTRY_SCHEMA_VERSION: &str = "task-registry-v1";
 const MEMORY_STATE_FILENAME: &str = "state.json";
 const STABLE_MEMORY_FILENAMES: &[&str] = &[
     "MEMORY.md",
@@ -41,6 +51,14 @@ const STABLE_MEMORY_FILENAMES: &[&str] = &[
     "runbooks.md",
 ];
 const MEMORY_SQLITE_FILENAMES: &[&str] = &["memory.sqlite3", "memory.db", ".memory.sqlite3"];
+const FACT_EXTRACTION_PATTERNS: &[(&str, &str)] = &[
+    ("explicit_memory", "(?i)\\b(?:remember|记住)[:：]\\s*(.+)"),
+    (
+        "user_preference",
+        "(?i)\\b(?:i prefer|我(?:更)?喜欢|偏好)\\s+(.+)",
+    ),
+    ("project_decision", "(?i)\\b(?:decision|决定)[:：]\\s*(.+)"),
+];
 const GENERIC_QUERY_TOKENS: &[&str] = &[
     "context", "current", "help", "latest", "memory", "project", "repo", "state", "status",
 ];
@@ -557,13 +575,13 @@ pub fn build_framework_alias_envelope(
     let alias_record = load_framework_alias_record(repo_root, alias_name)?;
     let host_entrypoint = resolve_alias_host_entrypoint(&alias_record, host_id);
     let canonical_owner = alias_record_text(&alias_record, &["canonical_owner"]);
-    let upstream = alias_value_at_path(&alias_record, &["upstream_source"])
+    let lineage = alias_value_at_path(&alias_record, &["lineage"])
         .cloned()
         .unwrap_or(Value::Null);
     let official_workflow = alias_value_at_path(&alias_record, &["official_workflow"])
         .cloned()
         .unwrap_or(Value::Null);
-    let skill_path = alias_record_text(&alias_record, &["upstream_source", "official_skill_path"]);
+    let skill_path = alias_skill_path(alias_name, &alias_record);
     let implementation_bar = alias_record_list(&alias_record, &["implementation_bar"]);
     let local_adaptations = alias_record_list(&alias_record, &["local_adaptations"]);
     let interaction_invariants = alias_value_at_path(&alias_record, &["interaction_invariants"])
@@ -587,11 +605,6 @@ pub fn build_framework_alias_envelope(
                 .unwrap_or(Value::Null),
             "transition_states": alias_record_list(&alias_record, &["official_workflow", "transition_states"]),
             "worker_lifecycle": alias_record_list(&alias_record, &["worker_lifecycle", "states"]),
-        }),
-        "latex-compile-acceleration" => json!({
-            "delegation_gate": alias_record_text(&alias_record, &["delegation_gate"]),
-            "analysis_lanes": alias_record_list(&alias_record, &["official_workflow", "lane_defaults"]),
-            "parallelism_gate": alias_record_list(&alias_record, &["lane_contract", "parallelism_gate"]),
         }),
         _ => Value::Null,
     };
@@ -640,7 +653,7 @@ pub fn build_framework_alias_envelope(
             "workspace": workspace_name_from_root(repo_root),
             "host_entrypoint": if host_entrypoint.is_empty() { Value::Null } else { Value::String(host_entrypoint) },
             "canonical_owner": if canonical_owner.is_empty() { Value::Null } else { Value::String(canonical_owner) },
-            "upstream_source": upstream,
+            "lineage": lineage,
             "official_workflow": official_workflow,
             "implementation_bar": implementation_bar,
             "local_adaptations": local_adaptations,
@@ -724,11 +737,11 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
             "canonical_owner": "execution-controller-coding",
             "reroute_when_ambiguous": "idea-to-plan",
             "reroute_when_root_cause_unknown": "systematic-debugging",
-            "upstream_source": {
-                "repo": "https://github.com/Yeachan-Heo/oh-my-claudecode",
-                "tag": "v4.13.2",
-                "commit": "0ac52cdaa093d6c41763e47055e995adaa4f8987",
-                "official_skill_path": "skills/autopilot/SKILL.md"
+            "skill_path": "skills/autopilot/SKILL.md",
+            "lineage": {
+                "source": "repo-native",
+                "description": "Native repo autopilot workflow for end-to-end execution on the local Rust supervisor.",
+                "external_runtime_dependency": false
             },
             "official_workflow": {
                 "phases": ["expansion", "planning", "execution", "qa", "validation", "cleanup"]
@@ -740,9 +753,9 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "converge-until-bounded-scope-clean"
             ],
             "local_adaptations": [
-                "replace .omc state files with rust-session-supervisor plus continuity artifacts",
-                "replace .omc specs and plans with artifacts/current task-local bootstrap outputs",
-                "keep deepinterview handoff as the first-class clarification gate for vague requests"
+                "store execution state in rust-session-supervisor plus continuity artifacts",
+                "store specs and plans in artifacts/current task-local bootstrap outputs",
+                "use deepinterview as the first-class clarification gate for vague requests"
             ],
             "execution_owners": [
                 "execution-controller-coding",
@@ -790,11 +803,11 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
         })),
         "deepinterview" => Some(json!({
             "canonical_owner": "code-review",
-            "upstream_source": {
-                "repo": "https://github.com/Yeachan-Heo/oh-my-claudecode",
-                "tag": "v4.13.2",
-                "commit": "0ac52cdaa093d6c41763e47055e995adaa4f8987",
-                "official_skill_path": "skills/deep-interview/SKILL.md"
+            "skill_path": "skills/deepinterview/SKILL.md",
+            "lineage": {
+                "source": "repo-native",
+                "description": "Native repo deep-interview workflow for evidence-first clarification and convergence review.",
+                "external_runtime_dependency": false
             },
             "official_workflow": {
                 "loop_rules": [
@@ -811,9 +824,9 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "fix-verify-loop-until-bounded-scope-clean"
             ],
             "local_adaptations": [
-                "reuse official deep-interview questioning model but store progress in continuity artifacts instead of .omc state",
+                "store interview progress in continuity artifacts and task-local bootstrap outputs",
                 "use live repo evidence first for brownfield clarification before asking the user",
-                "handoff into local autopilot and rust-session-supervisor instead of OMC slash pipeline"
+                "handoff into local autopilot and rust-session-supervisor after clarity is sufficient"
             ],
             "review_lanes": [
                 "architect-review",
@@ -844,11 +857,11 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                     "bounded sidecars are enough and orchestration overhead would dominate"
                 ]
             },
-            "upstream_source": {
-                "repo": "https://github.com/Yeachan-Heo/oh-my-claudecode",
-                "tag": "v4.13.2",
-                "commit": "0ac52cdaa093d6c41763e47055e995adaa4f8987",
-                "official_skill_path": "skills/team/SKILL.md"
+            "skill_path": "skills/team/SKILL.md",
+            "lineage": {
+                "source": "repo-native",
+                "description": "Native repo team workflow for Rust-first supervisor-led delegation and worker lifecycle management.",
+                "external_runtime_dependency": false
             },
             "official_workflow": {
                 "phases": ["scoping", "delegation", "execution", "integration", "qa", "cleanup"],
@@ -874,9 +887,9 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "supervisor-owned-continuity"
             ],
             "local_adaptations": [
-                "replace .omc team state with rust-session-supervisor and continuity artifacts",
+                "store team state in rust-session-supervisor plus continuity artifacts",
                 "keep shared continuity supervisor-owned while workers emit lane-local outputs",
-                "bind worker lifecycle to host tmux and resume capabilities instead of OMC state directories"
+                "bind worker lifecycle to host tmux and resume capabilities instead of plugin state directories"
             ],
             "execution_owners": [
                 "execution-controller-coding",
@@ -952,42 +965,6 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 ]
             }
         })),
-        "latex-compile-acceleration" => Some(json!({
-            "canonical_owner": "latex-compile-acceleration",
-            "delegation_gate": "subagent-delegation",
-            "upstream_source": {
-                "official_skill_path": "skills/latex-compile-acceleration/SKILL.md"
-            },
-            "official_workflow": {
-                "phases": ["measurement", "bottleneck-classification", "lane-planning", "execution", "verification"],
-                "lane_defaults": ["measurement", "structure-audit", "engine-cache-strategy", "verification-plan"]
-            },
-            "implementation_bar": [
-                "measurement-first",
-                "parallelism-gate-required",
-                "single-writer-aux-boundary",
-                "verification-evidence-required"
-            ],
-            "local_adaptations": [
-                "use Rust control-plane only for durable lane orchestration and host alias projection",
-                "keep LaTeX bottleneck diagnosis and tactic choice in the skill layer",
-                "preserve a serial full-build fallback for final verification"
-            ],
-            "lane_contract": {
-                "analysis_lanes": ["measurement", "structure-audit", "engine-cache-strategy", "verification-plan"],
-                "parallelism_gate": [
-                    "independent compile units must be explicit",
-                    "shared aux ownership must stay single-writer",
-                    "bibliography and ref convergence cannot be parallelized blindly"
-                ]
-            },
-            "host_entrypoints": {"codex-cli": "$latex-compile-acceleration", "claude-code": "/latex-compile-acceleration"},
-            "interaction_invariants": {
-                "requires_explicit_entrypoint": true,
-                "explicit_entrypoints": ["/latex-compile-acceleration", "$latex-compile-acceleration"],
-                "implicit_route_policy": "measurement-only"
-            }
-        })),
         _ => None,
     }
 }
@@ -1019,6 +996,24 @@ fn alias_record_list(value: &Value, path: &[&str]) -> Vec<String> {
 
 fn alias_record_bool(value: &Value, path: &[&str]) -> Option<bool> {
     alias_value_at_path(value, path).and_then(Value::as_bool)
+}
+
+fn alias_skill_path(alias_name: &str, alias_record: &Value) -> String {
+    let explicit_path = alias_record_text(alias_record, &["skill_path"]);
+    if !explicit_path.is_empty() {
+        return explicit_path;
+    }
+    let upstream_path =
+        alias_record_text(alias_record, &["upstream_source", "official_skill_path"]);
+    if !upstream_path.is_empty() {
+        return upstream_path;
+    }
+    match alias_name {
+        "autopilot" => "skills/autopilot/SKILL.md".to_string(),
+        "deepinterview" => "skills/deepinterview/SKILL.md".to_string(),
+        "team" => "skills/team/SKILL.md".to_string(),
+        _ => String::new(),
+    }
 }
 
 fn team_current_state(continuity: &Value) -> String {
@@ -1124,7 +1119,6 @@ fn build_framework_alias_entry_contract(
     max_lines: usize,
     compact: bool,
 ) -> Value {
-    let tag = alias_record_text(alias_record, &["upstream_source", "tag"]);
     let task = value_text(continuity.get("task"));
     let phase = value_text(continuity.get("phase"));
     let status = value_text(continuity.get("status"));
@@ -1208,9 +1202,8 @@ fn build_framework_alias_entry_contract(
                     missing_recovery_anchors.join(", ")
                 ));
             }
-            format!(
-                "进入 autopilot。OMC {tag} 执行流保留，但状态、恢复和续跑都走本地 Rust/continuity。"
-            )
+            "进入 autopilot。本仓原生执行流启动，状态、恢复和续跑都走本地 Rust/continuity。"
+                .to_string()
         }
         "deepinterview" => {
             let owner = alias_record_text(alias_record, &["canonical_owner"]);
@@ -1222,9 +1215,8 @@ fn build_framework_alias_entry_contract(
             if !review_lanes.is_empty() {
                 route_rules.push(format!("review lanes -> {}", review_lanes.join(", ")));
             }
-            format!(
-                "进入 deepinterview。OMC {tag} 访谈流保留，但访谈状态与 handoff 都走本地 Rust/continuity。"
-            )
+            "进入 deepinterview。本仓原生澄清流启动，访谈状态与 handoff 都走本地 Rust/continuity。"
+                .to_string()
         }
         "team" => {
             let owner = alias_record_text(alias_record, &["canonical_owner"]);
@@ -1269,31 +1261,8 @@ fn build_framework_alias_entry_contract(
             if !lane_fields.is_empty() {
                 route_rules.push(format!("lane contract -> {}", lane_fields.join(", ")));
             }
-            format!(
-                "进入 team。OMC {tag} 团队编排流保留，但 worker 生命周期、lane 合同、恢复和 continuity 都走本地 Rust/supervisor。"
-            )
-        }
-        "latex-compile-acceleration" => {
-            let owner = alias_record_text(alias_record, &["canonical_owner"]);
-            let delegation_gate = alias_record_text(alias_record, &["delegation_gate"]);
-            let lane_defaults =
-                alias_record_list(alias_record, &["official_workflow", "lane_defaults"]);
-            let parallelism_gate =
-                alias_record_list(alias_record, &["lane_contract", "parallelism_gate"]);
-            route_rules.push(format!("主 owner -> `{owner}`"));
-            route_rules.push(format!("bounded analysis lanes -> `{delegation_gate}`"));
-            route_rules.push("先测量 clean / warm / watch，再决定是否并行".to_string());
-            route_rules.push("bibliography / refs / shared aux 默认保持串行".to_string());
-            if !lane_defaults.is_empty() {
-                route_rules.push(format!("default lanes -> {}", lane_defaults.join(", ")));
-            }
-            if !parallelism_gate.is_empty() {
-                route_rules.push(format!(
-                    "parallelism gate -> {}",
-                    parallelism_gate.join("; ")
-                ));
-            }
-            "进入 latex-compile-acceleration。先做测量与瓶颈分类，只在编译单元边界明确时才进入并行 lane，并保留串行 full-build 作为最终验证。".to_string()
+            "进入 team。本仓原生团队编排流启动，worker 生命周期、lane 合同、恢复和 continuity 都走本地 Rust/supervisor。"
+                .to_string()
         }
         _ => format!(
             "进入 {alias_name}。优先使用本地 Rust/continuity alias 载荷，不要回退成长文说明。"
@@ -1544,31 +1513,6 @@ fn build_framework_alias_state_machine(
                     "when": "worker outputs are ready to merge",
                     "target": "execution-audit",
                     "action": "verify_and_close_loop",
-                }
-            ]
-        }),
-        "latex-compile-acceleration" => json!({
-            "default_mode": "measure-first-latex-optimization",
-            "rules": [
-                {
-                    "when": "bottleneck is still unknown",
-                    "target": "latex-compile-acceleration",
-                    "action": "measure_clean_warm_watch_first",
-                },
-                {
-                    "when": "independent compile units are explicit and aux ownership stays single-writer",
-                    "target": alias_record_text(alias_record, &["delegation_gate"]),
-                    "action": "use_bounded_analysis_or_compile_lanes",
-                },
-                {
-                    "when": "bibliography, references, or shared aux convergence dominate",
-                    "target": "latex-compile-acceleration",
-                    "action": "keep_serial_convergence_path",
-                },
-                {
-                    "when": "candidate optimization is ready to sign off",
-                    "target": "execution-audit",
-                    "action": "verify_full_build_and_invalidation",
                 }
             ]
         }),
@@ -3428,6 +3372,464 @@ fn compact_continuity_for_prompt(continuity: &Value) -> Value {
     })
 }
 
+pub fn build_framework_memory_policy_envelope(payload: Value) -> Result<Value, String> {
+    let limit = payload
+        .get("limit")
+        .and_then(Value::as_u64)
+        .and_then(|value| usize::try_from(value).ok());
+    let sources = memory_policy_conversation_sources(&payload);
+    let extracted = extract_memory_facts_from_sources(&sources, limit)?;
+    let persistence = persist_memory_policy_items_if_requested(&payload, &extracted)?;
+    Ok(json!({
+        "schema_version": FRAMEWORK_MEMORY_POLICY_SCHEMA_VERSION,
+        "authority": FRAMEWORK_MEMORY_POLICY_AUTHORITY,
+        "memory_policy": {
+            "ok": true,
+            "policy_owner": "rust",
+            "policy_kind": "deterministic-memory-extraction",
+            "pattern_set": FACT_EXTRACTION_PATTERNS
+                .iter()
+                .map(|(name, pattern)| json!({"name": name, "pattern": pattern}))
+                .collect::<Vec<_>>(),
+            "facts": extracted
+                .iter()
+                .map(|item| Value::String(item.fact.clone()))
+                .collect::<Vec<_>>(),
+            "persistence": persistence,
+            "items": extracted
+                .iter()
+                .map(|item| {
+                    json!({
+                        "fact": item.fact,
+                        "category": memory_category_for_pattern(&item.source_pattern),
+                        "source_pattern": item.source_pattern,
+                        "source_line": item.source_line,
+                        "source_role": item.source_role,
+                        "source_index": item.source_index,
+                        "confidence": item.confidence,
+                    })
+                })
+                .collect::<Vec<_>>(),
+        }
+    }))
+}
+
+pub fn build_framework_prompt_compression_envelope(payload: Value) -> Result<Value, String> {
+    let prompt = value_text(payload.get("prompt").or_else(|| payload.get("text")));
+    let token_budget = payload
+        .get("token_budget")
+        .or_else(|| payload.get("budget"))
+        .and_then(Value::as_u64)
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or_else(|| {
+            "framework prompt compression requires token_budget or budget".to_string()
+        })?;
+    let result = compress_prompt_with_rust_policy(&prompt, token_budget);
+    Ok(json!({
+        "schema_version": FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
+        "authority": FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY,
+        "compression": result,
+    }))
+}
+
+#[derive(Debug, Clone)]
+struct ExtractedMemoryFact {
+    fact: String,
+    source_pattern: String,
+    source_line: usize,
+    source_role: Option<String>,
+    source_index: Option<usize>,
+    confidence: f64,
+}
+
+#[derive(Debug, Clone)]
+struct MemoryPolicyTextSource {
+    text: String,
+    role: Option<String>,
+    index: Option<usize>,
+}
+
+fn memory_policy_conversation_sources(payload: &Value) -> Vec<MemoryPolicyTextSource> {
+    if let Some(text) = payload
+        .get("conversation")
+        .or_else(|| payload.get("text"))
+        .and_then(Value::as_str)
+    {
+        return vec![MemoryPolicyTextSource {
+            text: text.to_string(),
+            role: None,
+            index: None,
+        }];
+    }
+    payload
+        .get("messages")
+        .and_then(Value::as_array)
+        .map(|messages| {
+            messages
+                .iter()
+                .enumerate()
+                .filter_map(|(index, message)| {
+                    if let Some(text) = message.as_str() {
+                        return Some(MemoryPolicyTextSource {
+                            text: text.to_string(),
+                            role: None,
+                            index: Some(index),
+                        });
+                    }
+                    let role = message
+                        .get("role")
+                        .and_then(Value::as_str)
+                        .map(|value| value.trim().to_lowercase())
+                        .filter(|value| !value.is_empty());
+                    if matches!(role.as_deref(), Some("assistant" | "tool" | "function")) {
+                        return None;
+                    }
+                    let text = memory_message_content_text(message.get("content"));
+                    (!text.trim().is_empty()).then_some(MemoryPolicyTextSource {
+                        text,
+                        role,
+                        index: Some(index),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn memory_message_content_text(value: Option<&Value>) -> String {
+    match value {
+        Some(Value::String(text)) => text.to_string(),
+        Some(Value::Array(parts)) => parts
+            .iter()
+            .filter_map(|part| {
+                if let Some(text) = part.as_str() {
+                    return Some(text.to_string());
+                }
+                part.get("text")
+                    .or_else(|| part.get("content"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        Some(other) => value_text(Some(other)),
+        None => String::new(),
+    }
+}
+
+fn extract_memory_facts_from_sources(
+    sources: &[MemoryPolicyTextSource],
+    limit: Option<usize>,
+) -> Result<Vec<ExtractedMemoryFact>, String> {
+    let compiled = FACT_EXTRACTION_PATTERNS
+        .iter()
+        .map(|(name, pattern)| {
+            Regex::new(pattern)
+                .map(|regex| ((*name).to_string(), regex))
+                .map_err(|err| format!("compile memory extraction pattern failed: {err}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut facts = Vec::new();
+    let mut seen = HashSet::new();
+    for source in sources {
+        for (line_index, line) in source.text.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            for (name, regex) in &compiled {
+                let Some(captures) = regex.captures(trimmed) else {
+                    continue;
+                };
+                let Some(match_value) = captures.get(1) else {
+                    continue;
+                };
+                let fact = normalize_fact_text(match_value.as_str());
+                if fact.is_empty() {
+                    continue;
+                }
+                let dedupe_key = fact.to_lowercase();
+                if !seen.insert(dedupe_key) {
+                    continue;
+                }
+                facts.push(ExtractedMemoryFact {
+                    fact,
+                    source_pattern: name.clone(),
+                    source_line: line_index + 1,
+                    source_role: source.role.clone(),
+                    source_index: source.index,
+                    confidence: memory_confidence_for_pattern(name),
+                });
+                if limit.is_some_and(|max| facts.len() >= max) {
+                    return Ok(facts);
+                }
+            }
+        }
+    }
+    Ok(facts)
+}
+
+fn memory_category_for_pattern(pattern_name: &str) -> &'static str {
+    match pattern_name {
+        "user_preference" => "preference",
+        "project_decision" => "decision",
+        _ => "fact",
+    }
+}
+
+fn memory_confidence_for_pattern(pattern_name: &str) -> f64 {
+    match pattern_name {
+        "explicit_memory" | "project_decision" => 0.9,
+        "user_preference" => 0.85,
+        _ => 0.75,
+    }
+}
+
+fn persist_memory_policy_items_if_requested(
+    payload: &Value,
+    items: &[ExtractedMemoryFact],
+) -> Result<Value, String> {
+    let persist_requested = payload
+        .get("persist")
+        .or_else(|| payload.get("write"))
+        .or_else(|| payload.get("save"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !persist_requested {
+        return Ok(json!({
+            "requested": false,
+            "persisted": false,
+        }));
+    }
+    let memory_root = payload
+        .get("memory_root")
+        .and_then(Value::as_str)
+        .map(|value| PathBuf::from(value.trim()))
+        .filter(|path| !path.as_os_str().is_empty())
+        .ok_or_else(|| "framework memory policy persistence requires memory_root".to_string())?;
+    let workspace = payload
+        .get("workspace")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("workspace");
+    fs::create_dir_all(&memory_root)
+        .map_err(|err| format!("create memory policy root failed: {err}"))?;
+    let sqlite_path = memory_root.join("memory.sqlite3");
+    let conn = Connection::open(&sqlite_path)
+        .map_err(|err| format!("open memory policy sqlite failed: {err}"))?;
+    ensure_memory_items_table(&conn)?;
+    let now = current_local_timestamp();
+    let mut item_ids = Vec::new();
+    let mut changed_count = 0usize;
+    for item in items {
+        let item_id = memory_policy_item_id(workspace, &item.fact);
+        let evidence_json = serde_json::to_string(&json!([{
+            "source_pattern": item.source_pattern,
+            "source_line": item.source_line,
+            "source_role": item.source_role,
+            "source_index": item.source_index,
+        }]))
+        .map_err(|err| format!("serialize memory evidence failed: {err}"))?;
+        let metadata_json = serde_json::to_string(&json!({
+            "schema_version": FRAMEWORK_MEMORY_POLICY_SCHEMA_VERSION,
+            "authority": FRAMEWORK_MEMORY_POLICY_AUTHORITY,
+            "source_pattern": item.source_pattern,
+        }))
+        .map_err(|err| format!("serialize memory metadata failed: {err}"))?;
+        let keywords_json = serde_json::to_string(&query_tokens(&item.fact))
+            .map_err(|err| format!("serialize memory keywords failed: {err}"))?;
+        changed_count += conn
+            .execute(
+                "INSERT OR REPLACE INTO memory_items (
+                    item_id, workspace, category, source, confidence, status, summary, notes,
+                    evidence_json, metadata_json, keywords_json, created_at, updated_at
+                ) VALUES (
+                    ?1, ?2, ?3, ?4, ?5, 'active', ?6, '', ?7, ?8, ?9,
+                    COALESCE((SELECT created_at FROM memory_items WHERE item_id = ?1), ?10),
+                    ?10
+                )",
+                params![
+                    item_id,
+                    workspace,
+                    memory_category_for_pattern(&item.source_pattern),
+                    "framework_memory_policy",
+                    item.confidence,
+                    item.fact,
+                    evidence_json,
+                    metadata_json,
+                    keywords_json,
+                    now,
+                ],
+            )
+            .map_err(|err| format!("persist memory policy item failed: {err}"))?;
+        item_ids.push(item_id);
+    }
+    Ok(json!({
+        "requested": true,
+        "persisted": true,
+        "memory_root": memory_root.display().to_string(),
+        "sqlite_path": sqlite_path.display().to_string(),
+        "item_count": items.len(),
+        "changed_count": changed_count,
+        "item_ids": item_ids,
+    }))
+}
+
+fn ensure_memory_items_table(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS memory_items (
+            item_id TEXT PRIMARY KEY,
+            workspace TEXT NOT NULL,
+            category TEXT NOT NULL,
+            source TEXT NOT NULL,
+            confidence REAL NOT NULL DEFAULT 0.5,
+            status TEXT NOT NULL DEFAULT 'active',
+            summary TEXT NOT NULL,
+            notes TEXT NOT NULL DEFAULT '',
+            evidence_json TEXT NOT NULL DEFAULT '[]',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            keywords_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+        [],
+    )
+    .map_err(|err| format!("create memory_items table failed: {err}"))?;
+    Ok(())
+}
+
+fn memory_policy_item_id(workspace: &str, fact: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(workspace.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(fact.to_lowercase().as_bytes());
+    let digest = format!("{:x}", hasher.finalize());
+    format!("memory-policy-{}", &digest[..16])
+}
+
+fn normalize_fact_text(text: &str) -> String {
+    text.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim_matches(|ch: char| matches!(ch, '.' | ',' | ';' | '；' | '。' | '，'))
+        .trim()
+        .to_string()
+}
+
+fn compress_prompt_with_rust_policy(prompt: &str, token_budget: usize) -> Value {
+    let input_token_estimate = estimate_token_count(prompt);
+    if token_budget == 0 {
+        let output = "[omitted: token budget is zero]".to_string();
+        return compression_payload(
+            input_token_estimate,
+            estimate_token_count(&output),
+            output,
+            "zero_budget",
+            true,
+            vec!["all".to_string()],
+        );
+    }
+    if input_token_estimate <= token_budget {
+        return compression_payload(
+            input_token_estimate,
+            input_token_estimate,
+            prompt.to_string(),
+            "unchanged",
+            false,
+            Vec::new(),
+        );
+    }
+
+    let lines = prompt.lines().collect::<Vec<_>>();
+    let target_chars = token_budget.saturating_mul(4).max(1);
+    let (output, strategy, omitted_sections) = if lines.len() >= 6 {
+        let head = lines
+            .iter()
+            .take(3)
+            .map(|line| (*line).to_string())
+            .collect::<Vec<_>>();
+        let tail = lines
+            .iter()
+            .rev()
+            .take(2)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .map(|line| (*line).to_string())
+            .collect::<Vec<_>>();
+        let omitted = lines.len().saturating_sub(head.len() + tail.len());
+        (
+            [
+                head,
+                vec![format!("[omitted {omitted} middle lines]")],
+                tail,
+            ]
+            .concat()
+            .join("\n"),
+            "structured_head_tail".to_string(),
+            vec![format!("middle_lines:{omitted}")],
+        )
+    } else {
+        let mut truncated = prompt.chars().take(target_chars).collect::<String>();
+        truncated.push_str("\n[truncated tail]");
+        (
+            truncated,
+            "tail_truncation".to_string(),
+            vec!["tail".to_string()],
+        )
+    };
+    let bounded_output = enforce_prompt_budget(output, token_budget);
+    compression_payload(
+        input_token_estimate,
+        estimate_token_count(&bounded_output),
+        bounded_output,
+        &strategy,
+        true,
+        omitted_sections,
+    )
+}
+
+fn enforce_prompt_budget(output: String, token_budget: usize) -> String {
+    let max_chars = token_budget.saturating_mul(4).max(1);
+    if output.chars().count() <= max_chars {
+        return output;
+    }
+    let marker = "\n[truncated tail]";
+    if max_chars <= marker.chars().count() {
+        return "[truncated]".chars().take(max_chars).collect();
+    }
+    let keep = max_chars - marker.chars().count();
+    format!(
+        "{}{}",
+        output.chars().take(keep).collect::<String>(),
+        marker
+    )
+}
+
+fn compression_payload(
+    input_token_estimate: usize,
+    output_token_estimate: usize,
+    output: String,
+    strategy: &str,
+    truncated: bool,
+    omitted_sections: Vec<String>,
+) -> Value {
+    json!({
+        "schema_version": FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
+        "policy_owner": "rust",
+        "prompt_policy_owner": "rust",
+        "input_token_estimate": input_token_estimate,
+        "output_token_estimate": output_token_estimate,
+        "output": output,
+        "compressed_prompt": output,
+        "omitted_sections": omitted_sections,
+        "strategy": strategy,
+        "truncated": truncated,
+        "artifact_offload_decision": false,
+    })
+}
+
 fn resolve_memory_sqlite_path(memory_root: &Path) -> Option<PathBuf> {
     MEMORY_SQLITE_FILENAMES
         .iter()
@@ -3755,6 +4157,261 @@ fn build_evidence_index_payload(entries: Vec<Value>) -> Value {
     })
 }
 
+fn build_trace_metadata_payload(
+    task: &str,
+    phase: &str,
+    status: &str,
+    trace_metadata: Option<&Value>,
+    matched_skills: Option<&Value>,
+) -> Value {
+    let mut payload = trace_metadata
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    payload.insert(
+        "schema_version".to_string(),
+        Value::String(TRACE_METADATA_SCHEMA_VERSION.to_string()),
+    );
+    payload.insert("task".to_string(), Value::String(task.to_string()));
+    payload.insert("phase".to_string(), Value::String(phase.to_string()));
+    payload.insert(
+        "verification_status".to_string(),
+        Value::String(status.to_string()),
+    );
+    payload
+        .entry("updated_at".to_string())
+        .or_insert_with(|| Value::String(current_local_timestamp()));
+    if let Some(skills) = normalized_string_array(matched_skills)
+        .or_else(|| normalized_string_array(payload.get("matched_skills")))
+    {
+        payload.insert("matched_skills".to_string(), Value::Array(skills));
+    } else {
+        payload.insert("matched_skills".to_string(), Value::Array(Vec::new()));
+    }
+    Value::Object(payload)
+}
+
+fn build_session_supervisor_state_payload(
+    task_id: &str,
+    task: &str,
+    phase: &str,
+    status: &str,
+    summary: &str,
+    next_actions_payload: &Value,
+    evidence_payload: &Value,
+    trace_metadata_payload: &Value,
+    artifact_dir: &Path,
+    supervisor_state: Option<&Value>,
+    execution_contract: Option<&Value>,
+    blockers: Option<&Value>,
+    continuity: Option<&Value>,
+) -> Value {
+    let mut payload = supervisor_state
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    payload.insert(
+        "schema_version".to_string(),
+        Value::String(SUPERVISOR_STATE_SCHEMA_VERSION.to_string()),
+    );
+    payload.insert("task_id".to_string(), Value::String(task_id.to_string()));
+    payload.insert("task_summary".to_string(), Value::String(task.to_string()));
+    payload.insert("active_phase".to_string(), Value::String(phase.to_string()));
+    payload.insert(
+        "updated_at".to_string(),
+        Value::String(current_local_timestamp()),
+    );
+    if !summary.is_empty() {
+        payload.insert(
+            "last_summary".to_string(),
+            Value::String(summary.to_string()),
+        );
+    }
+    payload.insert(
+        "verification".to_string(),
+        normalized_verification(payload.get("verification"), status),
+    );
+    payload.insert(
+        "continuity".to_string(),
+        normalized_continuity(continuity.or_else(|| payload.get("continuity")), status),
+    );
+    payload.insert(
+        "next_actions".to_string(),
+        next_actions_payload
+            .get("next_actions")
+            .cloned()
+            .unwrap_or_else(|| Value::Array(Vec::new())),
+    );
+    payload.insert(
+        "evidence_count".to_string(),
+        Value::from(normalize_evidence_index(evidence_payload).len()),
+    );
+    if let Some(contract) = execution_contract.or_else(|| payload.get("execution_contract")) {
+        payload.insert("execution_contract".to_string(), contract.clone());
+    }
+    payload.insert(
+        "blockers".to_string(),
+        normalized_blockers(blockers.or_else(|| payload.get("blockers"))),
+    );
+    payload.insert("trace_metadata".to_string(), trace_metadata_payload.clone());
+    payload.insert(
+        "artifact_refs".to_string(),
+        json!({
+            "task_root": artifact_dir.display().to_string(),
+            "session_summary": artifact_dir.join(SESSION_SUMMARY_FILENAME).display().to_string(),
+            "next_actions": artifact_dir.join(NEXT_ACTIONS_FILENAME).display().to_string(),
+            "evidence_index": artifact_dir.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
+            "trace_metadata": artifact_dir.join(TRACE_METADATA_FILENAME).display().to_string(),
+            "continuity_journal": artifact_dir.join(CONTINUITY_JOURNAL_FILENAME).display().to_string(),
+        }),
+    );
+    Value::Object(payload)
+}
+
+fn build_continuity_journal_payload(
+    task_id: &str,
+    task: &str,
+    phase: &str,
+    status: &str,
+    artifact_dir: &Path,
+    summary_text: &str,
+    next_actions_payload: &Value,
+    evidence_payload: &Value,
+    trace_metadata_payload: &Value,
+    supervisor_state_payload: &Value,
+    existing_journal: Value,
+) -> Value {
+    let summary_sha = sha256_hex(summary_text.as_bytes());
+    let next_actions_sha = sha256_json(next_actions_payload);
+    let evidence_sha = sha256_json(evidence_payload);
+    let trace_sha = sha256_json(trace_metadata_payload);
+    let supervisor_sha = sha256_json(supervisor_state_payload);
+    let checkpoint_hash = sha256_hex(
+        [
+            summary_sha.as_str(),
+            next_actions_sha.as_str(),
+            evidence_sha.as_str(),
+            trace_sha.as_str(),
+            supervisor_sha.as_str(),
+        ]
+        .join(":")
+        .as_bytes(),
+    );
+    let checkpoint = json!({
+        "checkpoint_id": checkpoint_hash,
+        "task_id": task_id,
+        "task": task,
+        "phase": phase,
+        "status": status,
+        "created_at": current_local_timestamp(),
+        "artifact_hashes": {
+            "session_summary": summary_sha,
+            "next_actions": next_actions_sha,
+            "evidence_index": evidence_sha,
+            "trace_metadata": trace_sha,
+            "supervisor_state": supervisor_sha,
+        },
+        "artifact_refs": {
+            "task_root": artifact_dir.display().to_string(),
+            "session_summary": artifact_dir.join(SESSION_SUMMARY_FILENAME).display().to_string(),
+            "next_actions": artifact_dir.join(NEXT_ACTIONS_FILENAME).display().to_string(),
+            "evidence_index": artifact_dir.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
+            "trace_metadata": artifact_dir.join(TRACE_METADATA_FILENAME).display().to_string(),
+        }
+    });
+    let mut checkpoints = existing_journal
+        .get("checkpoints")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|item| item.get("checkpoint_id").and_then(Value::as_str) != Some(&checkpoint_hash))
+        .collect::<Vec<_>>();
+    checkpoints.push(checkpoint);
+    while checkpoints.len() > 20 {
+        checkpoints.remove(0);
+    }
+    json!({
+        "schema_version": CONTINUITY_JOURNAL_SCHEMA_VERSION,
+        "task_id": task_id,
+        "task": task,
+        "latest_checkpoint_id": checkpoint_hash,
+        "checkpoint_count": checkpoints.len(),
+        "checkpoints": checkpoints,
+    })
+}
+
+fn sha256_json(value: &Value) -> String {
+    sha256_hex(
+        serde_json::to_string(value)
+            .unwrap_or_else(|_| "null".to_string())
+            .as_bytes(),
+    )
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}
+
+fn normalized_verification(existing: Option<&Value>, status: &str) -> Value {
+    let mut payload = existing
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    payload.insert(
+        "verification_status".to_string(),
+        Value::String(status.to_string()),
+    );
+    payload.insert(
+        "updated_at".to_string(),
+        Value::String(current_local_timestamp()),
+    );
+    Value::Object(payload)
+}
+
+fn normalized_continuity(existing: Option<&Value>, status: &str) -> Value {
+    let mut payload = existing
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let terminal = is_terminal(status, TERMINAL_VERIFICATION_STATUSES)
+        || is_terminal(status, TERMINAL_STORY_STATES);
+    payload.insert(
+        "story_state".to_string(),
+        Value::String(if terminal { "completed" } else { "active" }.to_string()),
+    );
+    payload.insert("resume_allowed".to_string(), Value::Bool(!terminal));
+    payload.insert(
+        "last_updated_at".to_string(),
+        Value::String(current_local_timestamp()),
+    );
+    Value::Object(payload)
+}
+
+fn normalized_blockers(existing: Option<&Value>) -> Value {
+    let Some(value) = existing else {
+        return json!({"open_blockers": []});
+    };
+    if value.is_object() {
+        return value.clone();
+    }
+    if let Some(items) = normalized_string_array(Some(value)) {
+        return json!({"open_blockers": items});
+    }
+    json!({"open_blockers": []})
+}
+
+fn normalized_string_array(value: Option<&Value>) -> Option<Vec<Value>> {
+    let values = value_string_list(value);
+    if values.is_empty() {
+        None
+    } else {
+        Some(values.into_iter().map(Value::String).collect())
+    }
+}
+
 fn read_json_if_exists(path: &Path) -> Value {
     if !path.is_file() {
         return Value::Object(Map::new());
@@ -3889,9 +4546,11 @@ fn parse_session_summary(text: &str) -> Map<String, Value> {
 
 fn normalized_task_registry(payload: &Value) -> (Value, Vec<String>, Vec<String>) {
     let focus_task_id = safe_slug(&value_text(payload.get("focus_task_id")));
-    let mut known_task_ids = Vec::new();
-    let mut recoverable_task_ids = Vec::new();
-    let mut tasks = Vec::new();
+    normalize_task_registry_rows(focus_task_id, registry_rows_from_payload(payload))
+}
+
+fn registry_rows_from_payload(payload: &Value) -> Vec<Value> {
+    let mut rows = Vec::new();
     if let Some(items) = payload.get("tasks").and_then(Value::as_array) {
         for item in items {
             let Some(row) = item.as_object() else {
@@ -3901,23 +4560,13 @@ fn normalized_task_registry(payload: &Value) -> (Value, Vec<String>, Vec<String>
             if task_id.is_empty() {
                 continue;
             }
-            if !known_task_ids.iter().any(|existing| existing == &task_id) {
-                known_task_ids.push(task_id.clone());
-            }
-            if value_bool_or_none(row.get("resume_allowed")) == Some(true)
-                && !recoverable_task_ids
-                    .iter()
-                    .any(|existing| existing == &task_id)
-            {
-                recoverable_task_ids.push(task_id.clone());
-            }
             let task = value_text(row.get("task"));
             let task_value = if task.is_empty() {
                 Value::String(task_id.clone())
             } else {
                 Value::String(task)
             };
-            tasks.push(json!({
+            rows.push(json!({
                 "task_id": task_id,
                 "task": task_value,
                 "updated_at": nonempty_string(row.get("updated_at")),
@@ -3927,12 +4576,50 @@ fn normalized_task_registry(payload: &Value) -> (Value, Vec<String>, Vec<String>
             }));
         }
     }
+    rows
+}
+
+fn normalize_task_registry_rows(
+    focus_task_id: String,
+    mut rows: Vec<Value>,
+) -> (Value, Vec<String>, Vec<String>) {
+    rows.sort_by(|left, right| {
+        registry_task_sort_key(right)
+            .cmp(&registry_task_sort_key(left))
+            .then_with(|| value_text(right.get("task_id")).cmp(&value_text(left.get("task_id"))))
+    });
+
+    let mut seen = HashSet::new();
+    let mut tasks = Vec::new();
+    let mut known_task_ids = Vec::new();
+    let mut recoverable_task_ids = Vec::new();
+    let mut overflow_count = 0usize;
+    for row in rows {
+        let task_id = safe_slug(&value_text(row.get("task_id")));
+        if task_id.is_empty() || !seen.insert(task_id.clone()) {
+            continue;
+        }
+        if value_bool_or_none(row.get("resume_allowed")) == Some(true) {
+            recoverable_task_ids.push(task_id.clone());
+        }
+        known_task_ids.push(task_id);
+        if tasks.len() >= 128 {
+            overflow_count += 1;
+            continue;
+        }
+        tasks.push(row);
+    }
+    tasks.sort_by(|left, right| {
+        let left_focus = value_text(left.get("task_id")) == focus_task_id;
+        let right_focus = value_text(right.get("task_id")) == focus_task_id;
+        right_focus
+            .cmp(&left_focus)
+            .then_with(|| registry_task_sort_key(right).cmp(&registry_task_sort_key(left)))
+            .then_with(|| value_text(left.get("task_id")).cmp(&value_text(right.get("task_id"))))
+    });
     (
         json!({
-            "schema_version": payload
-                .get("schema_version")
-                .cloned()
-                .unwrap_or_else(|| Value::String("task-registry-v1".to_string())),
+            "schema_version": TASK_REGISTRY_SCHEMA_VERSION,
             "focus_task_id": if focus_task_id.is_empty() {
                 Value::Null
             } else {
@@ -3940,12 +4627,20 @@ fn normalized_task_registry(payload: &Value) -> (Value, Vec<String>, Vec<String>
             },
             "tasks": tasks,
             "task_count": known_task_ids.len(),
-            "truncated": false,
-            "overflow_count": 0,
+            "recoverable_task_count": recoverable_task_ids.len(),
+            "truncated": overflow_count > 0,
+            "overflow_count": overflow_count,
         }),
         known_task_ids,
         recoverable_task_ids,
     )
+}
+
+fn registry_task_sort_key(row: &Value) -> String {
+    first_nonempty(&[
+        value_text(row.get("updated_at")),
+        value_text(row.get("task_id")),
+    ])
 }
 
 fn write_focus_task_pointer(
@@ -3975,26 +4670,10 @@ fn write_task_registry_entry(
     focus_task_id: Option<&str>,
 ) -> Result<bool, String> {
     let existing = read_json_if_exists(&mirror_root.join(TASK_REGISTRY_NAME));
-    let mut normalized = normalized_task_registry(&existing).0;
-    let registry = normalized
-        .as_object_mut()
-        .ok_or_else(|| "normalized task registry must be an object".to_string())?;
-    registry.insert(
-        "schema_version".to_string(),
-        Value::String("task-registry-v1".to_string()),
-    );
-    if let Some(focus_task_id) = focus_task_id {
-        registry.insert(
-            "focus_task_id".to_string(),
-            Value::String(focus_task_id.to_string()),
-        );
-    }
-    let tasks = registry
-        .entry("tasks".to_string())
-        .or_insert_with(|| Value::Array(Vec::new()));
-    let rows = tasks
-        .as_array_mut()
-        .ok_or_else(|| "task registry tasks must be an array".to_string())?;
+    let focus_task = focus_task_id
+        .map(ToString::to_string)
+        .unwrap_or_else(|| safe_slug(&value_text(existing.get("focus_task_id"))));
+    let mut rows = registry_rows_from_payload(&existing);
     let mut replaced = false;
     for row in rows.iter_mut() {
         let Some(map) = row.as_object_mut() else {
@@ -4028,7 +4707,8 @@ fn write_task_registry_entry(
             "resume_allowed": resume_allowed,
         }));
     }
-    write_json_if_changed(&mirror_root.join(TASK_REGISTRY_NAME), &normalized)
+    let compacted = normalize_task_registry_rows(focus_task, rows).0;
+    write_json_if_changed(&mirror_root.join(TASK_REGISTRY_NAME), &compacted)
 }
 
 pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
@@ -4094,19 +4774,61 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
     let summary_path = primary_dir.join(SESSION_SUMMARY_FILENAME);
     let next_actions_path = primary_dir.join(NEXT_ACTIONS_FILENAME);
     let evidence_path = primary_dir.join(EVIDENCE_INDEX_FILENAME);
+    let trace_metadata_path = primary_dir.join(TRACE_METADATA_FILENAME);
+    let journal_path = primary_dir.join(CONTINUITY_JOURNAL_FILENAME);
     let summary_text = render_session_summary(&task, &phase, &status, &summary);
     let next_actions_payload = build_next_actions_payload(next_actions);
     let evidence_payload = build_evidence_index_payload(evidence);
+    let trace_metadata_payload = build_trace_metadata_payload(
+        &task,
+        &phase,
+        &status,
+        payload.get("trace_metadata"),
+        payload.get("matched_skills"),
+    );
+    let supervisor_state_payload = build_session_supervisor_state_payload(
+        &task_id,
+        &task,
+        &phase,
+        &status,
+        summary.trim(),
+        &next_actions_payload,
+        &evidence_payload,
+        &trace_metadata_payload,
+        &primary_dir,
+        payload.get("supervisor_state"),
+        payload.get("execution_contract"),
+        payload.get("blockers"),
+        payload.get("continuity"),
+    );
+    let journal_payload = build_continuity_journal_payload(
+        &task_id,
+        &task,
+        &phase,
+        &status,
+        &primary_dir,
+        &summary_text,
+        &next_actions_payload,
+        &evidence_payload,
+        &trace_metadata_payload,
+        &supervisor_state_payload,
+        read_json_if_exists(&journal_path),
+    );
 
     let mut changed_paths = Vec::new();
-    if write_text_if_changed(&summary_path, &summary_text)? {
-        changed_paths.push(summary_path.display().to_string());
-    }
-    if write_json_if_changed(&next_actions_path, &next_actions_payload)? {
-        changed_paths.push(next_actions_path.display().to_string());
-    }
-    if write_json_if_changed(&evidence_path, &evidence_payload)? {
-        changed_paths.push(evidence_path.display().to_string());
+    write_session_artifact_set(
+        &summary_path,
+        &next_actions_path,
+        &evidence_path,
+        Some(&trace_metadata_path),
+        &summary_text,
+        &next_actions_payload,
+        &evidence_payload,
+        Some(&trace_metadata_payload),
+        &mut changed_paths,
+    )?;
+    if write_json_if_changed(&journal_path, &journal_payload)? {
+        changed_paths.push(journal_path.display().to_string());
     }
 
     if !mirror_output_dir.is_empty() && focus {
@@ -4114,14 +4836,20 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
         let mirror_summary = mirror_root.join(SESSION_SUMMARY_FILENAME);
         let mirror_next_actions = mirror_root.join(NEXT_ACTIONS_FILENAME);
         let mirror_evidence = mirror_root.join(EVIDENCE_INDEX_FILENAME);
-        if write_text_if_changed(&mirror_summary, &summary_text)? {
-            changed_paths.push(mirror_summary.display().to_string());
-        }
-        if write_json_if_changed(&mirror_next_actions, &next_actions_payload)? {
-            changed_paths.push(mirror_next_actions.display().to_string());
-        }
-        if write_json_if_changed(&mirror_evidence, &evidence_payload)? {
-            changed_paths.push(mirror_evidence.display().to_string());
+        write_session_artifact_set(
+            &mirror_summary,
+            &mirror_next_actions,
+            &mirror_evidence,
+            Some(&mirror_root.join(TRACE_METADATA_FILENAME)),
+            &summary_text,
+            &next_actions_payload,
+            &evidence_payload,
+            Some(&trace_metadata_payload),
+            &mut changed_paths,
+        )?;
+        let mirror_journal = mirror_root.join(CONTINUITY_JOURNAL_FILENAME);
+        if write_json_if_changed(&mirror_journal, &journal_payload)? {
+            changed_paths.push(mirror_journal.display().to_string());
         }
     }
 
@@ -4135,7 +4863,7 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
             &task,
             &phase,
             &status,
-            None,
+            Some(!is_terminal(&status, TERMINAL_VERIFICATION_STATUSES)),
             &updated_at,
             if focus { Some(task_id.as_str()) } else { None },
         )? {
@@ -4145,15 +4873,41 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
             let root_summary = repo_root.join(SESSION_SUMMARY_FILENAME);
             let root_next_actions = repo_root.join(NEXT_ACTIONS_FILENAME);
             let root_evidence = repo_root.join(EVIDENCE_INDEX_FILENAME);
+            let root_trace = repo_root.join(TRACE_METADATA_FILENAME);
+            let mirror_summary = mirror_root.join(SESSION_SUMMARY_FILENAME);
+            let mirror_next_actions = mirror_root.join(NEXT_ACTIONS_FILENAME);
+            let mirror_evidence = mirror_root.join(EVIDENCE_INDEX_FILENAME);
+            let mirror_trace = mirror_root.join(TRACE_METADATA_FILENAME);
+            let root_journal = repo_root.join(CONTINUITY_JOURNAL_FILENAME);
+            let mirror_journal = mirror_root.join(CONTINUITY_JOURNAL_FILENAME);
             let active_pointer = mirror_root.join(ACTIVE_TASK_POINTER_NAME);
-            if write_text_if_changed(&root_summary, &summary_text)? {
-                changed_paths.push(root_summary.display().to_string());
+            write_session_artifact_set(
+                &root_summary,
+                &root_next_actions,
+                &root_evidence,
+                Some(&root_trace),
+                &summary_text,
+                &next_actions_payload,
+                &evidence_payload,
+                Some(&trace_metadata_payload),
+                &mut changed_paths,
+            )?;
+            if write_json_if_changed(&root_journal, &journal_payload)? {
+                changed_paths.push(root_journal.display().to_string());
             }
-            if write_json_if_changed(&root_next_actions, &next_actions_payload)? {
-                changed_paths.push(root_next_actions.display().to_string());
-            }
-            if write_json_if_changed(&root_evidence, &evidence_payload)? {
-                changed_paths.push(root_evidence.display().to_string());
+            write_session_artifact_set(
+                &mirror_summary,
+                &mirror_next_actions,
+                &mirror_evidence,
+                Some(&mirror_trace),
+                &summary_text,
+                &next_actions_payload,
+                &evidence_payload,
+                Some(&trace_metadata_payload),
+                &mut changed_paths,
+            )?;
+            if write_json_if_changed(&mirror_journal, &journal_payload)? {
+                changed_paths.push(mirror_journal.display().to_string());
             }
             if write_json_if_changed(
                 &active_pointer,
@@ -4169,6 +4923,10 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
             if write_focus_task_pointer(&mirror_root, &task_id, &task, &updated_at)? {
                 changed_paths.push(focus_pointer.display().to_string());
             }
+            let supervisor_state_path = repo_root.join(SUPERVISOR_STATE_FILENAME);
+            if write_json_if_changed(&supervisor_state_path, &supervisor_state_payload)? {
+                changed_paths.push(supervisor_state_path.display().to_string());
+            }
         }
     }
 
@@ -4181,6 +4939,34 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
         "task_id": task_id,
         "changed_paths": changed_paths,
     }))
+}
+
+fn write_session_artifact_set(
+    summary_path: &Path,
+    next_actions_path: &Path,
+    evidence_path: &Path,
+    trace_metadata_path: Option<&Path>,
+    summary_text: &str,
+    next_actions_payload: &Value,
+    evidence_payload: &Value,
+    trace_metadata_payload: Option<&Value>,
+    changed_paths: &mut Vec<String>,
+) -> Result<(), String> {
+    if write_text_if_changed(summary_path, summary_text)? {
+        changed_paths.push(summary_path.display().to_string());
+    }
+    if write_json_if_changed(next_actions_path, next_actions_payload)? {
+        changed_paths.push(next_actions_path.display().to_string());
+    }
+    if write_json_if_changed(evidence_path, evidence_payload)? {
+        changed_paths.push(evidence_path.display().to_string());
+    }
+    if let (Some(path), Some(payload)) = (trace_metadata_path, trace_metadata_payload) {
+        if write_json_if_changed(path, payload)? {
+            changed_paths.push(path.display().to_string());
+        }
+    }
+    Ok(())
 }
 
 fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value>> {

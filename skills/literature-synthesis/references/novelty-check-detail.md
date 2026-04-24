@@ -3,7 +3,7 @@
 Extracted from the main `literature-synthesis` SKILL.md to keep the main file
 focused on routing and workflow overview.
 
-## Mode B: Idea Novelty Check — Full Protocol
+## Idea Novelty Check — Full Protocol
 
 ### Phase 1: Claim Extraction
 

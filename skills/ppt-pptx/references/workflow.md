@@ -7,13 +7,13 @@ Use this reference when building a PowerPoint deck from scratch, refactoring an 
 Use this quick split before touching files:
 
 - Generic PPT ask or existing deck artifact with workflow still unclear -> start at `slides`
-- New deck from outline / notes / YAML / structured content where `deck.js` should be the source of truth -> use `ppt-pptx`
+- New deck from outline / notes / YAML / structured content where `deck.plan.json` should be the source of truth -> use `ppt-pptx`
 - Existing deck needs substantial redesign, new visual system, or source-of-truth rebuild -> use `ppt-pptx`
 - Existing `.pptx` needs in-place text edits, table/chart tweaks, inspection, or batch patches while the file stays the source of truth -> use `slides`
 
 Practical rule:
 
-- If the desired source of truth is `deck.js`, stay in `ppt-pptx`
+- If the desired source of truth is a Rust-authored `deck.plan.json`, stay in `ppt-pptx`
 - If the desired source of truth remains the `.pptx` file itself, start with `slides`
 
 Fast examples:
@@ -29,7 +29,7 @@ Create or reuse:
 
 ```text
 project/
-├── deck.js
+├── deck.plan.json
 ├── deck.pptx
 ├── assets/
 ├── rendered/
@@ -44,22 +44,14 @@ ppt init .
 
 Notes:
 
-- `assets/` can start empty; the bundled templates and `outline_to_deck.js` now fall back to placeholder panels when sample images are missing.
+- `assets/` can start empty; the Rust `ppt` templates fall back to placeholder panels when sample images are missing.
 - Add real local images later for final polish rather than blocking the first successful build.
-
-Optional compatibility wrapper:
-
-```text
-project/
-└── scripts/
-    └── pptx_tool.js
-```
 
 ## Engine Choice
 
-- Prefer PptxGenJS for deck generation.
+- Prefer the Rust `ppt` CLI for deck generation.
 - Do not use `python-pptx` for full authoring unless the task is inspection-oriented or very small.
-- Keep editable output in JavaScript so layout logic stays visible and reproducible.
+- Keep editable output driven by `deck.plan.json` so layout logic stays visible and reproducible.
 
 ## Existing Decks
 
@@ -70,7 +62,7 @@ When the input is an existing `.pptx`, choose one of two modes:
    - Start with `slides`, because the file itself stays the editable source of truth.
 2. Rebuild mode
    - Best for major redesign, consistent visual system, repeated generation, or a deck that should become reproducible from code.
-   - Extract structure/assets if helpful, then rebuild in PptxGenJS and keep `deck.js` as the source of truth.
+   - Extract structure/assets if helpful, then rebuild through the Rust `ppt` CLI and keep `deck.plan.json` as the source of truth.
    - Use `ppt office doctor|get|query` first when you need stable IDs, shape paths, or a quick structural map from the old deck.
 
 Use the rebuild path when the current deck is just raw material and the real goal is a cleaner long-term authoring workflow.
@@ -87,6 +79,40 @@ Before filling the slides, lock these decisions:
 - one primary card style and one emphasis style
 
 Beauty comes from repeated visual logic, not from piling effects onto isolated slides.
+
+## Design Skill Loop
+
+When the deck starts from old materials, brand examples, or screenshots, produce
+or reuse `DESIGN.md` before authoring. Keep the chain explicit:
+
+```text
+DESIGN.md / visual contract
+-> deck.plan.json
+-> deck.pptx
+-> rendered PNG evidence
+-> visual-review notes
+-> design-output-auditor verdict
+-> ppt qa / build-qa sign-off
+```
+
+Use `$design-md` for extracting a deck design system, `$frontend-design` for a
+new premium direction, `$design-workflow-protocol` for repeatable multi-round
+artifact tracking, and `$design-output-auditor` for final drift / AI-slop /
+anti-pattern checks.
+
+## Copy Naturalization First
+
+Run a light text pass before layout, especially for outline-generated decks:
+
+- Replace meta narration with direct claims.
+- Keep one clear judgment per slide; make bullets concrete enough to stand on
+  their own.
+- Vary sentence length and bullet openings; do not let every line follow the
+  same "verb + noun + result" shape.
+- Remove filler such as "本页展示", "核心观点如下", "具有重要意义", "赋能", and
+  "显著提升" unless a concrete number or mechanism follows.
+- Preserve facts, citations, numbers, names, and technical terms; do not invent
+  anecdotes just to sound human.
 
 ## Beauty Rules
 
@@ -132,7 +158,11 @@ Beauty comes from repeated visual logic, not from piling effects onto isolated s
 4. Build a montage with `ppt create-montage` when the deck is long.
 5. Run `ppt detect-fonts` when typography is part of the design.
 6. Call `$visual-review` on suspicious slides or the montage.
-7. Fix the source `.js` and repeat.
+7. Fix the source plan and repeat.
+
+If a `DESIGN.md` or visual contract exists, add one more pass after rendered
+review: ask `$design-output-auditor` for `match / minor drift / material drift /
+hard fail`, then fix only the smallest set needed to restore fidelity.
 
 If the deck is using fallback placeholder panels because images are missing, treat the build as structurally valid but not visually final.
 
@@ -156,20 +186,20 @@ Use this lane for:
 - watching an already-generated `.pptx` in HTML while iterating
 - batch patch plans against an existing artifact when you are not ready to fully rebuild the source
 
-Do not let OfficeCLI replace `deck.js` as the source of truth for new-code-authored decks. It is the inspection / patch / preview boost, not the authoring core.
+Do not let OfficeCLI replace `deck.plan.json` as the source of truth for new-code-authored decks. It is the inspection / patch / preview boost, not the authoring core.
 
 ## Hybrid Default
 
 The strongest default in this skill is now a hybrid lane:
 
-- `deck.js` / PptxGenJS remains the authoring source of truth
+- `deck.plan.json` remains the authoring source of truth
 - Rust tools handle render / structure / image-side QA
 - OfficeCLI handles issue discovery, schema validation, stable path lookup, and watch preview
 
 Recommended commands:
 
 ```bash
-ppt build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json
+ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --json
 ppt qa deck.pptx --rendered-dir rendered --json
 ppt intake old_deck.pptx --json
 ```
@@ -179,7 +209,7 @@ Use `build-qa` for code-authored decks and `intake` for existing-deck rebuilds.
 For a full regression pass from the skill root, run:
 
 ```bash
-node scripts/smoke_test.js
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- --help
 ```
 
 ## What To Look For In Rendered Slides
@@ -200,7 +230,7 @@ node scripts/smoke_test.js
 Deliver:
 
 - `deck.pptx`
-- `deck.js`
+- `deck.plan.json`
 - `assets/`
 - `sources.md`
 

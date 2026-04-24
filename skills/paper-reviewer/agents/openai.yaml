@@ -1,4 +1,4 @@
 interface:
   display_name: "Paper Reviewer"
-  short_description: "Judge whether a paper is ready to submit"
-  default_prompt: "Use $paper-reviewer as the review specialist lane behind $paper-workbench. Prefer it for explicit review-only requests or single-dimension review slices. Review and decide; do not drift into direct rewriting."
+  short_description: "Strict paper review with optional external calibration"
+  default_prompt: "Use $paper-reviewer as the review specialist lane behind $paper-workbench. Prefer it for explicit review-only requests, paper review, 严审, 能不能投, 投稿前把关, or single-dimension review slices. Lead with a reviewer verdict, top blockers, and the next honest move. External literature, venue, baseline, and citation research is allowed when it calibrates the bar, but do not upload confidential full manuscripts to public tools. Review and decide; do not drift into rewriting unless the user asks to switch into revision."

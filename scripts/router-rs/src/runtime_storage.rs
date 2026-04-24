@@ -25,6 +25,134 @@ const DEFAULT_STATE_SERVICE_AUTHORITY: &str = "rust-runtime-control-plane";
 const DEFAULT_STATE_SERVICE_ROLE: &str = "durable-background-state";
 const DEFAULT_STATE_SERVICE_PROJECTION: &str = "rust-native-projection";
 const SQLITE_TABLE_NAME: &str = "runtime_storage_payloads";
+const RUNTIME_BACKEND_FAMILY_CATALOG_SCHEMA_VERSION: &str =
+    "runtime-persistence-backend-family-catalog-v1";
+const RUNTIME_BACKEND_FAMILY_PARITY_SCHEMA_VERSION: &str =
+    "runtime-persistence-backend-family-parity-v1";
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RuntimeBackendCapabilities {
+    pub(crate) backend_family: &'static str,
+    pub(crate) supports_atomic_replace: bool,
+    pub(crate) supports_compaction: bool,
+    pub(crate) supports_snapshot_delta: bool,
+    pub(crate) supports_remote_event_transport: bool,
+    pub(crate) supports_consistent_append: bool,
+    pub(crate) supports_sqlite_wal: bool,
+}
+
+pub(crate) fn runtime_backend_capabilities(
+    backend_family: &str,
+) -> Result<RuntimeBackendCapabilities, String> {
+    match normalized_backend_family(backend_family).as_str() {
+        "filesystem" | "file" => Ok(RuntimeBackendCapabilities {
+            backend_family: "filesystem",
+            supports_atomic_replace: true,
+            supports_compaction: false,
+            supports_snapshot_delta: false,
+            supports_remote_event_transport: true,
+            supports_consistent_append: true,
+            supports_sqlite_wal: false,
+        }),
+        "sqlite" | "sqlite3" => Ok(RuntimeBackendCapabilities {
+            backend_family: "sqlite",
+            supports_atomic_replace: true,
+            supports_compaction: true,
+            supports_snapshot_delta: true,
+            supports_remote_event_transport: true,
+            supports_consistent_append: true,
+            supports_sqlite_wal: true,
+        }),
+        "memory" | "in_memory" | "regression" | "regression_double" => {
+            Ok(RuntimeBackendCapabilities {
+                backend_family: "memory",
+                supports_atomic_replace: false,
+                supports_compaction: false,
+                supports_snapshot_delta: false,
+                supports_remote_event_transport: true,
+                supports_consistent_append: false,
+                supports_sqlite_wal: false,
+            })
+        }
+        other => Err(format!("unsupported runtime backend family: {other:?}")),
+    }
+}
+
+pub(crate) fn runtime_backend_capabilities_payload(backend_family: &str) -> Result<Value, String> {
+    let capabilities = runtime_backend_capabilities(backend_family)?;
+    Ok(json!({
+        "backend_family": capabilities.backend_family,
+        "supports_atomic_replace": capabilities.supports_atomic_replace,
+        "supports_compaction": capabilities.supports_compaction,
+        "supports_snapshot_delta": capabilities.supports_snapshot_delta,
+        "supports_remote_event_transport": capabilities.supports_remote_event_transport,
+        "supports_consistent_append": capabilities.supports_consistent_append,
+        "supports_sqlite_wal": capabilities.supports_sqlite_wal,
+    }))
+}
+
+pub(crate) fn runtime_backend_family_catalog_payload() -> Value {
+    let families = ["filesystem", "sqlite", "memory"]
+        .into_iter()
+        .filter_map(|family| runtime_backend_capabilities_payload(family).ok())
+        .collect::<Vec<_>>();
+
+    json!({
+        "schema_version": RUNTIME_BACKEND_FAMILY_CATALOG_SCHEMA_VERSION,
+        "authority": RUNTIME_CHECKPOINT_CONTROL_PLANE_COMPILER_AUTHORITY,
+        "owner": "rust-runtime-checkpoint-control-plane",
+        "default_backend_family": "filesystem",
+        "strongest_local_backend_family": "sqlite",
+        "families": families,
+        "selection_rule": "store and checkpointer must resolve to one normalized backend_family before persistence operations",
+    })
+}
+
+pub(crate) fn runtime_backend_family_parity_payload(
+    store_backend_family: Option<&str>,
+    checkpointer_backend_family: Option<&str>,
+    trace_backend_family: Option<&str>,
+    state_backend_family: Option<&str>,
+) -> Result<Value, String> {
+    let store = store_backend_family.unwrap_or("filesystem");
+    let checkpointer = checkpointer_backend_family.unwrap_or(store);
+    let trace = trace_backend_family.unwrap_or(checkpointer);
+    let state = state_backend_family.unwrap_or(store);
+    let store_capabilities = runtime_backend_capabilities(store)?;
+    let checkpointer_capabilities = runtime_backend_capabilities(checkpointer)?;
+    let trace_capabilities = runtime_backend_capabilities(trace)?;
+    let state_capabilities = runtime_backend_capabilities(state)?;
+    let normalized_store = store_capabilities.backend_family;
+    let normalized_checkpointer = checkpointer_capabilities.backend_family;
+    let normalized_trace = trace_capabilities.backend_family;
+    let normalized_state = state_capabilities.backend_family;
+    let aligned = normalized_store == normalized_checkpointer
+        && normalized_store == normalized_trace
+        && normalized_store == normalized_state;
+    let mismatch_reason = if aligned {
+        Value::Null
+    } else {
+        Value::String(
+            "store, checkpointer, trace, and state must share one backend_family".to_string(),
+        )
+    };
+
+    Ok(json!({
+        "schema_version": RUNTIME_BACKEND_FAMILY_PARITY_SCHEMA_VERSION,
+        "authority": RUNTIME_CHECKPOINT_CONTROL_PLANE_COMPILER_AUTHORITY,
+        "store_backend_family": normalized_store,
+        "checkpointer_backend_family": normalized_checkpointer,
+        "trace_backend_family": normalized_trace,
+        "state_backend_family": normalized_state,
+        "aligned": aligned,
+        "mismatch_reason": mismatch_reason,
+        "compaction_eligible": aligned
+            && checkpointer_capabilities.supports_compaction
+            && checkpointer_capabilities.supports_snapshot_delta
+            && state_capabilities.supports_compaction
+            && state_capabilities.supports_snapshot_delta,
+    }))
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct RuntimeStorageRequestPayload {
@@ -34,6 +162,7 @@ pub(crate) struct RuntimeStorageRequestPayload {
     pub(crate) sqlite_db_path: Option<String>,
     pub(crate) storage_root: Option<String>,
     pub(crate) payload_text: Option<String>,
+    pub(crate) expected_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,9 +174,12 @@ pub(crate) struct RuntimeStorageResponsePayload {
     pub(crate) backend_family: String,
     pub(crate) sqlite_db_path: Option<String>,
     pub(crate) storage_root: Option<String>,
+    pub(crate) backend_capabilities: Value,
     pub(crate) exists: bool,
     pub(crate) payload_text: Option<String>,
     pub(crate) bytes_written: Option<usize>,
+    pub(crate) payload_sha256: Option<String>,
+    pub(crate) verified: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -81,6 +213,12 @@ fn stable_memory_key(path: &Path) -> Result<String, String> {
     Ok(normalize_runtime_path(&path.display().to_string())?
         .display()
         .to_string())
+}
+
+fn payload_sha256(payload_text: &str) -> String {
+    let mut digest = Sha256::new();
+    digest.update(payload_text.as_bytes());
+    format!("{:x}", digest.finalize())
 }
 
 fn memory_storage_root() -> Result<PathBuf, String> {
@@ -126,12 +264,17 @@ fn runtime_storage_db_name_candidates() -> Vec<String> {
 }
 
 fn sqlite_connection(path: &Path) -> Result<Connection, String> {
-    Connection::open(path).map_err(|err| {
+    let conn = Connection::open(path).map_err(|err| {
         format!(
             "open sqlite runtime storage failed for {}: {err}",
             path.display()
         )
-    })
+    })?;
+    conn.pragma_update(None, "journal_mode", "WAL")
+        .map_err(|err| format!("enable sqlite runtime storage WAL failed: {err}"))?;
+    conn.pragma_update(None, "synchronous", "NORMAL")
+        .map_err(|err| format!("set sqlite runtime storage synchronous mode failed: {err}"))?;
+    Ok(conn)
 }
 
 fn ensure_runtime_storage_sqlite_schema(conn: &Connection) -> Result<(), String> {
@@ -378,6 +521,8 @@ pub(crate) fn resolve_storage_backend(paths: &[PathBuf]) -> Option<ResolvedStora
             .and_then(|value| value.file_name())
             .and_then(|name| name.to_str());
 
+        let file_name = path.file_name().and_then(|name| name.to_str());
+
         if parent_name == Some("runtime_event_transports")
             || parent_name == Some("trace_compaction")
         {
@@ -385,6 +530,19 @@ pub(crate) fn resolve_storage_backend(paths: &[PathBuf]) -> Option<ResolvedStora
                 candidates.push(root.to_path_buf());
             }
             if let Some(root) = grandparent.and_then(Path::parent) {
+                candidates.push(root.to_path_buf());
+            }
+        }
+        if matches!(
+            file_name,
+            Some("TRACE_RESUME_MANIFEST.json")
+                | Some("TRACE_EVENTS.jsonl")
+                | Some("ATTACHED_RUNTIME_EVENT_HANDOFF.json")
+        ) {
+            if let Some(root) = path.parent() {
+                candidates.push(root.to_path_buf());
+            }
+            if let Some(root) = path.parent().and_then(Path::parent) {
                 candidates.push(root.to_path_buf());
             }
         }
@@ -456,20 +614,21 @@ fn resolve_runtime_storage_backend(
     String,
 > {
     let backend_family = normalized_backend_family(&request.backend_family);
-    match backend_family.as_str() {
-        "filesystem" | "file" => Ok((
+    let capabilities = runtime_backend_capabilities(&backend_family)?;
+    match capabilities.backend_family {
+        "filesystem" => Ok((
             ResolvedStorageBackend::Filesystem,
-            "filesystem".to_string(),
+            capabilities.backend_family.to_string(),
             None,
             None,
         )),
-        "memory" | "in_memory" | "regression" | "regression_double" => Ok((
+        "memory" => Ok((
             ResolvedStorageBackend::Memory,
-            "memory".to_string(),
+            capabilities.backend_family.to_string(),
             None,
             None,
         )),
-        "sqlite" | "sqlite3" => {
+        "sqlite" => {
             let db_path = request
                 .sqlite_db_path
                 .as_ref()
@@ -489,14 +648,12 @@ fn resolve_runtime_storage_backend(
                     db_path: db_path.clone(),
                     storage_root: storage_root.clone(),
                 },
-                "sqlite".to_string(),
+                capabilities.backend_family.to_string(),
                 Some(db_path.display().to_string()),
                 Some(storage_root.display().to_string()),
             ))
         }
-        other => Err(format!(
-            "unsupported runtime_storage backend family: {other:?}"
-        )),
+        other => Err(format!("unsupported runtime storage backend: {other}")),
     }
 }
 
@@ -507,17 +664,52 @@ pub(crate) fn runtime_storage_operation(
     let (backend, backend_family, sqlite_db_path, storage_root) =
         resolve_runtime_storage_backend(&request)?;
     let operation = request.operation.trim().to_lowercase();
+    let expected_sha256 = request.expected_sha256.clone();
     let payload_text = request.payload_text;
 
-    let (exists, resolved_payload_text, bytes_written) = match operation.as_str() {
-        "exists" => (storage_artifact_exists(&path, Some(&backend)), None, None),
+    let (exists, resolved_payload_text, bytes_written, payload_digest, verified) = match operation
+        .as_str()
+    {
+        "exists" => (
+            storage_artifact_exists(&path, Some(&backend)),
+            None,
+            None,
+            None,
+            None,
+        ),
         "read_text" => {
             let payload = storage_read_text(&path, Some(&backend))?;
-            (true, Some(payload), None)
+            let digest = payload_sha256(&payload);
+            let verified = expected_sha256
+                .as_deref()
+                .map(|expected| expected.eq_ignore_ascii_case(&digest));
+            (true, Some(payload), None, Some(digest), verified)
+        }
+        "verify_text" => {
+            let expected = expected_sha256
+                .or_else(|| payload_text.as_deref().map(payload_sha256))
+                .ok_or_else(|| {
+                    "runtime_storage verify_text requires expected_sha256 or payload_text"
+                        .to_string()
+                })?;
+            if !storage_artifact_exists(&path, Some(&backend)) {
+                (false, None, None, None, Some(false))
+            } else {
+                let payload = storage_read_text(&path, Some(&backend))?;
+                let digest = payload_sha256(&payload);
+                (
+                    true,
+                    None,
+                    None,
+                    Some(digest.clone()),
+                    Some(expected.eq_ignore_ascii_case(&digest)),
+                )
+            }
         }
         "write_text" => {
             let payload = payload_text
                 .ok_or_else(|| "runtime_storage write_text requires payload_text".to_string())?;
+            let digest = payload_sha256(&payload);
             match &backend {
                 ResolvedStorageBackend::Filesystem => filesystem_write_text(&path, &payload)?,
                 ResolvedStorageBackend::Memory => {
@@ -542,11 +734,18 @@ pub(crate) fn runtime_storage_operation(
                     storage_root,
                 } => sqlite_write_text(&path, db_path, storage_root, &payload)?,
             }
-            (true, None, Some(payload.as_bytes().len()))
+            (
+                true,
+                None,
+                Some(payload.as_bytes().len()),
+                Some(digest),
+                None,
+            )
         }
         "append_text" => {
             let payload = payload_text
                 .ok_or_else(|| "runtime_storage append_text requires payload_text".to_string())?;
+            let bytes_written = payload.as_bytes().len();
             match &backend {
                 ResolvedStorageBackend::Filesystem => filesystem_append_text(&path, &payload)?,
                 ResolvedStorageBackend::Memory => {
@@ -581,7 +780,14 @@ pub(crate) fn runtime_storage_operation(
                     storage_root,
                 } => sqlite_append_text(&path, db_path, storage_root, &payload)?,
             }
-            (true, None, Some(payload.as_bytes().len()))
+            let stored_payload = storage_read_text(&path, Some(&backend))?;
+            (
+                true,
+                None,
+                Some(bytes_written),
+                Some(payload_sha256(&stored_payload)),
+                None,
+            )
         }
         other => return Err(format!("unsupported runtime_storage operation: {other:?}")),
     };
@@ -594,9 +800,12 @@ pub(crate) fn runtime_storage_operation(
         backend_family,
         sqlite_db_path,
         storage_root,
+        backend_capabilities: runtime_backend_capabilities_payload(&request.backend_family)?,
         exists,
         payload_text: resolved_payload_text,
         bytes_written,
+        payload_sha256: payload_digest,
+        verified,
     })
 }
 
@@ -685,12 +894,38 @@ pub(crate) fn build_checkpoint_control_plane_compiler_payload(
         .get("capabilities")
         .and_then(Value::as_object)
         .ok_or_else(|| "runtime checkpoint control plane requires capabilities".to_string())?;
-    let backend_family = capabilities
+    let raw_backend_family = capabilities
         .get("backend_family")
         .and_then(Value::as_str)
         .ok_or_else(|| {
             "runtime checkpoint control plane capabilities must include backend_family".to_string()
         })?;
+    let backend_capabilities = runtime_backend_capabilities(raw_backend_family)?;
+    let backend_family = backend_capabilities.backend_family;
+    let parity = runtime_backend_family_parity_payload(
+        capabilities
+            .get("store_backend_family")
+            .and_then(Value::as_str),
+        capabilities
+            .get("checkpointer_backend_family")
+            .and_then(Value::as_str)
+            .or(Some(raw_backend_family)),
+        capabilities
+            .get("trace_backend_family")
+            .and_then(Value::as_str),
+        capabilities
+            .get("state_backend_family")
+            .and_then(Value::as_str),
+    )?;
+    if parity.get("aligned").and_then(Value::as_bool) != Some(true) {
+        return Err(format!(
+            "runtime checkpoint control plane backend family mismatch: {}",
+            parity
+                .get("mismatch_reason")
+                .and_then(Value::as_str)
+                .unwrap_or("backend families are not aligned")
+        ));
+    }
 
     let runtime_control_plane = build_runtime_control_plane_payload();
     let default_runtime_authority = runtime_control_plane
@@ -725,14 +960,38 @@ pub(crate) fn build_checkpoint_control_plane_compiler_payload(
             DEFAULT_STATE_SERVICE_PROJECTION,
         ),
         "backend_family": backend_family,
-        "supports_atomic_replace": capability_bool(capabilities, "supports_atomic_replace", true),
-        "supports_compaction": capability_bool(capabilities, "supports_compaction", false),
-        "supports_snapshot_delta": capability_bool(capabilities, "supports_snapshot_delta", false),
+        "supports_atomic_replace": capability_bool(
+            capabilities,
+            "supports_atomic_replace",
+            backend_capabilities.supports_atomic_replace,
+        ),
+        "supports_compaction": capability_bool(
+            capabilities,
+            "supports_compaction",
+            backend_capabilities.supports_compaction,
+        ),
+        "supports_snapshot_delta": capability_bool(
+            capabilities,
+            "supports_snapshot_delta",
+            backend_capabilities.supports_snapshot_delta,
+        ),
         "supports_remote_event_transport": capability_bool(
             capabilities,
             "supports_remote_event_transport",
-            false,
+            backend_capabilities.supports_remote_event_transport,
         ),
+        "supports_consistent_append": capability_bool(
+            capabilities,
+            "supports_consistent_append",
+            backend_capabilities.supports_consistent_append,
+        ),
+        "supports_sqlite_wal": capability_bool(
+            capabilities,
+            "supports_sqlite_wal",
+            backend_capabilities.supports_sqlite_wal,
+        ),
+        "backend_family_catalog": runtime_backend_family_catalog_payload(),
+        "backend_family_parity": parity,
         "trace_output_path": path_value(paths, "trace_output_path"),
         "event_stream_path": path_value(paths, "event_stream_path"),
         "resume_manifest_path": path_value(paths, "resume_manifest_path"),

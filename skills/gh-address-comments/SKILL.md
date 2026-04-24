@@ -66,6 +66,9 @@ cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/gh_source_gate_r
   fetch-comments --repo . --json
 ```
 
+Use `--open-only` when the next step should focus only on unresolved,
+non-outdated review threads.
+
 ## Priority routing rule
 
 If the task is triggered by GitHub PR review comments, review threads, or PR

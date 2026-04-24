@@ -170,6 +170,16 @@
       "first_turn": true
     },
     {
+      "id": "paper-workbench-external-research-review-case",
+      "category": "should-trigger",
+      "task": "现在 paper review，整篇严审，允许外部调研校准 novelty、baseline 和目标期刊标准。",
+      "focus_skill": "paper-workbench",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "forbidden_owners": ["literature-synthesis", "paper-writing", "architect-review"],
+      "first_turn": true
+    },
+    {
       "id": "paper-workbench-review-comments-case",
       "category": "should-trigger",
       "task": "根据 reviewer comments 修改论文，该删就删，该藏到附录就藏到附录。",
@@ -210,6 +220,36 @@
       "first_turn": true
     },
     {
+      "id": "paper-writing-storyline-case",
+      "category": "should-trigger",
+      "task": "这段 introduction 的科研讲故事不够好，帮我重写论文故事线，但只根据我给的结果和 claim 改。",
+      "focus_skill": "paper-writing",
+      "expected_owner": "paper-writing",
+      "expected_overlay": null,
+      "forbidden_owners": ["literature-synthesis", "paper-reviewer", "humanizer"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-workbench-ref-first-manuscript-case",
+      "category": "wrong-owner-near-miss",
+      "task": "整体推进这篇论文，先下载20篇目标期刊相近ref，学习它们怎么讲故事，再帮我重写摘要和引言。",
+      "focus_skill": "paper-workbench",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "forbidden_owners": ["literature-synthesis", "paper-writing", "research-workbench"],
+      "first_turn": true
+    },
+    {
+      "id": "literature-synthesis-target-journal-ref-corpus-case",
+      "category": "should-trigger",
+      "task": "先帮我按目标期刊下载和整理20篇最相近的ref，做成对比表并提炼这些文章的写作套路。",
+      "focus_skill": "literature-synthesis",
+      "expected_owner": "literature-synthesis",
+      "expected_overlay": null,
+      "forbidden_owners": ["paper-writing", "citation-management", "information-retrieval"],
+      "first_turn": true
+    },
+    {
       "id": "humanizer-sentence-audit-case",
       "category": "should-trigger",
       "task": "不要直接改写，先逐句评估这段话的 AIGC 痕迹，并判断哪些句子不需要改、哪些需要自然话改写、哪些需要完全重写。",
@@ -237,6 +277,16 @@
       "expected_owner": "paper-reviewer",
       "expected_overlay": null,
       "forbidden_owners": ["paper-workbench", "architect-review"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-reviewer-explicit-external-calibration-case",
+      "category": "wrong-owner-near-miss",
+      "task": "用 $paper-reviewer 做投稿前严审，可以外部查文献和目标期刊要求，但不要改稿。",
+      "focus_skill": "paper-reviewer",
+      "expected_owner": "paper-reviewer",
+      "expected_overlay": null,
+      "forbidden_owners": ["paper-workbench", "literature-synthesis", "paper-reviser"],
       "first_turn": true
     },
     {
@@ -337,6 +387,66 @@
       "expected_owner": "paper-reviser",
       "expected_overlay": null,
       "forbidden_owners": ["idea-to-plan", "paper-reviewer"],
+      "first_turn": true
+    },
+    {
+      "id": "research-workbench-generic-project-case",
+      "category": "should-trigger",
+      "task": "帮我整体推进这个科研项目，从想法、文献到实验一起编排。",
+      "focus_skill": "research-workbench",
+      "expected_owner": "research-workbench",
+      "expected_overlay": null,
+      "forbidden_owners": ["brainstorm-research", "autoresearch", "paper-workbench"],
+      "first_turn": true
+    },
+    {
+      "id": "research-workbench-next-step-case",
+      "category": "wrong-owner-near-miss",
+      "task": "这个课题现在该先搜文献还是先做实验，帮我判断下一步。",
+      "focus_skill": "research-workbench",
+      "expected_owner": "research-workbench",
+      "expected_overlay": null,
+      "forbidden_owners": ["autoresearch", "ai-research"],
+      "first_turn": true
+    },
+    {
+      "id": "research-workbench-paper-boundary-case",
+      "category": "wrong-owner-near-miss",
+      "task": "整体推进这篇论文，先帮我判断现在该审、该改还是该补实验。",
+      "focus_skill": "paper-workbench",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "forbidden_owners": ["research-workbench", "paper-reviewer", "paper-reviser"],
+      "first_turn": true
+    },
+    {
+      "id": "literature-synthesis-academic-search-case",
+      "category": "wrong-owner-near-miss",
+      "task": "帮我搜 arXiv 和 Semantic Scholar，梳理近三年这个方向的核心论文。",
+      "focus_skill": "literature-synthesis",
+      "expected_owner": "literature-synthesis",
+      "expected_overlay": null,
+      "forbidden_owners": ["information-retrieval", "research-workbench"],
+      "first_turn": true
+    },
+    {
+      "id": "autoresearch-explicit-loop-case",
+      "category": "wrong-owner-near-miss",
+      "task": "用多假设 autonomous research loop 跑实验、记录反思并综合结论。",
+      "focus_skill": "autoresearch",
+      "expected_owner": "autoresearch",
+      "expected_overlay": null,
+      "forbidden_owners": ["research-workbench", "brainstorm-research"],
+      "first_turn": true
+    },
+    {
+      "id": "information-retrieval-nonacademic-research-case",
+      "category": "wrong-owner-near-miss",
+      "task": "先调研几个浏览器自动化工具的最新生态和取舍，再给我技术选型建议。",
+      "focus_skill": "information-retrieval",
+      "expected_owner": "information-retrieval",
+      "expected_overlay": null,
+      "forbidden_owners": ["research-workbench", "literature-synthesis"],
       "first_turn": true
     },
     {

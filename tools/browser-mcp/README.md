@@ -1,23 +1,23 @@
 # browser-mcp
 
-A lean MCP browser server optimized for agent use, built on Playwright.
+A lean MCP browser server optimized for agent use. The steady-state stdio server
+is now the Rust implementation in `router-rs`; the TypeScript package remains a
+legacy/development surface.
 
-## v0.2.0 Highlights
+## Rust-first Highlights
 
+- **Rust stdio entrypoint** — `router-rs --browser-mcp-stdio` is the default runtime path
 - **Inline screenshot** — `browser_screenshot` returns a base64 PNG directly in the tool result (no separate file read needed)
-- **Session persistence** — `browser_save_session` / `browser_restore_session` persist cookies + localStorage across conversations
-- **Enhanced network tracking** — captures request bodies, failed requests (`errorText`), and timing (`durationMs`)
+- **Session persistence** — `browser_save_session` / `browser_restore_session` persist cookies across conversations
+- **Network tracking** — records recent requests, response status/type, and failed requests (`errorText`)
 - **Stable element refs** — fingerprints prefer `data-testid` first; no DOM-ordinal dependency on dynamic pages
-- **HTTP transport** — optional `--transport http --port <n>` for remote / multi-agent use
 - **Runtime diagnostics** — `browser_diagnostics` for self-inspection
-- **Screenshot housekeeping** — oldest files auto-removed when directory exceeds `maxScreenshots` (default 100)
 
 ## Scripts
 
 ```bash
-npm run build   # compile TypeScript
-npm run check   # typecheck only
-npm run test    # run vitest integration tests
+cargo build --manifest-path /Users/joe/Documents/skill/scripts/router-rs/Cargo.toml --release
+/Users/joe/Documents/skill/tools/browser-mcp/scripts/start_browser_mcp.sh
 ```
 
 ## Tools (16 total)
@@ -45,8 +45,8 @@ npm run test    # run vitest integration tests
 
 ### stdio (default)
 ```bash
-node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js
-# Flags: --headless true|false  --engine chromium|firefox|webkit  --capture-body
+./scripts/router-rs/target/release/router-rs --browser-mcp-stdio --repo-root /Users/joe/Documents/skill
+# Flags: --headless true|false
 #        --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json|.../ATTACHED_RUNTIME_EVENT_HANDOFF.json|.../TRACE_RESUME_MANIFEST.json|.../runtime_event_transports/session__job.json
 #        --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
 #        --runtime-binding-artifact-path /abs/path/runtime_event_transports/session__job.json
@@ -54,15 +54,10 @@ node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js
 #        --runtime-resume-manifest-path /abs/path/TRACE_RESUME_MANIFEST.json
 ```
 
-### HTTP (Streamable HTTP transport)
-```bash
-node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js --transport http --port 3721
-```
-
 ## Smoke test
 
 ```bash
-node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js
+printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' | ./scripts/router-rs/target/release/router-rs --browser-mcp-stdio --repo-root /Users/joe/Documents/skill
 ```
 
 ## Routing
@@ -73,14 +68,8 @@ installer under `scripts/`.
 
 ## Network body capture
 
-Disabled by default to keep token usage low. Enable via:
-
-```bash
-node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js --capture-body
-# or in BrowserRuntime: new BrowserRuntime({ captureBody: true })
-```
-
-Captures request `postData` and JSON response bodies up to 4 KB each.
+Rust browser-mcp keeps the default network surface compact. The old TypeScript
+`--capture-body` path is not part of the Rust stdio entrypoint.
 
 ## Runtime attach diagnostics
 
@@ -88,9 +77,9 @@ If you already have a Rust-first runtime attach descriptor, browser-mcp can
 consume it directly for self-inspection:
 
 ```bash
-node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
+./scripts/router-rs/target/release/router-rs --browser-mcp-stdio --repo-root /Users/joe/Documents/skill --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
 # or
-BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH=/abs/path/runtime-attach-descriptor.json node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js
+BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH=/abs/path/runtime-attach-descriptor.json ./tools/browser-mcp/scripts/start_browser_mcp.sh
 ```
 
 `--runtime-attach-artifact-path` is the preferred Rust-first entrypoint. The
@@ -114,6 +103,6 @@ through that same attach descriptor; replay results now include a lighter
 `replayContext` mirror so consumers can read attach provenance without
 re-parsing the full diagnostics block.
 
-The legacy `start_browser_mcp.sh` launcher is now only a no-build compatibility
-wrapper around `dist/index.js`; steady-state MCP config should call Node
-directly so startup never runs package installation or TypeScript compilation.
+The legacy `start_browser_mcp.sh` launcher now delegates to the Rust binary and
+does not require `dist/index.js`; steady-state MCP config can call the same Rust
+binary directly.

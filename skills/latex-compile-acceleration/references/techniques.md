@@ -1,58 +1,125 @@
 # LaTeX compile acceleration techniques
 
-This note keeps the **source-backed technique matrix** outside `SKILL.md` so the
-skill stays cheap to route.
+This reference is the heavy layer for `latex-compile-acceleration`. Keep
+`SKILL.md` as the routing/execution entrypoint and put commands, matrices, and
+tradeoffs here.
 
-## Practical ranking
+## Core rule
 
-For most repos, the best default stack is:
+Do not guess. Separate three timings before recommending a fix:
 
-1. `latexmk` baseline
-2. partial compile (`\includeonly`, `subfiles`, `standalone`) when structure allows
-3. TikZ / PGFPlots externalization for figure-heavy projects
-4. preamble precompilation (`mylatexformat`) for package-heavy documents
-5. draft mode during iterative writing
-6. TeXpresso for live preview workflows
-7. Tectonic + cache for CI / reproducible environments
+- **clean build**: no aux/cache output exists.
+- **warm build**: same sources, existing aux/cache output.
+- **edit loop**: one small source edit, then rebuild/preview.
 
-That ranking is an **inference from the upstream sources below** rather than a
-single upstream tool claiming universal superiority.
+The best optimization is the one that removes the measured bottleneck without
+making the final full build less trustworthy.
+
+## Fast measurement pack
+
+Set the root file once:
+
+```bash
+MAIN=main.tex
+```
+
+Clean build:
+
+```bash
+latexmk -C "$MAIN"
+/usr/bin/time -p latexmk -pdf -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 -outdir=build "$MAIN"
+```
+
+Warm build:
+
+```bash
+/usr/bin/time -p latexmk -pdf -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 -outdir=build "$MAIN"
+```
+
+Edit-loop approximation:
+
+```bash
+touch "$MAIN"
+/usr/bin/time -p latexmk -pdf -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 -outdir=build "$MAIN"
+```
+
+If `hyperfine` is available:
+
+```bash
+hyperfine --warmup 1 \
+  'latexmk -pdf -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 -outdir=build main.tex'
+```
+
+Quick log scan:
+
+```bash
+rg -n "Rerun|Citation|Reference|undefined|No file|Warning|^!" build/*.log
+```
+
+Dependency/output scan:
+
+```bash
+rg -n "\\.(bib|bbl|bcf|run\\.xml|toc|lof|lot|aux|pdf|png|eps|svg)" build/*.fls
+```
+
+## Decision tree
+
+1. If no baseline exists, install or use `latexmk` first. It removes manual
+   rerun guesswork and gives a stable surface for further tuning.
+2. If warm builds remain slow and figures dominate, externalize TikZ/PGFPlots
+   or isolate figures with `standalone`.
+3. If every run spends time loading packages/fonts before pages are processed,
+   try preamble precompilation with `mylatexformat`.
+4. If only one chapter changes in a large thesis/book, use `\includeonly` or
+   `subfiles`.
+5. If the pain is editor feedback latency, use `latexmk -pvc`, draft mode, or
+   TeXpresso.
+6. If CI cold start dominates, optimize package install/cache strategy before
+   touching TeX source.
+7. If bibliography, index, glossary, or references dominate, keep the
+   convergence path serial and optimize rerun discipline instead of parallelism.
 
 ## Technique matrix
 
 | Need / bottleneck | Recommended move | Why it helps | Caveats | Sources |
 |---|---|---|---|---|
-| Standard local build is too slow or repetitive | `latexmk` | Tracks dependencies and reruns only as needed; supports preview-continuous mode (`-pvc`) | Still not true AST-level incremental compilation | [CTAN latexmk](https://ctan.org/pkg/latexmk), [latexmk manual PDF](https://tug.ctan.org/support/latexmk/latexmk.pdf), [latexmk man page](https://www.mankier.com/1/latexmk) |
-| Need watch-based rebuilds | `latexmk -pvc` | Rebuilds on file changes without manual rerun loops | Still reruns TeX when watched sources change | [latexmk man page](https://www.mankier.com/1/latexmk) |
-| Need near-live rendering while editing | TeXpresso | Designed for live rendering and immediate error feedback | Early-phase project; editor integration matters | [TeXpresso repo](https://github.com/let-def/texpresso) |
-| Heavy TikZ figures dominate build time | TikZ externalization | Reuses generated figure PDFs instead of re-typesetting every figure | Cache invalidation after macro / preamble changes needs discipline | [PGF/TikZ external library](https://tikz.dev/library-external) |
-| Heavy PGFPlots dominate build time | PGFPlots externalization | Later runs include exported graphics, reducing typesetting time considerably | Similar invalidation caveats | [PGFPlots externalization docs](https://tikz.dev/pgfplots/libs-external) |
-| Large multi-file book / thesis, only one chapter is changing | `\includeonly` | Compile only selected `\include` files while preserving reference scaffolding | Requires `\include`; omitted chapters are not rendered | [LaTeX reference: splitting input](https://latexref.xyz/Splitting-the-input.html), [LaTeX reference: `\\include` / `\\includeonly`](https://latexref.xyz/_005cinclude-_0026-_005cincludeonly.html) |
-| Need chapter / subdocument isolation | `subfiles` | Lets subfiles compile separately or under the main document | Requires project structure buy-in | [CTAN subfiles](https://ctan.org/pkg/subfiles), [subfiles repo](https://github.com/gsalzer/subfiles) |
-| Need fast figure / snippet isolation | `standalone` | Great for figure-heavy workflows and separately compiled subdocuments | Most helpful when the repo already treats figures as separate units | [CTAN standalone](https://ctan.org/pkg/standalone), [standalone repo](https://github.com/MartinScharrer/standalone) |
-| Want cleaner wrapper behavior and temp-output handling | ClutTeX / `latexrun` | Cleaner output handling, rerun management, and convenient wrappers | Wrapper ergonomics, not guaranteed raw-engine speedup | [ClutTeX repo](https://github.com/minoki/cluttex), [latexrun repo](https://github.com/aclements/latexrun) |
-| CI cold starts / reproducibility pain | Tectonic + cache | Self-contained engine with local bundle caching; Actions ecosystem supports caching | Not always a drop-in replacement for every TeX Live workflow | [Tectonic repo](https://github.com/tectonic-typesetting/tectonic), [Tectonic first document guide](https://tectonic-typesetting.github.io/book/latest/getting-started/first-document.html), [setup-tectonic action](https://github.com/marketplace/actions/setup-tectonic) |
-| Need a task-graph around LaTeX dependencies | `pytask-latex` | Explicit dependency graph on top of LaTeX projects | Extra Python tooling and still typically shells out to `latexmk` | [pytask-latex repo](https://github.com/pytask-dev/pytask-latex) |
-| Need document-directed build rules | `arara` | Encodes build recipes in-document, reducing command drift | More orchestration than raw compile-speed improvement | [arara repo](https://github.com/islandoftex/arara) |
-| Package-heavy preamble loads slowly | **Preamble precompilation** (`mylatexformat`) | Dumps preamble state to `.fmt` format file; subsequent runs skip package loading entirely — up to 2× speedup | `.fmt` must be regenerated after preamble changes; some packages incompatible; LuaLaTeX + OpenType fonts may not dump cleanly | [CTAN mylatexformat](https://ctan.org/pkg/mylatexformat), [TeX.SE: precompile preamble](https://tex.stackexchange.com/q/39058) |
-| Writing / iterating, images not needed yet | **Draft mode** (`\documentclass[draft]{...}`) | Skips image rendering, marks overfull boxes; ideal for content-first editing | Images show as empty boxes; some packages change behavior in draft | common best practice |
-| Intermediate TeX passes generate unneeded PDF | **`-draftmode` flag** for intermediate passes | Tells the engine to skip PDF output and only update aux files; final pass generates real PDF | latexmk does not auto-detect; needs custom `$pdflatex` recipe | [latexmk man page](https://www.mankier.com/1/latexmk) |
-| PDF compression costs CPU during compile | **Reduce PDF compression** | `\pdfcompresslevel=0` + `\pdfobjcompresslevel=0` — removes zlib overhead at the cost of larger PDFs | Development only; re-enable for final output | [TeX.SE](https://tex.stackexchange.com/q/51849) |
-| Images compiled slowly due to format conversion | **Image format optimization** | Pre-convert figures to PDF (vector) or JPEG (raster); pdfLaTeX handles PDF/JPEG/PNG natively but converts EPS on the fly | Requires upstream tooling (Inkscape, ImageMagick) | [Overleaf graphics guide](https://www.overleaf.com/learn/latex/Inserting_Images) |
-| Multi-file project needs parallel chapter builds | **`make -jN` parallel** | Makefile defines per-chapter latexmk rules; `make -j4` compiles chapters concurrently | Only useful for independently compilable chapters; merge step needed | [TeX.SE](https://tex.stackexchange.com/q/8791) |
+| Unknown or repetitive local builds | `latexmk` | Tracks dependencies and reruns until refs settle | Not true AST-level incremental compilation | [CTAN latexmk](https://ctan.org/pkg/latexmk), [manual PDF](https://tug.ctan.org/support/latexmk/latexmk.pdf), [man page](https://www.mankier.com/1/latexmk) |
+| Watch-based rebuilds | `latexmk -pvc` | Rebuilds on file changes | Still reruns TeX when watched sources change | [latexmk man page](https://www.mankier.com/1/latexmk) |
+| Near-live preview | TeXpresso | Designed for live rendering and fast error feedback | Editor integration and project maturity matter | [TeXpresso repo](https://github.com/let-def/texpresso) |
+| Heavy TikZ | TikZ externalization | Reuses figure PDFs instead of re-typesetting each run | Needs shell escape and cache invalidation discipline | [PGF/TikZ external library](https://tikz.dev/library-external) |
+| Heavy PGFPlots | PGFPlots externalization | Reuses exported plots | Preamble/style changes may require cache reset | [PGFPlots externalization docs](https://tikz.dev/pgfplots/libs-external) |
+| Large thesis/book, one chapter changing | `\includeonly` | Compiles selected `\include` files while preserving aux scaffolding | Requires `\include`; omitted chapters are not rendered | [LaTeX splitting input](https://latexref.xyz/Splitting-the-input.html), [`\include` / `\includeonly`](https://latexref.xyz/_005cinclude-_0026-_005cincludeonly.html) |
+| Chapter/subdocument isolation | `subfiles` | Subfiles can compile alone or inside the main document | Requires project structure buy-in | [CTAN subfiles](https://ctan.org/pkg/subfiles), [subfiles repo](https://github.com/gsalzer/subfiles) |
+| Figure/snippet isolation | `standalone` | Compiles figures separately and includes PDFs later | Best when figures are natural separate units | [CTAN standalone](https://ctan.org/pkg/standalone), [standalone repo](https://github.com/MartinScharrer/standalone) |
+| Cleaner wrapper behavior | ClutTeX / `latexrun` | Better temp-output handling and wrapper ergonomics | Not guaranteed raw-engine speedup | [ClutTeX repo](https://github.com/minoki/cluttex), [latexrun repo](https://github.com/aclements/latexrun) |
+| CI cold starts / reproducibility | Tectonic + cache | Self-contained engine and cached bundles | Not a drop-in replacement for all TeX Live workflows | [Tectonic repo](https://github.com/tectonic-typesetting/tectonic), [guide](https://tectonic-typesetting.github.io/book/latest/getting-started/first-document.html), [setup action](https://github.com/marketplace/actions/setup-tectonic) |
+| Explicit task graph | `pytask-latex` | Makes LaTeX dependencies first-class in a workflow | Extra Python tooling; usually still shells out | [pytask-latex repo](https://github.com/pytask-dev/pytask-latex) |
+| Document-directed recipes | `arara` | Encodes build commands in the document | More orchestration than raw speed | [arara repo](https://github.com/islandoftex/arara) |
+| Package-heavy preamble | `mylatexformat` | Dumps static preamble state into `.fmt` | Regenerate after preamble changes; some packages/fonts resist dumping | [CTAN mylatexformat](https://ctan.org/pkg/mylatexformat), [TeX.SE](https://tex.stackexchange.com/q/39058) |
+| Writing phase, images not needed | draft mode | Skips image rendering and marks overfull boxes | Image boxes are blank; final build must disable draft | common best practice |
+| Intermediate passes do not need PDFs | engine `-draftmode` | Updates aux without writing PDF | Use only in controlled recipes; final pass must write PDF | [latexmk man page](https://www.mankier.com/1/latexmk) |
+| PDF compression costs CPU | lower compression | Avoids zlib/object compression during dev | Larger PDFs; re-enable for final | [TeX.SE](https://tex.stackexchange.com/q/51849) |
+| Slow image conversion | pre-convert images | Avoids on-the-fly EPS/SVG conversion | Adds source asset workflow | [Overleaf graphics guide](https://www.overleaf.com/learn/latex/Inserting_Images) |
+| Independent chapter builds | `make -jN` with isolated outputs | Runs true independent compile units concurrently | Requires separately compilable units and merge/sign-off path | [TeX.SE](https://tex.stackexchange.com/q/8791) |
 
-## Good default commands
+## Baseline commands
 
-### `latexmk` baseline
-
-Use one of these as the first optimization pass:
+pdfLaTeX:
 
 ```bash
 latexmk -pdf -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 -outdir=build main.tex
 ```
 
+XeLaTeX:
+
 ```bash
 latexmk -xelatex -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 -outdir=build main.tex
+```
+
+LuaLaTeX:
+
+```bash
+latexmk -lualatex -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 -outdir=build main.tex
 ```
 
 Watch mode:
@@ -61,7 +128,171 @@ Watch mode:
 latexmk -xelatex -pvc -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 -outdir=build main.tex
 ```
 
-### Tectonic
+Aux-only pass, when manually controlling final output:
+
+```bash
+pdflatex -draftmode -interaction=nonstopmode -halt-on-error -file-line-error main.tex
+pdflatex -interaction=nonstopmode -halt-on-error -file-line-error main.tex
+```
+
+## `.latexmkrc` recipes
+
+Default project-local `.latexmkrc`:
+
+```perl
+$pdf_mode = 1;  # 1=pdflatex, 4=lualatex, 5=xelatex
+
+$pdflatex = 'pdflatex -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 %O %S';
+$xelatex  = 'xelatex  -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 %O %S';
+$lualatex = 'lualatex -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 %O %S';
+
+$out_dir = 'build';
+$aux_dir = 'build/aux';
+
+$bibtex_use = 2;  # use biber when biblatex needs it
+$clean_ext = 'synctex.gz run.xml bbl bcf nav snm vrb fdb_latexmk fls';
+
+$preview_continuous_mode = 1;
+$pdf_previewer = 'open -a Preview %S';  # macOS
+```
+
+For TikZ externalization, make shell escape explicit:
+
+```perl
+$pdflatex = 'pdflatex -shell-escape -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 %O %S';
+$xelatex  = 'xelatex  -shell-escape -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 %O %S';
+$lualatex = 'lualatex -shell-escape -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 %O %S';
+```
+
+## TikZ / PGFPlots externalization
+
+Preamble:
+
+```latex
+\usepackage{tikz}
+\usetikzlibrary{external}
+\tikzexternalize[prefix=build/tikz/]
+```
+
+Build:
+
+```bash
+mkdir -p build/tikz
+latexmk -pdf -shell-escape -outdir=build main.tex
+```
+
+Use forced remake after style or macro changes:
+
+```latex
+\tikzset{external/force remake}
+```
+
+Then remove it after the cache is refreshed.
+
+## Preamble precompilation with `mylatexformat`
+
+Add a dump boundary before the document body:
+
+```latex
+% static package/font/macro setup above
+\endofdump
+
+\begin{document}
+```
+
+Generate the format:
+
+```bash
+pdftex -ini -jobname="main-preamble" "&pdflatex" mylatexformat.ltx main.tex
+```
+
+For XeLaTeX:
+
+```bash
+xetex -ini -jobname="main-preamble" "&xelatex" mylatexformat.ltx main.tex
+```
+
+Use it as the first line of `main.tex`:
+
+```latex
+%&main-preamble
+```
+
+Regenerate the `.fmt` after package, font, preamble macro, or class changes.
+If LuaLaTeX/OpenType font dumping fails or becomes fragile, prefer figure
+externalization or draft-mode tactics instead.
+
+## Large document tactics
+
+`\includeonly`:
+
+```latex
+\includeonly{chapters/introduction,chapters/methods}
+```
+
+Rules:
+
+- Use with `\include{...}`, not plain `\input{...}`.
+- Keep one full build without `\includeonly` before submission.
+- Rebuild all aux files after chapter splits, label moves, or bibliography
+  changes.
+
+`subfiles` main file:
+
+```latex
+\documentclass{book}
+\usepackage{subfiles}
+\begin{document}
+\subfile{chapters/introduction}
+\end{document}
+```
+
+`subfiles` chapter file:
+
+```latex
+\documentclass[../main.tex]{subfiles}
+\begin{document}
+Chapter text.
+\end{document}
+```
+
+Compile a chapter directly:
+
+```bash
+latexmk -pdf -outdir=build/chapters chapters/introduction.tex
+```
+
+## Draft and local-iteration speedups
+
+Class draft mode:
+
+```latex
+\documentclass[draft]{article}
+```
+
+Graphics draft mode only:
+
+```latex
+\usepackage[draft]{graphicx}
+```
+
+Development-only PDF compression bypass:
+
+```latex
+\pdfcompresslevel=0
+\pdfobjcompresslevel=0
+```
+
+For LuaLaTeX, use:
+
+```latex
+\pdfvariable compresslevel=0
+\pdfvariable objcompresslevel=0
+```
+
+Remove these before final output unless larger PDFs are acceptable.
+
+## Tectonic recipes
 
 Batch compile:
 
@@ -69,193 +300,37 @@ Batch compile:
 tectonic -X compile main.tex
 ```
 
-Watch mode:
+Watch:
 
 ```bash
 tectonic -X watch main.tex
 ```
 
-### Preamble precompilation (`mylatexformat`)
+Good fit:
 
-Generate the `.fmt` format file (one-time, re-run only when preamble changes):
+- CI where bundle caching matters.
+- Reproducible source-first papers.
+- Projects that do not rely on unusual TeX Live shell-escape workflows.
 
-```bash
-# For pdflatex
-pdftex -ini -jobname="mypreamble" "&pdflatex" mylatexformat.ltx main.tex
+Bad fit:
 
-# For xelatex
-xetex -ini -jobname="mypreamble" "&xelatex" mylatexformat.ltx main.tex
-```
+- Heavy custom shell-escape pipelines.
+- Workflows requiring exact TeX Live distribution behavior.
 
-Then add `%&mypreamble` as the **very first line** of `main.tex` to use the
-precompiled preamble. Alternatively, use `\endofdump` in the preamble to define
-which portion is "static" (precompiled) vs "dynamic" (re-processed every run).
-
-### Draft-mode compilation
-
-During writing, enable draft mode to skip image rendering:
-
-```latex
-\documentclass[draft]{article}
-```
-
-Or pass via command line without editing the `.tex` file:
-
-```bash
-latexmk -pdf -pdflatex="pdflatex %O '\PassOptionsToClass{draft}{article}\input{%S}'" main.tex
-```
-
-### PDF compression bypass (development only)
-
-Add early in preamble for faster dev builds, remove for final output:
-
-```latex
-\pdfcompresslevel=0
-\pdfobjcompresslevel=0
-```
-
-## `.latexmkrc` best practices
-
-A well-configured `.latexmkrc` in the project root improves both speed and
-tidiness. Example:
-
-```perl
-# Engine selection
-$pdflatex = 'pdflatex -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 %O %S';
-# $pdf_mode = 5;  # uncomment for xelatex
-# $pdf_mode = 4;  # uncomment for lualatex
-
-# Separate output and aux directories
-$out_dir  = 'build';
-$aux_dir  = 'build/aux';
-
-# Extra extensions to clean with `latexmk -c`
-$clean_ext = 'synctex.gz run.xml bbl nav snm vrb';
-
-# Biber for bibliography (if using biblatex)
-$bibtex_use = 2;
-
-# Preview-continuous settings
-$preview_continuous_mode = 1;
-$pdf_previewer = 'open -a Preview %S';  # macOS; adjust for Linux
-```
-
-## Selection heuristics
-
-Use these heuristics unless the repo already has a strong house style:
-
-- **Paper / report / thesis, ordinary workflow** → `latexmk`
-- **Figure-heavy scientific manuscript** → `latexmk` + externalization
-- **Large thesis / book** → `latexmk` + `\includeonly` or `subfiles`
-- **Live-preview-centric editing** → TeXpresso
-- **CI / reproducible automation** → Tectonic + cache
-- **Wrapper ergonomics / clean temp dirs matter** → ClutTeX or `latexrun`
-- **Package-heavy preamble, body iterating fast** → `mylatexformat` precompilation
-- **Writing-phase, images irrelevant** → draft mode + `\pdfcompresslevel=0`
-- **Multi-chapter book, chapters are independent** → `make -jN` parallel builds
-- **CI cold start / GitHub Actions** → `setup-texlive-action` + cache + minimal scheme
-
-## Parallelization rules
-
-### Good fits for multi-agent analysis or parallel compile lanes
-
-Use bounded lanes only when the boundary is explicit and one lane does not need to write another lane's aux state:
-
-- `\include`-based chapters that can be compiled independently for measurement or preview
-- `subfiles` / `standalone` repositories where subdocuments are already first-class compile units
-- TikZ / PGFPlots externalization where each figure becomes a cacheable unit
-- CI pipelines that intentionally shard chapter groups or subdocuments
-- read-only analysis lanes such as timing/log analysis, structure audit, and cache-strategy review
-
-### Bad fits for parallelization
-
-Do not push parallel compile just because the repo is large. Reject or down-rank it when the bottleneck is mostly:
-
-- package-heavy preamble loading
-- bibliography, index, glossary, or cross-reference convergence
-- a single monolithic document with shared aux churn
-- a watch loop where orchestration overhead is larger than the saved compile time
-- unclear output ownership for `build/`, `aux/`, cache directories, or generated figure files
-
-### Single-writer rule
-
-If multiple lanes are used, only one integrator should own the final recommendation and any shared continuity surface. Compile lanes should either:
-
-- stay read-only, or
-- write lane-local outputs only
-
-Never let multiple lanes concurrently write the same aux tree unless the repo already has explicit isolation per chapter / figure / shard.
-
-### Cache invalidation boundaries
-
-Before trusting any speedup, verify invalidation after:
-
-- **preamble change** → regenerate `.fmt` files and usually invalidate externalized figures that depend on changed macros/styles
-- **bibliography change** → rerun bibtex/biber flow and confirm ref convergence on a full serial build
-- **figure-source change** → rebuild only the affected externalized figure units, then confirm inclusion in the main document
-- **chapter split change** → re-check `\includeonly`, subfile glue, and CI shard boundaries
-- **CI environment change** → confirm cache keys invalidate when TeX packages / engine version / build recipe changes
-
-### Watch loop vs CI priority
-
-Treat local watch optimization and CI optimization as different problems:
-
-- for **local watch loops**, prefer lower-latency tactics such as `latexmk -pvc`, draft mode, externalization, and preamble precompilation
-- for **CI cold start**, prefer cacheability, reproducibility, and shard clarity such as Tectonic cache, minimal TeX Live installs, and explicit shard boundaries
-
-If the user asks for both, optimize the dominant pain first instead of mixing local and CI tactics into one unreadable stack.
-
-### Rust control-plane boundary
-
-Rust is a good fit for durable lane orchestration, batch summaries, and host-native alias entrypoints. It is **not** the place to hard-code LaTeX bottleneck diagnosis itself. Keep tactic choice in the skill layer and use Rust only to coordinate how analysis/compile lanes run and resume.
-
-## Stability and error recovery
-
-### Interaction modes
-
-Choose the mode that fits your workflow phase:
-
-| Mode | Flag | Behavior | Best for |
-|---|---|---|---|
-| `errorstopmode` | (default) | Stops on every error, waits for terminal input | Interactive debugging |
-| `nonstopmode` | `-interaction=nonstopmode` | Continues past errors; writes all to `.log` | latexmk / CI builds |
-| `batchmode` | `-interaction=batchmode` | Suppresses all terminal output except fatal errors | Fully automated scripts |
-| `scrollmode` | `-interaction=scrollmode` | Scrolls past errors, shows output | Semi-interactive debugging |
-
-### Error diagnosis workflow
-
-1. **Search for `!`** in the `.log` file — every TeX error starts with `!`
-2. **Use `-file-line-error`** to get `filename:line: error` format in the log
-3. **Binary search**: comment out half the document, recompile, narrow down
-4. **Minimal Working Example (MWE)**: isolate the broken snippet in a fresh file
-5. **Clean aux files**: run `latexmk -C` to remove all generated files and rebuild from scratch
-
-### Clean build discipline
-
-Stale auxiliary files (`.aux`, `.toc`, `.lof`, `.bbl`) can cause phantom errors.
-Adopt this discipline:
-
-- Run `latexmk -C` (full clean) after major structural changes
-- Run `latexmk -c` (light clean, keeps PDF) for routine resets
-- In CI, always start from a clean state
-
-## CI deep optimization
+## CI optimization
 
 ### GitHub Actions with TeX Live caching
 
 ```yaml
-# .github/workflows/latex.yml
 - uses: texlive-action/setup-texlive-action@v3
   with:
-    # Minimal scheme — install only what you need
     profile-path: .github/texlive.profile
     packages-path: .github/texlive.packages
-    # Caches TEXDIR automatically between runs
 ```
 
-Example `.github/texlive.profile` for minimal footprint:
+Minimal `.github/texlive.profile`:
 
-```
+```text
 selected_scheme scheme-minimal
 TEXDIR /tmp/texlive
 TEXMFLOCAL /tmp/texlive/texmf-local
@@ -265,15 +340,66 @@ option_doc 0
 option_src 0
 ```
 
-### Docker optimization
+Cache key should include:
 
-- Use Alpine-based TeX Live images for smaller size
-- Enable Docker layer caching: `docker buildx build --cache-from type=gha --cache-to type=gha,mode=max`
-- Pre-install only required packages in the Dockerfile
+- TeX Live year or image digest.
+- `.github/texlive.profile`.
+- `.github/texlive.packages`.
+- build script or `.latexmkrc`.
 
-### Reproducible PDF output
+### Tectonic cache
 
-For bit-reproducible builds (useful for checksums, archival):
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: ~/.cache/Tectonic
+    key: tectonic-${{ runner.os }}-${{ hashFiles('Tectonic.toml', 'main.tex', '**/*.bib') }}
+```
+
+### Docker
+
+Use a pinned image or pinned TeX Live install. Enable layer cache:
+
+```bash
+docker buildx build \
+  --cache-from type=gha \
+  --cache-to type=gha,mode=max \
+  -t latex-build .
+```
+
+Prefer installing the minimal package set once in the image over installing a
+full TeX Live distribution on every CI run.
+
+## Stability and error recovery
+
+Interaction modes:
+
+| Mode | Flag | Behavior | Best for |
+|---|---|---|---|
+| `errorstopmode` | default | Stops and waits for input | interactive debugging |
+| `nonstopmode` | `-interaction=nonstopmode` | Continues and logs errors | `latexmk` / CI |
+| `batchmode` | `-interaction=batchmode` | Minimal terminal output | mature automation |
+| `scrollmode` | `-interaction=scrollmode` | Scrolls past errors | semi-interactive debugging |
+
+Root-error scan:
+
+```bash
+rg -n "^!|^l\\.|Undefined control sequence|Emergency stop|Fatal error" build/*.log
+```
+
+Clean discipline:
+
+```bash
+latexmk -c main.tex   # light clean, keeps PDF
+latexmk -C main.tex   # full clean
+```
+
+Use `latexmk -C` after major structural changes, class changes, bibliography
+tool changes, or unexplained stale-reference behavior.
+
+## Reproducibility
+
+For bit-stable PDFs when supported by the engine:
 
 ```latex
 \pdfinfoomitdate=1
@@ -281,46 +407,111 @@ For bit-reproducible builds (useful for checksums, archival):
 \pdfsuppressptexinfo=-1
 ```
 
-Set `SOURCE_DATE_EPOCH` in CI to pin timestamps:
+In CI:
 
 ```bash
-export SOURCE_DATE_EPOCH=$(date -d '2024-01-01' +%s)
+export SOURCE_DATE_EPOCH=1704067200
 latexmk -pdf main.tex
 ```
 
-### Dependency pinning
-
-Use the `snapshot` package to record exact dependency versions:
+Dependency snapshot:
 
 ```latex
-\RequirePackage{snapshot}  % add before \documentclass
+\RequirePackage{snapshot}
 ```
 
-Generates a `.dep` file listing all package versions, which can be embedded via
-`\RequireVersions{...}` for future verification.
+This emits package-version data that helps reproduce a build environment later.
 
-## LuaLaTeX-specific notes
+## LuaLaTeX and XeLaTeX notes
 
-LuaLaTeX is typically 2–3× slower than pdfLaTeX due to OpenType font processing
-and Lua interpreter overhead. If using LuaLaTeX:
+LuaLaTeX and XeLaTeX can be slower than pdfLaTeX because font discovery,
+OpenType shaping, and Unicode stacks cost more per run.
 
-- Minimize loaded fonts and font features
-- Consider `babel` over `polyglossia` (measurable speedup in some locales)
-- Evaluate whether `microtype` is worth the overhead
-- TikZ externalization is even more impactful under LuaLaTeX
+Useful checks:
+
+- Avoid loading many font families during draft iterations.
+- Prefer figure externalization when TikZ is used with LuaLaTeX.
+- Measure `microtype`, `fontspec`, and language packages separately if the
+  preamble dominates.
+- Do not force pdfLaTeX if Unicode/OpenType output quality is a project
+  requirement; speed cannot trump correctness.
+
+## Parallelization rules
+
+Good parallel targets:
+
+- `\include` chapters compiled into isolated output directories.
+- `subfiles` chapter previews.
+- `standalone` figures.
+- TikZ/PGFPlots externalized figure PDFs.
+- CI shards with explicit source and output ownership.
+
+Bad parallel targets:
+
+- Shared bibliography/index/glossary convergence.
+- Shared `build/` or aux directories.
+- One monolithic root document.
+- Package-heavy preamble load.
+- Very short local watch loops.
+
+Safe Makefile shape:
+
+```make
+CHAPTERS := intro methods results
+
+.PHONY: chapters
+chapters: $(CHAPTERS:%=build/chapters/%.pdf)
+
+build/chapters/%.pdf: chapters/%.tex
+	mkdir -p build/chapters/$*
+	latexmk -pdf -outdir=build/chapters/$* $<
+```
+
+Run:
+
+```bash
+make -j4 chapters
+```
+
+Keep final integration serial:
+
+```bash
+latexmk -C main.tex
+latexmk -pdf -outdir=build main.tex
+```
+
+## Cache invalidation checklist
+
+| Change | Must invalidate or re-check |
+|---|---|
+| preamble/class/package/font change | `.fmt`, externalized figures using changed macros/styles |
+| bibliography file or style change | `.bbl`, `.bcf`, `run.xml`, full ref convergence |
+| figure source change | corresponding externalized/standalone output |
+| chapter split or label move | root aux files and `\includeonly` assumptions |
+| engine change | all aux/output/cache files |
+| CI package list change | TeX Live/Tectonic cache key |
+| `.latexmkrc` change | clean build and cache key |
 
 ## Validation checklist
 
 After any speed change:
 
-1. time a **clean build**
-2. time a **warm build**
-3. time the **edit → preview** loop
-4. verify references / bibliography still converge
-5. verify cache invalidation after:
-   - preamble change
-   - bibliography change
-   - figure-source change
-6. verify **error recovery**: compile a deliberately broken file and confirm sensible error output
-7. verify **clean build reproducibility**: `latexmk -C && latexmk` produces identical output
-8. for CI: verify **cache hit** on second run and **cold-start** timing
+1. Time a clean build.
+2. Time a warm build.
+3. Time the edit/preview loop.
+4. Confirm no unresolved reference/citation warnings remain.
+5. Confirm bibliography/index/glossary tools still run when needed.
+6. Confirm cache invalidation for the relevant change type.
+7. Confirm a deliberately broken file produces readable file-line errors.
+8. Confirm `latexmk -C && latexmk ...` still produces the final PDF.
+9. For CI, compare cold-start and second-run cache-hit timing.
+
+## Rust control-plane boundary
+
+Rust is useful for durable orchestration: host entrypoints, batch state,
+parallel lane fan-out/fan-in, summaries, and resume metadata.
+
+Rust should not hard-code the LaTeX tactic decision. The decision depends on
+TeX source structure, engine behavior, figures, bibliography, and user workflow.
+Keep that judgment in this skill layer and use Rust only to coordinate bounded
+analysis or compile lanes when the parallelism gate is satisfied.

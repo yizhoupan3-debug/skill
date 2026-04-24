@@ -43,6 +43,8 @@ Useful loss-control knobs:
   parsing so large tool transcripts do not grow memory without bound.
 - `AOB_UPSTREAM_CONNECT_TIMEOUT_SECS=10`: fails bad upstream endpoints quickly
   instead of tying up bridge workers.
+- `AOB_UPSTREAM_REQUEST_TIMEOUT_SECS=300`: caps non-stream upstream waits so a
+  wedged completion does not hold a Claude request forever.
 - `AOB_UPSTREAM_POOL_MAX_IDLE_PER_HOST=128`: keeps enough warm upstream
   connections for parallel Claude tool loops.
 - `AOB_STREAM_CHANNEL_DEPTH=64`: bounds queued SSE bytes per stream while still

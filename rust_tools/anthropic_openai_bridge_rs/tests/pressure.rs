@@ -47,6 +47,31 @@ fn start_mock_upstream(addr: SocketAddr, expected: usize, stream: bool) -> threa
     })
 }
 
+fn start_stalled_upstream(addr: SocketAddr) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        let listener = TcpListener::bind(addr).expect("bind stalled upstream");
+        let (mut stream, _) = listener.accept().expect("accept stalled upstream");
+        let mut reader = BufReader::new(stream.try_clone().expect("clone stream"));
+        let mut content_length = 0_usize;
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("read request header");
+            if line == "\r\n" || line == "\n" || line.is_empty() {
+                break;
+            }
+            if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                content_length = value.trim().parse().expect("content length");
+            }
+        }
+        let mut body = vec![0_u8; content_length];
+        reader.read_exact(&mut body).expect("read request body");
+        thread::sleep(Duration::from_secs(5));
+        let _ = stream.write_all(
+            b"HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: 2\r\n\r\n{}",
+        );
+    })
+}
+
 fn handle_mock_connection(mut stream: std::net::TcpStream, streaming: bool) {
     let mut reader = BufReader::new(stream.try_clone().expect("clone stream"));
     let mut header = String::new();
@@ -92,6 +117,10 @@ fn handle_mock_connection(mut stream: std::net::TcpStream, streaming: bool) {
 }
 
 fn start_bridge(upstream: SocketAddr, bridge: SocketAddr) -> Child {
+    start_bridge_with_args(upstream, bridge, &[])
+}
+
+fn start_bridge_with_args(upstream: SocketAddr, bridge: SocketAddr, extra_args: &[&str]) -> Child {
     let bin = env!("CARGO_BIN_EXE_anthropic_openai_bridge_rs");
     let mut child = Command::new(bin)
         .arg("--listen")
@@ -104,6 +133,7 @@ fn start_bridge(upstream: SocketAddr, bridge: SocketAddr) -> Child {
         .arg("gpt-5.5")
         .arg("--stream-channel-depth")
         .arg("8")
+        .args(extra_args)
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
@@ -204,4 +234,22 @@ fn pressure_stream_bridge_handles_parallel_requests() {
     child.kill().expect("kill bridge");
     let _ = child.wait();
     upstream_thread.join().expect("upstream thread");
+}
+
+#[test]
+fn non_stream_bridge_times_out_stalled_upstream() {
+    let upstream = free_addr();
+    let bridge = free_addr();
+    let upstream_thread = start_stalled_upstream(upstream);
+    let mut child =
+        start_bridge_with_args(upstream, bridge, &["--upstream-request-timeout-secs", "1"]);
+
+    let started = Instant::now();
+    let response = post_message(bridge, false);
+    assert!(started.elapsed() < Duration::from_secs(4));
+    assert!(response.starts_with("HTTP/1.1 502 Bad Gateway"));
+
+    child.kill().expect("kill bridge");
+    let _ = child.wait();
+    upstream_thread.join().expect("stalled upstream thread");
 }

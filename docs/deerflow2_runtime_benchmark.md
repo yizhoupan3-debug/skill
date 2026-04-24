@@ -78,7 +78,7 @@ Primary sources:
 
 ### DeerFlow pattern -> Codex target
 
-- harness/app split -> `framework_runtime` core vs future HTTP/CLI/channel adapters
+- harness/app split -> `router-rs` runtime core vs future HTTP/CLI/channel adapters
 - `RunManager` -> our background job state machine and future run kernel
 - `StreamBridge` -> future resumable trace/stream transport for long runs
 - unified store/checkpointer -> first land a narrow runtime checkpointer seam,
@@ -90,13 +90,15 @@ Primary sources:
 
 - only an in-memory producer/consumer stream bridge exists so far; there is no
   host-bound SSE/distributed bridge yet
-- the compaction/checkpoint backend family now exists as an abstraction, but
-  only the filesystem backend is concrete so far
+- the compaction/checkpoint backend family now exists as an abstraction;
+  filesystem remains the compatibility default and SQLite is the strongest
+  local backend for WAL, consistent append, compaction, and snapshot-delta
+  support
 - no real sandbox control plane yet
-- no Rust live in-process kernel yet; live execution is now Rust-first through
-  `router-rs`, while the old Python fallback survives only as a retired
-  explicit-request surface that returns rejection metadata
-- Python and Rust still duplicate some contract/compiler logic
+- no Rust live in-process kernel yet; live execution is Rust-first through
+  `router-rs`, and the old Python fallback request surface has been removed
+- remaining contract/compiler drift risk is between Rust surfaces and generated
+  host/skill/docs consumers, not between Python and Rust truth sources
 
 ## Immediate Next Wave
 
@@ -110,7 +112,7 @@ Priority order:
 2. keep the compatibility fallback retirement artifact as historical evidence,
    but do not reopen any request shim, settings/env exposure, or Python live
    path
-3. decide which middleware transforms stay as Python host callbacks vs move
+3. decide which host callbacks stay as edge-local adapter behavior vs move
    behind the execution-kernel seam
 4. keep extending resumable persistence and backend-family seams without
    re-opening the kernel boundary again
@@ -165,10 +167,9 @@ What this changes in practice:
 - the next runtime slice should extend that handoff seam beyond filesystem-only
   binding artifacts into stronger host/remote transport backends instead of
   redoing the same bridge in another local form
-- the next Rust slice should delete the remaining Python fallback and continue
-  collapsing residual Python-side prompt-preview/result shaping behind the
-  Rust-owned execution contract, but the current repo must not describe the
-  retired request shim as a runnable fallback path
+- the next Rust slice should keep tightening prompt-preview/result shaping
+  behind the Rust-owned execution contract, but the current repo must not
+  describe the retired request shim as a runnable fallback path
 
 ## Decision
 

@@ -1380,7 +1380,9 @@ dependencies = [
  "anyhow",
  "clap",
  "regex",
+ "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

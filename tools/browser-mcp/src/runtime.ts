@@ -82,6 +82,8 @@ const ROUTER_RS_TRACE_IO_AUTHORITY = 'rust-runtime-trace-io';
 const ROUTER_RS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'scripts', 'router-rs');
 const ROUTER_RS_RELEASE_BIN = path.join(ROUTER_RS_DIR, 'target', 'release', 'router-rs');
 const ROUTER_RS_DEBUG_BIN = path.join(ROUTER_RS_DIR, 'target', 'debug', 'router-rs');
+const DEFAULT_ROUTER_RS_STDIO_POOL_SIZE = 4;
+const MAX_ROUTER_RS_STDIO_POOL_SIZE = 16;
 
 const INTERACTIVE_SELECTOR = [
   'button',
@@ -130,6 +132,13 @@ interface RouterRsCommand {
   args: string[];
 }
 
+interface RouterRsPoolDiagnostics {
+  size: number;
+  inFlight: number;
+  nextClientIndex: number;
+  pendingPerClient: number[];
+}
+
 interface LoadedRuntimeAttachDescriptor {
   descriptor: RuntimeAttachDescriptor;
   inputArtifactKind: RuntimeAttachArtifactKind | null;
@@ -176,6 +185,7 @@ class RouterRsStdioClient {
   private process: ChildProcessWithoutNullStreams | null = null;
   private nextRequestId = 1;
   private queue: Promise<void> = Promise.resolve();
+  private pendingRequests = 0;
   private stdoutBuffer = '';
   private stderrBuffer = '';
   private pendingLine:
@@ -217,17 +227,26 @@ class RouterRsStdioClient {
       return response.payload as T;
     };
 
+    this.pendingRequests += 1;
     const result = this.queue.then(run, run);
     this.queue = result.then(
       () => undefined,
       () => undefined,
     );
-    return result;
+    try {
+      return await result;
+    } finally {
+      this.pendingRequests -= 1;
+    }
   }
 
   close(): void {
     this.process?.kill();
     this.process = null;
+  }
+
+  pendingCount(): number {
+    return this.pendingRequests;
   }
 
   private ensureProcess(): ChildProcessWithoutNullStreams {
@@ -327,7 +346,7 @@ class RouterRsStdioClientPool {
   }
 
   public request<T>(operation: string, payload: object): Promise<T> {
-    return this.acquireClient().request<T>(operation, payload);
+    return this.acquireClient(operation).request<T>(operation, payload);
   }
 
   public close(): void {
@@ -336,25 +355,69 @@ class RouterRsStdioClientPool {
     }
   }
 
-  private acquireClient(): RouterRsStdioClient {
+  public diagnostics(): RouterRsPoolDiagnostics {
+    const pendingPerClient = this.clients.map((client) => client.pendingCount());
+    return {
+      size: this.clients.length,
+      inFlight: pendingPerClient.reduce((total, count) => total + count, 0),
+      nextClientIndex: this.nextClientIndex,
+      pendingPerClient,
+    };
+  }
+
+  private acquireClient(operation: string): RouterRsStdioClient {
+    if (isRouterRsTraceReadOperation(operation)) {
+      return this.acquireLeastLoadedClient();
+    }
+    return this.acquireRoundRobinClient();
+  }
+
+  private acquireRoundRobinClient(): RouterRsStdioClient {
     const client = this.clients[this.nextClientIndex]!;
     this.nextClientIndex = (this.nextClientIndex + 1) % this.clients.length;
     return client;
   }
+
+  private acquireLeastLoadedClient(): RouterRsStdioClient {
+    let bestIndex = this.nextClientIndex;
+    let bestPending = Number.POSITIVE_INFINITY;
+    for (let offset = 0; offset < this.clients.length; offset += 1) {
+      const index = (this.nextClientIndex + offset) % this.clients.length;
+      const pending = this.clients[index]!.pendingCount();
+      if (pending < bestPending) {
+        bestIndex = index;
+        bestPending = pending;
+        if (pending === 0) {
+          break;
+        }
+      }
+    }
+    this.nextClientIndex = (bestIndex + 1) % this.clients.length;
+    return this.clients[bestIndex]!;
+  }
+}
+
+function isRouterRsTraceReadOperation(operation: string): boolean {
+  return operation === 'trace_stream_replay' || operation === 'trace_stream_inspect';
 }
 
 function resolveRouterRsPoolSize(): number {
   const raw =
+    process.env.ROUTER_RS_STDIO_POOL_SIZE ??
     process.env.BROWSER_MCP_ROUTER_STDIO_POOL_SIZE ??
     process.env.CODEX_ROUTER_STDIO_POOL_SIZE;
   if (!raw) {
-    return 4;
+    return DEFAULT_ROUTER_RS_STDIO_POOL_SIZE;
   }
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    return 4;
+    return DEFAULT_ROUTER_RS_STDIO_POOL_SIZE;
   }
-  return parsed;
+  return Math.min(parsed, MAX_ROUTER_RS_STDIO_POOL_SIZE);
+}
+
+function getRouterRsPoolDiagnostics(): RouterRsPoolDiagnostics | null {
+  return routerRsStdioClientPool?.diagnostics() ?? null;
 }
 
 function closeRouterRsProcessState(): void {
@@ -964,6 +1027,7 @@ export class BrowserRuntime {
       networkEventBufferSize,
       screenshotCount,
       runtimeVersion: RUNTIME_VERSION,
+      routerRsStdioPool: getRouterRsPoolDiagnostics(),
       attachedRuntime: await this.getAttachedRuntimeDiagnostics(),
     };
   }

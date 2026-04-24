@@ -2,12 +2,7 @@
 
 ## Quick Start
 
-```python
-from publication_rcparams import apply_publication_style
-
-# Chinese mode — auto-detects best available CJK font
-apply_publication_style(locale="zh")
-```
+Set `matplotlib` font parameters directly in the figure script.
 
 This automatically:
 1. Scans system fonts for a usable CJK typeface
@@ -95,14 +90,13 @@ ax.set_xlabel("Range: -3 to 3")
 
 **Cause**: Many CJK fonts lack glyphs for common mathematical and scientific symbols.
 
-**Fix**: `publication_rcparams` can automatically substitute these symbols with ASCII equivalents or suitable Unicode alternatives that are more widely supported.
+**Fix**: Substitute these symbols with ASCII equivalents or suitable Unicode alternatives that are more widely supported.
 
 ```python
     # Bad — uses Unicode characters missing in some CJK fonts
     ax.set_xlabel("范围: −3 to 3, 误差 ±0.1, 极限 ∞")
     
-    # Good — publication_rcparams.py handles these automatically via:
-    # sanitize_cjk_text() or patch_figure_cjk()
+    # Good: use ASCII-safe labels or a project-local text sanitizer
     
     # Supported auto-substitutions:
     # − (minus), ± (+/-), × (x), ÷ (/), ∞ (inf), ≈ (~), ≤ (<=), ≥ (>=), Δ (Delta), μ (u)

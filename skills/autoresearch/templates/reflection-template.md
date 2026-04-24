@@ -12,9 +12,17 @@ _Observed pattern, not just the metric._
 
 _Mechanistic explanation or best current guess._
 
+## Alternative Explanations
+
+_What else could explain the observed pattern?_
+
 ## Rules In / Rules Out
 
 _What did this result actually eliminate or support?_
+
+## Baseline / Ablation Read
+
+_Did the result beat the right simple baseline or only tune around it?_
 
 ## Direction
 

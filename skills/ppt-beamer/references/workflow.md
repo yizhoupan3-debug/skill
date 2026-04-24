@@ -151,7 +151,7 @@ Compile first, then render PNG thumbnails if page-by-page inspection is easier t
 If the deck has many pages, generate a lightweight review gallery:
 
 ```bash
-python3 ./scripts/build_review_html.py build/slides-pages
+find build/slides-pages -name '*.png' | sort
 ```
 
 Check for:

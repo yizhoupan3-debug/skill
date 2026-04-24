@@ -1,8 +1,12 @@
 ---
 name: latex-compile-acceleration
 description: |
-  Speed up LaTeX compile, watch, and preview workflows for papers, books, theses, and Beamer.
-  Use when the user asks about LaTeX 编译太慢, preamble 预编译, draft 加速, 编译稳定性, CI 缓存优化, or latexmk/Tectonic/live preview/TikZ externalization/\includeonly/mylatexformat/.latexmkrc. At 每轮对话开始 / first-turn / conversation start, check this skill for compile speed or stability; prefer it over $ppt-beamer or $build-tooling.
+  Speed up LaTeX build, watch, preview, and CI workflows with measurement-first tactics:
+  latexmk, Tectonic, TeXpresso, TikZ/PGFPlots externalization, \includeonly/subfiles,
+  mylatexformat, draft mode, .latexmkrc, caching, and stable error recovery. Use for
+  LaTeX 编译太慢, watch 太慢, preamble 预编译, TikZ 很慢, CI 缓存优化, or LaTeX build stability.
+  At 每轮对话开始 / first-turn / conversation start, prefer this skill over ppt-beamer
+  or build-tooling when the main problem is compile speed.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
@@ -10,18 +14,24 @@ routing_priority: P1
 session_start: preferred
 short_description: Speed up LaTeX compile and preview workflows
 trigger_hints:
-  - preamble 预编译
-  - draft 加速
+  - LaTeX 编译太慢
+  - watch 太慢
+  - preview loop
   - 编译稳定性
   - CI 缓存优化
   - latexmk
   - Tectonic
-  - live preview
+  - TeXpresso
   - TikZ externalization
+  - PGFPlots externalization
   - \includeonly
+  - subfiles
+  - standalone
   - mylatexformat
+  - preamble 预编译
+  - .latexmkrc
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
   platforms: [codex]
   tags:
     - latex
@@ -53,142 +63,100 @@ risk: low
 source: local
 ---
 
-- **Dual-Dimension Audit (Pre: Tex-Structure/Logic, Post: PDF-Fidelity/Build-Speed Results)** → `$execution-audit` [Overlay]
-
 # latex-compile-acceleration
 
-This skill owns **generic LaTeX compile-stack optimization** across article,
-report, book, thesis, paper, and Beamer repositories. Check it early at
-conversation start / first turn when the main ask is **slow compile / rebuild /
-watch / preview loops**, LaTeX engine choice, figure externalization,
-**preamble precompilation**, **draft-mode acceleration**, **compilation stability
-/ error recovery**, or **CI caching strategies**.
+Owns LaTeX compile-stack speed and stability for papers, theses, books,
+reports, and Beamer when the pain is build latency rather than slide/content
+authoring.
 
-## Priority routing rule
-
-If the user's request is mainly about:
-
-- compile latency
-- watch / preview loop speed
-- LaTeX engine or build-driver choice
-- figure externalization for faster builds
-- preamble precompilation (`mylatexformat`, `.fmt`)
-- draft mode for faster iterative editing
-- compilation stability, error recovery, or interaction modes
-- CI build optimization (caching, Docker, GitHub Actions)
-- `.latexmkrc` configuration
-
-then check this skill **before** domain owners such as `$ppt-beamer` and before
-generic tooling owners such as `$build-tooling`.
-
-This skill owns the **compile stack, speed path, and build stability**. Domain
-skills still own authoring, design, content, and rendered-output review once
-compile concerns are settled.
+Default posture: **measure first, choose the narrowest speed lever, keep one
+serial full-build path for sign-off**.
 
 ## When to use
 
-- Local LaTeX edit → compile → preview loops are too slow
-- CI LaTeX builds are slow or repeatedly cold-start dependencies
-- The user wants to choose between `latexmk`, Tectonic, TeXpresso, or adjacent wrappers
-- The document is large and needs partial compile strategies such as `\includeonly`
-- Heavy TikZ / PGFPlots figures dominate build time and should be externalized
-- The preamble loads many packages and the user wants precompilation (`mylatexformat`)
-- The user is in a writing phase and wants draft-mode acceleration
-- The user wants to reduce PDF compression overhead during development
-- Compilation keeps failing or producing stale results (stability / error recovery)
-- The user wants to optimize GitHub Actions / Docker CI for LaTeX
-- The user wants guidance on `.latexmkrc` best practices
-- The user wants reproducible PDF output or dependency pinning
-- Best for requests like:
-  - "LaTeX 编译太慢了，怎么提速"
-  - "给我一个快速编译方案，不只是 beamer"
-  - "latexmk / Tectonic / TeXpresso 该怎么选"
-  - "TikZ 图太重，怎么别每次都重编"
-  - "大论文只改一章，怎么局部编译"
-  - "CI 编译 LaTeX 太慢，怎么缓存"
-  - "preamble 太重了，能不能预编译"
-  - "写东西的时候不需要看图，怎么跳过"
-  - "编译老是出错，怎么稳定下来"
-  - ".latexmkrc 怎么配最优"
-  - "GitHub Actions 编译 LaTeX 怎么优化"
+- LaTeX clean, warm, or watch builds are slow.
+- The user asks about `latexmk`, Tectonic, TeXpresso, `.latexmkrc`, or engine choice.
+- Heavy TikZ/PGFPlots figures, image conversion, bibliography passes, or preamble
+  loading dominate compile time.
+- A large thesis/book needs `\includeonly`, `subfiles`, `standalone`, or chapter
+  preview strategy.
+- The user wants `mylatexformat`, draft mode, lower PDF compression, or other
+  local iteration speedups.
+- CI LaTeX builds need package caching, reproducible installs, Docker tuning, or
+  build sharding.
+- Compilation is flaky because of stale aux files, interaction modes, or rerun
+  churn, and the root error is already visible enough to optimize recovery.
 
 ## Do not use
 
-- The main task is authoring or revising a Beamer deck, not optimizing its compile stack → use `$ppt-beamer`
-- The main task is academic paper writing / prose polish → use `$paper-writing`
-- The build is failing and root cause is still unknown → use `$systematic-debugging` first
-- The task is generic JS / TS / Python / package-manager build tooling → use `$build-tooling`
-- The primary need is rendered PDF inspection or layout QA → use `$pdf` or `$visual-review`
+- Main task is Beamer content/layout/design authoring, not build speed: use
+  `$ppt-beamer`.
+- Main task is rendered PDF inspection or visual QA: use `$pdf` or
+  `$visual-review`.
+- Build is failing and the root cause is unknown: use `$systematic-debugging`
+  first, then return here for speed/stability.
+- Task is generic JS/TS/Python/Rust build tooling: use `$build-tooling`.
+- User asks to rewrite TeX compilation itself in Rust: route to `$rust-pro` only
+  after confirming this is a new tool project, not normal LaTeX acceleration.
 
-## Minimal workflow
+## Execution Contract
 
-1. Measure first: separate **clean build**, **warm build**, and **edit → preview / watch** timings before proposing changes.
-2. Classify the main bottleneck: preamble/package load, bibliography / cross-reference convergence, TikZ / PGFPlots, chapter structure, CI cold start, or error-recovery churn.
-3. Choose the narrowest lever that matches that bottleneck: `latexmk`, `\includeonly`, externalization, preamble precompilation, draft mode, TeXpresso, Tectonic cache, or CI shard/cache work.
-4. Open the parallelism gate only when compile units are genuinely independent.
-5. Keep one full-build fallback path for sign-off.
-6. Verify clean/warm/watch timings plus references, bibliography, cache invalidation, and error recovery behavior.
+1. Identify the target workflow: local edit loop, full release build, CI build,
+   or error-recovery workflow.
+2. Measure or request timings for clean build, warm build, and watch/edit loop
+   unless the user only wants conceptual advice.
+3. Classify the bottleneck: preamble, figures, bibliography/refs, chapter
+   structure, image conversion, CI cold start, engine choice, or aux churn.
+4. Pick the smallest matching lever from the playbook below.
+5. Preserve a serial full build as the final correctness check.
+6. Verify timing, ref/bib convergence, cache invalidation, and error output.
 
-## Parallelism gate
+## Default Playbook
 
-Recommend multi-agent analysis or parallel compile lanes only when the repo has a clear boundary such as:
+| Bottleneck | First move | Next move |
+|---|---|---|
+| Unknown local slowness | `latexmk` baseline with `-file-line-error` and isolated `build/` output | inspect `.log`, `.fls`, and warm vs clean delta |
+| Slow edit/watch loop | `latexmk -pvc`, draft mode, lower PDF compression | TeXpresso if near-live preview matters |
+| Heavy TikZ/PGFPlots | externalize figures | isolate figures with `standalone` |
+| Package-heavy preamble | `mylatexformat` | split static vs dynamic preamble with `\endofdump` |
+| Large thesis/book | `\includeonly` or `subfiles` | chapter-local preview targets |
+| Bibliography/refs dominate | keep serial convergence | reduce unnecessary reruns, clean stale aux |
+| CI cold starts | cache TeX Live/Tectonic bundle | minimal package profile or pinned Docker image |
+| Output chaos/stale files | `.latexmkrc` with `out_dir`/`aux_dir` | `latexmk -c`/`-C` discipline |
 
-- independent `\include` chapters
-- `subfiles` / `standalone` subdocuments
-- externalized figure units
-- CI shards with explicit document splits
-- read-only analysis lanes that do not co-edit shared continuity or aux state
+## Parallelism Gate
 
-Do **not** recommend parallelism as the default answer when the main bottleneck is:
+Only use parallel compile lanes when compile units are explicit and outputs do
+not fight over the same aux tree:
 
-- package-heavy preamble load
-- bibliography / index / cross-reference convergence
-- shared aux output with unclear write ownership
-- a single small document where orchestration overhead dominates
+- Good: independent `\include` chapters, `subfiles`, `standalone` figures,
+  TikZ externalized outputs, or CI shards with isolated output directories.
+- Bad: one monolithic document, shared bibliography/ref convergence,
+  package-heavy preamble load, unclear `build/` ownership, or a short watch loop
+  where orchestration costs more than recompilation.
+- Single-writer rule: one integrator owns shared `.aux`, `.bbl`, `.toc`, output
+  directories, and final PDF sign-off.
 
-## Default lane model
+## Rust Boundary
 
-When the task is large enough for orchestration, use a bounded multi-lane split:
+This skill is **not fully Rust** and should not be described that way.
 
-- **lane A — measurement**: collect build timings, log hotspots, and bottleneck attribution
-- **lane B — structure audit**: inspect `\include`, `subfiles`, `standalone`, and figure externalization boundaries
-- **lane C — engine/cache strategy**: evaluate `latexmk`, Tectonic, preamble precompilation, draft mode, and CI cache/shard options
-- **lane D — verification plan**: define clean/warm/watch validation, invalidation checks, and rollback/full-build fallback
+Rust owns host entrypoints, alias projection, durable lane orchestration, and
+resume state. LaTeX diagnosis and tactic choice stay in this skill and its
+reference docs. Do not present Rustification as the default fix for ordinary
+LaTeX slowness.
 
-Keep final recommendation synthesis with one integrator. Parallel lanes may emit lane-local findings, but they should not concurrently write shared continuity or shared TeX aux outputs.
+## Output Defaults
 
-## Rust control-plane fit
+- For advice: give the ranked diagnosis, exact command/config snippet, expected
+  speed effect, caveats, and verification command.
+- For repo edits: modify only build config/scripts needed for the chosen lever,
+  keep rollback simple, and avoid touching document content unless required.
+- For CI: include cache keys, invalidation conditions, and cold/warm timing
+  checks.
 
-Use Rust-native control-plane components only for orchestration concerns such as:
+## Reference Map
 
-- durable background batches
-- lane fan-out / fan-in
-- group summaries
-- host alias projection
-- resumable execution state
-
-Keep LaTeX optimization judgment in the skill layer. Rust should orchestrate **how** work is scheduled and resumed, not hard-code **which** TeX tactic is correct.
-
-## Hard constraints
-
-- Never recommend blind parallel compilation before measuring bottlenecks.
-- Never allow multiple lanes to write the same aux/output state unless ownership is explicit.
-- Never present Rust-ification as the default fix for ordinary local compile slowness.
-- Always keep a serial full-build path for final verification.
-
-## Framework fit
-
-Default Detect → Plan → Execute → Verify mapping:
-
-- **findings**: current bottlenecks such as slow watch loops, heavy TikZ, cold CI, package-heavy preamble, bibliography/ref convergence, or recurring compile errors
-- **execution items**: chosen interventions such as `latexmk`, externalization, partial compile, preamble precompilation, draft mode, CI caching, bounded lane splits, or stability fixes
-- **verification**: clean/warm/watch timing checks, convergence of refs/bib, cache invalidation, error recovery, CI cold/warm timing checks, and confirmation that any proposed parallel lane split respects single-writer boundaries
-
-## Resource Guide
-
-- Read [references/techniques.md](./references/techniques.md) for the sourced tool / technique matrix, concrete command patterns, `.latexmkrc` best practices, stability strategies, and CI optimization recipes.
-- **Superior Quality Audit**: For large-scale production LaTeX build systems, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
-
-## Trigger examples
-- "强制进行 LaTeX 构建深度审计 / 检查编译速度与 PDF 渲染结果。"
-- "Use $execution-audit to audit this build pipeline for speed-fidelity idealism."
+Read [references/techniques.md](./references/techniques.md) for command recipes,
+`.latexmkrc`, externalization, preamble precompilation, CI caching, stability
+checks, and validation details.

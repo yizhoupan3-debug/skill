@@ -41,27 +41,20 @@ const GENERATED_PATHS: [&str; 3] = [
 const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
     "cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root \"$PWD\"";
-const HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES: [&str; 6] = [
+const HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES: [&str; 5] = [
     ".claude",
-    ".claude/agents",
     ".claude/commands",
     ".claude/hooks",
     ".gemini",
     ".codex",
 ];
-const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 13] = [
+const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 7] = [
     "AGENT.md",
     "AGENTS.md",
     "CLAUDE.md",
     "GEMINI.md",
     CODEX_HOOK_README_PATH,
-    ".claude/agents/README.md",
-    ".claude/commands/autopilot.md",
-    ".claude/commands/background_batch.md",
-    ".claude/commands/deepinterview.md",
-    ".claude/commands/latex-compile-acceleration.md",
     ".claude/commands/refresh.md",
-    ".claude/commands/team.md",
     ".claude/hooks/README.md",
 ];
 const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 3] = [
@@ -87,19 +80,28 @@ const RETIRED_HOST_ENTRYPOINT_PATHS: [&str; 16] = [
     ".claude/hooks/post_tool_use_audit.sh",
     ".claude/hooks/pre_tool_use.sh",
 ];
-const MORE_RETIRED_HOST_ENTRYPOINT_PATHS: [&str; 3] = [
+const MORE_RETIRED_HOST_ENTRYPOINT_PATHS: [&str; 13] = [
+    ".claude/agents/README.md",
+    ".claude/agents/claude-host-maintainer.md",
+    ".claude/agents/framework-router.md",
+    ".claude/agents/skill-maintainer.md",
+    ".claude/agents/state-artifact-keeper.md",
+    ".claude/commands/autopilot.md",
+    ".claude/commands/background_batch.md",
+    ".claude/commands/deepinterview.md",
+    ".claude/commands/latex-compile-acceleration.md",
+    ".claude/commands/team.md",
     ".claude/hooks/session_end.sh",
     ".claude/hooks/config_change.sh",
     ".claude/hooks/stop_failure.sh",
 ];
-const CLAUDE_PRE_TOOL_USE_RULES: [&str; 13] = [
+const CLAUDE_PRE_TOOL_USE_RULES: [&str; 12] = [
     "/AGENT.md",
     "/AGENTS.md",
     "/CLAUDE.md",
     "/GEMINI.md",
     "/.gemini/settings.json",
     "/.claude/settings.json",
-    "/.claude/agents/README.md",
     "/.claude/hooks/README.md",
     "/.claude/hooks/*.sh",
     "/.claude/commands/**",
@@ -107,14 +109,13 @@ const CLAUDE_PRE_TOOL_USE_RULES: [&str; 13] = [
     "/.codex/host_entrypoints_sync_manifest.json",
     "/.codex/memory/CLAUDE_MEMORY.md",
 ];
-const CLAUDE_PRE_TOOL_USE_BASH_RULES: [&str; 12] = [
+const CLAUDE_PRE_TOOL_USE_BASH_RULES: [&str; 11] = [
     "*AGENT.md*",
     "*AGENTS.md*",
     "*CLAUDE.md*",
     "*GEMINI.md*",
     "*.gemini/settings.json*",
     "*.claude/settings.json*",
-    "*.claude/agents/README.md*",
     "*.claude/hooks/*",
     "*.claude/commands/*",
     "*.codex/hooks.json*",
@@ -127,29 +128,25 @@ const CLAUDE_QUALITY_PRE_TOOL_USE_RULES: [&str; 4] = [
     "/.claude/hooks/**",
     "/tools/browser-mcp/src/**",
 ];
-const CLAUDE_STOP_FAILURE_MATCHER: &str =
-    "invalid_request|server_error|max_output_tokens|rate_limit|authentication_failed|billing_error|unknown";
-const PROTECTED_GENERATED_PATHS: [&str; 10] = [
+const PROTECTED_GENERATED_PATHS: [&str; 9] = [
     "AGENT.md",
     "AGENTS.md",
     "CLAUDE.md",
     "GEMINI.md",
     ".gemini/settings.json",
     ".claude/settings.json",
-    ".claude/agents/README.md",
     ".codex/hooks.json",
     ".codex/host_entrypoints_sync_manifest.json",
     ".codex/memory/CLAUDE_MEMORY.md",
 ];
 const PROTECTED_GENERATED_PREFIXES: [&str; 2] = [".claude/hooks/", ".claude/commands/"];
-const PROTECTED_BASH_PATH_HINTS: [&str; 12] = [
+const PROTECTED_BASH_PATH_HINTS: [&str; 11] = [
     "AGENT.md",
     "AGENTS.md",
     "CLAUDE.md",
     "GEMINI.md",
     ".gemini/settings.json",
     ".claude/settings.json",
-    ".claude/agents/README.md",
     ".codex/hooks.json",
     ".claude/hooks/",
     ".claude/commands/",
@@ -337,9 +334,6 @@ const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 18] = [
 
 pub fn build_claude_hook_manifest() -> Value {
     let pre_tool_command = build_claude_host_hook_command("pre-tool-use");
-    let quality_command = build_claude_host_hook_command("pre-tool-use-quality");
-    let post_tool_command = build_claude_host_hook_command("post-tool-audit");
-    let post_tool_failure_command = build_claude_host_hook_command("post-tool-failure-audit");
 
     let pre_tool_hooks = build_tool_path_hooks(&CLAUDE_PRE_TOOL_USE_RULES, &pre_tool_command, None);
     let pre_tool_bash_hooks = CLAUDE_PRE_TOOL_USE_BASH_RULES
@@ -352,18 +346,6 @@ pub fn build_claude_hook_manifest() -> Value {
             })
         })
         .collect::<Vec<_>>();
-    let quality_pre_tool_hooks =
-        build_tool_path_hooks(&CLAUDE_QUALITY_PRE_TOOL_USE_RULES, &quality_command, None);
-    let post_tool_hooks = build_tool_path_hooks(
-        &CLAUDE_QUALITY_PRE_TOOL_USE_RULES,
-        &post_tool_command,
-        Some(json!({"async": true, "timeout": 8})),
-    );
-    let post_tool_failure_hooks = build_tool_path_hooks(
-        &CLAUDE_PRE_TOOL_USE_RULES,
-        &post_tool_failure_command,
-        Some(json!({"timeout": 8})),
-    );
 
     json!({
         "schema_version": "router-rs-claude-hook-manifest-v1",
@@ -383,42 +365,6 @@ pub fn build_claude_hook_manifest() -> Value {
                 {
                     "matcher": "Bash",
                     "hooks": pre_tool_bash_hooks,
-                },
-                {
-                    "matcher": "Edit|MultiEdit|Write",
-                    "hooks": quality_pre_tool_hooks,
-                }
-            ],
-            "PostToolUse": [
-                {
-                    "matcher": "Edit|MultiEdit|Write",
-                    "hooks": post_tool_hooks,
-                }
-            ],
-            "PostToolUseFailure": [
-                {
-                    "matcher": "Edit|MultiEdit|Write",
-                    "hooks": post_tool_failure_hooks,
-                }
-            ],
-            "UserPromptSubmit": [
-                {
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": build_claude_host_hook_command("user-prompt-submit"),
-                        }
-                    ]
-                }
-            ],
-            "SessionEnd": [
-                {
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": build_claude_host_hook_command("session-end"),
-                        }
-                    ]
                 }
             ],
             "ConfigChange": [
@@ -428,17 +374,6 @@ pub fn build_claude_hook_manifest() -> Value {
                         {
                             "type": "command",
                             "command": build_claude_host_hook_command("config-change"),
-                        }
-                    ]
-                }
-            ],
-            "StopFailure": [
-                {
-                    "matcher": CLAUDE_STOP_FAILURE_MATCHER,
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": build_claude_host_hook_command("stop-failure"),
                         }
                     ]
                 }
@@ -469,17 +404,8 @@ pub fn build_codex_hook_manifest() -> Value {
             "PreToolUse": [
                 build_codex_command_hook("pre-tool-use", "Bash"),
             ],
-            "SessionStart": [
-                build_codex_command_hook("session-start", "startup|resume"),
-            ],
             "PermissionRequest": [
                 build_codex_command_hook("permission-request", "Bash"),
-            ],
-            "PostToolUse": [
-                build_codex_command_hook("post-tool-use", "Bash"),
-            ],
-            "UserPromptSubmit": [
-                build_codex_unmatched_command_hook("user-prompt-submit"),
             ],
         }
     })
@@ -599,34 +525,10 @@ fn build_host_entrypoint_files(repo_root: &Path) -> Result<BTreeMap<String, Vec<
         "GEMINI.md".to_string(),
         build_root_gemini_proxy().into_bytes(),
     );
-    files.insert(
-        ".claude/agents/README.md".to_string(),
-        build_claude_agents_readme().into_bytes(),
-    );
     let commands = build_claude_commands();
     files.insert(
         ".claude/commands/refresh.md".to_string(),
         commands.refresh.into_bytes(),
-    );
-    files.insert(
-        ".claude/commands/background_batch.md".to_string(),
-        commands.background_batch.into_bytes(),
-    );
-    files.insert(
-        ".claude/commands/autopilot.md".to_string(),
-        commands.autopilot.into_bytes(),
-    );
-    files.insert(
-        ".claude/commands/deepinterview.md".to_string(),
-        commands.deepinterview.into_bytes(),
-    );
-    files.insert(
-        ".claude/commands/team.md".to_string(),
-        commands.team.into_bytes(),
-    );
-    files.insert(
-        ".claude/commands/latex-compile-acceleration.md".to_string(),
-        commands.latex_compile_acceleration.into_bytes(),
     );
     files.insert(
         ".claude/hooks/README.md".to_string(),
@@ -913,7 +815,6 @@ pub fn build_claude_hook_projection() -> Value {
         "root_agents_proxy": build_root_agents_proxy(),
         "root_claude_proxy": build_root_claude_proxy(),
         "root_gemini_proxy": build_root_gemini_proxy(),
-        "claude_agents_readme": build_claude_agents_readme(),
         "claude_commands": build_claude_commands_projection(),
         "hooks_readme": build_claude_hooks_readme(),
         "codex_hooks_readme": build_codex_hooks_readme(),
@@ -943,7 +844,8 @@ Generated-first maintenance rule:\n\n\
 - Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then regenerate via `{HOST_ENTRYPOINT_SYNC_HINT}`.\n\
 - Host entrypoint sync runs directly through `router-rs`; do not reintroduce a Python wrapper in front of it.\n\
 - Treat those files as materialized outputs, not hand-authored truth.\n\
-- `.claude/agents/*.md` stays manually maintained unless a file says otherwise.\n\
+- Long-term Claude entrypoint maintenance map: `docs/claude_entrypoint_maintenance.md`.\n\
+- Project `.claude/agents/*.md` subagents are retired here; keep reusable behavior in `skills/` and shared policy in `AGENT.md`.\n\
 - Event-level lifecycle decisions live in `.claude/hooks/README.md`.\n"
     )
 }
@@ -952,61 +854,13 @@ fn build_root_gemini_proxy() -> String {
     "# Gemini CLI Entry Proxy\n\nThis file exists because Gemini CLI discovers `GEMINI.md`.\n\n- Shared framework policy source of truth: [AGENT.md](AGENT.md)\n- Gemini local settings root: [.gemini/settings.json](.gemini/settings.json)\n\nGemini-specific config belongs in `.gemini/`, but the shared routing, memory,\nand artifact rules still come from `AGENT.md`.\n".to_string()
 }
 
-fn build_claude_agents_readme() -> String {
-    concat!(
-        "# Claude Agents Directory\n\n",
-        "These project-scoped Claude Code subagents help Claude use this repository's\n",
-        "shared routing, execution, and host-projection system without duplicating it.\n",
-        "The policy source of truth is still `../../AGENT.md`.\n\n",
-        "Available agents:\n\n",
-        "- `framework-router.md`: read-only router for choosing the right repo skill,\n",
-        "  gate, and next files to inspect\n",
-        "- `skill-maintainer.md`: bounded editor for `skills/**` and nearby framework\n",
-        "  surfaces when the task already has a clear write scope\n",
-        "- `state-artifact-keeper.md`: bounded maintainer for `.supervisor_state.json`\n",
-        "  and the shared task-artifact contract\n",
-        "- `claude-host-maintainer.md`: bounded maintainer for `.claude/**`,\n",
-        "  `CLAUDE.md`, and Claude-host compatibility docs without forking shared policy\n\n",
-        "Design rules for these subagents:\n\n",
-        "- They must read `../../AGENT.md` first and treat it as authoritative.\n",
-        "- They should stay thin: route into existing repo skills and artifacts instead\n",
-        "  of restating the framework.\n",
-        "- They should keep outputs concise and integration-friendly for the parent\n",
-        "  agent.\n",
-        "- They should not widen scope beyond the surfaces named in their prompt.\n",
-    )
-    .to_string()
-}
-
 struct ClaudeCommands {
     refresh: String,
-    background_batch: String,
-    autopilot: String,
-    deepinterview: String,
-    team: String,
-    latex_compile_acceleration: String,
 }
 
 fn build_claude_commands() -> ClaudeCommands {
     ClaudeCommands {
         refresh: build_claude_refresh_command(),
-        background_batch: build_claude_background_batch_command(),
-        autopilot: build_claude_alias_command("autopilot", "never", "skills/autopilot/SKILL.md"),
-        deepinterview: build_claude_alias_command(
-            "deepinterview",
-            "never",
-            "skills/deep-interview/SKILL.md",
-        ),
-        team: build_claude_alias_command(
-            "team",
-            "strong-orchestration-only",
-            "skills/team/SKILL.md",
-        ),
-        latex_compile_acceleration: build_claude_alias_command(
-            "latex-compile-acceleration",
-            "measurement-only",
-            "skills/latex-compile-acceleration/SKILL.md",
-        ),
     }
 }
 
@@ -1014,11 +868,6 @@ fn build_claude_commands_projection() -> Value {
     let commands = build_claude_commands();
     json!({
         "refresh": commands.refresh,
-        "background_batch": commands.background_batch,
-        "autopilot": commands.autopilot,
-        "deepinterview": commands.deepinterview,
-        "team": commands.team,
-        "latex_compile_acceleration": commands.latex_compile_acceleration,
     })
 }
 
@@ -1068,58 +917,6 @@ description: 使用 Rust refresh 命令继续当前活跃任务，并复制下�
     )
 }
 
-fn build_claude_alias_command(alias: &str, implicit_policy: &str, skill_path: &str) -> String {
-    let args = format!(
-        "--framework-alias-json --framework-alias {alias} --framework-host-id claude-code --compact-output --claude-hook-max-lines 3"
-    );
-    format!(
-        "---\n\
-description: Enter the repo's Rust-owned {alias} lane.\n\
-{}\n\
----\n\n\
-Treat `/{alias}` as a thin Rust-first alias.\n\
-This command now enters the repo through the resident Rust binary directly.\n\n\
-Run:\n\n\
-{}\n\n\
-If the release binary is missing, rerun the same command with:\n\n\
-{}\n\n\
-If both resident binaries are missing, self-heal with:\n\n\
-{}\n\n\
-Use `alias.state_machine` and `alias.entry_contract` as the working contract for this turn.\n\
-This alias only enters through explicit entrypoints: `/{alias}`, `${alias}`.\n\
-Implicit routing policy: `{implicit_policy}`.\n\
-Prefer the Rust alias payload over opening long docs or restating OMC background.\n\
-Only open `{skill_path}` if the alias payload is missing something you still need.\n\
-Keep execution inside the repo's native Rust/continuity lane.\n    ",
-        claude_command_allowed_tools(),
-        router_release_command(&args),
-        router_debug_command(&args),
-        router_cargo_command(&args),
-    )
-}
-
-fn build_claude_background_batch_command() -> String {
-    let state_args = "--background-state-json --background-state-input-json '<json>'";
-    let control_args = "--background-control-json --background-control-input-json '<json>'";
-    format!(
-        "---\n\
-description: Use the repo's Rust-owned background batch control and state surfaces.\n\
-{}\n\
----\n\n\
-Use `router-rs` directly for durable background batch control. Do not call the legacy Python helper.\n\n\
-Common Rust entrypoints:\n\n\
-- Plan a batch lane group with background control:\n  {}\n\
-- Read one persisted group summary with background state:\n  {}\n\
-- List persisted group summaries with background state:\n  {}\n\n\
-Use operation `batch-plan` for control, and `parallel_group_summary` or `parallel_group_summaries` for state.\n\
-Always relay the JSON result and then summarize it briefly in plain Chinese.\n",
-        claude_command_allowed_tools(),
-        router_release_command(control_args),
-        router_release_command(state_args),
-        router_release_command(state_args),
-    )
-}
-
 fn build_claude_hooks_readme() -> String {
     format!(
         "# Claude Hooks Directory\n\n\
@@ -1128,61 +925,51 @@ Generated-first maintenance:\n\n\
 - Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then regenerate via `{HOST_ENTRYPOINT_SYNC_HINT}`.\n\
 - Host entrypoint sync runs directly through `router-rs`; do not put a Python wrapper back in front of it.\n\
 - Treat `.claude/settings.json` and this README as materialized outputs.\n\
-- Manual Claude host guidance belongs in `.claude/agents/*.md` unless noted.\n\
-- Codex uses `.codex/hooks.json` for a separate silent preflight guardrail\n  layer on `Edit` / `MultiEdit` / `Write` / `Bash`; do not mirror Claude\n  prompt hooks onto Codex.\n\n\
+- Long-term entrypoint map: `../../docs/claude_entrypoint_maintenance.md`.\n\
+- Project Claude subagents are retired here; use shared `skills/` and `AGENT.md` instead of `.claude/agents/*.md` projections.\n\
+- Codex uses `.codex/hooks.json` for a separate silent preflight guardrail\n  layer on `Bash`; do not mirror Claude prompt or lifecycle hooks onto Codex.\n\n\
 Active hooks:\n\n\
 | Event | Runner | Purpose |\n\
 | --- | --- | --- |\n\
-| `UserPromptSubmit` | `router-rs --claude-host-hook-command user-prompt-submit` | Inject the repo-local shared memory and continuity truth on every real prompt, plus narrow execution-time hints when the current prompt clearly needs them. |\n\
-| `PreToolUse` | `router-rs --claude-host-hook-command pre-tool-use-quality` | Add a short path-aware implementation reminder before editing runtime, host-entrypoint sync, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |\n\
 | `PreToolUse` | `router-rs --claude-host-hook-command pre-tool-use` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |\n\
-| `PostToolUse` | `router-rs --claude-host-hook-command post-tool-audit` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |\n\
-| `PostToolUseFailure` | `router-rs --claude-host-hook-command post-tool-failure-audit` | When edits to generated host outputs fail, remind Claude to regenerate from Rust instead of retrying direct writes. |\n\
+| `ConfigChange` | `router-rs --claude-host-hook-command config-change` | Warn when generated Claude host files were edited directly instead of regenerated from source. |\n\
+| `UserPromptSubmit` | command available, not installed | Use `/refresh` instead of automatic prompt injection for explicit continuity. |\n\
+| `SessionEnd` | command available, not installed | Memory projection refresh stays explicit to avoid hidden lifecycle writes. |\n\
+| `PostToolUse` | command available, not installed | Delta audits remain callable for tests/debugging but do not auto-run after every edit. |\n\
+| `PostToolUseFailure` | command available, not installed | Generated-surface protection is handled before edits, not by failure cleanup. |\n\
 | `PostToolBatch` | documented surface, not installed | Available for batch-level follow-up after parallel tool calls; avoid using it for single-tool checks already covered by `PostToolUse`. |\n\
 | `UserPromptExpansion` | documented surface, not installed | Available for slash/command expansion validation; repo slash command bodies stay static unless a concrete risk appears. |\n\
-| `SessionEnd` | `router-rs --claude-host-hook-command session-end` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |\n\
-| `ConfigChange` | `router-rs --claude-host-hook-command config-change` | Warn when generated Claude host files were edited directly instead of regenerated from source. |\n\
-| `StopFailure` | `router-rs --claude-host-hook-command stop-failure` | Emit a host-private hint for selected Claude stop failures without mutating shared continuity. |\n\n\
-Everything else stays intentionally uninstalled here so startup and tool turns remain lean.\n\
-`UserPromptSubmit` is installed here on purpose: this repo keeps memory truth under\n\
-`./.codex/memory/` plus continuity artifacts, so prompt-time injection is the\n\
-lowest-friction way to keep Claude aligned with repo-local state instead of stale\n\
-host-global recall.\n\
+| `StopFailure` | command available, not installed | Failure classification remains host-private and explicit. |\n\n\
+Only `PreToolUse` and `ConfigChange` are installed here so startup, prompt, edit,\n\
+and lifecycle paths stay lean. Use `/refresh` when continuity context is needed;\n\
+do not reintroduce automatic prompt or session-end injection without a concrete\n\
+repo invariant.\n\
 Reply tone, \"讲人话\" rules, closeout shape, and broad implementation philosophy\n\
 still live in `AGENT.md`, not in hooks.\n\
 Static behavior rules belong in `AGENT.md` or `CLAUDE.md`; these hooks exist\n\
-for deterministic guardrails, lightweight execution-time context, and lifecycle\n\
-maintenance.\n\n\
+for deterministic guardrails and config-drift warnings.\n\n\
 Project hook principles:\n\n\
 - Keep project hooks for repo-specific invariants only.\n\
 - Keep hooks fast, especially `PreToolUse`, because it runs inside the agent\n  loop.\n\
 - Use `matcher` first and `if` to narrow further, so hook handlers do not spawn\n  on unrelated tool calls and normal edits stay fast.\n\
-- Automation hooks should be additive and short: inject narrow repo context or\n  launch cheap follow-up work, not essay-length prompt rewrites.\n\
+- Automation hooks should be additive and short: guard a concrete repo surface\n  or emit a concise warning, not essay-length prompt rewrites.\n\
 - Prefer `command` hooks for deterministic repo guardrails. `http`,\n  `mcp_tool`, `prompt`, and `agent` hook handlers are supported by Claude Code,\n  but should only be introduced for a real repo invariant that cannot be handled\n  locally and cheaply.\n\
 - Use `asyncRewake` only for background checks that may discover a real problem\n  after Claude has moved on; ordinary async audits should stay quiet unless they\n  have actionable feedback.\n\
 - Keep durable implementation philosophy in `AGENT.md`; hook-time nudges should\n  stay concrete, local to the current path, and local to the current delta.\n\
-- Prefer async `PostToolUse` for cheap quality follow-up that should not block\n  the main turn.\n\
 - Put personal notifications and local approval shortcuts in `~/.claude/settings.json`\n  or `.claude/settings.local.json`, not in committed project settings.\n\
 - Use `\"$CLAUDE_PROJECT_DIR\"`-anchored paths in hook commands and treat hook\n  stdin JSON as untrusted input.\n\
 - Prefer `PreToolUse` deny over `PostToolUse` cleanup for protected files.\n\
 - Keep the generated-surface guard intentionally narrow so normal edits stay fast.\n\
-- Keep `SessionEnd` as the only writer hook here; the others are guards or alerts.\n\
+- Keep project hooks non-writing by default; use explicit commands for refresh\n  and maintenance work.\n\
 - When debugging config drift, verify the installed hook set from Claude\n  Code's `/hooks` menu before changing generated files.\n\n\
 Validation commands:\n\n\
-- `printf '{{\"tool_name\":\"Edit\",\"tool_input\":{{\"file_path\":\"scripts/router-rs/src/claude_hooks.rs\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use-quality --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: allow` payload with `additionalContext`.\n\
-- `printf '{{\"tool_name\":\"Edit\",\"tool_input\":{{\"file_path\":\"scripts/router-rs/src/claude_hooks.rs\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command post-tool-audit --repo-root \"$PWD\"`\n  Expected: stdout is empty for clean edits, or JSON with top-level `additionalContext` when the new delta still looks patchy, compatibility-heavy, or wasteful.\n\
-- `printf '{{\"tool_name\":\"Edit\",\"tool_input\":{{\"file_path\":\"scripts/router-rs/src/host_integration.rs\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use-quality --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: allow` payload with Rust/runtime-oriented `additionalContext`.\n\
 - `{HOST_ENTRYPOINT_SYNC_HINT}`\n  Expected: regenerate `AGENT.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/settings.json`, `.codex/hooks.json`, and matching worktree projections directly from Rust.\n\
 - `printf '{{\"tool_name\":\"MultiEdit\",\"tool_input\":{{\"file_path\":\".claude/settings.json\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: deny` payload.\n\
 - `printf '{{\"tool_name\":\"Bash\",\"tool_input\":{{\"command\":\"cp tmp .claude/settings.json\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: deny` payload for the targeted write.\n\
 - `printf '{{\"tool_name\":\"Bash\",\"tool_input\":{{\"command\":\"printf x > .claude/settings.json\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: deny` payload for shell redirection into a protected generated file.\n\
-- `printf '{{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"继续修复这个仓库的共享记忆和 runtime\"}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command user-prompt-submit --repo-root \"$PWD\"`\n  Expected: stdout returns JSON with `hookSpecificOutput.additionalContext` containing repo-local memory and continuity reminders.\n\
-- `CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command session-end --repo-root \"$PWD\"`\n  Expected: project-local memory bundle refresh plus projection refresh; may repair stale terminal resume state in `.supervisor_state.json`.\n\
 - `printf '{{\"hook_event_name\":\"ConfigChange\",\"source\":\"project_settings\",\"file_path\":\".claude/settings.json\"}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command config-change --repo-root \"$PWD\"`\n  Expected: audit-only stderr guidance about regenerating generated Claude host files; exit 0.\n\
-- `printf '{{\"hook_event_name\":\"StopFailure\",\"error\":\"server_error\"}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command stop-failure --repo-root \"$PWD\"`\n  Expected: host-private failure classification hint on stderr; exit 0.\n\
-- `./scripts/router-rs/target/debug/router-rs --claude-host-hook-command session-end --repo-root \"$PWD\" --claude-hook-max-lines 4`\n  Expected: silent lifecycle entrypoint for Claude host hooks; same consolidation and projection contract.\n\
 - `printf '{{\"hook_event_name\":\"ConfigChange\",\"source\":\"project_settings\",\"file_path\":\".claude/settings.json\"}}\n' | ./scripts/router-rs/target/debug/router-rs --claude-hook-audit-command config-change --repo-root \"$PWD\"`\n  Expected: JSON on stdout plus audit-only stderr guidance; exit 0.\n\
-- In Claude Code, run `/hooks`\n  Expected: the project shows `PreToolUse`, `PostToolUse`, `UserPromptSubmit`,\n  `SessionEnd`, `ConfigChange`, and `StopFailure` from `.claude/settings.json`.\n\n\
+- In Claude Code, run `/hooks`\n  Expected: the project shows only `PreToolUse` and `ConfigChange` from `.claude/settings.json`.\n\n\
 Shared routing policy still comes from `../../AGENT.md`.\n"
     )
 }
@@ -1193,11 +980,9 @@ Codex hook config for this repo is generated from `scripts/router-rs/`.\n\n\
 Active hooks:\n\n\
 | Event | Runner | Purpose |\n\
 | --- | --- | --- |\n\
-| `SessionStart` | `router-rs --codex-hook-command session-start` | Load repo-local continuity context on startup and resume. |\n\
-| `UserPromptSubmit` | `router-rs --codex-hook-command user-prompt-submit` | Add the same repo-local memory and continuity context used by Claude. |\n\
 | `PreToolUse` | `router-rs --codex-hook-command pre-tool-use` | Guard Bash writes to generated host outputs before they run. |\n\
-| `PermissionRequest` | `router-rs --codex-hook-command permission-request` | Deny approval requests that target generated host outputs. |\n\
-| `PostToolUse` | `router-rs --codex-hook-command post-tool-use` | Surface a follow-up note if a Bash command already touched a generated output. |\n\n\
+| `PermissionRequest` | `router-rs --codex-hook-command permission-request` | Deny approval requests that target generated host outputs. |\n\n\
+Codex prompt and lifecycle hooks are intentionally not installed here. Keep startup quiet and put durable memory, routing, and reply policy in `AGENT.md`; stale local invocations of those Codex commands return no output instead of failing startup.\n\n\
 Codex currently applies tool-event matchers to `Bash` only, so this projection does not install `Edit`, `Write`, or `MultiEdit` matchers. Keep direct file-edit policy in `AGENT.md` and Rust-owned generated-surface checks instead of pretending Codex can intercept every non-shell tool call.\n\n\
 Regenerate with:\n\n\
 ```sh\n\
@@ -1209,18 +994,6 @@ cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-hos
 fn build_codex_command_hook(event: &str, matcher: &str) -> Value {
     json!({
         "matcher": matcher,
-        "hooks": [
-            {
-                "type": "command",
-                "command": build_codex_hook_command(event),
-                "timeout": 8,
-            }
-        ]
-    })
-}
-
-fn build_codex_unmatched_command_hook(event: &str) -> Value {
-    json!({
         "hooks": [
             {
                 "type": "command",
@@ -1348,12 +1121,12 @@ pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Va
     let payload = read_stdin_payload()?;
     match canonical {
         "pre-tool-use" => run_codex_pre_tool_use(repo_root, &payload),
-        "session-start" => run_codex_session_start(repo_root, &payload),
+        "session-start" => Ok(None),
         "permission-request" => {
             bridge_codex_permission_request(run_pre_tool_use(repo_root, &payload)?)
         }
-        "post-tool-use" => run_codex_post_tool_use(repo_root, &payload),
-        "user-prompt-submit" => run_codex_user_prompt_submit(repo_root, &payload),
+        "post-tool-use" => Ok(None),
+        "user-prompt-submit" => Ok(None),
         _ => Err(format!("Unsupported Codex audit command: {command}")),
     }
 }
@@ -1367,62 +1140,6 @@ fn run_codex_pre_tool_use(repo_root: &Path, payload: &Value) -> Result<Option<Va
         return Ok(Some(block));
     }
     Ok(None)
-}
-
-fn run_codex_session_start(repo_root: &Path, _payload: &Value) -> Result<Option<Value>, String> {
-    let context_payload = build_user_prompt_context_payload(repo_root, "继续当前仓库任务")?;
-    let Some(context) = context_payload.get("text").and_then(Value::as_str) else {
-        return Ok(None);
-    };
-    if context.trim().is_empty() {
-        return Ok(None);
-    }
-    Ok(Some(json!({
-        "hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": context,
-        },
-        "contextTelemetry": context_payload.get("telemetry").cloned().unwrap_or(Value::Null),
-    })))
-}
-
-fn run_codex_post_tool_use(_repo_root: &Path, payload: &Value) -> Result<Option<Value>, String> {
-    let Some(path) = bash_generated_write_target(payload) else {
-        return Ok(None);
-    };
-    let reason = codex_pre_tool_use_reason(&pre_tool_use_message(&path));
-    Ok(Some(json!({
-        "decision": "block",
-        "reason": reason,
-        "hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
-            "additionalContext": reason,
-        },
-    })))
-}
-
-fn run_codex_user_prompt_submit(
-    repo_root: &Path,
-    payload: &Value,
-) -> Result<Option<Value>, String> {
-    let base = run_user_prompt_submit(repo_root, payload)?;
-    let Some(context) = base
-        .get("hookSpecificOutput")
-        .and_then(|hook| hook.get("additionalContext"))
-        .and_then(Value::as_str)
-    else {
-        return Ok(None);
-    };
-    if context.trim().is_empty() {
-        return Ok(None);
-    }
-    Ok(Some(json!({
-        "hookSpecificOutput": {
-            "hookEventName": "UserPromptSubmit",
-            "additionalContext": context,
-        },
-        "contextTelemetry": base.get("contextTelemetry").cloned().unwrap_or(Value::Null),
-    })))
 }
 
 fn canonical_lifecycle_command(command: &str) -> Result<&'static str, String> {
@@ -2585,12 +2302,7 @@ fn looks_like_coding_request(prompt_text: &str) -> bool {
         .filter(|path| {
             matches!(
                 path.as_str(),
-                "AGENT.md"
-                    | "AGENTS.md"
-                    | "CLAUDE.md"
-                    | "GEMINI.md"
-                    | ".claude/hooks/README.md"
-                    | ".claude/agents/README.md"
+                "AGENT.md" | "AGENTS.md" | "CLAUDE.md" | "GEMINI.md" | ".claude/hooks/README.md"
             )
         })
         .count();

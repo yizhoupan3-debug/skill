@@ -262,7 +262,11 @@ When upgrading an old thin skill, do this in order:
 10. run:
 
 ```bash
-python3 /Users/joe/Documents/skill/scripts/check_skills.py --verify-codex-link
+cargo run --manifest-path /Users/joe/Documents/skill/scripts/skill-compiler-rs/Cargo.toml -- \
+  --skills-root /Users/joe/Documents/skill/skills \
+  --source-manifest /Users/joe/Documents/skill/skills/SKILL_SOURCE_MANIFEST.json \
+  --health-manifest /Users/joe/Documents/skill/skills/SKILL_HEALTH_MANIFEST.json \
+  --apply
 ```
 
 ---

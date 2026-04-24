@@ -2,6 +2,25 @@
 
 Use this reference when the deck needs stronger aesthetics, clearer hierarchy, or a more memorable visual identity.
 
+## Deck DESIGN.md Contract
+
+When a deck has source visuals, brand examples, or will go through multiple
+design rounds, treat `DESIGN.md` as the design source of truth. Align it with
+the shared design skills and include:
+
+- `Visual Theme & Atmosphere`
+- `Color Palette & Roles`
+- `Typography Rules`
+- `Component Stylings`
+- `Layout Principles`
+- `Slide Component Signatures`
+- `Prompt Block For Reuse`
+- `Generation Guardrails`
+- `Anti-Patterns`
+
+Map those fields into `deck.plan.json`: palette roles, typography scale, panel/card
+styles, cover/section/closing grammar, chart styling, and banned drift.
+
 ## Default Aesthetic
 
 Prefer a black-luxury direction:
@@ -144,3 +163,15 @@ Do not add a new bright color every time a slide feels weak.
 - dark backgrounds with weak low-contrast text
 - raw unblurred cover images used directly behind dense text
 - dark decks that confuse "cinematic" with "hard to read"
+
+## Design Audit Verdicts
+
+For rendered review, use the same verdict language as `$design-output-auditor`:
+
+- `match`: output follows the declared deck design system.
+- `minor drift`: small spacing, emphasis, or tone issue that does not change the
+  visual identity.
+- `material drift`: palette, typography, density, or layout grammar no longer
+  matches the contract.
+- `hard fail`: AI-slop, default Office styling, unreadable contrast, or an
+  anti-pattern relapse that breaks the deck's intended identity.

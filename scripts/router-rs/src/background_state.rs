@@ -1,3 +1,4 @@
+use crate::runtime_storage::runtime_backend_capabilities;
 use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -23,6 +24,8 @@ const DEFAULT_BACKGROUND_JOB_RETRY_COUNT: i64 = 0;
 const DEFAULT_BACKGROUND_JOB_MAX_ATTEMPTS: i64 = 1;
 const DEFAULT_BACKGROUND_JOB_BACKOFF_BASE_SECONDS: f64 = 0.0;
 const DEFAULT_BACKGROUND_JOB_BACKOFF_MULTIPLIER: f64 = 2.0;
+const DEFAULT_MAX_BACKGROUND_JOBS: usize = 16;
+const MAX_BACKGROUND_JOBS_LIMIT: usize = 64;
 const SQLITE_TABLE_NAME: &str = "runtime_storage_payloads";
 
 #[derive(Debug, Clone, Deserialize)]
@@ -40,6 +43,7 @@ struct BackgroundStateRequestPayload {
     session_id: Option<String>,
     incoming_job_id: Option<String>,
     parallel_group_id: Option<String>,
+    capacity_limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -294,15 +298,14 @@ fn validate_transition(previous_status: Option<&str>, next_status: &str) -> Resu
 }
 
 fn backend_capabilities(backend_family: &str) -> Result<(bool, bool, bool, bool), String> {
-    match normalized_backend_family(backend_family).as_str() {
-        "filesystem" | "file" => Ok((true, false, false, true)),
-        "sqlite" | "sqlite3" => Ok((true, true, true, true)),
-        "memory" => Ok((false, false, false, true)),
-        other => Err(format!(
-            "Unsupported durable background-state backend family: {:?}",
-            other
-        )),
-    }
+    let capabilities = runtime_backend_capabilities(backend_family)
+        .map_err(|err| format!("Unsupported durable background-state backend family: {err}"))?;
+    Ok((
+        capabilities.supports_atomic_replace,
+        capabilities.supports_compaction,
+        capabilities.supports_snapshot_delta,
+        capabilities.supports_remote_event_transport,
+    ))
 }
 
 fn normalized_backend_family(value: &str) -> String {
@@ -350,6 +353,8 @@ fn build_state_control_plane(
         "supports_compaction": supports_compaction,
         "supports_snapshot_delta": supports_snapshot_delta,
         "supports_remote_event_transport": supports_remote_event_transport,
+        "supports_consistent_append": runtime_backend_capabilities(&normalized_backend)?.supports_consistent_append,
+        "supports_sqlite_wal": runtime_backend_capabilities(&normalized_backend)?.supports_sqlite_wal,
         "state_path": state_path.to_string_lossy(),
     });
     if let Some(Value::Object(descriptor)) = control_plane_descriptor {
@@ -538,6 +543,7 @@ impl BackgroundStateStore {
         if let Some(persisted) = persisted {
             store.merge_persisted(persisted)?;
         }
+        store.compact_terminal_over_capacity(request.capacity_limit);
         Ok(store)
     }
 
@@ -770,6 +776,47 @@ impl BackgroundStateStore {
             .count()
     }
 
+    fn terminal_job_count(&self) -> usize {
+        self.jobs
+            .values()
+            .filter(|job| is_terminal_status(&job.status))
+            .count()
+    }
+
+    fn resolved_capacity_limit(&self, override_limit: Option<usize>) -> usize {
+        override_limit
+            .or_else(|| {
+                self.control_plane
+                    .get("max_background_jobs")
+                    .and_then(Value::as_u64)
+                    .map(|value| value as usize)
+            })
+            .unwrap_or(DEFAULT_MAX_BACKGROUND_JOBS)
+            .clamp(1, MAX_BACKGROUND_JOBS_LIMIT)
+    }
+
+    fn compact_terminal_over_capacity(&mut self, capacity_limit: Option<usize>) {
+        let limit = self.resolved_capacity_limit(capacity_limit);
+        if self.jobs.len() <= limit {
+            return;
+        }
+        let mut terminal_jobs = self
+            .jobs
+            .values()
+            .filter(|job| is_terminal_status(&job.status))
+            .map(|job| (job.updated_at.clone(), job.job_id.clone()))
+            .collect::<Vec<_>>();
+        terminal_jobs.sort();
+        let remove_count = self
+            .jobs
+            .len()
+            .saturating_sub(limit)
+            .min(terminal_jobs.len());
+        for (_, job_id) in terminal_jobs.into_iter().take(remove_count) {
+            self.jobs.remove(&job_id);
+        }
+    }
+
     fn pending_session_takeovers(&self) -> usize {
         self.pending_session_takeovers.len()
     }
@@ -940,9 +987,14 @@ impl BackgroundStateStore {
             "supports_compaction": self.control_plane.get("supports_compaction").cloned().unwrap_or(Value::Bool(false)),
             "supports_snapshot_delta": self.control_plane.get("supports_snapshot_delta").cloned().unwrap_or(Value::Bool(false)),
             "supports_remote_event_transport": self.control_plane.get("supports_remote_event_transport").cloned().unwrap_or(Value::Bool(false)),
+            "supports_consistent_append": self.control_plane.get("supports_consistent_append").cloned().unwrap_or(Value::Bool(false)),
+            "supports_sqlite_wal": self.control_plane.get("supports_sqlite_wal").cloned().unwrap_or(Value::Bool(false)),
             "state_path": self.control_plane.get("state_path").cloned().unwrap_or(Value::Null),
             "job_count": self.jobs.len(),
             "active_job_count": self.active_job_count(),
+            "terminal_job_count": self.terminal_job_count(),
+            "max_background_jobs": self.resolved_capacity_limit(None),
+            "max_background_jobs_limit": MAX_BACKGROUND_JOBS_LIMIT,
             "parallel_group_count": self.parallel_group_summaries().len(),
             "pending_session_takeovers": self.pending_session_takeovers(),
         })

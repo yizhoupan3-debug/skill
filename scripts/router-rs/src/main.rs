@@ -6,12 +6,12 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use strsim::jaro_winkler;
 
@@ -28,7 +28,9 @@ mod session_supervisor;
 mod trace_runtime;
 
 use background_state::handle_background_state_operation;
-use browser_mcp::run_browser_mcp_stdio_loop;
+use browser_mcp::{
+    resolve_browser_mcp_attach_artifact, run_browser_mcp_stdio_loop, BrowserAttachConfig,
+};
 use claude_hooks::{
     build_claude_hook_manifest, build_claude_hook_projection, build_claude_project_settings,
     run_claude_audit_hook, run_claude_lifecycle_hook, run_codex_audit_hook, sync_host_entrypoints,
@@ -49,13 +51,15 @@ use framework_profile::{
 };
 use framework_runtime::{
     build_framework_alias_envelope, build_framework_contract_summary_envelope,
-    build_framework_memory_recall_envelope, build_framework_refresh_payload,
+    build_framework_memory_policy_envelope, build_framework_memory_recall_envelope,
+    build_framework_prompt_compression_envelope, build_framework_refresh_payload,
     build_framework_runtime_snapshot_envelope, build_framework_statusline, resolve_repo_root_arg,
     write_framework_session_artifacts,
 };
 use host_integration::run_host_integration_from_args;
 use runtime_storage::{
     build_checkpoint_control_plane_compiler_payload, resolve_storage_backend,
+    runtime_backend_family_catalog_payload, runtime_backend_family_parity_payload,
     runtime_storage_operation, storage_artifact_exists, storage_read_text, ResolvedStorageBackend,
     RuntimeStorageRequestPayload,
 };
@@ -137,6 +141,16 @@ const ARTIFACT_GATE_PHRASES: [&str; 12] = [
     "工作簿",
     "幻灯片",
 ];
+const DEFAULT_ROUTER_STDIO_POOL_SIZE: usize = 4;
+const MAX_ROUTER_STDIO_POOL_SIZE: usize = 16;
+const DEFAULT_STDIO_MAX_CONCURRENCY: usize = 1;
+const MAX_STDIO_MAX_CONCURRENCY: usize = 16;
+const DEFAULT_MAX_CONCURRENT_SUBAGENTS: usize = 8;
+const MAX_CONCURRENT_SUBAGENTS_LIMIT: usize = 32;
+const DEFAULT_SUBAGENT_TIMEOUT_SECONDS: u64 = 900;
+const DEFAULT_MAX_BACKGROUND_JOBS: usize = 16;
+const MAX_BACKGROUND_JOBS_LIMIT: usize = 64;
+const DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS: u64 = 600;
 
 #[derive(Parser, Debug)]
 #[command(name = "router-rs")]
@@ -159,9 +173,27 @@ struct Cli {
     #[arg(long)]
     stdio_json: bool,
     #[arg(long)]
+    stdio_max_concurrency: Option<usize>,
+    #[arg(long)]
     framework_mcp_stdio: bool,
     #[arg(long)]
     browser_mcp_stdio: bool,
+    #[arg(long)]
+    browser_mcp_resolve_attach_artifact: bool,
+    #[arg(long)]
+    browser_mcp_search_root: Option<PathBuf>,
+    #[arg(long)]
+    headless: Option<String>,
+    #[arg(long)]
+    runtime_attach_artifact_path: Option<String>,
+    #[arg(long)]
+    runtime_attach_descriptor_path: Option<String>,
+    #[arg(long)]
+    runtime_binding_artifact_path: Option<String>,
+    #[arg(long)]
+    runtime_handoff_path: Option<String>,
+    #[arg(long)]
+    runtime_resume_manifest_path: Option<String>,
     #[arg(long)]
     framework_mcp_output_dir: Option<PathBuf>,
     #[arg(long)]
@@ -229,6 +261,10 @@ struct Cli {
     #[arg(long)]
     framework_memory_recall_json: bool,
     #[arg(long)]
+    framework_memory_policy_json: bool,
+    #[arg(long)]
+    framework_prompt_compression_json: bool,
+    #[arg(long)]
     framework_refresh_json: bool,
     #[arg(long)]
     framework_refresh_verbose: bool,
@@ -290,6 +326,10 @@ struct Cli {
     framework_task_id: Option<String>,
     #[arg(long)]
     framework_session_artifact_write_input_json: Option<String>,
+    #[arg(long)]
+    framework_memory_policy_input_json: Option<String>,
+    #[arg(long)]
+    framework_prompt_compression_input_json: Option<String>,
     #[arg(long)]
     cases: Option<PathBuf>,
     #[arg(long)]
@@ -747,73 +787,73 @@ struct BackgroundControlResponsePayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct TraceStreamReplayRequestPayload {
-    path: Option<String>,
-    event_stream_text: Option<String>,
-    compaction_manifest_path: Option<String>,
-    compaction_manifest_text: Option<String>,
-    compaction_state_text: Option<String>,
-    compaction_artifact_index_text: Option<String>,
-    compaction_delta_text: Option<String>,
-    session_id: Option<String>,
-    job_id: Option<String>,
-    stream_scope_fields: Option<Vec<String>>,
-    after_event_id: Option<String>,
-    limit: Option<usize>,
+pub(crate) struct TraceStreamReplayRequestPayload {
+    pub(crate) path: Option<String>,
+    pub(crate) event_stream_text: Option<String>,
+    pub(crate) compaction_manifest_path: Option<String>,
+    pub(crate) compaction_manifest_text: Option<String>,
+    pub(crate) compaction_state_text: Option<String>,
+    pub(crate) compaction_artifact_index_text: Option<String>,
+    pub(crate) compaction_delta_text: Option<String>,
+    pub(crate) session_id: Option<String>,
+    pub(crate) job_id: Option<String>,
+    pub(crate) stream_scope_fields: Option<Vec<String>>,
+    pub(crate) after_event_id: Option<String>,
+    pub(crate) limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct TraceStreamInspectRequestPayload {
-    path: Option<String>,
-    event_stream_text: Option<String>,
-    compaction_manifest_path: Option<String>,
-    compaction_manifest_text: Option<String>,
-    compaction_state_text: Option<String>,
-    compaction_artifact_index_text: Option<String>,
-    compaction_delta_text: Option<String>,
-    session_id: Option<String>,
-    job_id: Option<String>,
-    stream_scope_fields: Option<Vec<String>>,
+pub(crate) struct TraceStreamInspectRequestPayload {
+    pub(crate) path: Option<String>,
+    pub(crate) event_stream_text: Option<String>,
+    pub(crate) compaction_manifest_path: Option<String>,
+    pub(crate) compaction_manifest_text: Option<String>,
+    pub(crate) compaction_state_text: Option<String>,
+    pub(crate) compaction_artifact_index_text: Option<String>,
+    pub(crate) compaction_delta_text: Option<String>,
+    pub(crate) session_id: Option<String>,
+    pub(crate) job_id: Option<String>,
+    pub(crate) stream_scope_fields: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct TraceStreamReplayCursorPayload {
-    event_id: Option<String>,
-    event_index: usize,
+pub(crate) struct TraceStreamReplayCursorPayload {
+    pub(crate) event_id: Option<String>,
+    pub(crate) event_index: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct TraceStreamReplayResponsePayload {
-    schema_version: String,
-    authority: String,
-    path: String,
-    source_kind: String,
-    event_count: usize,
-    latest_event_id: Option<String>,
-    latest_event_kind: Option<String>,
-    latest_event_timestamp: Option<String>,
-    latest_cursor: Option<Value>,
-    after_event_id: Option<String>,
-    window_start_index: usize,
-    has_more: bool,
-    next_cursor: Option<TraceStreamReplayCursorPayload>,
-    events: Vec<Value>,
+pub(crate) struct TraceStreamReplayResponsePayload {
+    pub(crate) schema_version: String,
+    pub(crate) authority: String,
+    pub(crate) path: String,
+    pub(crate) source_kind: String,
+    pub(crate) event_count: usize,
+    pub(crate) latest_event_id: Option<String>,
+    pub(crate) latest_event_kind: Option<String>,
+    pub(crate) latest_event_timestamp: Option<String>,
+    pub(crate) latest_cursor: Option<Value>,
+    pub(crate) after_event_id: Option<String>,
+    pub(crate) window_start_index: usize,
+    pub(crate) has_more: bool,
+    pub(crate) next_cursor: Option<TraceStreamReplayCursorPayload>,
+    pub(crate) events: Vec<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct TraceStreamInspectResponsePayload {
-    schema_version: String,
-    authority: String,
-    path: String,
-    source_kind: String,
-    event_count: usize,
-    latest_event_id: Option<String>,
-    latest_event_kind: Option<String>,
-    latest_event_timestamp: Option<String>,
-    latest_cursor: Option<Value>,
-    recovery: Option<Value>,
-    reroute_count: usize,
-    retry_count: usize,
+pub(crate) struct TraceStreamInspectResponsePayload {
+    pub(crate) schema_version: String,
+    pub(crate) authority: String,
+    pub(crate) path: String,
+    pub(crate) source_kind: String,
+    pub(crate) event_count: usize,
+    pub(crate) latest_event_id: Option<String>,
+    pub(crate) latest_event_kind: Option<String>,
+    pub(crate) latest_event_timestamp: Option<String>,
+    pub(crate) latest_cursor: Option<Value>,
+    pub(crate) recovery: Option<Value>,
+    pub(crate) reroute_count: usize,
+    pub(crate) retry_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -889,6 +929,8 @@ struct StdioJsonRequestPayload {
     op: String,
     #[serde(default)]
     payload: Value,
+    #[serde(default)]
+    concurrency: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -899,6 +941,40 @@ struct StdioJsonResponsePayload {
     payload: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct StdioJsonRequestEnvelope {
+    line_index: u64,
+    request: StdioJsonRequestPayload,
+}
+
+#[derive(Debug, Clone)]
+struct StdioJsonResponseEnvelope {
+    line_index: u64,
+    response: StdioJsonResponsePayload,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct StdioRouterConcurrencyDescriptor {
+    default_pool_size: usize,
+    max_pool_size: usize,
+    env_keys: Vec<&'static str>,
+    stdio_max_concurrency_arg: &'static str,
+    request_concurrency_field: &'static str,
+    scheduling: &'static str,
+    backpressure: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RuntimeConcurrencyDefaultsPayload {
+    router_stdio: StdioRouterConcurrencyDescriptor,
+    max_background_jobs: usize,
+    max_background_jobs_limit: usize,
+    background_job_timeout_seconds: u64,
+    max_concurrent_subagents: usize,
+    max_concurrent_subagents_limit: usize,
+    subagent_timeout_seconds: u64,
 }
 
 fn background_effect_plan(next_step: &str) -> BackgroundControlEffectPlanPayload {
@@ -1236,6 +1312,7 @@ fn main() -> Result<(), String> {
         args.stdio_json,
         args.framework_mcp_stdio,
         args.browser_mcp_stdio,
+        args.browser_mcp_resolve_attach_artifact,
         args.route_json,
         args.route_policy_json,
         args.route_snapshot_json,
@@ -1268,6 +1345,8 @@ fn main() -> Result<(), String> {
         args.framework_runtime_snapshot_json,
         args.framework_contract_summary_json,
         args.framework_memory_recall_json,
+        args.framework_memory_policy_json,
+        args.framework_prompt_compression_json,
         args.framework_refresh_json,
         args.framework_statusline,
         args.framework_session_artifact_write_json,
@@ -1296,13 +1375,13 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --framework-mcp-stdio, --browser-mcp-stdio, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-integrator-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --runtime-checkpoint-control-plane-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-record-event-json, --trace-stream-replay-json, --trace-stream-inspect-json, --trace-compact-json, --write-trace-compaction-delta-json, --write-trace-metadata-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-statusline, --framework-session-artifact-write-json, --framework-alias-json, --control-plane-contracts-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --sync-host-entrypoints-json, --check-host-entrypoints-json, --host-integration, --claude-hook-command, --claude-hook-audit-command, --claude-host-hook-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
+            "choose only one output mode among --json, --stdio-json, --framework-mcp-stdio, --browser-mcp-stdio, --browser-mcp-resolve-attach-artifact, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-integrator-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --runtime-checkpoint-control-plane-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-record-event-json, --trace-stream-replay-json, --trace-stream-inspect-json, --trace-compact-json, --write-trace-compaction-delta-json, --write-trace-metadata-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-memory-policy-json, --framework-prompt-compression-json, --framework-refresh-json, --framework-statusline, --framework-session-artifact-write-json, --framework-alias-json, --control-plane-contracts-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --sync-host-entrypoints-json, --check-host-entrypoints-json, --host-integration, --claude-hook-command, --claude-hook-audit-command, --claude-host-hook-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
                 .to_string(),
         );
     }
 
     if args.stdio_json {
-        return run_stdio_json_loop();
+        return run_stdio_json_loop(args.stdio_max_concurrency);
     }
 
     if let Some(host_args) = args.host_integration.as_ref() {
@@ -1323,7 +1402,29 @@ fn main() -> Result<(), String> {
     }
 
     if args.browser_mcp_stdio {
-        return run_browser_mcp_stdio_loop(args.repo_root.as_deref());
+        return run_browser_mcp_stdio_loop(
+            args.repo_root.as_deref(),
+            BrowserAttachConfig::from_cli_and_env(
+                args.runtime_attach_descriptor_path,
+                args.runtime_attach_artifact_path,
+                args.runtime_binding_artifact_path,
+                args.runtime_handoff_path,
+                args.runtime_resume_manifest_path,
+                args.headless,
+            ),
+        );
+    }
+
+    if args.browser_mcp_resolve_attach_artifact {
+        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+        let Some(path) = resolve_browser_mcp_attach_artifact(
+            &repo_root,
+            args.browser_mcp_search_root.as_deref(),
+        ) else {
+            return Err("no browser-mcp runtime attach artifact candidates found".to_string());
+        };
+        println!("{path}");
+        return Ok(());
     }
 
     if args.sandbox_control_json {
@@ -1759,6 +1860,42 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.framework_memory_policy_json {
+        let payload = serde_json::from_str::<Value>(
+            args.framework_memory_policy_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--framework-memory-policy-input-json is required with --framework-memory-policy-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse framework memory policy input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_framework_memory_policy_envelope(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.framework_prompt_compression_json {
+        let payload = serde_json::from_str::<Value>(
+            args.framework_prompt_compression_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--framework-prompt-compression-input-json is required with --framework-prompt-compression-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse framework prompt compression input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_framework_prompt_compression_envelope(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
     if args.framework_refresh_json {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
         let refresh_payload = build_framework_refresh_payload(
@@ -2179,7 +2316,12 @@ fn build_search_results_payload(query: &str, matches: Vec<MatchRow>) -> SearchRe
     }
 }
 
-fn run_stdio_json_loop() -> Result<(), String> {
+fn run_stdio_json_loop(max_concurrency_override: Option<usize>) -> Result<(), String> {
+    let max_concurrency = resolve_stdio_max_concurrency(max_concurrency_override);
+    if max_concurrency > 1 {
+        return run_concurrent_stdio_json_loop(max_concurrency);
+    }
+
     let stdin = io::stdin();
     let stdout = io::stdout();
     let mut stdout_lock = stdout.lock();
@@ -2200,27 +2342,183 @@ fn run_stdio_json_loop() -> Result<(), String> {
     Ok(())
 }
 
+fn run_concurrent_stdio_json_loop(max_concurrency: usize) -> Result<(), String> {
+    let (task_tx, task_rx) = mpsc::channel::<StdioJsonRequestEnvelope>();
+    let (result_tx, result_rx) = mpsc::channel::<StdioJsonResponseEnvelope>();
+    let shared_rx = Arc::new(Mutex::new(task_rx));
+
+    for _ in 0..max_concurrency {
+        let worker_rx = Arc::clone(&shared_rx);
+        let worker_tx = result_tx.clone();
+        std::thread::spawn(move || loop {
+            let Ok(rx) = worker_rx.lock() else {
+                return;
+            };
+            let request = rx.recv();
+            drop(rx);
+            let envelope = match request {
+                Ok(envelope) => envelope,
+                Err(_) => return,
+            };
+            let response = dispatch_stdio_json_envelope(envelope);
+            if worker_tx.send(response).is_err() {
+                return;
+            }
+        });
+    }
+    drop(result_tx);
+
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    let mut stdout_lock = stdout.lock();
+    let mut pending = BTreeMap::<u64, StdioJsonResponsePayload>::new();
+    let mut next_line_index = 0_u64;
+    let mut next_write_index = 0_u64;
+    let mut in_flight = 0_usize;
+
+    for line_result in stdin.lock().lines() {
+        let line = line_result.map_err(|err| format!("read stdio request failed: {err}"))?;
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        while in_flight >= max_concurrency {
+            let envelope = result_rx
+                .recv()
+                .map_err(|err| format!("receive stdio response failed: {err}"))?;
+            in_flight = in_flight.saturating_sub(1);
+            write_ordered_stdio_response(
+                envelope,
+                &mut pending,
+                &mut next_write_index,
+                &mut stdout_lock,
+            )?;
+        }
+
+        let envelope = match parse_stdio_json_line(&line) {
+            Ok(request) => match request.concurrency {
+                Some(0) => StdioJsonResponseEnvelope {
+                    line_index: next_line_index,
+                    response: StdioJsonResponsePayload {
+                        id: request.id,
+                        ok: false,
+                        payload: None,
+                        error: Some(
+                            "stdio request concurrency must be a positive integer when provided"
+                                .to_string(),
+                        ),
+                    },
+                },
+                Some(1) => StdioJsonResponseEnvelope {
+                    line_index: next_line_index,
+                    response: dispatch_stdio_json_request_payload(request),
+                },
+                _ => {
+                    task_tx
+                        .send(StdioJsonRequestEnvelope {
+                            line_index: next_line_index,
+                            request,
+                        })
+                        .map_err(|err| format!("queue stdio request failed: {err}"))?;
+                    next_line_index += 1;
+                    in_flight += 1;
+                    continue;
+                }
+            },
+            Err(err) => StdioJsonResponseEnvelope {
+                line_index: next_line_index,
+                response: StdioJsonResponsePayload {
+                    id: Value::Null,
+                    ok: false,
+                    payload: None,
+                    error: Some(err),
+                },
+            },
+        };
+        write_ordered_stdio_response(
+            envelope,
+            &mut pending,
+            &mut next_write_index,
+            &mut stdout_lock,
+        )?;
+        next_line_index += 1;
+    }
+
+    drop(task_tx);
+    while in_flight > 0 {
+        let envelope = result_rx
+            .recv()
+            .map_err(|err| format!("receive stdio response failed: {err}"))?;
+        in_flight -= 1;
+        write_ordered_stdio_response(
+            envelope,
+            &mut pending,
+            &mut next_write_index,
+            &mut stdout_lock,
+        )?;
+    }
+    Ok(())
+}
+
+fn write_ordered_stdio_response<W: Write>(
+    envelope: StdioJsonResponseEnvelope,
+    pending: &mut BTreeMap<u64, StdioJsonResponsePayload>,
+    next_write_index: &mut u64,
+    output: &mut W,
+) -> Result<(), String> {
+    pending.insert(envelope.line_index, envelope.response);
+    while let Some(response) = pending.remove(next_write_index) {
+        let encoded = serde_json::to_string(&response)
+            .map_err(|err| format!("serialize stdio response failed: {err}"))?;
+        writeln!(output, "{encoded}")
+            .map_err(|err| format!("write stdio response failed: {err}"))?;
+        output
+            .flush()
+            .map_err(|err| format!("flush stdio response failed: {err}"))?;
+        *next_write_index += 1;
+    }
+    Ok(())
+}
+
 fn handle_stdio_json_line(line: &str) -> StdioJsonResponsePayload {
-    match serde_json::from_str::<StdioJsonRequestPayload>(line) {
-        Ok(request) => match dispatch_stdio_json_request(&request.op, request.payload) {
-            Ok(payload) => StdioJsonResponsePayload {
-                id: request.id,
-                ok: true,
-                payload: Some(payload),
-                error: None,
-            },
-            Err(error) => StdioJsonResponsePayload {
-                id: request.id,
-                ok: false,
-                payload: None,
-                error: Some(error),
-            },
-        },
+    match parse_stdio_json_line(line) {
+        Ok(request) => dispatch_stdio_json_request_payload(request),
         Err(err) => StdioJsonResponsePayload {
             id: Value::Null,
             ok: false,
             payload: None,
-            error: Some(format!("parse stdio request failed: {err}")),
+            error: Some(err),
+        },
+    }
+}
+
+fn dispatch_stdio_json_envelope(envelope: StdioJsonRequestEnvelope) -> StdioJsonResponseEnvelope {
+    StdioJsonResponseEnvelope {
+        line_index: envelope.line_index,
+        response: dispatch_stdio_json_request_payload(envelope.request),
+    }
+}
+
+fn parse_stdio_json_line(line: &str) -> Result<StdioJsonRequestPayload, String> {
+    serde_json::from_str::<StdioJsonRequestPayload>(line)
+        .map_err(|err| format!("parse stdio request failed: {err}"))
+}
+
+fn dispatch_stdio_json_request_payload(
+    request: StdioJsonRequestPayload,
+) -> StdioJsonResponsePayload {
+    match dispatch_stdio_json_request(&request.op, request.payload) {
+        Ok(payload) => StdioJsonResponsePayload {
+            id: request.id,
+            ok: true,
+            payload: Some(payload),
+            error: None,
+        },
+        Err(error) => StdioJsonResponsePayload {
+            id: request.id,
+            ok: false,
+            payload: None,
+            error: Some(error),
         },
     }
 }
@@ -2229,6 +2527,8 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
     match op {
         "route" => dispatch_stdio_route(payload),
         "search_skills" => dispatch_stdio_search_skills(payload),
+        "concurrency_defaults" => serde_json::to_value(runtime_concurrency_defaults_payload())
+            .map_err(|err| format!("serialize concurrency defaults output failed: {err}")),
         "execute" => {
             let request = serde_json::from_value::<ExecuteRequestPayload>(payload)
                 .map_err(|err| format!("parse execute input failed: {err}"))?;
@@ -2376,6 +2676,8 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
         "framework_runtime_snapshot" => dispatch_stdio_framework_runtime_snapshot(payload),
         "framework_contract_summary" => dispatch_stdio_framework_contract_summary(payload),
         "framework_memory_recall" => dispatch_stdio_framework_memory_recall(payload),
+        "framework_memory_policy" => build_framework_memory_policy_envelope(payload),
+        "framework_prompt_compression" => build_framework_prompt_compression_envelope(payload),
         "framework_session_artifact_write" => write_framework_session_artifacts(payload),
         "framework_alias" => dispatch_stdio_framework_alias(payload),
         "control_plane_contracts" => {
@@ -2669,6 +2971,46 @@ fn dispatch_stdio_compile_codex_profile_artifacts(payload: Value) -> Result<Valu
     let artifacts = build_codex_artifact_bundle(&profile, include_compatibility_inventory)?;
     serde_json::to_value(artifacts)
         .map_err(|err| format!("serialize codex profile artifacts output failed: {err}"))
+}
+
+fn runtime_concurrency_defaults_payload() -> RuntimeConcurrencyDefaultsPayload {
+    RuntimeConcurrencyDefaultsPayload {
+        router_stdio: StdioRouterConcurrencyDescriptor {
+            default_pool_size: DEFAULT_ROUTER_STDIO_POOL_SIZE,
+            max_pool_size: MAX_ROUTER_STDIO_POOL_SIZE,
+            env_keys: vec![
+                "ROUTER_RS_STDIO_POOL_SIZE",
+                "BROWSER_MCP_ROUTER_STDIO_POOL_SIZE",
+                "CODEX_ROUTER_STDIO_POOL_SIZE",
+            ],
+            stdio_max_concurrency_arg: "--stdio-max-concurrency",
+            request_concurrency_field: "concurrency",
+            scheduling: "bounded FIFO with ordered responses",
+            backpressure:
+                "reader stops admitting new work while in-flight requests reach the limit",
+        },
+        max_background_jobs: DEFAULT_MAX_BACKGROUND_JOBS,
+        max_background_jobs_limit: MAX_BACKGROUND_JOBS_LIMIT,
+        background_job_timeout_seconds: DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS,
+        max_concurrent_subagents: DEFAULT_MAX_CONCURRENT_SUBAGENTS,
+        max_concurrent_subagents_limit: MAX_CONCURRENT_SUBAGENTS_LIMIT,
+        subagent_timeout_seconds: DEFAULT_SUBAGENT_TIMEOUT_SECONDS,
+    }
+}
+
+fn resolve_stdio_max_concurrency(override_value: Option<usize>) -> usize {
+    override_value
+        .or_else(|| env_usize("ROUTER_RS_STDIO_MAX_CONCURRENCY"))
+        .or_else(|| env_usize("ROUTER_RS_STDIO_POOL_SIZE"))
+        .unwrap_or(DEFAULT_STDIO_MAX_CONCURRENCY)
+        .clamp(1, MAX_STDIO_MAX_CONCURRENCY)
+}
+
+fn env_usize(name: &str) -> Option<usize> {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .filter(|value| *value > 0)
 }
 
 fn load_records(
@@ -5854,7 +6196,7 @@ fn trace_stream_resolution(
     Ok(None)
 }
 
-fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
+pub(crate) fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
     let normalized_request = normalize_attach_request(&payload)?;
     let binding_artifact_path = normalized_request.binding_artifact_path;
     let handoff_path = normalized_request.handoff_path;
@@ -6160,11 +6502,7 @@ fn cleanup_attached_runtime_event_transport(payload: Value) -> Result<Value, Str
 }
 
 pub(crate) fn build_runtime_control_plane_payload() -> Value {
-    const DEFAULT_MAX_CONCURRENT_SUBAGENTS: u64 = 8;
-    const DEFAULT_SUBAGENT_TIMEOUT_SECONDS: u64 = 900;
-    const DEFAULT_MAX_BACKGROUND_JOBS: u64 = 16;
-    const DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS: u64 = 600;
-
+    let concurrency_defaults = runtime_concurrency_defaults_payload();
     let services = serde_json::json!({
         "router": {
             "authority": ROUTE_AUTHORITY,
@@ -6194,8 +6532,9 @@ pub(crate) fn build_runtime_control_plane_payload() -> Value {
                 "owner": "rust-runtime-control-plane",
                 "projection": "rust-native-projection",
                 "limit_owner": "rust-control-plane",
-                "max_concurrent_subagents": DEFAULT_MAX_CONCURRENT_SUBAGENTS,
-                "timeout_seconds": DEFAULT_SUBAGENT_TIMEOUT_SECONDS,
+                "max_concurrent_subagents": concurrency_defaults.max_concurrent_subagents,
+                "max_concurrent_subagents_limit": concurrency_defaults.max_concurrent_subagents_limit,
+                "timeout_seconds": concurrency_defaults.subagent_timeout_seconds,
                 "enforcement_mode": "rust-owned-policy-native-enforced",
             },
         },
@@ -6222,6 +6561,13 @@ pub(crate) fn build_runtime_control_plane_payload() -> Value {
             "role": "checkpoint-artifact-projection",
             "projection": "rust-native-projection",
             "delegate_kind": "filesystem-checkpointer",
+            "backend_family_catalog": runtime_backend_family_catalog_payload(),
+            "backend_family_parity": runtime_backend_family_parity_payload(
+                Some("filesystem"),
+                Some("filesystem"),
+                Some("filesystem"),
+                Some("filesystem"),
+            ).expect("default backend family parity is valid"),
         },
         "execution": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
@@ -6331,8 +6677,9 @@ pub(crate) fn build_runtime_control_plane_payload() -> Value {
                     "completion-race",
                     "session-release"
                 ],
-                "max_background_jobs": DEFAULT_MAX_BACKGROUND_JOBS,
-                "background_job_timeout_seconds": DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS,
+                "max_background_jobs": concurrency_defaults.max_background_jobs,
+                "max_background_jobs_limit": concurrency_defaults.max_background_jobs_limit,
+                "background_job_timeout_seconds": concurrency_defaults.background_job_timeout_seconds,
                 "admission_owner": "rust-background-control-policy",
                 "queue_concurrency_owner": "rust-control-plane",
             },
@@ -6393,11 +6740,19 @@ pub(crate) fn build_runtime_control_plane_payload() -> Value {
                 "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
                 "owner": "rust-control-plane",
                 "router_stdio_pool_owner": "rust-control-plane",
-                "router_stdio_pool_default_size": 4,
-                "max_background_jobs": DEFAULT_MAX_BACKGROUND_JOBS,
-                "max_concurrent_subagents": DEFAULT_MAX_CONCURRENT_SUBAGENTS,
-                "background_job_timeout_seconds": DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS,
-                "subagent_timeout_seconds": DEFAULT_SUBAGENT_TIMEOUT_SECONDS,
+                "router_stdio_pool_default_size": concurrency_defaults.router_stdio.default_pool_size,
+                "router_stdio_pool_max_size": concurrency_defaults.router_stdio.max_pool_size,
+                "router_stdio_pool_env_keys": concurrency_defaults.router_stdio.env_keys,
+                "router_stdio_pool_scheduling": concurrency_defaults.router_stdio.scheduling,
+                "router_stdio_backpressure": concurrency_defaults.router_stdio.backpressure,
+                "stdio_max_concurrency_arg": concurrency_defaults.router_stdio.stdio_max_concurrency_arg,
+                "request_concurrency_field": concurrency_defaults.router_stdio.request_concurrency_field,
+                "max_background_jobs": concurrency_defaults.max_background_jobs,
+                "max_background_jobs_limit": concurrency_defaults.max_background_jobs_limit,
+                "max_concurrent_subagents": concurrency_defaults.max_concurrent_subagents,
+                "max_concurrent_subagents_limit": concurrency_defaults.max_concurrent_subagents_limit,
+                "background_job_timeout_seconds": concurrency_defaults.background_job_timeout_seconds,
+                "subagent_timeout_seconds": concurrency_defaults.subagent_timeout_seconds,
             },
         },
         "services": services,
@@ -6840,9 +7195,6 @@ fn framework_alias_explicit_entrypoints(slug: &str) -> &'static [&'static str] {
         "autopilot" => &["/autopilot", "$autopilot"],
         "deepinterview" => &["/deepinterview", "$deepinterview"],
         "team" => &["/team", "$team"],
-        "latex-compile-acceleration" => {
-            &["/latex-compile-acceleration", "$latex-compile-acceleration"]
-        }
         _ => &[],
     }
 }
@@ -6894,9 +7246,6 @@ fn framework_alias_activation_labels(slug: &str) -> &'static [&'static str] {
         "autopilot" => &["autopilot", "auto-pilot", "auto pilot"],
         "deepinterview" => &["deepinterview", "deep-interview", "deep interview"],
         "team" => &["team"],
-        "latex-compile-acceleration" => {
-            &["latex-compile-acceleration", "latex compile acceleration"]
-        }
         _ => &[],
     }
 }
@@ -7116,6 +7465,116 @@ fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[String
     })
 }
 
+fn has_paper_ref_first_workflow_context(query_text: &str, query_token_list: &[String]) -> bool {
+    if !has_paper_context(query_text, query_token_list) {
+        return false;
+    }
+    let ref_markers = [
+        "下载ref",
+        "目标期刊",
+        "相近ref",
+        "相近 ref",
+        "reference corpus",
+        "target journal",
+    ];
+    let story_or_write_markers = [
+        "讲故事",
+        "故事线",
+        "写作套路",
+        "重写摘要",
+        "重写引言",
+        "再写",
+        "再帮我重写",
+    ];
+    ref_markers.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    }) && story_or_write_markers.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_research_workbench_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "科研项目",
+        "科研方向",
+        "课题",
+        "研究路线",
+        "research project",
+        "research direction",
+        "research workflow",
+        "下一步怎么做",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_external_retrieval_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "调研",
+        "深度调研",
+        "最新生态",
+        "技术选型",
+        "取舍",
+        "对比",
+        "compare",
+        "benchmarking",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_autoresearch_loop_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "autonomous research loop",
+        "autonomous research",
+        "multi-hypothesis",
+        "多假设",
+        "experiment loop",
+        "实验循环",
+        "记录反思",
+        "综合结论",
+        "two-loop",
+        "two loop",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_live_browser_action_context(query_text: &str, query_token_list: &[String]) -> bool {
+    [
+        "打开",
+        "访问",
+        "导航",
+        "点击",
+        "输入",
+        "登录",
+        "截图",
+        "重现",
+        "open",
+        "navigate",
+        "click",
+        "type",
+        "login",
+        "screenshot",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
 fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, String> {
     let normalized_mode = mode.trim().to_ascii_lowercase();
     let base = RouteExecutionPolicyPayload {
@@ -7128,25 +7587,30 @@ fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, String>
         diagnostic_report_required: false,
         strict_verification_required: false,
     };
-    let policy = match normalized_mode.as_str() {
-        "shadow" => RouteExecutionPolicyPayload {
-            diagnostic_route_mode: "shadow".to_string(),
-            diagnostic_report_required: true,
-            ..base
-        },
-        "verify" => RouteExecutionPolicyPayload {
-            diagnostic_route_mode: "verify".to_string(),
-            diagnostic_report_required: true,
-            strict_verification_required: true,
-            ..base
-        },
-        "rust" => base,
-        _ => {
-            return Err(format!(
-                "unsupported route mode for --route-policy-json: {mode}"
-            ))
-        }
-    };
+    let policy =
+        match normalized_mode.as_str() {
+            "shadow" => RouteExecutionPolicyPayload {
+                diagnostic_route_mode: "shadow".to_string(),
+                diagnostic_report_required: true,
+                ..base
+            },
+            "verify" => RouteExecutionPolicyPayload {
+                diagnostic_route_mode: "verify".to_string(),
+                diagnostic_report_required: true,
+                strict_verification_required: true,
+                ..base
+            },
+            "rust" => base,
+            "python" => return Err(
+                "retired route mode for --route-policy-json: python; use rust, shadow, or verify"
+                    .to_string(),
+            ),
+            _ => {
+                return Err(format!(
+                    "unsupported route mode for --route-policy-json: {mode}"
+                ))
+            }
+        };
     if policy.diagnostic_report_required && policy.diagnostic_route_mode == "none" {
         return Err(
             "route policy declared diagnostics outside the diagnostic route mode".to_string(),
@@ -7237,6 +7701,140 @@ fn score_route_candidate<'a>(
                     .to_string(),
             ],
         };
+    }
+    if record.slug == "research-workbench" && has_paper_context(query_text, query_token_list) {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: manuscript or paper context should route through paper-workbench before research-project orchestration."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.slug == "literature-synthesis"
+        && has_paper_ref_first_workflow_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: ref-first manuscript workflow should start at paper-workbench, which will call literature-synthesis internally."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.slug == "research-workbench"
+        && has_autoresearch_loop_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: explicit autonomous loop wording should route directly to autoresearch."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.slug == "brainstorm-research"
+        && has_autoresearch_loop_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: explicit autonomous loop wording is execution, not brainstorming."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.slug == "playwright"
+        && has_external_retrieval_context(query_text, query_token_list)
+        && !has_live_browser_action_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: generic browser-automation ecosystem research does not require a live browser evidence gate."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.slug == "architect-review"
+        && has_external_retrieval_context(query_text, query_token_list)
+        && !query_text.contains("架构")
+        && !query_text.contains("architecture")
+        && !query_text.contains("系统设计")
+    {
+        score *= 0.35;
+        reasons.push(
+            "Generic retrieval preference applied: technology-selection research without architecture-review wording should not default to architect-review."
+                .to_string(),
+        );
+    }
+    if record.slug == "information-retrieval"
+        && has_autoresearch_loop_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: explicit autonomous loop wording should stay on autoresearch."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.slug == "architect-review"
+        && has_external_retrieval_context(query_text, query_token_list)
+        && !query_text.contains("架构")
+        && !query_text.contains("architecture")
+        && !query_text.contains("系统设计")
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: generic technology-selection research without architecture-review wording should route through information-retrieval."
+                    .to_string(),
+            ],
+        };
+    }
+    if record.slug == "information-retrieval"
+        && has_external_retrieval_context(query_text, query_token_list)
+    {
+        score += 28.0;
+        reasons.push(
+            "Information-retrieval boost applied: external research, ecosystem comparison, or technology-selection wording detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "autoresearch" && has_autoresearch_loop_context(query_text, query_token_list)
+    {
+        score += 34.0;
+        reasons.push(
+            "Autoresearch loop boost applied: autonomous multi-hypothesis experiment loop detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "paper-workbench"
+        && has_paper_ref_first_workflow_context(query_text, query_token_list)
+    {
+        score += 42.0;
+        reasons.push(
+            "Paper-workbench boost applied: target-journal ref-first manuscript workflow detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "information-retrieval"
+        && has_research_workbench_context(query_text, query_token_list)
+        && !has_paper_context(query_text, query_token_list)
+    {
+        score *= 0.45;
+        reasons.push(
+            "Research-workbench preference applied: academic project next-step wording should not default to generic retrieval."
+                .to_string(),
+        );
     }
 
     if explicit_framework_alias {
@@ -8395,7 +8993,7 @@ fn resolve_trace_source(
     })
 }
 
-fn inspect_trace_stream(
+pub(crate) fn inspect_trace_stream(
     payload: TraceStreamInspectRequestPayload,
 ) -> Result<TraceStreamInspectResponsePayload, String> {
     let resolved = resolve_trace_source(
@@ -8429,7 +9027,7 @@ fn inspect_trace_stream(
     })
 }
 
-fn replay_trace_stream(
+pub(crate) fn replay_trace_stream(
     payload: TraceStreamReplayRequestPayload,
 ) -> Result<TraceStreamReplayResponsePayload, String> {
     let resolved = resolve_trace_source(
@@ -8727,6 +9325,30 @@ mod tests {
     }
 
     #[test]
+    fn stdio_request_dispatches_concurrency_defaults_payload() {
+        let response =
+            handle_stdio_json_line(r#"{"id":1,"op":"concurrency_defaults","payload":{}}"#);
+        assert!(response.ok);
+        let payload = response.payload.expect("payload");
+        assert_eq!(
+            payload["router_stdio"]["default_pool_size"],
+            json!(DEFAULT_ROUTER_STDIO_POOL_SIZE)
+        );
+        assert_eq!(
+            payload["router_stdio"]["max_pool_size"],
+            json!(MAX_ROUTER_STDIO_POOL_SIZE)
+        );
+        assert_eq!(
+            payload["max_background_jobs"],
+            json!(DEFAULT_MAX_BACKGROUND_JOBS)
+        );
+        assert_eq!(
+            payload["max_concurrent_subagents"],
+            json!(DEFAULT_MAX_CONCURRENT_SUBAGENTS)
+        );
+    }
+
+    #[test]
     fn stdio_request_dispatches_execute_payload() {
         let payload =
             serde_json::to_string(&sample_execute_request()).expect("serialize execute payload");
@@ -8986,6 +9608,159 @@ mod tests {
         assert!(statusline.contains("others=0"));
         assert!(statusline.contains("resumable=0"));
         assert!(statusline.contains("git=nogit"));
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_session_writer_materializes_complete_focus_continuity() {
+        let repo_root = temp_dir_path("framework-session-writer-continuity");
+        let output_dir = repo_root.join("artifacts").join("current");
+        let payload = json!({
+            "repo_root": repo_root,
+            "output_dir": output_dir,
+            "task_id": "continuity-polish-20260424120000",
+            "task": "continuity polish",
+            "phase": "implementation",
+            "status": "in_progress",
+            "summary": "Make Rust continuity recoverable without manual mirror repair.",
+            "focus": true,
+            "next_actions": ["Run targeted tests"],
+            "matched_skills": ["execution-controller-coding", "rust-pro"],
+            "execution_contract": {
+                "goal": "Improve continuity artifacts",
+                "acceptance_criteria": ["writer emits all recovery anchors"]
+            },
+            "blockers": ["none"]
+        });
+
+        let result = write_framework_session_artifacts(payload).expect("write artifacts");
+        let task_id = result["task_id"].as_str().expect("task id");
+        let task_root = repo_root.join("artifacts").join("current").join(task_id);
+
+        for path in [
+            task_root.join("SESSION_SUMMARY.md"),
+            task_root.join("NEXT_ACTIONS.json"),
+            task_root.join("EVIDENCE_INDEX.json"),
+            task_root.join("TRACE_METADATA.json"),
+            task_root.join("CONTINUITY_JOURNAL.json"),
+            repo_root.join("SESSION_SUMMARY.md"),
+            repo_root.join("NEXT_ACTIONS.json"),
+            repo_root.join("EVIDENCE_INDEX.json"),
+            repo_root.join("TRACE_METADATA.json"),
+            repo_root.join("CONTINUITY_JOURNAL.json"),
+            repo_root.join("artifacts/current/SESSION_SUMMARY.md"),
+            repo_root.join("artifacts/current/NEXT_ACTIONS.json"),
+            repo_root.join("artifacts/current/EVIDENCE_INDEX.json"),
+            repo_root.join("artifacts/current/TRACE_METADATA.json"),
+            repo_root.join("artifacts/current/CONTINUITY_JOURNAL.json"),
+            repo_root.join(".supervisor_state.json"),
+            repo_root.join("artifacts/current/active_task.json"),
+            repo_root.join("artifacts/current/focus_task.json"),
+            repo_root.join("artifacts/current/task_registry.json"),
+        ] {
+            assert!(path.is_file(), "missing {}", path.display());
+        }
+
+        let snapshot =
+            build_framework_runtime_snapshot_envelope(&repo_root, None, None).expect("snapshot");
+        let runtime = &snapshot["runtime_snapshot"];
+        assert_eq!(runtime["active_task_id"], json!(task_id));
+        assert_eq!(runtime["continuity"]["state"], json!("active"));
+        assert_eq!(runtime["continuity"]["can_resume"], json!(true));
+        assert_eq!(runtime["continuity"]["missing_recovery_anchors"], json!([]));
+
+        let supervisor = serde_json::from_str::<Value>(
+            &fs::read_to_string(repo_root.join(".supervisor_state.json")).expect("read supervisor"),
+        )
+        .expect("parse supervisor");
+        assert_eq!(supervisor["continuity"]["resume_allowed"], json!(true));
+        assert_eq!(
+            supervisor["verification"]["verification_status"],
+            json!("in_progress")
+        );
+        assert_eq!(
+            supervisor["trace_metadata"]["matched_skills"],
+            json!(["execution-controller-coding", "rust-pro"])
+        );
+        assert_eq!(
+            supervisor["artifact_refs"]["task_root"],
+            json!(task_root.display().to_string())
+        );
+        let journal = serde_json::from_str::<Value>(
+            &fs::read_to_string(task_root.join("CONTINUITY_JOURNAL.json")).expect("read journal"),
+        )
+        .expect("parse journal");
+        assert_eq!(journal["schema_version"], json!("continuity-journal-v1"));
+        assert_eq!(journal["checkpoint_count"], json!(1));
+        assert!(journal["latest_checkpoint_id"]
+            .as_str()
+            .is_some_and(|value| value.len() == 64));
+        assert!(
+            journal["checkpoints"][0]["artifact_hashes"]["supervisor_state"]
+                .as_str()
+                .is_some_and(|value| value.len() == 64)
+        );
+
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn task_registry_normalization_dedupes_and_limits_old_tasks() {
+        let repo_root = temp_dir_path("framework-registry-compact");
+        let current_root = repo_root.join("artifacts").join("current");
+        let mut tasks = Vec::new();
+        for index in 0..140 {
+            tasks.push(json!({
+                "task_id": format!("task-{index:03}"),
+                "task": format!("Task {index:03}"),
+                "updated_at": format!("2026-04-24T12:{:02}:00+08:00", index % 60),
+                "status": "completed",
+                "phase": "closeout",
+                "resume_allowed": false
+            }));
+        }
+        tasks.push(json!({
+            "task_id": "focus-task",
+            "task": "Focus task",
+            "updated_at": "2026-04-24T13:00:00+08:00",
+            "status": "in_progress",
+            "phase": "implementation",
+            "resume_allowed": true
+        }));
+        write_text_fixture(
+            &current_root.join("task_registry.json"),
+            &json!({
+                "schema_version": "task-registry-v1",
+                "focus_task_id": "focus-task",
+                "tasks": tasks
+            })
+            .to_string(),
+        );
+
+        let changed = framework_runtime::write_framework_session_artifacts(json!({
+            "repo_root": repo_root,
+            "output_dir": current_root,
+            "task_id": "focus-task",
+            "task": "Focus task",
+            "phase": "implementation",
+            "status": "in_progress",
+            "focus": true,
+            "next_actions": ["Continue"]
+        }))
+        .expect("write focused task");
+        assert_eq!(changed["task_id"], json!("focus-task"));
+
+        let registry = serde_json::from_str::<Value>(
+            &fs::read_to_string(current_root.join("task_registry.json")).expect("read registry"),
+        )
+        .expect("parse registry");
+        let tasks = registry["tasks"].as_array().expect("tasks");
+        assert_eq!(tasks.len(), 128);
+        assert_eq!(registry["truncated"], json!(true));
+        assert_eq!(registry["focus_task_id"], json!("focus-task"));
+        assert_eq!(tasks[0]["task_id"], json!("focus-task"));
+        assert_eq!(registry["recoverable_task_count"], json!(1));
+
         let _ = fs::remove_dir_all(&repo_root);
     }
 
@@ -9251,107 +10026,6 @@ mod tests {
         assert!(prompt.contains("进入 team"));
         assert!(prompt.contains("bounded subagent lane -> `subagent-delegation`"));
         assert!(prompt.contains("worker write scope -> `lane-local-delta-only`"));
-
-        let _ = fs::remove_dir_all(&repo_root);
-    }
-
-    #[test]
-    fn framework_alias_builds_compact_latex_compile_acceleration_payload() {
-        let repo_root = std::env::temp_dir().join(format!(
-            "router-rs-latex-alias-fixture-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("clock before epoch")
-                .as_nanos()
-        ));
-        let task_root = repo_root
-            .join("artifacts")
-            .join("current")
-            .join("active-latex-optimization-20260418210000");
-        fs::create_dir_all(&task_root).expect("create task root");
-        fs::create_dir_all(repo_root.join("artifacts").join("current"))
-            .expect("create current root");
-        fs::write(
-            task_root.join("SESSION_SUMMARY.md"),
-            "- task: active latex optimization\n- phase: measurement\n- status: in_progress\n",
-        )
-        .expect("write session summary");
-        fs::write(
-            task_root.join("NEXT_ACTIONS.json"),
-            r#"{"next_actions":["Measure clean build","Classify bibliography bottleneck"]}"#,
-        )
-        .expect("write next actions");
-        fs::write(task_root.join("EVIDENCE_INDEX.json"), r#"{"artifacts":[]}"#)
-            .expect("write evidence index");
-        fs::write(
-            task_root.join("TRACE_METADATA.json"),
-            r#"{"task":"active latex optimization","matched_skills":["latex-compile-acceleration"]}"#,
-        )
-        .expect("write trace metadata");
-        fs::write(
-            repo_root.join("artifacts").join("current").join("active_task.json"),
-            r#"{"task_id":"active-latex-optimization-20260418210000","task":"active latex optimization"}"#,
-        )
-        .expect("write active task");
-        fs::write(
-            repo_root.join(".supervisor_state.json"),
-            r#"{
-                "task_id":"active-latex-optimization-20260418210000",
-                "task_summary":"active latex optimization",
-                "active_phase":"measurement",
-                "verification":{"verification_status":"not_started"},
-                "continuity":{"story_state":"active","resume_allowed":true},
-                "execution_contract":{"acceptance_criteria":["full build remains reproducible"]}
-            }"#,
-        )
-        .expect("write supervisor state");
-
-        let payload = build_framework_alias_envelope(
-            &repo_root,
-            "latex-compile-acceleration",
-            5,
-            false,
-            None,
-        )
-        .expect("build alias payload");
-        let alias = payload
-            .get("alias")
-            .and_then(Value::as_object)
-            .expect("alias payload");
-        let prompt = alias
-            .get("entry_prompt")
-            .and_then(Value::as_str)
-            .expect("entry prompt");
-
-        assert_eq!(
-            payload["schema_version"],
-            json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
-        );
-        assert_eq!(alias["name"], json!("latex-compile-acceleration"));
-        assert_eq!(
-            alias["host_entrypoint"],
-            json!("$latex-compile-acceleration")
-        );
-        assert_eq!(alias["compact"], json!(false));
-        assert_eq!(
-            alias["canonical_owner"],
-            json!("latex-compile-acceleration")
-        );
-        assert_eq!(
-            alias["state_machine"]["handoff"]["default_mode"],
-            json!("measure-first-latex-optimization")
-        );
-        assert_eq!(
-            alias["state_machine"]["handoff"]["rules"][1]["target"],
-            json!("subagent-delegation")
-        );
-        assert_eq!(
-            alias["entry_contract"]["route_rules"][0],
-            json!("主 owner -> `latex-compile-acceleration`")
-        );
-        assert!(prompt.contains("进入 latex-compile-acceleration"));
-        assert!(prompt.contains("先做测量与瓶颈分类"));
-        assert!(prompt.contains("parallelism gate ->"));
 
         let _ = fs::remove_dir_all(&repo_root);
     }
@@ -9674,12 +10348,21 @@ mod tests {
             sqlite_db_path: None,
             storage_root: None,
             payload_text: Some("alpha".to_string()),
+            expected_sha256: None,
         })
         .expect("write payload");
         assert_eq!(write.schema_version, RUNTIME_STORAGE_SCHEMA_VERSION);
         assert_eq!(write.authority, RUNTIME_STORAGE_AUTHORITY);
         assert!(write.exists);
         assert_eq!(write.bytes_written, Some(5));
+        assert_eq!(
+            write.backend_capabilities["supports_atomic_replace"],
+            json!(true)
+        );
+        assert_eq!(
+            write.payload_sha256.as_deref(),
+            Some("8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8")
+        );
 
         let append = runtime_storage_operation(RuntimeStorageRequestPayload {
             operation: "append_text".to_string(),
@@ -9688,10 +10371,15 @@ mod tests {
             sqlite_db_path: None,
             storage_root: None,
             payload_text: Some("-beta".to_string()),
+            expected_sha256: None,
         })
         .expect("append payload");
         assert!(append.exists);
         assert_eq!(append.bytes_written, Some(5));
+        assert_eq!(
+            append.payload_sha256.as_deref(),
+            Some("a8b405ab6f00d98196baf634c9d1cb02b03a801770775effca822c7abe8cf432")
+        );
 
         let read = runtime_storage_operation(RuntimeStorageRequestPayload {
             operation: "read_text".to_string(),
@@ -9700,9 +10388,31 @@ mod tests {
             sqlite_db_path: None,
             storage_root: None,
             payload_text: None,
+            expected_sha256: Some(
+                "a8b405ab6f00d98196baf634c9d1cb02b03a801770775effca822c7abe8cf432".to_string(),
+            ),
         })
         .expect("read payload");
         assert_eq!(read.payload_text.as_deref(), Some("alpha-beta"));
+        assert_eq!(read.verified, Some(true));
+        assert_eq!(
+            read.payload_sha256.as_deref(),
+            Some("a8b405ab6f00d98196baf634c9d1cb02b03a801770775effca822c7abe8cf432")
+        );
+
+        let verify = runtime_storage_operation(RuntimeStorageRequestPayload {
+            operation: "verify_text".to_string(),
+            path: path.display().to_string(),
+            backend_family: "filesystem".to_string(),
+            sqlite_db_path: None,
+            storage_root: None,
+            payload_text: None,
+            expected_sha256: Some(
+                "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            ),
+        })
+        .expect("verify payload");
+        assert_eq!(verify.verified, Some(false));
 
         let _ = fs::remove_file(path);
     }
@@ -9726,9 +10436,14 @@ mod tests {
             sqlite_db_path: Some(db_path.display().to_string()),
             storage_root: Some(root.display().to_string()),
             payload_text: Some("{\"status\":\"ok\"}".to_string()),
+            expected_sha256: None,
         })
         .expect("sqlite write payload");
         assert_eq!(write.backend_family, "sqlite");
+        assert_eq!(
+            write.backend_capabilities["supports_sqlite_wal"],
+            json!(true)
+        );
         assert_eq!(
             write.sqlite_db_path.as_deref(),
             Some(db_path.display().to_string().as_str())
@@ -9746,11 +10461,96 @@ mod tests {
             sqlite_db_path: Some(db_path.display().to_string()),
             storage_root: Some(root.display().to_string()),
             payload_text: None,
+            expected_sha256: None,
         })
         .expect("sqlite read payload");
         assert_eq!(read.payload_text.as_deref(), Some("{\"status\":\"ok\"}"));
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn runtime_checkpoint_control_plane_normalizes_backend_family_catalog() {
+        let root = temp_dir_path("checkpoint-control-plane");
+        let response = build_checkpoint_control_plane_compiler_payload(json!({
+            "control_plane_descriptor": {
+                "schema_version": "router-rs-runtime-control-plane-v1",
+                "authority": "rust-runtime-control-plane",
+                "services": {
+                    "trace": {
+                        "authority": "rust-runtime-control-plane",
+                        "role": "trace-and-handoff",
+                        "projection": "rust-native-projection",
+                        "delegate_kind": "filesystem-trace-store"
+                    },
+                    "state": {
+                        "authority": "rust-runtime-control-plane",
+                        "role": "durable-background-state",
+                        "projection": "rust-native-projection",
+                        "delegate_kind": "filesystem-state-store"
+                    }
+                }
+            },
+            "capabilities": {
+                "backend_family": "sqlite3",
+                "store_backend_family": "sqlite",
+                "trace_backend_family": "sqlite",
+                "state_backend_family": "sqlite"
+            },
+            "paths": {
+                "trace_output_path": root.join("TRACE_METADATA.json").display().to_string(),
+                "event_stream_path": root.join("TRACE_EVENTS.jsonl").display().to_string(),
+                "resume_manifest_path": root.join("TRACE_RESUME_MANIFEST.json").display().to_string(),
+                "background_state_path": root.join("runtime_background_jobs.json").display().to_string(),
+                "event_transport_dir": root.join("runtime_event_transports").display().to_string()
+            }
+        }))
+        .expect("checkpoint control plane");
+        let control_plane = &response["checkpoint_control_plane"];
+
+        assert_eq!(control_plane["backend_family"], json!("sqlite"));
+        assert_eq!(
+            control_plane["trace_service"]["delegate_kind"],
+            json!("sqlite-trace-store")
+        );
+        assert_eq!(
+            control_plane["state_service"]["delegate_kind"],
+            json!("sqlite-state-store")
+        );
+        assert_eq!(control_plane["supports_compaction"], json!(true));
+        assert_eq!(control_plane["supports_snapshot_delta"], json!(true));
+        assert_eq!(control_plane["supports_consistent_append"], json!(true));
+        assert_eq!(control_plane["supports_sqlite_wal"], json!(true));
+        assert_eq!(
+            control_plane["backend_family_catalog"]["strongest_local_backend_family"],
+            json!("sqlite")
+        );
+        assert_eq!(
+            control_plane["backend_family_parity"]["aligned"],
+            json!(true)
+        );
+        assert_eq!(
+            control_plane["backend_family_parity"]["compaction_eligible"],
+            json!(true)
+        );
+    }
+
+    #[test]
+    fn runtime_checkpoint_control_plane_rejects_mixed_backend_families() {
+        let root = temp_dir_path("checkpoint-control-plane-mismatch");
+        let err = build_checkpoint_control_plane_compiler_payload(json!({
+            "capabilities": {
+                "backend_family": "sqlite",
+                "store_backend_family": "filesystem"
+            },
+            "paths": {
+                "background_state_path": root.join("runtime_background_jobs.json").display().to_string(),
+                "event_transport_dir": root.join("runtime_event_transports").display().to_string()
+            }
+        }))
+        .expect_err("mixed backend families should fail closed");
+
+        assert!(err.contains("backend family mismatch"));
     }
 
     #[test]
@@ -9943,6 +10743,9 @@ mod tests {
         assert_eq!(rust.route_result_engine, "rust");
         assert!(!rust.diagnostic_report_required);
         assert!(!rust.strict_verification_required);
+
+        let retired_python = build_route_policy("python").expect_err("python route mode retired");
+        assert!(retired_python.contains("retired route mode"));
     }
 
     #[test]
@@ -10008,6 +10811,19 @@ mod tests {
         assert_eq!(
             payload["runtime_host"]["startup_order"][0],
             Value::String("router".to_string())
+        );
+        assert_eq!(
+            payload["runtime_host"]["concurrency_contract"]["router_stdio_pool_default_size"],
+            json!(DEFAULT_ROUTER_STDIO_POOL_SIZE)
+        );
+        assert_eq!(
+            payload["runtime_host"]["concurrency_contract"]["router_stdio_pool_max_size"],
+            json!(MAX_ROUTER_STDIO_POOL_SIZE)
+        );
+        assert_eq!(
+            payload["services"]["middleware"]["subagent_limit_contract"]
+                ["max_concurrent_subagents_limit"],
+            json!(MAX_CONCURRENT_SUBAGENTS_LIMIT)
         );
         assert_eq!(
             payload["runtime_host"]["shutdown_order"][0],
@@ -10085,6 +10901,15 @@ mod tests {
         assert_eq!(
             payload["services"]["checkpoint"]["delegate_kind"],
             Value::String("filesystem-checkpointer".to_string())
+        );
+        assert_eq!(
+            payload["services"]["checkpoint"]["backend_family_catalog"]
+                ["strongest_local_backend_family"],
+            Value::String("sqlite".to_string())
+        );
+        assert_eq!(
+            payload["services"]["checkpoint"]["backend_family_parity"]["aligned"],
+            Value::Bool(true)
         );
         assert_eq!(
             payload["services"]["background"]["authority"],
@@ -11323,6 +12148,107 @@ mod tests {
     }
 
     #[test]
+    fn attach_runtime_event_transport_reads_sqlite_resume_manifest_trace_stream() {
+        let root = temp_json_path("attach-sqlite-root")
+            .with_extension("")
+            .join("runtime-data");
+        let db_path = root.join("runtime_checkpoint_store.sqlite3");
+        let binding_artifact_path = root
+            .join("runtime_event_transports")
+            .join("session-sqlite__job-sqlite.json");
+        let resume_manifest_path = root.join("TRACE_RESUME_MANIFEST.json");
+        let trace_stream_path = root.join("TRACE_EVENTS.jsonl");
+
+        fs::create_dir_all(binding_artifact_path.parent().expect("binding parent"))
+            .expect("create sqlite fixture dir");
+        let conn = rusqlite::Connection::open(&db_path).expect("open sqlite fixture");
+        conn.execute(
+            "CREATE TABLE runtime_storage_payloads (payload_key TEXT PRIMARY KEY, payload_text TEXT NOT NULL)",
+            [],
+        )
+        .expect("create runtime storage payload table");
+        for (path, payload) in [
+            (
+                binding_artifact_path.clone(),
+                serde_json::to_string_pretty(&json!({
+                    "schema_version": "runtime-event-transport-v1",
+                    "stream_id": "stream::job-sqlite",
+                    "session_id": "session-sqlite",
+                    "job_id": "job-sqlite",
+                    "binding_backend_family": "sqlite",
+                    "resume_mode": "after_event_id",
+                    "cleanup_preserves_replay": true
+                }))
+                .expect("serialize binding"),
+            ),
+            (
+                resume_manifest_path.clone(),
+                serde_json::to_string_pretty(&json!({
+                    "schema_version": "runtime-resume-manifest-v1",
+                    "session_id": "session-sqlite",
+                    "job_id": "job-sqlite",
+                    "event_transport_path": binding_artifact_path.display().to_string(),
+                    "trace_stream_path": trace_stream_path.display().to_string(),
+                    "updated_at": "2026-04-23T00:00:01+00:00"
+                }))
+                .expect("serialize resume"),
+            ),
+            (
+                trace_stream_path.clone(),
+                "{\"event_id\":\"evt-sqlite-1\",\"kind\":\"job.started\",\"ts\":\"2026-04-23T00:00:00.000Z\"}\n".to_string(),
+            ),
+        ] {
+            let stable_key = path
+                .strip_prefix(&root)
+                .expect("path under sqlite root")
+                .to_string_lossy()
+                .replace('\\', "/");
+            conn.execute(
+                "INSERT OR REPLACE INTO runtime_storage_payloads (payload_key, payload_text) VALUES (?1, ?2)",
+                rusqlite::params![stable_key, payload],
+            )
+            .expect("insert sqlite fixture payload");
+        }
+        drop(conn);
+
+        let attached = attach_runtime_event_transport(json!({
+            "resume_manifest_path": resume_manifest_path.display().to_string()
+        }))
+        .expect("attach via sqlite resume manifest");
+        assert_eq!(
+            attached["artifact_backend_family"],
+            Value::String("sqlite".to_string())
+        );
+        assert_eq!(
+            attached["trace_stream_path"],
+            Value::String(trace_stream_path.display().to_string())
+        );
+
+        let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
+            path: Some(trace_stream_path.display().to_string()),
+            event_stream_text: None,
+            compaction_manifest_path: None,
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
+            session_id: None,
+            job_id: None,
+            stream_scope_fields: None,
+            after_event_id: None,
+            limit: Some(10),
+        })
+        .expect("replay sqlite trace stream");
+        assert_eq!(replay.event_count, 1);
+        assert_eq!(
+            replay.events[0]["event_id"],
+            Value::String("evt-sqlite-1".to_string())
+        );
+
+        fs::remove_dir_all(root.parent().expect("fixture parent")).expect("cleanup sqlite fixture");
+    }
+
+    #[test]
     fn background_state_operation_persists_control_plane_projection_and_health() {
         let state_path = temp_json_path("background-state-filesystem");
         let response = handle_background_state_operation(json!({
@@ -11400,6 +12326,14 @@ mod tests {
             response["health"]["supports_remote_event_transport"],
             Value::Bool(true)
         );
+        assert_eq!(
+            response["health"]["supports_consistent_append"],
+            Value::Bool(true)
+        );
+        assert_eq!(
+            response["health"]["supports_sqlite_wal"],
+            Value::Bool(false)
+        );
 
         let persisted = read_json(&state_path).expect("read persisted state");
         assert_eq!(
@@ -11416,6 +12350,10 @@ mod tests {
         );
         assert_eq!(
             persisted["control_plane"]["supports_atomic_replace"],
+            Value::Bool(true)
+        );
+        assert_eq!(
+            persisted["control_plane"]["supports_consistent_append"],
             Value::Bool(true)
         );
         assert_eq!(
@@ -11440,6 +12378,44 @@ mod tests {
         );
 
         fs::remove_file(&state_path).expect("cleanup filesystem background state");
+    }
+
+    #[test]
+    fn background_state_operation_compacts_terminal_jobs_over_capacity() {
+        let state_path = temp_json_path("background-state-capacity");
+        for (job_id, status) in [
+            ("job-1", "completed"),
+            ("job-2", "failed"),
+            ("job-3", "queued"),
+        ] {
+            handle_background_state_operation(json!({
+                "schema_version": "router-rs-background-state-request-v1",
+                "operation": "apply_mutation",
+                "state_path": state_path.display().to_string(),
+                "backend_family": "filesystem",
+                "job_id": job_id,
+                "mutation": {"status": status}
+            }))
+            .expect("write background state fixture");
+        }
+
+        let response = handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "snapshot",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "capacity_limit": 2
+        }))
+        .expect("capacity-compacted snapshot");
+        let jobs = response["state"]["jobs"].as_array().expect("jobs");
+        assert_eq!(jobs.len(), 2);
+        assert!(jobs
+            .iter()
+            .any(|job| job["job_id"] == Value::String("job-3".to_string())));
+        assert_eq!(response["health"]["max_background_jobs"], json!(16));
+        assert_eq!(response["health"]["max_background_jobs_limit"], json!(64));
+
+        fs::remove_file(&state_path).expect("cleanup capacity background state");
     }
 
     #[test]
@@ -11508,6 +12484,11 @@ mod tests {
             response["health"]["supports_remote_event_transport"],
             Value::Bool(true)
         );
+        assert_eq!(
+            response["health"]["supports_consistent_append"],
+            Value::Bool(true)
+        );
+        assert_eq!(response["health"]["supports_sqlite_wal"], Value::Bool(true));
         assert!(!state_path.exists());
         assert!(sqlite_db_path.exists());
 

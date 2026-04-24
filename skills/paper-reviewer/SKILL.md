@@ -3,8 +3,11 @@ name: paper-reviewer
 description: |
   Specialist review lane behind `$paper-workbench`. Use when the user clearly
   wants review-only judgment, or explicitly asks for one review dimension such
-  as claim, math, references, figures, tables, language, or layout. This skill
-  reviews and decides; it does not directly rewrite.
+  as claim, novelty, evidence, math, references, figures, tables, language, or
+  layout. Also use for "paper review", "审稿", "严审", "能不能投", "投稿前把关",
+  or reviewer-style critique where external literature / venue research is
+  allowed to calibrate the bar. This skill reviews and decides; it does not
+  directly rewrite unless the user asks to switch into revision.
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
@@ -12,6 +15,19 @@ session_start: n/a
 trigger_hints:
   - $paper-reviewer
   - paper-reviewer
+  - paper review
+  - paper reviewer
+  - 审稿
+  - 审一下论文
+  - 审一下 paper
+  - 严审
+  - 整篇严审
+  - 能不能投
+  - 投稿前把关
+  - 投稿前 review
+  - 外部调研严审
+  - 查文献后审
+  - reviewer-style critique
   - 只做整篇严审不改稿
   - 只做投稿判断
   - 单独做 reviewer lane
@@ -27,7 +43,7 @@ trigger_hints:
   - 最严厉审稿
   - reject reviewer
 metadata:
-  version: "3.1.0"
+  version: "4.0.0"
   platforms: [codex]
   tags: [paper, manuscript, review, reviewer, submission, gate-chain, top-journal]
 framework_roles:
@@ -52,11 +68,18 @@ It owns the paper-facing judgment step: can this manuscript survive review,
 what are the real blockers, and which parts should be cut, narrowed, or left
 alone.
 
-The execution model is:
+Default posture:
 
-- main judgment chain = serial
-- evidence collection and local audits = bounded parallel sidecars
-- merge-back = local to the main thread
+- give a usable reviewer verdict first, not a process report
+- use external research when it helps judge novelty, baseline expectations,
+  venue fit, or citation truth
+- keep unpublished manuscript content confidential; search from title,
+  abstract, keywords, visible claims, and user-approved snippets rather than
+  uploading the whole draft to public third-party services
+- treat target venue and article type as the bar; if missing, proceed with a
+  provisional bar and label it as provisional instead of blocking
+- review before rewriting; switch to `$paper-reviser` only after findings are
+  accepted or the user explicitly asks for edits
 
 ## Use this when
 
@@ -64,6 +87,8 @@ The execution model is:
 - The user asks whether the paper is ready, risky, or worth submitting
 - The user wants a strict whole-paper pass before any edit decisions are opened
 - The user explicitly wants only one review dimension judged
+- The user allows or requests external research for related work, novelty,
+  target-journal norms, or baseline expectations
 
 ## Do not use
 
@@ -84,15 +109,67 @@ Do not expose internal gate jargon unless the user explicitly asks for it.
 
 ## What this skill should deliver
 
-Default output should stay simple:
+Default output should be decision-first and short enough to act on:
 
-1. overall judgment
-2. top blockers
-3. what to fix, cut, hide in appendix, or stop defending
+1. verdict: `可投 / 大修后再投 / 不建议投 / 需要补关键证据`
+2. top blockers: the few issues most likely to trigger rejection
+3. evidence gap: what is missing, unfair, weakly controlled, or overclaimed
+4. external calibration: closest prior work / venue norm / baseline expectation
+   only when external research was used
+5. next honest move: fix, cut, narrow, move to appendix, or stop defending
 
-If the user wants a filesystem-backed review workflow, use the shared protocol in
+Use severity only as plain reviewer priority:
+
+- `A 致命`: likely reject unless repaired or narrowed
+- `B 需补`: fixable but needs data, analysis, baseline, citation, or proof
+- `C 表达/呈现`: wording, organization, figure/table, or layout issue after the
+  claim boundary is safe
+
+If the user wants a filesystem-backed review workflow, or the manuscript review
+will span multiple turns, use the shared protocol in
 [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md). Treat the gate chain
 as internal machinery, not as the main user interface.
+
+## External research rules
+
+External research is allowed by default for review calibration when network
+access is available.
+
+Use it for:
+
+- target venue scope, article type, page / disclosure / artifact expectations
+- closest prior work, recent competing papers, and required baselines
+- citation existence, citation precision, and whether references are current
+- field-specific review norms such as reproducibility, ethics, statistics, or
+  data availability
+
+Do not use it to:
+
+- upload an unpublished full manuscript, confidential data, or private review
+  material to public AI / plagiarism / detector tools without explicit approval
+- pad the review with generic source lists
+- replace reading the manuscript's own claims, methods, figures, and tables
+
+Prefer official venue pages, publisher reviewer guidance, DOI/proceedings pages,
+PubMed/PMC where relevant, arXiv only when the field moves fast, and scholarly
+discovery indexes for expansion.
+
+## Review workflow
+
+For normal interactive review, use this compressed order:
+
+1. Lock the bar: target venue, article type, audience, and constraints. If
+   absent, infer a provisional bar and say so.
+2. Extract the paper's claim map: main claim, contribution bullets, decisive
+   evidence, figures/tables, baselines, and limitations.
+3. Run external calibration: closest prior work, expected baselines, recent
+   norms, and venue fit.
+4. Make the kill decision: identify the shortest reviewer path to reject and
+   whether it is genuinely fatal.
+5. Separate fix types: new evidence, claim narrowing, appendix routing,
+   citation repair, figure/table/layout repair, or prose cleanup.
+6. Report only the actionable conclusion unless the user asks for the full
+   audit trail.
 
 In protocol mode, prefer `串行主链 + 并行 sidecar lane`:
 
@@ -111,6 +188,8 @@ disk:
 - For explicit dimension review, inspect only that slice and do not silently expand scope
 - For whole-paper review, parallelize only bounded audit lanes under the current active gate
 - Use `$paper-logic` for claim, novelty, evidence, and experiment-depth subanalysis
+- Use `$literature-synthesis` only for a heavier external corpus or novelty
+  sweep; do not force the user to switch skills for a normal reviewer lookup
 - Use `$citation-management` for citation truth and venue calibration
 - Use `$paper-visuals`, `$visual-review`, and `$pdf` for final-scale figure, table, and layout checks
 
@@ -120,5 +199,9 @@ disk:
 - Use the hardest honest standard, not a comforting one
 - Do not parallelize multiple decision gates at once
 - Do not turn weak claims into wording advice
+- Do not block the review just because target venue or reference set is missing;
+  proceed provisionally and mark the uncertainty
+- Do not make the final answer a gate-progress report unless the user asked for
+  protocol artifacts
 - If the strongest honest move is to cut, narrow, or move something to appendix, say so plainly
 - Do not blur whole-paper review and local text polish into one owner

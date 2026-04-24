@@ -11,12 +11,18 @@ routing_gate: none
 session_start: preferred
 trigger_hints:
   - autonomous research
+  - autonomous research loop
   - multi-hypothesis
+  - 多假设
+  - 多假设实验
   - experiment loop
   - reflection synthesis
+  - 记录反思
+  - 综合结论
   - research state
   - experiment orchestration
   - two loop
+  - two-loop
   - hypothesis testing
 metadata:
   version: "3.1.0"
@@ -44,6 +50,11 @@ proactive acceleration and memory checks before expensive runs. See
 `references/workflow-notes.md` for the source-backed operating constraints that
 shaped this skill.
 
+The default posture is scientific sensemaking, not tuning. A run is only useful if
+it can change a belief about a mechanism, a boundary condition, or a rival
+explanation. Parameter sweeps are allowed only after the hypothesis says what the
+parameter is supposed to reveal.
+
 ## When To Use
 
 - Starting a new research project from a question or claim
@@ -53,10 +64,14 @@ shaped this skill.
 
 ## Do Not Use
 
+- The user wants one front door for a research-project task instead of directly entering the experiment loop
 - One-off model training, tuning, or evaluation without a research loop
 - Pure literature review or citation gathering
 - Brainstorming only, without execution
 - Paper review, paper writing, or figure polishing only
+
+Use `$research-workbench` for ambiguous research-project asks where the first
+active lane is not obviously the autonomous experiment loop yet.
 
 ## Operating Modes
 
@@ -77,20 +92,24 @@ spans sessions.
 
 ### Bootstrap
 
-1. Scope the question and name the expected contribution.
+1. Scope the question and name the expected contribution plus the mechanism sketch.
 2. Search literature enough to identify the novelty boundary. External web and
    scholarly-API lookup is allowed; keep the captured evidence in the workspace.
-3. Extract 3 to 5 core claims and run a novelty check.
+3. Extract 3 to 5 core claims and run a novelty check against rival explanations,
+   not just matching keywords.
 4. Write the first protocol before any experiment starts.
 
 ### Inner loop
 
-1. Pick one highest-priority hypothesis.
+1. Pick one highest-priority hypothesis with a mechanism and a falsifiable
+   prediction.
 2. Isolate the experiment in its own directory or branch.
-3. Before expensive runs, route implementation slices through the relevant execution owners and proactively check acceleration and memory-control paths.
-4. Run the experiment, measure the agreed proxy, and sanity-check the result.
-5. Record the outcome with what changed, what was observed, and what failed.
-6. Update the research state before starting the next cycle.
+3. Name the simple baseline, ablation, or control before implementation starts.
+4. Before expensive runs, route implementation slices through the relevant execution owners and proactively check acceleration and memory-control paths.
+5. Run the experiment, measure the agreed proxy, and sanity-check the result.
+6. Record the outcome with what changed, what was observed, what failed, what the
+   result rules in/out, and what alternative explanations remain.
+7. Update the research state before starting the next cycle.
 
 ### Outer loop
 
@@ -108,6 +127,8 @@ spans sessions.
 
 - Write the protocol before the first run. Include hypothesis, prediction, metric,
   success threshold, stop condition, and owner artifact paths.
+- Include mechanism, falsifiable prediction, baseline/control, confounders, and
+  negative signals before treating a run as a research run.
 - Keep a single source of truth for project state. Do not let parallel branches edit
   the same state file at once.
 - Log command, code version, data version, environment, seed, and metric for every
@@ -115,6 +136,15 @@ spans sessions.
 - Record throughput, latency, or peak-memory evidence whenever code changes affect
   execution shape or scale limits.
 - Record negative results with the failure mode they rule out.
+- Convert every run into a reusable finding, decision delta, and scope boundary;
+  avoid chronological "then I tried..." notes as the primary record.
+- If an older run only has a narrative summary, backfill it with `annotate-run`
+  before citing it as evidence. The generated `findings-reuse-index.md` is the
+  fast lookup surface for reusable results.
+- Run `audit-reuse` after migration or before handoff to list run records that
+  still have narrative-only evidence.
+- Separate metric movement from interpretation: a better number is not a finding
+  until the baseline/control and rival explanations have been checked.
 - Re-read the state and findings before resuming work in a later session.
 - If the state is stale or contradictory, reconcile it before launching new runs.
 - Treat `research-state.yaml` as the canonical control plane and `research-log.md` as
@@ -122,7 +152,8 @@ spans sessions.
 - Keep experiment folders append-only after a run is labeled complete.
 - Prefer the bundled Rust controller `../../scripts/autoresearch-rs` over ad hoc manual edits for
   init, queued hypotheses, run records, reflections, and next-step suggestions.
-- Keep external lookup inside the Rust controller path (`research-claim`) when
+- Keep external lookup inside the Rust controller path (`research-claim`,
+  `research-all`, `gate-from-research`) when
   possible; do not add Python helper scripts for search or state mutation.
 
 ## Minimum Run Record
@@ -130,13 +161,17 @@ spans sessions.
 Each meaningful run should capture:
 
 - Hypothesis id and one-line claim
+- Mechanism being tested and falsifiable prediction
+- Baseline/control or ablation expectation
 - Protocol version or commit hash
 - Data snapshot or generation recipe
 - Command or entry point used
 - Seed and environment notes
 - Primary metric and sanity checks
 - Outcome label: confirmatory, exploratory, failed, or ambiguous
+- Reusable finding, decision delta, and applies-to / does-not-apply-to scope
 - What the result rules in or rules out
+- Alternative explanations and threats to interpretation
 
 ## Parallelization Rules
 
@@ -178,7 +213,7 @@ slices as follows before expensive runs.
 |---|---|
 | Training, fine-tuning, or model-level experiments | `ai-research` primary; on Apple Silicon or MPS first check `mac-memory-management`; add `code-acceleration` when a generic hot path remains after runtime policy is settled |
 | Data pipelines, preprocessing, evaluation harnesses, inference hot paths, or agent loops | `ai-research`; on Mac add `mac-memory-management` first; add `code-acceleration` when generic dataflow or serializer bottlenecks remain |
-| Literature search or novelty checking | `literature-synthesis`, `academic-search` |
+| Literature search or novelty checking | `literature-synthesis` |
 | Brainstorming | `brainstorm-research` |
 | Reproducibility and experiment provenance | `experiment-reproducibility` |
 | Statistical analysis | `statistical-analysis` |
@@ -198,10 +233,16 @@ slices as follows before expensive runs.
 ## Research Discipline
 
 - Prefer mechanistic hypotheses: `X because Y, predicting Z`.
+- Ask "what would change my mind?" before asking "what parameter should I try?"
 - Treat unexpected results as a signal to revisit the assumption set.
+- Check the boring explanation first: leakage, data shift, implementation bug,
+  missing baseline, or compute artifact.
+- Prefer one decisive contrast over many loosely connected sweeps.
 - Use confirmatory labels only when the protocol was written before the run.
 - Keep exploratory and confirmatory results separate in the log.
 - A coherent negative result is valid if it rules out a meaningful alternative.
+- Do not call a metric gain a finding until you can say what mechanism it supports
+  and which rival explanation it weakens.
 - Do not continue random changes when the loop stalls; stop and reframe.
 
 ## Workspace Structure
@@ -228,6 +269,10 @@ slices as follows before expensive runs.
 - File resync: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- sync --workspace <project>`
 - Claim drafting lane: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- draft-claims --workspace <project>`
 - External research lane: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- research-claim --workspace <project> --claim-id C1`; this queries Semantic Scholar/arXiv from Rust and writes `literature/EXTERNAL_RESEARCH.md`
+- Batch external research: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- research-all --workspace <project> --max-claims 3`; this searches the top claims without manual per-claim repetition
+- Gate recommendation from captured research: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- gate-from-research --workspace <project> --apply`
+- Reuse annotation lane: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- annotate-run --workspace <project> --run-id run-001 --finding "..." --decision-delta "..." --reuse-note "..."`; this upgrades old run notes into reusable evidence.
+- Reuse audit lane: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- audit-reuse --workspace <project> --apply`; this refreshes `findings-reuse-index.md` and reports missing reusable fields.
 - Novelty comparison lane: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- compare-claim --workspace <project> ...`
 - Search-plan refresh: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- plan-search --workspace <project>`; this refreshes the managed search view from structured claims instead of creating a new persisted truth surface
 - First-claim brief refresh: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- brief-first-claim --workspace <project>`; the brief lives inside `CURRENT_CONTEXT.md`, and legacy `literature/NOVELTY_BRIEF.md` is treated as removable stale output

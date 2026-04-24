@@ -75,6 +75,7 @@
 - execution authority：Rust
 - runtime control-plane authority：Rust
 - steady-state fallback：已退休，不再是默认 runtime 能力
+- memory extraction / prompt compression policy：Rust
 - Python host role：thin projection / compatibility host
 - host adapters：继续是 shared contract 的消费方，不再是 framework truth 的私造源头
 
@@ -118,6 +119,7 @@
 - sandbox lifecycle 已达到最终形态
 - 所有 Python compatibility code 都已经物理删除
 - live in-process Rust kernel 已演化到最终架构终点
+- 所有 host-private 展示文案都已经并入 shared Rust truth
 
 本阶段完成，代表的是：
 

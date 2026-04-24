@@ -31,7 +31,6 @@
         "anti-laziness"
       ],
       "exclude": [
-        "academic-search",
         "autoresearch",
         "github-investigator",
         "brainstorm-research",
@@ -47,9 +46,10 @@
       "activation": "explicit",
       "surface_class": "specialist",
       "owners": [
+        "research-workbench",
         "information-retrieval",
         "github-investigator",
-        "academic-search"
+        "literature-synthesis"
       ],
       "overlays": [
         "anti-laziness"
@@ -58,7 +58,7 @@
         "plan-to-code",
         "react"
       ],
-      "purpose": "Bounded research, repo investigation, and evidence gathering."
+      "purpose": "Research-project front door plus bounded research, repo investigation, and evidence gathering."
     },
     "implementation_loadout": {
       "activation": "explicit",
@@ -74,7 +74,7 @@
         "frontend-code-quality"
       ],
       "exclude": [
-        "academic-search"
+        "literature-synthesis"
       ],
       "purpose": "Concrete implementation and refactor execution with test support."
     },

@@ -51,6 +51,8 @@ You are an expert AI/ML research engineer with deep knowledge across the full st
 
 ## Do not use
 
+- The user wants one front door for a research-project task and the first active lane is still unclear (use `$research-workbench`)
+- The user wants an autonomous multi-hypothesis research loop rather than one implementation/evaluation lane (use `$autoresearch`)
 - The task is purely about Mac memory pressure, unified memory limits, or MPS memory hygiene rather than model/research design (use `$mac-memory-management`)
 - The task is about paper review or revision rather than research engineering (use `$paper-reviewer`, `paper-reviser`, `paper-logic`, `paper-writing`, or `paper-visuals`)
 - The task is about brainstorming research directions (use `$brainstorm-research`)
@@ -89,6 +91,7 @@ Rule of thumb: "build it" → `ai-research`. "Is it correct?" → `research-engi
 - Follows research best practices: seed control, ablations, baselines
 - Cites relevant papers and techniques with proper attribution
 - Uses the 2024/2025 ecosystem as the default reference point
+- Keeps metrics tied to the research claim; a better number is not enough unless the baseline, ablation, and failure mode are named
 
 ## Response Approach
 

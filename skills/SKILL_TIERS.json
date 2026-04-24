@@ -32,16 +32,16 @@
     }
   },
   "summary": {
-    "total_skills": 151,
+    "total_skills": 150,
     "tier_counts": {
       "core": 20,
-      "optional": 129,
+      "optional": 128,
       "experimental": 2,
       "deprecated": 0
     },
     "activation_counts": {
       "default": 26,
-      "explicit_opt_in": 125,
+      "explicit_opt_in": 124,
       "disabled": 0
     }
   },
@@ -69,7 +69,6 @@
       "visual-review"
     ],
     "optional": [
-      "academic-search",
       "accessibility-auditor",
       "agent-memory",
       "agent-swarm-orchestration",
@@ -164,6 +163,7 @@
       "refresh",
       "release-engineering",
       "research-engineer",
+      "research-workbench",
       "rust-pro",
       "scientific-figure-plotting",
       "screenshot",
@@ -206,47 +206,6 @@
     "deprecated": []
   },
   "skills": {
-    "academic-search": {
-      "tier": "optional",
-      "reasons": [
-        "specialist-opt-in"
-      ],
-      "surface": {
-        "activation_mode": "explicit_opt_in",
-        "default_surface_enabled": false,
-        "default_loadout_memberships": []
-      },
-      "signals": {
-        "layer": "L3",
-        "owner": "owner",
-        "gate": "none",
-        "priority": "P2",
-        "session_start": "n/a",
-        "source": "project",
-        "source_position": 3,
-        "health": {
-          "dynamic_score": 98.3,
-          "static_score": 95.8,
-          "usage_30d": 0,
-          "reroutes_30d": 0,
-          "health_status": "Healthy"
-        },
-        "loadouts": [
-          {
-            "loadout": "default_surface_loadout",
-            "bucket": "exclude"
-          },
-          {
-            "loadout": "research_loadout",
-            "bucket": "owners"
-          },
-          {
-            "loadout": "implementation_loadout",
-            "bucket": "exclude"
-          }
-        ]
-      }
-    },
     "accessibility-auditor": {
       "tier": "optional",
       "reasons": [

@@ -7,6 +7,11 @@ This file defines the shared gate-chain contract used by `$paper-workbench`,
 internal main chain and sidecar lanes explicit so no capability is lost when the
 front door is unified.
 
+Use this protocol only when disk-backed, repeatable, multi-turn review state is
+actually useful. For normal interactive paper review, keep the protocol
+internal and lead with verdict, blockers, external calibration, and next move.
+Missing target venue should create a provisional review bar, not a hard stop.
+
 ## 1. Root Artifact Layout
 
 All runtime artifacts live in the manuscript workspace root, not in the

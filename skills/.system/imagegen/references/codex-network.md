@@ -1,33 +1,28 @@
-# Codex network approvals / sandbox notes
+# Codex network / local endpoint notes
 
-This file is for the fallback CLI mode only. Read it when the user explicitly asks to use `scripts/image_gen.py` / CLI / API / model controls, or after the user explicitly confirms that a transparent-output request should use the `gpt-image-1.5` true-transparency fallback path.
+This skill's default image path calls a local VibeProxy endpoint:
 
-This guidance is intentionally isolated from `SKILL.md` because it can vary by environment and may become stale. Prefer the defaults in your environment when in doubt.
+- `http://127.0.0.1:8318/v1/responses`
 
-## Why am I asked to approve image generation calls?
-The fallback CLI uses the OpenAI Image API, so it needs outbound network access. In many Codex setups, network access is disabled by default and/or the approval policy requires confirmation before networked commands run.
+## Why this path exists
 
-## Important note about approvals vs network
-- `--ask-for-approval never` suppresses approval prompts.
-- It does **not** by itself enable network access.
-- In `workspace-write`, network access still depends on your Codex configuration (for example `[sandbox_workspace_write] network_access = true`).
+- The local VibeProxy Responses path has been directly verified to return `image_generation_call`.
+- This skill standardizes on one direct local route instead of depending on runtime-managed tool injection.
+- Using the bundled CLI keeps execution deterministic and inspectable.
 
-## How do I reduce repeated approval prompts?
-If you trust the repo and want fewer prompts, use a configuration or profile that both:
-- enables network for the sandbox mode you plan to use
-- sets an approval policy that matches your risk tolerance
+## Network expectations
 
-Example `~/.codex/config.toml` pattern:
+- The default target is loopback only (`127.0.0.1`), not the public OpenAI endpoint.
+- If the local proxy is running, the call is usually just a normal local HTTP POST.
+- If the local proxy is down, requests will fail before any model-side image generation begins.
 
-```toml
-approval_policy = "on-request"
-sandbox_mode = "workspace-write"
+## Auth expectations
 
-[sandbox_workspace_write]
-network_access = true
-```
+- This path uses no OpenAI API credential.
+- If your local VibeProxy requires bearer auth, provide it with `VIBEPROXY_BEARER_TOKEN` or `VIBEPROXY_API_KEY`.
 
-If you want quieter automation after network is enabled, you can choose a stricter approval policy, but do that intentionally and with care.
+## Troubleshooting
 
-## Safety note
-Enabling network and reducing approvals lowers friction, but increases risk if you run untrusted code or work in an untrusted repository.
+- First verify the proxy is listening on `127.0.0.1:8318`.
+- Then run `cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/image_gen_rs/Cargo.toml -- generate --prompt "Test" --dry-run` to confirm the request shape.
+- If live calls fail, compare the bundled CLI payload against a direct working `curl` to `/v1/responses`.

@@ -13,7 +13,7 @@ use std::process::Command;
 use std::time::Duration;
 use uuid::Uuid;
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 const STAGE_BOOTSTRAP: &str = "bootstrap";
 const STAGE_INNER_LOOP: &str = "inner-loop";
 const STAGE_OUTER_LOOP: &str = "outer-loop";
@@ -39,6 +39,8 @@ const CLAIMS_BLOCK_START: &str = "<!-- autoresearch:claims:start -->";
 const CLAIMS_BLOCK_END: &str = "<!-- autoresearch:claims:end -->";
 const CONTEXT_BLOCK_START: &str = "<!-- autoresearch:context:start -->";
 const CONTEXT_BLOCK_END: &str = "<!-- autoresearch:context:end -->";
+const REUSE_INDEX_BLOCK_START: &str = "<!-- autoresearch:reuse-index:start -->";
+const REUSE_INDEX_BLOCK_END: &str = "<!-- autoresearch:reuse-index:end -->";
 
 #[derive(Parser)]
 #[command(name = "autoresearch-rs")]
@@ -102,6 +104,26 @@ enum Commands {
         #[arg(long = "timeout-secs", default_value_t = DEFAULT_EXTERNAL_TIMEOUT_SECS)]
         timeout_secs: u64,
     },
+    ResearchAll {
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long, value_enum, default_value_t = ExternalSourceArg::All)]
+        source: ExternalSourceArg,
+        #[arg(long, default_value_t = DEFAULT_RESEARCH_RESULT_LIMIT)]
+        limit: usize,
+        #[arg(long = "max-claims", default_value_t = 3)]
+        max_claims: usize,
+        #[arg(long = "timeout-secs", default_value_t = DEFAULT_EXTERNAL_TIMEOUT_SECS)]
+        timeout_secs: u64,
+    },
+    GateFromResearch {
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long = "min-results", default_value_t = 1)]
+        min_results: usize,
+        #[arg(long = "apply")]
+        apply: bool,
+    },
     BriefFirstClaim {
         #[arg(long)]
         workspace: PathBuf,
@@ -133,6 +155,22 @@ enum Commands {
         claim: String,
         #[arg(long)]
         prediction: Option<String>,
+        #[arg(long)]
+        mechanism: Option<String>,
+        #[arg(long = "falsifiable-prediction")]
+        falsifiable_prediction: Option<String>,
+        #[arg(long = "success-threshold")]
+        success_threshold: Option<String>,
+        #[arg(long = "stop-condition")]
+        stop_condition: Option<String>,
+        #[arg(long = "baseline")]
+        baselines: Vec<String>,
+        #[arg(long = "confounder")]
+        confounders: Vec<String>,
+        #[arg(long = "negative-signal")]
+        negative_signals: Vec<String>,
+        #[arg(long = "minimal-test")]
+        minimal_test: Option<String>,
         #[arg(long, value_enum, default_value_t = PriorityArg::Medium)]
         priority: PriorityArg,
         #[arg(long = "id")]
@@ -155,10 +193,56 @@ enum Commands {
         entry_command: Option<String>,
         #[arg(long = "evidence-path")]
         evidence_path: Option<String>,
+        #[arg(long = "sanity-check")]
+        sanity_checks: Vec<String>,
+        #[arg(long = "baseline-result")]
+        baseline_result: Option<String>,
+        #[arg(long = "rules-in")]
+        rules_in: Vec<String>,
+        #[arg(long = "rules-out")]
+        rules_out: Vec<String>,
+        #[arg(long = "alternative-explanation")]
+        alternative_explanations: Vec<String>,
+        #[arg(long = "threat")]
+        threats: Vec<String>,
+        #[arg(long = "interpretation")]
+        interpretation: Option<String>,
+        #[arg(long = "finding")]
+        finding: Option<String>,
+        #[arg(long = "decision-delta")]
+        decision_delta: Option<String>,
+        #[arg(long = "reuse-note")]
+        reuse_note: Option<String>,
+        #[arg(long = "applies-to")]
+        applies_to: Vec<String>,
+        #[arg(long = "does-not-apply-to")]
+        does_not_apply_to: Vec<String>,
         #[arg(long = "override-novelty-gate")]
         override_novelty_gate: bool,
         #[arg(long = "override-reason")]
         override_reason: Option<String>,
+    },
+    AnnotateRun {
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long = "run-id")]
+        run_id: String,
+        #[arg(long = "finding")]
+        finding: Option<String>,
+        #[arg(long = "decision-delta")]
+        decision_delta: Option<String>,
+        #[arg(long = "reuse-note")]
+        reuse_note: Option<String>,
+        #[arg(long = "applies-to")]
+        applies_to: Vec<String>,
+        #[arg(long = "does-not-apply-to")]
+        does_not_apply_to: Vec<String>,
+    },
+    AuditReuse {
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long = "apply")]
+        apply: bool,
     },
     Reflect {
         #[arg(long)]
@@ -415,6 +499,72 @@ fn main() -> Result<()> {
             }
             println!("Recorded external research for {}", workspace.display());
         }
+        Commands::ResearchAll {
+            workspace,
+            source,
+            limit,
+            max_claims,
+            timeout_secs,
+        } => {
+            let (workspace, state_path) = ensure_workspace(&workspace)?;
+            let state = load_state(&state_path)?;
+            let updated = research_all_claims(&state, &source, limit, max_claims, timeout_secs)?;
+            let added = arr(&updated, "external_research")
+                .len()
+                .saturating_sub(arr(&ensure_state_defaults(&state), "external_research").len());
+            dump_state(&state_path, &updated)?;
+            sync_workspace_files(&workspace, &updated)?;
+            append_research_log(
+                &workspace,
+                "External research batch recorded",
+                vec![
+                    format!("claims searched: {added}"),
+                    format!("source: {}", source.as_str()),
+                ],
+            )?;
+            append_ledger_event(
+                &workspace,
+                "external_research.batch_recorded",
+                json!({ "claims": added, "source": source.as_str() }),
+            )?;
+            println!(
+                "Recorded {added} external research entries for {}",
+                workspace.display()
+            );
+        }
+        Commands::GateFromResearch {
+            workspace,
+            min_results,
+            apply,
+        } => {
+            let (workspace, state_path) = ensure_workspace(&workspace)?;
+            let state = load_state(&state_path)?;
+            let recommendation = novelty_gate_recommendation_from_research(&state, min_results);
+            if apply {
+                let updated = apply_novelty_gate_recommendation(&state, &recommendation);
+                dump_state(&state_path, &updated)?;
+                sync_workspace_files(&workspace, &updated)?;
+                append_research_log(
+                    &workspace,
+                    "Novelty gate recommendation applied",
+                    vec![
+                        format!(
+                            "status: {}",
+                            str_field(&recommendation, "recommended_status")
+                        ),
+                        format!("decision: {}", str_field(&recommendation, "decision")),
+                    ],
+                )?;
+                append_ledger_event(
+                    &workspace,
+                    "novelty_gate.recommended_from_external_research",
+                    recommendation.clone(),
+                )?;
+                println!("{}", format_gate_recommendation(&recommendation));
+            } else {
+                println!("{}", format_gate_recommendation(&recommendation));
+            }
+        }
         Commands::BriefFirstClaim { workspace } => {
             let (workspace, state_path) = ensure_workspace(&workspace)?;
             let state = load_state(&state_path)?;
@@ -501,6 +651,14 @@ fn main() -> Result<()> {
             workspace,
             claim,
             prediction,
+            mechanism,
+            falsifiable_prediction,
+            success_threshold,
+            stop_condition,
+            baselines,
+            confounders,
+            negative_signals,
+            minimal_test,
             priority,
             id,
         } => {
@@ -508,10 +666,20 @@ fn main() -> Result<()> {
             let state = load_state(&state_path)?;
             let updated = add_hypothesis(
                 &state,
-                &claim,
-                prediction.as_deref(),
-                priority.as_str(),
-                id.as_deref(),
+                HypothesisInput {
+                    claim: &claim,
+                    prediction: prediction.as_deref(),
+                    mechanism: mechanism.as_deref(),
+                    falsifiable_prediction: falsifiable_prediction.as_deref(),
+                    success_threshold: success_threshold.as_deref(),
+                    stop_condition: stop_condition.as_deref(),
+                    baselines: &baselines,
+                    confounders: &confounders,
+                    negative_signals: &negative_signals,
+                    minimal_test: minimal_test.as_deref(),
+                    priority: priority.as_str(),
+                    hypothesis_id: id.as_deref(),
+                },
             )?;
             dump_state(&state_path, &updated)?;
             sync_workspace_files(&workspace, &updated)?;
@@ -546,6 +714,18 @@ fn main() -> Result<()> {
             metric_value,
             entry_command,
             evidence_path,
+            sanity_checks,
+            baseline_result,
+            rules_in,
+            rules_out,
+            alternative_explanations,
+            threats,
+            interpretation,
+            finding,
+            decision_delta,
+            reuse_note,
+            applies_to,
+            does_not_apply_to,
             override_novelty_gate,
             override_reason,
         } => {
@@ -560,6 +740,18 @@ fn main() -> Result<()> {
                 metric_value.as_deref(),
                 entry_command.as_deref(),
                 evidence_path.as_deref(),
+                &sanity_checks,
+                baseline_result.as_deref(),
+                &rules_in,
+                &rules_out,
+                &alternative_explanations,
+                &threats,
+                interpretation.as_deref(),
+                finding.as_deref(),
+                decision_delta.as_deref(),
+                reuse_note.as_deref(),
+                &applies_to,
+                &does_not_apply_to,
                 override_novelty_gate,
                 override_reason.as_deref(),
                 &workspace,
@@ -587,6 +779,18 @@ fn main() -> Result<()> {
                         "metric_value": record.get("metric_value").cloned().unwrap_or(Value::Null),
                         "command": record.get("command").cloned().unwrap_or(Value::Null),
                         "evidence_path": record.get("evidence_path").cloned().unwrap_or(Value::Null),
+                        "sanity_checks": record.get("sanity_checks").cloned().unwrap_or(Value::Null),
+                        "baseline_result": record.get("baseline_result").cloned().unwrap_or(Value::Null),
+                        "rules_in": record.get("rules_in").cloned().unwrap_or(Value::Null),
+                        "rules_out": record.get("rules_out").cloned().unwrap_or(Value::Null),
+                        "alternative_explanations": record.get("alternative_explanations").cloned().unwrap_or(Value::Null),
+                        "threats": record.get("threats").cloned().unwrap_or(Value::Null),
+                        "interpretation": record.get("interpretation").cloned().unwrap_or(Value::Null),
+                        "finding": record.get("finding").cloned().unwrap_or(Value::Null),
+                        "decision_delta": record.get("decision_delta").cloned().unwrap_or(Value::Null),
+                        "reuse_note": record.get("reuse_note").cloned().unwrap_or(Value::Null),
+                        "applies_to": record.get("applies_to").cloned().unwrap_or(Value::Null),
+                        "does_not_apply_to": record.get("does_not_apply_to").cloned().unwrap_or(Value::Null),
                         "novelty_gate_status_at_run": record.get("novelty_gate_status_at_run").cloned().unwrap_or(Value::Null),
                         "novelty_gate_override": record.get("novelty_gate_override").cloned().unwrap_or(Value::Null),
                         "override_reason": record.get("override_reason").cloned().unwrap_or(Value::Null),
@@ -607,6 +811,78 @@ fn main() -> Result<()> {
                 )?;
             }
             println!("Recorded run for {hypothesis_id}");
+        }
+        Commands::AnnotateRun {
+            workspace,
+            run_id,
+            finding,
+            decision_delta,
+            reuse_note,
+            applies_to,
+            does_not_apply_to,
+        } => {
+            let (workspace, state_path) = ensure_workspace(&workspace)?;
+            let state = load_state(&state_path)?;
+            let updated = annotate_run(
+                &state,
+                &run_id,
+                RunAnnotationInput {
+                    finding: finding.as_deref(),
+                    decision_delta: decision_delta.as_deref(),
+                    reuse_note: reuse_note.as_deref(),
+                    applies_to: &applies_to,
+                    does_not_apply_to: &does_not_apply_to,
+                },
+            )?;
+            dump_state(&state_path, &updated)?;
+            sync_workspace_files(&workspace, &updated)?;
+            append_research_log(
+                &workspace,
+                &format!("Run annotated for reuse ({run_id})"),
+                vec![
+                    format!("finding: {}", finding.unwrap_or_else(|| "-".into())),
+                    format!(
+                        "decision_delta: {}",
+                        decision_delta.unwrap_or_else(|| "-".into())
+                    ),
+                ],
+            )?;
+            append_ledger_event(
+                &workspace,
+                "run.annotated",
+                json!({
+                    "run_id": run_id,
+                    "finding": latest_run_by_id(&updated, &run_id).and_then(|run| run.get("finding")).cloned().unwrap_or(Value::Null),
+                    "decision_delta": latest_run_by_id(&updated, &run_id).and_then(|run| run.get("decision_delta")).cloned().unwrap_or(Value::Null),
+                    "reuse_note": latest_run_by_id(&updated, &run_id).and_then(|run| run.get("reuse_note")).cloned().unwrap_or(Value::Null),
+                }),
+            )?;
+            println!("Annotated {run_id} for reuse");
+        }
+        Commands::AuditReuse { workspace, apply } => {
+            let (workspace, state_path) = ensure_workspace(&workspace)?;
+            let state = load_state(&state_path)?;
+            let audit = reuse_audit(&state);
+            if apply {
+                sync_managed_file(
+                    &workspace.join("findings-reuse-index.md"),
+                    "# Findings Reuse Index\n\n",
+                    REUSE_INDEX_BLOCK_START,
+                    REUSE_INDEX_BLOCK_END,
+                    render_reuse_index_summary(&state),
+                )?;
+                append_research_log(
+                    &workspace,
+                    "Reuse audit refreshed",
+                    vec![
+                        format!("reusable: {}", audit["reusable_runs"]),
+                        format!("missing: {}", audit["missing_annotations"]),
+                    ],
+                )?;
+                append_ledger_event(&workspace, "reuse.audit_refreshed", audit.clone())?;
+                dump_state(&state_path, &state)?;
+            }
+            println!("{}", format_reuse_audit(&audit));
         }
         Commands::Reflect {
             workspace,
@@ -929,6 +1205,37 @@ fn set_key(value: &mut Value, key: &str, child: Value) {
     obj_mut(value).insert(key.to_string(), child);
 }
 
+fn string_vec(values: &[String]) -> Value {
+    json!(values
+        .iter()
+        .map(|item| item.trim())
+        .filter(|item| !item.is_empty())
+        .collect::<Vec<_>>())
+}
+
+fn optional_string(value: Option<&str>) -> Value {
+    value
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(Value::from)
+        .unwrap_or(Value::Null)
+}
+
+fn value_as_string_list(value: &Value, key: &str) -> Vec<String> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .filter(|item| !item.trim().is_empty())
+                .map(ToString::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn novelty_gate(value: &Value) -> &Map<String, Value> {
     value
         .get("novelty_gate")
@@ -1044,6 +1351,14 @@ fn ensure_state_defaults(state: &Value) -> Value {
         let item = hypothesis
             .as_object_mut()
             .expect("hypothesis must be object");
+        item.entry("mechanism").or_insert(Value::Null);
+        item.entry("falsifiable_prediction").or_insert(Value::Null);
+        item.entry("success_threshold").or_insert(Value::Null);
+        item.entry("stop_condition").or_insert(Value::Null);
+        item.entry("baselines").or_insert(json!([]));
+        item.entry("confounders").or_insert(json!([]));
+        item.entry("negative_signals").or_insert(json!([]));
+        item.entry("minimal_test").or_insert(Value::Null);
         let status = item
             .get("status")
             .and_then(Value::as_str)
@@ -1076,6 +1391,18 @@ fn ensure_state_defaults(state: &Value) -> Value {
         item.entry("override_reason").or_insert(Value::Null);
         item.entry("environment_fingerprint").or_insert(Value::Null);
         item.entry("git_provenance").or_insert(Value::Null);
+        item.entry("sanity_checks").or_insert(json!([]));
+        item.entry("baseline_result").or_insert(Value::Null);
+        item.entry("rules_in").or_insert(json!([]));
+        item.entry("rules_out").or_insert(json!([]));
+        item.entry("alternative_explanations").or_insert(json!([]));
+        item.entry("threats").or_insert(json!([]));
+        item.entry("interpretation").or_insert(Value::Null);
+        item.entry("finding").or_insert(Value::Null);
+        item.entry("decision_delta").or_insert(Value::Null);
+        item.entry("reuse_note").or_insert(Value::Null);
+        item.entry("applies_to").or_insert(json!([]));
+        item.entry("does_not_apply_to").or_insert(json!([]));
     }
     for record in arr_mut(&mut hydrated, "external_research") {
         let item = record
@@ -1151,6 +1478,15 @@ fn migrate_state(state: &Value) -> Value {
         let latest_decision = decisions.iter().rev().find(|item| {
             item.get("hypothesis_id").and_then(Value::as_str) == Some(hypothesis_id.as_str())
         });
+        let item = hypothesis.as_object_mut().unwrap();
+        item.entry("mechanism").or_insert(Value::Null);
+        item.entry("falsifiable_prediction").or_insert(Value::Null);
+        item.entry("success_threshold").or_insert(Value::Null);
+        item.entry("stop_condition").or_insert(Value::Null);
+        item.entry("baselines").or_insert(json!([]));
+        item.entry("confounders").or_insert(json!([]));
+        item.entry("negative_signals").or_insert(json!([]));
+        item.entry("minimal_test").or_insert(Value::Null);
         if status == "active"
             && latest_run.is_some()
             && (latest_decision.is_none()
@@ -1159,7 +1495,6 @@ fn migrate_state(state: &Value) -> Value {
         {
             status = "needs_reflection".to_string();
         }
-        let item = hypothesis.as_object_mut().unwrap();
         item.insert("status".into(), json!(status));
         item.entry("status_reason").or_insert(Value::Null);
         let status_updated_at = item
@@ -1176,6 +1511,18 @@ fn migrate_state(state: &Value) -> Value {
         item.entry("override_reason").or_insert(Value::Null);
         item.entry("environment_fingerprint").or_insert(Value::Null);
         item.entry("git_provenance").or_insert(Value::Null);
+        item.entry("sanity_checks").or_insert(json!([]));
+        item.entry("baseline_result").or_insert(Value::Null);
+        item.entry("rules_in").or_insert(json!([]));
+        item.entry("rules_out").or_insert(json!([]));
+        item.entry("alternative_explanations").or_insert(json!([]));
+        item.entry("threats").or_insert(json!([]));
+        item.entry("interpretation").or_insert(Value::Null);
+        item.entry("finding").or_insert(Value::Null);
+        item.entry("decision_delta").or_insert(Value::Null);
+        item.entry("reuse_note").or_insert(Value::Null);
+        item.entry("applies_to").or_insert(json!([]));
+        item.entry("does_not_apply_to").or_insert(json!([]));
     }
     obj_mut(&mut migrated)
         .entry("external_research")
@@ -1569,7 +1916,7 @@ fn build_search_queries(claim: &str, axis: &str) -> Vec<Value> {
             .join(" ")
     };
     let combination_terms = if keywords.len() >= 4 {
-        vec![
+        [
             keywords[0].clone(),
             keywords[1].clone(),
             keywords[keywords.len() - 2].clone(),
@@ -2047,8 +2394,8 @@ fn research_claim(
     timeout_secs: u64,
 ) -> Result<Value> {
     let source_record = claim_record_for_research(state, claim_id);
-    if claim_id.is_some() && source_record.is_none() {
-        bail!("Unknown claim id: {}", claim_id.unwrap());
+    if let (Some(claim_id), None) = (claim_id, source_record.as_ref()) {
+        bail!("Unknown claim id: {claim_id}");
     }
     let query = default_research_query(source_record.as_ref(), explicit_query)?;
     let client = http_client(timeout_secs)?;
@@ -2091,6 +2438,47 @@ fn research_claim(
     }))
 }
 
+fn claim_records_for_batch(state: &Value, max_claims: usize) -> Vec<Value> {
+    let mut records = current_search_plan(state);
+    if records.is_empty() {
+        if let Some(top) = top_priority_claim(state) {
+            records.push(build_search_plan_entry(&top));
+        }
+    }
+    records.into_iter().take(max_claims.clamp(1, 10)).collect()
+}
+
+fn research_all_claims(
+    state: &Value,
+    source: &ExternalSourceArg,
+    limit: usize,
+    max_claims: usize,
+    timeout_secs: u64,
+) -> Result<Value> {
+    let mut next_state = ensure_state_defaults(state);
+    let records = claim_records_for_batch(&next_state, max_claims);
+    if records.is_empty() {
+        bail!("No claims available. Run draft-claims first.");
+    }
+    for record in records {
+        let claim_id = record.get("claim_id").and_then(Value::as_str);
+        let query = default_research_query(Some(&record), None)?;
+        if has_matching_external_research(&next_state, claim_id, &query, source) {
+            continue;
+        }
+        let research = research_claim(
+            &next_state,
+            claim_id,
+            Some(&query),
+            source,
+            limit,
+            timeout_secs,
+        )?;
+        arr_mut(&mut next_state, "external_research").push(research);
+    }
+    Ok(next_state)
+}
+
 fn add_external_research(state: &Value, research: Value) -> Value {
     let mut next_state = ensure_state_defaults(state);
     arr_mut(&mut next_state, "external_research").push(research);
@@ -2107,6 +2495,231 @@ fn external_research_result_count(entry: &Value) -> usize {
         .and_then(Value::as_array)
         .map(Vec::len)
         .unwrap_or(0)
+}
+
+fn external_research_entries_for_claim<'a>(state: &'a Value, claim_id: &str) -> Vec<&'a Value> {
+    arr(state, "external_research")
+        .iter()
+        .filter(|entry| entry.get("claim_id").and_then(Value::as_str) == Some(claim_id))
+        .collect()
+}
+
+fn source_covers(existing_source: &str, requested_source: &ExternalSourceArg) -> bool {
+    match requested_source {
+        ExternalSourceArg::All => existing_source == ExternalSourceArg::All.as_str(),
+        ExternalSourceArg::SemanticScholar => {
+            existing_source == ExternalSourceArg::SemanticScholar.as_str()
+                || existing_source == ExternalSourceArg::All.as_str()
+        }
+        ExternalSourceArg::Arxiv => {
+            existing_source == ExternalSourceArg::Arxiv.as_str()
+                || existing_source == ExternalSourceArg::All.as_str()
+        }
+    }
+}
+
+fn has_matching_external_research(
+    state: &Value,
+    claim_id: Option<&str>,
+    query: &str,
+    source: &ExternalSourceArg,
+) -> bool {
+    let Some(claim_id) = claim_id else {
+        return false;
+    };
+    arr(state, "external_research").iter().any(|entry| {
+        entry.get("claim_id").and_then(Value::as_str) == Some(claim_id)
+            && entry.get("query").and_then(Value::as_str) == Some(query)
+            && entry
+                .get("source")
+                .and_then(Value::as_str)
+                .map(|existing| source_covers(existing, source))
+                .unwrap_or(false)
+            && external_research_result_count(entry) > 0
+    })
+}
+
+fn claim_ids_for_gate(state: &Value) -> Vec<String> {
+    let mut ids = Vec::new();
+    for key in ["claim_records", "draft_claims"] {
+        for claim in novelty_gate(state)
+            .get(key)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(id) = claim.get("claim_id").and_then(Value::as_str) {
+                if !ids.iter().any(|item| item == id) {
+                    ids.push(id.to_string());
+                }
+            }
+        }
+    }
+    ids
+}
+
+fn compared_claim_ids(state: &Value) -> HashSet<String> {
+    novelty_arr(state, "claim_records")
+        .iter()
+        .filter_map(|record| {
+            record
+                .get("claim_id")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        })
+        .collect()
+}
+
+fn novelty_gate_recommendation_from_research(state: &Value, min_results: usize) -> Value {
+    let min_results = min_results.max(1);
+    let claim_ids = claim_ids_for_gate(state);
+    let compared_ids = compared_claim_ids(state);
+    let mut reviewed = Vec::new();
+    let mut missing = Vec::new();
+    let mut uncompared = Vec::new();
+    for claim_id in &claim_ids {
+        let entries = external_research_entries_for_claim(state, claim_id);
+        let result_count: usize = entries
+            .iter()
+            .map(|entry| external_research_result_count(entry))
+            .sum();
+        if result_count >= min_results {
+            reviewed.push(json!({
+                "claim_id": claim_id,
+                "searches": entries.len(),
+                "results": result_count,
+            }));
+        } else {
+            missing.push(json!({
+                "claim_id": claim_id,
+                "results": result_count,
+                "needed": min_results,
+            }));
+        }
+        if !compared_ids.contains(claim_id) {
+            uncompared.push(json!({ "claim_id": claim_id }));
+        }
+    }
+    let existing_records = novelty_arr(state, "claim_records").len();
+    let recommended_status =
+        if claim_ids.is_empty() || !missing.is_empty() || !uncompared.is_empty() {
+            "pending"
+        } else {
+            "passed"
+        };
+    let decision = if recommended_status == "passed" {
+        "External searches exist for every drafted claim; proceed if manual comparisons are defensible."
+    } else if claim_ids.is_empty() {
+        "Draft claims before deciding the novelty gate."
+    } else if !uncompared.is_empty() {
+        "External searches exist, but claim comparisons are still missing."
+    } else {
+        "Some claims still need external research before the gate can pass."
+    };
+    json!({
+        "recommended_status": recommended_status,
+        "decision": decision,
+        "reviewed_claims": reviewed,
+        "missing_claims": missing,
+        "uncompared_claims": uncompared,
+        "claim_comparisons": existing_records,
+        "generated_at": now_iso(),
+    })
+}
+
+fn apply_novelty_gate_recommendation(state: &Value, recommendation: &Value) -> Value {
+    let mut next_state = ensure_state_defaults(state);
+    let status = str_field_default(recommendation, "recommended_status", "pending");
+    let decision = str_field_default(recommendation, "decision", "-");
+    let reviewed = recommendation
+        .get("reviewed_claims")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| {
+                    format!(
+                        "{}={} results",
+                        str_field_default(item, "claim_id", "?"),
+                        item.get("results")
+                            .map(value_to_string)
+                            .unwrap_or_else(|| "0".into())
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+    let gate = novelty_gate_mut(&mut next_state);
+    gate.insert("status".into(), json!(status));
+    gate.insert("decision".into(), json!(decision));
+    if !reviewed.is_empty() {
+        gate.insert("overlap_summary".into(), json!(reviewed));
+    }
+    next_state
+}
+
+fn format_gate_recommendation(recommendation: &Value) -> String {
+    let mut lines = vec![
+        format!(
+            "recommended_status: {}",
+            str_field_default(recommendation, "recommended_status", "pending")
+        ),
+        format!(
+            "decision: {}",
+            str_field_default(recommendation, "decision", "-")
+        ),
+        format!(
+            "claim_comparisons: {}",
+            recommendation
+                .get("claim_comparisons")
+                .map(value_to_string)
+                .unwrap_or_else(|| "0".into())
+        ),
+        "reviewed_claims:".into(),
+    ];
+    for item in recommendation
+        .get("reviewed_claims")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        lines.push(format!(
+            "- {}: {} results",
+            str_field_default(item, "claim_id", "?"),
+            item.get("results")
+                .map(value_to_string)
+                .unwrap_or_else(|| "0".into())
+        ));
+    }
+    lines.push("missing_claims:".into());
+    for item in recommendation
+        .get("missing_claims")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        lines.push(format!(
+            "- {}: {} / {} results",
+            str_field_default(item, "claim_id", "?"),
+            item.get("results")
+                .map(value_to_string)
+                .unwrap_or_else(|| "0".into()),
+            item.get("needed")
+                .map(value_to_string)
+                .unwrap_or_else(|| "1".into())
+        ));
+    }
+    lines.push("uncompared_claims:".into());
+    for item in recommendation
+        .get("uncompared_claims")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        lines.push(format!("- {}", str_field_default(item, "claim_id", "?")));
+    }
+    lines.join("\n")
 }
 
 fn cleanup_question_text(question: &str) -> String {
@@ -2344,10 +2957,10 @@ fn strongest_current_claim(state: &Value) -> String {
 fn sort_entries_by_recency(entries: &[Value], timestamp_field: &str) -> Vec<Value> {
     let mut sorted = entries.to_vec();
     sorted.sort_by(|a, b| {
-        let ta = parse_iso_timestamp(&str_field(a, timestamp_field))
-            .unwrap_or_else(|| DateTime::<Utc>::MIN_UTC);
-        let tb = parse_iso_timestamp(&str_field(b, timestamp_field))
-            .unwrap_or_else(|| DateTime::<Utc>::MIN_UTC);
+        let ta =
+            parse_iso_timestamp(&str_field(a, timestamp_field)).unwrap_or(DateTime::<Utc>::MIN_UTC);
+        let tb =
+            parse_iso_timestamp(&str_field(b, timestamp_field)).unwrap_or(DateTime::<Utc>::MIN_UTC);
         tb.cmp(&ta)
     });
     sorted
@@ -2441,6 +3054,111 @@ fn current_context_decisions(state: &Value) -> Vec<Value> {
         .collect()
 }
 
+fn reusable_runs(state: &Value) -> Vec<Value> {
+    sort_entries_by_recency(arr(state, "run_history"), "recorded_at")
+        .into_iter()
+        .filter(|record| {
+            !str_field_default(record, "finding", "").is_empty()
+                || !str_field_default(record, "decision_delta", "").is_empty()
+                || !str_field_default(record, "reuse_note", "").is_empty()
+                || !value_as_string_list(record, "applies_to").is_empty()
+                || !value_as_string_list(record, "does_not_apply_to").is_empty()
+        })
+        .collect()
+}
+
+fn missing_reuse_annotation_runs(state: &Value) -> Vec<Value> {
+    sort_entries_by_recency(arr(state, "run_history"), "recorded_at")
+        .into_iter()
+        .filter(|record| {
+            str_field_default(record, "finding", "").is_empty()
+                || str_field_default(record, "decision_delta", "").is_empty()
+                || str_field_default(record, "reuse_note", "").is_empty()
+        })
+        .collect()
+}
+
+fn reuse_audit(state: &Value) -> Value {
+    let reusable = reusable_runs(state);
+    let missing = missing_reuse_annotation_runs(state);
+    json!({
+        "runs": arr(state, "run_history").len(),
+        "reusable_runs": reusable.len(),
+        "missing_annotations": missing.len(),
+        "missing_runs": missing
+            .iter()
+            .take(20)
+            .map(|record| {
+                let missing_fields = [
+                    ("finding", str_field_default(record, "finding", "").is_empty()),
+                    (
+                        "decision_delta",
+                        str_field_default(record, "decision_delta", "").is_empty(),
+                    ),
+                    (
+                        "reuse_note",
+                        str_field_default(record, "reuse_note", "").is_empty(),
+                    ),
+                ]
+                .into_iter()
+                .filter_map(|(field, missing)| missing.then_some(field))
+                .collect::<Vec<_>>();
+                json!({
+                    "run_id": str_field(record, "run_id"),
+                    "summary": str_field_default(record, "summary", "-"),
+                    "missing": missing_fields,
+                })
+            })
+            .collect::<Vec<_>>(),
+        "generated_at": now_iso(),
+    })
+}
+
+fn format_reuse_audit(audit: &Value) -> String {
+    let mut lines = vec![
+        format!(
+            "runs: {}",
+            audit
+                .get("runs")
+                .map(value_to_string)
+                .unwrap_or_else(|| "0".into())
+        ),
+        format!(
+            "reusable_runs: {}",
+            audit
+                .get("reusable_runs")
+                .map(value_to_string)
+                .unwrap_or_else(|| "0".into())
+        ),
+        format!(
+            "missing_annotations: {}",
+            audit
+                .get("missing_annotations")
+                .map(value_to_string)
+                .unwrap_or_else(|| "0".into())
+        ),
+        "missing_runs:".into(),
+    ];
+    for item in audit
+        .get("missing_runs")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let missing = item
+            .get("missing")
+            .and_then(Value::as_array)
+            .map(|fields| join_string_array(fields))
+            .unwrap_or_else(|| "_none_".into());
+        lines.push(format!(
+            "- {}: missing {}",
+            str_field_default(item, "run_id", "?"),
+            missing
+        ));
+    }
+    lines.join("\n")
+}
+
 struct Freshness {
     stale: bool,
     history_bias_risk: bool,
@@ -2491,6 +3209,7 @@ fn recommend_next_actions(state: &Value) -> Vec<String> {
         actions.push(
             "用 research-claim 做一轮外部检索，把最近论文证据写进 EXTERNAL_RESEARCH.md。".into(),
         );
+        actions.push("多个 claim 时直接跑 research-all，再用 gate-from-research 看缺口。".into());
         actions.push("先完成 novelty gate，再启动高成本实验。".into());
         if gate_status == "pending" {
             actions.push("给每条 claim 标注 overlap level，并写 differentiation strategy。".into());
@@ -2528,6 +3247,21 @@ fn recommend_next_actions(state: &Value) -> Vec<String> {
         ];
     }
     let latest_run = latest_run.unwrap();
+    if str_field_default(latest_run, "finding", "").is_empty()
+        || str_field_default(latest_run, "decision_delta", "").is_empty()
+        || str_field_default(latest_run, "reuse_note", "").is_empty()
+    {
+        return vec![
+            format!(
+                "先给 {} 补 reusable finding、decision delta 和 reuse note，避免只留下流水账。",
+                str_field(latest_run, "run_id")
+            ),
+            format!(
+                "用 annotate-run --run-id {} 补齐 applies-to / does-not-apply-to。",
+                str_field(latest_run, "run_id")
+            ),
+        ];
+    }
     let latest_decision = latest_decision_for_hypothesis(state, &active_id);
     if latest_decision.is_none()
         || latest_decision.unwrap().get("run_id") != latest_run.get("run_id")
@@ -2628,6 +3362,13 @@ fn latest_run_for_hypothesis<'a>(state: &'a Value, hypothesis_id: &str) -> Optio
         .find(|item| item.get("hypothesis_id").and_then(Value::as_str) == Some(hypothesis_id))
 }
 
+fn latest_run_by_id<'a>(state: &'a Value, run_id: &str) -> Option<&'a Value> {
+    arr(state, "run_history")
+        .iter()
+        .rev()
+        .find(|item| item.get("run_id").and_then(Value::as_str) == Some(run_id))
+}
+
 fn latest_decision_for_hypothesis<'a>(state: &'a Value, hypothesis_id: &str) -> Option<&'a Value> {
     arr(state, "decisions")
         .iter()
@@ -2709,25 +3450,43 @@ fn transition_hypothesis(
     Ok(())
 }
 
-fn add_hypothesis(
-    state: &Value,
-    claim: &str,
-    prediction: Option<&str>,
-    priority: &str,
-    hypothesis_id: Option<&str>,
-) -> Result<Value> {
+struct HypothesisInput<'a> {
+    claim: &'a str,
+    prediction: Option<&'a str>,
+    mechanism: Option<&'a str>,
+    falsifiable_prediction: Option<&'a str>,
+    success_threshold: Option<&'a str>,
+    stop_condition: Option<&'a str>,
+    baselines: &'a [String],
+    confounders: &'a [String],
+    negative_signals: &'a [String],
+    minimal_test: Option<&'a str>,
+    priority: &'a str,
+    hypothesis_id: Option<&'a str>,
+}
+
+fn add_hypothesis(state: &Value, input: HypothesisInput<'_>) -> Result<Value> {
     let mut next_state = ensure_state_defaults(state);
-    let resolved_id = hypothesis_id
+    let resolved_id = input
+        .hypothesis_id
         .map(ToString::to_string)
-        .unwrap_or_else(|| slugify(claim).chars().take(40).collect());
+        .unwrap_or_else(|| slugify(input.claim).chars().take(40).collect());
     if find_hypothesis(&next_state, &resolved_id).is_some() {
         bail!("Hypothesis already exists: {resolved_id}");
     }
     let entry = json!({
         "id": resolved_id,
-        "claim": claim,
-        "prediction": prediction,
-        "priority": priority,
+        "claim": input.claim,
+        "prediction": input.prediction,
+        "mechanism": optional_string(input.mechanism),
+        "falsifiable_prediction": optional_string(input.falsifiable_prediction.or(input.prediction)),
+        "success_threshold": optional_string(input.success_threshold),
+        "stop_condition": optional_string(input.stop_condition),
+        "baselines": string_vec(input.baselines),
+        "confounders": string_vec(input.confounders),
+        "negative_signals": string_vec(input.negative_signals),
+        "minimal_test": optional_string(input.minimal_test),
+        "priority": input.priority,
         "status": "queued",
         "status_reason": Value::Null,
         "status_updated_at": now_iso(),
@@ -2763,6 +3522,79 @@ fn add_hypothesis(
     Ok(next_state)
 }
 
+struct RunAnnotationInput<'a> {
+    finding: Option<&'a str>,
+    decision_delta: Option<&'a str>,
+    reuse_note: Option<&'a str>,
+    applies_to: &'a [String],
+    does_not_apply_to: &'a [String],
+}
+
+fn merge_string_array(existing: &Value, additions: &[String]) -> Value {
+    let mut merged = existing
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .filter(|item| !item.trim().is_empty())
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    for item in additions
+        .iter()
+        .map(|item| item.trim())
+        .filter(|item| !item.is_empty())
+    {
+        if !merged.iter().any(|existing| existing == item) {
+            merged.push(item.to_string());
+        }
+    }
+    json!(merged)
+}
+
+fn annotate_run(state: &Value, run_id: &str, input: RunAnnotationInput<'_>) -> Result<Value> {
+    let mut next_state = ensure_state_defaults(state);
+    let Some(record) = arr_mut(&mut next_state, "run_history")
+        .iter_mut()
+        .find(|item| item.get("run_id").and_then(Value::as_str) == Some(run_id))
+    else {
+        bail!("Unknown run id: {run_id}");
+    };
+    let item = record.as_object_mut().expect("run record must be object");
+    if let Some(value) = input.finding {
+        let value = optional_string(Some(value));
+        if !value.is_null() {
+            item.insert("finding".into(), value);
+        }
+    }
+    if let Some(value) = input.decision_delta {
+        let value = optional_string(Some(value));
+        if !value.is_null() {
+            item.insert("decision_delta".into(), value);
+        }
+    }
+    if let Some(value) = input.reuse_note {
+        let value = optional_string(Some(value));
+        if !value.is_null() {
+            item.insert("reuse_note".into(), value);
+        }
+    }
+    let applies_to = merge_string_array(
+        item.get("applies_to").unwrap_or(&Value::Null),
+        input.applies_to,
+    );
+    item.insert("applies_to".into(), applies_to);
+    let does_not_apply_to = merge_string_array(
+        item.get("does_not_apply_to").unwrap_or(&Value::Null),
+        input.does_not_apply_to,
+    );
+    item.insert("does_not_apply_to".into(), does_not_apply_to);
+    item.insert("reuse_annotated_at".into(), json!(now_iso()));
+    Ok(next_state)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn record_run(
     state: &Value,
@@ -2773,6 +3605,18 @@ fn record_run(
     metric_value: Option<&str>,
     command: Option<&str>,
     evidence_path: Option<&str>,
+    sanity_checks: &[String],
+    baseline_result: Option<&str>,
+    rules_in: &[String],
+    rules_out: &[String],
+    alternative_explanations: &[String],
+    threats: &[String],
+    interpretation: Option<&str>,
+    finding: Option<&str>,
+    decision_delta: Option<&str>,
+    reuse_note: Option<&str>,
+    applies_to: &[String],
+    does_not_apply_to: &[String],
     override_novelty_gate: bool,
     override_reason: Option<&str>,
     workspace: &Path,
@@ -2838,6 +3682,18 @@ fn record_run(
         "metric_value": metric_value,
         "command": command,
         "evidence_path": evidence_path.map(ToString::to_string).unwrap_or_else(|| default_run_record_path(hypothesis_id, &run_id)),
+        "sanity_checks": string_vec(sanity_checks),
+        "baseline_result": optional_string(baseline_result),
+        "rules_in": string_vec(rules_in),
+        "rules_out": string_vec(rules_out),
+        "alternative_explanations": string_vec(alternative_explanations),
+        "threats": string_vec(threats),
+        "interpretation": optional_string(interpretation),
+        "finding": optional_string(finding),
+        "decision_delta": optional_string(decision_delta),
+        "reuse_note": optional_string(reuse_note),
+        "applies_to": string_vec(applies_to),
+        "does_not_apply_to": string_vec(does_not_apply_to),
         "novelty_gate_status_at_run": gate_status,
         "novelty_gate_override": override_novelty_gate,
         "override_reason": override_reason,
@@ -3025,16 +3881,27 @@ fn format_overlap_risk(overlap: &str) -> String {
 }
 
 fn summarize_rules_in(state: &Value) -> Vec<String> {
-    let lines = current_context_runs(state)
-        .into_iter()
-        .map(|record| {
-            format!(
+    let mut lines = Vec::new();
+    for record in current_context_runs(state) {
+        let run_id = str_field(&record, "run_id");
+        let finding = str_field_default(&record, "finding", "");
+        if !finding.is_empty() {
+            lines.push(format!("{run_id}: {finding}"));
+            continue;
+        }
+        let rules = value_as_string_list(&record, "rules_in");
+        if rules.is_empty() {
+            lines.push(format!(
                 "{}: {}",
-                str_field(&record, "run_id"),
+                run_id,
                 str_field_default(&record, "summary", "_No summary_")
-            )
-        })
-        .collect::<Vec<_>>();
+            ));
+        } else {
+            for item in rules {
+                lines.push(format!("{run_id}: {item}"));
+            }
+        }
+    }
     if lines.is_empty() {
         vec!["_No run-backed support recorded yet._".into()]
     } else {
@@ -3043,20 +3910,26 @@ fn summarize_rules_in(state: &Value) -> Vec<String> {
 }
 
 fn summarize_rules_out(state: &Value) -> Vec<String> {
-    let lines = current_context_runs(state)
-        .into_iter()
-        .filter(|record| {
-            ["failed", "ambiguous"]
+    let mut lines = Vec::new();
+    for record in current_context_runs(state) {
+        let run_id = str_field(&record, "run_id");
+        let rules = value_as_string_list(&record, "rules_out");
+        if rules.is_empty() {
+            if ["failed", "ambiguous"]
                 .contains(&record.get("outcome").and_then(Value::as_str).unwrap_or(""))
-        })
-        .map(|record| {
-            format!(
-                "{}: {}",
-                str_field(&record, "run_id"),
-                str_field_default(&record, "summary", "_No summary_")
-            )
-        })
-        .collect::<Vec<_>>();
+            {
+                lines.push(format!(
+                    "{}: {}",
+                    run_id,
+                    str_field_default(&record, "summary", "_No summary_")
+                ));
+            }
+        } else {
+            for item in rules {
+                lines.push(format!("{run_id}: {item}"));
+            }
+        }
+    }
     if lines.is_empty() {
         vec!["_No ruled-out branch has been recorded yet._".into()]
     } else {
@@ -3072,6 +3945,19 @@ fn summarize_remaining_risks(state: &Value) -> Vec<String> {
             .take(3)
             .map(|item| item.as_str().unwrap_or(&item.to_string()).to_string())
             .collect();
+    }
+    let mut risks = Vec::new();
+    for record in current_context_runs(state) {
+        let run_id = str_field(&record, "run_id");
+        for item in value_as_string_list(&record, "does_not_apply_to") {
+            risks.push(format!("{run_id} outside scope: {item}"));
+        }
+        for item in value_as_string_list(&record, "threats") {
+            risks.push(format!("{run_id}: {item}"));
+        }
+    }
+    if !risks.is_empty() {
+        return risks.into_iter().take(5).collect();
     }
     let actions = state
         .get("next_actions")
@@ -3129,6 +4015,96 @@ fn render_findings_summary(state: &Value) -> String {
             format!("- query: {}", str_field_default(entry, "query", "-")),
             format!("- results: {}", external_research_result_count(entry)),
         ]);
+    }
+    let reusable = current_context_runs(state)
+        .into_iter()
+        .filter(|record| {
+            !str_field_default(record, "reuse_note", "").is_empty()
+                || !str_field_default(record, "decision_delta", "").is_empty()
+                || !value_as_string_list(record, "applies_to").is_empty()
+        })
+        .collect::<Vec<_>>();
+    if !reusable.is_empty() {
+        lines.extend([String::new(), "### Reuse Notes".into()]);
+        for record in reusable.into_iter().take(5) {
+            let run_id = str_field(&record, "run_id");
+            let note = str_field_default(&record, "reuse_note", "");
+            let delta = str_field_default(&record, "decision_delta", "");
+            if !note.is_empty() {
+                lines.push(format!("- {run_id}: {note}"));
+            }
+            if !delta.is_empty() {
+                lines.push(format!("- {run_id} decision: {delta}"));
+            }
+            let applies_to = value_as_string_list(&record, "applies_to");
+            if !applies_to.is_empty() {
+                lines.push(format!("- {run_id} applies to: {}", applies_to.join("; ")));
+            }
+        }
+    }
+    let alternative_explanations = current_context_runs(state)
+        .into_iter()
+        .flat_map(|record| value_as_string_list(&record, "alternative_explanations"))
+        .collect::<Vec<_>>();
+    if !alternative_explanations.is_empty() {
+        lines.extend([
+            String::new(),
+            "### Alternative Explanations To Clear".into(),
+        ]);
+        for item in alternative_explanations.into_iter().take(5) {
+            lines.push(format!("- {item}"));
+        }
+    }
+    lines.join("\n")
+}
+
+fn render_reuse_index_summary(state: &Value) -> String {
+    let runs = reusable_runs(state);
+    let mut lines = vec![
+        "## Managed Reuse Index".into(),
+        String::new(),
+        "- purpose: find portable results without rereading chronological logs".into(),
+        format!("- reusable runs: {}", runs.len()),
+        String::new(),
+        "| Run | Finding | Decision Delta | Applies To | Does Not Apply To | Reuse Note |".into(),
+        "|---|---|---|---|---|---|".into(),
+    ];
+    if runs.is_empty() {
+        lines.push("| _none yet_ | - | - | - | - | - |".into());
+    } else {
+        for record in runs.iter().take(20) {
+            lines.push(format!(
+                "| {} | {} | {} | {} | {} | {} |",
+                escape_table_cell(&str_field_default(record, "run_id", "-")),
+                escape_table_cell(&str_field_default(record, "finding", "-")),
+                escape_table_cell(&str_field_default(record, "decision_delta", "-")),
+                escape_table_cell(&value_as_string_list(record, "applies_to").join("; ")),
+                escape_table_cell(&value_as_string_list(record, "does_not_apply_to").join("; ")),
+                escape_table_cell(&str_field_default(record, "reuse_note", "-")),
+            ));
+        }
+    }
+    lines.extend([
+        String::new(),
+        "## Missing Reuse Annotations".into(),
+        String::new(),
+    ]);
+    let missing = missing_reuse_annotation_runs(state)
+        .into_iter()
+        .take(10)
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
+        lines.push(
+            "- _All recorded runs have reusable finding, decision delta, and reuse note._".into(),
+        );
+    } else {
+        for record in missing {
+            lines.push(format!(
+                "- {}: run `annotate-run --run-id {}` before treating this as reusable evidence.",
+                str_field(&record, "run_id"),
+                str_field(&record, "run_id")
+            ));
+        }
     }
     lines.join("\n")
 }
@@ -3289,8 +4265,7 @@ fn render_external_research_summary(state: &Value) -> String {
     ];
     if entries.is_empty() {
         lines.push(
-            "_No external research recorded yet. Run `research-claim` after drafting claims._"
-                .into(),
+            "_No external research recorded yet. Run `research-claim` for one claim or `research-all` for a batch after drafting claims._".into(),
         );
         return lines.join("\n");
     }
@@ -3444,6 +4419,17 @@ fn join_string_array(values: &[Value]) -> String {
     }
 }
 
+fn format_string_list(values: &[String], empty: &str) -> String {
+    if values.is_empty() {
+        return empty.to_string();
+    }
+    values
+        .iter()
+        .map(|item| format!("- {item}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn render_current_context_summary(state: &Value) -> String {
     let freshness = state_freshness(state);
     let brief = current_brief(state);
@@ -3470,10 +4456,16 @@ fn render_current_context_summary(state: &Value) -> String {
         lines.push("- _No recent runs in the current context window._".into());
     } else {
         for record in &freshness.recent_runs {
+            let display = str_field_default(record, "finding", "");
+            let display = if display.is_empty() {
+                str_field_default(record, "summary", "_No summary_")
+            } else {
+                display
+            };
             lines.push(format!(
                 "- {}: {}",
                 str_field_default(record, "run_id", "-"),
-                str_field_default(record, "summary", "_No summary_")
+                display
             ));
         }
     }
@@ -3492,6 +4484,19 @@ fn render_current_context_summary(state: &Value) -> String {
                 str_field_default(decision, "reason", "_No reason_")
             ));
         }
+    }
+    let reusable = reusable_runs(state);
+    lines.extend([
+        String::new(),
+        "### Reusable Evidence".into(),
+        format!("- indexed reusable runs: {}", reusable.len()),
+    ]);
+    for record in reusable.iter().take(3) {
+        lines.push(format!(
+            "- {}: {}",
+            str_field(record, "run_id"),
+            str_field_default(record, "finding", "_No finding_")
+        ));
     }
     if let Some(brief) = brief {
         lines.extend([
@@ -3576,6 +4581,14 @@ fn format_hypothesis_card(hypothesis: &Value) -> String {
         "",
         &str_field_default(hypothesis, "claim", "_TBD_"),
         "",
+        "## Mechanism",
+        "",
+        &str_field_default(
+            hypothesis,
+            "mechanism",
+            "_Why should this work, beyond changing a parameter?_",
+        ),
+        "",
         "## Prediction",
         "",
         &str_field_default(
@@ -3584,17 +4597,62 @@ fn format_hypothesis_card(hypothesis: &Value) -> String {
             "_Add the expected observable change._",
         ),
         "",
+        "## Falsifiable Prediction",
+        "",
+        &str_field_default(
+            hypothesis,
+            "falsifiable_prediction",
+            "_What observation would make this hypothesis weaker?_",
+        ),
+        "",
         "## Priority",
         "",
         &format!("`{}`", str_field_default(hypothesis, "priority", "medium")),
         "",
+        "## Baselines / Controls",
+        "",
+        &format_string_list(
+            &value_as_string_list(hypothesis, "baselines"),
+            "_Closest simple baseline, ablation, or control._",
+        ),
+        "",
+        "## Confounders",
+        "",
+        &format_string_list(
+            &value_as_string_list(hypothesis, "confounders"),
+            "_What could explain the result besides the proposed mechanism?_",
+        ),
+        "",
+        "## Negative Signals",
+        "",
+        &format_string_list(
+            &value_as_string_list(hypothesis, "negative_signals"),
+            "_Early observations that should stop or reframe this branch._",
+        ),
+        "",
         "## Success Threshold",
         "",
-        "_What metric or observation counts as a win?_",
+        &str_field_default(
+            hypothesis,
+            "success_threshold",
+            "_What metric or observation counts as a win?_",
+        ),
+        "",
+        "## Minimal Decisive Test",
+        "",
+        &str_field_default(
+            hypothesis,
+            "minimal_test",
+            "_Smallest test that can change the decision._",
+        ),
         "",
         "## Stop Condition",
         "",
-        "_When do we stop spending more budget on this branch?_",
+        &str_field_default(
+            hypothesis,
+            "stop_condition",
+            "_When do we stop spending more budget on this branch?_",
+        ),
         "",
     ]
     .join("\n")
@@ -3612,17 +4670,58 @@ fn format_protocol(hypothesis: &Value) -> String {
         "",
         "_What changes in this run?_",
         "",
+        "## Proposed Mechanism",
+        "",
+        &str_field_default(
+            hypothesis,
+            "mechanism",
+            "_Why should the change cause the predicted result?_",
+        ),
+        "",
         "## Prediction",
         "",
         &str_field_default(hypothesis, "prediction", "_What outcome do you expect?_"),
+        "",
+        "## Falsifiable Prediction",
+        "",
+        &str_field_default(
+            hypothesis,
+            "falsifiable_prediction",
+            "_What observation would weaken the hypothesis?_",
+        ),
         "",
         "## Metric",
         "",
         "_Primary metric plus sanity checks._",
         "",
+        "## Baselines / Controls",
+        "",
+        &format_string_list(
+            &value_as_string_list(hypothesis, "baselines"),
+            "_Closest simple baseline, ablation, or control._",
+        ),
+        "",
+        "## Confounders",
+        "",
+        &format_string_list(
+            &value_as_string_list(hypothesis, "confounders"),
+            "_What else could explain the result?_",
+        ),
+        "",
         "## Success Threshold",
         "",
-        "_What result counts as success?_",
+        &str_field_default(
+            hypothesis,
+            "success_threshold",
+            "_What result counts as success?_",
+        ),
+        "",
+        "## Negative Signals",
+        "",
+        &format_string_list(
+            &value_as_string_list(hypothesis, "negative_signals"),
+            "_What result should stop or reframe the branch?_",
+        ),
         "",
         "## Command / Entry Point",
         "",
@@ -3634,9 +4733,21 @@ fn format_protocol(hypothesis: &Value) -> String {
         "",
         "_Record what is needed for reproducibility._",
         "",
+        "## Minimal Decisive Test",
+        "",
+        &str_field_default(
+            hypothesis,
+            "minimal_test",
+            "_Smallest run that can update the decision._",
+        ),
+        "",
         "## Stop Condition",
         "",
-        "_When do you stop this line?_",
+        &str_field_default(
+            hypothesis,
+            "stop_condition",
+            "_When do you stop this line?_",
+        ),
         "",
     ]
     .join("\n")
@@ -3654,6 +4765,14 @@ fn format_analysis_stub(hypothesis: &Value) -> String {
         "",
         "_Prefer mechanism over raw metric narration._",
         "",
+        "## Alternative Explanations",
+        "",
+        "_What else could explain the observed pattern?_",
+        "",
+        "## Baseline / Ablation Read",
+        "",
+        "_Did the result beat the right simple baseline or only tune around it?_",
+        "",
         "## Open Questions",
         "",
         "_What still needs to be disambiguated?_",
@@ -3667,6 +4786,13 @@ fn format_run_record(record: &Value) -> String {
     let metric_value = str_field_default(record, "metric_value", "value");
     let command = str_field_default(record, "command", "_not recorded_");
     let artifact_path = str_field_default(record, "evidence_path", "_not recorded_");
+    let sanity_checks = value_as_string_list(record, "sanity_checks");
+    let rules_in = value_as_string_list(record, "rules_in");
+    let rules_out = value_as_string_list(record, "rules_out");
+    let alternative_explanations = value_as_string_list(record, "alternative_explanations");
+    let threats = value_as_string_list(record, "threats");
+    let applies_to = value_as_string_list(record, "applies_to");
+    let does_not_apply_to = value_as_string_list(record, "does_not_apply_to");
     let override_used = if record
         .get("novelty_gate_override")
         .and_then(Value::as_bool)
@@ -3698,11 +4824,56 @@ fn format_run_record(record: &Value) -> String {
         "",
         &str_field_default(record, "summary", "_No summary recorded._"),
         "",
+        "## Reusable Finding",
+        "",
+        &str_field_default(
+            record,
+            "finding",
+            "_One reusable sentence: under what condition, what changed, and why it matters._",
+        ),
+        "",
+        "## Decision Delta",
+        "",
+        &str_field_default(
+            record,
+            "decision_delta",
+            "_What future decision should change because of this run?_",
+        ),
+        "",
+        "## Reuse Scope",
+        "",
+        "### Applies To",
+        "",
+        &format_string_list(&applies_to, "_Where this result can be reused._"),
+        "",
+        "### Does Not Apply To",
+        "",
+        &format_string_list(&does_not_apply_to, "_Boundary conditions for reuse._"),
+        "",
+        "### Reuse Note",
+        "",
+        &str_field_default(
+            record,
+            "reuse_note",
+            "_How to use this result later without rereading the whole log._",
+        ),
+        "",
         "## Metric Snapshot",
         "",
         &format!("- metric: {metric_name}"),
         &format!("- value: {metric_value}"),
-        "- sanity: _fill in sanity checks here_",
+        "",
+        "## Sanity Checks",
+        "",
+        &format_string_list(&sanity_checks, "_Fill in sanity checks here._"),
+        "",
+        "## Baseline / Control Result",
+        "",
+        &str_field_default(
+            record,
+            "baseline_result",
+            "_Compare against the simplest meaningful baseline or ablation._",
+        ),
         "",
         "## Evidence",
         "",
@@ -3719,7 +4890,32 @@ fn format_run_record(record: &Value) -> String {
         "",
         "## Rules In / Rules Out",
         "",
-        "_What changed in your belief after this run?_",
+        "### Rules In",
+        "",
+        &format_string_list(&rules_in, "_What did this result support?_"),
+        "",
+        "### Rules Out",
+        "",
+        &format_string_list(&rules_out, "_What did this result eliminate?_"),
+        "",
+        "## Alternative Explanations",
+        "",
+        &format_string_list(
+            &alternative_explanations,
+            "_What else could explain the result?_",
+        ),
+        "",
+        "## Threats To Interpretation",
+        "",
+        &format_string_list(&threats, "_What could make this conclusion misleading?_"),
+        "",
+        "## Interpretation",
+        "",
+        &str_field_default(
+            record,
+            "interpretation",
+            "_Mechanistic interpretation, not just metric narration._",
+        ),
         "",
     ]
     .join("\n")
@@ -3833,6 +5029,13 @@ fn sync_workspace_files(workspace: &Path, state: &Value) -> Result<()> {
         render_current_context_summary(state),
     )?;
     sync_managed_file(
+        &workspace.join("findings-reuse-index.md"),
+        "# Findings Reuse Index\n\n",
+        REUSE_INDEX_BLOCK_START,
+        REUSE_INDEX_BLOCK_END,
+        render_reuse_index_summary(state),
+    )?;
+    sync_managed_file(
         &workspace.join("findings.md"),
         "",
         FINDINGS_BLOCK_START,
@@ -3863,6 +5066,7 @@ fn format_status(state: &Value) -> String {
         ),
         format!("hypotheses: {}", arr(state, "hypotheses").len()),
         format!("runs: {}", arr(state, "run_history").len()),
+        format!("reusable_runs: {}", reusable_runs(state).len()),
         format!(
             "external_research: {}",
             arr(state, "external_research").len()
@@ -3944,6 +5148,26 @@ fn format_resume(state: &Value) -> String {
             str_field_default(run, "summary", "-")
         ));
         lines.push(format!(
+            "latest_interpretation: {}",
+            str_field_default(run, "interpretation", "-")
+        ));
+        lines.push(format!(
+            "latest_finding: {}",
+            str_field_default(run, "finding", "-")
+        ));
+        lines.push(format!(
+            "latest_decision_delta: {}",
+            str_field_default(run, "decision_delta", "-")
+        ));
+        let applies_to = value_as_string_list(run, "applies_to");
+        if !applies_to.is_empty() {
+            lines.push(format!("latest_applies_to: {}", applies_to.join("; ")));
+        }
+        let rules_out = value_as_string_list(run, "rules_out");
+        if !rules_out.is_empty() {
+            lines.push(format!("latest_rules_out: {}", rules_out.join("; ")));
+        }
+        lines.push(format!(
             "latest_run_git: {}",
             summarize_git_provenance(run.get("git_provenance"))
         ));
@@ -3974,6 +5198,7 @@ fn format_resume(state: &Value) -> String {
         "external_research_entries: {}",
         arr(state, "external_research").len()
     ));
+    lines.push(format!("reusable_runs: {}", reusable_runs(state).len()));
     lines.push("guardrail: trust CURRENT_CONTEXT.md and research-state.yaml first; treat older logs as background.".into());
     lines.push("next_actions:".into());
     for action in state
@@ -3987,4 +5212,102 @@ fn format_resume(state: &Value) -> String {
         lines.push(format!("- {}", action.as_str().unwrap_or("")));
     }
     lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn state_with_two_claims() -> Value {
+        let state = default_state(
+            "batch",
+            "Can retrieval augmented generation improve citation grounded research?",
+            "quick",
+        );
+        draft_claims_from_state(&state, None, 2)
+    }
+
+    #[test]
+    fn matching_external_research_treats_all_as_covering_specific_sources() {
+        let mut state = state_with_two_claims();
+        let query =
+            default_research_query(novelty_arr(&state, "draft_claims").first(), None).unwrap();
+        arr_mut(&mut state, "external_research").push(json!({
+            "claim_id": "C1",
+            "query": query,
+            "source": "all",
+            "results": [{ "title": "A paper" }],
+            "errors": [],
+            "created_at": now_iso(),
+        }));
+
+        assert!(has_matching_external_research(
+            &state,
+            Some("C1"),
+            &query,
+            &ExternalSourceArg::Arxiv
+        ));
+        assert!(!has_matching_external_research(
+            &state,
+            Some("C2"),
+            &query,
+            &ExternalSourceArg::Arxiv
+        ));
+    }
+
+    #[test]
+    fn gate_recommendation_requires_research_and_comparison_for_every_claim() {
+        let mut state = state_with_two_claims();
+        for claim_id in ["C1", "C2"] {
+            arr_mut(&mut state, "external_research").push(json!({
+                "claim_id": claim_id,
+                "query": format!("{claim_id} query"),
+                "source": "arxiv",
+                "results": [{ "title": "A paper" }],
+                "errors": [],
+                "created_at": now_iso(),
+            }));
+        }
+        state = add_claim_comparison(
+            &state,
+            "C1 compared claim",
+            "method",
+            "Closest prior work",
+            "medium",
+            "Narrower contribution",
+            "medium",
+            "defensible",
+            Some("C1"),
+        );
+
+        let pending = novelty_gate_recommendation_from_research(&state, 1);
+        assert_eq!(
+            pending.get("recommended_status").and_then(Value::as_str),
+            Some("pending")
+        );
+        assert_eq!(
+            pending
+                .get("uncompared_claims")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(1)
+        );
+
+        state = add_claim_comparison(
+            &state,
+            "C2 compared claim",
+            "task",
+            "Closest prior work",
+            "medium",
+            "Narrower contribution",
+            "medium",
+            "defensible",
+            Some("C2"),
+        );
+        let passed = novelty_gate_recommendation_from_research(&state, 1);
+        assert_eq!(
+            passed.get("recommended_status").and_then(Value::as_str),
+            Some("passed")
+        );
+    }
 }

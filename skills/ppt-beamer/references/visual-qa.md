@@ -20,7 +20,7 @@ Use `$visual-review` for that review so the overlap check has an explicit verdic
 1. Compile the deck.
 2. Run `check_beamer_log.sh` to collect obvious warnings.
 3. Render slide PNGs with `render_slides.sh`.
-4. Build an HTML gallery with `build_review_html.py` if the slide count is large.
+4. Build a review list with `find build/slides-pages -name '*.png' | sort` if the slide count is large.
 5. Call `$visual-review` on the rendered PNGs or gallery screenshots. Pass:
    - `target issue`: overlap, clipping, unreadable text, weak hierarchy, or render bug
    - `artifact scope`: page numbers or slide ids
