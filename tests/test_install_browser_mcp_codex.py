@@ -25,7 +25,9 @@ def test_build_server_block_uses_repo_relative_script_path(tmp_path: Path) -> No
     repo_root = tmp_path / "repo"
     block = build_server_block(repo_root)
     assert "[mcp_servers.browser-mcp]" in block
-    assert str(repo_root / "tools" / "browser-mcp" / "scripts" / "start_browser_mcp.sh") in block
+    assert 'command = "node"' in block
+    assert str(repo_root / "tools" / "browser-mcp" / "dist" / "index.js") in block
+    assert str(repo_root / "tools" / "browser-mcp") in block
 
 
 def test_install_server_bootstraps_missing_config_file(tmp_path: Path) -> None:
@@ -88,5 +90,6 @@ def test_install_server_replaces_stale_browser_block(tmp_path: Path) -> None:
     content = config_path.read_text(encoding="utf-8")
     assert changed is True
     assert content.count("[mcp_servers.browser-mcp]") == 1
-    assert str(tmp_path / "repo" / "tools" / "browser-mcp" / "scripts" / "start_browser_mcp.sh") in content
+    assert 'command = "node"' in content
+    assert str(tmp_path / "repo" / "tools" / "browser-mcp" / "dist" / "index.js") in content
     assert "[model]" in content

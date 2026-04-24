@@ -39,15 +39,6 @@ def _load_runtime_registry_or_none(repo_root: Path | None = None) -> dict[str, A
     return deepcopy(_load_runtime_registry_cached(str(_resolved_repo_root(repo_root))))
 
 
-def _load_runtime_registry_with_default_fallback(repo_root: Path | None = None) -> dict[str, Any] | None:
-    payload = _load_runtime_registry_or_none(repo_root)
-    if payload is not None:
-        return payload
-    if repo_root is not None:
-        return _load_runtime_registry_or_none(None)
-    return None
-
-
 def runtime_registry_path(repo_root: Path | None = None) -> Path:
     if repo_root is None:
         return _DEFAULT_REGISTRY_PATH
@@ -66,9 +57,9 @@ def host_adapter_records(
     include_legacy_aliases: bool = False,
     repo_root: Path | None = None,
 ) -> tuple[dict[str, Any], ...]:
-    payload = _load_runtime_registry_with_default_fallback(repo_root)
-    if payload is None:
-        raise FileNotFoundError(f"Missing runtime registry: {runtime_registry_path(repo_root)}")
+    if include_legacy_aliases:
+        raise ValueError("legacy host adapter aliases are retired; use runtime-registry default lane only.")
+    payload = load_runtime_registry(repo_root)
     rows = payload.get("host_adapters")
     if not isinstance(rows, list):
         raise ValueError("Runtime registry host_adapters must be a list.")
@@ -99,9 +90,7 @@ def host_adapter_record(
 
 
 def default_host_peer_set(*, repo_root: Path | None = None) -> tuple[str, ...]:
-    payload = _load_runtime_registry_with_default_fallback(repo_root)
-    if payload is None:
-        raise FileNotFoundError(f"Missing runtime registry: {runtime_registry_path(repo_root)}")
+    payload = load_runtime_registry(repo_root)
     rows = payload.get("default_host_peer_set")
     if not isinstance(rows, list):
         raise ValueError("Runtime registry default_host_peer_set must be a list.")
@@ -109,9 +98,7 @@ def default_host_peer_set(*, repo_root: Path | None = None) -> tuple[str, ...]:
 
 
 def shared_project_mcp_servers(*, repo_root: Path | None = None) -> tuple[str, ...]:
-    payload = _load_runtime_registry_with_default_fallback(repo_root)
-    if payload is None:
-        raise FileNotFoundError(f"Missing runtime registry: {runtime_registry_path(repo_root)}")
+    payload = load_runtime_registry(repo_root)
     rows = payload.get("shared_project_mcp_servers")
     if not isinstance(rows, list):
         raise ValueError("Runtime registry shared_project_mcp_servers must be a list.")
@@ -119,9 +106,7 @@ def shared_project_mcp_servers(*, repo_root: Path | None = None) -> tuple[str, .
 
 
 def plugin_records(*, repo_root: Path | None = None) -> tuple[dict[str, Any], ...]:
-    payload = _load_runtime_registry_with_default_fallback(repo_root)
-    if payload is None:
-        raise FileNotFoundError(f"Missing runtime registry: {runtime_registry_path(repo_root)}")
+    payload = load_runtime_registry(repo_root)
     rows = payload.get("plugins")
     if not isinstance(rows, list):
         raise ValueError("Runtime registry plugins must be a list.")
@@ -136,9 +121,7 @@ def primary_plugin_record(*, repo_root: Path | None = None) -> dict[str, Any]:
 
 
 def workspace_bootstrap_defaults(*, repo_root: Path | None = None) -> dict[str, Any]:
-    payload = _load_runtime_registry_with_default_fallback(repo_root)
-    if payload is None:
-        raise FileNotFoundError(f"Missing runtime registry: {runtime_registry_path(repo_root)}")
+    payload = load_runtime_registry(repo_root)
     defaults = payload.get("workspace_bootstrap_defaults")
     if not isinstance(defaults, dict):
         raise ValueError("Runtime registry workspace_bootstrap_defaults must be an object.")
@@ -146,9 +129,7 @@ def workspace_bootstrap_defaults(*, repo_root: Path | None = None) -> dict[str, 
 
 
 def framework_native_aliases(*, repo_root: Path | None = None) -> dict[str, Any]:
-    payload = _load_runtime_registry_with_default_fallback(repo_root)
-    if payload is None:
-        raise FileNotFoundError(f"Missing runtime registry: {runtime_registry_path(repo_root)}")
+    payload = load_runtime_registry(repo_root)
     aliases = payload.get("framework_native_aliases")
     if not isinstance(aliases, dict):
         raise ValueError("Runtime registry framework_native_aliases must be an object.")
@@ -156,9 +137,7 @@ def framework_native_aliases(*, repo_root: Path | None = None) -> dict[str, Any]
 
 
 def omc_retirement_contract(*, repo_root: Path | None = None) -> dict[str, Any]:
-    payload = _load_runtime_registry_with_default_fallback(repo_root)
-    if payload is None:
-        raise FileNotFoundError(f"Missing runtime registry: {runtime_registry_path(repo_root)}")
+    payload = load_runtime_registry(repo_root)
     contract = payload.get("omc_retirement_contract")
     if not isinstance(contract, dict):
         raise ValueError("Runtime registry omc_retirement_contract must be an object.")

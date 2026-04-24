@@ -33,6 +33,7 @@ struct BackgroundStateRequestPayload {
     state_path: Option<String>,
     backend_family: Option<String>,
     sqlite_db_path: Option<String>,
+    state_payload_text: Option<String>,
     control_plane_descriptor: Option<Value>,
     job_id: Option<String>,
     mutation: Option<BackgroundJobStatusMutation>,
@@ -296,6 +297,7 @@ fn backend_capabilities(backend_family: &str) -> Result<(bool, bool, bool, bool)
     match normalized_backend_family(backend_family).as_str() {
         "filesystem" | "file" => Ok((true, false, false, true)),
         "sqlite" | "sqlite3" => Ok((true, true, true, true)),
+        "memory" => Ok((false, false, false, true)),
         other => Err(format!(
             "Unsupported durable background-state backend family: {:?}",
             other
@@ -518,8 +520,12 @@ impl BackgroundStateStore {
             &backend_family,
             &state_path,
         )?;
-        let persisted =
-            read_persisted_state(&state_path, &backend_family, sqlite_db_path.as_deref())?;
+        let persisted = read_persisted_state(
+            &state_path,
+            &backend_family,
+            sqlite_db_path.as_deref(),
+            request.state_payload_text.as_deref(),
+        )?;
         let mut store = Self {
             state_path,
             backend_family: normalized_backend_family(&backend_family),
@@ -600,7 +606,7 @@ impl BackgroundStateStore {
         rebuilt
     }
 
-    fn persist(&self) -> Result<(), String> {
+    fn serialized_payload(&self) -> Result<String, String> {
         let persisted = PersistedBackgroundState {
             version: 2,
             schema_version: BACKGROUND_STATE_SCHEMA_VERSION.to_string(),
@@ -618,21 +624,30 @@ impl BackgroundStateStore {
                 })
                 .collect(),
         };
-        let payload =
-            serde_json::to_string_pretty(&persisted).map_err(|err| err.to_string())? + "\n";
+        serde_json::to_string_pretty(&persisted)
+            .map(|payload| payload + "\n")
+            .map_err(|err| err.to_string())
+    }
+
+    fn persist(&self) -> Result<Option<String>, String> {
+        let payload = self.serialized_payload()?;
+        if self.backend_family == "memory" {
+            return Ok(Some(payload));
+        }
         write_persisted_state(
             &self.state_path,
             &self.backend_family,
             self.sqlite_db_path.as_deref(),
             &payload,
-        )
+        )?;
+        Ok(None)
     }
 
     fn apply_mutation(
         &mut self,
         job_id: &str,
         mutation: &BackgroundJobStatusMutation,
-    ) -> Result<BackgroundRunStatus, String> {
+    ) -> Result<(BackgroundRunStatus, Option<String>), String> {
         let existing = self.jobs.get(job_id).cloned();
         let previous_status = existing.as_ref().map(|job| job.status.as_str());
         validate_transition(previous_status, &mutation.status)?;
@@ -678,8 +693,8 @@ impl BackgroundStateStore {
             resolved_session_id.as_deref(),
         );
         self.finalize_session(job_id, resolved_session_id.as_deref(), &mutation.status);
-        self.persist()?;
-        Ok(updated)
+        let persisted_payload_text = self.persist()?;
+        Ok((updated, persisted_payload_text))
     }
 
     fn reserve_session(
@@ -799,7 +814,7 @@ impl BackgroundStateStore {
         operation: &str,
         session_id: &str,
         incoming_job_id: &str,
-    ) -> Result<BackgroundSessionTakeoverArbitration, String> {
+    ) -> Result<(BackgroundSessionTakeoverArbitration, Option<String>), String> {
         let previous_active_job_id = self.active_sessions.get(session_id).cloned();
         let previous_pending_job_id = self.pending_session_takeovers.get(session_id).cloned();
         let mut changed = false;
@@ -879,21 +894,22 @@ impl BackgroundStateStore {
                 ))
             }
         };
-        if changed {
-            self.persist()?;
-        }
-        Ok(BackgroundSessionTakeoverArbitration {
-            schema_version: BACKGROUND_SESSION_TAKEOVER_ARBITRATION_SCHEMA_VERSION.to_string(),
-            operation: operation.to_string(),
-            session_id: session_id.to_string(),
-            incoming_job_id: incoming_job_id.to_string(),
-            previous_active_job_id,
-            previous_pending_job_id,
-            active_job_id: self.active_sessions.get(session_id).cloned(),
-            pending_job_id: self.pending_session_takeovers.get(session_id).cloned(),
-            outcome,
-            changed,
-        })
+        let persisted_payload_text = if changed { self.persist()? } else { None };
+        Ok((
+            BackgroundSessionTakeoverArbitration {
+                schema_version: BACKGROUND_SESSION_TAKEOVER_ARBITRATION_SCHEMA_VERSION.to_string(),
+                operation: operation.to_string(),
+                session_id: session_id.to_string(),
+                incoming_job_id: incoming_job_id.to_string(),
+                previous_active_job_id,
+                previous_pending_job_id,
+                active_job_id: self.active_sessions.get(session_id).cloned(),
+                pending_job_id: self.pending_session_takeovers.get(session_id).cloned(),
+                outcome,
+                changed,
+            },
+            persisted_payload_text,
+        ))
     }
 
     fn snapshot_payload(&self) -> Value {
@@ -1017,6 +1033,7 @@ fn read_persisted_state(
     state_path: &Path,
     backend_family: &str,
     sqlite_db_path: Option<&Path>,
+    state_payload_text: Option<&str>,
 ) -> Result<Option<PersistedBackgroundState>, String> {
     match normalized_backend_family(backend_family).as_str() {
         "filesystem" | "file" => {
@@ -1025,6 +1042,14 @@ fn read_persisted_state(
             }
             let text = fs::read_to_string(state_path).map_err(|err| err.to_string())?;
             let persisted = serde_json::from_str::<PersistedBackgroundState>(&text)
+                .map_err(|err| err.to_string())?;
+            Ok(Some(persisted))
+        }
+        "memory" => {
+            let Some(text) = state_payload_text else {
+                return Ok(None);
+            };
+            let persisted = serde_json::from_str::<PersistedBackgroundState>(text)
                 .map_err(|err| err.to_string())?;
             Ok(Some(persisted))
         }
@@ -1199,8 +1224,11 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
             let mutation = request.mutation.as_ref().ok_or_else(|| {
                 "Background state apply_mutation is missing mutation.".to_string()
             })?;
-            let job = store.apply_mutation(job_id, mutation)?;
+            let (job, persisted_payload_text) = store.apply_mutation(job_id, mutation)?;
             response["job"] = serde_json::to_value(job).map_err(|err| err.to_string())?;
+            if let Some(payload_text) = persisted_payload_text {
+                response["persisted_payload_text"] = Value::String(payload_text);
+            }
             response["state"] = store.snapshot_payload();
             response["health"] = store.health_payload();
         }
@@ -1232,12 +1260,15 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
             let incoming_job_id = request.incoming_job_id.as_deref().ok_or_else(|| {
                 "Background state arbitration is missing incoming_job_id.".to_string()
             })?;
-            let takeover = store.arbitrate_session_takeover(
+            let (takeover, persisted_payload_text) = store.arbitrate_session_takeover(
                 &request.operation,
                 session_id,
                 incoming_job_id,
             )?;
             response["takeover"] = serde_json::to_value(takeover).map_err(|err| err.to_string())?;
+            if let Some(payload_text) = persisted_payload_text {
+                response["persisted_payload_text"] = Value::String(payload_text);
+            }
             response["state"] = store.snapshot_payload();
             response["health"] = store.health_payload();
         }
@@ -1249,12 +1280,15 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
             let incoming_job_id = request.incoming_job_id.as_deref().ok_or_else(|| {
                 "Background state arbitration is missing incoming_job_id.".to_string()
             })?;
-            let takeover = store.arbitrate_session_takeover(
+            let (takeover, persisted_payload_text) = store.arbitrate_session_takeover(
                 &request.operation,
                 session_id,
                 incoming_job_id,
             )?;
             response["takeover"] = serde_json::to_value(takeover).map_err(|err| err.to_string())?;
+            if let Some(payload_text) = persisted_payload_text {
+                response["persisted_payload_text"] = Value::String(payload_text);
+            }
             response["state"] = store.snapshot_payload();
             response["health"] = store.health_payload();
         }

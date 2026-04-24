@@ -18,8 +18,12 @@ const FRAMEWORK_END_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_END -->";
 const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v1";
 const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
 const RETIRED_CODEX_MODEL_INSTRUCTIONS_PATH: &str = ".codex/model_instructions.md";
-const DEFAULT_TUI_STATUS_ITEMS: [&str; 3] =
-    ["model-with-reasoning", "context-remaining", "git-branch"];
+const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
+    "model-with-reasoning",
+    "fast-mode",
+    "context-remaining",
+    "git-branch",
+];
 const DEFAULT_SHARED_PROJECT_MCP_SERVERS: [&str; 3] =
     ["browser-mcp", "framework-mcp", "openaiDeveloperDocs"];
 const OPENAI_DEVELOPER_DOCS_MCP_URL: &str = "https://developers.openai.com/mcp";
@@ -1905,10 +1909,11 @@ fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
 
 fn build_browser_server_block(repo_root: &Path) -> String {
     format!(
-        "[mcp_servers.browser-mcp]\ncommand = \"{}\"",
+        "[mcp_servers.browser-mcp]\ncommand = \"node\"\nargs = [\"{}\"]\ncwd = \"{}\"",
         repo_root
-            .join("tools/browser-mcp/scripts/start_browser_mcp.sh")
-            .to_string_lossy()
+            .join("tools/browser-mcp/dist/index.js")
+            .to_string_lossy(),
+        repo_root.join("tools/browser-mcp").to_string_lossy(),
     )
 }
 
@@ -2299,8 +2304,23 @@ fn validate_home_claude_mcp(config_path: &Path, repo_root: &Path) -> Result<bool
         return Ok(false);
     };
 
-    let browser_ok = browser.get("command").and_then(Value::as_str) == Some("bash")
-        && browser.get("cwd").and_then(Value::as_str) == Some(repo_root.to_string_lossy().as_ref());
+    let expected_browser_command = "node";
+    let expected_browser_cwd = repo_root.join("tools/browser-mcp").to_string_lossy().into_owned();
+    let expected_browser_entrypoint = repo_root
+        .join("tools/browser-mcp/dist/index.js")
+        .to_string_lossy()
+        .into_owned();
+    let browser_ok = browser.get("command").and_then(Value::as_str)
+        == Some(expected_browser_command)
+        && browser.get("cwd").and_then(Value::as_str) == Some(expected_browser_cwd.as_str())
+        && browser
+            .get("args")
+            .and_then(Value::as_array)
+            .is_some_and(|args| args == &vec![Value::String(expected_browser_entrypoint.clone())])
+        && browser
+            .get("env")
+            .and_then(Value::as_object)
+            .is_some_and(Map::is_empty);
     let expected_framework_command = repo_root
         .join("scripts/router-rs/target/release/router-rs")
         .to_string_lossy()
@@ -2343,9 +2363,9 @@ fn managed_home_claude_mcp_server(repo_root: &Path, server_name: &str) -> Result
     match server_name {
         "browser-mcp" => Ok(json!({
             "type": "stdio",
-            "command": "bash",
-            "args": ["./tools/browser-mcp/scripts/start_browser_mcp.sh"],
-            "cwd": repo_root_value,
+            "command": "node",
+            "args": [repo_root.join("tools").join("browser-mcp").join("dist").join("index.js").to_string_lossy()],
+            "cwd": repo_root.join("tools").join("browser-mcp").to_string_lossy(),
             "env": {},
         })),
         "framework-mcp" => Ok(json!({
@@ -2367,8 +2387,8 @@ fn managed_home_claude_mcp_server(repo_root: &Path, server_name: &str) -> Result
 
 fn build_personal_plugin_mcp_payload(repo_root: &Path) -> Value {
     let repo_root_value = repo_root.to_string_lossy().into_owned();
-    let browser_script = repo_root
-        .join("tools/browser-mcp/scripts/start_browser_mcp.sh")
+    let browser_entrypoint = repo_root
+        .join("tools/browser-mcp/dist/index.js")
         .to_string_lossy()
         .into_owned();
     json!({
@@ -2379,9 +2399,9 @@ fn build_personal_plugin_mcp_payload(repo_root: &Path) -> Value {
                 "cwd": repo_root_value,
             },
             "browser-mcp": {
-                "command": "bash",
-                "args": [browser_script],
-                "cwd": repo_root_value,
+                "command": "node",
+                "args": [browser_entrypoint],
+                "cwd": repo_root.join("tools").join("browser-mcp").to_string_lossy(),
             },
             "openaiDeveloperDocs": {
                 "type": "http",

@@ -784,11 +784,7 @@ def test_trace_compaction_delta_append_prefers_rust_trace_io_on_filesystem(
     compaction = recorder.compact(session_id="session-rust-delta", job_id="job-rust-delta")
     assert compaction.applied is True
 
-    monkeypatch.setattr(
-        RuntimeTraceRecorder,
-        "_append_text",
-        lambda self, path, payload: (_ for _ in ()).throw(AssertionError("native delta append should stay unused")),
-    )
+    assert not hasattr(RuntimeTraceRecorder, "_append_text")
 
     recorder.record(
         session_id="session-rust-delta",
@@ -836,11 +832,7 @@ def test_trace_compaction_recovery_prefers_rust_trace_io_on_filesystem(
         stage="background",
     )
 
-    monkeypatch.setattr(
-        RuntimeTraceRecorder,
-        "_load_compaction_deltas",
-        lambda self, path: (_ for _ in ()).throw(AssertionError("native delta recovery should stay unused")),
-    )
+    assert not hasattr(RuntimeTraceRecorder, "_load_compaction_deltas")
 
     recovery = recorder.recover_compacted_state(session_id="session-rust-recovery", job_id="job-rust-recovery")
     assert recovery is not None
@@ -885,11 +877,7 @@ def test_trace_compaction_recovery_prefers_rust_trace_io_on_sqlite_backend(
         stage="background",
     )
 
-    monkeypatch.setattr(
-        RuntimeTraceRecorder,
-        "_load_compaction_deltas",
-        lambda self, path: (_ for _ in ()).throw(AssertionError("native delta recovery should stay unused")),
-    )
+    assert not hasattr(RuntimeTraceRecorder, "_load_compaction_deltas")
 
     recovery = recorder.recover_compacted_state(session_id="session-sqlite-recovery", job_id="job-sqlite-recovery")
     assert recovery is not None

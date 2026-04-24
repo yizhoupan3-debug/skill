@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import tempfile
 import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -91,13 +89,6 @@ def _coerce_scope_fields(value: Any, *, default: tuple[str, ...]) -> list[str]:
         seen.add(field)
         normalized.append(field)
     return normalized or list(default)
-
-
-def _stable_json_digest(payload: Any) -> str:
-    """Return a stable digest for one JSON-serializable payload."""
-
-    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def _iter_file_lines(path: Path) -> Iterable[str]:
@@ -583,7 +574,7 @@ class RuntimeEventStream(Protocol):
     def subscribe(
         self,
         *,
-        session_id: str,
+        session_id: str | None,
         job_id: str | None = None,
         after_event_id: str | None = None,
         limit: int | None = None,
@@ -908,27 +899,19 @@ class RuntimeTraceRecorder:
 
         self._activate_generation_for_stream(session_id=session_id, job_id=job_id)
         seq = self._next_seq
-        event_id = f"evt_{uuid.uuid4().hex[:12]}"
-        event = TraceEvent(
-            event_id=event_id,
-            seq=seq,
-            generation=self._generation,
-            cursor=_build_cursor(self._generation, seq, event_id),
+        event = self._record_event_via_rust(
             session_id=session_id,
             job_id=job_id,
             kind=kind,
             stage=stage,
             status=status,
             payload=payload or {},
-            schema_version=self.event_schema_version,
+            seq=seq,
         )
         self._events.append(event)
         self._next_seq += 1
-        if self.event_sink is not None:
-            self.event_sink.write_event(event)
         if self.event_stream is not None:
             self.event_stream.publish(event)
-        self._append_compaction_delta(event)
         return event
 
     def current_generation(self) -> int:
@@ -945,20 +928,7 @@ class RuntimeTraceRecorder:
         """Return the latest replay cursor for one session/job filter."""
 
         rust_cursor = self._latest_cursor_via_rust(session_id=session_id, job_id=job_id)
-        if rust_cursor is not None:
-            return rust_cursor
-        matched = self._filter_events(self._load_stream_events(), session_id=session_id, job_id=job_id)
-        if not matched:
-            return None
-        tail = matched[-1]
-        return TraceReplayCursor(
-            session_id=tail.session_id,
-            job_id=tail.job_id,
-            generation=tail.generation,
-            seq=tail.seq,
-            event_id=tail.event_id,
-            cursor=tail.cursor,
-        )
+        return rust_cursor
 
     def replay(
         self,
@@ -971,85 +941,17 @@ class RuntimeTraceRecorder:
     ) -> TraceReplayChunk:
         """Replay persisted or in-memory trace events from a stable resume cursor."""
 
-        rust_chunk = self._replay_via_rust(
+        return self._replay_via_rust(
             session_id=session_id,
             job_id=job_id,
             after_event_id=after_event_id or (after.event_id if after is not None else None),
             limit=limit,
         )
-        if rust_chunk is not None:
-            return rust_chunk
-
-        recovery = (
-            self.recover_compacted_state(session_id=session_id, job_id=job_id)
-            if session_id is not None
-            else None
-        )
-        if recovery is not None:
-            source_events = [self._delta_to_event(delta) for delta in recovery.deltas]
-            if after is not None:
-                source_events = [
-                    event
-                    for event in source_events
-                    if (event.generation, event.seq) > (after.generation, after.seq)
-                ]
-            has_more = limit is not None and len(source_events) > limit
-            window = source_events[:limit] if limit is not None else source_events
-            next_cursor = None
-            if window:
-                tail = window[-1]
-                next_cursor = TraceReplayCursor(
-                    session_id=tail.session_id,
-                    job_id=tail.job_id,
-                    generation=tail.generation,
-                    seq=tail.seq,
-                    event_id=tail.event_id,
-                    cursor=tail.cursor,
-                )
-            generation = next_cursor.generation if next_cursor is not None else recovery.latest_recoverable_generation
-            return TraceReplayChunk(
-                session_id=session_id,
-                job_id=job_id,
-                generation=generation,
-                events=window,
-                next_cursor=next_cursor,
-                has_more=has_more,
-            )
-
-        source_events = self._filter_events(self._load_stream_events(), session_id=session_id, job_id=job_id)
-        if after is not None:
-            source_events = [
-                event
-                for event in source_events
-                if (event.generation, event.seq) > (after.generation, after.seq)
-            ]
-        has_more = limit is not None and len(source_events) > limit
-        window = source_events[:limit] if limit is not None else source_events
-        next_cursor = None
-        if window:
-            tail = window[-1]
-            next_cursor = TraceReplayCursor(
-                session_id=tail.session_id,
-                job_id=tail.job_id,
-                generation=tail.generation,
-                seq=tail.seq,
-                event_id=tail.event_id,
-                cursor=tail.cursor,
-            )
-        generation = next_cursor.generation if next_cursor is not None else (after.generation if after is not None else 0)
-        return TraceReplayChunk(
-            session_id=session_id,
-            job_id=job_id,
-            generation=generation,
-            events=window,
-            next_cursor=next_cursor,
-            has_more=has_more,
-        )
 
     def stream_events(self, *, session_id: str | None = None, job_id: str | None = None) -> list[TraceEvent]:
         """Return replayable events with optional filtering for stream seeding."""
 
-        return self._filter_events(self._load_stream_events(), session_id=session_id, job_id=job_id)
+        return self._scoped_stream_events(session_id=session_id, job_id=job_id)
 
     def subscribe_chunk(
         self,
@@ -1080,13 +982,57 @@ class RuntimeTraceRecorder:
         )
 
     def _supports_rust_trace_io(self) -> bool:
-        if not isinstance(self.event_sink, JsonlTraceEventSink):
-            return False
-        capabilities = self._storage_capabilities()
-        return capabilities is None or capabilities.backend_family in {"filesystem", "sqlite"}
+        return isinstance(self.event_sink, JsonlTraceEventSink)
 
     def _trace_stream_path(self) -> Path | None:
         return self.event_sink.path if isinstance(self.event_sink, JsonlTraceEventSink) else None
+
+    def _record_event_via_rust(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None,
+        kind: str,
+        stage: str,
+        status: str,
+        payload: dict[str, Any],
+        seq: int,
+    ) -> TraceEvent:
+        manifest_path = self._compaction_manifest_path(session_id=session_id, job_id=job_id)
+        trace_stream_path = self._trace_stream_path()
+        request: dict[str, Any] = {
+            "path": str(trace_stream_path) if trace_stream_path is not None else None,
+            "write_outputs": self.storage_backend is None and isinstance(self.event_sink, JsonlTraceEventSink),
+            "sink_schema_version": (
+                self.event_sink.schema_version if self.event_sink is not None else TRACE_EVENT_SINK_SCHEMA_VERSION
+            ),
+            "event_schema_version": self.event_schema_version,
+            "generation": self._generation,
+            "seq": seq,
+            "session_id": session_id,
+            "job_id": job_id,
+            "kind": kind,
+            "stage": stage,
+            "status": status,
+            "payload": payload,
+            "compaction_manifest_path": str(manifest_path) if manifest_path is not None else None,
+        }
+        if self.storage_backend is not None and manifest_path is not None:
+            request["compaction_manifest_text"] = self._read_text(manifest_path)
+        resolved = self._rust_adapter.trace_record_event(request)
+        event = TraceEvent.model_validate(resolved["event"])
+        if self.storage_backend is not None and isinstance(self.event_sink, JsonlTraceEventSink):
+            sink_line = resolved.get("sink_line")
+            if not isinstance(sink_line, str):
+                raise RuntimeError("Rust trace event recorder returned a missing sink_line.")
+            self.storage_backend.append_text(self.event_sink.path, sink_line)
+            delta_path = resolved.get("delta_path")
+            delta_line = resolved.get("delta_line")
+            if isinstance(delta_path, str) and isinstance(delta_line, str):
+                self.storage_backend.append_text(Path(delta_path), delta_line)
+        elif self.event_sink is not None and not isinstance(self.event_sink, JsonlTraceEventSink):
+            self.event_sink.write_event(event)
+        return event
 
     def _compaction_manifest_path(self, *, session_id: str, job_id: str | None) -> Path | None:
         path = self._compaction_paths(session_id=session_id, job_id=job_id)["manifest"]
@@ -1102,7 +1048,11 @@ class RuntimeTraceRecorder:
         limit: int | None = None,
     ) -> Iterable[dict[str, Any]]:
         trace_stream_path = self._trace_stream_path()
-        manifest_path = self._compaction_manifest_path(session_id=session_id, job_id=job_id)
+        manifest_path = (
+            self._compaction_manifest_path(session_id=session_id, job_id=job_id)
+            if session_id is not None
+            else None
+        )
         payload: dict[str, Any] = {
             "path": str(trace_stream_path) if trace_stream_path is not None else None,
             "compaction_manifest_path": str(manifest_path) if manifest_path is not None else None,
@@ -1110,6 +1060,49 @@ class RuntimeTraceRecorder:
             "job_id": job_id,
             "stream_scope_fields": list(self._control_plane.stream_scope_fields),
         }
+        if self.storage_backend is not None:
+            if trace_stream_path is not None and self._exists(trace_stream_path):
+                payload["event_stream_text"] = self._read_text(trace_stream_path)
+            if manifest_path is not None and self._exists(manifest_path):
+                manifest = self.load_compaction_manifest(session_id=session_id, job_id=job_id)
+                payload["compaction_manifest_text"] = self._read_text(manifest_path)
+                if manifest is not None and manifest.latest_stable_snapshot is not None:
+                    snapshot = manifest.latest_stable_snapshot
+                    if snapshot.state_ref is not None:
+                        state_path = Path(snapshot.state_ref.uri)
+                        if not self._exists(state_path):
+                            raise RuntimeError(
+                                "Compaction recovery failed closed because a referenced artifact is missing."
+                            )
+                        payload["compaction_state_text"] = self._read_text(state_path)
+                    if snapshot.artifact_index_ref is not None:
+                        artifact_index_path = Path(snapshot.artifact_index_ref.uri)
+                        if not self._exists(artifact_index_path):
+                            raise RuntimeError(
+                                "Compaction recovery failed closed because a referenced artifact is missing."
+                            )
+                        payload["compaction_artifact_index_text"] = self._read_text(artifact_index_path)
+                if manifest is not None and manifest.delta_path is not None and self._exists(Path(manifest.delta_path)):
+                    payload["compaction_delta_text"] = self._read_text(Path(manifest.delta_path))
+        if not payload["path"] and self._events:
+            payload["event_stream_text"] = "".join(
+                json.dumps(
+                    {
+                        "sink_schema_version": TRACE_EVENT_SINK_SCHEMA_VERSION,
+                        "event": event.model_dump(mode="json"),
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                + "\n"
+                for event in self._events
+            )
+        missing_trace_stream = (
+            trace_stream_path is None
+            or (not self._exists(trace_stream_path) and not self._events)
+        )
+        if "event_stream_text" not in payload and missing_trace_stream:
+            payload["event_stream_text"] = ""
         if after_event_id is not None:
             payload["after_event_id"] = after_event_id
         if limit is not None:
@@ -1123,13 +1116,8 @@ class RuntimeTraceRecorder:
         return TraceReplayCursor.model_validate(dict(payload))
 
     def _latest_cursor_via_rust(self, *, session_id: str, job_id: str | None) -> TraceReplayCursor | None:
-        if not self._supports_rust_trace_io():
-            return None
-        try:
-            with self._rust_trace_request(session_id=session_id, job_id=job_id) as payload:
-                resolved = self._rust_adapter.trace_stream_inspect(payload)
-        except RuntimeError:
-            return None
+        with self._rust_trace_request(session_id=session_id, job_id=job_id) as payload:
+            resolved = self._rust_adapter.trace_stream_inspect(payload)
         return self._cursor_from_payload(resolved.get("latest_cursor"))
 
     def _replay_via_rust(
@@ -1139,19 +1127,14 @@ class RuntimeTraceRecorder:
         job_id: str | None,
         after_event_id: str | None,
         limit: int | None,
-    ) -> TraceReplayChunk | None:
-        if session_id is None or not self._supports_rust_trace_io():
-            return None
-        try:
-            with self._rust_trace_request(
-                    session_id=session_id,
-                    job_id=job_id,
-                    after_event_id=after_event_id,
-                    limit=limit,
-                ) as payload:
-                resolved = self._rust_adapter.trace_stream_replay(payload)
-        except RuntimeError:
-            return None
+    ) -> TraceReplayChunk:
+        with self._rust_trace_request(
+            session_id=session_id,
+            job_id=job_id,
+            after_event_id=after_event_id,
+            limit=limit,
+        ) as payload:
+            resolved = self._rust_adapter.trace_stream_replay(payload)
         events = [TraceEvent.model_validate(payload) for payload in resolved.get("events", [])]
         next_cursor = None
         if next_cursor is None and events:
@@ -1177,75 +1160,6 @@ class RuntimeTraceRecorder:
             has_more=bool(resolved.get("has_more", False)),
         )
 
-    def _stage_trace_stream(self, *, trace_stream_path: Path, temp_root: Path) -> Path:
-        staged = temp_root / "TRACE_EVENTS.jsonl"
-        staged.parent.mkdir(parents=True, exist_ok=True)
-        with staged.open("w", encoding="utf-8") as handle:
-            for line in self.storage_backend.iter_text_lines(trace_stream_path):
-                handle.write(line)
-        return staged
-
-    def _stage_backend_file(self, *, source: Path, destination: Path) -> None:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        with destination.open("w", encoding="utf-8") as handle:
-            for line in self.storage_backend.iter_text_lines(source):
-                handle.write(line)
-
-    def _stage_compaction_manifest(
-        self,
-        *,
-        session_id: str,
-        job_id: str | None,
-        manifest_path: Path,
-        temp_root: Path,
-    ) -> Path:
-        manifest = self.load_compaction_manifest(session_id=session_id, job_id=job_id)
-        if manifest is None or manifest.latest_stable_snapshot is None:
-            raise RuntimeError("Compaction manifest is missing required recovery artifact refs.")
-        snapshot = manifest.latest_stable_snapshot
-        if snapshot.state_ref is None or snapshot.artifact_index_ref is None:
-            raise RuntimeError("Compaction manifest is missing required recovery artifact refs.")
-
-        stream_key = _build_compaction_stream_key(session_id, job_id)
-        trace_root = temp_root / "trace_compaction"
-        artifacts_dir = trace_root / "artifacts"
-        staged_manifest_path = trace_root / f"{stream_key}.manifest.json"
-        staged_snapshot_path = trace_root / f"{stream_key}.snapshot.json"
-        staged_delta_path = trace_root / f"{stream_key}.deltas.jsonl"
-        staged_artifact_index_path = artifacts_dir / f"{stream_key}.artifacts.json"
-        staged_state_path = artifacts_dir / f"{stream_key}.state.json"
-
-        state_path = Path(snapshot.state_ref.uri)
-        artifact_index_path = Path(snapshot.artifact_index_ref.uri)
-        self._stage_backend_file(source=state_path, destination=staged_state_path)
-        self._stage_backend_file(source=artifact_index_path, destination=staged_artifact_index_path)
-        if manifest.delta_path is not None and self._exists(Path(manifest.delta_path)):
-            self._stage_backend_file(source=Path(manifest.delta_path), destination=staged_delta_path)
-        else:
-            staged_delta_path.parent.mkdir(parents=True, exist_ok=True)
-            staged_delta_path.write_text("", encoding="utf-8")
-
-        staged_snapshot = snapshot.model_copy(
-            update={
-                "artifact_index_ref": snapshot.artifact_index_ref.model_copy(update={"uri": str(staged_artifact_index_path)}),
-                "state_ref": snapshot.state_ref.model_copy(update={"uri": str(staged_state_path)}),
-            }
-        )
-        staged_manifest = manifest.model_copy(
-            update={
-                "latest_stable_snapshot": staged_snapshot,
-                "manifest_path": str(staged_manifest_path),
-                "snapshot_path": str(staged_snapshot_path),
-                "delta_path": str(staged_delta_path),
-                "artifact_index_path": str(staged_artifact_index_path),
-                "state_path": str(staged_state_path),
-            }
-        )
-        staged_snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-        staged_snapshot_path.write_text(staged_snapshot.model_dump_json(indent=2) + "\n", encoding="utf-8")
-        staged_manifest_path.write_text(staged_manifest.model_dump_json(indent=2) + "\n", encoding="utf-8")
-        return staged_manifest_path
-
     def compact(
         self,
         *,
@@ -1256,148 +1170,19 @@ class RuntimeTraceRecorder:
         """Persist a stable snapshot and roll the active stream into the next generation."""
 
         capabilities = self._storage_capabilities()
-        if (
-            capabilities is None
-            or not capabilities.supports_compaction
-            or not capabilities.supports_snapshot_delta
-        ):
-            backend_family = capabilities.backend_family if capabilities is not None else None
-            return TraceCompactionResult(
-                applied=False,
-                status="unsupported",
-                reason="storage backend does not advertise compaction + snapshot-delta support",
-                session_id=session_id,
-                job_id=job_id,
-                backend_family=backend_family,
-                current_generation=self._generation,
-                next_generation=self._generation,
-            )
-
-        source_events = self._filter_events(self._load_stream_events(), session_id=session_id, job_id=job_id)
-        active_events = [event for event in source_events if event.generation == source_events[-1].generation] if source_events else []
-        if not active_events:
-            return TraceCompactionResult(
-                applied=False,
-                status="no_events",
-                reason="no matching events available for compaction",
-                session_id=session_id,
-                job_id=job_id,
-                backend_family=capabilities.backend_family,
-                current_generation=self._generation,
-                next_generation=self._generation,
-            )
-
-        previous_manifest = self.load_compaction_manifest(session_id=session_id, job_id=job_id)
-        parent_snapshot = previous_manifest.latest_stable_snapshot if previous_manifest is not None else None
-        paths = self._compaction_paths(session_id=session_id, job_id=job_id)
-        tail = active_events[-1]
-        state_payload = {
-            "session_id": session_id,
-            "job_id": job_id,
-            "generation": tail.generation,
-            "watermark_event_id": tail.event_id,
-            "delta_cursor": tail.cursor,
-            "latest_cursor": TraceReplayCursor(
-                session_id=tail.session_id,
-                job_id=tail.job_id,
-                generation=tail.generation,
-                seq=tail.seq,
-                event_id=tail.event_id,
-                cursor=tail.cursor,
-            ).model_dump(mode="json"),
-            "event_count": len(active_events),
-            "latest_event": tail.model_dump(mode="json"),
-            "control_plane": self._control_plane.model_dump(mode="json"),
-            "continuity_artifacts": list(dict.fromkeys(str(path) for path in artifact_paths)),
-        }
-        state_serialized = json.dumps(state_payload, ensure_ascii=False, indent=2) + "\n"
-        self._write_text(paths["state"], state_serialized)
-        state_ref = self._build_artifact_ref(kind="state_ref", path=paths["state"], payload=state_serialized)
-
-        artifact_index_refs = [
-            state_ref,
-            self._build_artifact_ref(
-                kind="trace_output",
-                path=self.output_path,
-            )
-            if self.output_path is not None
-            else None,
-            self._build_artifact_ref(
-                kind="trace_stream",
-                path=self.event_sink.path,
-            )
-            if isinstance(self.event_sink, JsonlTraceEventSink)
-            else None,
-        ]
-        artifact_index_refs.extend(
-            self._build_external_artifact_ref(path=artifact_path)
-            for artifact_path in list(dict.fromkeys(str(path) for path in artifact_paths))
-        )
-        artifact_index_payload = [ref.model_dump(mode="json") for ref in artifact_index_refs if ref is not None]
-        artifact_index_serialized = json.dumps(artifact_index_payload, ensure_ascii=False, indent=2) + "\n"
-        self._write_text(paths["artifact_index"], artifact_index_serialized)
-        artifact_index_ref = self._build_artifact_ref(
-            kind="artifact_index_ref",
-            path=paths["artifact_index"],
-            payload=artifact_index_serialized,
-        )
-
-        snapshot_summary = {
-            "latest_event_id": tail.event_id,
-            "latest_seq": tail.seq,
-            "event_count": len(active_events),
-            "latest_cursor": state_payload["latest_cursor"],
-            "kind": tail.kind,
-            "stage": tail.stage,
-            "status": tail.status,
-        }
-        snapshot = TraceCompactionSnapshot(
-            generation=tail.generation,
-            snapshot_id=f"snap_{uuid.uuid4().hex[:12]}",
-            parent_generation=parent_snapshot.generation if parent_snapshot is not None else None,
-            parent_snapshot_id=parent_snapshot.snapshot_id if parent_snapshot is not None else None,
+        backend_family = capabilities.backend_family if capabilities is not None else None
+        result = self._compact_via_rust(
             session_id=session_id,
             job_id=job_id,
-            watermark_event_id=tail.event_id,
-            state_digest=_stable_json_digest(state_payload),
-            artifact_index_ref=artifact_index_ref,
-            state_ref=state_ref,
-            delta_cursor=tail.cursor,
-            summary=snapshot_summary,
+            artifact_paths=artifact_paths,
+            backend_family=backend_family,
+            supports_compaction=bool(capabilities is not None and capabilities.supports_compaction),
+            supports_snapshot_delta=bool(capabilities is not None and capabilities.supports_snapshot_delta),
         )
-        self._write_text(paths["snapshot"], snapshot.model_dump_json(indent=2) + "\n")
-        self._write_text(paths["deltas"], "")
-
-        next_generation = tail.generation + 1
-        manifest = TraceCompactionManifest(
-            session_id=session_id,
-            job_id=job_id,
-            backend_family=capabilities.backend_family,
-            compaction_supported=True,
-            snapshot_delta_supported=True,
-            latest_stable_snapshot=snapshot,
-            active_generation=next_generation,
-            active_parent_snapshot_id=snapshot.snapshot_id,
-            manifest_path=str(paths["manifest"]),
-            snapshot_path=str(paths["snapshot"]),
-            delta_path=str(paths["deltas"]),
-            artifact_index_path=str(paths["artifact_index"]),
-            state_path=str(paths["state"]),
-        )
-        self._write_text(paths["manifest"], manifest.model_dump_json(indent=2) + "\n")
-        self._generation = next_generation
-        self._next_seq = 1
-        return TraceCompactionResult(
-            applied=True,
-            status="compacted",
-            session_id=session_id,
-            job_id=job_id,
-            backend_family=capabilities.backend_family,
-            current_generation=snapshot.generation,
-            next_generation=next_generation,
-            latest_stable_snapshot=snapshot,
-            manifest_path=str(paths["manifest"]),
-        )
+        if result.applied:
+            self._generation = result.next_generation
+            self._next_seq = 1
+        return result
 
     def load_compaction_manifest(
         self,
@@ -1412,6 +1197,53 @@ class RuntimeTraceRecorder:
             return None
         return TraceCompactionManifest.model_validate_json(self._read_text(path))
 
+    def _compact_via_rust(
+        self,
+        *,
+        session_id: str,
+        job_id: str | None,
+        artifact_paths: Iterable[str],
+        backend_family: str | None,
+        supports_compaction: bool,
+        supports_snapshot_delta: bool,
+    ) -> TraceCompactionResult:
+        paths = self._compaction_paths(session_id=session_id, job_id=job_id)
+        trace_stream_path = self._trace_stream_path()
+        root_path = (
+            trace_stream_path.parent
+            if trace_stream_path is not None
+            else (self.output_path.parent if self.output_path is not None else Path.cwd())
+        )
+        request: dict[str, Any] = {
+            "root_path": str(root_path),
+            "event_stream_path": str(trace_stream_path) if trace_stream_path is not None else None,
+            "output_path": str(self.output_path) if self.output_path is not None else None,
+            "session_id": session_id,
+            "job_id": job_id,
+            "backend_family": backend_family,
+            "supports_compaction": supports_compaction,
+            "supports_snapshot_delta": supports_snapshot_delta,
+            "current_generation": self._generation,
+            "artifact_paths": list(dict.fromkeys(str(path) for path in artifact_paths)),
+            "write_outputs": self.storage_backend is None,
+        }
+        if self.storage_backend is not None:
+            if trace_stream_path is not None and self._exists(trace_stream_path):
+                request["event_stream_text"] = self._read_text(trace_stream_path)
+            if self.output_path is not None and self._exists(self.output_path):
+                request["output_text"] = self._read_text(self.output_path)
+            if self._exists(paths["manifest"]):
+                request["previous_manifest_text"] = self._read_text(paths["manifest"])
+        resolved = self._rust_adapter.trace_compact(request)
+        if self.storage_backend is not None:
+            for write in resolved.get("writes", []):
+                if isinstance(write, Mapping):
+                    path = write.get("path")
+                    payload_text = write.get("payload_text")
+                    if isinstance(path, str) and isinstance(payload_text, str):
+                        self.storage_backend.write_text(Path(path), payload_text)
+        return TraceCompactionResult.model_validate(resolved)
+
     def recover_compacted_state(
         self,
         *,
@@ -1422,68 +1254,15 @@ class RuntimeTraceRecorder:
 
         if session_id is None:
             return None
-        if self._supports_rust_trace_io():
-            manifest_path = self._compaction_manifest_path(session_id=session_id, job_id=job_id)
-            if manifest_path is not None:
-                try:
-                    with self._rust_trace_request(session_id=session_id, job_id=job_id) as payload:
-                        resolved = self._rust_adapter.trace_stream_inspect(payload)
-                except RuntimeError:
-                    pass
-                else:
-                    recovery_payload = resolved.get("recovery")
-                    if isinstance(recovery_payload, Mapping):
-                        return TraceCompactionRecovery.model_validate(dict(recovery_payload))
-        manifest = self.load_compaction_manifest(session_id=session_id, job_id=job_id)
-        if manifest is None or manifest.latest_stable_snapshot is None:
+        manifest_path = self._compaction_manifest_path(session_id=session_id, job_id=job_id)
+        if manifest_path is None:
             return None
-
-        snapshot = manifest.latest_stable_snapshot
-        if snapshot.state_ref is None or snapshot.artifact_index_ref is None:
-            raise RuntimeError("Compaction manifest is missing required recovery artifact refs.")
-
-        state_path = Path(snapshot.state_ref.uri)
-        artifact_index_path = Path(snapshot.artifact_index_ref.uri)
-        if not self._exists(state_path) or not self._exists(artifact_index_path):
-            raise RuntimeError("Compaction recovery failed closed because a referenced artifact is missing.")
-
-        state_payload = json.loads(self._read_text(state_path))
-        artifact_index = [
-            TraceArtifactRef.model_validate(payload)
-            for payload in json.loads(self._read_text(artifact_index_path) or "[]")
-        ]
-        delta_path = Path(manifest.delta_path) if manifest.delta_path is not None else None
-        deltas = self._load_compaction_deltas(delta_path)
-        latest_cursor = None
-        if deltas:
-            tail = deltas[-1]
-            latest_cursor = self._cursor_from_delta(tail)
-        elif isinstance(state_payload.get("latest_cursor"), Mapping):
-            latest_cursor = TraceReplayCursor.model_validate(state_payload["latest_cursor"])
-        latest_generation = deltas[-1].generation if deltas else manifest.active_generation
-        return TraceCompactionRecovery(
-            session_id=session_id,
-            job_id=job_id,
-            latest_recoverable_generation=latest_generation,
-            snapshot=snapshot,
-            deltas=deltas,
-            artifact_index=artifact_index,
-            state=state_payload,
-            latest_cursor=latest_cursor,
-        )
-
-    @staticmethod
-    def _count_reroutes_in(events: list[TraceEvent]) -> int:
-        """Return reroute count for one scoped event list."""
-
-        route_select_count = sum(1 for event in events if event.kind == "route.selected")
-        return max(0, route_select_count - 1)
-
-    @staticmethod
-    def _count_retries_in(events: list[TraceEvent]) -> int:
-        """Return retry count for one scoped event list."""
-
-        return sum(1 for event in events if event.kind == "run.failed")
+        with self._rust_trace_request(session_id=session_id, job_id=job_id) as payload:
+            resolved = self._rust_adapter.trace_stream_inspect(payload)
+        recovery_payload = resolved.get("recovery")
+        if not isinstance(recovery_payload, Mapping):
+            return None
+        return TraceCompactionRecovery.model_validate(dict(recovery_payload))
 
     def _scoped_stream_events(
         self,
@@ -1493,22 +1272,26 @@ class RuntimeTraceRecorder:
     ) -> list[TraceEvent]:
         """Return persisted stream events narrowed to the requested scope."""
 
-        events = self._load_stream_events()
-        if session_id is None and job_id is None:
-            return events
-        return self._filter_events(events, session_id=session_id, job_id=job_id)
+        return self._replay_via_rust(
+            session_id=session_id,
+            job_id=job_id,
+            after_event_id=None,
+            limit=None,
+        ).events
 
     def count_reroutes(self, session_id: str, job_id: str | None = None) -> int:
         """Return reroute count for a session based on route selection events."""
 
-        events = self._scoped_stream_events(session_id=session_id, job_id=job_id)
-        return self._count_reroutes_in(events)
+        with self._rust_trace_request(session_id=session_id, job_id=job_id) as payload:
+            resolved = self._rust_adapter.trace_stream_inspect(payload)
+        return int(resolved.get("reroute_count", 0))
 
     def count_retries(self, session_id: str, job_id: str | None = None) -> int:
         """Return retry count for a session based on prior run failures."""
 
-        events = self._scoped_stream_events(session_id=session_id, job_id=job_id)
-        return self._count_retries_in(events)
+        with self._rust_trace_request(session_id=session_id, job_id=job_id) as payload:
+            resolved = self._rust_adapter.trace_stream_inspect(payload)
+        return int(resolved.get("retry_count", 0))
 
     def latest_route_selection(self, *, session_id: str) -> dict[str, Any] | None:
         """Return the latest route-selected payload for one session."""
@@ -1544,20 +1327,16 @@ class RuntimeTraceRecorder:
         if self.output_path is None:
             return
 
-        stream_state = self.describe_stream()
-        events = self._scoped_stream_events(session_id=session_id, job_id=job_id)
-        resolved_reroute_count = (
-            reroute_count if reroute_count is not None else self._count_reroutes_in(events)
-        )
-        resolved_retry_count = (
-            retry_count if retry_count is not None else self._count_retries_in(events)
-        )
-
         trace_event_sink_schema_version = (
             self.event_sink.schema_version if self.event_sink is not None else None
         )
         control_plane = self._control_plane.model_dump(mode="json")
-        serialized_events = [event.model_dump(mode="json") for event in events]
+        trace_stream_path = self._trace_stream_path()
+        manifest_path = (
+            self._compaction_manifest_path(session_id=session_id, job_id=job_id)
+            if session_id is not None
+            else None
+        )
 
         payload = {
             "output_path": str(self.output_path),
@@ -1566,10 +1345,15 @@ class RuntimeTraceRecorder:
             "owner": owner,
             "gate": gate,
             "overlay": overlay,
-            "reroute_count": resolved_reroute_count,
-            "retry_count": resolved_retry_count,
+            "reroute_count": reroute_count,
+            "retry_count": retry_count,
             "artifact_paths": artifact_paths,
             "verification_status": verification_status,
+            "session_id": session_id,
+            "job_id": job_id,
+            "event_stream_path": str(trace_stream_path) if trace_stream_path is not None else None,
+            "compaction_manifest_path": str(manifest_path) if manifest_path is not None else None,
+            "stream_scope_fields": list(self._control_plane.stream_scope_fields),
             "framework_version": self.framework_version,
             "metadata_schema_version": self.metadata_schema_version,
             "runtime_path": str(_default_routing_runtime_path()),
@@ -1578,11 +1362,37 @@ class RuntimeTraceRecorder:
             "parallel_group": parallel_group,
             "supervisor_projection": supervisor_projection,
             "control_plane": control_plane,
-            "stream": stream_state,
-            "events": serialized_events,
         }
         if self.storage_backend is not None:
             payload["write_outputs"] = False
+            if trace_stream_path is not None and self._exists(trace_stream_path):
+                payload["event_stream_text"] = self._read_text(trace_stream_path)
+            if manifest_path is not None and self._exists(manifest_path):
+                payload["compaction_manifest_text"] = self._read_text(manifest_path)
+                manifest = self.load_compaction_manifest(session_id=session_id, job_id=job_id)
+                if manifest is not None and manifest.latest_stable_snapshot is not None:
+                    snapshot = manifest.latest_stable_snapshot
+                    if snapshot.state_ref is not None:
+                        state_path = Path(snapshot.state_ref.uri)
+                        payload["compaction_state_text"] = self._read_text(state_path)
+                    if snapshot.artifact_index_ref is not None:
+                        artifact_index_path = Path(snapshot.artifact_index_ref.uri)
+                        payload["compaction_artifact_index_text"] = self._read_text(artifact_index_path)
+                    if manifest.delta_path is not None and self._exists(Path(manifest.delta_path)):
+                        payload["compaction_delta_text"] = self._read_text(Path(manifest.delta_path))
+        elif not payload["event_stream_path"] and self._events:
+            payload["event_stream_text"] = "".join(
+                json.dumps(
+                    {
+                        "sink_schema_version": TRACE_EVENT_SINK_SCHEMA_VERSION,
+                        "event": event.model_dump(mode="json"),
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                + "\n"
+                for event in self._events
+            )
         resolved = self._rust_adapter.write_trace_metadata(payload)
         if self.storage_backend is not None:
             payload_text = resolved.get("payload_text")
@@ -1689,156 +1499,15 @@ class RuntimeTraceRecorder:
             "state": artifacts_dir / f"{stream_key}.state.json",
         }
 
-    def _write_text(self, path: Path, payload: str) -> None:
-        if self.storage_backend is not None:
-            self.storage_backend.write_text(path, payload)
-            return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(payload, encoding="utf-8")
-
-    def _append_text(self, path: Path, payload: str) -> None:
-        if self.storage_backend is not None:
-            self.storage_backend.append_text(path, payload)
-            return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(payload)
-
     def _read_text(self, path: Path) -> str:
         if self.storage_backend is not None:
             return self.storage_backend.read_text(path)
         return path.read_text(encoding="utf-8")
 
-    def _iter_text_lines(self, path: Path) -> Iterable[str]:
-        if self.storage_backend is not None:
-            yield from self.storage_backend.iter_text_lines(path)
-            return
-        yield from _iter_file_lines(path)
-
     def _exists(self, path: Path) -> bool:
         if self.storage_backend is not None:
             return self.storage_backend.exists(path)
         return path.exists()
-
-    def _build_artifact_ref(
-        self,
-        *,
-        kind: str,
-        path: Path | None,
-        payload: str | None = None,
-    ) -> TraceArtifactRef | None:
-        if path is None:
-            return None
-        if payload is None:
-            if not self._exists(path):
-                return None
-            payload = self._read_text(path)
-        return TraceArtifactRef(
-            artifact_id=f"art_{uuid.uuid4().hex[:12]}",
-            kind=kind,
-            uri=str(path),
-            digest=hashlib.sha256(payload.encode("utf-8")).hexdigest(),
-            size_bytes=len(payload.encode("utf-8")),
-        )
-
-    def _build_external_artifact_ref(self, *, path: str) -> TraceArtifactRef:
-        encoded = path.encode("utf-8")
-        return TraceArtifactRef(
-            artifact_id=f"art_{uuid.uuid4().hex[:12]}",
-            kind="continuity_artifact",
-            uri=path,
-            digest=hashlib.sha256(encoded).hexdigest(),
-            size_bytes=len(encoded),
-            producer="runtime-trace-recorder-external",
-        )
-
-    def _append_compaction_delta(self, event: TraceEvent) -> None:
-        manifest = self.load_compaction_manifest(session_id=event.session_id, job_id=event.job_id)
-        if manifest is None or manifest.delta_path is None or manifest.active_parent_snapshot_id is None:
-            return
-        if event.generation != manifest.active_generation:
-            return
-        delta = TraceCompactionDelta(
-            generation=event.generation,
-            delta_id=f"delta_{uuid.uuid4().hex[:12]}",
-            parent_snapshot_id=manifest.active_parent_snapshot_id,
-            seq=event.seq,
-            ts=event.ts,
-            kind=event.kind,
-            payload={
-                "event_id": event.event_id,
-                "cursor": event.cursor,
-                "stage": event.stage,
-                "status": event.status,
-                "payload": event.payload,
-            },
-            artifact_refs=[],
-            applies_to={
-                "session_id": event.session_id,
-                "job_id": event.job_id,
-            },
-        )
-        path = Path(manifest.delta_path)
-        if self._supports_rust_trace_io():
-            try:
-                self._append_compaction_delta_via_rust(path=path, delta=delta)
-                return
-            except RuntimeError:
-                pass
-        serialized = delta.model_dump_json() + "\n"
-        self._append_text(path, serialized)
-
-    def _append_compaction_delta_via_rust(self, *, path: Path, delta: TraceCompactionDelta) -> None:
-        payload = {"path": str(path), "delta": delta.model_dump(mode="json")}
-        capabilities = self._storage_capabilities()
-        if capabilities is None or capabilities.backend_family == "filesystem" or self.storage_backend is None:
-            self._rust_adapter.write_trace_compaction_delta(payload)
-            return
-        with tempfile.TemporaryDirectory(prefix="runtime-trace-delta-") as temp_dir:
-            staged_path = Path(temp_dir) / path.name
-            self._rust_adapter.write_trace_compaction_delta(
-                {
-                    "path": str(staged_path),
-                    "delta": delta.model_dump(mode="json"),
-                }
-            )
-            self.storage_backend.append_text(path, staged_path.read_text(encoding="utf-8"))
-
-    def _load_compaction_deltas(self, path: Path | None) -> list[TraceCompactionDelta]:
-        if path is None or not self._exists(path):
-            return []
-        return [
-            TraceCompactionDelta.model_validate_json(line)
-            for line in self._iter_text_lines(path)
-            if line.strip()
-        ]
-
-    def _delta_to_event(self, delta: TraceCompactionDelta) -> TraceEvent:
-        payload = delta.payload
-        return TraceEvent(
-            event_id=str(payload["event_id"]),
-            seq=delta.seq,
-            generation=delta.generation,
-            cursor=str(payload["cursor"]),
-            ts=delta.ts,
-            session_id=str(delta.applies_to["session_id"]),
-            job_id=delta.applies_to.get("job_id"),
-            kind=delta.kind,
-            stage=str(payload["stage"]),
-            status=str(payload.get("status", "ok")),
-            payload=dict(payload.get("payload", {})),
-        )
-
-    def _cursor_from_delta(self, delta: TraceCompactionDelta) -> TraceReplayCursor:
-        payload = delta.payload
-        return TraceReplayCursor(
-            session_id=str(delta.applies_to["session_id"]),
-            job_id=delta.applies_to.get("job_id"),
-            generation=delta.generation,
-            seq=delta.seq,
-            event_id=str(payload["event_id"]),
-            cursor=str(payload["cursor"]),
-        )
 
     def _activate_generation_for_stream(self, *, session_id: str, job_id: str | None) -> None:
         manifest = self.load_compaction_manifest(session_id=session_id, job_id=job_id)
@@ -1847,18 +1516,14 @@ class RuntimeTraceRecorder:
         if manifest.active_generation < self._generation:
             return
         self._generation = manifest.active_generation
-        active_events = [
-            event
-            for event in self._filter_events(self._load_stream_events(), session_id=session_id, job_id=job_id)
-            if event.generation == self._generation
-        ]
-        active_deltas = self._load_compaction_deltas(Path(manifest.delta_path) if manifest.delta_path is not None else None)
-        last_seq = 0
-        if active_events:
-            last_seq = max(last_seq, active_events[-1].seq)
-        if active_deltas:
-            last_seq = max(last_seq, active_deltas[-1].seq)
-        self._next_seq = last_seq + 1 if last_seq else 1
+        with self._rust_trace_request(session_id=session_id, job_id=job_id) as payload:
+            resolved = self._rust_adapter.trace_stream_inspect(payload)
+        latest_cursor = self._cursor_from_payload(resolved.get("latest_cursor"))
+        self._next_seq = (
+            latest_cursor.seq + 1
+            if latest_cursor is not None and latest_cursor.generation == self._generation
+            else 1
+        )
 
     def _latest_compaction_manifest_path(self) -> str | None:
         root_candidate = (

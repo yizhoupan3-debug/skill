@@ -52,13 +52,8 @@ def _seed_browser_package(repo_root: Path) -> Path:
 
 def _seed_browser_package_state(
     repo_root: Path,
-    *,
-    include_node_modules: bool = True,
-    src_newer_than_dist: bool = False,
 ) -> Path:
     package_root = repo_root / "tools" / "browser-mcp"
-    if include_node_modules:
-        (package_root / "node_modules").mkdir(parents=True, exist_ok=True)
     src_root = package_root / "src"
     dist_root = package_root / "dist"
 
@@ -66,15 +61,6 @@ def _seed_browser_package_state(
         _write_text(src_root / name, f"// {name}\n")
     for name in DIST_FILES:
         _write_text(dist_root / name, f"// built {name}\n")
-
-    older = 1_700_000_000
-    newer = older + 10
-    src_ts = newer if src_newer_than_dist else older
-    dist_ts = older if src_newer_than_dist else newer
-    for name in SOURCE_FILES:
-        os.utime(src_root / name, (src_ts, src_ts))
-    for name in DIST_FILES:
-        os.utime(dist_root / name, (dist_ts, dist_ts))
     return package_root
 
 
@@ -104,51 +90,18 @@ def _install_fake_node(bin_dir: Path, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def _install_fake_npm(bin_dir: Path, output_path: Path) -> None:
-    _write_text(
-        bin_dir / "npm",
-        "\n".join(
-            [
-                "#!/bin/sh",
-                "python3 - \"$@\" <<'PY'",
-                "import json, os, sys",
-                "from pathlib import Path",
-                "path = Path(os.environ['FAKE_NPM_OUTPUT'])",
-                "calls = []",
-                "if path.exists():",
-                "    calls = json.loads(path.read_text(encoding='utf-8'))",
-                "calls.append({'argv': sys.argv[1:], 'cwd': os.getcwd()})",
-                "path.write_text(json.dumps(calls, ensure_ascii=False), encoding='utf-8')",
-                "PY",
-            ]
-        )
-        + "\n",
-    )
-    (bin_dir / "npm").chmod(0o755)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-
 def _read_fake_node_output(path: Path) -> dict[str, object]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _read_fake_npm_output(path: Path) -> list[dict[str, object]]:
-    if not path.exists():
-        return []
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _run_launcher(repo_root: Path, *, env: dict[str, str], extra_args: list[str] | None = None) -> dict[str, object]:
     output_path = repo_root / "fake-node-output.json"
-    npm_output_path = repo_root / "fake-npm-output.json"
     bin_dir = repo_root / "fake-bin"
     _install_fake_node(bin_dir, output_path)
-    _install_fake_npm(bin_dir, npm_output_path)
     launcher_env = os.environ.copy()
     launcher_env.update(env)
     launcher_env["PATH"] = f"{bin_dir}:{launcher_env.get('PATH', '')}"
     launcher_env["FAKE_NODE_OUTPUT"] = str(output_path)
-    launcher_env["FAKE_NPM_OUTPUT"] = str(npm_output_path)
     launcher_env["REAL_NODE_BIN"] = REAL_NODE_BIN
 
     subprocess.run(
@@ -157,9 +110,7 @@ def _run_launcher(repo_root: Path, *, env: dict[str, str], extra_args: list[str]
         env=launcher_env,
         check=True,
     )
-    result = _read_fake_node_output(output_path)
-    result["npm_calls"] = _read_fake_npm_output(npm_output_path)
-    return result
+    return _read_fake_node_output(output_path)
 
 
 def _prepare_repo(tmp_path: Path) -> Path:
@@ -168,17 +119,10 @@ def _prepare_repo(tmp_path: Path) -> Path:
 
 def _prepare_repo_state(
     tmp_path: Path,
-    *,
-    include_node_modules: bool = True,
-    src_newer_than_dist: bool = False,
 ) -> Path:
     repo_root = tmp_path / "repo"
     _copy_launcher_scripts(repo_root)
-    _seed_browser_package_state(
-        repo_root,
-        include_node_modules=include_node_modules,
-        src_newer_than_dist=src_newer_than_dist,
-    )
+    _seed_browser_package_state(repo_root)
     return repo_root
 
 
@@ -416,75 +360,26 @@ def test_launcher_passes_through_resume_manifest_env_when_it_is_the_only_attach_
     ]
 
 
-def test_launcher_runs_npm_install_when_node_modules_is_missing(tmp_path: Path) -> None:
-    repo_root = _prepare_repo_state(tmp_path, include_node_modules=False)
+def test_launcher_fails_fast_when_prebuilt_dist_is_missing(tmp_path: Path) -> None:
+    repo_root = _prepare_repo(tmp_path)
+    (repo_root / "tools" / "browser-mcp" / "dist" / "index.js").unlink()
+    output_path = repo_root / "fake-node-output.json"
+    bin_dir = repo_root / "fake-bin"
+    _install_fake_node(bin_dir, output_path)
+    launcher_env = os.environ.copy()
+    launcher_env["PATH"] = f"{bin_dir}:{launcher_env.get('PATH', '')}"
+    launcher_env["FAKE_NODE_OUTPUT"] = str(output_path)
+    launcher_env["REAL_NODE_BIN"] = REAL_NODE_BIN
 
-    result = _run_launcher(repo_root, env={})
-
-    assert result["argv"] == ["dist/index.js"]
-    assert result["npm_calls"] == [
-        {
-            "argv": ["install"],
-            "cwd": str(repo_root / "tools" / "browser-mcp"),
-        }
-    ]
-
-
-def test_launcher_runs_npm_build_when_sources_are_newer_than_dist(tmp_path: Path) -> None:
-    repo_root = _prepare_repo_state(tmp_path, src_newer_than_dist=True)
-
-    result = _run_launcher(repo_root, env={})
-
-    assert result["argv"] == ["dist/index.js"]
-    assert result["npm_calls"] == [
-        {
-            "argv": ["run", "build"],
-            "cwd": str(repo_root / "tools" / "browser-mcp"),
-        }
-    ]
-
-
-def test_launcher_runs_install_then_build_when_modules_are_missing_and_dist_is_stale(
-    tmp_path: Path,
-) -> None:
-    repo_root = _prepare_repo_state(
-        tmp_path,
-        include_node_modules=False,
-        src_newer_than_dist=True,
+    result = subprocess.run(
+        [str(repo_root / "tools" / "browser-mcp" / "scripts" / "start_browser_mcp.sh")],
+        cwd=repo_root,
+        env=launcher_env,
+        check=False,
+        capture_output=True,
+        text=True,
     )
 
-    result = _run_launcher(repo_root, env={})
-
-    assert result["argv"] == ["dist/index.js"]
-    assert result["npm_calls"] == [
-        {
-            "argv": ["install"],
-            "cwd": str(repo_root / "tools" / "browser-mcp"),
-        },
-        {
-            "argv": ["run", "build"],
-            "cwd": str(repo_root / "tools" / "browser-mcp"),
-        },
-    ]
-
-
-def test_launcher_runs_npm_install_then_build_when_both_preflight_conditions_apply(tmp_path: Path) -> None:
-    repo_root = _prepare_repo_state(
-        tmp_path,
-        include_node_modules=False,
-        src_newer_than_dist=True,
-    )
-
-    result = _run_launcher(repo_root, env={})
-
-    assert result["argv"] == ["dist/index.js"]
-    assert result["npm_calls"] == [
-        {
-            "argv": ["install"],
-            "cwd": str(repo_root / "tools" / "browser-mcp"),
-        },
-        {
-            "argv": ["run", "build"],
-            "cwd": str(repo_root / "tools" / "browser-mcp"),
-        },
-    ]
+    assert result.returncode == 1
+    assert "requires prebuilt dist/index.js" in result.stderr
+    assert not output_path.exists()

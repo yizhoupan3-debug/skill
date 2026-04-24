@@ -118,14 +118,15 @@ class CodexAgnoRuntime:
             settings.codex_home,
             timeout_seconds=settings.rust_router_timeout_seconds,
         )
+        self.runtime_integrator_descriptor = self.rust_adapter.runtime_integrator()
         self.router_service = RouterService(settings, rust_adapter=self.rust_adapter)
         self.control_plane_descriptor = self.router_service.control_plane_descriptor
         self._max_background_jobs, self._background_job_timeout = _runtime_background_defaults(
-            self.control_plane_descriptor
+            self.runtime_integrator_descriptor
         )
         self._max_concurrent_subagents, self._subagent_timeout_seconds = _runtime_subagent_defaults(
             settings,
-            self.control_plane_descriptor,
+            self.runtime_integrator_descriptor,
         )
         self.checkpointer = FilesystemRuntimeCheckpointer(
             data_dir=self.settings.resolved_data_dir,
@@ -184,6 +185,7 @@ class CodexAgnoRuntime:
     def _apply_control_plane_descriptor(self, descriptor: dict[str, Any]) -> None:
         """Propagate the active Rust control-plane descriptor across runtime seams."""
 
+        self.runtime_integrator_descriptor = self.rust_adapter.runtime_integrator()
         self.control_plane_descriptor = dict(descriptor)
         self.state_service.refresh_control_plane(self.control_plane_descriptor)
         self.trace_service.refresh_control_plane(self.control_plane_descriptor)
@@ -207,11 +209,11 @@ class CodexAgnoRuntime:
     def health(self) -> dict[str, Any]:
         """Return health information for each runtime service seam."""
 
-        runtime_host = _runtime_host_contract(self.control_plane_descriptor)
+        runtime_host = _runtime_host_contract(self.runtime_integrator_descriptor)
         payload = {
             "control_plane": self.control_plane_descriptor,
             "runtime_host": runtime_host,
-            "rustification": _runtime_rustification_health(self.control_plane_descriptor),
+            "rustification": _runtime_rustification_health(self.runtime_integrator_descriptor),
         }
         section_payloads = {
             "router": self.router_service.health(),
@@ -287,7 +289,7 @@ class CodexAgnoRuntime:
             binding_artifact_path=binding_artifact_path,
             handoff_path=handoff_path,
             resume_manifest_path=resume_manifest_path,
-        ).model_dump(mode="json")
+        )
 
     def subscribe_attached_runtime_events(
         self,
@@ -329,7 +331,7 @@ class CodexAgnoRuntime:
             binding_artifact_path=binding_artifact_path,
             handoff_path=handoff_path,
             resume_manifest_path=resume_manifest_path,
-        ).model_dump(mode="json")
+        )
 
     def _build_middleware_chain(self) -> MiddlewareChain:
         """Build the ordered middleware pipeline."""
@@ -358,7 +360,7 @@ class CodexAgnoRuntime:
         }
 
     def _runtime_service_order(self, field_name: str) -> list[str]:
-        runtime_host = _runtime_host_contract(self.control_plane_descriptor)
+        runtime_host = _runtime_host_contract(self.runtime_integrator_descriptor)
         configured = runtime_host.get(field_name, [])
         if not isinstance(configured, list):
             raise RuntimeError(f"runtime host contract field {field_name!r} must be a list.")
@@ -380,11 +382,11 @@ class CodexAgnoRuntime:
         self.router_service.reload()
         self._apply_control_plane_descriptor(self.router_service.control_plane_descriptor)
         self._max_background_jobs, self._background_job_timeout = _runtime_background_defaults(
-            self.control_plane_descriptor
+            self.runtime_integrator_descriptor
         )
         self._max_concurrent_subagents, self._subagent_timeout_seconds = _runtime_subagent_defaults(
             self.settings,
-            self.control_plane_descriptor,
+            self.runtime_integrator_descriptor,
         )
         self.background_service.configure_limits(
             max_background_jobs=self._max_background_jobs,

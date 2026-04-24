@@ -24,7 +24,6 @@ import framework_runtime.profile_artifacts as profile_artifacts_module
 from framework_runtime.framework_profile import build_framework_profile
 from framework_runtime.host_adapters import compile_codex_common_adapter
 from framework_runtime.profile_artifacts import (
-    build_framework_shared_contract_projection_report,
     emit_framework_contract_artifacts,
 )
 from framework_runtime.framework_profile import FrameworkProfile
@@ -98,6 +97,21 @@ def test_profile_artifacts_avoids_internal_compatibility_escape_hatch_import() -
             wrapper_imports.extend(overlap)
 
     assert wrapper_imports == []
+
+    retired_python_projection_helpers = {
+        "FrameworkSharedContract",
+        "FrameworkSharedContractProjectionReport",
+        "FrameworkSharedContractSurface",
+        "build_framework_shared_contract_projection_report",
+    }
+    retired_imports = []
+    for node in tree.body:
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        imported = {alias.name for alias in node.names}
+        retired_imports.extend(sorted(imported & retired_python_projection_helpers))
+
+    assert retired_imports == []
 
 
 def test_internal_runtime_modules_avoid_host_adapters_wrapper_imports() -> None:
@@ -217,7 +231,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "routing",
         "memory",
         "continuity",
-        "host_projection",
+        "host_adapter_payload",
     ]
     assert surface_policy["default_surface"]["default_loadouts"] == ["default_surface_loadout"]
     assert cli_common["controller_boundary"]["shared_adapter"] == "cli_common_adapter"
@@ -238,7 +252,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     ]
 
     claude = json.loads(Path(paths["claude_code_adapter"]).read_text(encoding="utf-8"))
-    assert claude["host_adapter_payload"] == claude["host_projection"]
+    assert "host_projection" not in claude
     assert claude["host_adapter_payload"]["context_files"] == [
         "CLAUDE.md",
         "CLAUDE.local.md",
@@ -301,7 +315,7 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert claude["host_adapter_payload"]["checkpointing_supported"] is True
 
     gemini = json.loads(Path(paths["gemini_cli_adapter"]).read_text(encoding="utf-8"))
-    assert gemini["host_adapter_payload"] == gemini["host_projection"]
+    assert "host_projection" not in gemini
     assert gemini["host_adapter_payload"]["structured_output_modes"] == ["json", "stream-json"]
 
     cli_discovery = json.loads(
@@ -480,24 +494,24 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
 
     rust_bundle = json.loads(Path(paths["rust_profile_bundle"]).read_text(encoding="utf-8"))
     assert rust_bundle["profile_id"] == "artifact-profile"
-    assert rust_bundle["companion_projection"]["enabledSkills"][1]["skill_id"] == "memory-bridge"
+    assert "companion_projection" not in rust_bundle
     assert rust_bundle["cli_common_adapter"]["controller_boundary"]["shared_adapter"] == "cli_common_adapter"
     assert rust_bundle["codex_common_adapter"]["controller_boundary"]["framework_truth"] == "framework_core"
     assert rust_bundle["codex_desktop_adapter"]["entrypoint_contract"]["entrypoint_kind"] == "interactive"
     assert rust_bundle["codex_cli_adapter"]["execution_surface"]["supports_cron"] is True
-    assert rust_bundle["claude_code_adapter"]["host_projection"]["context_files"] == [
+    assert rust_bundle["claude_code_adapter"]["host_adapter_payload"]["context_files"] == [
         "CLAUDE.md",
         "CLAUDE.local.md",
     ]
     assert rust_bundle["claude_code_adapter"]["execution_surface"]["supports_cron"] is False
-    assert rust_bundle["claude_code_adapter"]["host_projection"]["subagent_paths"] == [
+    assert rust_bundle["claude_code_adapter"]["host_adapter_payload"]["subagent_paths"] == [
         "~/.claude/agents/",
         ".claude/agents/",
     ]
-    assert rust_bundle["claude_code_adapter"]["host_projection"]["config_root_env_var"] == (
+    assert rust_bundle["claude_code_adapter"]["host_adapter_payload"]["config_root_env_var"] == (
         "CLAUDE_CONFIG_DIR"
     )
-    assert rust_bundle["claude_code_adapter"]["host_projection"]["hook_event_names"] == [
+    assert rust_bundle["claude_code_adapter"]["host_adapter_payload"]["hook_event_names"] == [
         "PreToolUse",
         "PostToolUse",
         "Notification",
@@ -525,22 +539,22 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
         "Elicitation",
         "ElicitationResult",
     ]
-    assert rust_bundle["claude_code_adapter"]["host_projection"]["hook_control_settings"] == [
+    assert rust_bundle["claude_code_adapter"]["host_adapter_payload"]["hook_control_settings"] == [
         "disableAllHooks",
         "allowManagedHooksOnly",
         "allowedHttpHookUrls",
         "httpHookAllowedEnvVars",
     ]
-    assert rust_bundle["claude_code_adapter"]["host_projection"]["hook_environment_markers"] == [
+    assert rust_bundle["claude_code_adapter"]["host_adapter_payload"]["hook_environment_markers"] == [
         "CLAUDE_ENV_FILE",
         "CLAUDE_PROJECT_DIR",
         "CLAUDE_PLUGIN_ROOT",
         "CLAUDE_PLUGIN_DATA",
         "CLAUDE_CODE_REMOTE",
     ]
-    assert rust_bundle["claude_code_adapter"]["host_projection"]["checkpointing_supported"] is True
+    assert rust_bundle["claude_code_adapter"]["host_adapter_payload"]["checkpointing_supported"] is True
     assert "hook_registry" in rust_bundle["claude_code_adapter"]["capabilities"]["host"]
-    assert rust_bundle["gemini_cli_adapter"]["host_projection"]["structured_output_modes"] == [
+    assert rust_bundle["gemini_cli_adapter"]["host_adapter_payload"]["structured_output_modes"] == [
         "json",
         "stream-json",
     ]
@@ -590,18 +604,18 @@ def test_emit_framework_contract_artifacts_writes_parity_snapshot_baseline_and_r
     assert rust_cli["execution_surface"]["controller_is_cli"] is False
 
     rust_claude = json.loads(Path(paths["rust_claude_code_adapter"]).read_text(encoding="utf-8"))
-    assert rust_claude["host_projection"]["context_files"] == [
+    assert rust_claude["host_adapter_payload"]["context_files"] == [
         "CLAUDE.md",
         "CLAUDE.local.md",
     ]
-    assert rust_claude["host_projection"]["hook_inspection_commands"] == ["/hooks"]
-    assert rust_claude["host_projection"]["plugin_hook_manifest_paths"] == ["hooks/hooks.json"]
-    assert rust_claude["host_projection"]["managed_settings_paths"][0] == (
+    assert rust_claude["host_adapter_payload"]["hook_inspection_commands"] == ["/hooks"]
+    assert rust_claude["host_adapter_payload"]["plugin_hook_manifest_paths"] == ["hooks/hooks.json"]
+    assert rust_claude["host_adapter_payload"]["managed_settings_paths"][0] == (
         "/Library/Application Support/ClaudeCode/managed-settings.json"
     )
 
     rust_gemini = json.loads(Path(paths["rust_gemini_cli_adapter"]).read_text(encoding="utf-8"))
-    assert rust_gemini["host_projection"]["structured_output_modes"] == ["json", "stream-json"]
+    assert rust_gemini["host_adapter_payload"]["structured_output_modes"] == ["json", "stream-json"]
 
     rust_cli_discovery = json.loads(
         Path(paths["rust_cli_family_capability_discovery"]).read_text(encoding="utf-8")
@@ -790,11 +804,6 @@ def test_emit_framework_contract_artifacts_keeps_codex_common_adapter_out_of_def
     manifest = json.loads(Path(paths["artifact_layout_manifest"]).read_text(encoding="utf-8"))
     assert "codex_common_adapter" not in manifest["artifacts_by_lane"]["default"]
 
-    report = build_framework_shared_contract_projection_report(profile)
-    projections = {item["adapter_id"]: item for item in report["adapter_projections"]}
-    assert projections["codex_common_adapter"]["shared_contract_match"] is True
-    assert projections["codex_common_adapter"]["bridge_contract_match"] is True
-
 
 def test_emit_framework_contract_artifacts_rejects_fallback_host_outputs(
     tmp_path: Path,
@@ -815,7 +824,7 @@ def test_emit_framework_contract_artifacts_rejects_fallback_host_outputs(
         )
 
 
-def test_emit_framework_contract_artifacts_can_opt_in_compatibility_inventory(
+def test_emit_framework_contract_artifacts_rejects_compatibility_inventory(
     tmp_path: Path,
 ) -> None:
     profile = build_framework_profile(
@@ -826,99 +835,12 @@ def test_emit_framework_contract_artifacts_can_opt_in_compatibility_inventory(
         session_policy={"mode": "bounded"},
     )
 
-    paths = emit_framework_contract_artifacts(
-        tmp_path,
-        profile=profile,
-        include_compatibility_inventory=True,
-    )
-
-    common = json.loads(Path(paths["codex_common_adapter"]).read_text(encoding="utf-8"))
-    assert Path(paths["codex_common_adapter"]).parent.name == "continuity"
-    assert common["controller_boundary"]["framework_truth"] == "framework_core"
-    assert common["metadata"]["adapter_alias_of"] == "cli_common_adapter"
-    matrix = json.loads(Path(paths["upgrade_compatibility_matrix"]).read_text(encoding="utf-8"))
-    assert Path(paths["upgrade_compatibility_matrix"]).parent.name == "continuity"
-    assert matrix["cli_common_adapter"]["compatible"] is True
-    assert matrix["codex_desktop_adapter"]["compatible"] is True
-    assert matrix["codex_cli_adapter"]["compatible"] is True
-    assert matrix["claude_code_adapter"]["compatible"] is True
-    assert matrix["gemini_cli_adapter"]["compatible"] is True
-    assert matrix["aionrs_companion_adapter"]["compatible"] is True
-    assert matrix["aionrs_companion_adapter"]["legacy_surface"] is True
-    assert matrix["aionui_host_adapter"]["compatible"] is True
-    assert matrix["aionui_host_adapter"]["legacy_surface"] is True
-    assert "codex_desktop_host_adapter" not in matrix
-
-
-def test_framework_shared_contract_projection_report_keeps_hosts_on_one_outer_truth() -> None:
-    profile = build_framework_profile(
-        profile_id="shared-contract-report",
-        display_name="Shared Contract Report",
-        rules_bundle={"rules": [{"id": "outer-owned"}]},
-        skill_bundle={"skills": ["router", "memory-bridge"]},
-        session_policy={"mode": "bounded", "approval_mode": "manual"},
-        tool_policy={"shell": "allow"},
-        approval_policy={"mode": "manual"},
-        loadout_policy={"default": "framework"},
-        artifact_contract={"layout": "stable-v1"},
-        memory_mounts=("project",),
-        mcp_servers=("local-memory",),
-        workspace_bootstrap={"skill_bridge": {"project_dir": ".codex/skills"}},
-    )
-
-    report = build_framework_shared_contract_projection_report(profile)
-    projections = {item["adapter_id"]: item for item in report["adapter_projections"]}
-
-    assert report["shared_contract_schema_version"] == "framework-shared-contract-v1"
-    assert report["all_shared_contract_projections_match"] is True
-    assert report["all_bridge_contract_projections_match"] is True
-    assert report["canonical_bridge_contract"] == {
-        "skills": {"project_dir": ".codex/skills"},
-        "memory": {
-            "bridge_dir": ".aionrs-memory-bridge",
-            "mounts": [
-                {
-                    "mount_id": "project",
-                    "source": "project",
-                    "bridge_kind": "framework-memory-mount",
-                }
-            ],
-        },
-    }
-    assert set(projections) == {
-        "cli_common_adapter",
-        "codex_common_adapter",
-        "codex_desktop_adapter",
-        "codex_cli_adapter",
-        "claude_code_adapter",
-        "gemini_cli_adapter",
-    }
-    assert projections["cli_common_adapter"]["projection_field"] == "shared_contract"
-    assert projections["cli_common_adapter"]["shared_contract_match"] is True
-    assert projections["cli_common_adapter"]["bridge_contract_match"] is True
-    assert projections["cli_common_adapter"]["bridge_contract"] == report["canonical_bridge_contract"]
-    assert projections["codex_common_adapter"]["bridge_contract_match"] is True
-    assert projections["codex_common_adapter"]["bridge_contract"] == report["canonical_bridge_contract"]
-    assert projections["codex_desktop_adapter"]["projection_field"] == "common_contract"
-    assert projections["codex_desktop_adapter"]["bridge_contract_match"] is True
-    assert projections["codex_desktop_adapter"]["bridge_contract"] == report["canonical_bridge_contract"]
-    assert projections["codex_desktop_adapter"]["runtime_surface_match"] is True
-    assert projections["codex_cli_adapter"]["bridge_contract_match"] is True
-    assert projections["codex_cli_adapter"]["bridge_contract"] == report["canonical_bridge_contract"]
-    assert projections["codex_cli_adapter"]["runtime_surface_match"] is True
-    assert projections["claude_code_adapter"]["bridge_contract_match"] is True
-    assert projections["claude_code_adapter"]["runtime_surface_match"] is True
-    assert projections["gemini_cli_adapter"]["bridge_contract_match"] is True
-    assert projections["gemini_cli_adapter"]["runtime_surface_match"] is True
-    assert projections["gemini_cli_adapter"]["projected_contract"]["workspace_bootstrap"][
-        "bridges"
-    ]["memory"]["mounts"] == [
-        {
-            "mount_id": "project",
-            "source": "project",
-            "bridge_kind": "framework-memory-mount",
-        }
-    ]
+    with pytest.raises(ValueError, match="compatibility inventory artifacts are retired"):
+        emit_framework_contract_artifacts(
+            tmp_path,
+            profile=profile,
+            include_compatibility_inventory=True,
+        )
 
 
 def test_framework_profile_artifact_bidirectional_shared_contract_consistency(tmp_path: Path) -> None:
@@ -961,16 +883,8 @@ def test_framework_profile_artifact_bidirectional_shared_contract_consistency(tm
             f"{adapter_id} shared-contract payload not aligned with framework_profile"
         )
 
-    report = build_framework_shared_contract_projection_report(
-        framework_profile,
-        adapter_payloads=contract_payloads,
-    )
-    assert report["shared_contract_schema_version"] == "framework-shared-contract-v1"
-    assert report["all_shared_contract_projections_match"] is True
-    assert report["all_bridge_contract_projections_match"] is True
 
-
-def test_emit_framework_contract_artifacts_can_opt_in_compatibility_inventory_outputs(
+def test_emit_framework_contract_artifacts_keeps_compatibility_inventory_outputs_retired(
     tmp_path: Path,
 ) -> None:
     profile = build_framework_profile(
@@ -981,47 +895,13 @@ def test_emit_framework_contract_artifacts_can_opt_in_compatibility_inventory_ou
         session_policy={"mode": "bounded"},
     )
 
-    paths = emit_framework_contract_artifacts(
-        tmp_path,
-        profile=profile,
-        rust_adapter=_rust_route_adapter(),
-        include_compatibility_inventory=True,
-    )
-
-    assert "codex_desktop_host_adapter" not in paths
-    assert "codex_desktop_alias_inventory" not in paths
-    assert "codex_desktop_alias_retirement_status" not in paths
-    assert Path(paths["codex_common_adapter"]).parent.name == "continuity"
-    assert json.loads(Path(paths["codex_common_adapter"]).read_text(encoding="utf-8")) == json.loads(
-        Path(paths["rust_codex_common_adapter"]).read_text(encoding="utf-8")
-    )
-    assert json.loads(Path(paths["cli_common_adapter"]).read_text(encoding="utf-8"))[
-        "controller_boundary"
-    ]["shared_adapter"] == "cli_common_adapter"
-    assert json.loads(Path(paths["codex_common_adapter"]).read_text(encoding="utf-8"))[
-        "metadata"
-    ]["adapter_alias_of"] == "cli_common_adapter"
-    assert json.loads(Path(paths["codex_desktop_adapter"]).read_text(encoding="utf-8"))[
-        "entrypoint_contract"
-    ]["entrypoint_kind"] == "interactive"
-    assert json.loads(Path(paths["codex_cli_adapter"]).read_text(encoding="utf-8"))[
-        "execution_surface"
-    ]["entrypoint_kind"] == "headless"
-    assert json.loads(Path(paths["claude_code_adapter"]).read_text(encoding="utf-8"))[
-        "host_projection"
-    ]["context_files"][0] == "CLAUDE.md"
-    assert json.loads(Path(paths["gemini_cli_adapter"]).read_text(encoding="utf-8"))[
-        "host_projection"
-    ]["settings_paths"] == ["~/.gemini/settings.json"]
-    matrix = json.loads(Path(paths["upgrade_compatibility_matrix"]).read_text(encoding="utf-8"))
-    assert Path(paths["upgrade_compatibility_matrix"]).parent.name == "continuity"
-    assert "codex_desktop_host_adapter" not in matrix
-    rust_matrix = json.loads(
-        Path(paths["rust_upgrade_compatibility_matrix"]).read_text(encoding="utf-8")
-    )
-    assert "codex_desktop_host_adapter" not in rust_matrix
-    assert rust_matrix["aionrs_companion_adapter"]["legacy_surface"] is True
-    assert "rust_codex_desktop_host_adapter" not in paths
+    with pytest.raises(ValueError, match="compatibility inventory artifacts are retired"):
+        emit_framework_contract_artifacts(
+            tmp_path,
+            profile=profile,
+            rust_adapter=_rust_route_adapter(),
+            include_compatibility_inventory=True,
+        )
 
 
 def test_rust_route_adapter_can_compile_profile_bundle(tmp_path: Path) -> None:
@@ -1038,7 +918,7 @@ def test_rust_route_adapter_can_compile_profile_bundle(tmp_path: Path) -> None:
     payload = _rust_route_adapter().compile_profile_bundle(profile_path)
 
     assert payload["profile_id"] == "rust-compile-profile"
-    assert payload["companion_projection"]["presetRules"][0]["id"] == "outer-owned"
+    assert "companion_projection" not in payload
     assert payload["cli_common_adapter"]["controller_boundary"]["shared_adapter"] == "cli_common_adapter"
     assert payload["codex_common_adapter"]["metadata"]["adapter_alias_of"] == "cli_common_adapter"
     assert payload["cli_family_capability_discovery"]["all_cli_hosts_compatible"] is True
@@ -1078,7 +958,7 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
     assert payload["codex_common_adapter"]["controller_boundary"]["framework_truth"] == "framework_core"
     assert payload["codex_desktop_adapter"]["entrypoint_contract"]["entrypoint_kind"] == "interactive"
     assert payload["codex_cli_adapter"]["execution_surface"]["controller_is_cli"] is False
-    assert payload["claude_code_adapter"]["host_projection"]["settings_paths"] == [
+    assert payload["claude_code_adapter"]["host_adapter_payload"]["settings_paths"] == [
         "~/.claude/settings.json",
         ".claude/settings.json",
         ".claude/settings.local.json",
@@ -1119,7 +999,7 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
         "route_engine",
         "diagnostic_route_mode",
     ]
-    assert payload["gemini_cli_adapter"]["host_projection"]["context_files"] == ["GEMINI.md"]
+    assert payload["gemini_cli_adapter"]["host_adapter_payload"]["context_files"] == ["GEMINI.md"]
     assert payload["cli_family_capability_discovery"]["all_cli_hosts_compatible"] is True
     assert payload["cli_family_capability_discovery"]["cli_hosts"]["codex_cli_adapter"][
         "supports_cron"
@@ -1131,7 +1011,7 @@ def test_rust_route_adapter_can_compile_codex_profile_artifacts(tmp_path: Path) 
     assert payload["codex_dual_entry_parity_snapshot"]["all_shared_contract_checks_pass"] is True
 
 
-def test_rust_route_adapter_can_compile_compatibility_inventory_artifact(tmp_path: Path) -> None:
+def test_rust_route_adapter_rejects_compatibility_inventory_artifact(tmp_path: Path) -> None:
     profile = build_framework_profile(
         profile_id="rust-artifacts-profile-compat",
         display_name="Rust Artifacts Profile Compat",
@@ -1142,20 +1022,14 @@ def test_rust_route_adapter_can_compile_compatibility_inventory_artifact(tmp_pat
     profile_path = tmp_path / "framework_profile.json"
     profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False), encoding="utf-8")
 
-    payload = _rust_route_adapter().compile_codex_profile_artifacts(
-        profile_path,
-        include_compatibility_inventory=True,
-    )
-
-    assert payload["upgrade_compatibility_matrix"]["cli_common_adapter"]["compatible"] is True
-    assert payload["upgrade_compatibility_matrix"]["codex_desktop_adapter"]["compatible"] is True
-    assert payload["upgrade_compatibility_matrix"]["codex_cli_adapter"]["compatible"] is True
-    assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["compatible"] is True
-    assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["legacy_surface"] is True
-    assert "codex_desktop_host_adapter" not in payload["upgrade_compatibility_matrix"]
+    with pytest.raises(ValueError, match="compatibility inventory artifacts are retired"):
+        _rust_route_adapter().compile_codex_profile_artifacts(
+            profile_path,
+            include_compatibility_inventory=True,
+        )
 
 
-def test_rust_route_adapter_compatibility_inventory_stays_alias_free(tmp_path: Path) -> None:
+def test_rust_route_adapter_keeps_compatibility_inventory_retired(tmp_path: Path) -> None:
     profile = build_framework_profile(
         profile_id="rust-artifacts-profile-legacy",
         display_name="Rust Artifacts Profile Legacy",
@@ -1166,20 +1040,8 @@ def test_rust_route_adapter_compatibility_inventory_stays_alias_free(tmp_path: P
     profile_path = tmp_path / "framework_profile.json"
     profile_path.write_text(json.dumps(profile.to_dict(), ensure_ascii=False), encoding="utf-8")
 
-    payload = _rust_route_adapter().compile_codex_profile_artifacts(
-        profile_path,
-        include_compatibility_inventory=True,
-    )
-
-    assert payload["cli_common_adapter"]["controller_boundary"]["shared_adapter"] == "cli_common_adapter"
-    assert payload["codex_common_adapter"]["controller_boundary"]["framework_truth"] == "framework_core"
-    assert payload["codex_desktop_adapter"]["entrypoint_contract"]["entrypoint_kind"] == "interactive"
-    assert payload["codex_cli_adapter"]["execution_surface"]["entrypoint_kind"] == "headless"
-    assert payload["claude_code_adapter"]["host_projection"]["context_files"][0] == "CLAUDE.md"
-    assert payload["gemini_cli_adapter"]["host_projection"]["structured_output_modes"] == [
-        "json",
-        "stream-json",
-    ]
-    assert "codex_desktop_host_adapter" not in payload
-    assert "codex_desktop_host_adapter" not in payload["upgrade_compatibility_matrix"]
-    assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["legacy_surface"] is True
+    with pytest.raises(ValueError, match="compatibility inventory artifacts are retired"):
+        _rust_route_adapter().compile_codex_profile_artifacts(
+            profile_path,
+            include_compatibility_inventory=True,
+        )

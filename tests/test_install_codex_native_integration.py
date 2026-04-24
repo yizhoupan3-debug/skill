@@ -100,7 +100,12 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
         "--repo-root",
         str(repo_root.resolve()),
     ]
+    assert claude_mcp_payload["mcpServers"]["browser-mcp"]["command"] == "node"
+    assert claude_mcp_payload["mcpServers"]["browser-mcp"]["args"] == [
+        str(repo_root.resolve() / "tools" / "browser-mcp" / "dist" / "index.js")
+    ]
     assert plugin_mcp_payload["mcpServers"]["framework-mcp"]["cwd"] == str(repo_root.resolve())
+    assert plugin_mcp_payload["mcpServers"]["browser-mcp"]["command"] == "node"
     assert [plugin["name"] for plugin in marketplace["plugins"]].count("skill-framework-native") == 1
     assert first["default_bootstrap"]["status"] == "materialized"
     assert second["default_bootstrap"]["status"] == "already-present"
