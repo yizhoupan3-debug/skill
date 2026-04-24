@@ -43,15 +43,12 @@ from framework_runtime.execution_kernel_contracts import (
     build_execution_kernel_live_response_serialization_contract_core,
 )
 from framework_runtime.host_adapters import (
-    AIONRS_COMPANION_ADAPTER,
-    AIONUI_HOST_ADAPTER,
     CLAUDE_CODE_ADAPTER,
     CLI_COMMON_ADAPTER,
     CODEX_CLI_ADAPTER,
     CODEX_COMMON_ADAPTER,
     CODEX_DESKTOP_ADAPTER,
     GEMINI_CLI_ADAPTER,
-    GENERIC_HOST_ADAPTER,
     get_host_adapter,
     list_host_adapters,
     compile_claude_code_adapter,
@@ -61,13 +58,6 @@ from framework_runtime.host_adapters import (
     compile_codex_desktop_adapter,
     compile_cli_common_adapter,
     compile_gemini_cli_adapter,
-)
-from framework_runtime.host_adapter_compatibility import (
-    compatibility_snapshot,
-    build_upgrade_compatibility_matrix,
-    compile_aionrs_companion_adapter,
-    compile_aionui_host_adapter,
-    validate_adapter_compatibility,
 )
 from framework_runtime.rust_router import RustRouteAdapter
 import framework_runtime.rust_router as rust_router_module
@@ -187,7 +177,6 @@ def test_run_framework_contract_artifacts_cli_reuses_shared_route_adapter_for_ru
             str(output_dir),
             "--include-rust-bundle",
             "--include-fallback-artifacts",
-            "--include-compatibility-inventory",
         ],
     )
 
@@ -198,7 +187,7 @@ def test_run_framework_contract_artifacts_cli_reuses_shared_route_adapter_for_ru
     assert captured["profile_id"] == "cli-artifact-profile-rust"
     assert captured["rust_adapter"] is fake_adapter
     assert captured["include_fallback_artifacts"] is True
-    assert captured["include_compatibility_inventory"] is True
+    assert captured["include_compatibility_inventory"] is False
 
 
 def test_rust_route_adapter_rejects_stale_binary_when_sources_are_newer() -> None:
@@ -767,7 +756,7 @@ def test_framework_profile_emits_host_neutral_shared_contract_surface() -> None:
         approval_policy={"mode": "manual"},
         loadout_policy={"default": "framework"},
         framework_surface_policy={
-            "kernel": {"canonical_axes": ["routing", "memory", "continuity", "host_projection"]},
+            "kernel": {"canonical_axes": ["routing", "memory", "continuity", "host_adapter_payload"]},
             "default_surface": {"default_loadouts": ["default_surface_loadout"]},
         },
         artifact_contract={"layout": "stable-v1"},
@@ -799,7 +788,7 @@ def test_framework_profile_emits_host_neutral_shared_contract_surface() -> None:
         {"server_id": "local-memory", "transport": "stdio"},
     ]
     assert payload["shared_contract"]["framework_surface_policy"] == {
-        "kernel": {"canonical_axes": ["routing", "memory", "continuity", "host_projection"]},
+        "kernel": {"canonical_axes": ["routing", "memory", "continuity", "host_adapter_payload"]},
         "default_surface": {"default_loadouts": ["default_surface_loadout"]},
     }
     assert payload["shared_contract"]["session_contract"] == {
@@ -813,7 +802,7 @@ def test_framework_profile_emits_host_neutral_shared_contract_surface() -> None:
         "project_dir": ".codex/skills",
     }
     assert payload["shared_contract"]["workspace_bootstrap"]["bridges"]["memory"] == {
-        "bridge_dir": ".aionrs-memory-bridge",
+        "bridge_dir": ".codex/memory-bridge",
         "mounts": [
             {"mount_id": "project", "source": ".codex/memory"},
             {
@@ -1023,7 +1012,7 @@ def test_adapt_framework_profile_rejects_legacy_host_projection_opt_in() -> None
             },
         )
     except ValueError as exc:
-        assert "host_projection is a legacy read surface" in str(exc)
+        assert "host_projection output is retired" in str(exc)
         assert "host_adapter_payload" in str(exc)
     else:
         raise AssertionError("expected legacy host_projection opt-in to be rejected")
@@ -1053,7 +1042,7 @@ def test_adapt_framework_profile_allows_explicit_host_adapter_payload_opt_in() -
         },
     ).host_payload
     assert adapted["host_adapter_payload"]["context_files"] == ["AGENTS.md"]
-    assert adapted["host_projection"]["context_files"] == ["AGENTS.md"]
+    assert "host_projection" not in adapted
 
 
 def test_compile_cli_common_adapter_uses_rust_artifact_and_keeps_override_surface(
@@ -1175,7 +1164,7 @@ def test_framework_profile_rejects_aionrs_pinned_host_core() -> None:
             host_family="aionrs",
         )
     except ValueError as exc:
-        assert "must not be pinned directly to aionrs" in str(exc)
+        assert "must not be pinned to retired host family" in str(exc)
     else:
         raise AssertionError("expected ValueError")
 
@@ -1212,72 +1201,14 @@ def test_merge_profile_overrides_merges_nested_policies() -> None:
     }
 
 
-def test_aionrs_companion_adapter_compiles_host_neutral_profile() -> None:
-    profile = build_framework_profile(
-        profile_id="fusion-aionrs",
-        display_name="Fusion Aionrs",
-        rules_bundle={
-            "bundle_id": "fusion-rules",
-            "rules": [{"id": "deep-adaptation", "content": "outer-owned"}],
-        },
-        skill_bundle={
-            "bundle_id": "fusion-skills",
-            "skills": ["router", "memory-bridge"],
-        },
-        session_policy={
-            "mode": "bounded",
-            "approval_mode": "manual",
-            "history_policy": "append-only",
-        },
-        tool_policy={"shell": "allow"},
-        approval_policy={"mode": "manual", "surface": "host-approval"},
-        loadout_policy={"default": "portable"},
-        artifact_contract={"layout": "stable-v1"},
-        model_policy={"provider": "openai", "model": "gpt-5", "temperature": 0.1},
-        memory_mounts=(
-            {
-                "mount_id": "project",
-                "source": ".codex/memory",
-                "bridge_kind": "project-memory",
-            },
-            "user",
-        ),
-        mcp_servers=({"server_id": "local-memory", "transport": "stdio"},),
-        workspace_bootstrap={
-            "skill_bridge": {
-                "project_dir": ".codex/skills",
-                "bridge_dir": ".aionrs/skills",
-            }
-        },
-        host_capability_requirements={
-            "aionrs-companion": {
-                "required_host_capabilities": ["session_mode", "tool_approval"],
-            }
-        },
-    )
-
-    adapted = compile_aionrs_companion_adapter(profile)
-    contract = adapted.host_payload["companion_contract"]
-
-    assert adapted.adapter == AIONRS_COMPANION_ADAPTER
-    assert contract["presetRules"][0]["id"] == "deep-adaptation"
-    assert contract["enabledSkills"][1]["skill_id"] == "memory-bridge"
-    assert contract["sessionMode"]["mode"] == "bounded"
-    assert contract["aionrsConfig"]["config"]["provider"] == "openai"
-    assert contract["fallbackSemantics"]["fallback_adapter"] == "codex_desktop_adapter"
-    assert contract["fallbackSemantics"]["default_host_peer_set"] == [
-        "codex_desktop_adapter",
-        "codex_cli_adapter",
-        "claude_code_adapter",
-        "gemini_cli_adapter",
-    ]
-    assert adapted.host_payload["metadata"]["legacy_surface"] is True
-    assert adapted.host_payload["legacy_boundary"]["adapter_lifecycle"] == "legacy-compatibility"
-    assert adapted.host_payload["legacy_boundary"]["exposure_lane"] == "fallback-only-explicit"
-    assert adapted.host_payload["legacy_boundary"]["default_host_peer_set_member"] is False
-    assert adapted.host_payload["host_capability_requirements"] == {
-        "required_host_capabilities": ["session_mode", "tool_approval"],
-    }
+def test_aionrs_companion_adapter_surface_is_retired() -> None:
+    assert not hasattr(host_adapters_module, "AIONRS_COMPANION_ADAPTER")
+    assert not hasattr(host_adapters_module, "AIONUI_HOST_ADAPTER")
+    assert not hasattr(host_adapters_module, "GENERIC_HOST_ADAPTER")
+    with pytest.raises(KeyError, match="unknown host adapter"):
+        get_host_adapter("aionrs_companion_adapter")
+    with pytest.raises(ValueError, match="legacy host adapter aliases are retired"):
+        list_host_adapters(include_legacy_aliases=True)
 
 
 def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
@@ -1299,7 +1230,6 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
 
     cli_common = compile_cli_common_adapter(profile)
     common = compile_codex_common_adapter(profile)
-    aionui = compile_aionui_host_adapter(profile)
     desktop = compile_codex_desktop_adapter(profile)
     cli = compile_codex_cli_adapter(profile)
     claude = compile_claude_code_adapter(profile)
@@ -1324,47 +1254,13 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
         "gemini_cli_adapter",
     ]
 
-    assert aionui.adapter == AIONUI_HOST_ADAPTER
-    assert aionui.host_payload["host_session_create"]["sessionMode"]["mode"] == "team"
-    assert aionui.host_payload["host_runtime_contract"]["preferred_backend"] == "aionrs_companion_adapter"
-    assert aionui.host_payload["metadata"]["legacy_surface"] is True
-    assert aionui.host_payload["legacy_boundary"]["adapter_lifecycle"] == "legacy-compatibility"
-    assert aionui.host_payload["legacy_boundary"]["exposure_lane"] == "fallback-only-explicit"
-    assert aionui.host_payload["legacy_boundary"]["default_host_peer_set_member"] is False
-    event_transport = aionui.host_payload["host_runtime_contract"]["event_transport"]
-    assert event_transport["schema_version"] == TRACE_EVENT_TRANSPORT_SCHEMA_VERSION
-    assert event_transport["transport_contract_kind"] == "runtime_event_stream"
-    assert event_transport["transport_family"] == "host-facing-transport"
-    assert event_transport["transport_kind"] == "poll"
-    assert event_transport["endpoint_kind"] == "runtime_method"
-    assert event_transport["remote_capable"] is True
-    assert event_transport["handoff_supported"] is True
-    assert event_transport["handoff_method"] == "describe_runtime_event_handoff"
-    assert event_transport["subscribe_method"] == "subscribe_runtime_events"
-    assert event_transport["cleanup_method"] == "cleanup_runtime_events"
-    assert event_transport["describe_method"] == "describe_runtime_event_transport"
-    assert event_transport["handoff_kind"] == "artifact_handoff"
-    assert event_transport["binding_refresh_mode"] == "describe_or_checkpoint"
-    assert event_transport["binding_artifact_format"] == "json"
-    assert event_transport["resume_mode"] == "after_event_id"
-    assert event_transport["heartbeat_supported"] is True
-    assert event_transport["cleanup_semantics"] == "stream_cache_only"
-    assert event_transport["cleanup_preserves_replay"] is True
-    assert event_transport["replay_reseed_supported"] is True
-    assert event_transport["chunk_schema_version"] == TRACE_EVENT_STREAM_SCHEMA_VERSION
-    assert event_transport["cursor_schema_version"] == TRACE_REPLAY_CURSOR_SCHEMA_VERSION
-    assert event_transport["replay_supported"] is True
-    assert aionui.host_payload["host_runtime_contract"]["event_stream_binding"] == event_transport
-    assert aionui.adapter.protocol_hints["deep_adaptation_not_fork"] is True
-
     assert desktop.adapter == CODEX_DESKTOP_ADAPTER
-    assert desktop.host_payload["fallback_semantics"]["requires_aionrs"] is False
     assert desktop.host_payload["runtime_surface"]["artifact_contract"] == {"layout": "stable-v1"}
     assert desktop.host_payload["memory_mounts"][0]["mount_id"] == "project"
     assert desktop.host_payload["controller_boundary"]["single_source_of_truth"] is True
     assert desktop.host_payload["entrypoint_contract"]["entrypoint_kind"] == "interactive"
     assert desktop.host_payload["entrypoint_contract"]["shared_adapter"] == "cli_common_adapter"
-    assert desktop.adapter.protocol_hints["works_without_aionrs"] is True
+    assert "works_without_aionrs" not in desktop.adapter.protocol_hints
 
     assert cli.adapter == CODEX_CLI_ADAPTER
     assert cli.host_payload["runtime_surface"]["artifact_contract"] == {"layout": "stable-v1"}
@@ -1380,7 +1276,7 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
     assert cli.host_payload["execution_surface"]["entrypoint_kind"] == "headless"
     assert cli.host_payload["execution_surface"]["controller_is_cli"] is False
     assert cli.host_payload["common_contract"] == desktop.host_payload["common_contract"]
-    assert cli.host_payload["host_adapter_payload"] == cli.host_payload["host_projection"]
+    assert "host_projection" not in cli.host_payload
     assert cli.host_payload["execution_surface"]["shared_adapter"] == "cli_common_adapter"
     assert cli.host_payload["host_adapter_payload"]["context_files"] == ["AGENTS.md"]
     assert cli.host_payload["host_adapter_payload"]["settings_paths"] == [
@@ -1396,7 +1292,7 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
 
     assert claude.adapter == CLAUDE_CODE_ADAPTER
     assert claude.host_payload["execution_surface"]["shared_adapter"] == "cli_common_adapter"
-    assert claude.host_payload["host_adapter_payload"] == claude.host_payload["host_projection"]
+    assert "host_projection" not in claude.host_payload
     assert claude.host_payload["host_adapter_payload"]["context_files"] == [
         "CLAUDE.md",
         "CLAUDE.local.md",
@@ -1504,7 +1400,7 @@ def test_cli_family_and_desktop_adapters_share_one_outer_contract() -> None:
 
     assert gemini.adapter == GEMINI_CLI_ADAPTER
     assert gemini.host_payload["execution_surface"]["shared_adapter"] == "cli_common_adapter"
-    assert gemini.host_payload["host_adapter_payload"] == gemini.host_payload["host_projection"]
+    assert "host_projection" not in gemini.host_payload
     assert gemini.host_payload["host_adapter_payload"]["context_files"] == ["GEMINI.md"]
     assert gemini.host_payload["host_adapter_payload"]["settings_paths"] == ["~/.gemini/settings.json"]
     assert gemini.host_payload["host_adapter_payload"]["structured_output_modes"] == [
@@ -1560,60 +1456,28 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
         },
     )
 
-    snapshot = compatibility_snapshot()
-    assert snapshot["generic_host_adapter"]["works_without_aionrs"] is True
-    assert snapshot["cli_common_adapter"]["host_id"] == "cli-family-shared"
-    assert snapshot["codex_common_adapter"]["host_id"] == "codex-shared"
-    assert snapshot["codex_desktop_adapter"]["host_id"] == "codex-desktop"
-    assert snapshot["claude_code_adapter"]["host_id"] == "claude-code"
-    assert snapshot["gemini_cli_adapter"]["host_id"] == "gemini-cli"
-    assert "aionrs_companion_adapter" not in snapshot
-    assert "aionui_host_adapter" not in snapshot
-    assert "codex_desktop_host_adapter" not in snapshot
-    assert snapshot["codex_cli_adapter"]["host_id"] == "codex-cli"
-    compatibility_snapshot_with_alias = compatibility_snapshot(include_legacy_aliases=True)
-    fallback_lane = compatibility_snapshot_with_alias["fallback_lane"]
-    assert fallback_lane["default_host_peer_set"] == [
+    adapter_ids = {spec.adapter_id for spec in list_host_adapters()}
+    assert adapter_ids == {
+        "cli_common_adapter",
+        "codex_common_adapter",
         "codex_desktop_adapter",
         "codex_cli_adapter",
         "claude_code_adapter",
         "gemini_cli_adapter",
-    ]
-    assert fallback_lane["explicit_opt_in_required"] is True
-    assert fallback_lane["legacy_adapters"]["aionrs_companion_adapter"]["upgrade_zone"] == (
-        "upstream-safe-zone"
-    )
-    assert fallback_lane["legacy_adapters"]["aionrs_companion_adapter"]["legacy_surface"] is True
-    assert fallback_lane["legacy_adapters"]["aionui_host_adapter"]["legacy_surface"] is True
-
-    validation = validate_adapter_compatibility(
-        profile,
-        [
-            CLI_COMMON_ADAPTER,
-            CODEX_COMMON_ADAPTER,
-            GENERIC_HOST_ADAPTER,
-            CODEX_DESKTOP_ADAPTER,
-            CODEX_CLI_ADAPTER,
-            CLAUDE_CODE_ADAPTER,
-            GEMINI_CLI_ADAPTER,
-            AIONUI_HOST_ADAPTER,
-        ],
-    )
-    assert validation == {
-        "cli_common_adapter": True,
-        "codex_common_adapter": True,
-        "generic_host_adapter": False,
-        "codex_desktop_adapter": True,
-        "codex_cli_adapter": True,
-        "claude_code_adapter": True,
-        "gemini_cli_adapter": True,
-        "aionui_host_adapter": True,
     }
+    with pytest.raises(ValueError, match="legacy host adapter aliases are retired"):
+        list_host_adapters(include_legacy_aliases=True)
 
     cli_family = build_cli_family_parity_snapshot(profile)
     cli_discovery = build_cli_family_capability_discovery(profile)
     assert cli_family["framework_truth"] == "framework_core"
     assert cli_family["shared_adapter"] == "cli_common_adapter"
+    assert cli_family["all_shared_contract_checks_pass"] is True
+    assert set(cli_discovery["cli_hosts"]) == {
+        "codex_cli_adapter",
+        "claude_code_adapter",
+        "gemini_cli_adapter",
+    }
     assert cli_family["parity_checks"]["artifact_contract"] is True
     assert cli_discovery["cli_hosts"]["codex_cli_adapter"]["context_files"] == ["AGENTS.md"]
     assert cli_discovery["cli_hosts"]["codex_cli_adapter"]["session_supervisor_driver"] == (
@@ -1786,32 +1650,6 @@ def test_adapter_compatibility_snapshot_validation_and_cli_family_parity_snapsho
     assert parity["controller_boundary"]["single_source_of_truth"] is True
     assert parity["all_shared_contract_checks_pass"] is True
 
-    matrix = build_upgrade_compatibility_matrix(profile)
-    assert matrix["cli_common_adapter"]["compatible"] is True
-    assert matrix["codex_desktop_adapter"]["compatible"] is True
-    assert matrix["codex_cli_adapter"]["compatible"] is True
-    assert matrix["claude_code_adapter"]["compatible"] is True
-    assert matrix["gemini_cli_adapter"]["compatible"] is True
-    assert "aionrs_companion_adapter" not in matrix
-    assert "aionui_host_adapter" not in matrix
-    assert "codex_desktop_host_adapter" not in matrix
-
-    compatibility_matrix_with_alias = build_upgrade_compatibility_matrix(
-        profile,
-        include_legacy_aliases=True,
-    )
-    assert compatibility_matrix_with_alias["aionrs_companion_adapter"]["compatible"] is True
-    assert compatibility_matrix_with_alias["aionrs_companion_adapter"]["exposure_lane"] == (
-        "fallback-only-explicit"
-    )
-    assert compatibility_matrix_with_alias["aionrs_companion_adapter"][
-        "default_host_peer_set_member"
-    ] is False
-    assert "aionrs_session_protocol" in compatibility_matrix_with_alias["aionrs_companion_adapter"][
-        "fork_danger_zone"
-    ]
-    assert compatibility_matrix_with_alias["aionui_host_adapter"]["legacy_surface"] is True
-
 
 def test_host_adapter_lookup_defaults_to_canonical_registry() -> None:
     adapter_ids = {spec.adapter_id for spec in list_host_adapters()}
@@ -1821,26 +1659,19 @@ def test_host_adapter_lookup_defaults_to_canonical_registry() -> None:
     assert "aionrs_companion_adapter" not in adapter_ids
     assert "aionui_host_adapter" not in adapter_ids
     assert "codex_desktop_host_adapter" not in adapter_ids
+    assert "generic_host_adapter" not in adapter_ids
 
     for adapter_id in (
         "aionrs_companion_adapter",
         "aionui_host_adapter",
     ):
-        try:
+        with pytest.raises(KeyError, match="unknown host adapter"):
             get_host_adapter(adapter_id)
-        except KeyError as exc:
-            assert "include_legacy_aliases=True" in str(exc)
-        else:
-            raise AssertionError("expected legacy surface lookup to require explicit opt-in")
 
-    legacy_companion = get_host_adapter("aionrs_companion_adapter", include_legacy_aliases=True)
-    assert legacy_companion is AIONRS_COMPANION_ADAPTER
-
-    expanded_adapter_ids = {
-        spec.adapter_id for spec in list_host_adapters(include_legacy_aliases=True)
-    }
-    assert "aionrs_companion_adapter" in expanded_adapter_ids
-    assert "aionui_host_adapter" in expanded_adapter_ids
+    with pytest.raises(ValueError, match="legacy host adapter aliases are retired"):
+        get_host_adapter("aionrs_companion_adapter", include_legacy_aliases=True)
+    with pytest.raises(ValueError, match="legacy host adapter aliases are retired"):
+        list_host_adapters(include_legacy_aliases=True)
 
 
 def test_validate_adapter_compatibility_requires_opt_in_for_legacy_alias_strings() -> None:
@@ -1853,24 +1684,10 @@ def test_validate_adapter_compatibility_requires_opt_in_for_legacy_alias_strings
         },
     )
 
-    try:
-        validate_adapter_compatibility(
-            profile,
-            ["aionrs_companion_adapter"],
-        )
-    except KeyError as exc:
-        assert "include_legacy_aliases=True" in str(exc)
-    else:
-        raise AssertionError("expected legacy surface validation to require explicit opt-in")
-
-    validation = validate_adapter_compatibility(
-        profile,
-        ["aionrs_companion_adapter"],
-        include_legacy_aliases=True,
-    )
-    assert validation == {
-        "aionrs_companion_adapter": True,
-    }
+    _ = profile
+    assert not (RUNTIME_SRC / "framework_runtime" / "host_adapter_compatibility.py").exists()
+    with pytest.raises(ValueError, match="legacy host adapter aliases are retired"):
+        list_host_adapters(include_legacy_aliases=True)
 
 
 def test_legacy_codex_desktop_alias_compiler_drops_the_old_compatibility_escape_hatch() -> None:
@@ -2179,9 +1996,7 @@ def test_router_rs_profile_json_matches_outer_framework_contract() -> None:
     assert payload["workspace_bootstrap"] == canonical_shared_contract["workspace_bootstrap"]
     assert payload["memory_mounts"] == canonical_shared_contract["memory_mounts"]
     assert payload["mcp_servers"] == canonical_shared_contract["mcp_servers"]
-    assert payload["companion_projection"]["presetRules"][0]["id"] == "outer-owned"
-    assert payload["companion_projection"]["enabledSkills"][1]["skill_id"] == "memory-bridge"
-    assert payload["companion_projection"]["fallbackSemantics"]["fallback_adapter"] == "codex_desktop_adapter"
+    assert "companion_projection" not in payload
     assert payload["cli_common_adapter"]["controller_boundary"]["shared_adapter"] == "cli_common_adapter"
     assert payload["cli_common_adapter"]["shared_contract"]["workspace_bootstrap"] == (
         canonical_shared_contract["workspace_bootstrap"]
@@ -2218,11 +2033,11 @@ def test_router_rs_profile_json_matches_outer_framework_contract() -> None:
         "execution_surface": "execution_surface",
     }
     assert "legacy_codex_common_adapter" not in payload["codex_common_adapter"]["parity_contract"]
-    assert payload["claude_code_adapter"]["host_projection"]["context_files"] == [
+    assert payload["claude_code_adapter"]["host_adapter_payload"]["context_files"] == [
         "CLAUDE.md",
         "CLAUDE.local.md",
     ]
-    assert payload["gemini_cli_adapter"]["host_projection"]["context_files"] == ["GEMINI.md"]
+    assert payload["gemini_cli_adapter"]["host_adapter_payload"]["context_files"] == ["GEMINI.md"]
     assert payload["cli_family_parity_snapshot"]["all_shared_contract_checks_pass"] is True
     assert "codex_desktop_host_adapter" not in payload
     assert "codex_desktop_alias_retirement_status" not in payload
@@ -2377,12 +2192,12 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     assert payload["codex_cli_adapter"]["bridge_contract"] == (
         payload["codex_cli_adapter"]["common_contract"]["workspace_bootstrap"]["bridges"]
     )
-    assert payload["claude_code_adapter"]["host_projection"]["settings_paths"] == [
+    assert payload["claude_code_adapter"]["host_adapter_payload"]["settings_paths"] == [
         "~/.claude/settings.json",
         ".claude/settings.json",
         ".claude/settings.local.json",
     ]
-    assert payload["gemini_cli_adapter"]["host_projection"]["context_files"] == ["GEMINI.md"]
+    assert payload["gemini_cli_adapter"]["host_adapter_payload"]["context_files"] == ["GEMINI.md"]
     assert payload["execution_controller_contract"]["status_contract"] == (
         "execution_controller_contract_v1"
     )
@@ -2444,7 +2259,7 @@ def test_router_rs_profile_artifacts_json_exposes_first_class_codex_outputs() ->
     ] is False
 
 
-def test_router_rs_profile_artifacts_json_ignores_removed_legacy_alias_flag() -> None:
+def test_router_rs_profile_artifacts_json_rejects_removed_legacy_alias_flag() -> None:
     profile = build_framework_profile(
         profile_id="rust-profile-artifacts-legacy",
         display_name="Rust Profile Artifacts Legacy",
@@ -2468,29 +2283,16 @@ def test_router_rs_profile_artifacts_json_ignores_removed_legacy_alias_flag() ->
                 "--framework-profile",
                 str(profile_path),
             ],
-            check=True,
             capture_output=True,
             text=True,
             cwd=PROJECT_ROOT,
         )
 
-    payload = json.loads(proc.stdout)
-    assert payload["cli_common_adapter"]["controller_boundary"]["shared_adapter"] == "cli_common_adapter"
-    assert payload["codex_common_adapter"]["controller_boundary"]["framework_truth"] == "framework_core"
-    assert payload["codex_desktop_adapter"]["entrypoint_contract"]["entrypoint_kind"] == "interactive"
-    assert payload["codex_cli_adapter"]["execution_surface"]["entrypoint_kind"] == "headless"
-    assert payload["claude_code_adapter"]["host_projection"]["context_files"][0] == "CLAUDE.md"
-    assert payload["gemini_cli_adapter"]["host_projection"]["structured_output_modes"] == [
-        "json",
-        "stream-json",
-    ]
-    assert "codex_desktop_host_adapter" not in payload
-    assert "codex_desktop_alias_retirement_status" not in payload
-    assert "codex_desktop_host_adapter" not in payload["upgrade_compatibility_matrix"]
-    assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["legacy_surface"] is True
+    assert proc.returncode != 0
+    assert "compatibility inventory artifacts are retired" in proc.stderr
 
 
-def test_router_rs_profile_artifacts_json_can_include_compatibility_inventory() -> None:
+def test_router_rs_profile_artifacts_json_rejects_compatibility_inventory() -> None:
     profile = build_framework_profile(
         profile_id="rust-profile-artifacts-compat",
         display_name="Rust Profile Artifacts Compat",
@@ -2514,27 +2316,13 @@ def test_router_rs_profile_artifacts_json_can_include_compatibility_inventory() 
                 "--framework-profile",
                 str(profile_path),
             ],
-            check=True,
             capture_output=True,
             text=True,
             cwd=PROJECT_ROOT,
         )
 
-    payload = json.loads(proc.stdout)
-    assert "codex_desktop_alias_retirement_status" not in payload
-    assert payload["upgrade_compatibility_matrix"]["cli_common_adapter"]["compatible"] is True
-    assert payload["upgrade_compatibility_matrix"]["codex_common_adapter"]["compatible"] is True
-    assert payload["upgrade_compatibility_matrix"]["codex_common_adapter"]["legacy_surface"] is False
-    assert (
-        payload["upgrade_compatibility_matrix"]["codex_common_adapter"][
-            "default_host_peer_set_member"
-        ]
-        is False
-    )
-    assert payload["upgrade_compatibility_matrix"]["codex_desktop_adapter"]["compatible"] is True
-    assert "codex_desktop_host_adapter" not in payload["upgrade_compatibility_matrix"]
-    assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["compatible"] is True
-    assert payload["upgrade_compatibility_matrix"]["aionrs_companion_adapter"]["legacy_surface"] is True
+    assert proc.returncode != 0
+    assert "compatibility inventory artifacts are retired" in proc.stderr
 
 
 def test_ensure_capabilities_rejects_missing_capability() -> None:

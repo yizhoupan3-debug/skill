@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, Field
 
-from framework_runtime.checkpoint_store import RuntimeStorageBackend, select_runtime_storage_backend
+from framework_runtime.checkpoint_store import (
+    InMemoryRuntimeStorageBackend,
+    RuntimeStorageBackend,
+    select_runtime_storage_backend,
+)
 from framework_runtime.paths import default_codex_home
 from framework_runtime.rust_router import RustRouteAdapter
 from framework_runtime.schemas import BackgroundParallelGroupSummary, BackgroundRunStatus, RunTaskResponse
@@ -40,6 +43,9 @@ _DEFAULT_BACKGROUND_JOB_RETRY_COUNT = 0
 _DEFAULT_BACKGROUND_JOB_MAX_ATTEMPTS = 1
 _DEFAULT_BACKGROUND_JOB_BACKOFF_BASE_SECONDS = 0.0
 _DEFAULT_BACKGROUND_JOB_BACKOFF_MULTIPLIER = 2.0
+_DEFAULT_IN_MEMORY_BACKGROUND_STATE_PATH = (
+    default_codex_home() / ".codex" / "runtime_background_jobs.memory.json"
+)
 VALID_TRANSITIONS = {
     None: ACTIVE_JOB_STATUSES | TERMINAL_JOB_STATUSES,
     "queued": {"queued", "running", "interrupt_requested", "interrupted", "failed"},
@@ -75,14 +81,6 @@ class SessionConflictError(RuntimeError):
     """Raised when another active job already owns the same session."""
 
 
-@dataclass(frozen=True)
-class PendingSessionTakeover:
-    """Represent one in-flight session handoff to a replacement job."""
-
-    session_id: str
-    incoming_job_id: str
-
-
 class BackgroundSessionTakeoverArbitration(BaseModel):
     """Versioned reducer result for one session takeover operation."""
 
@@ -96,31 +94,6 @@ class BackgroundSessionTakeoverArbitration(BaseModel):
     pending_job_id: str | None = None
     outcome: Literal["available", "pending", "owned", "claimed", "released", "noop"]
     changed: bool = False
-
-
-class _PersistedActiveSession(BaseModel):
-    """One durable active-session reservation row."""
-
-    session_id: str
-    job_id: str
-
-
-class _PersistedPendingTakeover(BaseModel):
-    """One durable pending session handoff row."""
-
-    session_id: str
-    incoming_job_id: str
-
-
-class _PersistedBackgroundState(BaseModel):
-    """Versioned durable contract for background job state."""
-
-    version: int = 2
-    schema_version: str = BACKGROUND_STATE_SCHEMA_VERSION
-    control_plane: dict[str, Any] | None = None
-    jobs: list[BackgroundRunStatus] = Field(default_factory=list)
-    active_sessions: list[_PersistedActiveSession] = Field(default_factory=list)
-    pending_session_takeovers: list[_PersistedPendingTakeover] = Field(default_factory=list)
 
 
 class BackgroundStateControlPlaneDescriptor(BaseModel):
@@ -356,21 +329,22 @@ class BackgroundJobStore:
         self._jobs: dict[str, BackgroundRunStatus] = {}
         self._active_sessions: dict[str, str] = {}
         self._pending_session_takeovers: dict[str, str] = {}
-        self._state_path = state_path
-        self._storage_backend = storage_backend or select_runtime_storage_backend(
-            storage_root=state_path.parent if state_path is not None else None
+        self._state_payload_text: str | None = None
+        resolved_state_path = state_path
+        resolved_storage_backend = storage_backend
+        if resolved_state_path is None:
+            resolved_state_path = _DEFAULT_IN_MEMORY_BACKGROUND_STATE_PATH
+            resolved_storage_backend = resolved_storage_backend or InMemoryRuntimeStorageBackend()
+        self._state_path = resolved_state_path
+        self._storage_backend = resolved_storage_backend or select_runtime_storage_backend(
+            storage_root=resolved_state_path.parent
         )
         self._control_plane = _build_state_control_plane_descriptor(
             control_plane_descriptor=control_plane_descriptor,
             storage_backend=self._storage_backend,
             state_path=self._state_path,
         )
-        capabilities = self._storage_backend.capabilities()
-        self._use_rust_background_state = (
-            self._state_path is not None
-            and capabilities.backend_family != "memory"
-            and self._control_plane.authority == RustRouteAdapter.background_state_store_authority
-        )
+        self._use_rust_background_state = True
         self._rust_adapter = RustRouteAdapter(default_codex_home()) if self._use_rust_background_state else None
         self._load_state()
 
@@ -450,21 +424,7 @@ class BackgroundJobStore:
             if not isinstance(job, dict):
                 raise RuntimeError("Rust background state store returned a missing job payload.")
             return BackgroundRunStatus.model_validate(job)
-
-        existing = self._jobs.get(job_id)
-        previous_status = existing.status if existing is not None else None
-        previous_session_id = existing.session_id if existing is not None else None
-        resolved_session_id = mutation.session_id if mutation.session_id is not None else previous_session_id
-        resolved_mutation = BackgroundJobStatusMutation(**(asdict(mutation) | {"session_id": resolved_session_id}))
-
-        self._assert_transition(previous_status, resolved_mutation.status)
-        self._reserve_session(job_id, resolved_session_id, resolved_mutation.status)
-        existing = resolved_mutation.apply(job_id=job_id, existing=existing)
-        self._jobs[job_id] = existing
-        self._release_previous_session(job_id, previous_session_id, resolved_session_id)
-        self._finalize_session(job_id, resolved_session_id, resolved_mutation.status)
-        self._persist_state()
-        return existing
+        raise RuntimeError("Python background state fallback is retired.")
 
     def get(self, job_id: str) -> BackgroundRunStatus | None:
         """Return one background job row."""
@@ -510,66 +470,7 @@ class BackgroundJobStore:
             if not isinstance(takeover, dict):
                 raise RuntimeError("Rust background state store returned a missing takeover payload.")
             return BackgroundSessionTakeoverArbitration.model_validate(takeover)
-
-        previous_active_job_id = self._active_sessions.get(session_id)
-        previous_pending_job_id = self._pending_session_takeovers.get(session_id)
-        changed = False
-        outcome: Literal["available", "pending", "owned", "claimed", "released", "noop"]
-
-        if operation == "reserve":
-            if previous_pending_job_id is not None and previous_pending_job_id != incoming_job_id:
-                raise SessionConflictError(
-                    f"Session {session_id!r} already has a pending takeover for job {previous_pending_job_id!r}."
-                )
-            if previous_active_job_id is None:
-                outcome = "pending" if previous_pending_job_id == incoming_job_id else "available"
-            elif previous_active_job_id == incoming_job_id:
-                outcome = "owned"
-            else:
-                if previous_pending_job_id != incoming_job_id:
-                    self._pending_session_takeovers[session_id] = incoming_job_id
-                    changed = True
-                outcome = "pending"
-        elif operation == "claim":
-            if previous_pending_job_id != incoming_job_id:
-                raise SessionConflictError(
-                    f"Session {session_id!r} is not reserved for incoming job {incoming_job_id!r}."
-                )
-            if previous_active_job_id is not None and previous_active_job_id != incoming_job_id:
-                raise SessionConflictError(
-                    f"Session {session_id!r} is still active in job {previous_active_job_id!r}."
-                )
-            if previous_active_job_id != incoming_job_id:
-                self._active_sessions[session_id] = incoming_job_id
-                changed = True
-            if previous_pending_job_id is not None:
-                self._pending_session_takeovers.pop(session_id, None)
-                changed = True
-            outcome = "claimed"
-        elif operation == "release":
-            if previous_pending_job_id == incoming_job_id:
-                self._pending_session_takeovers.pop(session_id, None)
-                changed = True
-            if self._active_sessions.get(session_id) == incoming_job_id and incoming_job_id not in self._jobs:
-                self._active_sessions.pop(session_id, None)
-                changed = True
-            outcome = "released" if changed else "noop"
-        else:  # pragma: no cover - Literal keeps the branch defensive only.
-            raise ValueError(f"Unsupported takeover arbitration operation: {operation!r}")
-
-        if changed:
-            self._persist_state()
-        return BackgroundSessionTakeoverArbitration(
-            operation=operation,
-            session_id=session_id,
-            incoming_job_id=incoming_job_id,
-            previous_active_job_id=previous_active_job_id,
-            previous_pending_job_id=previous_pending_job_id,
-            active_job_id=self._active_sessions.get(session_id),
-            pending_job_id=self._pending_session_takeovers.get(session_id),
-            outcome=outcome,
-            changed=changed,
-        )
+        raise RuntimeError("Python background state fallback is retired.")
 
     def reserve_session_takeover(self, *, session_id: str, incoming_job_id: str) -> str | None:
         """Reserve the next ownership handoff for one session."""
@@ -616,193 +517,47 @@ class BackgroundJobStore:
     def parallel_group_summary(self, parallel_group_id: str) -> BackgroundParallelGroupSummary | None:
         """Return one aggregate summary for a durable parallel batch."""
 
-        if self._use_rust_background_state:
-            response = self._invoke_rust_state(
-                operation="parallel_group_summary",
-                parallel_group_id=parallel_group_id,
-            )
-            summary = response.get("parallel_group_summary")
-            return BackgroundParallelGroupSummary.model_validate(summary) if isinstance(summary, dict) else None
-
-        jobs = [
-            job
-            for job in self._jobs.values()
-            if job.parallel_group_id == parallel_group_id
-        ]
-        if not jobs:
-            return None
-        return self._build_parallel_group_summary(parallel_group_id=parallel_group_id, jobs=jobs)
+        response = self._invoke_rust_state(
+            operation="parallel_group_summary",
+            parallel_group_id=parallel_group_id,
+        )
+        summary = response.get("parallel_group_summary")
+        return BackgroundParallelGroupSummary.model_validate(summary) if isinstance(summary, dict) else None
 
     def parallel_group_summaries(self) -> list[BackgroundParallelGroupSummary]:
         """Return aggregate summaries for all durable parallel batches."""
 
-        if self._use_rust_background_state:
-            response = self._invoke_rust_state(operation="parallel_group_summaries")
-            summaries = response.get("parallel_group_summaries")
-            if not isinstance(summaries, list):
-                raise RuntimeError("Rust background state store returned an invalid parallel_group_summaries payload.")
-            return [BackgroundParallelGroupSummary.model_validate(item) for item in summaries if isinstance(item, dict)]
-
-        grouped: dict[str, list[BackgroundRunStatus]] = {}
-        for job in self._jobs.values():
-            if job.parallel_group_id is None:
-                continue
-            grouped.setdefault(job.parallel_group_id, []).append(job)
-        return [
-            self._build_parallel_group_summary(parallel_group_id=parallel_group_id, jobs=grouped[parallel_group_id])
-            for parallel_group_id in sorted(grouped)
-        ]
+        response = self._invoke_rust_state(operation="parallel_group_summaries")
+        summaries = response.get("parallel_group_summaries")
+        if not isinstance(summaries, list):
+            raise RuntimeError("Rust background state store returned an invalid parallel_group_summaries payload.")
+        return [BackgroundParallelGroupSummary.model_validate(item) for item in summaries if isinstance(item, dict)]
 
     def control_plane_descriptor(self) -> BackgroundStateControlPlaneDescriptor:
         """Return the Rust-owned control-plane projection for this Python store."""
 
-        if self._use_rust_background_state:
-            self._invoke_rust_state(operation="snapshot")
+        self._invoke_rust_state(operation="snapshot")
         return self._control_plane.model_copy()
 
     def health(self) -> dict[str, Any]:
         """Return store health using the shared control-plane boundary."""
 
-        if self._use_rust_background_state:
-            response = self._invoke_rust_state(operation="health")
-            health = response.get("health")
-            if isinstance(health, dict):
-                return health
-        descriptor = self.control_plane_descriptor()
-        return {
-            "control_plane_authority": descriptor.authority,
-            "control_plane_role": descriptor.role,
-            "control_plane_projection": descriptor.projection,
-            "control_plane_delegate_kind": descriptor.delegate_kind,
-            "runtime_control_plane_authority": descriptor.runtime_control_plane_authority,
-            "runtime_control_plane_schema_version": descriptor.runtime_control_plane_schema_version,
-            "backend_family": descriptor.backend_family,
-            "supports_atomic_replace": descriptor.supports_atomic_replace,
-            "supports_compaction": descriptor.supports_compaction,
-            "supports_snapshot_delta": descriptor.supports_snapshot_delta,
-            "supports_remote_event_transport": descriptor.supports_remote_event_transport,
-            "state_path": descriptor.state_path,
-            "job_count": len(self._jobs),
-            "active_job_count": self.active_job_count(),
-            "parallel_group_count": len(self.parallel_group_summaries()),
-            "pending_session_takeovers": self.pending_session_takeovers(),
-        }
-
-    def _assert_transition(self, previous_status: str | None, next_status: str) -> None:
-        """Validate background job lifecycle transitions."""
-
-        allowed = VALID_TRANSITIONS.get(previous_status, {next_status})
-        if next_status not in allowed:
-            raise ValueError(f"Invalid background job transition: {previous_status!r} -> {next_status!r}")
-
-    def _reserve_session(self, job_id: str, session_id: str | None, status: str) -> None:
-        """Reserve an active session for queued or running work."""
-
-        if session_id is None or status not in ACTIVE_JOB_STATUSES:
-            return
-        owner = self._active_sessions.get(session_id)
-        if owner is not None and owner != job_id:
-            raise SessionConflictError(f"Session {session_id!r} is already active in job {owner!r}.")
-        self._active_sessions[session_id] = job_id
-
-    def _release_previous_session(self, job_id: str, previous_session_id: str | None, next_session_id: str | None) -> None:
-        """Release the old session reservation if the job moved to a new session id."""
-
-        if previous_session_id is None or previous_session_id == next_session_id:
-            return
-        if self._active_sessions.get(previous_session_id) == job_id:
-            self._active_sessions.pop(previous_session_id, None)
-
-    def _finalize_session(self, job_id: str, session_id: str | None, status: str) -> None:
-        """Release the reservation once the job reaches a terminal state."""
-
-        if session_id is None or status not in TERMINAL_JOB_STATUSES:
-            return
-        if self._active_sessions.get(session_id) == job_id:
-            self._active_sessions.pop(session_id, None)
+        response = self._invoke_rust_state(operation="health")
+        health = response.get("health")
+        if isinstance(health, dict):
+            return health
+        raise RuntimeError("Rust background state store returned an invalid health payload.")
 
     def _load_state(self) -> None:
         """Load durable state from disk when a state path is configured."""
 
-        if self._use_rust_background_state:
-            self._invoke_rust_state(operation="snapshot")
-            return
-        if self._state_path is None or not self._storage_backend.exists(self._state_path):
-            return
-
-        payload = json.loads(self._storage_backend.read_text(self._state_path))
-        persisted = _PersistedBackgroundState.model_validate(payload)
-        if persisted.control_plane is not None:
-            merged = self._control_plane.model_dump(mode="json")
-            merged.update(
-                {
-                    key: value
-                    for key, value in persisted.control_plane.items()
-                    if value is not None
-                }
-            )
-            self._control_plane = BackgroundStateControlPlaneDescriptor.model_validate(merged)
-        self._jobs = {job.job_id: job for job in persisted.jobs}
-
-        if persisted.active_sessions:
-            self._active_sessions = {
-                row.session_id: row.job_id for row in persisted.active_sessions
-            }
-        else:
-            self._active_sessions = self._rebuild_active_sessions()
-
-        self._active_sessions = {
-            session_id: job_id
-            for session_id, job_id in self._active_sessions.items()
-            if job_id not in self._jobs or self._jobs[job_id].status in ACTIVE_JOB_STATUSES
-        }
-        self._pending_session_takeovers = {
-            row.session_id: row.incoming_job_id
-            for row in persisted.pending_session_takeovers
-            if row.incoming_job_id not in self._jobs
-            or self._jobs[row.incoming_job_id].status in ACTIVE_JOB_STATUSES
-        }
-
-    def _persist_state(self) -> None:
-        """Persist state to a deterministic, versioned JSON contract."""
-
-        if self._use_rust_background_state:
-            return
-        if self._state_path is None:
-            return
-        persisted = _PersistedBackgroundState(
-            control_plane=self._control_plane.model_dump(mode="json"),
-            jobs=[self._jobs[job_id] for job_id in sorted(self._jobs)],
-            active_sessions=[
-                _PersistedActiveSession(session_id=session_id, job_id=job_id)
-                for session_id, job_id in sorted(self._active_sessions.items())
-            ],
-            pending_session_takeovers=[
-                _PersistedPendingTakeover(session_id=session_id, incoming_job_id=job_id)
-                for session_id, job_id in sorted(self._pending_session_takeovers.items())
-            ],
-        )
-        payload = json.dumps(persisted.model_dump(mode="json"), ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-        self._storage_backend.write_text(self._state_path, payload)
-
-    def _rebuild_active_sessions(self) -> dict[str, str]:
-        """Rebuild active session reservations from active job rows."""
-
-        candidates = sorted(
-            (
-                job.updated_at,
-                job.job_id,
-                job.session_id,
-            )
-            for job in self._jobs.values()
-            if job.session_id is not None and job.status in ACTIVE_JOB_STATUSES
-        )
-        active_sessions: dict[str, str] = {}
-        for _, job_id, session_id in candidates:
-            if session_id is None:
-                continue
-            active_sessions[session_id] = job_id
-        return active_sessions
+        if (
+            self._storage_backend.capabilities().backend_family == "memory"
+            and self._state_path is not None
+            and self._storage_backend.exists(self._state_path)
+        ):
+            self._state_payload_text = self._storage_backend.read_text(self._state_path)
+        self._invoke_rust_state(operation="snapshot")
 
     def _invoke_rust_state(self, *, operation: str, **payload: Any) -> dict[str, Any]:
         if self._rust_adapter is None:
@@ -820,6 +575,7 @@ class BackgroundJobStore:
             ):
                 raise SessionConflictError(message) from exc
             raise
+        self._refresh_memory_payload(response)
         self._sync_rust_snapshot(response.get("state"))
         return response
 
@@ -843,6 +599,8 @@ class BackgroundJobStore:
                 },
             },
         }
+        if capabilities.backend_family == "memory":
+            request["state_payload_text"] = self._state_payload_text
         sqlite_db_path = getattr(self._storage_backend, "_db_path", None)
         if sqlite_db_path is not None:
             request["sqlite_db_path"] = str(sqlite_db_path)
@@ -883,45 +641,21 @@ class BackgroundJobStore:
                 and isinstance(row.get("session_id"), str)
                 and isinstance(row.get("incoming_job_id"), str)
             }
+        self._sync_memory_backend_state()
 
-    @staticmethod
-    def _build_parallel_group_summary(
-        *,
-        parallel_group_id: str,
-        jobs: list[BackgroundRunStatus],
-    ) -> BackgroundParallelGroupSummary:
-        """Aggregate a stable summary for one background parallel group."""
+    def _sync_memory_backend_state(self) -> None:
+        if self._state_path is None or self._storage_backend.capabilities().backend_family != "memory":
+            return
+        payload = self._state_payload_text
+        if payload is None:
+            return
+        self._storage_backend.write_text(self._state_path, payload)
 
-        status_counts: dict[str, int] = {}
-        session_ids: set[str] = set()
-        lane_ids: set[str] = set()
-        parent_job_ids: set[str] = set()
-        active_job_count = 0
-        terminal_job_count = 0
-        latest_updated_at: str | None = None
-        for job in jobs:
-            status_counts[job.status] = status_counts.get(job.status, 0) + 1
-            if job.session_id is not None:
-                session_ids.add(job.session_id)
-            if job.lane_id is not None:
-                lane_ids.add(job.lane_id)
-            if job.parent_job_id is not None:
-                parent_job_ids.add(job.parent_job_id)
-            if job.status in ACTIVE_JOB_STATUSES:
-                active_job_count += 1
-            if job.status in TERMINAL_JOB_STATUSES:
-                terminal_job_count += 1
-            if latest_updated_at is None or job.updated_at > latest_updated_at:
-                latest_updated_at = job.updated_at
-        return BackgroundParallelGroupSummary(
-            parallel_group_id=parallel_group_id,
-            job_ids=sorted(job.job_id for job in jobs),
-            session_ids=sorted(session_ids),
-            lane_ids=sorted(lane_ids),
-            parent_job_ids=sorted(parent_job_ids),
-            status_counts=dict(sorted(status_counts.items())),
-            active_job_count=active_job_count,
-            terminal_job_count=terminal_job_count,
-            total_job_count=len(jobs),
-            latest_updated_at=latest_updated_at,
-        )
+    def _refresh_memory_payload(self, response: Mapping[str, Any]) -> None:
+        if self._storage_backend.capabilities().backend_family != "memory":
+            return
+        payload_text = response.get("persisted_payload_text")
+        if isinstance(payload_text, str):
+            self._state_payload_text = payload_text
+        elif self._state_path is not None and self._storage_backend.exists(self._state_path):
+            self._state_payload_text = self._storage_backend.read_text(self._state_path)

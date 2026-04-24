@@ -4,14 +4,9 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::execution_contract::build_execution_kernel_live_response_serialization_contract;
+
 const REQUIRED_CORE_CAPABILITIES: [&str; 4] = ["runtime", "memory", "artifact", "orchestration"];
-const COMMON_FORK_DANGER_SURFACES: [&str; 5] = [
-    "aionrs_session_protocol",
-    "aionrs_event_grammar",
-    "aionrs_resume_semantics",
-    "aionrs_tool_approval_semantics",
-    "aionrs_provider_plumbing",
-];
 const COMMON_PARITY_FIELDS: [&str; 12] = [
     "artifact_contract",
     "memory_mounts",
@@ -105,43 +100,7 @@ const CLI_FAMILY_HOST_CAPABILITIES: [&str; 9] = [
     "workspace_bootstrap",
     "session_contract",
 ];
-const AIONRS_COMPANION_HOST_CAPABILITIES: [&str; 8] = [
-    "streaming_events",
-    "tool_approval",
-    "session_mode",
-    "dynamic_config",
-    "mcp_config",
-    "workspace_bootstrap",
-    "skill_bridge",
-    "memory_bridge",
-];
-const AIONUI_HOST_CAPABILITIES: [&str; 5] = [
-    "conversation_bootstrap",
-    "tool_approval_ui",
-    "event_stream_binding",
-    "workspace_sync",
-    "team_mode_sync",
-];
-const GENERIC_HOST_CAPABILITIES: [&str; 3] =
-    ["local_runtime", "artifact_contract", "memory_mounts"];
-const NO_OPTIONAL_CAPABILITIES: [&str; 0] = [];
-const AIONRS_OPTIONAL_CAPABILITIES: [&str; 2] = ["memory", "orchestration"];
-const AIONUI_OPTIONAL_CAPABILITIES: [&str; 1] = ["orchestration"];
-const NO_THIN_PATCH_SURFACES: [&str; 0] = [];
-const CLI_METADATA_THIN_PATCH_SURFACES: [&str; 1] = ["cli_metadata_injection"];
-const DESKTOP_THIN_PATCH_SURFACES: [&str; 1] = ["desktop_metadata_injection"];
-const CLAUDE_THIN_PATCH_SURFACES: [&str; 2] =
-    ["cli_metadata_injection", "settings_bridge_projection"];
-const GEMINI_THIN_PATCH_SURFACES: [&str; 2] =
-    ["cli_metadata_injection", "settings_bridge_projection"];
-const AIONRS_THIN_PATCH_SURFACES: [&str; 3] = [
-    "startup_wrapper",
-    "default_config_injection",
-    "bridge_cleanup_strategy",
-];
-const AIONUI_THIN_PATCH_SURFACES: [&str; 2] = ["host_metadata_injection", "bridge_path_cleanup"];
 const HOST_ADAPTER_PAYLOAD_KEY: &str = "host_adapter_payload";
-const LEGACY_HOST_PROJECTION_KEY: &str = "host_projection";
 const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
     "adapter_id",
     "adapter_alias_of",
@@ -209,22 +168,6 @@ struct AdapterDescriptor<'a> {
     host_id: &'a str,
     transport: &'a str,
     host_capabilities: &'a [&'a str],
-}
-
-#[derive(Clone, Copy)]
-struct CompatibilityAdapterSpec<'a> {
-    adapter_id: &'a str,
-    host_id: &'a str,
-    transport: &'a str,
-    required_capabilities: &'a [&'a str],
-    optional_capabilities: &'a [&'a str],
-    host_capabilities: &'a [&'a str],
-    thin_patch_surfaces: &'a [&'a str],
-    works_without_aionrs: bool,
-    legacy_surface: bool,
-    legacy_lane: Option<&'a str>,
-    default_host_peer_set_member: bool,
-    requires_aionrs: bool,
 }
 
 struct AdapterBuildContext<'a> {
@@ -305,7 +248,6 @@ pub struct ProfileBundle {
     pub workspace_bootstrap: Map<String, Value>,
     pub host_capability_requirements: Map<String, Value>,
     pub metadata: Map<String, Value>,
-    pub companion_projection: CompanionProjection,
     pub cli_common_adapter: Value,
     pub codex_common_adapter: Value,
     pub codex_desktop_adapter: Value,
@@ -326,27 +268,6 @@ pub struct ProfileBundle {
 pub struct CapabilityBundle {
     pub core: Vec<String>,
     pub optional: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct CompanionProjection {
-    #[serde(rename = "presetRules")]
-    pub preset_rules: Vec<Value>,
-    #[serde(rename = "enabledSkills")]
-    pub enabled_skills: Vec<Value>,
-    #[serde(rename = "sessionMode")]
-    pub session_mode: Value,
-    #[serde(rename = "aionrsConfig")]
-    pub aionrs_config: Value,
-    #[serde(rename = "mcpConfig")]
-    pub mcp_config: Value,
-    #[serde(rename = "workspaceBootstrap")]
-    pub workspace_bootstrap: Value,
-    pub bridges: Value,
-    #[serde(rename = "toolApprovalMapping")]
-    pub tool_approval_mapping: Value,
-    #[serde(rename = "fallbackSemantics")]
-    pub fallback_semantics: Value,
 }
 
 pub fn load_framework_profile(path: &Path) -> Result<FrameworkProfileContract, String> {
@@ -502,43 +423,6 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         workspace_bootstrap: workspace_bootstrap.clone(),
         host_capability_requirements: profile.host_capability_requirements.clone(),
         metadata: profile.metadata.clone(),
-        companion_projection: CompanionProjection {
-            preset_rules: normalize_bundle_items(
-                &profile.rules_bundle,
-                &["rules", "items"],
-                "rule",
-            ),
-            enabled_skills: normalize_bundle_items(
-                &profile.skill_bundle,
-                &["skills", "items"],
-                "skill_id",
-            ),
-            session_mode: compile_session_mode(&profile.session_policy),
-            aionrs_config: compile_aionrs_config(&profile.model_policy),
-            mcp_config: value_object([("servers", Value::Array(normalized_mcp_servers))]),
-            workspace_bootstrap: Value::Object(workspace_bootstrap.clone()),
-            bridges: workspace_bootstrap
-                .get("bridges")
-                .cloned()
-                .unwrap_or_else(|| Value::Object(Map::new())),
-            tool_approval_mapping: compile_tool_approval_mapping(profile),
-            fallback_semantics: value_object([
-                ("requires_aionrs", Value::Bool(true)),
-                (
-                    "portable_core_preserved",
-                    Value::Array(
-                        REQUIRED_CORE_CAPABILITIES
-                            .iter()
-                            .map(|cap| Value::String((*cap).to_string()))
-                            .collect(),
-                    ),
-                ),
-                (
-                    "fallback_adapter",
-                    Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-                ),
-            ]),
-        },
         cli_common_adapter: Value::Object(cli_common_adapter),
         codex_common_adapter: Value::Object(codex_common_adapter),
         codex_desktop_adapter: Value::Object(codex_desktop_adapter),
@@ -560,6 +444,12 @@ pub fn build_codex_artifact_bundle(
     profile: &FrameworkProfileContract,
     include_compatibility_inventory: bool,
 ) -> Result<Map<String, Value>, String> {
+    if include_compatibility_inventory {
+        return Err(
+            "compatibility inventory artifacts are retired; use canonical Rust outputs."
+                .to_string(),
+        );
+    }
     let bundle = build_profile_bundle(profile)?;
     let mut artifacts = Map::new();
     artifacts.insert("cli_common_adapter".to_string(), bundle.cli_common_adapter);
@@ -589,15 +479,6 @@ pub fn build_codex_artifact_bundle(
         "codex_dual_entry_parity_snapshot".to_string(),
         bundle.codex_dual_entry_parity_snapshot,
     );
-    if include_compatibility_inventory {
-        artifacts.insert(
-            "upgrade_compatibility_matrix".to_string(),
-            Value::Object(build_upgrade_compatibility_matrix(
-                Some(profile),
-                true,
-            )),
-        );
-    }
     artifacts.insert(
         EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID.to_string(),
         bundle.execution_controller_contract,
@@ -621,282 +502,6 @@ pub fn build_codex_artifact_bundle(
     Ok(artifacts)
 }
 
-fn compatibility_specs(include_legacy_aliases: bool) -> Vec<CompatibilityAdapterSpec<'static>> {
-    let mut specs = vec![
-        CompatibilityAdapterSpec {
-            adapter_id: CLI_COMMON_ADAPTER_ID,
-            host_id: "cli-family-shared",
-            transport: "host-neutral-contract",
-            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
-            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
-            host_capabilities: &CLI_FAMILY_HOST_CAPABILITIES,
-            thin_patch_surfaces: &NO_THIN_PATCH_SURFACES,
-            works_without_aionrs: false,
-            legacy_surface: false,
-            legacy_lane: None,
-            default_host_peer_set_member: false,
-            requires_aionrs: false,
-        },
-        CompatibilityAdapterSpec {
-            adapter_id: CODEX_COMMON_ADAPTER_ID,
-            host_id: "codex-shared",
-            transport: "host-neutral-contract",
-            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
-            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
-            host_capabilities: &CLI_FAMILY_HOST_CAPABILITIES,
-            thin_patch_surfaces: &NO_THIN_PATCH_SURFACES,
-            works_without_aionrs: false,
-            legacy_surface: false,
-            legacy_lane: None,
-            default_host_peer_set_member: false,
-            requires_aionrs: false,
-        },
-        CompatibilityAdapterSpec {
-            adapter_id: CODEX_DESKTOP_ADAPTER_ID,
-            host_id: "codex-desktop",
-            transport: "local-bridge",
-            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
-            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
-            host_capabilities: &CODEX_DESKTOP_HOST_CAPABILITIES,
-            thin_patch_surfaces: &DESKTOP_THIN_PATCH_SURFACES,
-            works_without_aionrs: true,
-            legacy_surface: false,
-            legacy_lane: None,
-            default_host_peer_set_member: true,
-            requires_aionrs: false,
-        },
-        CompatibilityAdapterSpec {
-            adapter_id: CODEX_CLI_ADAPTER_ID,
-            host_id: "codex-cli",
-            transport: "headless-exec",
-            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
-            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
-            host_capabilities: &CODEX_CLI_HOST_CAPABILITIES,
-            thin_patch_surfaces: &CLI_METADATA_THIN_PATCH_SURFACES,
-            works_without_aionrs: true,
-            legacy_surface: false,
-            legacy_lane: None,
-            default_host_peer_set_member: true,
-            requires_aionrs: false,
-        },
-        CompatibilityAdapterSpec {
-            adapter_id: CLAUDE_CODE_ADAPTER_ID,
-            host_id: "claude-code",
-            transport: "headless-exec",
-            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
-            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
-            host_capabilities: &CLAUDE_CODE_HOST_CAPABILITIES,
-            thin_patch_surfaces: &CLAUDE_THIN_PATCH_SURFACES,
-            works_without_aionrs: true,
-            legacy_surface: false,
-            legacy_lane: None,
-            default_host_peer_set_member: true,
-            requires_aionrs: false,
-        },
-        CompatibilityAdapterSpec {
-            adapter_id: GEMINI_CLI_ADAPTER_ID,
-            host_id: "gemini-cli",
-            transport: "headless-exec",
-            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
-            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
-            host_capabilities: &GEMINI_CLI_HOST_CAPABILITIES,
-            thin_patch_surfaces: &GEMINI_THIN_PATCH_SURFACES,
-            works_without_aionrs: true,
-            legacy_surface: false,
-            legacy_lane: None,
-            default_host_peer_set_member: true,
-            requires_aionrs: false,
-        },
-        CompatibilityAdapterSpec {
-            adapter_id: "generic_host_adapter",
-            host_id: "generic",
-            transport: "inproc",
-            required_capabilities: &REQUIRED_CORE_CAPABILITIES,
-            optional_capabilities: &NO_OPTIONAL_CAPABILITIES,
-            host_capabilities: &GENERIC_HOST_CAPABILITIES,
-            thin_patch_surfaces: &NO_THIN_PATCH_SURFACES,
-            works_without_aionrs: true,
-            legacy_surface: false,
-            legacy_lane: None,
-            default_host_peer_set_member: false,
-            requires_aionrs: false,
-        },
-    ];
-    if include_legacy_aliases {
-        specs.extend([
-            CompatibilityAdapterSpec {
-                adapter_id: "aionrs_companion_adapter",
-                host_id: "aionrs-companion",
-                transport: "stdio-jsonl",
-                required_capabilities: &["runtime", "artifact"],
-                optional_capabilities: &AIONRS_OPTIONAL_CAPABILITIES,
-                host_capabilities: &AIONRS_COMPANION_HOST_CAPABILITIES,
-                thin_patch_surfaces: &AIONRS_THIN_PATCH_SURFACES,
-                works_without_aionrs: false,
-                legacy_surface: true,
-                legacy_lane: Some("fallback"),
-                default_host_peer_set_member: false,
-                requires_aionrs: true,
-            },
-            CompatibilityAdapterSpec {
-                adapter_id: "aionui_host_adapter",
-                host_id: "aionui",
-                transport: "bridge-contract",
-                required_capabilities: &["runtime", "artifact", "memory"],
-                optional_capabilities: &AIONUI_OPTIONAL_CAPABILITIES,
-                host_capabilities: &AIONUI_HOST_CAPABILITIES,
-                thin_patch_surfaces: &AIONUI_THIN_PATCH_SURFACES,
-                works_without_aionrs: false,
-                legacy_surface: true,
-                legacy_lane: Some("fallback"),
-                default_host_peer_set_member: false,
-                requires_aionrs: false,
-            },
-        ]);
-    }
-    specs
-}
-
-fn compatibility_upstream_safe_zone(spec: CompatibilityAdapterSpec<'_>) -> Value {
-    let mut entries = vec![
-        Value::String("framework_profile_compilation".to_string()),
-        Value::String("artifact_contract_projection".to_string()),
-    ];
-    if spec.works_without_aionrs {
-        entries.push(Value::String("works_without_aionrs".to_string()));
-    }
-    if spec.legacy_surface {
-        entries.push(Value::String("legacy_surface".to_string()));
-    }
-    if let Some(legacy_lane) = spec.legacy_lane {
-        entries.push(Value::String("legacy_lane".to_string()));
-        if legacy_lane == "compatibility" {
-            entries.push(Value::String("canonical_adapter_id".to_string()));
-        }
-    }
-    if !spec.default_host_peer_set_member {
-        entries.push(Value::String("default_host_peer_set_member".to_string()));
-    }
-    Value::Array(entries)
-}
-
-fn adapter_compatibility_value(
-    profile: Option<&FrameworkProfileContract>,
-    spec: CompatibilityAdapterSpec<'_>,
-) -> Value {
-    let Some(profile) = profile else {
-        return Value::Null;
-    };
-    let capability_set = profile
-        .core_capabilities
-        .iter()
-        .map(String::as_str)
-        .collect::<HashSet<_>>();
-    let required_capabilities_ok = spec
-        .required_capabilities
-        .iter()
-        .all(|capability| capability_set.contains(*capability));
-    let resolved_host_requirements =
-        resolve_host_capability_requirements(profile, spec.host_id, spec.adapter_id);
-    let required_host_capabilities = resolved_host_requirements
-        .get("required_host_capabilities")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let available_host_capabilities = spec
-        .host_capabilities
-        .iter()
-        .copied()
-        .collect::<HashSet<_>>();
-    let required_host_capabilities_ok = required_host_capabilities
-        .iter()
-        .filter_map(Value::as_str)
-        .all(|capability| available_host_capabilities.contains(capability));
-    Value::Bool(required_capabilities_ok && required_host_capabilities_ok)
-}
-
-fn build_upgrade_compatibility_matrix(
-    profile: Option<&FrameworkProfileContract>,
-    include_legacy_aliases: bool,
-) -> Map<String, Value> {
-    let mut matrix = Map::new();
-    for spec in compatibility_specs(include_legacy_aliases) {
-        let required_capabilities = spec
-            .required_capabilities
-            .iter()
-            .copied()
-            .collect::<HashSet<_>>();
-        let optional_capabilities = spec
-            .optional_capabilities
-            .iter()
-            .copied()
-            .collect::<HashSet<_>>();
-        let exposure_lane = if spec.legacy_surface {
-            format!(
-                "{}-only-explicit",
-                spec.legacy_lane.unwrap_or("compatibility")
-            )
-        } else {
-            "default-peer-set".to_string()
-        };
-        matrix.insert(
-            spec.adapter_id.to_string(),
-            value_object([
-                ("adapter_id", Value::String(spec.adapter_id.to_string())),
-                ("host_id", Value::String(spec.host_id.to_string())),
-                ("transport", Value::String(spec.transport.to_string())),
-                ("requires_aionrs", Value::Bool(spec.requires_aionrs)),
-                (
-                    "works_without_aionrs",
-                    Value::Bool(spec.works_without_aionrs),
-                ),
-                (
-                    "core_runtime",
-                    Value::Bool(
-                        required_capabilities.contains("runtime")
-                            || optional_capabilities.contains("runtime"),
-                    ),
-                ),
-                (
-                    "memory",
-                    Value::Bool(
-                        required_capabilities.contains("memory")
-                            || optional_capabilities.contains("memory"),
-                    ),
-                ),
-                (
-                    "artifact",
-                    Value::Bool(
-                        required_capabilities.contains("artifact")
-                            || optional_capabilities.contains("artifact"),
-                    ),
-                ),
-                (
-                    "orchestration",
-                    Value::Bool(
-                        required_capabilities.contains("orchestration")
-                            || optional_capabilities.contains("orchestration"),
-                    ),
-                ),
-                ("upstream_safe_zone", compatibility_upstream_safe_zone(spec)),
-                ("thin_patch_zone", string_array(spec.thin_patch_surfaces)),
-                (
-                    "fork_danger_zone",
-                    string_array(&COMMON_FORK_DANGER_SURFACES),
-                ),
-                ("legacy_surface", Value::Bool(spec.legacy_surface)),
-                ("exposure_lane", Value::String(exposure_lane)),
-                (
-                    "default_host_peer_set_member",
-                    Value::Bool(spec.default_host_peer_set_member),
-                ),
-                ("compatible", adapter_compatibility_value(profile, spec)),
-            ]),
-        );
-    }
-    matrix
-}
-
 fn validate_framework_profile(profile: &FrameworkProfileContract) -> Result<(), String> {
     if profile.profile_id.trim().is_empty() {
         return Err("framework profile missing profile_id".to_string());
@@ -908,7 +513,7 @@ fn validate_framework_profile(profile: &FrameworkProfileContract) -> Result<(), 
         return Err("framework profile missing framework_profile_version".to_string());
     }
     if profile.host_family == "aionrs" {
-        return Err("framework core must not be pinned directly to aionrs".to_string());
+        return Err("framework core must not be pinned to retired host family".to_string());
     }
 
     let capability_set = profile
@@ -940,33 +545,6 @@ fn validate_framework_profile(profile: &FrameworkProfileContract) -> Result<(), 
         ));
     }
     Ok(())
-}
-
-fn normalize_bundle_items(bundle: &Value, list_keys: &[&str], fallback_field: &str) -> Vec<Value> {
-    match bundle {
-        Value::Object(map) => {
-            for key in list_keys {
-                if let Some(Value::Array(items)) = map.get(*key) {
-                    return items
-                        .iter()
-                        .map(|item| match item {
-                            Value::Object(obj) => Value::Object(obj.clone()),
-                            other => value_object([(fallback_field, other.clone())]),
-                        })
-                        .collect();
-                }
-            }
-            vec![Value::Object(map.clone())]
-        }
-        Value::Array(items) => items
-            .iter()
-            .map(|item| match item {
-                Value::Object(obj) => Value::Object(obj.clone()),
-                other => value_object([(fallback_field, other.clone())]),
-            })
-            .collect(),
-        other => vec![value_object([("bundle_id", other.clone())])],
-    }
 }
 
 fn normalize_mounts(memory_mounts: &[Value]) -> Vec<Value> {
@@ -1034,7 +612,7 @@ fn compile_workspace_bootstrap(
             value_object([
                 ("project_dir", Value::String(".codex/skills".to_string())),
                 ("user_dir", Value::String("~/.codex/skills".to_string())),
-                ("bridge_dir", Value::String(".aionrs/skills".to_string())),
+                ("bridge_dir", Value::String(".codex/skills".to_string())),
             ])
         });
         bridges.insert("skills".to_string(), skills_bridge);
@@ -1044,7 +622,7 @@ fn compile_workspace_bootstrap(
             value_object([
                 (
                     "bridge_dir",
-                    Value::String(".aionrs-memory-bridge".to_string()),
+                    Value::String(".codex/memory-bridge".to_string()),
                 ),
                 ("mounts", Value::Array(normalized_memory_mounts.to_vec())),
             ])
@@ -1097,94 +675,6 @@ fn compile_session_mode(session_policy: &Map<String, Value>) -> Value {
                 .unwrap_or(Value::Bool(false)),
         ),
         ("extras", Value::Object(extras)),
-    ])
-}
-
-fn compile_aionrs_config(model_policy: &Map<String, Value>) -> Value {
-    let config_keys = [
-        "provider",
-        "model",
-        "profile",
-        "base_url",
-        "endpoint",
-        "temperature",
-        "max_tokens",
-        "max_output_tokens",
-        "headers",
-        "compat_mode",
-    ];
-    let mut config = Map::new();
-    let mut extras = Map::new();
-    for (key, value) in model_policy {
-        if config_keys.contains(&key.as_str()) {
-            config.insert(key.clone(), value.clone());
-        } else {
-            extras.insert(key.clone(), value.clone());
-        }
-    }
-
-    let requested_provider = model_policy
-        .get("provider")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_lowercase();
-    let builtin_provider_path = matches!(
-        requested_provider.as_str(),
-        "" | "anthropic" | "openai" | "aws-bedrock" | "bedrock"
-    );
-
-    let mut provider_boundary = Map::new();
-    provider_boundary.insert(
-        "provider_managed_by".to_string(),
-        Value::String("aionrs-provider-layer".to_string()),
-    );
-    provider_boundary.insert(
-        "supports_builtin_provider_path".to_string(),
-        Value::Bool(builtin_provider_path),
-    );
-    provider_boundary.insert(
-        "compatible_entry_required".to_string(),
-        Value::Bool(!requested_provider.is_empty() && !builtin_provider_path),
-    );
-    provider_boundary.insert(
-        "framework_core_provider_pinned".to_string(),
-        Value::Bool(false),
-    );
-    if !extras.is_empty() {
-        provider_boundary.insert("framework_model_extras".to_string(), Value::Object(extras));
-    }
-
-    value_object([
-        ("config", Value::Object(config)),
-        ("provider_boundary", Value::Object(provider_boundary)),
-    ])
-}
-
-fn compile_tool_approval_mapping(profile: &FrameworkProfileContract) -> Value {
-    value_object([
-        ("tool_policy", Value::Object(profile.tool_policy.clone())),
-        (
-            "approval_policy",
-            Value::Object(profile.approval_policy.clone()),
-        ),
-        (
-            "loadout_policy",
-            Value::Object(profile.loadout_policy.clone()),
-        ),
-        (
-            "event_map",
-            value_object([
-                (
-                    "request",
-                    Value::String("tool.approval.request".to_string()),
-                ),
-                (
-                    "approved",
-                    Value::String("tool.approval.approved".to_string()),
-                ),
-                ("denied", Value::String("tool.approval.denied".to_string())),
-            ]),
-        ),
     ])
 }
 
@@ -1725,24 +1215,16 @@ fn build_cli_family_host_adapter(
         complete_cli_host_adapter_payload(descriptor.host_id, inputs.host_adapter_payload.clone());
     payload.insert(
         HOST_ADAPTER_PAYLOAD_KEY.to_string(),
-        Value::Object(host_adapter_payload.clone()),
-    );
-    payload.insert(
-        LEGACY_HOST_PROJECTION_KEY.to_string(),
         Value::Object(host_adapter_payload),
     );
     payload.insert(
         "fallback_semantics".to_string(),
         value_object([
-            ("requires_aionrs", Value::Bool(false)),
             (
                 "preserves_core_capabilities",
                 string_array(&REQUIRED_CORE_CAPABILITIES),
             ),
-            (
-                "degrade_to",
-                Value::String("generic_host_adapter".to_string()),
-            ),
+            ("degrade_to", Value::Null),
             (
                 "shared_adapter",
                 Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
@@ -2196,15 +1678,11 @@ fn build_codex_desktop_adapter(
     payload.insert(
         "fallback_semantics".to_string(),
         value_object([
-            ("requires_aionrs", Value::Bool(false)),
             (
                 "preserves_core_capabilities",
                 string_array(&REQUIRED_CORE_CAPABILITIES),
             ),
-            (
-                "degrade_to",
-                Value::String("generic_host_adapter".to_string()),
-            ),
+            ("degrade_to", Value::Null),
             (
                 "shared_adapter",
                 Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
@@ -2258,15 +1736,11 @@ fn build_codex_cli_adapter(
     payload.insert(
         "fallback_semantics".to_string(),
         value_object([
-            ("requires_aionrs", Value::Bool(false)),
             (
                 "preserves_core_capabilities",
                 string_array(&REQUIRED_CORE_CAPABILITIES),
             ),
-            (
-                "degrade_to",
-                Value::String("generic_host_adapter".to_string()),
-            ),
+            ("degrade_to", Value::Null),
             (
                 "shared_adapter",
                 Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
@@ -2543,7 +2017,7 @@ fn build_cli_family_capability_discovery_entry(
         .get("execution_surface")
         .and_then(Value::as_object)
         .ok_or_else(|| format!("{} missing execution_surface", descriptor.adapter_id))?;
-    let host_projection = adapter_host_payload(adapter).map_err(|_| {
+    let host_adapter_payload = adapter_host_payload(adapter).map_err(|_| {
         format!(
             "{} missing {}",
             descriptor.adapter_id, HOST_ADAPTER_PAYLOAD_KEY
@@ -2610,10 +2084,6 @@ fn build_cli_family_capability_discovery_entry(
             .unwrap_or_else(|| Value::String(String::new())),
     );
     payload.insert(
-        "works_without_aionrs".to_string(),
-        Value::Bool(host_projection.get("host_cli").is_some()),
-    );
-    payload.insert(
         "available_host_capabilities".to_string(),
         Value::Array(available_host_capabilities),
     );
@@ -2668,7 +2138,7 @@ fn build_cli_family_capability_discovery_entry(
     ] {
         payload.insert(
             field.to_string(),
-            host_projection
+            host_adapter_payload
                 .get(field)
                 .cloned()
                 .unwrap_or_else(|| match field {
@@ -2741,7 +2211,7 @@ fn build_cli_family_snapshot_entry(adapter: &Map<String, Value>) -> Result<Value
         .get("execution_surface")
         .and_then(Value::as_object)
         .ok_or_else(|| "cli adapter missing execution_surface".to_string())?;
-    let host_projection = adapter_host_payload(adapter)?;
+    let host_adapter_payload = adapter_host_payload(adapter)?;
 
     Ok(value_object([
         (
@@ -2774,84 +2244,84 @@ fn build_cli_family_snapshot_entry(adapter: &Map<String, Value>) -> Result<Value
         ),
         (
             "context_files",
-            host_projection
+            host_adapter_payload
                 .get("context_files")
                 .cloned()
                 .unwrap_or_else(|| Value::Array(vec![])),
         ),
         (
             "config_root_env_var",
-            host_projection
+            host_adapter_payload
                 .get("config_root_env_var")
                 .cloned()
                 .unwrap_or(Value::Null),
         ),
         (
             "settings_paths",
-            host_projection
+            host_adapter_payload
                 .get("settings_paths")
                 .cloned()
                 .unwrap_or_else(|| Value::Array(vec![])),
         ),
         (
             "mcp_config_paths",
-            host_projection
+            host_adapter_payload
                 .get("mcp_config_paths")
                 .cloned()
                 .unwrap_or_else(|| Value::Array(vec![])),
         ),
         (
             "settings_scope_order",
-            host_projection
+            host_adapter_payload
                 .get("settings_scope_order")
                 .cloned()
                 .unwrap_or_else(|| Value::Array(vec![])),
         ),
         (
             "subagent_paths",
-            host_projection
+            host_adapter_payload
                 .get("subagent_paths")
                 .cloned()
                 .unwrap_or_else(|| Value::Array(vec![])),
         ),
         (
             "hook_event_names",
-            host_projection
+            host_adapter_payload
                 .get("hook_event_names")
                 .cloned()
                 .unwrap_or_else(|| Value::Array(vec![])),
         ),
         (
             "hook_control_settings",
-            host_projection
+            host_adapter_payload
                 .get("hook_control_settings")
                 .cloned()
                 .unwrap_or_else(|| Value::Array(vec![])),
         ),
         (
             "hook_inspection_commands",
-            host_projection
+            host_adapter_payload
                 .get("hook_inspection_commands")
                 .cloned()
                 .unwrap_or_else(|| Value::Array(vec![])),
         ),
         (
             "plugin_hook_manifest_paths",
-            host_projection
+            host_adapter_payload
                 .get("plugin_hook_manifest_paths")
                 .cloned()
                 .unwrap_or_else(|| Value::Array(vec![])),
         ),
         (
             "hook_environment_markers",
-            host_projection
+            host_adapter_payload
                 .get("hook_environment_markers")
                 .cloned()
                 .unwrap_or_else(|| Value::Array(vec![])),
         ),
         (
             "checkpointing_supported",
-            host_projection
+            host_adapter_payload
                 .get("checkpointing_supported")
                 .cloned()
                 .unwrap_or(Value::Bool(false)),
@@ -3597,7 +3067,7 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         Value::String("execution_kernel_live_fallback_retirement_status_v1".to_string()),
     );
     payload.insert(
-        "affected_host_projections".to_string(),
+        "affected_host_adapter_payloads".to_string(),
         Value::Array(vec![
             Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
             Value::String(CODEX_CLI_ADAPTER_ID.to_string()),
@@ -3651,274 +3121,6 @@ fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value
         "retirement_gates".to_string(),
         Value::Object(retirement_gates),
     );
-    payload
-}
-
-fn build_execution_kernel_live_response_serialization_contract() -> Map<String, Value> {
-    let steady_state_kernel_fields = vec![
-        Value::String("execution_kernel_metadata_schema_version".to_string()),
-        Value::String("execution_kernel".to_string()),
-        Value::String("execution_kernel_authority".to_string()),
-        Value::String("execution_kernel_contract_mode".to_string()),
-        Value::String("execution_kernel_fallback_policy".to_string()),
-        Value::String("execution_kernel_in_process_replacement_complete".to_string()),
-        Value::String("execution_kernel_delegate".to_string()),
-        Value::String("execution_kernel_delegate_authority".to_string()),
-        Value::String("execution_kernel_delegate_family".to_string()),
-        Value::String("execution_kernel_delegate_impl".to_string()),
-        Value::String("execution_kernel_live_primary".to_string()),
-        Value::String("execution_kernel_live_primary_authority".to_string()),
-        Value::String("execution_kernel_response_shape".to_string()),
-        Value::String("execution_kernel_prompt_preview_owner".to_string()),
-    ];
-    let mut live_primary_required_metadata_fields = steady_state_kernel_fields.clone();
-    live_primary_required_metadata_fields.extend(vec![
-        Value::String("run_id".to_string()),
-        Value::String("status".to_string()),
-        Value::String("execution_kernel_model_id_source".to_string()),
-        Value::String("trace_event_count".to_string()),
-        Value::String("trace_output_path".to_string()),
-    ]);
-    let mut dry_run_required_metadata_fields = steady_state_kernel_fields.clone();
-    dry_run_required_metadata_fields.extend(vec![
-        Value::String("reason".to_string()),
-        Value::String("execution_kernel_contract_mode".to_string()),
-        Value::String("execution_kernel_fallback_policy".to_string()),
-        Value::String("trace_event_count".to_string()),
-        Value::String("trace_output_path".to_string()),
-    ]);
-    let public_response_fields = Value::Array(vec![
-        Value::String("session_id".to_string()),
-        Value::String("user_id".to_string()),
-        Value::String("skill".to_string()),
-        Value::String("overlay".to_string()),
-        Value::String("live_run".to_string()),
-        Value::String("content".to_string()),
-        Value::String("usage".to_string()),
-        Value::String("prompt_preview".to_string()),
-        Value::String("model_id".to_string()),
-        Value::String("metadata".to_string()),
-    ]);
-    let usage_fields = Value::Array(vec![
-        Value::String("input_tokens".to_string()),
-        Value::String("output_tokens".to_string()),
-        Value::String("total_tokens".to_string()),
-        Value::String("mode".to_string()),
-    ]);
-
-    let mut usage_contract = Map::new();
-    usage_contract.insert("fields".to_string(), usage_fields);
-    usage_contract.insert("live_mode".to_string(), Value::String("live".to_string()));
-    usage_contract.insert(
-        "dry_run_mode".to_string(),
-        Value::String("estimated".to_string()),
-    );
-
-    let mut runtime_response_metadata_fields = Map::new();
-    runtime_response_metadata_fields.insert(
-        "shared".to_string(),
-        Value::Array(vec![
-            Value::String("trace_event_count".to_string()),
-            Value::String("trace_output_path".to_string()),
-        ]),
-    );
-    runtime_response_metadata_fields.insert(
-        "steady_state_kernel".to_string(),
-        Value::Array(steady_state_kernel_fields.clone()),
-    );
-    runtime_response_metadata_fields.insert(
-        "live_primary".to_string(),
-        Value::Array(vec![
-            Value::String("run_id".to_string()),
-            Value::String("status".to_string()),
-            Value::String("execution_mode".to_string()),
-            Value::String("route_engine".to_string()),
-            Value::String("diagnostic_route_mode".to_string()),
-            Value::String("execution_kernel_model_id_source".to_string()),
-        ]),
-    );
-    runtime_response_metadata_fields.insert(
-        "dry_run".to_string(),
-        Value::Array(vec![
-            Value::String("reason".to_string()),
-            Value::String("execution_kernel_contract_mode".to_string()),
-            Value::String("execution_kernel_fallback_policy".to_string()),
-        ]),
-    );
-
-    let mut current_contract_truth = Map::new();
-    current_contract_truth.insert(
-        "public_response_model".to_string(),
-        Value::String("RunTaskResponse".to_string()),
-    );
-    current_contract_truth.insert(
-        "execution_request_schema_version".to_string(),
-        Value::String("router-rs-execute-request-v1".to_string()),
-    );
-    current_contract_truth.insert(
-        "live_primary_schema_version".to_string(),
-        Value::String("router-rs-execute-response-v1".to_string()),
-    );
-    current_contract_truth.insert(
-        "steady_state_metadata_schema_version".to_string(),
-        Value::String("router-rs-execution-kernel-metadata-v1".to_string()),
-    );
-    current_contract_truth.insert(
-        "live_primary_prompt_preview_owner".to_string(),
-        Value::String("rust-execution-cli".to_string()),
-    );
-    current_contract_truth.insert(
-        "steady_state_response_shapes".to_string(),
-        json!(["live_primary", "dry_run"]),
-    );
-    current_contract_truth.insert(
-        "dry_run_prompt_preview_owner".to_string(),
-        Value::String("rust-execution-cli".to_string()),
-    );
-    current_contract_truth.insert(
-        "live_primary_model_id_source".to_string(),
-        Value::String("aggregator-response.model".to_string()),
-    );
-
-    let mut live_primary = Map::new();
-    live_primary.insert("live_run".to_string(), Value::Bool(true));
-    live_primary.insert("usage_mode".to_string(), Value::String("live".to_string()));
-    live_primary.insert(
-        "content_type".to_string(),
-        Value::String("string".to_string()),
-    );
-    live_primary.insert(
-        "prompt_preview_source".to_string(),
-        Value::String("rust-owned-live-prompt".to_string()),
-    );
-    live_primary.insert("model_id_present".to_string(), Value::Bool(true));
-    live_primary.insert(
-        "required_metadata_fields".to_string(),
-        Value::Array(live_primary_required_metadata_fields),
-    );
-    live_primary.insert(
-        "steady_state_metadata_fields".to_string(),
-        Value::Array(steady_state_kernel_fields.clone()),
-    );
-    live_primary.insert(
-        "pass_through_metadata_fields".to_string(),
-        Value::Array(vec![
-            Value::String("execution_mode".to_string()),
-            Value::String("route_engine".to_string()),
-            Value::String("diagnostic_route_mode".to_string()),
-        ]),
-    );
-
-    let mut dry_run = Map::new();
-    dry_run.insert("live_run".to_string(), Value::Bool(false));
-    dry_run.insert(
-        "usage_mode".to_string(),
-        Value::String("estimated".to_string()),
-    );
-    dry_run.insert(
-        "content_type".to_string(),
-        Value::String("string".to_string()),
-    );
-    dry_run.insert(
-        "prompt_preview_source".to_string(),
-        Value::String("rust-owned-dry-run-prompt".to_string()),
-    );
-    dry_run.insert("model_id_present".to_string(), Value::Bool(false));
-    dry_run.insert(
-        "required_metadata_fields".to_string(),
-        Value::Array(dry_run_required_metadata_fields),
-    );
-    dry_run.insert(
-        "steady_state_metadata_fields".to_string(),
-        Value::Array(steady_state_kernel_fields),
-    );
-    dry_run.insert("fallback_reason_present".to_string(), Value::Bool(false));
-
-    let mut current_response_shape_truth = Map::new();
-    current_response_shape_truth.insert("live_primary".to_string(), Value::Object(live_primary));
-    current_response_shape_truth.insert("dry_run".to_string(), Value::Object(dry_run));
-
-    let mut retirement_gates = Map::new();
-    retirement_gates.insert(
-        "response_shape_contract_externalized".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "live_primary_response_contract_externalized".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "compatibility_live_response_serialization_still_native_owned".to_string(),
-        Value::Bool(false),
-    );
-    retirement_gates.insert(
-        "compatibility_live_response_serialization_still_python_owned".to_string(),
-        Value::Bool(false),
-    );
-    retirement_gates.insert(
-        "runtime_control_flow_change_required_for_removal".to_string(),
-        Value::Bool(false),
-    );
-
-    let mut guardrails = Map::new();
-    guardrails.insert(
-        "thin_projection_boundary_preserved".to_string(),
-        Value::Bool(true),
-    );
-    guardrails.insert(
-        "cli_hosts_may_not_become_framework_truth".to_string(),
-        Value::Bool(true),
-    );
-    guardrails.insert(
-        "claude_host_runtime_semantics_remain_host_owned".to_string(),
-        Value::Bool(true),
-    );
-
-    let mut payload = Map::new();
-    payload.insert(
-        "framework_truth".to_string(),
-        Value::String("framework_core".to_string()),
-    );
-    payload.insert(
-        "status_contract".to_string(),
-        Value::String("execution_kernel_live_response_serialization_contract_v1".to_string()),
-    );
-    payload.insert(
-        "scope".to_string(),
-        Value::String("compatibility_live_response_serialization".to_string()),
-    );
-    payload.insert(
-        "artifact_role".to_string(),
-        Value::String("shared-contract-evidence".to_string()),
-    );
-    payload.insert(
-        "affected_host_projections".to_string(),
-        Value::Array(vec![
-            Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-            Value::String(CODEX_CLI_ADAPTER_ID.to_string()),
-            Value::String(CLAUDE_CODE_ADAPTER_ID.to_string()),
-            Value::String(GEMINI_CLI_ADAPTER_ID.to_string()),
-        ]),
-    );
-    payload.insert("public_response_fields".to_string(), public_response_fields);
-    payload.insert("usage_contract".to_string(), Value::Object(usage_contract));
-    payload.insert(
-        "runtime_response_metadata_fields".to_string(),
-        Value::Object(runtime_response_metadata_fields),
-    );
-    payload.insert(
-        "current_contract_truth".to_string(),
-        Value::Object(current_contract_truth),
-    );
-    payload.insert(
-        "current_response_shape_truth".to_string(),
-        Value::Object(current_response_shape_truth),
-    );
-    payload.insert(
-        "retirement_gates".to_string(),
-        Value::Object(retirement_gates),
-    );
-    payload.insert("guardrails".to_string(), Value::Object(guardrails));
     payload
 }
 
@@ -4029,7 +3231,7 @@ mod tests {
             "approval_policy": {"mode": "manual"},
             "loadout_policy": {"default": "portable"},
             "framework_surface_policy": {
-                "kernel": {"canonical_axes": ["routing", "memory", "continuity", "host_projection"]},
+                "kernel": {"canonical_axes": ["routing", "memory", "continuity", "host_adapter_payload"]},
                 "default_surface": {"default_loadouts": ["default_surface_loadout"]}
             },
             "artifact_contract": {"layout": "stable-v1"},
@@ -4041,16 +3243,10 @@ mod tests {
     }
 
     #[test]
-    fn profile_bundle_builds_companion_projection() {
+    fn profile_bundle_builds_first_class_rust_profile() {
         let bundle = build_profile_bundle(&sample_profile()).expect("bundle should build");
         assert_eq!(bundle.profile_id, "fusion-default");
         assert_eq!(bundle.capabilities.core.len(), 4);
-        assert_eq!(bundle.companion_projection.preset_rules.len(), 1);
-        assert_eq!(bundle.companion_projection.enabled_skills.len(), 2);
-        assert_eq!(
-            bundle.companion_projection.fallback_semantics["fallback_adapter"],
-            Value::String("codex_desktop_adapter".to_string())
-        );
         assert_eq!(
             bundle.cli_common_adapter["controller_boundary"]["shared_adapter"],
             Value::String("cli_common_adapter".to_string())
@@ -4072,20 +3268,14 @@ mod tests {
             .expect("parity contract object")
             .get("legacy_codex_common_adapter")
             .is_none());
+        assert!(bundle.claude_code_adapter.get("host_projection").is_none());
         assert_eq!(
-            bundle.claude_code_adapter["host_adapter_payload"],
-            bundle.claude_code_adapter["host_projection"]
-        );
-        assert_eq!(
-            bundle.claude_code_adapter["host_projection"]["context_files"],
+            bundle.claude_code_adapter["host_adapter_payload"]["context_files"],
             json!(["CLAUDE.md", "CLAUDE.local.md"])
         );
+        assert!(bundle.gemini_cli_adapter.get("host_projection").is_none());
         assert_eq!(
-            bundle.gemini_cli_adapter["host_adapter_payload"],
-            bundle.gemini_cli_adapter["host_projection"]
-        );
-        assert_eq!(
-            bundle.gemini_cli_adapter["host_projection"]["structured_output_modes"],
+            bundle.gemini_cli_adapter["host_adapter_payload"]["structured_output_modes"],
             json!(["json", "stream-json"])
         );
         assert_eq!(
@@ -4230,7 +3420,7 @@ mod tests {
     #[test]
     fn adapter_host_payload_requires_canonical_key() {
         let adapter = Map::from_iter([(
-            LEGACY_HOST_PROJECTION_KEY.to_string(),
+            "host_projection".to_string(),
             value_object([(
                 "context_files",
                 Value::Array(vec![Value::String("CLAUDE.md".to_string())]),
@@ -4467,20 +3657,18 @@ mod tests {
             artifacts["codex_common_adapter"]["metadata"]["adapter_alias_of"],
             Value::String("cli_common_adapter".to_string())
         );
+        assert!(artifacts["claude_code_adapter"]
+            .get("host_projection")
+            .is_none());
         assert_eq!(
-            artifacts["claude_code_adapter"]["host_adapter_payload"],
-            artifacts["claude_code_adapter"]["host_projection"]
-        );
-        assert_eq!(
-            artifacts["claude_code_adapter"]["host_projection"]["context_files"],
+            artifacts["claude_code_adapter"]["host_adapter_payload"]["context_files"],
             json!(["CLAUDE.md", "CLAUDE.local.md"])
         );
+        assert!(artifacts["gemini_cli_adapter"]
+            .get("host_projection")
+            .is_none());
         assert_eq!(
-            artifacts["gemini_cli_adapter"]["host_adapter_payload"],
-            artifacts["gemini_cli_adapter"]["host_projection"]
-        );
-        assert_eq!(
-            artifacts["gemini_cli_adapter"]["host_projection"]["structured_output_modes"],
+            artifacts["gemini_cli_adapter"]["host_adapter_payload"]["structured_output_modes"],
             json!(["json", "stream-json"])
         );
         assert_eq!(
@@ -4620,12 +3808,11 @@ mod tests {
             artifacts["codex_cli_adapter"]["execution_surface"]["entrypoint_kind"],
             Value::String("headless".to_string())
         );
+        assert!(artifacts["claude_code_adapter"]
+            .get("host_projection")
+            .is_none());
         assert_eq!(
-            artifacts["claude_code_adapter"]["host_adapter_payload"],
-            artifacts["claude_code_adapter"]["host_projection"]
-        );
-        assert_eq!(
-            artifacts["claude_code_adapter"]["host_projection"]["settings_paths"],
+            artifacts["claude_code_adapter"]["host_adapter_payload"]["settings_paths"],
             json!([
                 "~/.claude/settings.json",
                 ".claude/settings.json",
@@ -4692,7 +3879,7 @@ mod tests {
         let mut profile = sample_profile();
         profile.host_family = "aionrs".to_string();
         let error = build_profile_bundle(&profile).expect_err("should reject pinned host family");
-        assert!(error.contains("must not be pinned directly to aionrs"));
+        assert!(error.contains("must not be pinned to retired host family"));
     }
 
     #[test]

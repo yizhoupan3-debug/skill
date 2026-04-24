@@ -315,7 +315,7 @@ const TERMINAL_VERIFICATION_STATUSES: [&str; 6] = [
 ];
 
 const CLAUDE_SETTINGS_SCHEMA_URL: &str = "https://json.schemastore.org/claude-code-settings.json";
-const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 20] = [
+const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 18] = [
     "Bash(ls)",
     "Bash(pwd)",
     "Bash(rg *)",
@@ -334,8 +334,6 @@ const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 20] = [
     "Bash(*scripts/router-rs/target/debug/router-rs *)",
     "Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)",
     "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
-    "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
-    "Bash(bash ./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
 ];
 
 pub fn build_claude_hook_manifest() -> Value {

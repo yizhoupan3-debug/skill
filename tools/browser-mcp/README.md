@@ -45,7 +45,7 @@ npm run test    # run vitest integration tests
 
 ### stdio (default)
 ```bash
-node dist/index.js
+node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js
 # Flags: --headless true|false  --engine chromium|firefox|webkit  --capture-body
 #        --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json|.../ATTACHED_RUNTIME_EVENT_HANDOFF.json|.../TRACE_RESUME_MANIFEST.json|.../runtime_event_transports/session__job.json
 #        --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
@@ -56,7 +56,7 @@ node dist/index.js
 
 ### HTTP (Streamable HTTP transport)
 ```bash
-node dist/index.js --transport http --port 3721
+node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js --transport http --port 3721
 ```
 
 ## Codex integration
@@ -65,12 +65,12 @@ node dist/index.js --transport http --port 3721
 python3 /Users/joe/Documents/skill/scripts/install_browser_mcp_codex.py
 ```
 
-Adds a `browser-mcp` stdio entry to `/Users/joe/.codex/config.toml`. Restart Codex after updating.
+Adds a `browser-mcp` stdio entry that launches the prebuilt `dist/index.js` directly. Restart Codex after updating.
 
 ### Smoke test
 
 ```bash
-/Users/joe/Documents/skill/tools/browser-mcp/scripts/start_browser_mcp.sh
+node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js
 ```
 
 ### Routing
@@ -83,7 +83,7 @@ The Playwright skill CLI flow is the fallback when the MCP server is unavailable
 Disabled by default to keep token usage low. Enable via:
 
 ```bash
-node dist/index.js --capture-body
+node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js --capture-body
 # or in BrowserRuntime: new BrowserRuntime({ captureBody: true })
 ```
 
@@ -95,9 +95,9 @@ If you already have a Rust-first runtime attach descriptor, browser-mcp can
 consume it directly for self-inspection:
 
 ```bash
-node dist/index.js --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
+node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
 # or
-BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH=/abs/path/runtime-attach-descriptor.json node dist/index.js
+BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH=/abs/path/runtime-attach-descriptor.json node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js
 ```
 
 `--runtime-attach-artifact-path` is the preferred Rust-first entrypoint. The
@@ -121,11 +121,6 @@ through that same attach descriptor; replay results now include a lighter
 `replayContext` mirror so consumers can read attach provenance without
 re-parsing the full diagnostics block.
 
-If you do not pass an explicit runtime attach input, the bundled
-`start_browser_mcp.sh` launcher now auto-discovers the newest replay-capable
-runtime attach input under `framework_runtime/artifacts/scratch/`. It now
-keeps checkpoint resume manifests as canonical attach artifacts when they are
-the freshest recovery anchor, falls back to transport binding artifacts when
-needed, and also resolves sqlite-backed logical attach paths by reading
-`runtime_checkpoint_store.sqlite3` when the binding JSON does not exist as a
-local file.
+The legacy `start_browser_mcp.sh` launcher is now only a no-build compatibility
+wrapper around `dist/index.js`; steady-state MCP config should call Node
+directly so startup never runs package installation or TypeScript compilation.

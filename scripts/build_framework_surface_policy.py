@@ -14,7 +14,7 @@ LOADOUTS_PATH = ROOT / "skills" / "SKILL_LOADOUTS.json"
 TIERS_PATH = ROOT / "skills" / "SKILL_TIERS.json"
 OUTPUT_PATH = ROOT / "configs" / "framework" / "FRAMEWORK_SURFACE_POLICY.json"
 
-KERNEL_AXES = ["routing", "memory", "continuity", "host_projection"]
+KERNEL_AXES = ["routing", "memory", "continuity", "host_adapter_payload"]
 SOURCE_ROOTS = [
     "framework_runtime/src/",
     "scripts/",
@@ -120,7 +120,7 @@ def build_framework_surface_policy(
         "schema_version": "framework-surface-policy-v1",
         "kernel": {
             "canonical_axes": KERNEL_AXES,
-            "policy": "Keep only routing, memory, continuity, and host projection on the mainline; everything else is an opt-in capability.",
+            "policy": "Keep only routing, memory, continuity, and host adapter payload on the mainline; everything else is an opt-in capability.",
         },
         "migration_guardrails": {
             "preserve_rust_runtime_authority": True,
@@ -148,7 +148,7 @@ def build_framework_surface_policy(
             "session_artifact_roots": SESSION_ARTIFACT_ROOTS,
             "rules": [
                 "Do not mix compiled outputs or scratch runs back into source roots.",
-                "Generated routing and host projection artifacts remain replaceable outputs, not authoring sources of truth.",
+                "Generated routing and host adapter payload artifacts remain replaceable outputs, not authoring sources of truth.",
                 "Session continuity stays under root mirrors plus artifacts/current and must not drift into random repo folders.",
             ],
         },

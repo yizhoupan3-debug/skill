@@ -28,19 +28,16 @@ except ImportError:  # pragma: no cover - optional host probe dependency.
 from framework_runtime.checkpoint_store import RuntimeCheckpointer
 from framework_runtime.config import RuntimeSettings
 from framework_runtime.execution_kernel_contracts import (
-    EXECUTION_KERNEL_AUTHORITY,
-    EXECUTION_KERNEL_KIND,
     EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
     EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
     EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
     execution_kernel_steady_state_fields,
     normalize_execution_kernel_metadata_contract,
-    resolve_execution_kernel_expectations,
-    validate_execution_kernel_steady_state_metadata,
 )
 from framework_runtime.memory import FactMemoryStore
 from framework_runtime.middleware import MiddlewareContext
 from framework_runtime.observability import build_runtime_observability_health_snapshot
+from framework_runtime.paths import default_codex_home
 from framework_runtime.rust_router import RustRouteAdapter
 from framework_runtime.schemas import (
     BackgroundBatchEnqueueResponse,
@@ -153,6 +150,10 @@ def _runtime_control_plane_service_descriptor(
         return {}
     services = control_plane_descriptor.get("services")
     if not isinstance(services, Mapping):
+        control_plane = control_plane_descriptor.get("control_plane")
+        if isinstance(control_plane, Mapping):
+            services = control_plane.get("services")
+    if not isinstance(services, Mapping):
         return {}
     service = services.get(service_name)
     if not isinstance(service, Mapping):
@@ -166,6 +167,10 @@ def _runtime_control_plane_rustification_status(
     if not isinstance(control_plane_descriptor, Mapping):
         return {}
     status = control_plane_descriptor.get("rustification_status")
+    if not isinstance(status, Mapping):
+        control_plane = control_plane_descriptor.get("control_plane")
+        if isinstance(control_plane, Mapping):
+            status = control_plane.get("rustification_status")
     if not isinstance(status, Mapping):
         return {}
     return dict(status)
@@ -203,10 +208,8 @@ def _runtime_execution_kernel_contract(
         contract = service_descriptor.get("kernel_contract")
     if not isinstance(contract, Mapping):
         raise RuntimeError("runtime control plane execution descriptor is missing kernel_contract.")
-    return validate_execution_kernel_steady_state_metadata(
-        metadata=contract,
-        execution_kernel=EXECUTION_KERNEL_KIND,
-        execution_kernel_authority=EXECUTION_KERNEL_AUTHORITY,
+    return RustRouteAdapter(default_codex_home()).normalize_execution_kernel_contract(
+        kernel_contract=contract,
         response_shape=resolved_response_shape,
     )
 
@@ -341,11 +344,17 @@ def _runtime_host_contract(control_plane_descriptor: Mapping[str, Any] | None) -
     }
     if not isinstance(control_plane_descriptor, Mapping):
         return payload
-    payload["authority"] = control_plane_descriptor.get("authority", payload["authority"])
+    control_plane = control_plane_descriptor.get("control_plane")
+    resolved_control_plane = control_plane if isinstance(control_plane, Mapping) else control_plane_descriptor
+    payload["authority"] = resolved_control_plane.get("authority", payload["authority"])
     runtime_host = control_plane_descriptor.get("runtime_host")
+    if not isinstance(runtime_host, Mapping) and isinstance(resolved_control_plane, Mapping):
+        runtime_host = resolved_control_plane.get("runtime_host")
     if isinstance(runtime_host, Mapping):
         payload.update(dict(runtime_host))
     services = control_plane_descriptor.get("services")
+    if not isinstance(services, Mapping) and isinstance(resolved_control_plane, Mapping):
+        services = resolved_control_plane.get("services")
     if isinstance(services, Mapping):
         payload["rust_owned_service_count"] = len(
             [
@@ -392,8 +401,10 @@ def _runtime_background_effect_host_contract(
 
     rustification_status = _runtime_control_plane_rustification_status(control_plane_descriptor)
     if isinstance(control_plane_descriptor, Mapping):
-        runtime_control_plane_authority = control_plane_descriptor.get("authority")
-        runtime_control_plane_schema_version = control_plane_descriptor.get("schema_version")
+        control_plane = control_plane_descriptor.get("control_plane")
+        resolved_control_plane = control_plane if isinstance(control_plane, Mapping) else control_plane_descriptor
+        runtime_control_plane_authority = resolved_control_plane.get("authority")
+        runtime_control_plane_schema_version = resolved_control_plane.get("schema_version")
     else:
         runtime_control_plane_authority = None
         runtime_control_plane_schema_version = None
@@ -625,15 +636,102 @@ class SandboxLifecycleService:
         """Admit one execution into the sandbox state machine and enforce its contract."""
 
         record = self._acquire_record(request)
-        self._validate_policy(request, record)
-        self._validate_budget(request.sandbox_budget, record=record, request=request)
-        self._transition(record, "busy", event_kind="sandbox.execution_started", request=request)
+        admission = self._rust_adapter.sandbox_control(
+            {
+                "schema_version": self.schema_version,
+                "operation": "admit",
+                "current_state": record.state,
+                "capability_categories": list(request.sandbox_policy.capability_categories),
+                "tool_category": request.sandbox_tool_category,
+                "dedicated_profile": request.sandbox_policy.dedicated_profile,
+                "budget_cpu": request.sandbox_budget.cpu,
+                "budget_memory": request.sandbox_budget.memory,
+                "budget_wall_clock": request.sandbox_budget.wall_clock,
+                "budget_output_size": request.sandbox_budget.output_size,
+            }
+        )
+        if not bool(admission.get("allowed")):
+            resolved_state = str(admission.get("resolved_state") or "failed")
+            failure_reason = str(
+                admission.get("failure_reason")
+                or admission.get("error")
+                or "sandbox_admission_denied"
+            )
+            budget_violation = admission.get("budget_violation")
+            record.state = resolved_state
+            record.last_event_at = _now_iso()
+            record.quarantined = bool(admission.get("quarantined"))
+            record.last_failure_reason = failure_reason
+            record.last_budget_violation = (
+                str(budget_violation) if budget_violation is not None else None
+            )
+            self._record_event(
+                record,
+                event_kind=str(admission.get("event_kind") or "sandbox.failed"),
+                request=request,
+                detail={
+                    "failure_reason": failure_reason,
+                    **(
+                        {"budget_violation": str(budget_violation)}
+                        if budget_violation is not None
+                        else {}
+                    ),
+                },
+            )
+            if failure_reason.startswith("budget_"):
+                raise SandboxBudgetExceeded(failure_reason)
+            raise SandboxCapabilityViolation(failure_reason)
+        record.state = str(admission.get("resolved_state") or "busy")
+        record.last_event_at = _now_iso()
+        self._record_event(
+            record,
+            event_kind=str(admission.get("event_kind") or "sandbox.execution_started"),
+            request=request,
+        )
         usage_before = self._usage_snapshot()
         started_at = asyncio.get_running_loop().time()
         try:
             response = await executor(request)
         except Exception as error:
-            self._handle_execution_failure(record, request=request, error=error)
+            error_kind = (
+                "wall_clock_exceeded"
+                if isinstance(error, (TimeoutError, asyncio.TimeoutError))
+                else f"execution_failed:{type(error).__name__}"
+            )
+            failure = self._rust_adapter.sandbox_control(
+                {
+                    "schema_version": self.schema_version,
+                    "operation": "execution_result",
+                    "current_state": record.state,
+                    "error_kind": error_kind,
+                }
+            )
+            if not bool(failure.get("allowed")):
+                raise SandboxLifecycleError(
+                    str(
+                        failure.get("error")
+                        or f"invalid sandbox execution-result state: {record.state!r}"
+                    )
+                ) from error
+            record.state = str(failure.get("resolved_state") or "failed")
+            record.last_event_at = _now_iso()
+            record.quarantined = bool(failure.get("quarantined"))
+            record.last_failure_reason = str(
+                failure.get("failure_reason") or failure.get("error") or error_kind
+            )
+            record.last_budget_violation = (
+                str(failure.get("budget_violation"))
+                if failure.get("budget_violation") is not None
+                else None
+            )
+            self._record_event(
+                record,
+                event_kind=str(failure.get("event_kind") or "sandbox.failed"),
+                request=request,
+                detail={"failure_reason": record.last_failure_reason},
+            )
+            if bool(failure.get("cleanup_required")):
+                self._schedule_cleanup(record)
             raise
 
         runtime_probe = self._build_runtime_probe(
@@ -642,28 +740,63 @@ class SandboxLifecycleService:
             started_at=started_at,
             usage_before=usage_before,
         )
-        violation = self._detect_budget_violation(request.sandbox_budget, runtime_probe)
-        if violation is not None:
-            record.last_failure_reason = violation
-            record.last_budget_violation = violation
-            self._transition(
-                record,
-                "draining",
-                event_kind="sandbox.budget_exceeded",
-                request=request,
-                detail={"failure_reason": violation, "runtime_probe": runtime_probe.to_metadata()},
-            )
-            self._schedule_cleanup(record)
-            raise SandboxBudgetExceeded(violation)
-
-        self._transition(
-            record,
-            "draining",
-            event_kind="sandbox.execution_completed",
-            request=request,
-            detail={"runtime_probe": runtime_probe.to_metadata()},
+        execution_result = self._rust_adapter.sandbox_control(
+            {
+                "schema_version": self.schema_version,
+                "operation": "execution_result",
+                "current_state": record.state,
+                "budget_cpu": request.sandbox_budget.cpu,
+                "budget_memory": request.sandbox_budget.memory,
+                "budget_wall_clock": request.sandbox_budget.wall_clock,
+                "budget_output_size": request.sandbox_budget.output_size,
+                "probe_cpu": runtime_probe.cpu,
+                "probe_memory": runtime_probe.memory,
+                "probe_wall_clock": runtime_probe.wall_clock,
+                "probe_output_size": runtime_probe.output_size,
+            }
         )
-        self._schedule_cleanup(record)
+        if not bool(execution_result.get("allowed")):
+            raise SandboxLifecycleError(
+                str(
+                    execution_result.get("error")
+                    or f"invalid sandbox execution-result state: {record.state!r}"
+                )
+            )
+        record.state = str(execution_result.get("resolved_state") or "draining")
+        record.last_event_at = _now_iso()
+        record.quarantined = bool(execution_result.get("quarantined"))
+        record.last_failure_reason = (
+            str(execution_result.get("failure_reason"))
+            if execution_result.get("failure_reason") is not None
+            else None
+        )
+        record.last_budget_violation = (
+            str(execution_result.get("budget_violation"))
+            if execution_result.get("budget_violation") is not None
+            else None
+        )
+        self._record_event(
+            record,
+            event_kind=str(execution_result.get("event_kind") or "sandbox.execution_completed"),
+            request=request,
+            detail={
+                "runtime_probe": runtime_probe.to_metadata(),
+                **(
+                    {"failure_reason": record.last_failure_reason}
+                    if record.last_failure_reason is not None
+                    else {}
+                ),
+                **(
+                    {"budget_violation": record.last_budget_violation}
+                    if record.last_budget_violation is not None
+                    else {}
+                ),
+            },
+        )
+        if bool(execution_result.get("cleanup_required")):
+            self._schedule_cleanup(record)
+        if record.last_budget_violation is not None:
+            raise SandboxBudgetExceeded(record.last_budget_violation)
         response.metadata.update(
             {
                 "sandbox_schema_version": self.schema_version,
@@ -792,51 +925,6 @@ class SandboxLifecycleService:
             and record.policy.reusable == policy.reusable
         )
 
-    def _validate_policy(self, request: ExecutionKernelRequest, record: _SandboxRecord) -> None:
-        categories = tuple(request.sandbox_policy.capability_categories)
-        if not categories:
-            self._mark_failed(
-                record,
-                request=request,
-                reason="policy_violation:missing_capability_declaration",
-            )
-            raise SandboxCapabilityViolation("policy_violation:missing_capability_declaration")
-        for category in categories:
-            if category not in self._capability_categories:
-                reason = f"policy_violation:unknown_capability:{category}"
-                self._mark_failed(record, request=request, reason=reason)
-                raise SandboxCapabilityViolation(reason)
-        if request.sandbox_tool_category not in self._capability_categories:
-            reason = f"policy_violation:unknown_tool_category:{request.sandbox_tool_category}"
-            self._mark_failed(record, request=request, reason=reason)
-            raise SandboxCapabilityViolation(reason)
-        if request.sandbox_tool_category not in categories:
-            reason = f"policy_violation:capability_denied:{request.sandbox_tool_category}"
-            self._mark_failed(record, request=request, reason=reason)
-            raise SandboxCapabilityViolation(reason)
-        if request.sandbox_tool_category == "high_risk" and not request.sandbox_policy.dedicated_profile:
-            reason = "policy_violation:high_risk_requires_dedicated_profile"
-            self._mark_failed(record, request=request, reason=reason)
-            raise SandboxCapabilityViolation(reason)
-
-    def _validate_budget(
-        self,
-        budget: SandboxResourceBudget,
-        *,
-        record: _SandboxRecord,
-        request: ExecutionKernelRequest,
-    ) -> None:
-        for dimension, value in (
-            ("cpu", budget.cpu),
-            ("memory", budget.memory),
-            ("wall_clock", budget.wall_clock),
-            ("output_size", budget.output_size),
-        ):
-            if value <= 0:
-                reason = f"budget_admission_failed:{dimension}_non_positive"
-                self._mark_failed(record, request=request, reason=reason)
-                raise SandboxBudgetExceeded(reason)
-
     def _build_runtime_probe(
         self,
         *,
@@ -867,52 +955,6 @@ class SandboxLifecycleService:
             wall_clock=probe.wall_clock if probe is not None and probe.wall_clock is not None else elapsed,
             output_size=probe.output_size if probe is not None and probe.output_size is not None else output_size,
             source=probe.source if probe is not None else "host-runtime-rusage",
-        )
-
-    @staticmethod
-    def _detect_budget_violation(
-        budget: SandboxResourceBudget,
-        probe: SandboxRuntimeProbe,
-    ) -> str | None:
-        for dimension, limit, observed in (
-            ("cpu", budget.cpu, probe.cpu),
-            ("memory", budget.memory, probe.memory),
-            ("wall_clock", budget.wall_clock, probe.wall_clock),
-            ("output_size", budget.output_size, probe.output_size),
-        ):
-            if observed is not None and observed > limit:
-                return f"{dimension}_exceeded"
-        return None
-
-    def _handle_execution_failure(
-        self,
-        record: _SandboxRecord,
-        *,
-        request: ExecutionKernelRequest,
-        error: Exception,
-    ) -> None:
-        if isinstance(error, (TimeoutError, asyncio.TimeoutError)):
-            record.last_failure_reason = "wall_clock_exceeded"
-            self._transition(
-                record,
-                "draining",
-                event_kind="sandbox.timeout",
-                request=request,
-                detail={"failure_reason": record.last_failure_reason},
-            )
-            self._schedule_cleanup(record)
-            return
-        self._mark_failed(record, request=request, reason=f"execution_failed:{type(error).__name__}")
-
-    def _mark_failed(self, record: _SandboxRecord, *, request: ExecutionKernelRequest, reason: str) -> None:
-        record.last_failure_reason = reason
-        record.quarantined = True
-        self._transition(
-            record,
-            "failed",
-            event_kind="sandbox.failed",
-            request=request,
-            detail={"failure_reason": reason},
         )
 
     def _schedule_cleanup(self, record: _SandboxRecord) -> None:
@@ -1037,7 +1079,9 @@ class RouterService:
             settings.codex_home,
             timeout_seconds=settings.rust_router_timeout_seconds,
         )
-        self.control_plane_descriptor = self._rust_adapter.runtime_control_plane()
+        integrator = self._rust_adapter.runtime_integrator()
+        self.control_plane_descriptor = dict(integrator.get("control_plane") or {})
+        self._runtime_integrator_descriptor = integrator
         self.skills = []
         self._last_route_report: RouteDiagnosticReport | None = None
         self._route_policy: RouteExecutionPolicy | None = None
@@ -1055,7 +1099,9 @@ class RouterService:
     def reload(self) -> None:
         """Refresh runtime skill metadata and the Rust-owned route policy."""
 
-        self.control_plane_descriptor = self._rust_adapter.runtime_control_plane()
+        integrator = self._rust_adapter.runtime_integrator()
+        self.control_plane_descriptor = dict(integrator.get("control_plane") or {})
+        self._runtime_integrator_descriptor = integrator
         self.skills = self.loader.load(
             refresh=True,
             load_bodies=not self.settings.progressive_skill_loading,
@@ -1091,7 +1137,7 @@ class RouterService:
 
         policy = self._resolve_route_policy()
         service_descriptor = _runtime_control_plane_service_descriptor(
-            self.control_plane_descriptor,
+            self._runtime_integrator_descriptor,
             "router",
         )
         payload = _runtime_service_health_projection(
@@ -1802,23 +1848,19 @@ class ExecutionEnvironmentService:
                         + ", ".join(sorted(missing_fields))
                     )
             if steady_state_fields:
-                # Steady-state kernel identity remains Rust-contract-owned; runtime metadata
-                # may vary on family/impl details, but it may not rename the kernel itself.
-                expectations = resolve_execution_kernel_expectations(kernel_contract)
-                validated_metadata = validate_execution_kernel_steady_state_metadata(
-                    metadata=metadata,
-                    execution_kernel=expectations["execution_kernel"],
-                    execution_kernel_authority=expectations["execution_kernel_authority"],
-                    execution_kernel_delegate=expectations["execution_kernel_delegate"],
-                    execution_kernel_delegate_authority=expectations[
-                        "execution_kernel_delegate_authority"
-                    ],
+                validated_metadata = self._rust_adapter.normalize_execution_kernel_contract(
+                    kernel_contract=kernel_contract,
                     response_shape=str(
                         metadata.get(
                             EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY,
                             payload[EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY],
                         )
                     ),
+                )
+                validated_metadata = self._rust_adapter.validate_execution_kernel_steady_state_metadata(
+                    metadata=metadata,
+                    kernel_contract=validated_metadata,
+                    response_shape=str(validated_metadata[EXECUTION_KERNEL_RESPONSE_SHAPE_METADATA_KEY]),
                 )
                 for field in contract_fields:
                     payload[field] = validated_metadata[field]

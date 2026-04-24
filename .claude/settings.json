@@ -533,9 +533,7 @@
       "Bash(*scripts/router-rs/target/release/router-rs *)",
       "Bash(*scripts/router-rs/target/debug/router-rs *)",
       "Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)",
-      "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
-      "Bash(./tools/browser-mcp/scripts/start_browser_mcp.sh *)",
-      "Bash(bash ./tools/browser-mcp/scripts/start_browser_mcp.sh *)"
+      "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)"
     ]
   }
 }

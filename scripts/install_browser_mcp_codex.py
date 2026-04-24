@@ -22,11 +22,13 @@ def build_server_block(repo_root: Path) -> str:
         str: TOML block ready to append to the Codex config.
     """
 
-    command_path = repo_root / "tools" / "browser-mcp" / "scripts" / "start_browser_mcp.sh"
+    command_path = repo_root / "tools" / "browser-mcp" / "dist" / "index.js"
     return "\n".join(
         [
             "[mcp_servers.browser-mcp]",
-            f'command = "{command_path}"',
+            'command = "node"',
+            f'args = ["{command_path}"]',
+            f'cwd = "{repo_root / "tools" / "browser-mcp"}"',
         ]
     )
 

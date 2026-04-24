@@ -20,11 +20,11 @@ from pydantic import ValidationError
 from framework_runtime.config import RuntimeSettings
 from framework_runtime.execution_kernel_contracts import (
     EXECUTION_KERNEL_REQUEST_SCHEMA_VERSION,
+    EXECUTION_KERNEL_RESPONSE_SCHEMA_VERSION,
     EXECUTION_KERNEL_RESPONSE_SHAPE_DRY_RUN,
     EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY,
-    decode_router_rs_execution_response,
-    resolve_execution_kernel_expectations,
-    validate_execution_kernel_steady_state_metadata,
+    execution_contract_bundle,
+    execution_kernel_response_model_validate,
 )
 from framework_runtime.schemas import (
     ExecutionKernelRequest,
@@ -50,6 +50,21 @@ class RouterRsExecutionError(RuntimeError):
 
 class RouterRsInfrastructureError(RouterRsExecutionError):
     """Router-rs failed before a valid execution result could be produced."""
+
+
+def _runtime_integrator_service_descriptor(
+    runtime_integrator: Mapping[str, Any] | None,
+    service_name: str,
+) -> dict[str, Any]:
+    if not isinstance(runtime_integrator, Mapping):
+        return {}
+    services = runtime_integrator.get("services")
+    if not isinstance(services, Mapping):
+        return {}
+    service = services.get(service_name)
+    if not isinstance(service, Mapping):
+        return {}
+    return dict(service)
 
 
 def _resolve_binary_candidate(*candidates: Path) -> Path | None:
@@ -90,6 +105,16 @@ def _load_json_object_from_file(path: Path, *, source: str) -> dict[str, Any]:
         return _load_json_object(path.read_text(encoding="utf-8"), source=source)
     except OSError as exc:
         raise RuntimeError(f"{source}: failed reading {path}") from exc
+
+
+def _expect_json_object(
+    payload: Mapping[str, Any] | Any,
+    *,
+    context: str,
+) -> dict[str, Any]:
+    if not isinstance(payload, Mapping):
+        raise RuntimeError(f"{context} returned a non-object payload: {payload!r}")
+    return dict(payload)
 
 
 def discover_codex_home(start_path: Path) -> Path:
@@ -510,6 +535,8 @@ class RustRouteAdapter:
     route_snapshot_schema_version = "router-rs-route-snapshot-v1"
     route_report_schema_version = "router-rs-route-report-v2"
     runtime_storage_schema_version = "router-rs-runtime-storage-v1"
+    runtime_integrator_schema_version = "router-rs-runtime-integrator-v1"
+    runtime_checkpoint_control_plane_schema_version = "router-rs-runtime-checkpoint-control-plane-v1"
     runtime_control_plane_schema_version = "router-rs-runtime-control-plane-v1"
     sandbox_control_schema_version = "router-rs-sandbox-control-v1"
     background_control_schema_version = "router-rs-background-control-v1"
@@ -519,14 +546,17 @@ class RustRouteAdapter:
     transport_binding_write_schema_version = "router-rs-transport-binding-write-v1"
     checkpoint_manifest_write_schema_version = "router-rs-checkpoint-manifest-write-v1"
     attached_runtime_event_transport_authority = "rust-runtime-attached-event-transport"
+    trace_record_event_schema_version = "router-rs-trace-record-event-v1"
     trace_stream_replay_schema_version = "router-rs-trace-stream-replay-v1"
     trace_stream_inspect_schema_version = "router-rs-trace-stream-inspect-v1"
+    trace_compact_schema_version = "runtime-trace-compaction-result-v1"
     trace_compaction_delta_write_schema_version = "router-rs-trace-compaction-delta-write-v1"
     trace_metadata_write_schema_version = "router-rs-trace-metadata-write-v1"
     runtime_observability_exporter_schema_version = "runtime-observability-exporter-v1"
     runtime_observability_metric_catalog_schema_version = "runtime-observability-metric-catalog-v1"
     runtime_observability_metric_record_schema_version = "runtime-observability-metric-record-v1"
     runtime_observability_dashboard_schema_version = "runtime-observability-dashboard-v1"
+    runtime_observability_health_snapshot_schema_version = "runtime-observability-health-snapshot-v1"
     framework_runtime_snapshot_schema_version = "router-rs-framework-runtime-snapshot-v1"
     framework_contract_summary_schema_version = "router-rs-framework-contract-summary-v1"
     framework_memory_recall_schema_version = "router-rs-framework-memory-recall-v1"
@@ -539,8 +569,12 @@ class RustRouteAdapter:
     routing_eval_schema_version = "routing-eval-v1"
     route_authority = ROUTE_AUTHORITY
     execution_authority = "rust-execution-cli"
+    execution_contract_bundle_schema_version = "router-rs-execution-kernel-contract-bundle-v1"
+    execution_contract_authority = "rust-execution-kernel-authority"
     compile_authority = ROUTE_COMPILE_AUTHORITY
+    runtime_integrator_authority = "rust-runtime-integrator"
     runtime_control_plane_authority = "rust-runtime-control-plane"
+    runtime_checkpoint_control_plane_authority = "rust-runtime-checkpoint-control-plane"
     sandbox_control_authority = "rust-sandbox-control"
     background_control_authority = "rust-background-control"
     background_state_store_authority = "rust-background-state-store"
@@ -667,13 +701,8 @@ class RustRouteAdapter:
             else EXECUTION_KERNEL_RESPONSE_SHAPE_LIVE_PRIMARY
         )
         if resolved_contract is not None:
-            expectations = resolve_execution_kernel_expectations(resolved_contract)
-            return validate_execution_kernel_steady_state_metadata(
-                metadata=resolved_contract,
-                execution_kernel=expectations["execution_kernel"],
-                execution_kernel_authority=expectations["execution_kernel_authority"],
-                execution_kernel_delegate=expectations["execution_kernel_delegate"],
-                execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
+            return self.normalize_execution_kernel_contract(
+                kernel_contract=resolved_contract,
                 response_shape=response_shape,
             )
 
@@ -696,13 +725,8 @@ class RustRouteAdapter:
                 "runtime control plane execution descriptor is missing "
                 f"kernel_contract_by_mode.{response_shape}."
             )
-        expectations = resolve_execution_kernel_expectations(contract_payload)
-        return validate_execution_kernel_steady_state_metadata(
-            metadata=contract_payload,
-            execution_kernel=expectations["execution_kernel"],
-            execution_kernel_authority=expectations["execution_kernel_authority"],
-            execution_kernel_delegate=expectations["execution_kernel_delegate"],
-            execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
+        return self.normalize_execution_kernel_contract(
+            kernel_contract=contract_payload,
             response_shape=response_shape,
         )
 
@@ -721,15 +745,10 @@ class RustRouteAdapter:
             dry_run=dry_run,
             kernel_contract=kernel_contract,
         )
-        expectations = resolve_execution_kernel_expectations(resolved_contract)
-        return decode_router_rs_execution_response(
+        return self.decode_execution_response(
             payload,
-            execution_kernel=expectations["execution_kernel"],
-            execution_kernel_authority=expectations["execution_kernel_authority"],
-            execution_kernel_delegate=expectations["execution_kernel_delegate"],
-            execution_kernel_delegate_authority=expectations["execution_kernel_delegate_authority"],
-            execution_kernel_delegate_family=expectations["execution_kernel_delegate_family"],
-            execution_kernel_delegate_impl=expectations["execution_kernel_delegate_impl"],
+            kernel_contract=resolved_contract,
+            dry_run=dry_run,
         )
 
     async def execute_runtime_request(
@@ -1276,6 +1295,40 @@ class RustRouteAdapter:
             )
         return resolved
 
+    def runtime_checkpoint_control_plane(
+        self,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Compile the checkpoint control-plane descriptor through router-rs."""
+
+        args = [
+            "--runtime-checkpoint-control-plane-json",
+            "--runtime-checkpoint-control-plane-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        resolved = self._run_hot_json_command(
+            "runtime_checkpoint_control_plane",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="runtime checkpoint control-plane compiler",
+        )
+        if resolved.get("schema_version") != self.runtime_checkpoint_control_plane_schema_version:
+            raise RuntimeError(
+                "Rust runtime checkpoint control-plane compiler returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
+            )
+        if resolved.get("authority") != self.runtime_checkpoint_control_plane_authority:
+            raise RuntimeError(
+                "Rust runtime checkpoint control-plane compiler returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        control_plane = resolved.get("checkpoint_control_plane")
+        if not isinstance(control_plane, dict):
+            raise RuntimeError(
+                "Rust runtime checkpoint control-plane compiler returned a missing checkpoint_control_plane payload."
+            )
+        return control_plane
+
     def runtime_storage_exists(
         self,
         *,
@@ -1376,19 +1429,20 @@ class RustRouteAdapter:
     ) -> dict[str, Any]:
         """Compile first-class Rust Codex contract/parity artifacts for one profile."""
 
+        if include_compatibility_inventory:
+            raise ValueError("compatibility inventory artifacts are retired; router-rs owns canonical outputs.")
+
         command = [
             *self._binary_command(),
             "--profile-artifacts-json",
             "--framework-profile",
             str(profile_path),
         ]
-        if include_compatibility_inventory:
-            command.append("--include-compatibility-inventory")
         return self._run_hot_json_command(
             "compile_codex_profile_artifacts",
             {
                 "profile_path": str(profile_path),
-                "include_compatibility_inventory": include_compatibility_inventory,
+                "include_compatibility_inventory": False,
             },
             command,
             failure_label="profile artifact compiler",
@@ -1743,6 +1797,152 @@ class RustRouteAdapter:
             )
         return payload
 
+    def execution_contract_bundle(self) -> dict[str, Any]:
+        """Return the Rust-owned execution contract bundle."""
+
+        payload = self._run_hot_json_command(
+            "execution_contract_bundle",
+            {},
+            [*self._binary_command(), "--stdio-json"],
+            failure_label="execution contract bundle compiler",
+        )
+        if payload.get("schema_version") != self.execution_contract_bundle_schema_version:
+            raise RuntimeError(
+                "Rust execution contract bundle compiler returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
+            )
+        if payload.get("authority") != self.execution_contract_authority:
+            raise RuntimeError(
+                "Rust execution contract bundle compiler returned an unexpected authority marker: "
+                f"{payload.get('authority')!r}"
+            )
+        return payload
+
+    def normalize_execution_kernel_metadata_contract(
+        self,
+        payload: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Normalize one execution metadata contract through Rust truth."""
+
+        resolved = self._run_hot_json_command(
+            "normalize_execution_kernel_metadata_contract",
+            dict(payload or {}),
+            [*self._binary_command(), "--stdio-json"],
+            failure_label="execution metadata contract normalizer",
+        )
+        return _expect_json_object(
+            resolved,
+            context="Rust execution metadata contract normalizer",
+        )
+
+    def normalize_execution_kernel_contract(
+        self,
+        *,
+        kernel_contract: Mapping[str, Any],
+        response_shape: str | None = None,
+    ) -> dict[str, Any]:
+        """Normalize one steady-state execution contract through Rust truth."""
+
+        payload: dict[str, Any] = {"kernel_contract": dict(kernel_contract)}
+        if response_shape is not None:
+            payload["response_shape"] = response_shape
+        resolved = self._run_hot_json_command(
+            "normalize_execution_kernel_contract",
+            payload,
+            [*self._binary_command(), "--stdio-json"],
+            failure_label="execution kernel contract normalizer",
+        )
+        return _expect_json_object(
+            resolved,
+            context="Rust execution kernel contract normalizer",
+        )
+
+    def validate_execution_kernel_steady_state_metadata(
+        self,
+        *,
+        metadata: Mapping[str, Any],
+        kernel_contract: Mapping[str, Any] | None = None,
+        response_shape: str | None = None,
+    ) -> dict[str, Any]:
+        """Validate one steady-state metadata payload through Rust truth."""
+
+        payload: dict[str, Any] = {"metadata": dict(metadata)}
+        if kernel_contract is not None:
+            payload["kernel_contract"] = dict(kernel_contract)
+        if response_shape is not None:
+            payload["response_shape"] = response_shape
+        resolved = self._run_hot_json_command(
+            "validate_execution_kernel_steady_state_metadata",
+            payload,
+            [*self._binary_command(), "--stdio-json"],
+            failure_label="execution steady-state metadata validator",
+        )
+        return _expect_json_object(
+            resolved,
+            context="Rust execution steady-state metadata validator",
+        )
+
+    def decode_execution_response(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        kernel_contract: Mapping[str, Any] | None = None,
+        dry_run: bool | None = None,
+    ) -> RunTaskResponse:
+        """Decode one execution response through Rust truth."""
+
+        request_payload: dict[str, Any] = {"payload": dict(payload)}
+        if kernel_contract is not None:
+            request_payload["kernel_contract"] = dict(kernel_contract)
+        if dry_run is not None:
+            request_payload["dry_run"] = dry_run
+        resolved = self._run_hot_json_command(
+            "decode_execution_response",
+            request_payload,
+            [*self._binary_command(), "--stdio-json"],
+            failure_label="execution response decoder",
+        )
+        normalized = _expect_json_object(
+            resolved,
+            context="Rust execution response decoder",
+        )
+        return execution_kernel_response_model_validate(normalized)
+
+    def runtime_integrator(self) -> dict[str, Any]:
+        """Return the Rust-owned runtime integrator descriptor bundle."""
+
+        args = ["--runtime-integrator-json"]
+        payload = self._run_hot_json_command(
+            "runtime_integrator",
+            {},
+            [*self._binary_command(), *args],
+            failure_label="runtime integrator compiler",
+        )
+        if payload.get("schema_version") != self.runtime_integrator_schema_version:
+            raise RuntimeError(
+                "Rust runtime integrator compiler returned an unknown schema: "
+                f"{payload.get('schema_version')!r}"
+            )
+        if payload.get("authority") != self.runtime_integrator_authority:
+            raise RuntimeError(
+                "Rust runtime integrator compiler returned an unexpected authority marker: "
+                f"{payload.get('authority')!r}"
+            )
+        control_plane = payload.get("control_plane")
+        if not isinstance(control_plane, dict):
+            raise RuntimeError("Rust runtime integrator compiler returned a missing control_plane payload.")
+        if control_plane.get("schema_version") != self.runtime_control_plane_schema_version:
+            raise RuntimeError(
+                "Rust runtime integrator compiler returned an unexpected control_plane schema: "
+                f"{control_plane.get('schema_version')!r}"
+            )
+        if control_plane.get("authority") != self.runtime_control_plane_authority:
+            raise RuntimeError(
+                "Rust runtime integrator compiler returned an unexpected control_plane authority marker: "
+                f"{control_plane.get('authority')!r}"
+            )
+        return payload
+
     def runtime_observability_exporter_descriptor(self) -> dict[str, Any]:
         """Return the Rust-owned runtime observability exporter descriptor."""
 
@@ -1798,6 +1998,22 @@ class RustRouteAdapter:
                 f"{payload.get('schema_version')!r}"
             )
         return payload
+
+    def runtime_observability_health_snapshot(self) -> dict[str, Any]:
+        """Return the Rust-owned runtime observability health snapshot."""
+
+        payload = self.runtime_integrator()
+        observability = payload.get("observability")
+        if not isinstance(observability, dict):
+            raise RuntimeError(
+                "Rust runtime integrator compiler returned a missing observability payload."
+            )
+        if observability.get("schema_version") != self.runtime_observability_health_snapshot_schema_version:
+            raise RuntimeError(
+                "Rust runtime observability health snapshot compiler returned an unknown schema: "
+                f"{observability.get('schema_version')!r}"
+            )
+        return observability
 
     def runtime_metric_record(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Build one Rust-owned runtime observability metric record."""
@@ -2083,12 +2299,18 @@ class RustRouteAdapter:
             "--subscribe-attached-runtime-events-input-json",
             json.dumps(payload, ensure_ascii=False),
         ]
-        resolved = self._run_hot_json_command(
-            "subscribe_attached_runtime_events",
-            payload,
-            [*self._binary_command(), *args],
-            failure_label="attached runtime event replay",
-        )
+        try:
+            resolved = self._run_hot_json_command(
+                "subscribe_attached_runtime_events",
+                payload,
+                [*self._binary_command(), *args],
+                failure_label="attached runtime event replay",
+            )
+        except RuntimeError as exc:
+            message = str(exc)
+            if not message.startswith("Rust attached runtime event transport failed: "):
+                raise RuntimeError(f"Rust attached runtime event transport failed: {message}") from exc
+            raise
         if resolved.get("schema_version") != "runtime-event-stream-v1":
             raise RuntimeError(
                 "Rust attached runtime event replay returned an unknown schema: "
@@ -2144,6 +2366,34 @@ class RustRouteAdapter:
             )
         return resolved
 
+    def trace_record_event(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--trace-record-event-json",
+            "--trace-record-event-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        resolved = self._run_hot_json_command(
+            "trace_record_event",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="trace event recorder",
+        )
+        if resolved.get("schema_version") != self.trace_record_event_schema_version:
+            raise RuntimeError(
+                "Rust trace event recorder returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
+            )
+        if resolved.get("authority") != self.trace_stream_io_authority:
+            raise RuntimeError(
+                "Rust trace event recorder returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        if not isinstance(resolved.get("event"), dict):
+            raise RuntimeError("Rust trace event recorder returned a missing event.")
+        if not isinstance(resolved.get("sink_line"), str):
+            raise RuntimeError("Rust trace event recorder returned a missing sink_line.")
+        return resolved
+
     def trace_stream_inspect(self, payload: dict[str, Any]) -> dict[str, Any]:
         args = [
             "--trace-stream-inspect-json",
@@ -2164,6 +2414,30 @@ class RustRouteAdapter:
         if resolved.get("authority") != self.trace_stream_io_authority:
             raise RuntimeError(
                 "Rust trace stream inspect returned an unexpected authority marker: "
+                f"{resolved.get('authority')!r}"
+            )
+        return resolved
+
+    def trace_compact(self, payload: dict[str, Any]) -> dict[str, Any]:
+        args = [
+            "--trace-compact-json",
+            "--trace-compact-input-json",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+        resolved = self._run_hot_json_command(
+            "trace_compact",
+            payload,
+            [*self._binary_command(), *args],
+            failure_label="trace compaction",
+        )
+        if resolved.get("schema_version") != self.trace_compact_schema_version:
+            raise RuntimeError(
+                "Rust trace compaction returned an unknown schema: "
+                f"{resolved.get('schema_version')!r}"
+            )
+        if resolved.get("authority") != self.trace_stream_io_authority:
+            raise RuntimeError(
+                "Rust trace compaction returned an unexpected authority marker: "
                 f"{resolved.get('authority')!r}"
             )
         return resolved

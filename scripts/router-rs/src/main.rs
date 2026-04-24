@@ -19,16 +19,34 @@ use strsim::jaro_winkler;
 
 mod background_state;
 mod claude_hooks;
+mod execution_contract;
 mod framework_mcp;
 mod framework_profile;
 mod framework_runtime;
 mod host_integration;
+mod runtime_storage;
 mod session_supervisor;
+mod trace_runtime;
 
 use background_state::handle_background_state_operation;
 use claude_hooks::{
     build_claude_hook_manifest, build_claude_hook_projection, build_claude_project_settings,
     run_claude_audit_hook, run_claude_lifecycle_hook, run_codex_audit_hook, sync_host_entrypoints,
+};
+use execution_contract::{
+    build_execution_contract_bundle, build_execution_kernel_contracts_by_mode,
+    build_execution_kernel_metadata_contract, build_steady_state_execution_kernel_metadata,
+    decode_execution_response_value, normalize_execution_kernel_contract_value,
+    normalize_execution_kernel_metadata_contract_value,
+    validate_execution_kernel_steady_state_metadata_value, EXECUTION_AUTHORITY,
+    EXECUTION_CONTRACT_BUNDLE_SCHEMA_VERSION, EXECUTION_KERNEL_AUTHORITY,
+    EXECUTION_KERNEL_CONTRACT_MODE, EXECUTION_KERNEL_DELEGATE_FAMILY,
+    EXECUTION_KERNEL_DELEGATE_IMPL, EXECUTION_KERNEL_FALLBACK_POLICY,
+    EXECUTION_KERNEL_KIND, EXECUTION_LIVE_RESPONSE_SERIALIZATION_CONTRACT,
+    EXECUTION_METADATA_CONTRACT_SCHEMA_VERSION, EXECUTION_METADATA_SCHEMA_VERSION,
+    EXECUTION_MODEL_ID_SOURCE, EXECUTION_PROMPT_PREVIEW_OWNER,
+    EXECUTION_RESPONSE_SHAPE_DRY_RUN, EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
+    EXECUTION_SCHEMA_VERSION,
 };
 use framework_mcp::run_framework_mcp_stdio_loop;
 use framework_profile::{
@@ -42,7 +60,13 @@ use framework_runtime::{
     write_framework_session_artifacts,
 };
 use host_integration::run_host_integration_from_args;
+use runtime_storage::{
+    build_checkpoint_control_plane_compiler_payload, resolve_storage_backend,
+    runtime_storage_operation, storage_artifact_exists, storage_read_text, ResolvedStorageBackend,
+    RuntimeStorageRequestPayload,
+};
 use session_supervisor::handle_session_supervisor_operation;
+use trace_runtime::{compact_trace_stream, record_trace_event};
 
 #[cfg(test)]
 use framework_runtime::FRAMEWORK_ALIAS_SCHEMA_VERSION;
@@ -55,23 +79,10 @@ const ROUTE_REPORT_SCHEMA_VERSION: &str = "router-rs-route-report-v2";
 const ROUTE_RESOLUTION_SCHEMA_VERSION: &str = "router-rs-route-resolution-v1";
 const ROUTE_AUTHORITY: &str = "rust-route-core";
 const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
-const EXECUTION_SCHEMA_VERSION: &str = "router-rs-execute-response-v1";
-const EXECUTION_METADATA_SCHEMA_VERSION: &str = "router-rs-execution-kernel-metadata-v1";
-const EXECUTION_METADATA_CONTRACT_SCHEMA_VERSION: &str =
-    "router-rs-execution-kernel-metadata-contract-v1";
-const EXECUTION_AUTHORITY: &str = "rust-execution-cli";
-const EXECUTION_KERNEL_KIND: &str = "rust-execution-kernel-slice";
-const EXECUTION_KERNEL_AUTHORITY: &str = "rust-execution-kernel-authority";
-const EXECUTION_KERNEL_CONTRACT_MODE: &str = "rust-live-primary";
-const EXECUTION_KERNEL_FALLBACK_POLICY: &str = "infrastructure-only-explicit";
-const EXECUTION_KERNEL_DELEGATE_FAMILY: &str = "rust-cli";
-const EXECUTION_KERNEL_DELEGATE_IMPL: &str = "router-rs";
-const EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY: &str = "live_primary";
-const EXECUTION_RESPONSE_SHAPE_DRY_RUN: &str = "dry_run";
-const EXECUTION_PROMPT_PREVIEW_OWNER: &str = "rust-execution-cli";
-const EXECUTION_MODEL_ID_SOURCE: &str = "aggregator-response.model";
 const RUNTIME_CONTROL_PLANE_SCHEMA_VERSION: &str = "router-rs-runtime-control-plane-v1";
 const RUNTIME_CONTROL_PLANE_AUTHORITY: &str = "rust-runtime-control-plane";
+const RUNTIME_INTEGRATOR_SCHEMA_VERSION: &str = "router-rs-runtime-integrator-v1";
+const RUNTIME_INTEGRATOR_AUTHORITY: &str = "rust-runtime-integrator";
 const SANDBOX_CONTROL_SCHEMA_VERSION: &str = "router-rs-sandbox-control-v1";
 const SANDBOX_CONTROL_AUTHORITY: &str = "rust-sandbox-control";
 const BACKGROUND_CONTROL_SCHEMA_VERSION: &str = "router-rs-background-control-v1";
@@ -103,6 +114,8 @@ const RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION: &str =
     "runtime-observability-metric-catalog-v1";
 const RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION: &str = "runtime-observability-metrics-v1";
 const RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION: &str = "runtime-observability-dashboard-v1";
+const RUNTIME_OBSERVABILITY_HEALTH_SNAPSHOT_SCHEMA_VERSION: &str =
+    "runtime-observability-health-snapshot-v1";
 const RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY: &str = "shared-runtime-v1";
 const OVERLAY_ONLY_SKILLS: [&str; 4] = [
     "execution-audit",
@@ -158,6 +171,8 @@ struct Cli {
     #[arg(long)]
     execute_json: bool,
     #[arg(long)]
+    runtime_integrator_json: bool,
+    #[arg(long)]
     runtime_control_plane_json: bool,
     #[arg(long)]
     sandbox_control_json: bool,
@@ -173,6 +188,8 @@ struct Cli {
     describe_handoff_json: bool,
     #[arg(long)]
     checkpoint_resume_manifest_json: bool,
+    #[arg(long)]
+    runtime_checkpoint_control_plane_json: bool,
     #[arg(long)]
     write_transport_binding_json: bool,
     #[arg(long)]
@@ -192,9 +209,13 @@ struct Cli {
     #[arg(long)]
     runtime_metric_record_json: bool,
     #[arg(long)]
+    trace_record_event_json: bool,
+    #[arg(long)]
     trace_stream_replay_json: bool,
     #[arg(long)]
     trace_stream_inspect_json: bool,
+    #[arg(long)]
+    trace_compact_json: bool,
     #[arg(long)]
     write_trace_compaction_delta_json: bool,
     #[arg(long)]
@@ -294,6 +315,8 @@ struct Cli {
     #[arg(long)]
     checkpoint_resume_manifest_input_json: Option<String>,
     #[arg(long)]
+    runtime_checkpoint_control_plane_input_json: Option<String>,
+    #[arg(long)]
     write_transport_binding_input_json: Option<String>,
     #[arg(long)]
     write_checkpoint_resume_manifest_input_json: Option<String>,
@@ -306,9 +329,13 @@ struct Cli {
     #[arg(long)]
     runtime_metric_record_input_json: Option<String>,
     #[arg(long)]
+    trace_record_event_input_json: Option<String>,
+    #[arg(long)]
     trace_stream_replay_input_json: Option<String>,
     #[arg(long)]
     trace_stream_inspect_input_json: Option<String>,
+    #[arg(long)]
+    trace_compact_input_json: Option<String>,
     #[arg(long)]
     write_trace_compaction_delta_input_json: Option<String>,
     #[arg(long)]
@@ -495,30 +522,6 @@ struct RouteResolutionPayload {
     authority: String,
     policy: RouteExecutionPolicyPayload,
     route_diagnostic_report: Option<RouteDiffReportPayload>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct RuntimeStorageRequestPayload {
-    operation: String,
-    path: String,
-    backend_family: String,
-    sqlite_db_path: Option<String>,
-    storage_root: Option<String>,
-    payload_text: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct RuntimeStorageResponsePayload {
-    schema_version: String,
-    authority: String,
-    operation: String,
-    path: String,
-    backend_family: String,
-    sqlite_db_path: Option<String>,
-    storage_root: Option<String>,
-    exists: bool,
-    payload_text: Option<String>,
-    bytes_written: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -742,7 +745,12 @@ struct BackgroundControlResponsePayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TraceStreamReplayRequestPayload {
     path: Option<String>,
+    event_stream_text: Option<String>,
     compaction_manifest_path: Option<String>,
+    compaction_manifest_text: Option<String>,
+    compaction_state_text: Option<String>,
+    compaction_artifact_index_text: Option<String>,
+    compaction_delta_text: Option<String>,
     session_id: Option<String>,
     job_id: Option<String>,
     stream_scope_fields: Option<Vec<String>>,
@@ -753,7 +761,12 @@ struct TraceStreamReplayRequestPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TraceStreamInspectRequestPayload {
     path: Option<String>,
+    event_stream_text: Option<String>,
     compaction_manifest_path: Option<String>,
+    compaction_manifest_text: Option<String>,
+    compaction_state_text: Option<String>,
+    compaction_artifact_index_text: Option<String>,
+    compaction_delta_text: Option<String>,
     session_id: Option<String>,
     job_id: Option<String>,
     stream_scope_fields: Option<Vec<String>>,
@@ -795,6 +808,8 @@ struct TraceStreamInspectResponsePayload {
     latest_event_timestamp: Option<String>,
     latest_cursor: Option<Value>,
     recovery: Option<Value>,
+    reroute_count: usize,
+    retry_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -824,11 +839,21 @@ struct TraceMetadataWriteRequestPayload {
     owner: String,
     gate: String,
     overlay: Option<String>,
-    reroute_count: usize,
-    retry_count: usize,
+    reroute_count: Option<usize>,
+    retry_count: Option<usize>,
     #[serde(default)]
     artifact_paths: Vec<String>,
     verification_status: String,
+    session_id: Option<String>,
+    job_id: Option<String>,
+    event_stream_path: Option<String>,
+    event_stream_text: Option<String>,
+    compaction_manifest_path: Option<String>,
+    compaction_manifest_text: Option<String>,
+    compaction_state_text: Option<String>,
+    compaction_artifact_index_text: Option<String>,
+    compaction_delta_text: Option<String>,
+    stream_scope_fields: Option<Vec<String>>,
     framework_version: Option<String>,
     metadata_schema_version: Option<String>,
     routing_runtime_version: Option<u64>,
@@ -1058,6 +1083,59 @@ fn write_trace_metadata(
         .framework_version
         .unwrap_or_else(default_trace_framework_version);
     let timestamp = payload.ts.unwrap_or_else(|| timestamp_now());
+    let resolved_trace = if payload.events.is_none()
+        || payload.stream.is_none()
+        || payload.reroute_count.is_none()
+        || payload.retry_count.is_none()
+    {
+        match resolve_trace_source(
+            payload.event_stream_path.as_deref(),
+            payload.event_stream_text.as_deref(),
+            payload.compaction_manifest_path.as_deref(),
+            payload.compaction_manifest_text.as_deref(),
+            payload.compaction_state_text.as_deref(),
+            payload.compaction_artifact_index_text.as_deref(),
+            payload.compaction_delta_text.as_deref(),
+            payload.session_id.as_deref(),
+            payload.job_id.as_deref(),
+            &payload.stream_scope_fields,
+        ) {
+            Ok(value) => Some(value),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+    let resolved_events = payload.events.clone().unwrap_or_else(|| {
+        resolved_trace
+            .as_ref()
+            .map(|trace| {
+                trace
+                    .events
+                    .iter()
+                    .cloned()
+                    .map(Value::Object)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    });
+    let reroute_count = payload.reroute_count.unwrap_or_else(|| {
+        resolved_trace
+            .as_ref()
+            .map(|trace| trace_reroute_count(&trace.events))
+            .unwrap_or(0)
+    });
+    let retry_count = payload.retry_count.unwrap_or_else(|| {
+        resolved_trace
+            .as_ref()
+            .map(|trace| trace_retry_count(&trace.events))
+            .unwrap_or(0)
+    });
+    let resolved_stream = payload.stream.clone().or_else(|| {
+        resolved_trace
+            .as_ref()
+            .map(|trace| build_trace_stream_metadata(trace, payload.control_plane.as_ref()))
+    });
 
     let mut document = Map::new();
     document.insert("version".to_string(), json!(1));
@@ -1085,8 +1163,8 @@ fn write_trace_metadata(
             "overlay": payload.overlay,
         }),
     );
-    document.insert("reroute_count".to_string(), json!(payload.reroute_count));
-    document.insert("retry_count".to_string(), json!(payload.retry_count));
+    document.insert("reroute_count".to_string(), json!(reroute_count));
+    document.insert("retry_count".to_string(), json!(retry_count));
     document.insert("artifact_paths".to_string(), json!(payload.artifact_paths));
     document.insert(
         "verification_status".to_string(),
@@ -1107,11 +1185,11 @@ fn write_trace_metadata(
     if let Some(value) = payload.control_plane {
         document.insert("control_plane".to_string(), value);
     }
-    if let Some(value) = payload.stream {
+    if let Some(value) = resolved_stream {
         document.insert("stream".to_string(), value);
     }
-    if let Some(value) = payload.events {
-        document.insert("events".to_string(), Value::Array(value));
+    if !resolved_events.is_empty() {
+        document.insert("events".to_string(), Value::Array(resolved_events));
     }
 
     let serialized = serde_json::to_string_pretty(&Value::Object(document))
@@ -1157,6 +1235,7 @@ fn main() -> Result<(), String> {
         args.route_policy_json,
         args.route_snapshot_json,
         args.execute_json,
+        args.runtime_integrator_json,
         args.runtime_control_plane_json,
         args.sandbox_control_json,
         args.background_control_json,
@@ -1165,6 +1244,7 @@ fn main() -> Result<(), String> {
         args.describe_transport_json,
         args.describe_handoff_json,
         args.checkpoint_resume_manifest_json,
+        args.runtime_checkpoint_control_plane_json,
         args.write_transport_binding_json,
         args.write_checkpoint_resume_manifest_json,
         args.attach_runtime_event_transport_json,
@@ -1174,8 +1254,10 @@ fn main() -> Result<(), String> {
         args.runtime_observability_metric_catalog_json,
         args.runtime_observability_dashboard_json,
         args.runtime_metric_record_json,
+        args.trace_record_event_json,
         args.trace_stream_replay_json,
         args.trace_stream_inspect_json,
+        args.trace_compact_json,
         args.write_trace_compaction_delta_json,
         args.write_trace_metadata_json,
         args.framework_runtime_snapshot_json,
@@ -1208,7 +1290,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --framework-mcp-stdio, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-stream-replay-json, --trace-stream-inspect-json, --write-trace-compaction-delta-json, --write-trace-metadata-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-session-artifact-write-json, --framework-alias-json, --control-plane-contracts-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --sync-host-entrypoints-json, --check-host-entrypoints-json, --host-integration, --claude-hook-command, --claude-hook-audit-command, --claude-host-hook-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
+            "choose only one output mode among --json, --stdio-json, --framework-mcp-stdio, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-integrator-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --runtime-checkpoint-control-plane-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-record-event-json, --trace-stream-replay-json, --trace-stream-inspect-json, --trace-compact-json, --write-trace-compaction-delta-json, --write-trace-metadata-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-session-artifact-write-json, --framework-alias-json, --control-plane-contracts-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --sync-host-entrypoints-json, --check-host-entrypoints-json, --host-integration, --claude-hook-command, --claude-hook-audit-command, --claude-host-hook-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
                 .to_string(),
         );
     }
@@ -1351,6 +1433,24 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.runtime_checkpoint_control_plane_json {
+        let payload = serde_json::from_str::<Value>(
+            args.runtime_checkpoint_control_plane_input_json
+                .as_deref()
+                .ok_or_else(|| {
+                    "--runtime-checkpoint-control-plane-input-json is required with --runtime-checkpoint-control-plane-json"
+                        .to_string()
+                })?,
+        )
+        .map_err(|err| format!("parse runtime checkpoint control plane input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&build_checkpoint_control_plane_compiler_payload(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
     if args.write_transport_binding_json {
         let payload = serde_json::from_str::<Value>(
             args.write_transport_binding_input_json
@@ -1450,6 +1550,15 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.runtime_integrator_json {
+        println!(
+            "{}",
+            serde_json::to_string(&build_runtime_integrator_payload())
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
     if args.runtime_observability_exporter_json {
         println!(
             "{}",
@@ -1513,6 +1622,23 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.trace_record_event_json {
+        let payload =
+            serde_json::from_str(args.trace_record_event_input_json.as_deref().ok_or_else(
+                || {
+                    "--trace-record-event-input-json is required with --trace-record-event-json"
+                        .to_string()
+                },
+            )?)
+            .map_err(|err| format!("parse trace record event input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&record_trace_event(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
     if args.trace_stream_inspect_json {
         let payload = serde_json::from_str::<TraceStreamInspectRequestPayload>(
             args.trace_stream_inspect_input_json
@@ -1526,6 +1652,20 @@ fn main() -> Result<(), String> {
         println!(
             "{}",
             serde_json::to_string(&inspect_trace_stream(payload)?)
+                .map_err(|err| format!("serialize output failed: {err}"))?
+        );
+        return Ok(());
+    }
+
+    if args.trace_compact_json {
+        let payload =
+            serde_json::from_str(args.trace_compact_input_json.as_deref().ok_or_else(|| {
+                "--trace-compact-input-json is required with --trace-compact-json".to_string()
+            })?)
+            .map_err(|err| format!("parse trace compact input failed: {err}"))?;
+        println!(
+            "{}",
+            serde_json::to_string(&compact_trace_stream(payload)?)
                 .map_err(|err| format!("serialize output failed: {err}"))?
         );
         return Ok(());
@@ -1707,6 +1847,12 @@ fn main() -> Result<(), String> {
         let profile_path = args.framework_profile.as_deref().ok_or_else(|| {
             "--framework-profile is required with --profile-artifacts-json".to_string()
         })?;
+        if args.include_compatibility_inventory {
+            return Err(
+                "compatibility inventory artifacts are retired; use canonical Rust outputs."
+                    .to_string(),
+            );
+        }
         let profile = load_framework_profile(profile_path)?;
         let artifacts =
             build_codex_artifact_bundle(&profile, args.include_compatibility_inventory)?;
@@ -2073,6 +2219,41 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
             serde_json::to_value(execute_request(request)?)
                 .map_err(|err| format!("serialize execute output failed: {err}"))
         }
+        "execution_contract_bundle" => Ok(Value::Object(build_execution_contract_bundle())),
+        "normalize_execution_kernel_metadata_contract" => {
+            if payload.as_object().is_some_and(Map::is_empty) || payload.is_null() {
+                normalize_execution_kernel_metadata_contract_value(None)
+            } else {
+                normalize_execution_kernel_metadata_contract_value(Some(&payload))
+            }
+        }
+        "normalize_execution_kernel_contract" => {
+            let kernel_contract = payload
+                .get("kernel_contract")
+                .ok_or_else(|| "execution-kernel contract payload is missing kernel_contract.".to_string())?;
+            let response_shape = payload.get("response_shape").and_then(Value::as_str);
+            normalize_execution_kernel_contract_value(kernel_contract, response_shape)
+        }
+        "validate_execution_kernel_steady_state_metadata" => {
+            let metadata = payload
+                .get("metadata")
+                .ok_or_else(|| "execution-kernel validation payload is missing metadata.".to_string())?;
+            let kernel_contract = payload.get("kernel_contract");
+            let response_shape = payload.get("response_shape").and_then(Value::as_str);
+            validate_execution_kernel_steady_state_metadata_value(
+                metadata,
+                kernel_contract,
+                response_shape,
+            )
+        }
+        "decode_execution_response" => {
+            let execution_payload = payload
+                .get("payload")
+                .ok_or_else(|| "execution response decode payload is missing payload.".to_string())?;
+            let kernel_contract = payload.get("kernel_contract");
+            let dry_run = payload.get("dry_run").and_then(Value::as_bool);
+            decode_execution_response_value(execution_payload, kernel_contract, dry_run)
+        }
         "route_report" => dispatch_stdio_route_report(payload),
         "route_resolution" => dispatch_stdio_route_resolution(payload),
         "route_policy" => dispatch_stdio_route_policy(payload),
@@ -2081,6 +2262,7 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
         "compile_codex_profile_artifacts" => {
             dispatch_stdio_compile_codex_profile_artifacts(payload)
         }
+        "runtime_integrator" => Ok(build_runtime_integrator_payload()),
         "runtime_control_plane" => Ok(build_runtime_control_plane_payload()),
         "sandbox_control" => {
             let request = serde_json::from_value::<SandboxControlRequestPayload>(payload)
@@ -2104,6 +2286,11 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
                 format!("serialize runtime observability dashboard output failed: {err}")
             })
         }
+        "runtime_observability_health_snapshot" => {
+            serde_json::to_value(build_runtime_observability_health_snapshot()).map_err(|err| {
+                format!("serialize runtime observability health snapshot output failed: {err}")
+            })
+        }
         "runtime_metric_record" => serde_json::to_value(build_runtime_metric_record(payload)?)
             .map_err(|err| format!("serialize runtime metric record output failed: {err}")),
         "background_control" => {
@@ -2117,6 +2304,7 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
         "describe_transport" => build_trace_transport_descriptor(payload),
         "describe_handoff" => build_trace_handoff_descriptor(payload),
         "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload),
+        "runtime_checkpoint_control_plane" => build_checkpoint_control_plane_compiler_payload(payload),
         "write_transport_binding" => write_transport_binding_payload(payload),
         "write_checkpoint_resume_manifest" => write_checkpoint_resume_manifest_payload(payload),
         "attach_runtime_event_transport" => attach_runtime_event_transport(payload),
@@ -2130,6 +2318,12 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
             serde_json::to_value(runtime_storage_operation(request)?)
                 .map_err(|err| format!("serialize runtime storage output failed: {err}"))
         }
+        "trace_record_event" => {
+            let request = serde_json::from_value(payload)
+                .map_err(|err| format!("parse trace record event input failed: {err}"))?;
+            serde_json::to_value(record_trace_event(request)?)
+                .map_err(|err| format!("serialize trace record event output failed: {err}"))
+        }
         "trace_stream_replay" => {
             let request = serde_json::from_value::<TraceStreamReplayRequestPayload>(payload)
                 .map_err(|err| format!("parse trace stream replay input failed: {err}"))?;
@@ -2141,6 +2335,12 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
                 .map_err(|err| format!("parse trace stream inspect input failed: {err}"))?;
             serde_json::to_value(inspect_trace_stream(request)?)
                 .map_err(|err| format!("serialize trace stream inspect output failed: {err}"))
+        }
+        "trace_compact" => {
+            let request = serde_json::from_value(payload)
+                .map_err(|err| format!("parse trace compact input failed: {err}"))?;
+            serde_json::to_value(compact_trace_stream(request)?)
+                .map_err(|err| format!("serialize trace compact output failed: {err}"))
         }
         "write_trace_compaction_delta" => {
             let request =
@@ -2441,6 +2641,12 @@ fn dispatch_stdio_compile_codex_profile_artifacts(payload: Value) -> Result<Valu
         .get("include_compatibility_inventory")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    if include_compatibility_inventory {
+        return Err(
+            "compatibility inventory artifacts are retired; use canonical Rust outputs."
+                .to_string(),
+        );
+    }
     let profile = load_framework_profile(Path::new(&profile_path))?;
     let artifacts = build_codex_artifact_bundle(&profile, include_compatibility_inventory)?;
     serde_json::to_value(artifacts)
@@ -4514,150 +4720,6 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     lines.join("\n")
 }
 
-fn build_steady_state_execution_kernel_metadata(response_shape: &str) -> Map<String, Value> {
-    let mut metadata = Map::new();
-    metadata.insert(
-        "execution_kernel_metadata_schema_version".to_string(),
-        Value::String(EXECUTION_METADATA_SCHEMA_VERSION.to_string()),
-    );
-    metadata.insert(
-        "execution_kernel".to_string(),
-        Value::String(EXECUTION_KERNEL_KIND.to_string()),
-    );
-    metadata.insert(
-        "execution_kernel_authority".to_string(),
-        Value::String(EXECUTION_KERNEL_AUTHORITY.to_string()),
-    );
-    metadata.insert(
-        "execution_kernel_contract_mode".to_string(),
-        Value::String(EXECUTION_KERNEL_CONTRACT_MODE.to_string()),
-    );
-    metadata.insert(
-        "execution_kernel_fallback_policy".to_string(),
-        Value::String(EXECUTION_KERNEL_FALLBACK_POLICY.to_string()),
-    );
-    metadata.insert(
-        "execution_kernel_in_process_replacement_complete".to_string(),
-        Value::Bool(true),
-    );
-    metadata.insert(
-        "execution_kernel_delegate".to_string(),
-        Value::String(EXECUTION_KERNEL_DELEGATE_IMPL.to_string()),
-    );
-    metadata.insert(
-        "execution_kernel_delegate_authority".to_string(),
-        Value::String(EXECUTION_AUTHORITY.to_string()),
-    );
-    metadata.insert(
-        "execution_kernel_delegate_family".to_string(),
-        Value::String(EXECUTION_KERNEL_DELEGATE_FAMILY.to_string()),
-    );
-    metadata.insert(
-        "execution_kernel_delegate_impl".to_string(),
-        Value::String(EXECUTION_KERNEL_DELEGATE_IMPL.to_string()),
-    );
-    metadata.insert(
-        "execution_kernel_live_primary".to_string(),
-        Value::String(EXECUTION_KERNEL_DELEGATE_IMPL.to_string()),
-    );
-    metadata.insert(
-        "execution_kernel_live_primary_authority".to_string(),
-        Value::String(EXECUTION_AUTHORITY.to_string()),
-    );
-    metadata.insert(
-        "execution_kernel_response_shape".to_string(),
-        Value::String(response_shape.to_string()),
-    );
-    metadata.insert(
-        "execution_kernel_prompt_preview_owner".to_string(),
-        Value::String(EXECUTION_PROMPT_PREVIEW_OWNER.to_string()),
-    );
-    metadata
-}
-
-fn build_execution_kernel_contracts_by_mode() -> Map<String, Value> {
-    let mut contracts = Map::new();
-    contracts.insert(
-        EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY.to_string(),
-        Value::Object(build_steady_state_execution_kernel_metadata(
-            EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
-        )),
-    );
-    contracts.insert(
-        EXECUTION_RESPONSE_SHAPE_DRY_RUN.to_string(),
-        Value::Object(build_steady_state_execution_kernel_metadata(
-            EXECUTION_RESPONSE_SHAPE_DRY_RUN,
-        )),
-    );
-    contracts
-}
-
-fn build_execution_kernel_metadata_contract() -> Value {
-    json!({
-        "schema_version": EXECUTION_METADATA_CONTRACT_SCHEMA_VERSION,
-        "authority": EXECUTION_KERNEL_AUTHORITY,
-        "steady_state_fields": [
-            "execution_kernel_metadata_schema_version",
-            "execution_kernel",
-            "execution_kernel_authority",
-            "execution_kernel_contract_mode",
-            "execution_kernel_fallback_policy",
-            "execution_kernel_in_process_replacement_complete",
-            "execution_kernel_delegate",
-            "execution_kernel_delegate_authority",
-            "execution_kernel_delegate_family",
-            "execution_kernel_delegate_impl",
-            "execution_kernel_live_primary",
-            "execution_kernel_live_primary_authority",
-            "execution_kernel_response_shape",
-            "execution_kernel_prompt_preview_owner",
-        ],
-        "runtime_fields": {
-            "shared": ["trace_event_count", "trace_output_path"],
-            "live_primary_required": [
-                "run_id",
-                "status",
-                "execution_kernel_model_id_source",
-                "trace_event_count",
-                "trace_output_path",
-            ],
-            "live_primary_passthrough": [
-                "execution_mode",
-                "route_engine",
-                "diagnostic_route_mode",
-            ],
-            "dry_run_required": [
-                "reason",
-                "execution_kernel_contract_mode",
-                "execution_kernel_fallback_policy",
-                "trace_event_count",
-                "trace_output_path",
-            ],
-        },
-        "metadata_keys": {
-            "metadata_schema_version": "execution_kernel_metadata_schema_version",
-            "contract_mode": "execution_kernel_contract_mode",
-            "fallback_policy": "execution_kernel_fallback_policy",
-            "response_shape": "execution_kernel_response_shape",
-            "prompt_preview_owner": "execution_kernel_prompt_preview_owner",
-            "model_id_source": "execution_kernel_model_id_source",
-        },
-        "defaults": {
-            "contract_mode": EXECUTION_KERNEL_CONTRACT_MODE,
-            "fallback_policy": EXECUTION_KERNEL_FALLBACK_POLICY,
-            "prompt_preview_owner_by_mode": {
-                EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY: EXECUTION_PROMPT_PREVIEW_OWNER,
-                EXECUTION_RESPONSE_SHAPE_DRY_RUN: EXECUTION_PROMPT_PREVIEW_OWNER,
-            },
-            "live_primary_model_id_source": EXECUTION_MODEL_ID_SOURCE,
-            "supported_response_shapes": [
-                EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
-                EXECUTION_RESPONSE_SHAPE_DRY_RUN,
-            ],
-        },
-    })
-}
-
 fn build_dry_run_execute_response(
     payload: &ExecuteRequestPayload,
     prompt_preview: Option<String>,
@@ -4868,7 +4930,11 @@ fn build_live_execute_response(
     }
 }
 
-fn required_non_empty_string(payload: &Value, key: &str, context: &str) -> Result<String, String> {
+pub(crate) fn required_non_empty_string(
+    payload: &Value,
+    key: &str,
+    context: &str,
+) -> Result<String, String> {
     payload
         .get(key)
         .and_then(Value::as_str)
@@ -4923,7 +4989,7 @@ fn copy_text_to_clipboard(text: &str) -> Result<Value, String> {
     }))
 }
 
-fn optional_non_empty_string(payload: &Value, key: &str) -> Option<String> {
+pub(crate) fn optional_non_empty_string(payload: &Value, key: &str) -> Option<String> {
     payload
         .get(key)
         .and_then(Value::as_str)
@@ -5263,7 +5329,7 @@ fn write_checkpoint_resume_manifest_payload(payload: Value) -> Result<Value, Str
     }))
 }
 
-fn write_text_payload(path: &Path, payload: &str) -> Result<usize, String> {
+pub(crate) fn write_text_payload(path: &Path, payload: &str) -> Result<usize, String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
             format!(
@@ -5282,456 +5348,6 @@ fn write_text_payload(path: &Path, payload: &str) -> Result<usize, String> {
     fs::rename(&tmp_path, path)
         .map_err(|err| format!("replace payload {} failed: {err}", path.display()))?;
     Ok(payload.len())
-}
-
-#[derive(Debug, Clone)]
-enum ResolvedStorageBackend {
-    Filesystem,
-    Sqlite {
-        db_path: PathBuf,
-        storage_root: PathBuf,
-    },
-}
-
-fn normalize_runtime_path(path: &str) -> Result<PathBuf, String> {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return Err("runtime attach path must be non-empty".to_string());
-    }
-    let candidate = PathBuf::from(trimmed);
-    if candidate.is_absolute() {
-        return Ok(candidate);
-    }
-    std::env::current_dir()
-        .map(|cwd| cwd.join(candidate))
-        .map_err(|err| format!("resolve runtime attach path failed: {err}"))
-}
-
-fn normalize_optional_runtime_path(path: Option<String>) -> Result<Option<PathBuf>, String> {
-    path.map(|value| normalize_runtime_path(&value)).transpose()
-}
-
-fn env_checkpoint_storage_db_path() -> Option<PathBuf> {
-    std::env::var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-}
-
-fn runtime_storage_db_name_candidates() -> Vec<String> {
-    let mut ordered = Vec::new();
-    let mut seen = HashSet::new();
-    for candidate in [
-        env_checkpoint_storage_db_path().and_then(|path| {
-            path.file_name()
-                .and_then(|value| value.to_str())
-                .map(str::to_string)
-        }),
-        Some("runtime_checkpoint_store.sqlite3".to_string()),
-    ]
-    .into_iter()
-    .flatten()
-    {
-        if seen.insert(candidate.clone()) {
-            ordered.push(candidate);
-        }
-    }
-    ordered
-}
-
-fn sqlite_connection(path: &Path) -> Result<Connection, String> {
-    Connection::open(path).map_err(|err| {
-        format!(
-            "open sqlite runtime storage failed for {}: {err}",
-            path.display()
-        )
-    })
-}
-
-fn ensure_runtime_storage_sqlite_schema(conn: &Connection) -> Result<(), String> {
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS runtime_storage_payloads (payload_key TEXT PRIMARY KEY, payload_text TEXT NOT NULL)",
-        [],
-    )
-    .map_err(|err| format!("ensure sqlite runtime storage schema failed: {err}"))?;
-    Ok(())
-}
-
-fn sqlite_lookup_keys(path: &Path, storage_root: &Path) -> Result<(String, String), String> {
-    let resolved_path = normalize_runtime_path(&path.display().to_string())?;
-    let resolved_root = normalize_runtime_path(&storage_root.display().to_string())?;
-    let stable_key = resolved_path
-        .strip_prefix(&resolved_root)
-        .map_err(|_| {
-            format!(
-                "sqlite runtime storage path {} must stay under storage root {}",
-                resolved_path.display(),
-                resolved_root.display()
-            )
-        })?
-        .to_string_lossy()
-        .replace('\\', "/");
-    let legacy_key = resolved_path.display().to_string();
-    Ok((stable_key, legacy_key))
-}
-
-fn sqlite_payload_exists(path: &Path, db_path: &Path, storage_root: &Path) -> Result<bool, String> {
-    let (stable_key, legacy_key) = sqlite_lookup_keys(path, storage_root)?;
-    let conn = sqlite_connection(db_path)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT 1 FROM runtime_storage_payloads WHERE payload_key = ?1 OR payload_key = ?2 LIMIT 1",
-        )
-        .map_err(|err| format!("prepare sqlite exists query failed: {err}"))?;
-    let exists = stmt
-        .query_row(params![stable_key, legacy_key], |row| row.get::<_, i64>(0))
-        .optional()
-        .map_err(|err| format!("run sqlite exists query failed: {err}"))?
-        .is_some();
-    Ok(exists)
-}
-
-fn sqlite_read_text(path: &Path, db_path: &Path, storage_root: &Path) -> Result<String, String> {
-    let (stable_key, legacy_key) = sqlite_lookup_keys(path, storage_root)?;
-    let conn = sqlite_connection(db_path)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT payload_text FROM runtime_storage_payloads WHERE payload_key = ?1 OR payload_key = ?2 LIMIT 1",
-        )
-        .map_err(|err| format!("prepare sqlite read query failed: {err}"))?;
-    stmt.query_row(params![stable_key, legacy_key], |row| {
-        row.get::<_, String>(0)
-    })
-    .map_err(|err| format!("read sqlite payload failed for {}: {err}", path.display()))
-}
-
-fn sqlite_write_text(
-    path: &Path,
-    db_path: &Path,
-    storage_root: &Path,
-    payload_text: &str,
-) -> Result<(), String> {
-    let (stable_key, _) = sqlite_lookup_keys(path, storage_root)?;
-    if let Some(parent) = db_path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "create sqlite parent directory for {} failed: {err}",
-                db_path.display()
-            )
-        })?;
-    }
-    let conn = sqlite_connection(db_path)?;
-    ensure_runtime_storage_sqlite_schema(&conn)?;
-    conn.execute(
-        "INSERT INTO runtime_storage_payloads (payload_key, payload_text) VALUES (?1, ?2)
-         ON CONFLICT(payload_key) DO UPDATE SET payload_text = excluded.payload_text",
-        params![stable_key, payload_text],
-    )
-    .map_err(|err| format!("write sqlite payload failed for {}: {err}", path.display()))?;
-    Ok(())
-}
-
-fn sqlite_append_text(
-    path: &Path,
-    db_path: &Path,
-    storage_root: &Path,
-    payload_text: &str,
-) -> Result<(), String> {
-    let (stable_key, _) = sqlite_lookup_keys(path, storage_root)?;
-    if let Some(parent) = db_path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "create sqlite parent directory for {} failed: {err}",
-                db_path.display()
-            )
-        })?;
-    }
-    let conn = sqlite_connection(db_path)?;
-    ensure_runtime_storage_sqlite_schema(&conn)?;
-    conn.execute(
-        "INSERT INTO runtime_storage_payloads (payload_key, payload_text) VALUES (?1, ?2)
-         ON CONFLICT(payload_key) DO UPDATE
-         SET payload_text = runtime_storage_payloads.payload_text || excluded.payload_text",
-        params![stable_key, payload_text],
-    )
-    .map_err(|err| format!("append sqlite payload failed for {}: {err}", path.display()))?;
-    Ok(())
-}
-
-fn storage_artifact_exists(path: &Path, storage_backend: Option<&ResolvedStorageBackend>) -> bool {
-    if path.exists() {
-        return true;
-    }
-    match storage_backend {
-        Some(ResolvedStorageBackend::Filesystem) => false,
-        Some(ResolvedStorageBackend::Sqlite {
-            db_path,
-            storage_root,
-        }) => sqlite_payload_exists(path, db_path, storage_root).unwrap_or(false),
-        None => false,
-    }
-}
-
-fn storage_read_text(
-    path: &Path,
-    storage_backend: Option<&ResolvedStorageBackend>,
-) -> Result<String, String> {
-    if path.exists() {
-        return fs::read_to_string(path)
-            .map_err(|err| format!("read artifact failed for {}: {err}", path.display()));
-    }
-    match storage_backend {
-        Some(ResolvedStorageBackend::Filesystem) | None => {
-            Err(format!("artifact does not exist: {}", path.display()))
-        }
-        Some(ResolvedStorageBackend::Sqlite {
-            db_path,
-            storage_root,
-        }) => sqlite_read_text(path, db_path, storage_root),
-    }
-}
-
-fn resolve_storage_backend(paths: &[PathBuf]) -> Option<ResolvedStorageBackend> {
-    if paths.is_empty() {
-        return None;
-    }
-    if paths.iter().any(|path| path.exists()) {
-        return Some(ResolvedStorageBackend::Filesystem);
-    }
-
-    let mut roots = Vec::new();
-    let mut seen_roots = HashSet::new();
-    for path in paths {
-        let mut candidates = Vec::new();
-        let parent = path.parent();
-        let parent_name = parent
-            .and_then(|value| value.file_name())
-            .and_then(|name| name.to_str());
-        let grandparent = parent.and_then(Path::parent);
-        let grandparent_name = grandparent
-            .and_then(|value| value.file_name())
-            .and_then(|name| name.to_str());
-
-        if parent_name == Some("runtime_event_transports")
-            || parent_name == Some("trace_compaction")
-        {
-            if let Some(root) = grandparent {
-                candidates.push(root.to_path_buf());
-            }
-            if let Some(root) = grandparent.and_then(Path::parent) {
-                candidates.push(root.to_path_buf());
-            }
-        }
-        if grandparent_name == Some("trace_compaction") {
-            if let Some(root) = grandparent.and_then(Path::parent) {
-                candidates.push(root.to_path_buf());
-            }
-        }
-        if let Some(parent) = path.parent() {
-            candidates.push(parent.to_path_buf());
-        }
-        for candidate in candidates {
-            let normalized = normalize_runtime_path(&candidate.display().to_string()).ok()?;
-            if seen_roots.insert(normalized.clone()) {
-                roots.push(normalized);
-            }
-        }
-    }
-
-    if let Some(db_path) = env_checkpoint_storage_db_path()
-        .and_then(|path| normalize_runtime_path(&path.display().to_string()).ok())
-        .filter(|path| path.is_absolute() && path.exists())
-    {
-        for root in &roots {
-            let backend = ResolvedStorageBackend::Sqlite {
-                db_path: db_path.clone(),
-                storage_root: root.clone(),
-            };
-            if paths
-                .iter()
-                .any(|path| storage_artifact_exists(path, Some(&backend)))
-            {
-                return Some(backend);
-            }
-        }
-    }
-
-    let db_name_candidates = runtime_storage_db_name_candidates();
-    for root in &roots {
-        for db_name in &db_name_candidates {
-            let db_path = root.join(db_name);
-            if !db_path.exists() {
-                continue;
-            }
-            let backend = ResolvedStorageBackend::Sqlite {
-                db_path,
-                storage_root: root.clone(),
-            };
-            if paths
-                .iter()
-                .any(|path| storage_artifact_exists(path, Some(&backend)))
-            {
-                return Some(backend);
-            }
-        }
-    }
-
-    None
-}
-
-fn normalized_runtime_storage_backend_family(value: &str) -> String {
-    value.trim().to_lowercase().replace('-', "_")
-}
-
-fn resolve_runtime_storage_backend(
-    request: &RuntimeStorageRequestPayload,
-) -> Result<
-    (
-        ResolvedStorageBackend,
-        String,
-        Option<String>,
-        Option<String>,
-    ),
-    String,
-> {
-    let backend_family = normalized_runtime_storage_backend_family(&request.backend_family);
-    match backend_family.as_str() {
-        "filesystem" | "file" => Ok((
-            ResolvedStorageBackend::Filesystem,
-            "filesystem".to_string(),
-            None,
-            None,
-        )),
-        "sqlite" | "sqlite3" => {
-            let db_path = request
-                .sqlite_db_path
-                .as_ref()
-                .ok_or_else(|| "runtime_storage sqlite backend requires sqlite_db_path".to_string())
-                .and_then(|value| normalize_runtime_path(value))?;
-            let storage_root = match request.storage_root.clone() {
-                Some(value) => normalize_runtime_path(&value)?,
-                None => db_path.parent().map(Path::to_path_buf).ok_or_else(|| {
-                    format!(
-                        "runtime_storage sqlite db path {} must have a parent directory",
-                        db_path.display()
-                    )
-                })?,
-            };
-            Ok((
-                ResolvedStorageBackend::Sqlite {
-                    db_path: db_path.clone(),
-                    storage_root: storage_root.clone(),
-                },
-                "sqlite".to_string(),
-                Some(db_path.display().to_string()),
-                Some(storage_root.display().to_string()),
-            ))
-        }
-        other => Err(format!(
-            "unsupported runtime_storage backend family: {other:?}"
-        )),
-    }
-}
-
-fn runtime_storage_operation(
-    request: RuntimeStorageRequestPayload,
-) -> Result<RuntimeStorageResponsePayload, String> {
-    let path = normalize_runtime_path(&request.path)?;
-    let (backend, backend_family, sqlite_db_path, storage_root) =
-        resolve_runtime_storage_backend(&request)?;
-    let operation = request.operation.trim().to_lowercase();
-    let payload_text = request.payload_text;
-
-    let (exists, resolved_payload_text, bytes_written) = match operation.as_str() {
-        "exists" => (storage_artifact_exists(&path, Some(&backend)), None, None),
-        "read_text" => {
-            let payload = storage_read_text(&path, Some(&backend))?;
-            (true, Some(payload), None)
-        }
-        "write_text" => {
-            let payload = payload_text
-                .ok_or_else(|| "runtime_storage write_text requires payload_text".to_string())?;
-            match &backend {
-                ResolvedStorageBackend::Filesystem => {
-                    if let Some(parent) = path.parent() {
-                        fs::create_dir_all(parent).map_err(|err| {
-                            format!(
-                                "create runtime storage parent directory failed for {}: {err}",
-                                path.display()
-                            )
-                        })?;
-                    }
-                    fs::write(&path, payload.as_bytes()).map_err(|err| {
-                        format!(
-                            "write runtime storage payload failed for {}: {err}",
-                            path.display()
-                        )
-                    })?;
-                }
-                ResolvedStorageBackend::Sqlite {
-                    db_path,
-                    storage_root,
-                } => {
-                    sqlite_write_text(&path, db_path, storage_root, &payload)?;
-                }
-            }
-            (true, None, Some(payload.as_bytes().len()))
-        }
-        "append_text" => {
-            let payload = payload_text
-                .ok_or_else(|| "runtime_storage append_text requires payload_text".to_string())?;
-            match &backend {
-                ResolvedStorageBackend::Filesystem => {
-                    if let Some(parent) = path.parent() {
-                        fs::create_dir_all(parent).map_err(|err| {
-                            format!(
-                                "create runtime storage parent directory failed for {}: {err}",
-                                path.display()
-                            )
-                        })?;
-                    }
-                    let mut file = OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(&path)
-                        .map_err(|err| {
-                            format!(
-                                "open runtime storage payload for append failed for {}: {err}",
-                                path.display()
-                            )
-                        })?;
-                    file.write_all(payload.as_bytes()).map_err(|err| {
-                        format!(
-                            "append runtime storage payload failed for {}: {err}",
-                            path.display()
-                        )
-                    })?;
-                }
-                ResolvedStorageBackend::Sqlite {
-                    db_path,
-                    storage_root,
-                } => {
-                    sqlite_append_text(&path, db_path, storage_root, &payload)?;
-                }
-            }
-            (true, None, Some(payload.as_bytes().len()))
-        }
-        other => return Err(format!("unsupported runtime_storage operation: {other:?}")),
-    };
-
-    Ok(RuntimeStorageResponsePayload {
-        schema_version: RUNTIME_STORAGE_SCHEMA_VERSION.to_string(),
-        authority: RUNTIME_STORAGE_AUTHORITY.to_string(),
-        operation,
-        path: path.display().to_string(),
-        backend_family,
-        sqlite_db_path,
-        storage_root,
-        exists,
-        payload_text: resolved_payload_text,
-        bytes_written,
-    })
 }
 
 fn descriptor_mapping<'a>(
@@ -5779,6 +5395,7 @@ struct NormalizedAttachRequest {
     binding_artifact_path: Option<String>,
     handoff_path: Option<String>,
     resume_manifest_path: Option<String>,
+    trace_stream_path: Option<String>,
     binding_artifact_resolution: Option<String>,
     handoff_resolution: Option<String>,
     resume_manifest_resolution: Option<String>,
@@ -5794,6 +5411,7 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
             binding_artifact_path: explicit_binding_artifact_path.clone(),
             handoff_path: explicit_handoff_path.clone(),
             resume_manifest_path: explicit_resume_manifest_path.clone(),
+            trace_stream_path: None,
             binding_artifact_resolution: explicit_binding_artifact_path
                 .as_ref()
                 .map(|_| "explicit_request".to_string()),
@@ -5810,6 +5428,7 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
             binding_artifact_path: explicit_binding_artifact_path.clone(),
             handoff_path: explicit_handoff_path.clone(),
             resume_manifest_path: explicit_resume_manifest_path.clone(),
+            trace_stream_path: None,
             binding_artifact_resolution: explicit_binding_artifact_path
                 .as_ref()
                 .map(|_| "explicit_request".to_string()),
@@ -5903,6 +5522,7 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
     let descriptor_binding = mapping_string(resolved_mapping, "binding_artifact_path")?;
     let descriptor_handoff = mapping_string(resolved_mapping, "handoff_path")?;
     let descriptor_resume = mapping_string(resolved_mapping, "resume_manifest_path")?;
+    let descriptor_trace_stream = mapping_string(resolved_mapping, "trace_stream_path")?;
     let binding_artifact_path = merge_attach_path_values(
         explicit_binding_artifact_path.clone(),
         descriptor_binding,
@@ -5922,6 +5542,7 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
         binding_artifact_path,
         handoff_path,
         resume_manifest_path,
+        trace_stream_path: descriptor_trace_stream,
         binding_artifact_resolution: if explicit_binding_artifact_path.is_some() {
             Some("explicit_request".to_string())
         } else {
@@ -5994,6 +5615,24 @@ fn json_path(value: &Value, key: &str) -> Result<Option<PathBuf>, String> {
 
 fn nested_json_path(value: &Value, path: &[&str]) -> Result<Option<PathBuf>, String> {
     normalize_optional_runtime_path(nested_non_empty_string(value, path))
+}
+
+fn normalize_optional_runtime_path(value: Option<String>) -> Result<Option<PathBuf>, String> {
+    value
+        .map(|path| {
+            let candidate = PathBuf::from(path.trim());
+            if candidate.as_os_str().is_empty() {
+                return Err("runtime attach path must be non-empty".to_string());
+            }
+            if candidate.is_absolute() {
+                Ok(candidate)
+            } else {
+                std::env::current_dir()
+                    .map(|cwd| cwd.join(candidate))
+                    .map_err(|err| format!("resolve runtime attach path failed: {err}"))
+            }
+        })
+        .transpose()
 }
 
 fn normalize_path_for_compare(path: &Path) -> PathBuf {
@@ -6202,6 +5841,8 @@ fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
     let binding_artifact_path = normalized_request.binding_artifact_path;
     let handoff_path = normalized_request.handoff_path;
     let resume_manifest_path = normalized_request.resume_manifest_path;
+    let descriptor_trace_stream_path =
+        normalize_optional_runtime_path(normalized_request.trace_stream_path)?;
     if binding_artifact_path.is_none() && handoff_path.is_none() && resume_manifest_path.is_none() {
         return Err(
             "External runtime event attach requires a binding artifact, handoff manifest, or resume manifest path."
@@ -6337,6 +5978,16 @@ fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
                 .to_string(),
         );
     };
+    if let Some(descriptor_trace_stream_path) = descriptor_trace_stream_path.as_ref() {
+        if normalize_path_for_compare(descriptor_trace_stream_path)
+            != normalize_path_for_compare(&trace_stream_path)
+        {
+            return Err(
+                "External runtime event attach descriptor must already match canonical 'resolved_artifacts.trace_stream_path'."
+                    .to_string(),
+            );
+        }
+    }
     if !storage_artifact_exists(&trace_stream_path, storage_backend.as_ref()) {
         return Err(format!(
             "External runtime event replay trace stream not found: {}",
@@ -6431,7 +6082,12 @@ fn subscribe_attached_runtime_events(payload: Value) -> Result<Value, String> {
         })?;
     let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
         path: Some(trace_stream_path.to_string()),
+        event_stream_text: None,
         compaction_manifest_path: None,
+        compaction_manifest_text: None,
+        compaction_state_text: None,
+        compaction_artifact_index_text: None,
+        compaction_delta_text: None,
         session_id: Some(session_id.clone()),
         job_id: job_id.clone(),
         stream_scope_fields: None,
@@ -6485,7 +6141,7 @@ fn cleanup_attached_runtime_event_transport(payload: Value) -> Result<Value, Str
     }))
 }
 
-fn build_runtime_control_plane_payload() -> Value {
+pub(crate) fn build_runtime_control_plane_payload() -> Value {
     const DEFAULT_MAX_CONCURRENT_SUBAGENTS: u64 = 8;
     const DEFAULT_SUBAGENT_TIMEOUT_SECONDS: u64 = 900;
     const DEFAULT_MAX_BACKGROUND_JOBS: u64 = 16;
@@ -6711,6 +6367,70 @@ fn build_runtime_control_plane_payload() -> Value {
     })
 }
 
+fn build_runtime_integrator_payload() -> Value {
+    let control_plane = build_runtime_control_plane_payload();
+    let runtime_host = control_plane
+        .get("runtime_host")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let services = control_plane
+        .get("services")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let rustification_status = control_plane
+        .get("rustification_status")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let concurrency_contract = runtime_host
+        .get("concurrency_contract")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let subagent_limit_contract = services
+        .get("middleware")
+        .and_then(Value::as_object)
+        .and_then(|middleware| middleware.get("subagent_limit_contract"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let observability_exporter = build_runtime_observability_exporter_descriptor();
+    let observability_metric_catalog = build_runtime_observability_metric_catalog_payload();
+    let observability_dashboard = runtime_observability_dashboard_schema();
+    json!({
+        "schema_version": RUNTIME_INTEGRATOR_SCHEMA_VERSION,
+        "authority": RUNTIME_INTEGRATOR_AUTHORITY,
+        "mode": "rust-owned-thin-orchestration",
+        "control_plane": control_plane,
+        "runtime_host": runtime_host,
+        "services": services,
+        "rustification_status": rustification_status,
+        "concurrency_contract": concurrency_contract,
+        "subagent_limit_contract": subagent_limit_contract,
+        "observability": {
+            "schema_version": RUNTIME_OBSERVABILITY_HEALTH_SNAPSHOT_SCHEMA_VERSION,
+            "ownership_lane": observability_exporter["ownership_lane"].clone(),
+            "metric_catalog_version": observability_exporter["metric_catalog_version"].clone(),
+            "dashboard_schema_version": observability_dashboard["schema_version"].clone(),
+            "resource_dimensions": observability_dashboard["resource_dimensions"].clone(),
+            "metric_catalog_schema_version": observability_metric_catalog["schema_version"].clone(),
+            "metric_names": observability_metric_catalog["metrics"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|metric| metric.get("metric_name").cloned())
+                .collect::<Vec<Value>>(),
+            "dashboard_panel_count": observability_dashboard["panels"]
+                .as_array()
+                .map(|items| items.len())
+                .unwrap_or(0),
+            "dashboard_alert_count": observability_dashboard["alerts"]
+                .as_array()
+                .map(|items| items.len())
+                .unwrap_or(0),
+            "exporter": observability_exporter,
+        },
+    })
+}
+
 fn runtime_observability_resource_dimensions() -> Vec<&'static str> {
     vec![
         "service.name",
@@ -6831,6 +6551,45 @@ fn build_runtime_observability_exporter_descriptor() -> Value {
         "producer_authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
         "exporter_owner": "rust-control-plane",
         "exporter_authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
+    })
+}
+
+fn build_runtime_observability_health_snapshot() -> Value {
+    let exporter = build_runtime_observability_exporter_descriptor();
+    let dashboard = runtime_observability_dashboard_schema();
+    let catalog = build_runtime_observability_metric_catalog_payload();
+    let metric_names = catalog
+        .get("metrics")
+        .and_then(Value::as_array)
+        .map(|metrics| {
+            metrics
+                .iter()
+                .filter_map(|metric| metric.get("metric_name").cloned())
+                .collect::<Vec<Value>>()
+        })
+        .unwrap_or_default();
+    let dashboard_panel_count = dashboard
+        .get("panels")
+        .and_then(Value::as_array)
+        .map(|panels| panels.len())
+        .unwrap_or(0);
+    let dashboard_alert_count = dashboard
+        .get("alerts")
+        .and_then(Value::as_array)
+        .map(|alerts| alerts.len())
+        .unwrap_or(0);
+
+    json!({
+        "schema_version": RUNTIME_OBSERVABILITY_HEALTH_SNAPSHOT_SCHEMA_VERSION,
+        "ownership_lane": exporter["ownership_lane"].clone(),
+        "metric_catalog_version": exporter["metric_catalog_version"].clone(),
+        "dashboard_schema_version": dashboard["schema_version"].clone(),
+        "resource_dimensions": dashboard["resource_dimensions"].clone(),
+        "metric_catalog_schema_version": catalog["schema_version"].clone(),
+        "metric_names": metric_names,
+        "dashboard_panel_count": dashboard_panel_count,
+        "dashboard_alert_count": dashboard_alert_count,
+        "exporter": exporter,
     })
 }
 
@@ -8201,13 +7960,19 @@ fn trace_event_matches_request_scope(
 
 fn load_trace_stream_events(
     path: &Path,
+    event_stream_text: Option<&str>,
     session_id: Option<&str>,
     job_id: Option<&str>,
     stream_scope_fields: &Option<Vec<String>>,
 ) -> Result<Vec<Map<String, Value>>, String> {
     let mut events = Vec::new();
-    let storage_backend = resolve_storage_backend(&[path.to_path_buf()]);
-    let raw_payload = storage_read_text(path, storage_backend.as_ref())?;
+    let raw_payload = match event_stream_text {
+        Some(value) => value.to_string(),
+        None => {
+            let storage_backend = resolve_storage_backend(&[path.to_path_buf()]);
+            storage_read_text(path, storage_backend.as_ref())?
+        }
+    };
 
     for (line_number, raw_line) in raw_payload.lines().enumerate() {
         if raw_line.trim().is_empty() {
@@ -8355,19 +8120,25 @@ struct ResolvedTraceSource {
 
 fn load_compaction_recovery(
     manifest_path: &Path,
+    manifest_text: Option<&str>,
+    state_text: Option<&str>,
+    artifact_index_text: Option<&str>,
+    delta_text: Option<&str>,
     session_id: Option<&str>,
     job_id: Option<&str>,
     stream_scope_fields: &Option<Vec<String>>,
 ) -> Result<ResolvedTraceSource, String> {
     let storage_backend = resolve_storage_backend(&[manifest_path.to_path_buf()]);
-    let manifest_payload =
-        serde_json::from_str::<Value>(&storage_read_text(manifest_path, storage_backend.as_ref())?)
-            .map_err(|err| {
-                format!(
-                    "parse compaction manifest failed for {}: {err}",
-                    manifest_path.display()
-                )
-            })?;
+    let manifest_raw = match manifest_text {
+        Some(value) => value.to_string(),
+        None => storage_read_text(manifest_path, storage_backend.as_ref())?,
+    };
+    let manifest_payload = serde_json::from_str::<Value>(&manifest_raw).map_err(|err| {
+        format!(
+            "parse compaction manifest failed for {}: {err}",
+            manifest_path.display()
+        )
+    })?;
     let manifest = manifest_payload.as_object().ok_or_else(|| {
         format!(
             "compaction manifest must decode to a JSON object: {}",
@@ -8396,32 +8167,37 @@ fn load_compaction_recovery(
         })?;
     let state_path = PathBuf::from(state_ref_uri);
     let artifact_index_path = PathBuf::from(artifact_index_uri);
-    if !storage_artifact_exists(&state_path, storage_backend.as_ref())
-        || !storage_artifact_exists(&artifact_index_path, storage_backend.as_ref())
+    if state_text.is_none()
+        && artifact_index_text.is_none()
+        && (!storage_artifact_exists(&state_path, storage_backend.as_ref())
+            || !storage_artifact_exists(&artifact_index_path, storage_backend.as_ref()))
     {
         return Err(
             "Compaction recovery failed closed because a referenced artifact is missing."
                 .to_string(),
         );
     }
-    let state_payload =
-        serde_json::from_str::<Value>(&storage_read_text(&state_path, storage_backend.as_ref())?)
-            .map_err(|err| {
-            format!(
-                "parse compaction state failed for {}: {err}",
-                state_path.display()
-            )
-        })?;
-    let artifact_index_payload = serde_json::from_str::<Value>(&storage_read_text(
-        &artifact_index_path,
-        storage_backend.as_ref(),
-    )?)
-    .map_err(|err| {
+    let state_raw = match state_text {
+        Some(value) => value.to_string(),
+        None => storage_read_text(&state_path, storage_backend.as_ref())?,
+    };
+    let state_payload = serde_json::from_str::<Value>(&state_raw).map_err(|err| {
         format!(
-            "parse compaction artifact index failed for {}: {err}",
-            artifact_index_path.display()
+            "parse compaction state failed for {}: {err}",
+            state_path.display()
         )
     })?;
+    let artifact_index_raw = match artifact_index_text {
+        Some(value) => value.to_string(),
+        None => storage_read_text(&artifact_index_path, storage_backend.as_ref())?,
+    };
+    let artifact_index_payload =
+        serde_json::from_str::<Value>(&artifact_index_raw).map_err(|err| {
+            format!(
+                "parse compaction artifact index failed for {}: {err}",
+                artifact_index_path.display()
+            )
+        })?;
 
     let delta_path = manifest
         .get("delta_path")
@@ -8430,8 +8206,14 @@ fn load_compaction_recovery(
     let mut deltas = Vec::new();
     let mut events = Vec::new();
     if let Some(delta_path) = delta_path.as_ref() {
-        if storage_artifact_exists(delta_path, storage_backend.as_ref()) {
-            let raw_delta_payload = storage_read_text(delta_path, storage_backend.as_ref())?;
+        let raw_delta_payload = delta_text.map(str::to_string).or_else(|| {
+            if storage_artifact_exists(delta_path, storage_backend.as_ref()) {
+                storage_read_text(delta_path, storage_backend.as_ref()).ok()
+            } else {
+                None
+            }
+        });
+        if let Some(raw_delta_payload) = raw_delta_payload {
             for (line_number, raw_line) in raw_delta_payload.lines().enumerate() {
                 if raw_line.trim().is_empty() {
                     continue;
@@ -8522,24 +8304,44 @@ fn load_compaction_recovery(
 
 fn resolve_trace_source(
     path: Option<&str>,
+    event_stream_text: Option<&str>,
     compaction_manifest_path: Option<&str>,
+    compaction_manifest_text: Option<&str>,
+    compaction_state_text: Option<&str>,
+    compaction_artifact_index_text: Option<&str>,
+    compaction_delta_text: Option<&str>,
     session_id: Option<&str>,
     job_id: Option<&str>,
     stream_scope_fields: &Option<Vec<String>>,
 ) -> Result<ResolvedTraceSource, String> {
-    if let Some(compaction_path) = compaction_manifest_path {
+    if compaction_manifest_path.is_some() || compaction_manifest_text.is_some() {
+        let compaction_path = compaction_manifest_path.unwrap_or("<inline-compaction-manifest>");
         return load_compaction_recovery(
             &PathBuf::from(compaction_path),
+            compaction_manifest_text,
+            compaction_state_text,
+            compaction_artifact_index_text,
+            compaction_delta_text,
             session_id,
             job_id,
             stream_scope_fields,
         );
     }
-    let path = path.ok_or_else(|| {
-        "trace stream replay requires path or compaction_manifest_path".to_string()
+    let path = path.or(if event_stream_text.is_some() {
+        Some("<inline-trace-stream>")
+    } else {
+        None
+    }).ok_or_else(|| {
+        "trace stream replay requires path, event_stream_text, compaction_manifest_path, or compaction_manifest_text".to_string()
     })?;
     let path_buf = PathBuf::from(path);
-    let events = load_trace_stream_events(&path_buf, session_id, job_id, stream_scope_fields)?;
+    let events = load_trace_stream_events(
+        &path_buf,
+        event_stream_text,
+        session_id,
+        job_id,
+        stream_scope_fields,
+    )?;
     let latest_event = events.last();
     Ok(ResolvedTraceSource {
         path: path_buf,
@@ -8561,11 +8363,18 @@ fn inspect_trace_stream(
 ) -> Result<TraceStreamInspectResponsePayload, String> {
     let resolved = resolve_trace_source(
         payload.path.as_deref(),
+        payload.event_stream_text.as_deref(),
         payload.compaction_manifest_path.as_deref(),
+        payload.compaction_manifest_text.as_deref(),
+        payload.compaction_state_text.as_deref(),
+        payload.compaction_artifact_index_text.as_deref(),
+        payload.compaction_delta_text.as_deref(),
         payload.session_id.as_deref(),
         payload.job_id.as_deref(),
         &payload.stream_scope_fields,
     )?;
+    let reroute_count = trace_reroute_count(&resolved.events);
+    let retry_count = trace_retry_count(&resolved.events);
 
     Ok(TraceStreamInspectResponsePayload {
         schema_version: TRACE_STREAM_INSPECT_SCHEMA_VERSION.to_string(),
@@ -8578,6 +8387,8 @@ fn inspect_trace_stream(
         latest_event_timestamp: resolved.latest_event_timestamp,
         latest_cursor: resolved.latest_cursor,
         recovery: resolved.recovery,
+        reroute_count,
+        retry_count,
     })
 }
 
@@ -8586,7 +8397,12 @@ fn replay_trace_stream(
 ) -> Result<TraceStreamReplayResponsePayload, String> {
     let resolved = resolve_trace_source(
         payload.path.as_deref(),
+        payload.event_stream_text.as_deref(),
         payload.compaction_manifest_path.as_deref(),
+        payload.compaction_manifest_text.as_deref(),
+        payload.compaction_state_text.as_deref(),
+        payload.compaction_artifact_index_text.as_deref(),
+        payload.compaction_delta_text.as_deref(),
         payload.session_id.as_deref(),
         payload.job_id.as_deref(),
         &payload.stream_scope_fields,
@@ -8643,6 +8459,90 @@ fn replay_trace_stream(
         next_cursor,
         events,
     })
+}
+
+fn trace_reroute_count(events: &[Map<String, Value>]) -> usize {
+    events
+        .iter()
+        .filter(|event| {
+            trace_event_string_field(event, "kind").as_deref() == Some("route.selected")
+        })
+        .count()
+        .saturating_sub(1)
+}
+
+fn trace_retry_count(events: &[Map<String, Value>]) -> usize {
+    events
+        .iter()
+        .filter(|event| trace_event_string_field(event, "kind").as_deref() == Some("run.failed"))
+        .count()
+}
+
+fn build_trace_stream_metadata(
+    trace: &ResolvedTraceSource,
+    control_plane: Option<&Value>,
+) -> Value {
+    let latest = trace.events.last();
+    let mut stream = Map::new();
+    stream.insert(
+        "generation".to_string(),
+        json!(latest
+            .and_then(|event| trace_event_usize_field(event, "generation"))
+            .unwrap_or(0)),
+    );
+    stream.insert("replay_supported".to_string(), Value::Bool(true));
+    stream.insert("event_stream_supported".to_string(), Value::Bool(true));
+    stream.insert(
+        "event_stream_schema_version".to_string(),
+        Value::String("runtime-event-stream-v1".to_string()),
+    );
+    if let Some(control_plane) = control_plane.and_then(Value::as_object) {
+        let field_map = [
+            ("authority", "control_plane_authority"),
+            ("role", "control_plane_role"),
+            ("projection", "control_plane_projection"),
+            ("delegate_kind", "control_plane_delegate_kind"),
+            ("ownership_lane", "ownership_lane"),
+            ("producer_owner", "producer_owner"),
+            ("producer_authority", "producer_authority"),
+            ("exporter_owner", "exporter_owner"),
+            ("exporter_authority", "exporter_authority"),
+            ("transport_family", "transport_family"),
+            ("resume_mode", "resume_mode"),
+            ("stream_scope_fields", "stream_scope_fields"),
+            ("cleanup_scope_fields", "cleanup_scope_fields"),
+        ];
+        for (source, target) in field_map {
+            if let Some(value) = control_plane.get(source) {
+                stream.insert(target.to_string(), value.clone());
+            }
+        }
+    }
+    stream.insert(
+        "event_stream_path".to_string(),
+        Value::String(trace.path.display().to_string()),
+    );
+    stream.insert("compaction_manifest_path".to_string(), Value::Null);
+    stream.insert("event_count".to_string(), json!(trace.events.len()));
+    stream.insert(
+        "latest_seq".to_string(),
+        json!(latest
+            .and_then(|event| trace_event_usize_field(event, "seq"))
+            .unwrap_or(0)),
+    );
+    stream.insert(
+        "latest_event_id".to_string(),
+        trace
+            .latest_event_id
+            .clone()
+            .map(Value::String)
+            .unwrap_or(Value::Null),
+    );
+    stream.insert(
+        "latest_cursor".to_string(),
+        trace.latest_cursor.clone().unwrap_or(Value::Null),
+    );
+    Value::Object(stream)
 }
 
 fn write_trace_compaction_delta(
@@ -10248,6 +10148,45 @@ mod tests {
     }
 
     #[test]
+    fn runtime_observability_health_snapshot_is_rust_owned() {
+        let payload = build_runtime_observability_health_snapshot();
+
+        assert_eq!(
+            payload["schema_version"],
+            Value::String(RUNTIME_OBSERVABILITY_HEALTH_SNAPSHOT_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            payload["metric_catalog_schema_version"],
+            Value::String(RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            payload["dashboard_schema_version"],
+            Value::String(RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            payload["metric_catalog_version"],
+            Value::String(RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION.to_string())
+        );
+        assert_eq!(
+            payload["dashboard_panel_count"],
+            Value::Number(serde_json::Number::from(6))
+        );
+        assert_eq!(
+            payload["dashboard_alert_count"],
+            Value::Number(serde_json::Number::from(3))
+        );
+        let metric_names = payload["metric_names"].as_array().expect("metric names");
+        assert_eq!(metric_names.len(), 6);
+        assert!(metric_names
+            .iter()
+            .any(|value| value == "runtime.route_mismatch_total"));
+        assert_eq!(
+            payload["exporter"]["exporter_authority"],
+            Value::String(RUNTIME_CONTROL_PLANE_AUTHORITY.to_string())
+        );
+    }
+
+    #[test]
     fn sandbox_control_accepts_known_edges_and_rejects_invalid_edges() {
         let accepted = build_sandbox_control_response(SandboxControlRequestPayload {
             schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
@@ -11022,7 +10961,12 @@ mod tests {
 
         let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
             path: Some(trace_path.display().to_string()),
+            event_stream_text: None,
             compaction_manifest_path: None,
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
             session_id: None,
             job_id: None,
             stream_scope_fields: None,
@@ -11068,7 +11012,12 @@ mod tests {
 
         let summary = inspect_trace_stream(TraceStreamInspectRequestPayload {
             path: Some(trace_path.display().to_string()),
+            event_stream_text: None,
             compaction_manifest_path: None,
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
             session_id: None,
             job_id: None,
             stream_scope_fields: None,
@@ -11104,7 +11053,12 @@ mod tests {
 
         let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
             path: Some(trace_path.display().to_string()),
+            event_stream_text: None,
             compaction_manifest_path: None,
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
             session_id: Some("session-1".to_string()),
             job_id: Some("job-1".to_string()),
             stream_scope_fields: None,
@@ -11702,7 +11656,12 @@ mod tests {
 
         let summary = inspect_trace_stream(TraceStreamInspectRequestPayload {
             path: None,
+            event_stream_text: None,
             compaction_manifest_path: Some(manifest_path.display().to_string()),
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
             session_id: Some("session-compact".to_string()),
             job_id: Some("job-compact".to_string()),
             stream_scope_fields: None,
@@ -11718,7 +11677,12 @@ mod tests {
 
         let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
             path: None,
+            event_stream_text: None,
             compaction_manifest_path: Some(manifest_path.display().to_string()),
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
             session_id: Some("session-compact".to_string()),
             job_id: Some("job-compact".to_string()),
             stream_scope_fields: None,
@@ -11798,10 +11762,20 @@ mod tests {
             owner: "execution-controller-coding".to_string(),
             gate: "none".to_string(),
             overlay: None,
-            reroute_count: 0,
-            retry_count: 1,
+            reroute_count: Some(0),
+            retry_count: Some(1),
             artifact_paths: vec!["artifacts/current/SESSION_SUMMARY.md".to_string()],
             verification_status: "passed".to_string(),
+            session_id: None,
+            job_id: None,
+            event_stream_path: None,
+            event_stream_text: None,
+            compaction_manifest_path: None,
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
+            stream_scope_fields: None,
             framework_version: Some("phase1".to_string()),
             metadata_schema_version: Some("trace-metadata-v2".to_string()),
             routing_runtime_version: Some(9),

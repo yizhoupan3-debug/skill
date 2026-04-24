@@ -21,41 +21,7 @@ from framework_runtime.trace import (
 
 
 RUNTIME_CHECKPOINT_CONTROL_PLANE_SCHEMA_VERSION = "runtime-checkpoint-control-plane-v1"
-_DEFAULT_TRACE_SERVICE_DESCRIPTOR = {
-    "authority": "rust-runtime-control-plane",
-    "role": "trace-and-handoff",
-    "projection": "rust-native-projection",
-    "delegate_kind": "filesystem-trace-store",
-}
-_DEFAULT_STATE_SERVICE_DESCRIPTOR = {
-    "authority": "rust-runtime-control-plane",
-    "role": "durable-background-state",
-    "projection": "rust-native-projection",
-    "delegate_kind": "filesystem-state-store",
-}
-
-
-def _default_service_delegate_kind(*, service_name: str, backend_family: str) -> str:
-    """Return the backend-aware default delegate kind for one service lane."""
-
-    normalized_backend = backend_family.strip().lower().replace("_", "-")
-    return f"{normalized_backend}-{service_name}-store"
-
-
-def _coerce_legacy_service_delegate_kind(
-    *,
-    delegate_kind: str,
-    service_name: str,
-    backend_family: str,
-) -> str:
-    """Rewrite stale filesystem delegate labels when the active backend is not filesystem."""
-
-    legacy_delegate = f"filesystem-{service_name}-store"
-    if backend_family == "filesystem" or delegate_kind != legacy_delegate:
-        return delegate_kind
-    return _default_service_delegate_kind(service_name=service_name, backend_family=backend_family)
-
-
+_DEFAULT_RUNTIME_CONTROL_PLANE_AUTHORITY = "rust-runtime-control-plane"
 @dataclass(frozen=True)
 class RuntimeStoreCapabilities:
     """Describe the active persistence backend family and forward-compat flags."""
@@ -83,7 +49,7 @@ class RuntimeCheckpointControlPlaneDescriptor(BaseModel):
 
     schema_version: str = RUNTIME_CHECKPOINT_CONTROL_PLANE_SCHEMA_VERSION
     runtime_control_plane_schema_version: str | None = None
-    runtime_control_plane_authority: str = _DEFAULT_TRACE_SERVICE_DESCRIPTOR["authority"]
+    runtime_control_plane_authority: str = _DEFAULT_RUNTIME_CONTROL_PLANE_AUTHORITY
     trace_service: dict[str, Any]
     state_service: dict[str, Any]
     backend_family: str
@@ -96,82 +62,6 @@ class RuntimeCheckpointControlPlaneDescriptor(BaseModel):
     resume_manifest_path: str | None = None
     background_state_path: str
     event_transport_dir: str
-
-
-def _build_service_projection(
-    *,
-    control_plane_descriptor: Mapping[str, Any] | None,
-    service_name: str,
-    defaults: Mapping[str, Any],
-    capabilities: RuntimeStoreCapabilities,
-) -> dict[str, Any]:
-    payload = dict(defaults)
-    payload["delegate_kind"] = _default_service_delegate_kind(
-        service_name=service_name,
-        backend_family=capabilities.backend_family,
-    )
-    if isinstance(control_plane_descriptor, Mapping):
-        services = control_plane_descriptor.get("services")
-        if isinstance(services, Mapping):
-            service = services.get(service_name)
-            if isinstance(service, Mapping):
-                for field in ("authority", "role", "projection", "delegate_kind"):
-                    value = service.get(field)
-                    if value is not None:
-                        payload[field] = value
-    delegate_kind = payload.get("delegate_kind")
-    if isinstance(delegate_kind, str):
-        payload["delegate_kind"] = _coerce_legacy_service_delegate_kind(
-            delegate_kind=delegate_kind,
-            service_name=service_name,
-            backend_family=capabilities.backend_family,
-        )
-    return payload
-
-
-def _build_checkpoint_control_plane_descriptor(
-    *,
-    control_plane_descriptor: Mapping[str, Any] | None,
-    paths: RuntimeCheckpointPaths,
-    capabilities: RuntimeStoreCapabilities,
-) -> RuntimeCheckpointControlPlaneDescriptor:
-    payload: dict[str, Any] = {
-        "runtime_control_plane_schema_version": (
-            control_plane_descriptor.get("schema_version")
-            if isinstance(control_plane_descriptor, Mapping)
-            else None
-        ),
-        "runtime_control_plane_authority": str(
-            control_plane_descriptor.get("authority")
-            if isinstance(control_plane_descriptor, Mapping) and control_plane_descriptor.get("authority") is not None
-            else _DEFAULT_TRACE_SERVICE_DESCRIPTOR["authority"]
-        ),
-        "trace_service": _build_service_projection(
-            control_plane_descriptor=control_plane_descriptor,
-            service_name="trace",
-            defaults=_DEFAULT_TRACE_SERVICE_DESCRIPTOR,
-            capabilities=capabilities,
-        ),
-        "state_service": _build_service_projection(
-            control_plane_descriptor=control_plane_descriptor,
-            service_name="state",
-            defaults=_DEFAULT_STATE_SERVICE_DESCRIPTOR,
-            capabilities=capabilities,
-        ),
-        "backend_family": capabilities.backend_family,
-        "supports_atomic_replace": capabilities.supports_atomic_replace,
-        "supports_compaction": capabilities.supports_compaction,
-        "supports_snapshot_delta": capabilities.supports_snapshot_delta,
-        "supports_remote_event_transport": capabilities.supports_remote_event_transport,
-        "trace_output_path": str(paths.trace_output_path) if paths.trace_output_path is not None else None,
-        "event_stream_path": str(paths.event_stream_path) if paths.event_stream_path is not None else None,
-        "resume_manifest_path": str(paths.resume_manifest_path) if paths.resume_manifest_path is not None else None,
-        "background_state_path": str(paths.background_state_path),
-        "event_transport_dir": str(paths.event_transport_dir),
-    }
-    return RuntimeCheckpointControlPlaneDescriptor.model_validate(payload)
-
-
 class RuntimeStorageBackend(Protocol):
     """Low-level storage backend used by checkpoint and state services."""
 
@@ -197,6 +87,9 @@ class RuntimeStorageBackend(Protocol):
 class FilesystemRuntimeStorageBackend:
     """Filesystem storage backend with atomic replace semantics."""
 
+    def __init__(self, *, rust_adapter: RustRouteAdapter | None = None) -> None:
+        self._rust_adapter = rust_adapter or RustRouteAdapter(_runtime_settings().codex_home)
+
     def capabilities(self) -> RuntimeStoreCapabilities:
         return RuntimeStoreCapabilities(
             backend_family="filesystem",
@@ -207,32 +100,36 @@ class FilesystemRuntimeStorageBackend:
         )
 
     def exists(self, path: Path) -> bool:
-        return path.exists()
+        return self._rust_adapter.runtime_storage_exists(path=path, backend_family="filesystem")
 
     def read_text(self, path: Path) -> str:
-        return path.read_text(encoding="utf-8")
+        if not self.exists(path):
+            raise KeyError(f"No payload stored for path {path!s}")
+        return self._rust_adapter.runtime_storage_read_text(path=path, backend_family="filesystem")
 
     def iter_text_lines(self, path: Path) -> Iterator[str]:
-        with path.open(encoding="utf-8") as handle:
-            yield from handle
+        yield from self.read_text(path).splitlines(keepends=True)
 
     def write_text(self, path: Path, payload: str) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = path.with_suffix(f"{path.suffix}.tmp")
-        tmp_path.write_text(payload, encoding="utf-8")
-        tmp_path.replace(path)
+        self._rust_adapter.runtime_storage_write_text(
+            path=path,
+            backend_family="filesystem",
+            payload_text=payload,
+        )
 
     def append_text(self, path: Path, payload: str) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(payload)
+        self._rust_adapter.runtime_storage_append_text(
+            path=path,
+            backend_family="filesystem",
+            payload_text=payload,
+        )
 
 
 class InMemoryRuntimeStorageBackend:
     """In-process backend used to validate backend-family-neutral runtime persistence."""
 
-    def __init__(self) -> None:
-        self._payloads: dict[str, str] = {}
+    def __init__(self, *, rust_adapter: RustRouteAdapter | None = None) -> None:
+        self._rust_adapter = rust_adapter or RustRouteAdapter(_runtime_settings().codex_home)
 
     def capabilities(self) -> RuntimeStoreCapabilities:
         return RuntimeStoreCapabilities(
@@ -244,24 +141,29 @@ class InMemoryRuntimeStorageBackend:
         )
 
     def exists(self, path: Path) -> bool:
-        return self._key(path) in self._payloads
+        return self._rust_adapter.runtime_storage_exists(path=path, backend_family="memory")
 
     def read_text(self, path: Path) -> str:
-        return self._payloads[self._key(path)]
+        if not self.exists(path):
+            raise KeyError(f"No payload stored for path {path!s}")
+        return self._rust_adapter.runtime_storage_read_text(path=path, backend_family="memory")
 
     def iter_text_lines(self, path: Path) -> Iterator[str]:
         yield from self.read_text(path).splitlines(keepends=True)
 
     def write_text(self, path: Path, payload: str) -> None:
-        self._payloads[self._key(path)] = payload
+        self._rust_adapter.runtime_storage_write_text(
+            path=path,
+            backend_family="memory",
+            payload_text=payload,
+        )
 
     def append_text(self, path: Path, payload: str) -> None:
-        key = self._key(path)
-        self._payloads[key] = self._payloads.get(key, "") + payload
-
-    @staticmethod
-    def _key(path: Path) -> str:
-        return str(path)
+        self._rust_adapter.runtime_storage_append_text(
+            path=path,
+            backend_family="memory",
+            payload_text=payload,
+        )
 
 
 class SQLiteRuntimeStorageBackend:
@@ -290,7 +192,6 @@ class SQLiteRuntimeStorageBackend:
         )
 
     def exists(self, path: Path) -> bool:
-        path = self._validated_path(path)
         return self._rust_adapter.runtime_storage_exists(
             path=path,
             backend_family="sqlite",
@@ -299,7 +200,6 @@ class SQLiteRuntimeStorageBackend:
         )
 
     def read_text(self, path: Path) -> str:
-        path = self._validated_path(path)
         if not self.exists(path):
             raise KeyError(f"No payload stored for path {path!s}")
         return self._rust_adapter.runtime_storage_read_text(
@@ -313,9 +213,9 @@ class SQLiteRuntimeStorageBackend:
         yield from self.read_text(path).splitlines(keepends=True)
 
     def write_text(self, path: Path, payload: str) -> None:
-        path = self._validated_path(path)
+        resolved = path.expanduser().resolve()
         self._rust_adapter.runtime_storage_write_text(
-            path=path,
+            path=resolved,
             backend_family="sqlite",
             sqlite_db_path=self._db_path,
             storage_root=self._storage_root,
@@ -323,25 +223,14 @@ class SQLiteRuntimeStorageBackend:
         )
 
     def append_text(self, path: Path, payload: str) -> None:
-        path = self._validated_path(path)
+        resolved = path.expanduser().resolve()
         self._rust_adapter.runtime_storage_append_text(
-            path=path,
+            path=resolved,
             backend_family="sqlite",
             sqlite_db_path=self._db_path,
             storage_root=self._storage_root,
             payload_text=payload,
         )
-
-    def _validated_path(self, path: Path) -> Path:
-        resolved = path.expanduser().resolve()
-        try:
-            resolved.relative_to(self._storage_root)
-        except ValueError as exc:
-            raise ValueError(
-                f"SQLite runtime storage path {resolved!s} must stay under storage root {self._storage_root!s}"
-            ) from exc
-        return resolved
-
 
 def _runtime_settings() -> "RuntimeSettings":
     from framework_runtime.config import RuntimeSettings
@@ -358,6 +247,7 @@ def select_runtime_storage_backend(
     backend_family: str | None = None,
     storage_root: Path | None = None,
     sqlite_db_path: Path | None = None,
+    rust_adapter: RustRouteAdapter | None = None,
 ) -> RuntimeStorageBackend:
     """Select a concrete backend from config or an explicit family override."""
 
@@ -369,9 +259,9 @@ def select_runtime_storage_backend(
     normalized_family = _normalized_backend_family(resolved_family)
 
     if normalized_family in {"filesystem", "file"}:
-        return FilesystemRuntimeStorageBackend()
+        return FilesystemRuntimeStorageBackend(rust_adapter=rust_adapter)
     if normalized_family in {"memory", "in_memory", "regression", "regression_double"}:
-        return InMemoryRuntimeStorageBackend()
+        return InMemoryRuntimeStorageBackend(rust_adapter=rust_adapter)
     if normalized_family in {"sqlite", "sqlite3"}:
         if sqlite_db_path is None:
             if settings is None:
@@ -381,7 +271,11 @@ def select_runtime_storage_backend(
                 sqlite_db_path = (storage_root / db_file).resolve()
             else:
                 sqlite_db_path = settings.resolved_checkpoint_storage_db_file
-        return SQLiteRuntimeStorageBackend(db_path=sqlite_db_path, storage_root=storage_root)
+        return SQLiteRuntimeStorageBackend(
+            db_path=sqlite_db_path,
+            storage_root=storage_root,
+            rust_adapter=rust_adapter,
+        )
     raise ValueError(f"Unsupported runtime storage backend family: {resolved_family!r}")
 
 
@@ -466,22 +360,49 @@ class FilesystemRuntimeCheckpointer:
         rust_adapter: RustRouteAdapter | None = None,
     ) -> None:
         self.data_dir = data_dir
-        self.storage_backend = storage_backend or select_runtime_storage_backend(storage_root=data_dir)
+        self._rust_adapter = rust_adapter or RustRouteAdapter(_runtime_settings().codex_home)
+        self.storage_backend = storage_backend or select_runtime_storage_backend(
+            storage_root=data_dir,
+            rust_adapter=self._rust_adapter,
+        )
         self._paths = RuntimeCheckpointPaths(
             trace_output_path=trace_output_path,
             event_stream_path=(trace_output_path.with_name("TRACE_EVENTS.jsonl") if trace_output_path else None),
             resume_manifest_path=(
                 trace_output_path.with_name("TRACE_RESUME_MANIFEST.json") if trace_output_path else None
             ),
-            event_transport_dir=data_dir / "runtime_event_transports",
+                event_transport_dir=data_dir / "runtime_event_transports",
             background_state_path=background_state_path or (data_dir / "runtime_background_jobs.json"),
         )
-        self._control_plane = _build_checkpoint_control_plane_descriptor(
-            control_plane_descriptor=control_plane_descriptor,
-            paths=self._paths,
-            capabilities=self.storage_backend.capabilities(),
+        self._control_plane = RuntimeCheckpointControlPlaneDescriptor.model_validate(
+            self._rust_adapter.runtime_checkpoint_control_plane(
+                {
+                    "control_plane_descriptor": dict(control_plane_descriptor)
+                    if isinstance(control_plane_descriptor, Mapping)
+                    else None,
+                    "paths": {
+                        "trace_output_path": (
+                            str(self._paths.trace_output_path)
+                            if self._paths.trace_output_path is not None
+                            else None
+                        ),
+                        "event_stream_path": (
+                            str(self._paths.event_stream_path)
+                            if self._paths.event_stream_path is not None
+                            else None
+                        ),
+                        "resume_manifest_path": (
+                            str(self._paths.resume_manifest_path)
+                            if self._paths.resume_manifest_path is not None
+                            else None
+                        ),
+                        "background_state_path": str(self._paths.background_state_path),
+                        "event_transport_dir": str(self._paths.event_transport_dir),
+                    },
+                    "capabilities": self.storage_backend.capabilities().__dict__,
+                }
+            )
         )
-        self._rust_adapter = rust_adapter or RustRouteAdapter(_runtime_settings().codex_home)
 
     def describe_paths(self) -> RuntimeCheckpointPaths:
         """Return the shared path descriptor."""
@@ -621,9 +542,6 @@ class FilesystemRuntimeCheckpointer:
             parallel_group=parallel_group,
             supervisor_projection=supervisor_projection,
         )
-        if self._is_filesystem_storage_backend():
-            self._write_resume_manifest_via_rust(paths.resume_manifest_path, manifest)
-            return manifest
         self.storage_backend.write_text(paths.resume_manifest_path, manifest.model_dump_json(indent=2) + "\n")
         return manifest
 
@@ -668,49 +586,9 @@ class FilesystemRuntimeCheckpointer:
                 },
             }
         )
-        if self._is_filesystem_storage_backend():
-            self._write_transport_binding_via_rust(path, projected)
-            return path
         payload = projected.model_dump_json(indent=2) + "\n"
         self.storage_backend.write_text(path, payload)
         return path
-
-    def _is_filesystem_storage_backend(self) -> bool:
-        return isinstance(self.storage_backend, FilesystemRuntimeStorageBackend)
-
-    def _build_transport_binding_write_payload(
-        self,
-        *,
-        path: Path,
-        transport: RuntimeEventTransport,
-    ) -> dict[str, Any]:
-        payload = transport.model_dump(mode="json")
-        payload["path"] = str(path)
-        return payload
-
-    def _build_resume_manifest_write_payload(
-        self,
-        *,
-        path: Path,
-        manifest: TraceResumeManifest,
-    ) -> dict[str, Any]:
-        payload = manifest.model_dump(mode="json")
-        payload["path"] = str(path)
-        return payload
-
-    def _write_transport_binding_via_rust(self, path: Path, transport: RuntimeEventTransport) -> None:
-        resolved = self._rust_adapter.write_transport_binding(
-            self._build_transport_binding_write_payload(path=path, transport=transport)
-        )
-        if resolved.get("path") != str(path):
-            raise RuntimeError("Rust transport binding writer acknowledged a mismatched path.")
-
-    def _write_resume_manifest_via_rust(self, path: Path, manifest: TraceResumeManifest) -> None:
-        resolved = self._rust_adapter.write_checkpoint_resume_manifest(
-            self._build_resume_manifest_write_payload(path=path, manifest=manifest)
-        )
-        if resolved.get("path") != str(path):
-            raise RuntimeError("Rust checkpoint resume manifest writer acknowledged a mismatched path.")
 
     def control_plane_descriptor(self) -> RuntimeCheckpointControlPlaneDescriptor:
         """Return the shared control-plane descriptor for checkpoint-backed artifacts."""

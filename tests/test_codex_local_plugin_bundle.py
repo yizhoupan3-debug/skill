@@ -27,8 +27,9 @@ def test_plugin_mcp_bundle_points_back_to_repo_root() -> None:
     assert framework["command"] == "./scripts/router-rs/target/release/router-rs"
     assert framework["args"] == ["--framework-mcp-stdio", "--repo-root", "../.."]
     assert framework["cwd"] == "../.."
-    assert browser["command"] == "bash"
-    assert browser["cwd"] == "../.."
+    assert browser["command"] == "node"
+    assert browser["args"] == ["./tools/browser-mcp/dist/index.js"]
+    assert browser["cwd"] == "./tools/browser-mcp"
 
 
 def test_marketplace_registers_local_plugin() -> None:

@@ -47,6 +47,14 @@ def test_host_adapter_specs_are_materialized_from_runtime_registry() -> None:
     ]
 
 
+def test_host_adapters_do_not_redeclare_registry_rows_in_python() -> None:
+    source = (RUNTIME_SRC / "framework_runtime" / "host_adapters.py").read_text(encoding="utf-8")
+
+    assert 'adapter_id="' not in source
+    assert "host_capabilities=(" not in source
+    assert "protocol_hints={" not in source
+
+
 def test_runtime_registry_missing_file_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

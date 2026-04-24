@@ -48,7 +48,9 @@ def test_repo_local_codex_framework_mcp_uses_rust_only_entrypoint() -> None:
 
     assert "python3" not in source
     assert "scripts.framework_mcp" not in source
-    assert "scripts/router-rs/Cargo.toml" in source
+    assert 'command = "/Users/joe/Documents/skill/scripts/router-rs/target/release/router-rs"' in source
+    assert "scripts/router-rs/Cargo.toml" not in source
+    assert 'command = "cargo"' not in source
     assert "--framework-mcp-stdio" in source
 
 

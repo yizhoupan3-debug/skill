@@ -38,7 +38,7 @@ def test_framework_surface_policy_keeps_kernel_small_and_default_surface_explici
         "routing",
         "memory",
         "continuity",
-        "host_projection",
+        "host_adapter_payload",
     ]
     assert payload["migration_guardrails"]["avoid_runtime_kernel_fork"] is True
     assert payload["default_surface"]["default_loadouts"] == ["default_surface_loadout"]

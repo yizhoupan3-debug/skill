@@ -229,9 +229,8 @@ class FrameworkProfile:
     """Host-agnostic framework contract.
 
     The profile is the stable, outer-framework truth source. Host adapters may
-    project this contract into AionUI, Codex Desktop, aionrs companion, or any
-    future host, but framework core semantics must not be encoded in any single
-    host protocol.
+    project this contract into first-class host entrypoints, but framework core
+    semantics must not be encoded in any single host protocol.
     """
 
     profile_id: str
@@ -315,7 +314,7 @@ class FrameworkProfile:
         if missing:
             raise ValueError(f"framework profile missing core capabilities: {missing}")
         if self.host_family == "aionrs":
-            raise ValueError("framework core must not be pinned directly to aionrs")
+            raise ValueError("framework core must not be pinned to retired host family")
         host_specific_metadata = sorted(set(self.metadata) & HOST_SPECIFIC_METADATA_KEYS)
         if host_specific_metadata:
             raise ValueError(

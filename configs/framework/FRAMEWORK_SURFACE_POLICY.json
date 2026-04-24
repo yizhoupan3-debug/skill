@@ -6,9 +6,9 @@
       "routing",
       "memory",
       "continuity",
-      "host_projection"
+      "host_adapter_payload"
     ],
-    "policy": "Keep only routing, memory, continuity, and host projection on the mainline; everything else is an opt-in capability."
+    "policy": "Keep only routing, memory, continuity, and host adapter payload on the mainline; everything else is an opt-in capability."
   },
   "migration_guardrails": {
     "preserve_rust_runtime_authority": true,
@@ -98,7 +98,7 @@
     ],
     "rules": [
       "Do not mix compiled outputs or scratch runs back into source roots.",
-      "Generated routing and host projection artifacts remain replaceable outputs, not authoring sources of truth.",
+      "Generated routing and host adapter payload artifacts remain replaceable outputs, not authoring sources of truth.",
       "Session continuity stays under root mirrors plus artifacts/current and must not drift into random repo folders."
     ]
   },

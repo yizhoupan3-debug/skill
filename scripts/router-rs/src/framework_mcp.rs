@@ -88,9 +88,7 @@ fn read_framework_mcp_message<R: BufRead>(
 
     *transport_mode = Some(FrameworkMcpTransportMode::NewlineDelimited);
     Ok(Some(
-        first_line
-            .trim_end_matches(&['\r', '\n'][..])
-            .to_string(),
+        first_line.trim_end_matches(&['\r', '\n'][..]).to_string(),
     ))
 }
 
@@ -1197,8 +1195,12 @@ mod tests {
         let output_dir = temp_root("framework-mcp-content-length");
         let input = Cursor::new(format!(
             "{}{}",
-            frame_message(&json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})),
-            frame_message(&json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}))
+            frame_message(
+                &json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+            ),
+            frame_message(
+                &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+            )
         ));
         let mut output = Vec::new();
         run_framework_mcp_stdio(input, &mut output, &repo_root, &output_dir).expect("run mcp");
@@ -1218,9 +1220,11 @@ mod tests {
             .expect("tool list body");
         let initialize_payload =
             serde_json::from_str::<Value>(initialize).expect("parse initialize response");
-        let tools_payload =
-            serde_json::from_str::<Value>(tool_list).expect("parse tool response");
-        assert_eq!(initialize_payload["result"]["serverInfo"]["name"], SERVER_NAME);
+        let tools_payload = serde_json::from_str::<Value>(tool_list).expect("parse tool response");
+        assert_eq!(
+            initialize_payload["result"]["serverInfo"]["name"],
+            SERVER_NAME
+        );
         assert!(tools_payload["result"]["tools"]
             .as_array()
             .expect("tools")

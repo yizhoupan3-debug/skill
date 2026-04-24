@@ -10,11 +10,11 @@
       "cwd": "../.."
     },
     "browser-mcp": {
-      "command": "bash",
+      "command": "node",
       "args": [
-        "./tools/browser-mcp/scripts/start_browser_mcp.sh"
+        "./tools/browser-mcp/dist/index.js"
       ],
-      "cwd": "../.."
+      "cwd": "./tools/browser-mcp"
     }
   }
 }

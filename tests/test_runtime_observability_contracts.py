@@ -17,9 +17,7 @@ if str(RUNTIME_SRC) not in sys.path:
     sys.path.insert(0, str(RUNTIME_SRC))
 
 from framework_runtime.observability import (
-    RUNTIME_OBSERVABILITY_DASHBOARD_DIMENSIONS,
     RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION,
-    RUNTIME_OBSERVABILITY_METRIC_SPECS,
     build_runtime_metric_record,
     build_runtime_observability_exporter_descriptor,
     build_runtime_observability_health_snapshot,
@@ -237,48 +235,62 @@ def test_metrics_catalog_and_dashboard_schema_are_stable() -> None:
 
 def test_concrete_observability_helpers_match_the_contract() -> None:
     adapter = RustRouteAdapter(default_codex_home(), timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS)
-    with patch("framework_runtime.observability._observability_rust_adapter", return_value=adapter):
-        exporter = build_runtime_observability_exporter_descriptor()
-        assert exporter["ownership_lane"] == "rust-contract-lane"
-        assert exporter["producer_owner"] == "rust-control-plane"
-        assert exporter["exporter_owner"] == "rust-control-plane"
-        assert exporter["export_path"] == "jsonl-plus-otel"
+    exporter = build_runtime_observability_exporter_descriptor(rust_adapter=adapter)
+    assert exporter["ownership_lane"] == "rust-contract-lane"
+    assert exporter["producer_owner"] == "rust-control-plane"
+    assert exporter["exporter_owner"] == "rust-control-plane"
+    assert exporter["export_path"] == "jsonl-plus-otel"
 
-        schema = runtime_observability_dashboard_schema()
-        assert schema["schema_version"] == "runtime-observability-dashboard-v1"
-        assert tuple(schema["resource_dimensions"]) == RUNTIME_OBSERVABILITY_DASHBOARD_DIMENSIONS
-        assert {panel["metric"] for panel in schema["panels"]} == {
-            spec.metric_name for spec in RUNTIME_OBSERVABILITY_METRIC_SPECS
-        }
+    schema = runtime_observability_dashboard_schema(rust_adapter=adapter)
+    assert schema["schema_version"] == "runtime-observability-dashboard-v1"
+    assert tuple(schema["resource_dimensions"]) == (
+        "service.name",
+        "service.version",
+        "runtime.instance.id",
+        "route_engine_mode",
+        "runtime.job_id",
+        "runtime.session_id",
+        "runtime.attempt",
+        "runtime.worker_id",
+        "runtime.generation",
+    )
+    assert {panel["metric"] for panel in schema["panels"]} == {
+        "runtime.route_mismatch_total",
+        "runtime.replay_resume_success_total",
+        "runtime.lease_takeover_latency_ms",
+        "runtime.interrupt_completion_latency_ms",
+        "runtime.compression_offload_total",
+        "runtime.sandbox_timeout_total",
+    }
 
-        record = build_runtime_metric_record(
-            "runtime.route_mismatch_total",
-            value=3,
-            service_name="codex-runtime",
-            service_version="v1",
-            runtime_instance_id="runtime-123",
-            route_engine_mode="rust",
-            job_id="job-1",
-            session_id="session-1",
-            attempt=2,
-            worker_id="worker-7",
-            generation="gen-a",
-        )
-        assert record["metric_name"] == "runtime.route_mismatch_total"
-        assert record["metric_type"] == "counter"
-        assert record["unit"] == "1"
-        assert record["resource_attributes"]["service.name"] == "codex-runtime"
-        assert record["dimensions"] == {
-            "runtime.job_id": "job-1",
-            "runtime.session_id": "session-1",
-            "runtime.attempt": 2,
-            "runtime.worker_id": "worker-7",
-            "runtime.generation": "gen-a",
-            "runtime.stage": "runtime.metric",
-            "runtime.status": "ok",
-        }
-        assert record["ownership"]["exporter_authority"] == "rust-runtime-control-plane"
-        assert "build_runtime_metric_record()" in CONTRACT_TEXT
+    record = build_runtime_metric_record(
+        "runtime.route_mismatch_total",
+        value=3,
+        service_name="codex-runtime",
+        service_version="v1",
+        runtime_instance_id="runtime-123",
+        route_engine_mode="rust",
+        job_id="job-1",
+        session_id="session-1",
+        attempt=2,
+        worker_id="worker-7",
+        generation="gen-a",
+    )
+    assert record["metric_name"] == "runtime.route_mismatch_total"
+    assert record["metric_type"] == "counter"
+    assert record["unit"] == "1"
+    assert record["resource_attributes"]["service.name"] == "codex-runtime"
+    assert record["dimensions"] == {
+        "runtime.job_id": "job-1",
+        "runtime.session_id": "session-1",
+        "runtime.attempt": 2,
+        "runtime.worker_id": "worker-7",
+        "runtime.generation": "gen-a",
+        "runtime.stage": "runtime.metric",
+        "runtime.status": "ok",
+    }
+    assert record["ownership"]["exporter_authority"] == "rust-runtime-control-plane"
+    assert "build_runtime_metric_record()" in CONTRACT_TEXT
 
 
 def test_metric_catalog_helper_freezes_machine_readable_metrics_path() -> None:
@@ -299,62 +311,86 @@ def test_metric_catalog_helper_freezes_machine_readable_metrics_path() -> None:
         "runtime.worker_id",
         "runtime.generation",
     ]
-    assert [metric["metric_name"] for metric in catalog["metrics"]] == [
-        spec.metric_name for spec in RUNTIME_OBSERVABILITY_METRIC_SPECS
+    expected_metric_names = [
+        "runtime.route_mismatch_total",
+        "runtime.replay_resume_success_total",
+        "runtime.lease_takeover_latency_ms",
+        "runtime.interrupt_completion_latency_ms",
+        "runtime.compression_offload_total",
+        "runtime.sandbox_timeout_total",
     ]
-    assert [metric["dimensions"] for metric in catalog["metrics"]] == [
-        list(spec.base_dimensions) for spec in RUNTIME_OBSERVABILITY_METRIC_SPECS
+    expected_dimensions = [
+        "service.name",
+        "service.version",
+        "runtime.instance.id",
+        "route_engine_mode",
+        "runtime.job_id",
+        "runtime.session_id",
+        "runtime.attempt",
+        "runtime.worker_id",
+        "runtime.generation",
     ]
+    assert [metric["metric_name"] for metric in catalog["metrics"]] == expected_metric_names
+    assert [metric["dimensions"] for metric in catalog["metrics"]] == [expected_dimensions] * len(
+        expected_metric_names
+    )
     assert "runtime_observability_metric_catalog()" in CONTRACT_TEXT
 
     health = build_runtime_observability_health_snapshot()
     assert health["metric_catalog_schema_version"] == RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION
     assert health["metric_names"] == [metric["metric_name"] for metric in catalog["metrics"]]
+    assert health["dashboard_panel_count"] == 6
+    assert health["dashboard_alert_count"] == 3
 
 
 def test_observability_helpers_delegate_to_rust_contract_lane() -> None:
     adapter = RustRouteAdapter(default_codex_home(), timeout_seconds=RUST_ADAPTER_TIMEOUT_SECONDS)
-    with patch("framework_runtime.observability._observability_rust_adapter", return_value=adapter):
-        exporter = build_runtime_observability_exporter_descriptor()
-        assert exporter == adapter.runtime_observability_exporter_descriptor()
+    exporter = build_runtime_observability_exporter_descriptor(rust_adapter=adapter)
+    assert exporter == adapter.runtime_observability_exporter_descriptor()
 
-        catalog = runtime_observability_metric_catalog()
-        assert catalog == adapter.runtime_observability_metric_catalog()
+    catalog = runtime_observability_metric_catalog(rust_adapter=adapter)
+    assert catalog == adapter.runtime_observability_metric_catalog()
 
-        dashboard = runtime_observability_dashboard_schema()
-        assert dashboard == adapter.runtime_observability_dashboard_schema()
+    dashboard = runtime_observability_dashboard_schema(rust_adapter=adapter)
+    assert dashboard == adapter.runtime_observability_dashboard_schema()
 
-        request = {
-            "metric_name": "runtime.route_mismatch_total",
-            "value": 3,
-            "service_name": "codex-runtime",
-            "service_version": "v1",
-            "runtime_instance_id": "runtime-123",
-            "route_engine_mode": "rust",
-            "job_id": "job-1",
-            "session_id": "session-1",
-            "attempt": 2,
-            "worker_id": "worker-7",
-            "generation": "gen-a",
-        }
-        record = build_runtime_metric_record(
-            "runtime.route_mismatch_total",
-            value=3,
-            service_name="codex-runtime",
-            service_version="v1",
-            runtime_instance_id="runtime-123",
-            route_engine_mode="rust",
-            job_id="job-1",
-            session_id="session-1",
-            attempt=2,
-            worker_id="worker-7",
-            generation="gen-a",
-        )
-        assert record == adapter.runtime_metric_record(request)
+    health = build_runtime_observability_health_snapshot(rust_adapter=adapter)
+    assert health == adapter.runtime_observability_health_snapshot()
+
+    request = {
+        "metric_name": "runtime.route_mismatch_total",
+        "value": 3,
+        "service_name": "codex-runtime",
+        "service_version": "v1",
+        "runtime_instance_id": "runtime-123",
+        "route_engine_mode": "rust",
+        "job_id": "job-1",
+        "session_id": "session-1",
+        "attempt": 2,
+        "worker_id": "worker-7",
+        "generation": "gen-a",
+    }
+    record = build_runtime_metric_record(
+        "runtime.route_mismatch_total",
+        value=3,
+        service_name="codex-runtime",
+        service_version="v1",
+        runtime_instance_id="runtime-123",
+        route_engine_mode="rust",
+        job_id="job-1",
+        session_id="session-1",
+        attempt=2,
+        worker_id="worker-7",
+        generation="gen-a",
+    )
+    assert record == adapter.runtime_metric_record(request)
 
 
 def test_observability_helpers_fail_closed_when_rust_lane_is_unavailable() -> None:
     class _BrokenRustObservabilityAdapter:
+        def health(self) -> dict[str, object]:
+            return {"available": True}
+
         def runtime_observability_exporter_descriptor(self) -> dict[str, object]:
             raise RuntimeError("rust observability lane unavailable")
 
@@ -364,25 +400,27 @@ def test_observability_helpers_fail_closed_when_rust_lane_is_unavailable() -> No
         def runtime_observability_dashboard_schema(self) -> dict[str, object]:
             raise RuntimeError("rust observability lane unavailable")
 
+        def runtime_observability_health_snapshot(self) -> dict[str, object]:
+            raise RuntimeError("rust observability lane unavailable")
+
         def runtime_metric_record(self, payload: dict[str, object]) -> dict[str, object]:
             raise RuntimeError("rust observability lane unavailable")
 
-    with patch(
-        "framework_runtime.observability._observability_rust_adapter",
-        return_value=_BrokenRustObservabilityAdapter(),
+    adapter = _BrokenRustObservabilityAdapter()
+    for helper in (
+        lambda: build_runtime_observability_exporter_descriptor(rust_adapter=adapter),
+        lambda: runtime_observability_metric_catalog(rust_adapter=adapter),
+        lambda: runtime_observability_dashboard_schema(rust_adapter=adapter),
+        lambda: build_runtime_observability_health_snapshot(rust_adapter=adapter),
     ):
-        for helper in (
-            build_runtime_observability_exporter_descriptor,
-            runtime_observability_metric_catalog,
-            runtime_observability_dashboard_schema,
-        ):
-            try:
-                helper()
-            except RuntimeError as exc:
-                assert "Rust observability lane failed" in str(exc)
-            else:
-                raise AssertionError("observability helpers must fail without the Rust lane")
+        try:
+            helper()
+        except RuntimeError as exc:
+            assert "rust observability lane unavailable" in str(exc)
+        else:
+            raise AssertionError("observability helpers must fail without the Rust lane")
 
+    with patch("framework_runtime.observability.RustRouteAdapter", return_value=adapter):
         try:
             build_runtime_metric_record(
                 "runtime.route_mismatch_total",
@@ -398,7 +436,7 @@ def test_observability_helpers_fail_closed_when_rust_lane_is_unavailable() -> No
                 generation="gen-a",
             )
         except RuntimeError as exc:
-            assert "Rust observability lane failed" in str(exc)
+            assert "rust observability lane unavailable" in str(exc)
         else:
             raise AssertionError("metric records must fail without the Rust lane")
 
@@ -418,8 +456,8 @@ def test_observability_helpers_fail_closed_for_unknown_metrics_and_empty_dimensi
             worker_id="worker-7",
             generation="gen-a",
         )
-    except ValueError as exc:
-        assert str(exc) == "unsupported runtime metric: runtime.unknown_total"
+    except RuntimeError as exc:
+        assert "unsupported runtime metric: runtime.unknown_total" in str(exc)
     else:
         raise AssertionError("unknown metrics should fail closed")
 
@@ -437,8 +475,8 @@ def test_observability_helpers_fail_closed_for_unknown_metrics_and_empty_dimensi
             worker_id="worker-7",
             generation="gen-a",
         )
-    except ValueError as exc:
-        assert str(exc) == "service_name must be a non-empty string"
+    except RuntimeError as exc:
+        assert "requires non-empty service_name" in str(exc)
     else:
         raise AssertionError("empty resource dimensions should fail closed")
 
@@ -457,7 +495,7 @@ def test_observability_helpers_fail_closed_for_unknown_metrics_and_empty_dimensi
             generation="gen-a",
         )
     except ValueError as exc:
-        assert str(exc) == "metric value must be finite"
+        assert "Out of range float values are not JSON compliant" in str(exc)
     else:
         raise AssertionError("non-finite metric values should fail closed")
 
@@ -475,8 +513,8 @@ def test_observability_helpers_fail_closed_for_unknown_metrics_and_empty_dimensi
             worker_id="worker-7",
             generation="gen-a",
         )
-    except ValueError as exc:
-        assert str(exc) == "runtime metric record requires a numeric value"
+    except RuntimeError as exc:
+        assert "runtime metric record requires a numeric value" in str(exc)
     else:
         raise AssertionError("boolean metric values should fail closed")
 
@@ -494,7 +532,7 @@ def test_observability_helpers_fail_closed_for_unknown_metrics_and_empty_dimensi
             worker_id="worker-7",
             generation="gen-a",
         )
-    except ValueError as exc:
-        assert str(exc) == "runtime metric record requires non-negative integer field attempt"
+    except RuntimeError as exc:
+        assert "runtime metric record requires non-negative integer field attempt" in str(exc)
     else:
         raise AssertionError("negative attempts should fail closed")
