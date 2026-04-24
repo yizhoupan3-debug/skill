@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib
+import json
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import StringIO
@@ -27,6 +29,10 @@ def require_dependency(
 
 pd = require_dependency("pandas", feature="financial data normalization")
 requests = require_dependency("requests", feature="HTTP financial data access")
+
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = SKILL_ROOT.parents[1]
+RUST_MANIFEST = REPO_ROOT / "rust_tools/financial_data_rs/Cargo.toml"
 
 
 @dataclass(slots=True)
@@ -239,6 +245,18 @@ class MarketDataClient:
         interval: str = "1h",
         limit: int = 200,
     ) -> FetchResult:
+        if exchange.lower() in {"binance", "coinbase", "kraken"}:
+            return self._fetch_rust_ohlcv(
+                market="crypto",
+                symbol=symbol,
+                exchange=exchange,
+                interval=interval,
+                limit=limit,
+                period="1mo",
+                source="auto",
+                adjusted=False,
+            )
+
         ccxt = require_dependency("ccxt", feature="crypto market data fetching")
 
         exchange_cls = getattr(ccxt, exchange)
@@ -280,6 +298,18 @@ class MarketDataClient:
         source: Literal["auto", "yfinance", "stooq"] = "auto",
         adjusted: bool = False,
     ) -> FetchResult:
+        if not adjusted:
+            return self._fetch_rust_ohlcv(
+                market="us",
+                symbol=symbol,
+                exchange="binance",
+                interval=interval,
+                limit=200,
+                period=period,
+                source=source,
+                adjusted=adjusted,
+            )
+
         attempts = [source] if source != "auto" else ["yfinance", "stooq"]
         last_error: Exception | None = None
         for candidate in attempts:
@@ -294,6 +324,81 @@ class MarketDataClient:
                 if source != "auto":
                     raise
         raise RuntimeError(f"All U.S. data sources failed for {symbol}") from last_error
+
+    def _fetch_rust_ohlcv(
+        self,
+        *,
+        market: Literal["crypto", "us"],
+        symbol: str,
+        exchange: str,
+        interval: str,
+        limit: int,
+        period: str,
+        source: Literal["auto", "yfinance", "stooq"],
+        adjusted: bool,
+    ) -> FetchResult:
+        rust_source = "yahoo" if source == "yfinance" else source
+        cmd = [
+            "cargo",
+            "run",
+            "--quiet",
+            "--manifest-path",
+            str(RUST_MANIFEST),
+            "--",
+            "ohlcv",
+            "--market",
+            market,
+            "--symbol",
+            symbol,
+            "--exchange",
+            exchange,
+            "--interval",
+            interval,
+            "--limit",
+            str(limit),
+            "--period",
+            period,
+            "--source",
+            rust_source,
+            "--format",
+            "json",
+        ]
+        if adjusted:
+            cmd.append("--adjusted")
+
+        completed = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        if completed.returncode != 0:
+            message = completed.stderr.strip() or completed.stdout.strip()
+            raise RuntimeError(message or f"Rust financial data CLI exited {completed.returncode}")
+
+        payload = json.loads(completed.stdout)
+        metadata = payload["metadata"]
+        df = pd.DataFrame(payload["records"])
+        if df.empty:
+            raise ValueError(f"Rust financial data CLI returned empty OHLCV data for {symbol}")
+        if "timestamp" in df.columns:
+            df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+        df = self._ensure_monotonic(df, "timestamp")
+        notes = list(metadata.get("notes", []))
+        notes.append("fetched by Rust core")
+        return FetchResult(
+            dataset=metadata["dataset"],
+            source=metadata["source"],
+            market=metadata["market"],
+            symbol=metadata["symbol"],
+            interval=metadata.get("interval"),
+            timezone=metadata.get("timezone"),
+            adjusted=metadata.get("adjusted"),
+            fetched_at_utc=metadata["fetched_at_utc"],
+            data=df,
+            notes=notes,
+        )
 
     def _fetch_us_yfinance(
         self,

@@ -223,6 +223,8 @@ enum Commands {
         #[arg(long)]
         bootstrap_output_dir: Option<PathBuf>,
         #[arg(long)]
+        with_browser_mcp: bool,
+        #[arg(long)]
         skip_framework_overlay_retirement: bool,
         #[arg(long)]
         skip_personal_plugin: bool,
@@ -384,6 +386,7 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             home_claude_refresh_path,
             home_claude_mcp_config_path,
             bootstrap_output_dir,
+            with_browser_mcp,
             skip_framework_overlay_retirement,
             skip_personal_plugin,
             skip_personal_marketplace,
@@ -402,6 +405,7 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             &home_claude_refresh_path,
             &home_claude_mcp_config_path,
             bootstrap_output_dir.as_deref(),
+            with_browser_mcp,
             !skip_framework_overlay_retirement,
             !skip_personal_plugin,
             !skip_personal_marketplace,
@@ -771,6 +775,7 @@ fn install_native_integration(
     home_claude_refresh_path: &Path,
     home_claude_mcp_config_path: &Path,
     bootstrap_output_dir: Option<&Path>,
+    install_browser_mcp: bool,
     retire_framework_overlay_file: bool,
     install_personal_plugin: bool,
     install_personal_marketplace_entry: bool,
@@ -802,6 +807,15 @@ fn install_native_integration(
 
     let created_config = ensure_config_file(&home_config_path)?;
     let codex_hooks_feature_changed = ensure_codex_hooks_feature(&home_config_path)?;
+    let browser_changed = if install_browser_mcp {
+        install_mcp_block(
+            &home_config_path,
+            "[mcp_servers.browser-mcp]",
+            &build_browser_server_block(&repo_root),
+        )?
+    } else {
+        false
+    };
     let framework_changed = install_mcp_block(
         &home_config_path,
         "[mcp_servers.framework-mcp]",
@@ -871,6 +885,7 @@ fn install_native_integration(
         "repo_marketplace_path": repo_root.join(".agents/plugins/marketplace.json").to_string_lossy(),
         "created_config": created_config,
         "codex_hooks_feature_changed": codex_hooks_feature_changed,
+        "browser_mcp_changed": browser_changed,
         "framework_mcp_changed": framework_changed,
         "tui_status_line_changed": tui_changed,
         "personal_plugin_changed": personal_plugin_changed,

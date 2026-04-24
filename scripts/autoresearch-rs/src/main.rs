@@ -1217,10 +1217,6 @@ fn command_output(args: &[&str], cwd: &Path) -> Option<String> {
 fn capture_environment_fingerprint(workspace: &Path) -> Value {
     json!({
         "rust_version": command_output(&["rustc", "--version"], workspace).unwrap_or_else(|| "unknown".to_string()),
-        "python_version": command_output(&["python3", "--version"], workspace)
-            .or_else(|| command_output(&["python", "--version"], workspace))
-            .map(|version| version.trim_start_matches("Python ").to_string())
-            .unwrap_or_else(|| "unknown".to_string()),
         "platform": std::env::consts::OS,
         "machine": std::env::consts::ARCH,
         "yaml_available": true,
@@ -1279,15 +1275,14 @@ fn capture_git_provenance(workspace: &Path) -> Value {
 
 fn summarize_environment_fingerprint(fingerprint: Option<&Value>) -> String {
     let Some(fingerprint) = fingerprint else {
-        return "python=- platform=- machine=-".to_string();
+        return "rust=- platform=- machine=-".to_string();
     };
     let runtime_version = fingerprint
-        .get("python_version")
-        .or_else(|| fingerprint.get("rust_version"))
+        .get("rust_version")
         .and_then(Value::as_str)
         .unwrap_or("-");
     format!(
-        "python={} platform={} machine={}",
+        "rust={} platform={} machine={}",
         runtime_version,
         fingerprint
             .get("platform")

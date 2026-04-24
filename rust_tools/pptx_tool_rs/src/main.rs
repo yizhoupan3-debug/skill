@@ -915,48 +915,6 @@ fn parse_outline_yaml_subset(raw: &str) -> Result<Value> {
             continue;
         };
 
-        if line.starts_with("    ") && !line.starts_with("      ") {
-            if let Some((key, value)) = trimmed.split_once(':') {
-                let key = key.trim().to_string();
-                let value = value.trim();
-                current_list = None;
-                current_object = None;
-                if value.is_empty() {
-                    slide.insert(key.clone(), Value::Array(Vec::new()));
-                    current_list = Some(key);
-                } else {
-                    slide.insert(key, parse_yaml_scalar(value));
-                }
-            }
-            continue;
-        }
-
-        if line.starts_with("      - ") {
-            let Some(list_key) = current_list.clone() else {
-                continue;
-            };
-            let item = trimmed.trim_start_matches("- ").trim();
-            if let Some(array) = slide.get_mut(&list_key).and_then(Value::as_array_mut) {
-                array.push(parse_yaml_inline_value(item));
-            }
-            continue;
-        }
-
-        if line.starts_with("      ") && !line.starts_with("        ") {
-            if let Some((key, value)) = trimmed.split_once(':') {
-                let key = key.trim().to_string();
-                let value = value.trim();
-                if value.is_empty() {
-                    slide.insert(key.clone(), json!({}));
-                    current_object = Some(key);
-                } else {
-                    slide.insert(key, parse_yaml_scalar(value));
-                    current_object = None;
-                }
-            }
-            continue;
-        }
-
         if line.starts_with("        - ") {
             let Some(object_key) = current_object.clone() else {
                 continue;
@@ -974,14 +932,81 @@ fn parse_outline_yaml_subset(raw: &str) -> Result<Value> {
         }
 
         if line.starts_with("        ") {
-            let Some(object_key) = current_object.clone() else {
+            let object_key = current_object
+                .clone()
+                .or_else(|| current_list.clone())
+                .unwrap_or_default();
+            if object_key.is_empty() {
                 continue;
-            };
+            }
             if let Some((key, value)) = trimmed.split_once(':') {
                 if let Some(object) = slide.get_mut(&object_key).and_then(Value::as_object_mut) {
                     object.insert(key.trim().to_string(), parse_yaml_scalar(value.trim()));
                 }
             }
+            continue;
+        }
+
+        if line.starts_with("    ") && !line.starts_with("      ") {
+            if let Some((key, value)) = trimmed.split_once(':') {
+                let key = key.trim().to_string();
+                let value = value.trim();
+                current_list = None;
+                current_object = None;
+                if value.is_empty() {
+                    if matches!(key.as_str(), "bullets" | "metrics" | "steps" | "timeline") {
+                        slide.insert(key.clone(), Value::Array(Vec::new()));
+                        current_list = Some(key);
+                    } else {
+                        slide.insert(key.clone(), json!({}));
+                        current_object = Some(key);
+                    }
+                } else if let Some(object_key) = current_object.clone() {
+                    if let Some(object) = slide.get_mut(&object_key).and_then(Value::as_object_mut)
+                    {
+                        object.insert(key, parse_yaml_scalar(value));
+                    }
+                } else {
+                    slide.insert(key, parse_yaml_scalar(value));
+                    current_object = None;
+                }
+            }
+            continue;
+        }
+
+        if line.starts_with("      - ") {
+            let Some(list_key) = current_list.clone() else {
+                continue;
+            };
+            let item = trimmed.trim_start_matches("- ").trim();
+            if let Some(array) = slide.get_mut(&list_key).and_then(Value::as_array_mut) {
+                array.push(parse_yaml_inline_value(item));
+            }
+            continue;
+        }
+
+        if line.starts_with("      ") && !line.starts_with("        ") {
+            if let Some((raw_key, raw_value)) = trimmed.split_once(':') {
+                let key = raw_key.trim().to_string();
+                let value = raw_value.trim();
+                if let Some(object_key) = current_object.clone() {
+                    if let Some(object) = slide.get_mut(&object_key).and_then(Value::as_object_mut)
+                    {
+                        if value.is_empty() {
+                            object.insert(key, json!([]));
+                        } else {
+                            object.insert(key, parse_yaml_scalar(value));
+                        }
+                    }
+                } else if value.is_empty() {
+                    slide.insert(key.clone(), json!({}));
+                    current_object = Some(key);
+                } else {
+                    slide.insert(key, parse_yaml_scalar(value));
+                    current_object = None;
+                }
+            }
+            continue;
         }
     }
 
@@ -993,6 +1018,7 @@ fn parse_outline_yaml_subset(raw: &str) -> Result<Value> {
 }
 
 fn parse_yaml_inline_value(value: &str) -> Value {
+    let value = value.trim();
     if value.starts_with('{') || value.starts_with('[') {
         parse_yaml_jsonish(value).unwrap_or_else(|| Value::String(unquote_yaml(value).to_string()))
     } else {
@@ -1012,7 +1038,51 @@ fn parse_yaml_scalar(value: &str) -> Value {
 }
 
 fn parse_yaml_jsonish(value: &str) -> Option<Value> {
-    serde_json::from_str(value).ok()
+    serde_json::from_str(value)
+        .ok()
+        .or_else(|| serde_json::from_str(&yaml_inline_to_jsonish(value)).ok())
+}
+
+fn yaml_inline_to_jsonish(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 8);
+    let mut in_string = false;
+    let mut quote = '\0';
+    let mut key_start = true;
+    let mut reading_key = false;
+    for ch in value.chars() {
+        if in_string {
+            if ch == quote {
+                in_string = false;
+            }
+            out.push(ch);
+            continue;
+        }
+        match ch {
+            '"' | '\'' => {
+                in_string = true;
+                quote = ch;
+                out.push('"');
+            }
+            '{' | ',' => {
+                key_start = ch == '{';
+                reading_key = false;
+                out.push(ch);
+            }
+            ':' if reading_key => {
+                key_start = false;
+                reading_key = false;
+                out.push_str("\":");
+            }
+            ch if key_start && !ch.is_whitespace() => {
+                key_start = false;
+                reading_key = true;
+                out.push('"');
+                out.push(ch);
+            }
+            _ => out.push(ch),
+        }
+    }
+    out
 }
 
 fn unquote_yaml(value: &str) -> &str {

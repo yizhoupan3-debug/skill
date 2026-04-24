@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hybrid CLI: Rust for OHLCV/export hot paths, Python for fundamentals surfaces."""
+"""Rust-first CLI for OHLCV/export, with Python kept for fundamentals surfaces."""
 from __future__ import annotations
 
 import argparse
@@ -92,12 +92,12 @@ def emit_result(result, fmt: str) -> None:
 def should_use_rust(args: argparse.Namespace) -> bool:
     """Route network-heavy paths to Rust when the feature set matches."""
     if args.command == "ohlcv":
-        return args.market in {"crypto", "us"} and not (args.market == "us" and args.source == "yfinance" and args.adjusted)
+        return args.market in {"crypto", "us"} and not args.adjusted
     if args.command == "export":
         return (
             args.market in {"crypto", "us"}
             and args.file_format in {"csv", "json"}
-            and not (args.market == "us" and args.source == "yfinance" and args.adjusted)
+            and not args.adjusted
         )
     return False
 

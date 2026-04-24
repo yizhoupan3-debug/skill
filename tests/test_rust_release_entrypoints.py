@@ -17,9 +17,23 @@ def test_python_wrapper_scripts_stay_retired() -> None:
         PROJECT_ROOT / "scripts" / "rust_binary_runner.py",
         PROJECT_ROOT / "scripts" / "host_integration_runner.py",
         PROJECT_ROOT / "configs" / "codex" / "model_instructions.md",
+        PROJECT_ROOT / "skills" / "autoresearch" / "scripts" / "research_ctl.py",
+        PROJECT_ROOT / "skills" / "autoresearch" / "scripts" / "init_research.py",
     )
 
     assert [path for path in retired_paths if path.exists()] == []
+
+
+def test_autoresearch_uses_rust_only_controller() -> None:
+    skill_dir = PROJECT_ROOT / "skills" / "autoresearch"
+    skill_doc = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    rust_source = PROJECT_ROOT / "scripts" / "autoresearch-rs" / "src" / "main.rs"
+
+    assert rust_source.exists()
+    assert not (skill_dir / "scripts").exists()
+    assert "scripts/autoresearch-rs" in skill_doc
+    assert "research_ctl.py" not in skill_doc
+    assert "init_research.py" not in skill_doc
 
 
 def test_installed_project_hooks_use_router_rs_only() -> None:

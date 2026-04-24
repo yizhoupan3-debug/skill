@@ -71,49 +71,36 @@ bridge_behavior: mobile_complete_once
 
 ## Execution tiers
 
-- 只诊断：`python3 scripts/git_safety.py doctor`
-- 出收口步骤：`python3 scripts/git_safety.py publish-plan`
-- 查看内置验证预设：`python3 scripts/git_safety.py list-verify-presets`
-- 按当前改动面自动建议预设：`python3 scripts/git_safety.py suggest-verify-presets`
-- 并行批量验证：`python3 scripts/git_safety.py verify-batch --verify-cmd '<cmd>' --verify-cmd '<cmd>' --verify-jobs 2`
-- 用预设并行批量验证：`python3 scripts/git_safety.py verify-batch --verify-preset gitx-smoke --verify-jobs 2`
-- 自动执行到 merge：`python3 scripts/git_safety.py auto-closeout`
-- 自动执行到 push：`python3 scripts/git_safety.py auto-closeout --push`
-- 自动执行并先跑并行验证：`python3 scripts/git_safety.py auto-closeout --verify-cmd '<cmd>' --verify-cmd '<cmd>' --verify-jobs 2`
-- 自动执行并先跑预设验证：`python3 scripts/git_safety.py auto-closeout --verify-preset gitx-smoke --verify-jobs 2`
-- 自动执行并吃掉当前改动面的建议预设：`python3 scripts/git_safety.py auto-closeout --use-suggested-verify-presets --verify-jobs 2`
+- 只诊断：`git status --short --branch` + `git worktree list --porcelain`
+- 看提交面：`git diff --stat` + `git diff --cached --stat`
+- 看远端关系：`git rev-parse --abbrev-ref --symbolic-full-name @{u}` + `git status --short --branch`
+- 验证：直接运行本次改动面需要的 `cargo test` / `pytest` / `npm test` / smoke 命令
+- 收口：人工明确分支、提交、merge、push 路线；不要依赖已移除的 Python git helper
 
 ## Required workflow
 
 1. 先跑 gitx 诊断，而不是上来就提交：
-   - `python3 scripts/git_safety.py doctor`
-   - `python3 scripts/git_safety.py publish-plan`
-2. 需要看原始面时，再补：
-   - `python3 scripts/git_safety.py status`
    - `git status --short --branch`
    - `git worktree list --porcelain`
    - `git stash list`
+2. 需要看原始面时，再补：
+   - `git diff --stat`
+   - `git diff --cached --stat`
+   - `git status --short --branch`
 3. 若发现脏改动直接堆在 `main`、存在 stash、或 worktree 头部不一致：
-   - 先做 checkpoint，必要时用 `python3 scripts/git_safety.py start-topic <branch>`
+   - 先做手动 checkpoint：保存 `git diff`、`git diff --staged`、必要的 untracked 清单到 `artifacts/ops/`
    - 不要直接在混乱状态下提交
 4. 对待提交改动做 review：
    - 先找明显 bug、回归、脏文件、生成物噪音、遗漏测试
    - 需要时先修复再继续
 5. 能并行的面尽量放在收口前半段：
    - 只读审计可以并行看：status / worktree / stash / hooks / reflog
-   - 验证可以用 `verify-batch` 或 `auto-closeout --verify-cmd ... --verify-jobs N`
-   - 反复常用的验证面优先沉成 `--verify-preset`
-   - 如果懒得判断该跑哪组验证，先用 `suggest-verify-presets`
-   - 现在每个预设都带 `label / priority / cwd`，建议结果会按权重排序，并标出命中理由
-   - 多个预设命中同一条验证命令时会自动去重，优先保留高优先级那一份
+   - 验证命令可以并行跑，但提交、merge、push 必须串行
    - 真正改 Git 状态的临界区仍保持串行，不要并发提交、并发 merge
-   - 当前内置预设已经覆盖 `gitx-smoke`、`entrypoint-sync`、`rust-router`、`routing-eval`、`browser-runtime`
 6. 高输出验证默认优先走 repo 里的 RTK 规则：
    - `cargo test` / `npm test` / `git diff` 这类噪声命令，允许自动加 `rtk`
    - 若需要原始输出，用 `--no-rtk`
-7. 低风险场景可以直接走：
-   - `python3 scripts/git_safety.py auto-closeout`
-   - 需要真正一把推上去时再加 `--push`
+7. 低风险场景也要显式确认提交面和目标分支，不走隐藏自动化。
 8. 整理提交面：
    - 把真正源码改动和缓存/日志/临时文件分开
    - 保留用户无关改动，不要误吞
@@ -122,7 +109,7 @@ bridge_behavior: mobile_complete_once
    - 没法验证时要明确说明风险
 10. 提交与分支收口：
    - 用清晰提交信息提交
-   - 若工作在 topic/worktree 分支上，优先按照 `publish-plan` 或 `auto-closeout` 给出的 `--ff-only` 路线收口
+   - 若工作在 topic/worktree 分支上，优先用 `git merge --ff-only` 路线收口
 11. 推送：
    - 推送前确认 upstream、ahead/behind、remote 目标
    - 用显式 remote 和 branch；不要盲推

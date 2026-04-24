@@ -16,6 +16,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use strsim::jaro_winkler;
 
 mod background_state;
+mod browser_mcp;
 mod claude_hooks;
 mod execution_contract;
 mod framework_mcp;
@@ -27,6 +28,7 @@ mod session_supervisor;
 mod trace_runtime;
 
 use background_state::handle_background_state_operation;
+use browser_mcp::run_browser_mcp_stdio_loop;
 use claude_hooks::{
     build_claude_hook_manifest, build_claude_hook_projection, build_claude_project_settings,
     run_claude_audit_hook, run_claude_lifecycle_hook, run_codex_audit_hook, sync_host_entrypoints,
@@ -158,6 +160,8 @@ struct Cli {
     stdio_json: bool,
     #[arg(long)]
     framework_mcp_stdio: bool,
+    #[arg(long)]
+    browser_mcp_stdio: bool,
     #[arg(long)]
     framework_mcp_output_dir: Option<PathBuf>,
     #[arg(long)]
@@ -1231,6 +1235,7 @@ fn main() -> Result<(), String> {
         args.json,
         args.stdio_json,
         args.framework_mcp_stdio,
+        args.browser_mcp_stdio,
         args.route_json,
         args.route_policy_json,
         args.route_snapshot_json,
@@ -1291,7 +1296,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --framework-mcp-stdio, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-integrator-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --runtime-checkpoint-control-plane-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-record-event-json, --trace-stream-replay-json, --trace-stream-inspect-json, --trace-compact-json, --write-trace-compaction-delta-json, --write-trace-metadata-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-statusline, --framework-session-artifact-write-json, --framework-alias-json, --control-plane-contracts-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --sync-host-entrypoints-json, --check-host-entrypoints-json, --host-integration, --claude-hook-command, --claude-hook-audit-command, --claude-host-hook-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
+            "choose only one output mode among --json, --stdio-json, --framework-mcp-stdio, --browser-mcp-stdio, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-integrator-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --runtime-checkpoint-control-plane-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-record-event-json, --trace-stream-replay-json, --trace-stream-inspect-json, --trace-compact-json, --write-trace-compaction-delta-json, --write-trace-metadata-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-statusline, --framework-session-artifact-write-json, --framework-alias-json, --control-plane-contracts-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --sync-host-entrypoints-json, --check-host-entrypoints-json, --host-integration, --claude-hook-command, --claude-hook-audit-command, --claude-host-hook-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
                 .to_string(),
         );
     }
@@ -1315,6 +1320,10 @@ fn main() -> Result<(), String> {
             args.repo_root.as_deref(),
             args.framework_mcp_output_dir.as_deref(),
         );
+    }
+
+    if args.browser_mcp_stdio {
+        return run_browser_mcp_stdio_loop(args.repo_root.as_deref());
     }
 
     if args.sandbox_control_json {

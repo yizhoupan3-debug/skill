@@ -7,10 +7,6 @@ edition = "2021"
 name = "screenshot_rs"
 path = "src/main.rs"
 
-[[bin]]
-name = "screenshot"
-path = "src/main.rs"
-
 [dependencies]
 anyhow = "1.0"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
