@@ -30,13 +30,15 @@ fn plugin_manifest_exposes_skills_and_mcp_bundle() {
 fn plugin_mcp_bundle_points_back_to_repo_root() {
     let payload = read_json(&project_root().join("plugins/skill-framework-native/.mcp.json"));
     let framework = &payload["mcpServers"]["framework-mcp"];
-    assert_eq!(
-        framework["command"],
-        "./scripts/router-rs/target/release/router-rs"
-    );
+    assert_eq!(framework["command"], "./scripts/router-rs/run_router_rs.sh");
     assert_eq!(
         framework["args"],
-        serde_json::json!(["--framework-mcp-stdio", "--repo-root", "../.."])
+        serde_json::json!([
+            "./scripts/router-rs/Cargo.toml",
+            "--framework-mcp-stdio",
+            "--repo-root",
+            "../.."
+        ])
     );
     assert_eq!(framework["cwd"], "../..");
     assert_eq!(payload["mcpServers"].as_object().unwrap().len(), 1);
@@ -85,9 +87,7 @@ fn refresh_skill_stays_available_for_codex_global_entry() {
         "name: refresh",
         "$refresh",
         r#"PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}""#,
-        r#""$PROJECT_DIR"/scripts/router-rs/target/release/router-rs --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR""#,
-        r#""$PROJECT_DIR"/scripts/router-rs/target/debug/router-rs --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR""#,
-        r#"cargo run --manifest-path "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --release -- --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR""#,
+        r#""$PROJECT_DIR"/scripts/router-rs/run_router_rs.sh "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR""#,
         "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。",
         "--framework-refresh-verbose",
     ] {
@@ -383,10 +383,8 @@ fn repo_local_codex_framework_mcp_uses_rust_only_entrypoint() {
     let source = read_text(&project_root().join(".codex/config.toml"));
     assert!(!source.contains("python3"));
     assert!(!source.contains("scripts.framework_mcp"));
-    assert!(source.contains(
-        r#"command = "/Users/joe/Documents/skill/scripts/router-rs/target/release/router-rs""#
-    ));
-    assert!(!source.contains("scripts/router-rs/Cargo.toml"));
+    assert!(source
+        .contains(r#"command = "/Users/joe/Documents/skill/scripts/router-rs/run_router_rs.sh""#));
     assert!(!source.contains(r#"command = "cargo""#));
     assert!(source.contains("--framework-mcp-stdio"));
 }

@@ -16,7 +16,6 @@ legacy/development surface.
 ## Scripts
 
 ```bash
-cargo build --manifest-path /Users/joe/Documents/skill/scripts/router-rs/Cargo.toml --release
 /Users/joe/Documents/skill/tools/browser-mcp/scripts/start_browser_mcp.sh
 ```
 
@@ -45,7 +44,7 @@ cargo build --manifest-path /Users/joe/Documents/skill/scripts/router-rs/Cargo.t
 
 ### stdio (default)
 ```bash
-./scripts/router-rs/target/release/router-rs --browser-mcp-stdio --repo-root /Users/joe/Documents/skill
+./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --browser-mcp-stdio --repo-root /Users/joe/Documents/skill
 # Flags: --headless true|false
 #        --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json|.../ATTACHED_RUNTIME_EVENT_HANDOFF.json|.../TRACE_RESUME_MANIFEST.json|.../runtime_event_transports/session__job.json
 #        --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
@@ -57,7 +56,7 @@ cargo build --manifest-path /Users/joe/Documents/skill/scripts/router-rs/Cargo.t
 ## Smoke test
 
 ```bash
-printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' | ./scripts/router-rs/target/release/router-rs --browser-mcp-stdio --repo-root /Users/joe/Documents/skill
+printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' | ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --browser-mcp-stdio --repo-root /Users/joe/Documents/skill
 ```
 
 ## Routing
@@ -77,7 +76,7 @@ If you already have a Rust-first runtime attach descriptor, browser-mcp can
 consume it directly for self-inspection:
 
 ```bash
-./scripts/router-rs/target/release/router-rs --browser-mcp-stdio --repo-root /Users/joe/Documents/skill --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
+./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --browser-mcp-stdio --repo-root /Users/joe/Documents/skill --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json
 # or
 BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH=/abs/path/runtime-attach-descriptor.json ./tools/browser-mcp/scripts/start_browser_mcp.sh
 ```
@@ -103,6 +102,6 @@ through that same attach descriptor; replay results now include a lighter
 `replayContext` mirror so consumers can read attach provenance without
 re-parsing the full diagnostics block.
 
-The legacy `start_browser_mcp.sh` launcher now delegates to the Rust binary and
-does not require `dist/index.js`; steady-state MCP config can call the same Rust
-binary directly.
+The legacy `start_browser_mcp.sh` launcher now delegates to the Rust launcher and
+does not require `dist/index.js`; steady-state MCP config can call the same
+Rust-owned launcher directly.

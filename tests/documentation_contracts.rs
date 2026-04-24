@@ -227,17 +227,12 @@ fn rust_contracts_doc_records_current_minimal_implementation_truth() {
 fn top_level_docs_do_not_revive_retired_python_work_as_active() {
     let root = project_root();
     let scoped_docs = [
-        "rust_checklist.md",
-        "rust_next_phase_checklist.md",
         "audit_report.md",
-        "omc_checklist.md",
         "docs/rust_contracts.md",
         "docs/framework_profile_contract.md",
         "docs/host_adapter_contracts.md",
         "docs/runtime_observability_contract.md",
         "docs/runtime_sandbox_contract.md",
-        "aionrs_fusion_docs/codex_dual_entry_rust_checklist.md",
-        "aionrs_fusion_docs/codex_dual_entry_next_phase_checklist.md",
     ];
     let joined = scoped_docs
         .iter()

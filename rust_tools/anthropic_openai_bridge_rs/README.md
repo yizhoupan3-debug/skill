@@ -19,7 +19,7 @@ Example:
 
 ```sh
 cargo run --manifest-path rust_tools/anthropic_openai_bridge_rs/Cargo.toml --release -- \
-  --listen 127.0.0.1:8320 \
+  --listen 0.0.0.0:8320 \
   --upstream-base http://127.0.0.1:8318/v1 \
   --upstream-key sk-dummy \
   --model gpt-5.5
@@ -57,3 +57,5 @@ ANTHROPIC_BASE_URL=http://127.0.0.1:8320
 ANTHROPIC_AUTH_TOKEN=sk-dummy
 ANTHROPIC_MODEL=gpt-5.5
 ```
+
+For Cowork workspace access, keep the bridge listening on `0.0.0.0:8320` and configure the inference provider URL to a host-reachable address for the Mac, not the workspace-local loopback address. If the app offers Docker-style host resolution, use `http://host.docker.internal:8320`; otherwise use the Mac's LAN address, for example `http://192.168.x.x:8320`.

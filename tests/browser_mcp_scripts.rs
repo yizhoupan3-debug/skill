@@ -593,21 +593,73 @@ fn launcher_passes_through_resume_manifest_env_when_it_is_the_only_attach_input(
 }
 
 #[test]
-fn launcher_fails_fast_when_prebuilt_router_rs_is_missing() {
+fn launcher_builds_router_rs_when_no_prebuilt_binary_exists() {
     let tmp = tempdir().unwrap();
     let repo_root = prepare_repo(tmp.path());
     fs::remove_file(repo_root.join("scripts/router-rs/target/release/router-rs")).unwrap();
-    let output_path = repo_root.join("fake-router-output.json");
+    let cargo_log = repo_root.join("fake-cargo-output.json");
+    let fake_cargo = install_fake_cargo_builder(&repo_root, &cargo_log);
     let mut command =
         Command::new(repo_root.join("tools/browser-mcp/scripts/start_browser_mcp.sh"));
     command
         .current_dir(&repo_root)
         .env_remove("BROWSER_MCP_ROUTER_RS_BIN")
-        .env(ROUTER_EXEC_LOG_ENV, &output_path);
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                fake_cargo.parent().unwrap().display(),
+                std::env::var("PATH").unwrap_or_default()
+            ),
+        )
+        .env("CARGO_TARGET_DIR", repo_root.join("shared-target"));
     let result = run(command);
-    assert_eq!(result.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&result.stderr).contains("requires prebuilt router-rs"));
-    assert!(!output_path.exists());
+    assert!(
+        result.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(
+        read_json(&cargo_log)["argv"],
+        json!(["--browser-mcp-stdio", "--repo-root", repo_root])
+    );
+}
+
+#[test]
+fn launcher_rebuilds_router_rs_when_sources_are_newer_than_binary() {
+    let tmp = tempdir().unwrap();
+    let repo_root = prepare_repo(tmp.path());
+    let router_path = repo_root.join("scripts/router-rs/target/release/router-rs");
+    set_mtime(&router_path, 1_700_000_000);
+    write_text(
+        &repo_root.join("scripts/router-rs/src/main.rs"),
+        "// fresh source\n",
+    );
+    let cargo_log = repo_root.join("fresh-cargo-output.json");
+    let fake_cargo = install_fake_cargo_builder(&repo_root, &cargo_log);
+
+    let mut command =
+        Command::new(repo_root.join("tools/browser-mcp/scripts/start_browser_mcp.sh"));
+    command
+        .current_dir(&repo_root)
+        .env_remove("BROWSER_MCP_ROUTER_RS_BIN")
+        .env_remove(ROUTER_EXEC_LOG_ENV)
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                fake_cargo.parent().unwrap().display(),
+                std::env::var("PATH").unwrap_or_default()
+            ),
+        )
+        .env("CARGO_TARGET_DIR", repo_root.join("shared-target"));
+
+    common::assert_success(&run(command));
+    assert_eq!(
+        read_json(&cargo_log)["argv"],
+        json!(["--browser-mcp-stdio", "--repo-root", repo_root])
+    );
 }
 
 fn run_resolver_cli(search_root: &std::path::Path) -> Output {
@@ -639,6 +691,13 @@ fn prepare_repo(tmp_path: &std::path::Path) -> std::path::PathBuf {
     )
     .unwrap();
     make_executable(&script_root.join("start_browser_mcp.sh"));
+    fs::create_dir_all(repo_root.join("scripts/router-rs")).unwrap();
+    fs::copy(
+        project_root().join("scripts/router-rs/run_router_rs.sh"),
+        repo_root.join("scripts/router-rs/run_router_rs.sh"),
+    )
+    .unwrap();
+    make_executable(&repo_root.join("scripts/router-rs/run_router_rs.sh"));
     install_fake_router(&repo_root);
     for name in SOURCE_FILES {
         write_text(
@@ -687,16 +746,48 @@ fn install_fake_router(repo_root: &Path) {
         &router_path,
         &format!(
             r#"#!/bin/sh
-python3 - "$@" <<'PY'
-import json, os, sys
-from pathlib import Path
-Path(os.environ[{env_key:?}]).write_text(json.dumps({{"argv": sys.argv[1:], "cwd": os.getcwd()}}), encoding="utf-8")
-PY
+printf '{{"argv":[' > "${env_key}"
+first=1
+for arg in "$@"; do
+  if [ "$first" = 0 ]; then printf ',' >> "${env_key}"; fi
+  first=0
+  escaped=$(printf '%s' "$arg" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  printf '"%s"' "$escaped" >> "${env_key}"
+done
+printf '],"cwd":"%s"}}\n' "$(pwd | sed 's/\\/\\\\/g; s/"/\\"/g')" >> "${env_key}"
 "#,
             env_key = ROUTER_EXEC_LOG_ENV
         ),
     );
     make_executable(&router_path);
+}
+
+fn install_fake_cargo_builder(repo_root: &Path, cargo_log: &Path) -> std::path::PathBuf {
+    let fake_cargo = repo_root.join("fake-bin/cargo");
+    write_text(
+        &fake_cargo,
+        &format!(
+            r#"#!/bin/sh
+mkdir -p "$CARGO_TARGET_DIR/release"
+cat > "$CARGO_TARGET_DIR/release/router-rs" <<'SH'
+#!/bin/sh
+printf '{{"argv":[' > "{cargo_log}"
+first=1
+for arg in "$@"; do
+  if [ "$first" = 0 ]; then printf ',' >> "{cargo_log}"; fi
+  first=0
+  escaped=$(printf '%s' "$arg" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  printf '"%s"' "$escaped" >> "{cargo_log}"
+done
+printf ']}}\n' >> "{cargo_log}"
+SH
+chmod +x "$CARGO_TARGET_DIR/release/router-rs"
+"#,
+            cargo_log = cargo_log.display()
+        ),
+    );
+    make_executable(&fake_cargo);
+    fake_cargo
 }
 
 fn seed_sqlite_payload(db_path: &std::path::Path, payload_key: &str, payload: &serde_json::Value) {

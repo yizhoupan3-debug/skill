@@ -8,21 +8,10 @@ REPO_ROOT=$(cd -- "$PACKAGE_DIR/../.." && pwd)
 cd "$REPO_ROOT"
 
 ROUTER_BIN=${BROWSER_MCP_ROUTER_RS_BIN:-}
+ROUTER_LAUNCHER_ARGS=()
 if [ -z "$ROUTER_BIN" ]; then
-  for candidate in \
-    "$REPO_ROOT/scripts/router-rs/target/release/router-rs" \
-    "$REPO_ROOT/scripts/router-rs/target/debug/router-rs"
-  do
-    if [ -x "$candidate" ]; then
-      ROUTER_BIN=$candidate
-      break
-    fi
-  done
-fi
-
-if [ -z "$ROUTER_BIN" ] || [ ! -x "$ROUTER_BIN" ]; then
-  echo "browser-mcp requires prebuilt router-rs; run cargo build --manifest-path scripts/router-rs/Cargo.toml --release before starting MCP." >&2
-  exit 1
+  ROUTER_BIN="$REPO_ROOT/scripts/router-rs/run_router_rs.sh"
+  ROUTER_LAUNCHER_ARGS=("$REPO_ROOT/scripts/router-rs/Cargo.toml")
 fi
 
 RUST_ARGS=(--browser-mcp-stdio --repo-root "$REPO_ROOT")
@@ -39,4 +28,4 @@ elif [ -n "${BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH:-}" ]; then
   RUST_ARGS+=(--runtime-resume-manifest-path "$BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH")
 fi
 
-exec "$ROUTER_BIN" "${RUST_ARGS[@]}" "$@"
+exec "$ROUTER_BIN" "${ROUTER_LAUNCHER_ARGS[@]}" "${RUST_ARGS[@]}" "$@"

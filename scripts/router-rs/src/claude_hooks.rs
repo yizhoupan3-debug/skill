@@ -42,7 +42,7 @@ const GENERATED_PATHS: [&str; 5] = [
 ];
 const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
-    "cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root \"$PWD\"";
+    "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --sync-host-entrypoints-json --repo-root \"$PWD\"";
 const HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES: [&str; 5] = [
     ".claude",
     ".claude/commands",
@@ -317,7 +317,7 @@ const TERMINAL_VERIFICATION_STATUSES: [&str; 6] = [
 ];
 
 const CLAUDE_SETTINGS_SCHEMA_URL: &str = "https://json.schemastore.org/claude-code-settings.json";
-const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 18] = [
+const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 14] = [
     "Bash(ls)",
     "Bash(pwd)",
     "Bash(rg *)",
@@ -329,12 +329,8 @@ const CLAUDE_PROJECT_ALLOW_PERMISSIONS: [&str; 18] = [
     "Bash(git rev-parse *)",
     "Bash(git ls-files *)",
     "Bash(cargo test *)",
-    "Bash(cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- *)",
-    "Bash(./scripts/router-rs/target/release/router-rs *)",
-    "Bash(./scripts/router-rs/target/debug/router-rs *)",
-    "Bash(*scripts/router-rs/target/release/router-rs *)",
-    "Bash(*scripts/router-rs/target/debug/router-rs *)",
-    "Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)",
+    "Bash(./scripts/router-rs/run_router_rs.sh *)",
+    "Bash(*scripts/router-rs/run_router_rs.sh *)",
     "Bash(cmp -s TRACE_METADATA.json artifacts/current/TRACE_METADATA.json)",
 ];
 
@@ -878,24 +874,12 @@ fn build_claude_commands_projection() -> Value {
 }
 
 fn claude_command_allowed_tools() -> &'static str {
-    "allowed-tools:\n  - Bash(git rev-parse *)\n  - Bash(./scripts/router-rs/target/release/router-rs *)\n  - Bash(./scripts/router-rs/target/debug/router-rs *)\n  - Bash(*scripts/router-rs/target/release/router-rs *)\n  - Bash(*scripts/router-rs/target/debug/router-rs *)\n  - Bash(cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- *)\n  - Bash(cargo run --manifest-path *scripts/router-rs/Cargo.toml --release -- *)"
+    "allowed-tools:\n  - Bash(git rev-parse *)\n  - Bash(./scripts/router-rs/run_router_rs.sh *)\n  - Bash(*scripts/router-rs/run_router_rs.sh *)"
 }
 
-fn router_release_command(args: &str) -> String {
+fn router_launcher_command(args: &str) -> String {
     format!(
-        "`PROJECT_DIR=\"${{CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; \"$PROJECT_DIR\"/scripts/router-rs/target/release/router-rs {args} --repo-root \"$PROJECT_DIR\"`"
-    )
-}
-
-fn router_debug_command(args: &str) -> String {
-    format!(
-        "`PROJECT_DIR=\"${{CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; \"$PROJECT_DIR\"/scripts/router-rs/target/debug/router-rs {args} --repo-root \"$PROJECT_DIR\"`"
-    )
-}
-
-fn router_cargo_command(args: &str) -> String {
-    format!(
-        "`PROJECT_DIR=\"${{CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; cargo run --manifest-path \"$PROJECT_DIR\"/scripts/router-rs/Cargo.toml --release -- {args} --repo-root \"$PROJECT_DIR\"`"
+        "`PROJECT_DIR=\"${{CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; \"$PROJECT_DIR\"/scripts/router-rs/run_router_rs.sh \"$PROJECT_DIR\"/scripts/router-rs/Cargo.toml {args} --repo-root \"$PROJECT_DIR\"`"
     )
 }
 
@@ -910,16 +894,10 @@ description: 使用 Rust refresh 命令继续当前活跃任务，并复制下�
 它会读取现有 continuity 真源，为当前活跃任务生成下一轮执行提示。\n\n\
 运行：\n\n\
 {}\n\n\
-如果 release 二进制不存在，用下面的命令重试：\n\n\
-{}\n\n\
-如果两个常驻二进制都不存在，用下面的命令自修复：\n\n\
-{}\n\n\
 然后严格回复：\n\
 `下一轮执行提示已准备好，并且已经复制到剪贴板。`\n",
         claude_command_allowed_tools(),
-        router_release_command(args),
-        router_debug_command(args),
-        router_cargo_command(args),
+        router_launcher_command(args),
     )
 }
 
@@ -970,11 +948,11 @@ Project hook principles:\n\n\
 - When debugging config drift, verify the installed hook set from Claude\n  Code's `/hooks` menu before changing generated files.\n\n\
 Validation commands:\n\n\
 - `{HOST_ENTRYPOINT_SYNC_HINT}`\n  Expected: regenerate `AGENT.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/settings.json`, `.codex/hooks.json`, and matching worktree projections directly from Rust.\n\
-- `printf '{{\"tool_name\":\"MultiEdit\",\"tool_input\":{{\"file_path\":\".claude/settings.json\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: deny` payload.\n\
-- `printf '{{\"tool_name\":\"Bash\",\"tool_input\":{{\"command\":\"cp tmp .claude/settings.json\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: deny` payload for the targeted write.\n\
-- `printf '{{\"tool_name\":\"Bash\",\"tool_input\":{{\"command\":\"printf x > .claude/settings.json\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: deny` payload for shell redirection into a protected generated file.\n\
-- `printf '{{\"hook_event_name\":\"ConfigChange\",\"source\":\"project_settings\",\"file_path\":\".claude/settings.json\"}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command config-change --repo-root \"$PWD\"`\n  Expected: audit-only stderr guidance about regenerating generated Claude host files; exit 0.\n\
-- `printf '{{\"hook_event_name\":\"ConfigChange\",\"source\":\"project_settings\",\"file_path\":\".claude/settings.json\"}}\n' | ./scripts/router-rs/target/debug/router-rs --claude-hook-audit-command config-change --repo-root \"$PWD\"`\n  Expected: JSON on stdout plus audit-only stderr guidance; exit 0.\n\
+- `printf '{{\"tool_name\":\"MultiEdit\",\"tool_input\":{{\"file_path\":\".claude/settings.json\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-host-hook-command pre-tool-use --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: deny` payload.\n\
+- `printf '{{\"tool_name\":\"Bash\",\"tool_input\":{{\"command\":\"cp tmp .claude/settings.json\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-host-hook-command pre-tool-use --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: deny` payload for the targeted write.\n\
+- `printf '{{\"tool_name\":\"Bash\",\"tool_input\":{{\"command\":\"printf x > .claude/settings.json\"}}}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-host-hook-command pre-tool-use --repo-root \"$PWD\"`\n  Expected: stdout returns a JSON `permissionDecision: deny` payload for shell redirection into a protected generated file.\n\
+- `printf '{{\"hook_event_name\":\"ConfigChange\",\"source\":\"project_settings\",\"file_path\":\".claude/settings.json\"}}\n' | CLAUDE_PROJECT_DIR=\"$PWD\" ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-host-hook-command config-change --repo-root \"$PWD\"`\n  Expected: audit-only stderr guidance about regenerating generated Claude host files; exit 0.\n\
+- `printf '{{\"hook_event_name\":\"ConfigChange\",\"source\":\"project_settings\",\"file_path\":\".claude/settings.json\"}}\n' | ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-hook-audit-command config-change --repo-root \"$PWD\"`\n  Expected: JSON on stdout plus audit-only stderr guidance; exit 0.\n\
 - In Claude Code, run `/hooks`\n  Expected: the project shows only `PreToolUse` and `ConfigChange` from `.claude/settings.json`.\n\n\
 Shared routing policy still comes from `../../AGENT.md`.\n"
     )
@@ -992,7 +970,7 @@ Codex prompt and lifecycle hooks are intentionally not installed here. Keep star
 Codex currently applies tool-event matchers to `Bash` only, so this projection does not install `Edit`, `Write`, or `MultiEdit` matchers. Keep direct file-edit policy in `AGENT.md` and Rust-owned generated-surface checks instead of pretending Codex can intercept every non-shell tool call.\n\n\
 Regenerate with:\n\n\
 ```sh\n\
-cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root \"$PWD\"\n\
+./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --sync-host-entrypoints-json --repo-root \"$PWD\"\n\
 ```\n"
         .to_string()
 }
@@ -1020,21 +998,12 @@ fn build_hook_binary_preamble(
         "{project_var}=\"${{{env_var}:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; "
     ));
     command.push_str(&format!(
-        "ROUTER_RS_RELEASE_BIN=\"${project_var}/scripts/router-rs/target/release/router-rs\"; "
+        "ROUTER_RS_LAUNCHER=\"${project_var}/scripts/router-rs/run_router_rs.sh\"; "
     ));
     command.push_str(&format!(
-        "ROUTER_RS_DEBUG_BIN=\"${project_var}/scripts/router-rs/target/debug/router-rs\"; "
+        "ROUTER_RS_MANIFEST=\"${project_var}/scripts/router-rs/Cargo.toml\"; "
     ));
-    command
-        .push_str("ROUTER_RS_SHARED_TARGET_DIR=\"${CARGO_TARGET_DIR:-/tmp/skill-cargo-target}\"; ");
-    command.push_str(
-        "ROUTER_RS_SHARED_RELEASE_BIN=\"$ROUTER_RS_SHARED_TARGET_DIR/release/router-rs\"; ",
-    );
-    command
-        .push_str("ROUTER_RS_SHARED_DEBUG_BIN=\"$ROUTER_RS_SHARED_TARGET_DIR/debug/router-rs\"; ");
-    command.push_str("ROUTER_RS_BIN=\"\"; ");
-    command.push_str("for ROUTER_RS_CANDIDATE in \"$ROUTER_RS_RELEASE_BIN\" \"$ROUTER_RS_DEBUG_BIN\" \"$ROUTER_RS_SHARED_RELEASE_BIN\" \"$ROUTER_RS_SHARED_DEBUG_BIN\"; do if [ -x \"$ROUTER_RS_CANDIDATE\" ] && { [ -z \"$ROUTER_RS_BIN\" ] || [ \"$ROUTER_RS_CANDIDATE\" -nt \"$ROUTER_RS_BIN\" ]; }; then ROUTER_RS_BIN=\"$ROUTER_RS_CANDIDATE\"; fi; done; ");
-    command.push_str("if [ -z \"$ROUTER_RS_BIN\" ]; then ");
+    command.push_str("if [ ! -x \"$ROUTER_RS_LAUNCHER\" ]; then ");
     command.push_str(missing_binary_fallback);
     command.push_str("; fi; ");
     command
@@ -1044,10 +1013,10 @@ fn build_claude_host_hook_command(event: &str) -> String {
     let mut command = build_hook_binary_preamble(
         "CLAUDE_PROJECT_DIR",
         "CLAUDE_PROJECT_DIR",
-        "echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1",
+        "echo \"Missing required router-rs launcher: $ROUTER_RS_LAUNCHER\" >&2; exit 1",
     );
     command.push_str(&format!(
-        "\"$ROUTER_RS_BIN\" --claude-host-hook-command {event} --repo-root \"$CLAUDE_PROJECT_DIR\""
+        "\"$ROUTER_RS_LAUNCHER\" \"$ROUTER_RS_MANIFEST\" --claude-host-hook-command {event} --repo-root \"$CLAUDE_PROJECT_DIR\""
     ));
     command
 }
@@ -1056,7 +1025,7 @@ fn build_codex_hook_command(event: &str) -> String {
     let mut command =
         build_hook_binary_preamble("CODEX_PROJECT_ROOT", "CODEX_PROJECT_ROOT", "exit 0");
     command.push_str(&format!(
-        "\"$ROUTER_RS_BIN\" --codex-hook-command {event} --repo-root \"$CODEX_PROJECT_ROOT\""
+        "\"$ROUTER_RS_LAUNCHER\" \"$ROUTER_RS_MANIFEST\" --codex-hook-command {event} --repo-root \"$CODEX_PROJECT_ROOT\""
     ));
     command
 }
@@ -1522,7 +1491,7 @@ fn default_memory_md(repo_root: &Path) -> String {
 }
 
 fn default_runbooks() -> String {
-    "# runbooks\n\n## 标准操作\n\n- 统一维护入口：cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace>\n- 需要迁移旧 artifact 布局时显式执行：cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace> --apply-artifact-migrations\n- 合并稳定记忆：cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4\n- 召回上下文：cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --framework-memory-recall-json --repo-root <repo_root> --framework-memory-mode stable|active|history|debug --query <关键词> --limit <N>\n- 生命周期收口：./scripts/router-rs/target/release/router-rs --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4\n- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。\n"
+    "# runbooks\n\n## 标准操作\n\n- 统一维护入口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace>\n- 需要迁移旧 artifact 布局时显式执行：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace> --apply-artifact-migrations\n- 合并稳定记忆：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4\n- 召回上下文：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --framework-memory-recall-json --repo-root <repo_root> --framework-memory-mode stable|active|history|debug --query <关键词> --limit <N>\n- 生命周期收口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4\n- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。\n"
         .to_string()
 }
 

@@ -1306,9 +1306,10 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
                 .unwrap_or(Value::Null);
         }
         "arbitrate_session_takeover" => {
-            let arbitration_operation = request.arbitration_operation.as_deref().ok_or_else(|| {
-                "Background state arbitration is missing arbitration_operation.".to_string()
-            })?;
+            let arbitration_operation =
+                request.arbitration_operation.as_deref().ok_or_else(|| {
+                    "Background state arbitration is missing arbitration_operation.".to_string()
+                })?;
             let session_id = request
                 .session_id
                 .as_deref()

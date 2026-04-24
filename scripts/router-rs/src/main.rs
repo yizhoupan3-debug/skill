@@ -4973,7 +4973,12 @@ fn maybe_record_sandbox_event(
         .create(true)
         .append(true)
         .open(&path)
-        .map_err(|err| format!("open sandbox event log failed for {}: {err}", path.display()))?;
+        .map_err(|err| {
+            format!(
+                "open sandbox event log failed for {}: {err}",
+                path.display()
+            )
+        })?;
     file.write_all(serialized.as_bytes())
         .map_err(|err| format!("write sandbox event failed for {}: {err}", path.display()))?;
     response.event_log_path = Some(path.display().to_string());
@@ -11728,7 +11733,10 @@ mod tests {
             event["schema_version"],
             Value::String(SANDBOX_EVENT_SCHEMA_VERSION.to_string())
         );
-        assert_eq!(event["kind"], Value::String("sandbox.execution_started".to_string()));
+        assert_eq!(
+            event["kind"],
+            Value::String("sandbox.execution_started".to_string())
+        );
         assert_eq!(event["sandbox_id"], Value::String("sandbox-1".to_string()));
         assert_eq!(
             event["effective_capabilities"][1],

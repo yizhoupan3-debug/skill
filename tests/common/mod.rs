@@ -5,7 +5,6 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::time::SystemTime;
 
 pub fn project_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -78,95 +77,16 @@ pub fn run_ok(command: Command) -> Output {
     output
 }
 
-fn newest_mtime(path: &Path) -> Option<SystemTime> {
-    let metadata = fs::metadata(path).ok()?;
-    if metadata.is_file() {
-        return metadata.modified().ok();
-    }
-    if !metadata.is_dir() {
-        return None;
-    }
-    let mut newest = metadata.modified().ok();
-    for entry in fs::read_dir(path).ok()? {
-        let child = entry.ok()?.path();
-        if let Some(mtime) = newest_mtime(&child) {
-            if newest.map_or(true, |current| mtime > current) {
-                newest = Some(mtime);
-            }
-        }
-    }
-    newest
-}
-
-fn freshest_existing(paths: &[PathBuf]) -> Option<PathBuf> {
-    paths
-        .iter()
-        .filter(|path| path.is_file())
-        .max_by_key(|path| {
-            (
-                path.metadata()
-                    .and_then(|metadata| metadata.modified())
-                    .unwrap_or(SystemTime::UNIX_EPOCH),
-                path.to_string_lossy().to_string(),
-            )
-        })
-        .cloned()
-}
-
-pub fn ensure_router_rs_binary_fresh() {
-    let root = project_root();
-    let router_root = root.join("scripts/router-rs");
-    if !router_root.exists() {
-        return;
-    }
-    let latest_source = [router_root.join("Cargo.toml"), router_root.join("src")]
-        .iter()
-        .filter_map(|path| newest_mtime(path))
-        .max();
-    let latest_binary = freshest_existing(&[
-        router_root.join("target/release/router-rs"),
-        router_root.join("target/debug/router-rs"),
-    ])
-    .and_then(|path| {
-        path.metadata()
-            .and_then(|metadata| metadata.modified())
-            .ok()
-    });
-    if latest_binary.is_some() && latest_source <= latest_binary {
-        return;
-    }
-    let output = Command::new("cargo")
-        .args(["build", "--manifest-path"])
-        .arg(router_root.join("Cargo.toml"))
-        .current_dir(root)
-        .output()
-        .expect("failed to build router-rs");
-    assert_success(&output);
-}
-
 pub fn router_rs_command<I, S>(args: I) -> Command
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    ensure_router_rs_binary_fresh();
     let root = project_root();
     let router_root = root.join("scripts/router-rs");
-    if let Some(binary) = freshest_existing(&[
-        router_root.join("target/release/router-rs"),
-        router_root.join("target/debug/router-rs"),
-    ]) {
-        let mut command = Command::new(binary);
-        command.args(args);
-        command.current_dir(root);
-        return command;
-    }
-
-    let mut command = Command::new("cargo");
+    let mut command = Command::new(router_root.join("run_router_rs.sh"));
     command
-        .args(["run", "--quiet", "--manifest-path"])
         .arg(router_root.join("Cargo.toml"))
-        .args(["--release", "--"])
         .args(args)
         .current_dir(root);
     command

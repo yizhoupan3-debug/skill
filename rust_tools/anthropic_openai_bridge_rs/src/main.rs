@@ -28,7 +28,7 @@ const LEGACY_FUNCTION_TOOL_INDEX: u64 = u64::MAX;
 #[command(name = "anthropic-openai-bridge-rs")]
 #[command(about = "Anthropic Messages API bridge to an OpenAI-compatible chat backend")]
 struct Cli {
-    #[arg(long, env = "AOB_LISTEN", default_value = "127.0.0.1:8320")]
+    #[arg(long, env = "AOB_LISTEN", default_value = "0.0.0.0:8320")]
     listen: SocketAddr,
     #[arg(
         long,

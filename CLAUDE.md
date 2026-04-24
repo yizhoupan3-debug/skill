@@ -14,7 +14,7 @@ GPT bridge rule:
 
 Generated-first maintenance rule:
 
-- Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then regenerate via `cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root "$PWD"`.
+- Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then regenerate via `./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --sync-host-entrypoints-json --repo-root "$PWD"`.
 - Host entrypoint sync runs directly through `router-rs`; do not reintroduce a Python wrapper in front of it.
 - Treat those files as materialized outputs, not hand-authored truth.
 - Long-term Claude entrypoint maintenance map: `docs/claude_entrypoint_maintenance.md`.
