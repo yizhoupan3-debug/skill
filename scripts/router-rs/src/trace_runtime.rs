@@ -164,7 +164,7 @@ pub fn record_trace_event(
         authority: TRACE_STREAM_IO_AUTHORITY.to_string(),
         path: payload.path,
         event: Value::Object(event),
-        bytes_written: sink_line.as_bytes().len(),
+        bytes_written: sink_line.len(),
         sink_line,
         delta_path,
         delta_line,
@@ -541,7 +541,7 @@ fn maybe_append_compaction_delta(
     if write_outputs {
         append_text(Path::new(delta_path), &delta_line)?;
     }
-    let bytes = delta_line.as_bytes().len();
+    let bytes = delta_line.len();
     Ok((Some(delta_path.to_string()), Some(delta_line), bytes))
 }
 
@@ -693,7 +693,7 @@ fn build_artifact_ref(kind: &str, path: &Path, payload: &str, producer: &str) ->
         "kind": kind,
         "uri": path.display().to_string(),
         "digest": sha256_hex(payload.as_bytes()),
-        "size_bytes": payload.as_bytes().len(),
+        "size_bytes": payload.len(),
         "created_at": Utc::now().to_rfc3339(),
         "producer": producer,
     })
@@ -706,7 +706,7 @@ fn build_external_artifact_ref(path: &str) -> Value {
         "kind": "continuity_artifact",
         "uri": path,
         "digest": sha256_hex(path.as_bytes()),
-        "size_bytes": path.as_bytes().len(),
+        "size_bytes": path.len(),
         "created_at": Utc::now().to_rfc3339(),
         "producer": "runtime-trace-recorder-external",
     })

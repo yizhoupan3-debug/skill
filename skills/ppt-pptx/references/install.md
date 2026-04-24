@@ -12,6 +12,10 @@ cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/pptx_tool_rs/Car
 
 For faster repeated use, build the Rust tools and put the resulting binary on `PATH` as `ppt`.
 
+There is no skill-local package install step. The only runtime entry is the Rust
+CLI; `ppt init` writes `ppt.commands.json` into each deck workspace as a command
+cheat sheet, not a package manifest.
+
 ## System Tools For QA
 
 Rendered QA relies on system binaries:
@@ -29,24 +33,23 @@ brew install --cask libreoffice
 brew install poppler
 ```
 
-## Optional OfficeCLI Install
+## Rust Office Inspector
 
-For deeper `.pptx` inspection, HTML preview, path-based querying, and structured issue / schema checks, this skill can also use local `officecli`.
+For deeper `.pptx` inspection, HTML preview, path-based querying, and structured issue / package checks, use the Rust `ppt office ...` commands. No separate inspector install is required.
 
 Quick check:
 
 ```bash
-officecli --version
-officecli pptx --help
+ppt office probe --json
 ```
 
 What it adds to `ppt-pptx`:
 
 - `view outline` for quick deck shape / text-box counts
 - `view issues` for overflow / missing-title / structure diagnostics
-- `validate` for OpenXML schema checks
+- `validate` for core OpenXML package checks
 - `get` / `query` for stable-path inspection of existing decks
-- `watch` for live HTML preview when iterating on an already-generated `.pptx`
+- `watch` for local HTML preview when iterating on an already-generated `.pptx`
 
 ## Recommended Workspace Bootstrap
 
@@ -55,6 +58,11 @@ ppt init .
 ppt outline outline.yaml --output deck.plan.json --bootstrap --build
 ```
 
+Before the final build, polish the outline text with `$humanizer`,
+`$copywriting`, or `$paper-writing` as appropriate, then lock the deck's visual
+contract with `$design-md` or `$frontend-design`. The Rust CLI builds and checks
+the deck; these companion skills make the text and design intentional.
+
 The expected workspace outputs are:
 
 - `deck.plan.json`
@@ -62,6 +70,7 @@ The expected workspace outputs are:
 - `assets/`
 - `rendered/`
 - `sources.md`
+- `ppt.commands.json`
 
 Optional images:
 
@@ -79,7 +88,7 @@ Cross-platform font default:
 ### `ppt` is not found
 
 - build the Rust tool or invoke it through `cargo run --manifest-path ... --bin ppt --`
-- confirm the built binary directory is on `PATH` when using package scripts
+- confirm the built binary directory is on `PATH` when using optional local scripts
 
 ### Render commands fail even though `deck.pptx` builds
 
@@ -91,24 +100,31 @@ Cross-platform font default:
 - confirm `fc-list` is available
 - keep authored defaults to `Arial` and `Courier New` unless the project requires a specific installed font
 
-### OfficeCLI-backed diagnostics are missing
+### Rust inspector diagnostics fail
 
-- check `officecli --version`
-- if unavailable, the deck can still build and render; only the deeper OfficeCLI audit / watch path is unavailable
-- `ppt office probe --json` is the quickest local check
+- run `ppt office probe --json`
+- run `ppt extract-structure deck.pptx --output structure.json` to isolate malformed package structure
+- rebuild from `deck.plan.json` if the package is missing required OpenXML parts
 
-Useful OfficeCLI audit commands after generation:
+### A package install step appears in an old workspace
+
+- remove the package wrapper from that deck workspace
+- invoke `ppt ...` directly or through the Rust command manifest
+- do not add a package manifest back to `skills/ppt-pptx`
+
+Useful Rust inspector commands after generation:
 
 ```bash
 ppt office doctor deck.pptx --json
 ppt office outline deck.pptx --json
-ppt office watch deck.pptx --port 18080
+ppt office watch deck.pptx --browser
 ```
 
-Recommended mixed-lane commands:
+Recommended Rust lane commands:
 
 ```bash
 ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --json
-ppt qa deck.pptx --rendered-dir rendered --json
+ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --quality strict --json
+ppt qa deck.pptx --rendered-dir rendered --fail-on-issues --json
 ppt intake old_deck.pptx --json
 ```

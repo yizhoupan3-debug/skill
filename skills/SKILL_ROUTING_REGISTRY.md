@@ -66,7 +66,7 @@
 | `gitx` | Active | P1 | L2 | owner | none | project | ✓ 100.0 | Run the safe Git review-fix-tidy-commit-merge-push workflow end to end. |
 | `go-pro` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Deliver safe concurrent Go code with managed goroutine lifecycles, composable in |
 | `graphviz-expert` | Active | P2 | L3 | owner | none | project | ✓ 92.8 | Create Graphviz/DOT diagrams for precise, orthogonal, publication-quality flowch |
-| `humanizer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Audit existing prose for machine-like writing signals, then naturalize only wher |
+| `humanizer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | General prose polish and style naturalization for existing drafts or supplied no |
 | `i18n-l10n` | Active | P2 | L3 | overlay | none | project | ✓ 96.8 | Internationalization and localization overlay for web/mobile projects. Use for m |
 | `idea-to-plan` | Active | P0 | L-1 | @strategic-orchestrator | delegation | project | ✓ 100.0 | Turn ambiguous ideas into evidence-backed plans with branch routing and compress |
 | `imagegen` | Active | P2 | L1 | owner | none | project | ✓ 98.7 | Generate or edit raster images through VibeProxy Local /v1/responses using the b |

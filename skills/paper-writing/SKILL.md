@@ -8,6 +8,8 @@ description: |
   "写 introduction", "重写 introduction", "改 related work 文字",
   "科研讲故事", "论文故事线", "根据ref学习写法", "改段落逻辑", "改 caption", "cover letter", "回复信润色",
   "response to reviewers", "只改表达不改 claim", or "不是整篇 review，只做文字/结构精修".
+  Also use when the user says paper/writing skill output is bad and the object is
+  manuscript prose rather than generic prose.
   This skill owns reader-facing prose: section purpose, paragraph flow,
   research storytelling, claim calibration, academic tone, and sentence clarity. It must not invent
   science, citations, results, or reviewer-facing promises.
@@ -136,8 +138,11 @@ trigger_hints:
   - results writing
   - discussion writing
   - conclusion rewrite
+  - 论文写作 skill 不好用
+  - paper writing 不好用
+  - 持续优化论文写作
 metadata:
-  version: "2.6.0"
+  version: "2.7.0"
   platforms: [codex]
   tags: [paper, writing, rewrite, abstract, introduction, conclusion, caption, rebuttal]
 framework_roles:
@@ -172,6 +177,7 @@ for the task.
 - The user wants response-letter or rebuttal prose polish only, without coordinating manuscript decisions
 - The user wants a submission cover letter or other bounded journal-facing prose
 - The user wants paper-specific "de-AI" cleanup while preserving scientific claims
+- The user complains that manuscript writing output is too generic, too AI-like, or not useful enough
 
 ## Do not use
 
@@ -195,6 +201,7 @@ for the task.
 6. If the target venue is known, adapt abstract format, section order, word budget, and AI-use disclosure to that venue.
 7. Choose the smallest useful output: revised text only for simple polish; revised text plus notes only when risks remain.
 8. Deliver revised text first. Add at most three short notes only for unresolved risk, placeholders, or claim/evidence mismatch.
+9. If no rewrite is possible because facts are missing, produce a fillable story card or paragraph skeleton instead of generic writing advice.
 
 If invoked inside the protocol-backed paper workflow, follow the active paper
 state from [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md), but do not
@@ -228,6 +235,25 @@ Improve, in this order:
 3. flow
 4. tone
 5. terminology consistency
+6. naturalness without lowering information density
+
+## Anti-bad-output rules
+
+- Do not answer with general "how to write a paper" advice when the user gave text or notes that can be rewritten.
+- Do not make prose smoother by deleting numbers, conditions, limitations, or comparators.
+- Do not inflate weak findings into "significant", "novel", "robust", or "first" claims unless the supplied evidence supports them.
+- Do not imitate target-journal style at the sentence level; learn only section moves, evidence order, and claim posture.
+- Do not leave a rewrite as a polished paragraph if the real issue is the story spine; fix the gap-move-evidence path first.
+- For Chinese or ESL source text, preserve the author's intended claim before making the English more idiomatic.
+
+## Minimal useful outputs
+
+Pick one:
+
+- **Revised text only**: for local polish where claims are safe.
+- **Revised text + risk notes**: for claim/evidence, citation, or venue risks.
+- **Story card + rewrite**: for abstract, introduction, discussion, or story-line work.
+- **Skeleton with `[VERIFY: ...]` placeholders**: when facts, numbers, citations, or venue rules are missing.
 
 ## Core Heuristics
 

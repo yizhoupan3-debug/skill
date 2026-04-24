@@ -5,7 +5,7 @@ server:
   host: "0.0.0.0"
 
 api-keys:
-  - "sk-aggregator-aa996d6ea7b880c9886cabe7a7532372"
+  - "__OPENAI_PROXY_API_KEY__"
 
 # 令牌目录：将所有 Plus 账号的 .json 令牌放入此目录
 auth-dir: "./auths"

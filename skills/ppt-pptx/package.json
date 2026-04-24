@@ -1,5 +1,0 @@
-{
-  "scripts": {
-    "smoke:test": "cargo run --manifest-path ../../rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- --help"
-  }
-}

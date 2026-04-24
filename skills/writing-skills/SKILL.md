@@ -3,9 +3,10 @@ name: writing-skills
 description: |
   Standardize and strengthen multiple `SKILL.md` files and shared skill-writing docs across a library.
   Use when the task is batch rewriting, template unification, or repository-wide wording cleanup for many skills.
+  This is skill-documentation writing, not prose/essay/manuscript writing.
   For one-skill writing guidance use `$skill-writer`; for Codex routing policy use `$skill-framework-developer`.
 metadata:
-  version: "2.1.0"
+  version: "2.2.0"
   platforms: [codex]
   category: meta
   tags:
@@ -57,6 +58,7 @@ reusable wording patterns, and batch documentation cleanup.
 
 - Single-skill wording, token budget, or boundary design → use `$skill-writer`
 - Codex routing diagnosis or framework behavior → use `$skill-framework-developer`
+- Normal prose, essay, or manuscript writing → use `$humanizer`, `$paper-writing`, or `$copywriting`
 - Antigravity-specific trigger debugging → use `$skill-developer`
 - Installing/importing skills → use `$skill-installer` / `$skill-installer-antigravity`
 

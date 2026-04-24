@@ -1,7 +1,9 @@
 .DS_Store
 __pycache__/
 *.pyc
+*.log
 node_modules/
+**/target/
 skills/tao-ci/
 target/
 .supervisor_state.json
@@ -21,7 +23,7 @@ configs/codex/sub_accounts.state.json
 skill/
 tmp/
 output/
-.aionrs/sessions/
+.aionrs/
 .aionui_patch_tree
 .playwright-mcp/
 .workbuddy/

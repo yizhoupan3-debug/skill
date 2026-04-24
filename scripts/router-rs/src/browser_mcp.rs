@@ -656,7 +656,7 @@ impl BrowserRuntime {
         let session = self
             .sessions
             .get(&session_id)
-            .ok_or_else(|| session_not_found_error())?;
+            .ok_or_else(session_not_found_error)?;
         let tabs = session
             .tabs
             .keys()

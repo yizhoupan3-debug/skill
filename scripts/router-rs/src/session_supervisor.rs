@@ -529,6 +529,7 @@ fn detect_rate_limit(evidence_text: &str, patterns: &[Regex]) -> Option<BlockCla
     None
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_driver_command(
     host: &str,
     cwd: &str,

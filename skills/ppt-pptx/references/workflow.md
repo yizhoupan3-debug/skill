@@ -33,7 +33,8 @@ project/
 ├── deck.pptx
 ├── assets/
 ├── rendered/
-└── sources.md
+├── sources.md
+└── ppt.commands.json
 ```
 
 Fast bootstrap:
@@ -50,7 +51,7 @@ Notes:
 ## Engine Choice
 
 - Prefer the Rust `ppt` CLI for deck generation.
-- Do not use `python-pptx` for full authoring unless the task is inspection-oriented or very small.
+- Do not introduce a parallel authoring engine for this lane.
 - Keep editable output driven by `deck.plan.json` so layout logic stays visible and reproducible.
 
 ## Existing Decks
@@ -63,7 +64,7 @@ When the input is an existing `.pptx`, choose one of two modes:
 2. Rebuild mode
    - Best for major redesign, consistent visual system, repeated generation, or a deck that should become reproducible from code.
    - Extract structure/assets if helpful, then rebuild through the Rust `ppt` CLI and keep `deck.plan.json` as the source of truth.
-   - Use `ppt office doctor|get|query` first when you need stable IDs, shape paths, or a quick structural map from the old deck.
+   - Use the Rust `ppt office doctor|get|query` inspector first when you need stable IDs, shape paths, or a quick structural map from the old deck.
 
 Use the rebuild path when the current deck is just raw material and the real goal is a cleaner long-term authoring workflow.
 
@@ -86,7 +87,9 @@ When the deck starts from old materials, brand examples, or screenshots, produce
 or reuse `DESIGN.md` before authoring. Keep the chain explicit:
 
 ```text
-DESIGN.md / visual contract
+outline / notes / old deck structure
+-> text-owner polish
+-> DESIGN.md / visual contract
 -> deck.plan.json
 -> deck.pptx
 -> rendered PNG evidence
@@ -99,6 +102,22 @@ Use `$design-md` for extracting a deck design system, `$frontend-design` for a
 new premium direction, `$design-workflow-protocol` for repeatable multi-round
 artifact tracking, and `$design-output-auditor` for final drift / AI-slop /
 anti-pattern checks.
+
+## Text Skill Loop
+
+The text pass happens before layout. Pick one owner, then encode the improved
+copy back into `deck.plan.json`:
+
+- `$humanizer`: ordinary prose, rough notes, speaker notes, "去模板腔", and
+  outline text that sounds machine-generated.
+- `$copywriting`: pitch decks, product decks, sales decks, fundraising decks,
+  landing narratives, taglines, CTAs, and persuasive section titles.
+- `$paper-writing`: academic talks, research reports, manuscript-to-slide
+  conversion, methods/results framing, and citation-sensitive wording.
+
+Use the text owner to make titles shorter, bullets concrete, and speaker notes
+less generic. Then use the Rust naturalization pass as a safety net, not as the
+only writing step.
 
 ## Copy Naturalization First
 
@@ -127,10 +146,10 @@ Run a light text pass before layout, especially for outline-generated decks:
 ## Authoring Rules
 
 - Set theme fonts explicitly before measuring or sizing text.
-- Use helper functions for image crop/contain and text-box sizing instead of hand-tuning every box.
-- Use `valign: "top"` for growing content boxes.
-- Prefer native charts for simple visuals, then restyle them to match the deck palette and hierarchy.
-- Use SVG for diagrams when possible.
+- Encode image crop/contain intent and text-box sizing in `deck.plan.json` instead of hand-tuning generated output.
+- Keep growing content boxes top-aligned in the source plan.
+- Prefer editable chart/table structures for simple visuals, then restyle them to match the deck palette and hierarchy.
+- Use local vector or raster assets for diagrams when they improve editability or render fidelity.
 - Reserve a bottom safe area before placing the lowest chart, caption, or text block.
 - Rewrite copy before shrinking type. If a title wraps badly, shorten it or widen the box.
 
@@ -153,12 +172,13 @@ Run a light text pass before layout, especially for outline-generated decks:
 ## QA Loop
 
 1. Generate the `.pptx`.
-2. Run `ppt slides-test` when the slide is dense or edge-tight.
-3. Render the deck to PNGs with `ppt render`.
-4. Build a montage with `ppt create-montage` when the deck is long.
-5. Run `ppt detect-fonts` when typography is part of the design.
-6. Call `$visual-review` on suspicious slides or the montage.
-7. Fix the source plan and repeat.
+2. Run `ppt office doctor` for Rust outline, issue, and package validation.
+3. Run `ppt slides-test` when the slide is dense or edge-tight.
+4. Render the deck to PNGs with `ppt render`.
+5. Build a montage with `ppt create-montage` when the deck is long.
+6. Run `ppt detect-fonts` when typography is part of the design.
+7. Call `$visual-review` on suspicious slides or the montage.
+8. Fix the source plan and repeat.
 
 If a `DESIGN.md` or visual contract exists, add one more pass after rendered
 review: ask `$design-output-auditor` for `match / minor drift / material drift /
@@ -166,9 +186,9 @@ hard fail`, then fix only the smallest set needed to restore fidelity.
 
 If the deck is using fallback placeholder panels because images are missing, treat the build as structurally valid but not visually final.
 
-## OfficeCLI Boost
+## Rust Inspector Boost
 
-Use the optional OfficeCLI lane when the deck already exists and you need stronger inspection than rendered screenshots alone.
+Use the Rust inspector lane when the deck already exists and you need stronger inspection than rendered screenshots alone.
 
 Recommended commands:
 
@@ -176,7 +196,7 @@ Recommended commands:
 ppt office doctor deck.pptx --json
 ppt office get deck.pptx '/slide[1]' --depth 2 --json
 ppt office query deck.pptx 'shape[font=Arial]' --json
-ppt office watch deck.pptx --port 18080
+ppt office watch deck.pptx --browser
 ```
 
 Use this lane for:
@@ -184,23 +204,24 @@ Use this lane for:
 - fast outline / issue / validation scans on a generated deck
 - stable `shape[@id=N]` addressing before a rebuild
 - watching an already-generated `.pptx` in HTML while iterating
-- batch patch plans against an existing artifact when you are not ready to fully rebuild the source
+- read-only batch plan checks against an existing artifact before fully rebuilding the source
 
-Do not let OfficeCLI replace `deck.plan.json` as the source of truth for new-code-authored decks. It is the inspection / patch / preview boost, not the authoring core.
+Do not let the inspector replace `deck.plan.json` as the source of truth for new-code-authored decks. It is the inspection / preview boost, not the authoring core.
 
-## Hybrid Default
+## Rust Default
 
-The strongest default in this skill is now a hybrid lane:
+The strongest default in this skill is now one Rust-owned lane:
 
 - `deck.plan.json` remains the authoring source of truth
 - Rust tools handle render / structure / image-side QA
-- OfficeCLI handles issue discovery, schema validation, stable path lookup, and watch preview
+- Rust `ppt office ...` handles issue discovery, package validation, stable path lookup, and preview
 
 Recommended commands:
 
 ```bash
 ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --json
-ppt qa deck.pptx --rendered-dir rendered --json
+ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --quality strict --json
+ppt qa deck.pptx --rendered-dir rendered --fail-on-issues --json
 ppt intake old_deck.pptx --json
 ```
 
@@ -233,5 +254,7 @@ Deliver:
 - `deck.plan.json`
 - `assets/`
 - `sources.md`
+- `ppt.commands.json`
+- rendered PNGs or montage when visual QA mattered
 
 Do not deliver only screenshots or a PDF if the user asked for a PPT/PPTX deck.

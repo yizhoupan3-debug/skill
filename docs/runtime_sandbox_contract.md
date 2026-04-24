@@ -59,6 +59,10 @@ Capability categories:
 
 The policy must surface the effective capability set in traces or durable events so that a tool decision can be audited after recovery.
 
+The Rust control surface exposes this as `effective_capabilities` on sandbox
+responses and, when event tracing is requested, writes the same field into the
+durable sandbox event stream.
+
 ## Resource Budgets
 
 Sandbox execution must enforce budgets before and during execution. Budgets are part of the contract, not best-effort hints.
@@ -230,6 +234,9 @@ The current Rust-owned runtime exposes the contract-backed minimal sandbox contr
 - capability policy is request-scoped, deny-by-default, and rejects high-risk execution unless the sandbox profile is dedicated
 - budgets are attached to every execution request; admission validates all four dimensions, while runtime enforcement checks wall-clock, output size, and host-visible CPU or memory probes
 - cleanup is asynchronous, observable, and recorded in `runtime_sandbox_events.jsonl`
+- event tracing is explicit: callers opt in with `trace_event`, provide
+  `event_log_path`, and receive `event_written` plus
+  `event_schema_version = runtime-sandbox-event-v1`
 - cleanup success is the only path back to `recycled`; cleanup failure quarantines the sandbox as `failed`
 - failed sandboxes stay out of the reusable pool, while healthy sandboxes may only be reused under the same profile and capability set
 

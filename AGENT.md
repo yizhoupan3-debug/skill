@@ -80,6 +80,11 @@ framework policy instead of forking per-host routing or memory rules.
 ## Verification Defaults
 
 - Verify the narrowest meaningful slice before handoff.
+- Rust builds/tests/runs must not leave Cargo output in the repository. Use the
+  repo Cargo config target dir (`/tmp/skill-cargo-target`) or an explicit
+  external `CARGO_TARGET_DIR`; after any Cargo verification, run
+  `./scripts/clean-rust-targets.sh` before closeout unless the user explicitly
+  asks to keep build artifacts.
 - For shared policy, host entrypoint, routing, or hook changes, prefer this
   order unless the task says otherwise: Rust-owned sync through
   `cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- ...`,

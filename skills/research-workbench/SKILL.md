@@ -7,9 +7,10 @@ description: |
   planning, reproducibility, statistics, figures, technical critique, or AI/ML
   research engineering. Good for asks like
   "帮我推进这个科研方向", "这条研究线下一步怎么做", "从想法到实验一起编排", "整体推进这个 research project",
-  or "这个课题现在该先搜文献还是先做实验". This skill picks the right research
-  lane first, then keeps the workflow continuous without making the user switch
-  skills.
+  "科研相关 skill 不好用，持续优化", "科研允许外部调研校准", or
+  "这个课题现在该先搜文献还是先做实验". This skill picks the right research lane,
+  performs lightweight external calibration when it changes the decision, and
+  keeps the workflow continuous without making the user switch skills.
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
@@ -31,8 +32,13 @@ trigger_hints:
   - 实验设计
   - 补实验
   - novelty gate
+  - 科研 skill 不好用
+  - 科研相关 skill 不好用
+  - 科研工作流优化
+  - 持续优化科研流程
+  - 科研外部调研校准
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
   platforms: [codex]
   tags: [research, workflow, orchestrator, literature, experiments, statistics]
 framework_roles:
@@ -72,6 +78,8 @@ manuscript, or "这篇论文", route to `$paper-workbench` first.
 - The user says `整体推进这个 research project`, `从想法到实验一起编排`, `这条研究线下一步怎么做`, or similarly workflow-shaped asks
 - The task may need literature search, novelty checking, experiment planning, reproducibility, statistics, or figure work, but the first active lane is not obvious yet
 - The user says `课题`, `科研方向`, `研究路线`, `补实验`, or `下一步怎么做` without making the object a manuscript
+- The user says the research skills are not working well and asks for continued optimization of the research workflow
+- External literature or venue lookup is allowed and can change the lane decision, novelty judgment, or experiment priority
 
 ## Do not use
 
@@ -106,9 +114,22 @@ Rules:
 - novelty/risk asks default to `先判新意`
 - execution-first asks default to `先做实验`
 - rigor/failure-analysis asks default to `先补严谨性`
+- if the user says `允许外部调研`, run only the lookup needed to change the lane decision; do not turn the whole task into generic web research
+- if the user complains that a research skill is bad, treat it as a routing/workflow repair signal: identify the broken handoff, tighten the next active lane, and preserve the fix in the relevant skill or routing case
 
 Do not make the user switch skills just because the work naturally moves from
 idea to literature to experiment.
+
+## Anti-bad-output rules
+
+Avoid the failure modes that make research skills feel useless:
+
+- Do not return a generic "research plan" when one concrete next action can change the project state.
+- Do not ask the user to choose between literature, novelty, or experiment lanes unless that choice depends on a value judgment only they can make.
+- Do not call an idea novel before checking close prior work; label it `provisional` until the nearest papers are known.
+- Do not recommend experiments without naming the hypothesis, control, baseline, success metric, and failure interpretation.
+- Do not bury the decision under a long taxonomy; lead with the phase, blocker, decision, and next action.
+- Do not let external research become citation hoarding; use it to calibrate field state, baselines, venue expectations, or feasibility.
 
 ## Boundary gates
 
@@ -143,6 +164,16 @@ Keep the user-facing output simple:
 1. what phase the research task is really in now
 2. the real blocker or next active lane
 3. the next honest move
+
+When taking action rather than only advising, the minimum useful artifact is a
+four-field lane card:
+
+```text
+phase:
+blocker:
+decision:
+next_action:
+```
 
 When filesystem-backed work is needed, keep the long notes in local artifacts and
 return only the phase, blocker, decision, and next action in chat.

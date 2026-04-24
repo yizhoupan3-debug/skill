@@ -163,7 +163,7 @@ fn handle_framework_mcp_line(line: &str, repo_root: &Path, output_dir: &Path) ->
                 Value::Null,
                 framework_error(
                     "INVALID_INPUT",
-                    &format!("Invalid JSON input: {}", err.to_string()),
+                    &format!("Invalid JSON input: {err}"),
                     &["send one JSON-RPC object per line"],
                     true,
                 ),
@@ -503,7 +503,7 @@ fn compact_memory_recall_payload(mut payload: Value) -> Value {
                 "memory_root": retrieval.get("memory_root").cloned().unwrap_or(Value::Null),
                 "sqlite_path": retrieval.get("sqlite_path").cloned().unwrap_or(Value::Null),
                 "active_task_id": retrieval.get("active_task_id").cloned().unwrap_or(Value::Null),
-                "active_task_included": retrieval.get("active_task_included").cloned().unwrap_or_else(|| json!(false)),
+                "active_task_included": retrieval.get("active_task_included").cloned().unwrap_or(Value::Bool(false)),
                 "freshness": retrieval.get("freshness").cloned().unwrap_or_else(|| json!({})),
                 "items": retrieval.get("items").cloned().unwrap_or_else(|| json!([])),
             }),
@@ -512,7 +512,7 @@ fn compact_memory_recall_payload(mut payload: Value) -> Value {
             "continuity".to_string(),
             json!({
                 "state": continuity.get("state").cloned().unwrap_or(Value::Null),
-                "can_resume": continuity.get("can_resume").cloned().unwrap_or_else(|| json!(false)),
+                "can_resume": continuity.get("can_resume").cloned().unwrap_or(Value::Bool(false)),
                 "task": continuity.get("task").cloned().unwrap_or(Value::Null),
                 "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
                 "status": continuity.get("status").cloned().unwrap_or(Value::Null),

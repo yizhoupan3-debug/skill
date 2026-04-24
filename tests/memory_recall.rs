@@ -302,9 +302,7 @@ fn rust_memory_policy_can_persist_to_sqlite_store() {
 
     let conn = Connection::open(tmp.path().join(".codex/memory/memory.sqlite3")).unwrap();
     let mut stmt = conn
-        .prepare(
-            "SELECT workspace, category, source, summary, status FROM memory_items LIMIT 1",
-        )
+        .prepare("SELECT workspace, category, source, summary, status FROM memory_items LIMIT 1")
         .unwrap();
     let row = stmt
         .query_row([], |row| {

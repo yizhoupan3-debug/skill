@@ -10,6 +10,7 @@ description: |
   Use when the user asks for "文献梳理", "主题综述", "研究现状总结", "帮我看看这个思路
   别人做过没有", "把这批论文做成对比表", "写 related work", "给我文章相关工作", "帮我搜论文",
   "找这个方向的文献", "下载ref", "目标期刊相近文章", "找20篇相近文章", "搜 arXiv", "Semantic Scholar 搜索",
+  "外部调研校准 novelty/baseline", "科研 skill 不好用，先把文献 lane 做扎实",
   or needs paper-by-paper notes turned into a coherent synthesis rather than
   isolated summaries.
 routing_layer: L4
@@ -41,8 +42,12 @@ trigger_hints:
   - literature review
   - novelty check
   - related work
+  - 外部调研校准 novelty
+  - 外部调研校准 baseline
+  - 科研 skill 不好用
+  - 文献 lane 做扎实
 metadata:
-  version: "2.2.0"
+  version: "2.3.0"
   platforms: [codex]
   tags:
     - literature-review
@@ -79,6 +84,7 @@ Default to one of these modes based on the user's request:
 - Separate what each paper claims from what the evidence actually supports.
 - Be explicit about the review scope: task, method family, data domain, time window, and evaluation criteria.
 - Prefer tight comparison dimensions over long descriptive prose.
+- When external research is allowed, use it to find close prior work, required baselines, venue expectations, and recent shifts; avoid broad web browsing that does not affect the synthesis.
 
 ## Workflow
 
@@ -223,6 +229,15 @@ Choose the smallest output that fully serves the request. For full structural de
 - When a claim depends on what a screenshot, figure, or rendered page visibly shows, route that visual judgment through `$visual-review` instead of ad hoc image interpretation.
 - If recent papers materially change the landscape, reflect that in the synthesis.
 - Keep the final output easy to reuse in a paper, proposal, or reading report.
+
+## Anti-bad-output rules
+
+- Do not stop at "here are papers"; explain what the corpus means for the user's idea, paper, or next experiment.
+- Do not rank by citation count alone when closeness to task, venue, method, or baseline is the real criterion.
+- Do not overfit to the first search query; run broad, focused, and nearest-neighbor queries before novelty judgments.
+- Do not merge arXiv preprints, final proceedings versions, and derivative surveys without noting version or evidence differences.
+- Do not draft related work until the comparison dimensions and positioning claim are clear.
+- Do not mark novelty as binary; split into already done, adjacent, underexplored, and uncertain.
 
 ## Academic Source Discipline
 

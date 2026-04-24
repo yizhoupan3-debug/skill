@@ -18,8 +18,18 @@ the shared design skills and include:
 - `Generation Guardrails`
 - `Anti-Patterns`
 
+Use `$design-md` to extract these fields from old decks, screenshots, or brand
+assets. Use `$frontend-design` when no source style exists but the deck still
+needs a fresh premium visual direction. After rendering, use `$visual-review`
+for image-grounded findings and `$design-output-auditor` for the final drift
+verdict against this contract.
+
 Map those fields into `deck.plan.json`: palette roles, typography scale, panel/card
 styles, cover/section/closing grammar, chart styling, and banned drift.
+
+Keep the contract actionable. A good deck plan should name the palette roles,
+font families, recurring slide components, and layout families clearly enough
+that the Rust builder can regenerate the deck without guessing.
 
 ## Default Aesthetic
 
@@ -56,6 +66,10 @@ For a generic but high-quality PPTX deck, bias toward:
 - section slides: short title stack, a dominant image or evidence band, and one supporting module group
 - image-data slides: one wide dark evidence surface plus a small number of metric chips
 - closing slide: same family as the cover, quieter and more cinematic than informational
+
+When the outline is dense, split slides by idea before shrinking text. A slightly
+longer deck with readable hierarchy is better than a compressed deck that only
+works at editor zoom.
 
 ## Slide Roles
 
@@ -118,6 +132,10 @@ Preferred patterns:
 - dark panel grid with one clear visual focal point
 
 Use equal columns only when the content is genuinely balanced.
+
+For editable PPTX output, prefer shapes, text, and simple structured chart/table
+data over raster-only composites. Use raster assets for visual evidence,
+screenshots, or image-led slides, not for text that collaborators need to edit.
 
 ## Image Embedding
 

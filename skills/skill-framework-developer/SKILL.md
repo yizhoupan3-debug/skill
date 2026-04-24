@@ -3,7 +3,8 @@ name: skill-framework-developer
 description: |
   Skill 框架治理：路由、边界、owner/gate/overlay、维护规范与减少 token 消耗。
   Use when the request is about framework policy, routing-system review, skill-boundary audit,
-  overlap repair strategy, or skill-library self-optimization.
+  overlap repair strategy, skill-library self-optimization, or feedback that a
+  domain skill is "不好用" and should be continuously improved.
 routing_layer: L0
 routing_owner: owner
 routing_gate: none
@@ -23,6 +24,12 @@ trigger_hints:
   - 减少 token 消耗
   - framework 自优化
   - owner gate overlay
+  - skill 不好用
+  - skill不好用
+  - 持续优化 skill
+  - 外部调研优化 skill
+  - 科研 skill 不好用
+  - 写作 skill 不好用
 framework_roles:
   - planner
   - gate
@@ -34,7 +41,7 @@ framework_contracts:
   consumes_execution_items: false
   emits_verification_results: false
 metadata:
-  version: "3.2.0"
+  version: "3.3.0"
   platforms: [codex]
   tags:
     - codex
@@ -80,9 +87,12 @@ the request is about framework structure rather than one isolated file edit.
 - The task is about **边界重叠 / 修改旧 skill / 顺手修旧 skill / 旧 skill 该不该拆**
 - The user wants to decide owner vs gate vs overlay, or when to split vs extend an incumbent skill
 - A skill is over-broad, misfiring, or weak at first-turn routing
+- The user says a domain skill is not useful, too generic, or needs continuous optimization
 - The problem is framework-level overlap between `skill-writer`, `skill-creator`, `skill-installer`, and `skill-routing-repair`
 - Best for requests like:
   - "优化整个 skill 框架"
+  - "科研相关 skill 太不好用了，持续优化，允许外部调研"
+  - "写作 skill 还是不好用，帮我继续收紧"
   - "这个 Codex skill 到底该谁当 owner？"
   - "边界重叠怎么处理，先改旧 skill 还是新建？"
   - "把这个框架改得更快、更准、更省 token"

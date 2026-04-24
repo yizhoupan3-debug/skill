@@ -156,6 +156,10 @@ When choosing a pattern automatically, use these heuristics:
 | `hasImage && dataPoints >= 2` | Evidence Board |
 | `textLength > 500 && !hasImage` | split into multiple slides |
 
+Prefer editable primitives when the audience may revise the deck in PowerPoint.
+Use raster charts or screenshots only when they are evidence artifacts, not
+when they are the main editable argument.
+
 ## Anti-Patterns
 
 - Equal-weight 6-card grid where nothing stands out

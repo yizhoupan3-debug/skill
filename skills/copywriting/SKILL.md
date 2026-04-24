@@ -2,7 +2,9 @@
 name: copywriting
 description: |
   Create persuasive commercial copy for landing pages, ads, product descriptions, and other conversion-focused assets.
-  Use when the user asks to 写文案、广告词、产品卖点、落地页、品牌故事、CTA、小红书文案, or needs campaign copy, landing page copy, product descriptions, taglines, or other marketing text with a clear call-to-action.
+  Use when the user asks to 写文案、广告词、产品卖点、落地页、品牌故事、CTA、小红书文案,
+  销售信, 转化率文案, UX 微文案, or needs campaign copy, landing page copy,
+  product descriptions, taglines, or other marketing text with a clear call-to-action.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
@@ -18,8 +20,13 @@ trigger_hints:
   - product descriptions
   - taglines
   - copywriting
+  - 销售信
+  - 转化率文案
+  - UX 微文案
+  - in-app microcopy
+  - cold email copy
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
   platforms: [codex, antigravity]
   tags:
     - copywriting
@@ -121,11 +128,14 @@ Accept handoff from `$humanizer` when:
 
 ## Required workflow
 
-1. Confirm the brief: audience, brand tone, CTA, platform/medium, word limits.
+1. Infer the brief when it is safe: audience, brand tone, CTA, platform/medium, word limits.
 2. Choose the right copy framework for the task type.
 3. Write the copy with strong hooks, clear value props, and actionable CTAs.
 4. Polish: cut filler, sharpen rhythm, verify CTA clarity, remove AI patterns.
 5. Deliver variants if A/B testing is in scope.
+
+Do not block on brief questions unless the missing detail would materially change
+the claim, compliance risk, audience, or platform constraints.
 
 ## Core workflow
 
@@ -221,20 +231,12 @@ For high-stakes or long-form copy, use a staged pipeline:
 
 ## Output defaults
 
-Default output should contain:
-- copy brief summary (audience, tone, goal)
-- final copy (or variants)
-- strategic rationale for key choices
+Default output should start with the final copy. Add brief notes only when they
+help the user choose or reduce risk.
 
 Recommended structure:
 
 ````markdown
-## 文案 Brief
-- 受众：...
-- 调性：...
-- 目标：...
-- CTA：...
-
 ## 文案
 
 [Final copy here]
@@ -247,9 +249,20 @@ Recommended structure:
 ### 变体 B — [角度说明]
 ...
 
-## 策略说明
-- ...
+## 简短说明
+[Only include 1-3 bullets when useful]
 ````
+
+For one-liners, CTAs, titles, subject lines, and UX microcopy, output only the
+best options with short labels. Do not include a full Brief section by default.
+
+## Anti-bad-output rules
+
+- Do not make every answer look like an AIDA/PAS template.
+- Do not explain the framework unless the user asks.
+- Do not write glossy but unverifiable promises; use concrete product facts or placeholders.
+- Do not produce ten near-identical variants; each variant must use a different angle.
+- Do not use generic AI marketing words such as "赋能", "革新", "一站式", or "极致体验" unless the brand voice requires them.
 
 ## Hard constraints
 
