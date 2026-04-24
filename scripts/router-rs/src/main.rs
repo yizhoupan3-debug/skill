@@ -13050,6 +13050,53 @@ mod tests {
     }
 
     #[test]
+    fn background_state_arbitration_dispatch_requires_explicit_operation() {
+        let state_path = temp_json_path("background-state-arbitration-dispatch");
+
+        handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "apply_mutation",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "job_id": "job-1",
+            "mutation": {
+                "status": "running",
+                "session_id": "shared-session"
+            }
+        }))
+        .expect("seed active owner");
+
+        let reserved = handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "arbitrate_session_takeover",
+            "arbitration_operation": "reserve",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "session_id": "shared-session",
+            "incoming_job_id": "job-2"
+        }))
+        .expect("dispatch reserve arbitration");
+        assert_eq!(reserved["takeover"]["operation"], json!("reserve"));
+        assert_eq!(reserved["takeover"]["outcome"], json!("pending"));
+
+        let missing = handle_background_state_operation(json!({
+            "schema_version": "router-rs-background-state-request-v1",
+            "operation": "arbitrate_session_takeover",
+            "state_path": state_path.display().to_string(),
+            "backend_family": "filesystem",
+            "session_id": "shared-session",
+            "incoming_job_id": "job-3"
+        }))
+        .expect_err("missing arbitration operation should fail closed");
+        assert_eq!(
+            missing,
+            "Background state arbitration is missing arbitration_operation."
+        );
+
+        fs::remove_file(&state_path).expect("cleanup arbitration dispatch state");
+    }
+
+    #[test]
     fn background_state_operation_arbitrates_takeover_across_persisted_roundtrip() {
         let state_path = temp_json_path("background-state-takeover");
         let control_plane_descriptor = json!({
