@@ -39,6 +39,7 @@ struct BackgroundStateRequestPayload {
     state_payload_text: Option<String>,
     control_plane_descriptor: Option<Value>,
     job_id: Option<String>,
+    arbitration_operation: Option<String>,
     mutation: Option<BackgroundJobStatusMutation>,
     session_id: Option<String>,
     incoming_job_id: Option<String>,
@@ -1305,6 +1306,9 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
                 .unwrap_or(Value::Null);
         }
         "arbitrate_session_takeover" => {
+            let arbitration_operation = request.arbitration_operation.as_deref().ok_or_else(|| {
+                "Background state arbitration is missing arbitration_operation.".to_string()
+            })?;
             let session_id = request
                 .session_id
                 .as_deref()
@@ -1313,7 +1317,7 @@ pub fn handle_background_state_operation(payload: Value) -> Result<Value, String
                 "Background state arbitration is missing incoming_job_id.".to_string()
             })?;
             let (takeover, persisted_payload_text) = store.arbitrate_session_takeover(
-                &request.operation,
+                arbitration_operation,
                 session_id,
                 incoming_job_id,
             )?;
