@@ -19,6 +19,10 @@ use tokio::sync::mpsc;
 use tokio::time;
 use tokio_stream::wrappers::ReceiverStream;
 
+type StreamEvent = (&'static str, Value);
+const LEGACY_FUNCTION_ID_PREFIX: &str = "call_legacy_";
+const LEGACY_FUNCTION_TOOL_INDEX: u64 = u64::MAX;
+
 #[derive(Parser, Debug)]
 #[command(name = "anthropic-openai-bridge-rs")]
 #[command(about = "Anthropic Messages API bridge to an OpenAI-compatible chat backend")]
@@ -169,6 +173,7 @@ async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         "stream_include_usage": state.stream_include_usage,
         "stream_obfuscation": stream_obfuscation_label(&state.stream_obfuscation),
         "max_tokens_field": resolve_max_tokens_field(&state.max_tokens_field, &state.model),
+        "sampling_parameters": if supports_sampling_parameters(&state.model) { "forwarded" } else { "dropped_for_reasoning_model" },
         "stream_heartbeat_secs": state.stream_heartbeat_secs,
         "loss_reduction": {
             "system": "top-level Anthropic system maps to a dedicated OpenAI message",
@@ -241,9 +246,16 @@ async fn handle_messages(
                 .map_err(|err| format!("read upstream response failed: {err}"))?;
             return Ok(json_error(status, &text));
         }
+        let upstream_model = openai_body
+            .get("model")
+            .and_then(Value::as_str)
+            .unwrap_or(&state.model)
+            .to_string();
+        let estimated_input_tokens = estimate_openai_request_tokens(&openai_body);
         return Ok(openai_stream_to_anthropic_response(
             response,
-            state.model.clone(),
+            upstream_model,
+            estimated_input_tokens,
             state.stream_heartbeat_secs,
         ));
     }
@@ -256,7 +268,12 @@ async fn handle_messages(
     }
     let openai_response: Value = serde_json::from_str(&text)
         .map_err(|err| format!("parse upstream response failed: {err}: {text}"))?;
-    let anthropic = openai_to_anthropic(&state.model, &openai_response);
+    let upstream_model = openai_body
+        .get("model")
+        .and_then(Value::as_str)
+        .unwrap_or(&state.model)
+        .to_string();
+    let anthropic = openai_to_anthropic(&upstream_model, &openai_response);
     if request.stream {
         Ok(sse_response(&anthropic))
     } else {
@@ -300,30 +317,37 @@ fn build_openai_request(
             Value::Number(max_tokens.into()),
         );
     }
-    if let Some(effort) = &state.reasoning_effort {
-        body.insert(
-            "reasoning_effort".to_string(),
-            Value::String(effort.to_string()),
-        );
+    if supports_reasoning_effort(&model) {
+        if let Some(effort) = &state.reasoning_effort {
+            body.insert(
+                "reasoning_effort".to_string(),
+                Value::String(effort.to_string()),
+            );
+        }
     }
-    if let Some(value) = request.temperature {
-        insert_number(&mut body, "temperature", value);
-    }
-    if let Some(value) = request.top_p {
-        insert_number(&mut body, "top_p", value);
+    if supports_sampling_parameters(&model) {
+        if let Some(value) = request.temperature {
+            insert_number(&mut body, "temperature", value);
+        }
+        if let Some(value) = request.top_p {
+            insert_number(&mut body, "top_p", value);
+        }
     }
     if let Some(stops) = &request.stop_sequences {
         body.insert("stop".to_string(), json!(stops));
     }
-    if let Some(tools) = &request.tools {
+    if let Some(tools) = request.tools.as_ref().filter(|tools| !tools.is_empty()) {
         body.insert(
             "tools".to_string(),
             Value::Array(tools.iter().map(anthropic_tool_to_openai).collect()),
         );
-    }
-    if let Some(choice) = &request.tool_choice {
-        if let Some(mapped) = anthropic_tool_choice_to_openai(choice) {
-            body.insert("tool_choice".to_string(), mapped);
+        if let Some(choice) = &request.tool_choice {
+            if let Some(mapped) = anthropic_tool_choice_to_openai(choice) {
+                body.insert("tool_choice".to_string(), mapped);
+            }
+        }
+        if anthropic_disable_parallel_tool_use(&request.tool_choice) {
+            body.insert("parallel_tool_calls".to_string(), Value::Bool(false));
         }
     }
     body.insert("stream".to_string(), Value::Bool(stream));
@@ -346,11 +370,7 @@ fn resolve_upstream_model(state: &AppState, request: &AnthropicRequest) -> Strin
 fn resolve_max_tokens_field(configured: &str, model: &str) -> String {
     match configured.trim().to_ascii_lowercase().as_str() {
         "" | "auto" => {
-            if model.starts_with("gpt-5")
-                || model.starts_with("o1")
-                || model.starts_with("o3")
-                || model.starts_with("o4")
-            {
+            if uses_max_completion_tokens(model) {
                 "max_completion_tokens".to_string()
             } else {
                 "max_tokens".to_string()
@@ -358,6 +378,31 @@ fn resolve_max_tokens_field(configured: &str, model: &str) -> String {
         }
         value => value.to_string(),
     }
+}
+
+fn normalized_model_family(model: &str) -> String {
+    model
+        .trim()
+        .trim_start_matches("openai/")
+        .trim_start_matches("openai:")
+        .trim_start_matches("models/")
+        .to_ascii_lowercase()
+}
+
+fn uses_max_completion_tokens(model: &str) -> bool {
+    let model = normalized_model_family(model);
+    model.starts_with("gpt-5")
+        || model.starts_with("o1")
+        || model.starts_with("o3")
+        || model.starts_with("o4")
+}
+
+fn supports_reasoning_effort(model: &str) -> bool {
+    uses_max_completion_tokens(model)
+}
+
+fn supports_sampling_parameters(model: &str) -> bool {
+    !uses_max_completion_tokens(model)
 }
 
 fn build_openai_messages(
@@ -443,11 +488,19 @@ fn append_assistant_message(messages: &mut Vec<Value>, content: &Value) {
     }
     let mut message = Map::new();
     message.insert("role".to_string(), Value::String("assistant".to_string()));
-    message.insert("content".to_string(), Value::String(text_parts.join("\n")));
+    if text_parts.is_empty() && !tool_calls.is_empty() {
+        message.insert("content".to_string(), Value::Null);
+    } else {
+        message.insert("content".to_string(), Value::String(text_parts.join("\n")));
+    }
     if !tool_calls.is_empty() {
         message.insert("tool_calls".to_string(), Value::Array(tool_calls));
     }
-    messages.push(Value::Object(message));
+    if message.get("content") != Some(&Value::String(String::new()))
+        || message.contains_key("tool_calls")
+    {
+        messages.push(Value::Object(message));
+    }
 }
 
 fn content_blocks(content: &Value) -> Vec<Value> {
@@ -578,6 +631,14 @@ fn anthropic_tool_choice_to_openai(choice: &Value) -> Option<Value> {
     }
 }
 
+fn anthropic_disable_parallel_tool_use(choice: &Option<Value>) -> bool {
+    choice
+        .as_ref()
+        .and_then(|choice| choice.get("disable_parallel_tool_use"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
 fn parse_stream_obfuscation(raw: &str) -> Result<StreamObfuscation, String> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "" | "omit" | "none" | "off" => Ok(StreamObfuscation::Omit),
@@ -615,7 +676,11 @@ fn openai_to_anthropic(default_model: &str, openai: &Value) -> AnthropicResponse
         .unwrap_or_else(|| json!({}));
     let message = choice.get("message").cloned().unwrap_or_else(|| json!({}));
     let mut content = Vec::new();
-    if let Some(text) = message.get("content").and_then(Value::as_str) {
+    if let Some(text) = message
+        .get("content")
+        .or_else(|| message.get("refusal"))
+        .and_then(Value::as_str)
+    {
         if !text.is_empty() {
             content.push(json!({"type": "text", "text": text}));
         }
@@ -627,17 +692,27 @@ fn openai_to_anthropic(default_model: &str, openai: &Value) -> AnthropicResponse
                 "type": "tool_use",
                 "id": tool_call.get("id").and_then(Value::as_str).unwrap_or("toolu_unknown"),
                 "name": function.get("name").and_then(Value::as_str).unwrap_or("unknown_tool"),
-                "input": parse_json_string(function.get("arguments")).unwrap_or_else(|| json!({})),
+                "input": parse_tool_arguments(function.get("arguments")).unwrap_or_else(|| json!({})),
             }));
         }
+    }
+    if let Some(function) = message.get("function_call") {
+        let name = function
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown_tool");
+        content.push(json!({
+            "type": "tool_use",
+            "id": legacy_function_call_id(name),
+            "name": name,
+            "input": parse_tool_arguments(function.get("arguments")).unwrap_or_else(|| json!({})),
+        }));
     }
     if content.is_empty() {
         content.push(json!({"type": "text", "text": ""}));
     }
     let usage = openai.get("usage").unwrap_or(&Value::Null);
-    let output_tokens = usage
-        .get("completion_tokens")
-        .and_then(Value::as_u64)
+    let output_tokens = usage_token(usage, &["completion_tokens", "output_tokens"])
         .unwrap_or_else(|| estimate_tokens(&content_value_to_text(&Value::Array(content.clone()))));
     AnthropicResponse {
         id: openai
@@ -659,21 +734,43 @@ fn openai_to_anthropic(default_model: &str, openai: &Value) -> AnthropicResponse
             input_tokens: usage
                 .get("prompt_tokens")
                 .and_then(Value::as_u64)
+                .or_else(|| usage_token(usage, &["input_tokens"]))
                 .unwrap_or(0),
             output_tokens,
         },
     }
 }
 
-fn parse_json_string(value: Option<&Value>) -> Option<Value> {
-    let text = value.and_then(Value::as_str)?;
-    serde_json::from_str(text).ok()
+fn usage_token(usage: &Value, keys: &[&str]) -> Option<u64> {
+    keys.iter()
+        .find_map(|key| usage.get(*key).and_then(Value::as_u64))
+}
+
+fn parse_tool_arguments(value: Option<&Value>) -> Option<Value> {
+    match value? {
+        Value::String(text) => serde_json::from_str(text).ok(),
+        Value::Object(_) => value.cloned(),
+        _ => None,
+    }
+}
+
+fn legacy_function_call_id(name: &str) -> String {
+    let mut sanitized = String::new();
+    for character in name.chars() {
+        if character.is_ascii_alphanumeric() || character == '_' || character == '-' {
+            sanitized.push(character);
+        }
+    }
+    if sanitized.is_empty() {
+        sanitized.push_str("unknown_tool");
+    }
+    format!("{LEGACY_FUNCTION_ID_PREFIX}{sanitized}")
 }
 
 fn map_finish_reason(reason: Option<&str>) -> String {
     match reason {
         Some("length") => "max_tokens",
-        Some("tool_calls") => "tool_use",
+        Some("tool_calls") | Some("function_call") => "tool_use",
         Some("content_filter") => "refusal",
         Some("stop") | None => "end_turn",
         Some(_) => "end_turn",
@@ -771,11 +868,19 @@ fn sse_response(message: &AnthropicResponse) -> Response {
 fn openai_stream_to_anthropic_response(
     response: reqwest::Response,
     default_model: String,
+    estimated_input_tokens: u64,
     heartbeat_secs: u64,
 ) -> Response {
     let (tx, rx) = mpsc::channel::<Result<Bytes, Infallible>>(256);
     tokio::spawn(async move {
-        bridge_openai_stream(response, default_model, heartbeat_secs, tx).await;
+        bridge_openai_stream(
+            response,
+            default_model,
+            estimated_input_tokens,
+            heartbeat_secs,
+            tx,
+        )
+        .await;
     });
     Response::builder()
         .status(StatusCode::OK)
@@ -790,29 +895,12 @@ fn openai_stream_to_anthropic_response(
 async fn bridge_openai_stream(
     response: reqwest::Response,
     default_model: String,
+    estimated_input_tokens: u64,
     heartbeat_secs: u64,
     tx: mpsc::Sender<Result<Bytes, Infallible>>,
 ) {
-    let mut state = StreamBridgeState::new(default_model);
-    if !send_sse(
-        &tx,
-        "message_start",
-        &json!({
-            "type": "message_start",
-            "message": {
-                "id": state.id,
-                "type": "message",
-                "role": "assistant",
-                "content": [],
-                "model": state.model,
-                "stop_reason": null,
-                "stop_sequence": null,
-                "usage": {"input_tokens": 0, "output_tokens": 1}
-            }
-        }),
-    )
-    .await
-    {
+    let mut state = StreamBridgeState::new(default_model, estimated_input_tokens);
+    if !send_sse(&tx, "message_start", &state.message_start_event()).await {
         return;
     }
 
@@ -856,25 +944,40 @@ async fn bridge_openai_stream(
             let frame = buffer[..frame_len].to_vec();
             buffer.drain(..drain_len);
             let frame = String::from_utf8_lossy(&frame);
-            for data in sse_frame_data(&frame) {
-                if data == "[DONE]" {
-                    finish_stream(&tx, &mut state).await;
-                    return;
-                }
-                let chunk: Value = match serde_json::from_str(&data) {
-                    Ok(chunk) => chunk,
-                    Err(_) => continue,
-                };
-                for (event, payload) in openai_stream_chunk_to_anthropic_events(&mut state, &chunk)
-                {
-                    if !send_sse(&tx, &event, &payload).await {
-                        return;
-                    }
-                }
+            if !handle_sse_frame_data(&tx, &mut state, &frame).await {
+                return;
             }
         }
     }
+    if !buffer.is_empty() {
+        let frame = String::from_utf8_lossy(&buffer);
+        if !handle_sse_frame_data(&tx, &mut state, &frame).await {
+            return;
+        }
+    }
     finish_stream(&tx, &mut state).await;
+}
+
+async fn handle_sse_frame_data(
+    tx: &mpsc::Sender<Result<Bytes, Infallible>>,
+    state: &mut StreamBridgeState,
+    frame: &str,
+) -> bool {
+    for data in sse_frame_data(frame) {
+        if data == "[DONE]" {
+            finish_stream(tx, state).await;
+            return false;
+        }
+        let chunk: Value = match serde_json::from_str(&data) {
+            Ok(chunk) => chunk,
+            Err(_) => continue,
+        };
+        let events = openai_stream_chunk_to_anthropic_events(state, &chunk);
+        if !events.is_empty() && !send_sse_events(tx, events).await {
+            return false;
+        }
+    }
+    true
 }
 
 async fn finish_stream(
@@ -883,17 +986,23 @@ async fn finish_stream(
 ) {
     let mut events = Vec::new();
     state.finish(&mut events);
-    for (event, payload) in events {
-        if !send_sse(tx, &event, &payload).await {
-            return;
-        }
+    if events.is_empty() {
+        return;
     }
+    let _ = send_sse_events(tx, events).await;
 }
 
 async fn send_sse(tx: &mpsc::Sender<Result<Bytes, Infallible>>, event: &str, data: &Value) -> bool {
     tx.send(Ok(Bytes::from(sse_event(event, data))))
         .await
         .is_ok()
+}
+
+async fn send_sse_events(
+    tx: &mpsc::Sender<Result<Bytes, Infallible>>,
+    events: Vec<StreamEvent>,
+) -> bool {
+    tx.send(Ok(sse_events(events))).await.is_ok()
 }
 
 async fn send_comment(tx: &mpsc::Sender<Result<Bytes, Infallible>>, comment: &str) -> bool {
@@ -908,6 +1017,14 @@ fn sse_event(event: &str, data: &Value) -> String {
     output
 }
 
+fn sse_events(events: Vec<StreamEvent>) -> Bytes {
+    let mut output = String::new();
+    for (event, data) in events {
+        push_sse(&mut output, event, &data);
+    }
+    Bytes::from(output)
+}
+
 fn find_sse_frame(buffer: &[u8]) -> Option<(usize, usize)> {
     for index in 0..buffer.len().saturating_sub(1) {
         if &buffer[index..index + 2] == b"\n\n" {
@@ -917,21 +1034,22 @@ fn find_sse_frame(buffer: &[u8]) -> Option<(usize, usize)> {
             return Some((index, index + 4));
         }
     }
-    if buffer.ends_with(b"\r\n") || buffer.ends_with(b"\n") {
-        return Some((buffer.len(), buffer.len()));
-    }
     None
 }
 
 fn sse_frame_data(frame: &str) -> Vec<String> {
-    let mut items = Vec::new();
+    let mut data_lines = Vec::new();
     for line in frame.lines() {
         let line = line.trim_end_matches('\r');
         if let Some(data) = line.strip_prefix("data:") {
-            items.push(data.trim_start().to_string());
+            data_lines.push(data.trim_start().to_string());
         }
     }
-    items
+    if data_lines.is_empty() {
+        Vec::new()
+    } else {
+        vec![data_lines.join("\n")]
+    }
 }
 
 #[derive(Debug)]
@@ -945,15 +1063,19 @@ struct StreamBridgeState {
     input_tokens: u64,
     output_tokens: u64,
     output_chars: u64,
+    stream_events: u64,
+    finished: bool,
 }
 
 #[derive(Debug)]
 struct ToolStreamBlock {
-    content_index: usize,
+    content_index: Option<usize>,
+    id: Option<String>,
+    name: Option<String>,
 }
 
 impl StreamBridgeState {
-    fn new(model: String) -> Self {
+    fn new(model: String, input_tokens: u64) -> Self {
         Self {
             id: format!("msg_stream_{}", unix_seconds()),
             model,
@@ -961,13 +1083,31 @@ impl StreamBridgeState {
             next_content_index: 0,
             tool_blocks: BTreeMap::new(),
             stop_reason: "end_turn".to_string(),
-            input_tokens: 0,
+            input_tokens,
             output_tokens: 0,
             output_chars: 0,
+            stream_events: 0,
+            finished: false,
         }
     }
 
-    fn ensure_text_block(&mut self, events: &mut Vec<(String, Value)>) -> usize {
+    fn message_start_event(&self) -> Value {
+        json!({
+            "type": "message_start",
+            "message": {
+                "id": self.id,
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "model": self.model,
+                "stop_reason": null,
+                "stop_sequence": null,
+                "usage": {"input_tokens": self.input_tokens, "output_tokens": 1}
+            }
+        })
+    }
+
+    fn ensure_text_block(&mut self, events: &mut Vec<StreamEvent>) -> usize {
         if let Some(index) = self.text_index {
             return index;
         }
@@ -975,7 +1115,7 @@ impl StreamBridgeState {
         self.next_content_index += 1;
         self.text_index = Some(index);
         events.push((
-            "content_block_start".to_string(),
+            "content_block_start",
             json!({
                 "type": "content_block_start",
                 "index": index,
@@ -990,23 +1130,37 @@ impl StreamBridgeState {
         tool_index: u64,
         id: Option<&str>,
         name: Option<&str>,
-        events: &mut Vec<(String, Value)>,
+        events: &mut Vec<StreamEvent>,
     ) -> usize {
-        if let Some(block) = self.tool_blocks.get(&tool_index) {
-            return block.content_index;
+        self.remember_tool_block(tool_index, id, name);
+        if let Some(index) = self
+            .tool_blocks
+            .get(&tool_index)
+            .and_then(|block| block.content_index)
+        {
+            return index;
         }
         let index = self.next_content_index;
         self.next_content_index += 1;
-        let id = id.unwrap_or("toolu_stream").to_string();
-        let name = name.unwrap_or("unknown_tool").to_string();
-        self.tool_blocks.insert(
-            tool_index,
-            ToolStreamBlock {
-                content_index: index,
-            },
-        );
+        let block = self
+            .tool_blocks
+            .entry(tool_index)
+            .or_insert(ToolStreamBlock {
+                content_index: None,
+                id: None,
+                name: None,
+            });
+        let name = block
+            .name
+            .clone()
+            .unwrap_or_else(|| "unknown_tool".to_string());
+        let id = block
+            .id
+            .clone()
+            .unwrap_or_else(|| legacy_function_call_id(&name));
+        block.content_index = Some(index);
         events.push((
-            "content_block_start".to_string(),
+            "content_block_start",
             json!({
                 "type": "content_block_start",
                 "index": index,
@@ -1016,38 +1170,69 @@ impl StreamBridgeState {
         index
     }
 
-    fn finish(&mut self, events: &mut Vec<(String, Value)>) {
+    fn remember_tool_block(&mut self, tool_index: u64, id: Option<&str>, name: Option<&str>) {
+        let block = self
+            .tool_blocks
+            .entry(tool_index)
+            .or_insert(ToolStreamBlock {
+                content_index: None,
+                id: None,
+                name: None,
+            });
+        if let Some(id) = id {
+            block.id = Some(id.to_string());
+        }
+        if let Some(name) = name {
+            block.name = Some(name.to_string());
+        }
+    }
+
+    fn finish(&mut self, events: &mut Vec<StreamEvent>) {
+        if self.finished {
+            return;
+        }
+        self.finished = true;
+        for tool_index in self
+            .tool_blocks
+            .iter()
+            .filter_map(|(tool_index, block)| block.content_index.is_none().then_some(*tool_index))
+            .collect::<Vec<_>>()
+        {
+            self.ensure_tool_block(tool_index, None, None, events);
+        }
         if let Some(index) = self.text_index {
             events.push((
-                "content_block_stop".to_string(),
+                "content_block_stop",
                 json!({"type": "content_block_stop", "index": index}),
             ));
         }
         for block in self.tool_blocks.values() {
-            events.push((
-                "content_block_stop".to_string(),
-                json!({"type": "content_block_stop", "index": block.content_index}),
-            ));
+            if let Some(content_index) = block.content_index {
+                events.push((
+                    "content_block_stop",
+                    json!({"type": "content_block_stop", "index": content_index}),
+                ));
+            }
         }
         if self.output_tokens == 0 {
             self.output_tokens = estimate_tokens_by_chars(self.output_chars);
         }
         events.push((
-            "message_delta".to_string(),
+            "message_delta",
             json!({
                 "type": "message_delta",
                 "delta": {"stop_reason": self.stop_reason, "stop_sequence": null},
                 "usage": {"output_tokens": self.output_tokens}
             }),
         ));
-        events.push(("message_stop".to_string(), json!({"type": "message_stop"})));
+        events.push(("message_stop", json!({"type": "message_stop"})));
     }
 }
 
 fn openai_stream_chunk_to_anthropic_events(
     state: &mut StreamBridgeState,
     chunk: &Value,
-) -> Vec<(String, Value)> {
+) -> Vec<StreamEvent> {
     let mut events = Vec::new();
     if let Some(model) = chunk.get("model").and_then(Value::as_str) {
         state.model = model.to_string();
@@ -1068,12 +1253,18 @@ fn openai_stream_chunk_to_anthropic_events(
             state.stop_reason = map_finish_reason(Some(reason));
         }
         let delta = choice.get("delta").unwrap_or(&Value::Null);
-        if let Some(text) = delta.get("content").and_then(Value::as_str) {
+        if let Some(text) = delta
+            .get("content")
+            .or_else(|| delta.get("reasoning_content"))
+            .or_else(|| delta.get("reasoning"))
+            .and_then(Value::as_str)
+        {
             if !text.is_empty() {
                 let index = state.ensure_text_block(&mut events);
                 state.output_chars += text.chars().count() as u64;
+                state.stream_events += 1;
                 events.push((
-                    "content_block_delta".to_string(),
+                    "content_block_delta",
                     json!({
                         "type": "content_block_delta",
                         "index": index,
@@ -1086,17 +1277,19 @@ fn openai_stream_chunk_to_anthropic_events(
             for tool_call in tool_calls {
                 let tool_index = tool_call.get("index").and_then(Value::as_u64).unwrap_or(0);
                 let function = tool_call.get("function").unwrap_or(&Value::Null);
-                let index = state.ensure_tool_block(
-                    tool_index,
-                    tool_call.get("id").and_then(Value::as_str),
-                    function.get("name").and_then(Value::as_str),
-                    &mut events,
-                );
+                let tool_id = tool_call.get("id").and_then(Value::as_str);
+                let tool_name = function.get("name").and_then(Value::as_str);
+                if function.get("arguments").and_then(Value::as_str).is_none() {
+                    state.remember_tool_block(tool_index, tool_id, tool_name);
+                    continue;
+                }
+                let index = state.ensure_tool_block(tool_index, tool_id, tool_name, &mut events);
                 if let Some(arguments) = function.get("arguments").and_then(Value::as_str) {
                     if !arguments.is_empty() {
                         state.output_chars += arguments.chars().count() as u64;
+                        state.stream_events += 1;
                         events.push((
-                            "content_block_delta".to_string(),
+                            "content_block_delta",
                             json!({
                                 "type": "content_block_delta",
                                 "index": index,
@@ -1104,6 +1297,29 @@ fn openai_stream_chunk_to_anthropic_events(
                             }),
                         ));
                     }
+                }
+            }
+        }
+        if let Some(function) = delta.get("function_call") {
+            let tool_name = function.get("name").and_then(Value::as_str);
+            if function.get("arguments").and_then(Value::as_str).is_none() {
+                state.remember_tool_block(LEGACY_FUNCTION_TOOL_INDEX, None, tool_name);
+                continue;
+            }
+            let index =
+                state.ensure_tool_block(LEGACY_FUNCTION_TOOL_INDEX, None, tool_name, &mut events);
+            if let Some(arguments) = function.get("arguments").and_then(Value::as_str) {
+                if !arguments.is_empty() {
+                    state.output_chars += arguments.chars().count() as u64;
+                    state.stream_events += 1;
+                    events.push((
+                        "content_block_delta",
+                        json!({
+                            "type": "content_block_delta",
+                            "index": index,
+                            "delta": {"type": "input_json_delta", "partial_json": arguments}
+                        }),
+                    ));
                 }
             }
         }
@@ -1216,7 +1432,7 @@ mod tests {
         );
         assert_eq!(mapped["model"], "gpt-5.5");
         assert_eq!(mapped["max_completion_tokens"], 128);
-        assert_eq!(mapped["messages"][2]["content"], "");
+        assert_eq!(mapped["messages"][2]["content"], Value::Null);
         assert_eq!(
             mapped["messages"][2]["tool_calls"][0]["function"]["name"],
             "read_file"
@@ -1230,6 +1446,92 @@ mod tests {
             "string"
         );
         assert_eq!(mapped["stream"], false);
+    }
+
+    #[test]
+    fn maps_disable_parallel_tool_use_to_openai_parallel_flag() {
+        let request = AnthropicRequest {
+            model: None,
+            max_tokens: None,
+            system: None,
+            tools: Some(vec![
+                json!({"name":"read_file","input_schema":{"type":"object"}}),
+            ]),
+            tool_choice: Some(json!({"type": "auto", "disable_parallel_tool_use": true})),
+            temperature: None,
+            top_p: None,
+            stop_sequences: None,
+            stream: false,
+            messages: vec![AnthropicMessage {
+                role: "user".to_string(),
+                content: Value::String("read it".to_string()),
+            }],
+        };
+        let mapped = build_openai_request(&state(), &request, false).expect("mapped");
+        assert_eq!(mapped["tool_choice"], "auto");
+        assert_eq!(mapped["parallel_tool_calls"], false);
+    }
+
+    #[test]
+    fn ignores_tool_choice_without_tools() {
+        let request = AnthropicRequest {
+            model: None,
+            max_tokens: None,
+            system: None,
+            tools: None,
+            tool_choice: Some(json!({"type": "auto", "disable_parallel_tool_use": true})),
+            temperature: None,
+            top_p: None,
+            stop_sequences: None,
+            stream: false,
+            messages: vec![AnthropicMessage {
+                role: "user".to_string(),
+                content: Value::String("ping".to_string()),
+            }],
+        };
+        let mapped = build_openai_request(&state(), &request, false).expect("mapped");
+        assert!(mapped.get("tool_choice").is_none());
+        assert!(mapped.get("parallel_tool_calls").is_none());
+    }
+
+    #[test]
+    fn non_stream_response_uses_upstream_model_fallback() {
+        let response = openai_to_anthropic(
+            "openai/gpt-5.5",
+            &json!({
+                "id": "chatcmpl_test",
+                "choices": [{"message": {"content": "pong"}, "finish_reason": "stop"}]
+            }),
+        );
+        assert_eq!(response.model, "openai/gpt-5.5");
+    }
+
+    #[test]
+    fn drops_sampling_parameters_for_reasoning_models() {
+        let request = AnthropicRequest {
+            model: None,
+            max_tokens: None,
+            system: None,
+            tools: None,
+            tool_choice: None,
+            temperature: Some(0.2),
+            top_p: Some(0.9),
+            stop_sequences: None,
+            stream: false,
+            messages: vec![AnthropicMessage {
+                role: "user".to_string(),
+                content: Value::String("ping".to_string()),
+            }],
+        };
+        let mapped = build_openai_request(&state(), &request, false).expect("mapped");
+        assert!(mapped.get("temperature").is_none());
+        assert!(mapped.get("top_p").is_none());
+
+        let mut legacy_state = state();
+        legacy_state.model = "gpt-4o".to_string();
+        let mapped = build_openai_request(&legacy_state, &request, false).expect("mapped");
+        assert_eq!(mapped["temperature"], 0.2);
+        assert_eq!(mapped["top_p"], 0.9);
     }
 
     #[test]
@@ -1263,7 +1565,7 @@ mod tests {
         state.max_tokens_field = "max_completion_tokens".to_string();
         state.stream_obfuscation = StreamObfuscation::Include(false);
         let request = AnthropicRequest {
-            model: Some("claude-sonnet-4-5".to_string()),
+            model: Some("openai/gpt-5.5".to_string()),
             max_tokens: Some(128),
             system: None,
             tools: None,
@@ -1278,10 +1580,35 @@ mod tests {
             }],
         };
         let mapped = build_openai_request(&state, &request, true).expect("mapped");
-        assert_eq!(mapped["model"], "claude-sonnet-4-5");
+        assert_eq!(mapped["model"], "openai/gpt-5.5");
         assert_eq!(mapped["reasoning_effort"], "low");
         assert_eq!(mapped["max_completion_tokens"], 128);
         assert_eq!(mapped["stream_options"]["include_obfuscation"], false);
+    }
+
+    #[test]
+    fn preserved_claude_alias_does_not_get_gpt_reasoning_knobs() {
+        let mut state = state();
+        state.preserve_request_model = true;
+        state.reasoning_effort = Some("low".to_string());
+        let request = AnthropicRequest {
+            model: Some("claude-sonnet-4-5".to_string()),
+            max_tokens: Some(128),
+            system: None,
+            tools: None,
+            tool_choice: None,
+            temperature: None,
+            top_p: None,
+            stop_sequences: None,
+            stream: false,
+            messages: vec![AnthropicMessage {
+                role: "user".to_string(),
+                content: Value::String("ping".to_string()),
+            }],
+        };
+        let mapped = build_openai_request(&state, &request, false).expect("mapped");
+        assert_eq!(mapped["model"], "claude-sonnet-4-5");
+        assert!(mapped.get("reasoning_effort").is_none());
     }
 
     #[test]
@@ -1366,6 +1693,33 @@ mod tests {
     }
 
     #[test]
+    fn maps_object_tool_arguments_refusal_and_response_usage_aliases() {
+        let response = openai_to_anthropic(
+            "gpt-5.5",
+            &json!({
+                "id": "chatcmpl_test",
+                "choices": [{
+                    "message": {
+                        "refusal": "cannot comply",
+                        "tool_calls": [{
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "read_file", "arguments": {"path": "README.md"}}
+                        }]
+                    },
+                    "finish_reason": "content_filter"
+                }],
+                "usage": {"input_tokens": 11, "output_tokens": 4}
+            }),
+        );
+        assert_eq!(response.stop_reason, "refusal");
+        assert_eq!(response.usage.input_tokens, 11);
+        assert_eq!(response.usage.output_tokens, 4);
+        assert_eq!(response.content[0]["text"], "cannot comply");
+        assert_eq!(response.content[1]["input"]["path"], "README.md");
+    }
+
+    #[test]
     fn stream_response_uses_anthropic_event_sequence() {
         let message = AnthropicResponse {
             id: "msg_test".to_string(),
@@ -1392,8 +1746,22 @@ mod tests {
     }
 
     #[test]
+    fn sse_parser_waits_for_complete_frames_and_joins_multiline_data() {
+        assert_eq!(find_sse_frame(b"data: {\"partial\": true}\n"), None);
+        assert_eq!(find_sse_frame(b"data: {\"ok\": true}\n\n"), Some((18, 20)));
+        assert_eq!(
+            sse_frame_data("event: message\ndata: {\"a\":\ndata: 1}\n"),
+            vec!["{\"a\":\n1}".to_string()]
+        );
+    }
+
+    #[test]
     fn maps_openai_stream_chunks_to_anthropic_deltas() {
-        let mut state = StreamBridgeState::new("gpt-5.5".to_string());
+        let mut state = StreamBridgeState::new("gpt-5.5".to_string(), 7);
+        assert_eq!(
+            state.message_start_event()["message"]["usage"]["input_tokens"],
+            7
+        );
         let text_events = openai_stream_chunk_to_anthropic_events(
             &mut state,
             &json!({
@@ -1423,5 +1791,89 @@ mod tests {
         assert_eq!(tool_events[0].0, "content_block_start");
         assert_eq!(tool_events[1].1["delta"]["type"], "input_json_delta");
         assert_eq!(tool_events[1].1["delta"]["partial_json"], "{\"path\"");
+    }
+
+    #[test]
+    fn maps_legacy_function_call_and_reasoning_stream_shapes() {
+        let legacy = openai_to_anthropic(
+            "gpt-4o",
+            &json!({
+                "id": "chatcmpl_legacy",
+                "choices": [{
+                    "message": {
+                        "function_call": {"name": "read_file", "arguments": "{\"path\":\"README.md\"}"}
+                    },
+                    "finish_reason": "function_call"
+                }]
+            }),
+        );
+        assert_eq!(legacy.stop_reason, "tool_use");
+        assert_eq!(legacy.content[0]["id"], "call_legacy_read_file");
+        assert_eq!(legacy.content[0]["input"]["path"], "README.md");
+
+        let mut state = StreamBridgeState::new("gpt-4o".to_string(), 1);
+        let events = openai_stream_chunk_to_anthropic_events(
+            &mut state,
+            &json!({
+                "choices": [{
+                    "delta": {
+                        "reasoning_content": "visible reasoning ",
+                        "function_call": {"name": "read_file", "arguments": "{\"path\""}
+                    },
+                    "finish_reason": "function_call"
+                }]
+            }),
+        );
+        assert_eq!(events[1].1["delta"]["text"], "visible reasoning ");
+        assert_eq!(events[2].1["content_block"]["id"], "call_legacy_read_file");
+        assert_eq!(events[3].1["delta"]["partial_json"], "{\"path\"");
+    }
+
+    #[test]
+    fn delays_tool_stream_block_until_arguments_arrive() {
+        let mut state = StreamBridgeState::new("gpt-5.5".to_string(), 1);
+        let name_only = openai_stream_chunk_to_anthropic_events(
+            &mut state,
+            &json!({
+                "choices": [{
+                    "delta": {
+                        "tool_calls": [{
+                            "index": 0,
+                            "id": "call_1",
+                            "function": {"name": "read_file"}
+                        }]
+                    }
+                }]
+            }),
+        );
+        assert!(name_only.is_empty());
+
+        let argument_events = openai_stream_chunk_to_anthropic_events(
+            &mut state,
+            &json!({
+                "choices": [{
+                    "delta": {
+                        "tool_calls": [{
+                            "index": 0,
+                            "function": {"arguments": "{\"path\""}
+                        }]
+                    }
+                }]
+            }),
+        );
+        assert_eq!(argument_events[0].1["content_block"]["id"], "call_1");
+        assert_eq!(argument_events[0].1["content_block"]["name"], "read_file");
+        assert_eq!(argument_events[1].1["delta"]["partial_json"], "{\"path\"");
+    }
+
+    #[test]
+    fn finish_stream_is_idempotent_after_done_frames() {
+        let mut state = StreamBridgeState::new("gpt-5.5".to_string(), 1);
+        let mut first = Vec::new();
+        state.finish(&mut first);
+        let mut second = Vec::new();
+        state.finish(&mut second);
+        assert_eq!(first.last().map(|event| event.0), Some("message_stop"));
+        assert!(second.is_empty());
     }
 }
