@@ -30,8 +30,8 @@ metadata:
 risk: medium
 source: community-adapted
 runtime_requirements:
-  python:
-    - pyyaml
+  rust:
+    - cargo
 ---
 
 # Autoresearch
@@ -119,7 +119,7 @@ spans sessions.
 - Treat `research-state.yaml` as the canonical control plane and `research-log.md` as
   the chronological record.
 - Keep experiment folders append-only after a run is labeled complete.
-- Prefer the bundled controller `scripts/research_ctl.py` over ad hoc manual edits for
+- Prefer the bundled Rust controller `../../scripts/autoresearch-rs` over ad hoc manual edits for
   init, queued hypotheses, run records, reflections, and next-step suggestions.
 
 ## Minimum Run Record
@@ -219,15 +219,14 @@ slices as follows before expensive runs.
 
 ## Primary Assets
 
-- Controller CLI: `skills/autoresearch/scripts/research_ctl.py`
-- Backward-compatible init wrapper: `skills/autoresearch/scripts/init_research.py`
+- Rust controller CLI: `scripts/autoresearch-rs`
 - Templates: `skills/autoresearch/templates/`
-- Resume handoff: `python3 skills/autoresearch/scripts/research_ctl.py resume --workspace <project>`
-- File resync: `python3 skills/autoresearch/scripts/research_ctl.py sync --workspace <project>`
-- Claim drafting lane: `python3 skills/autoresearch/scripts/research_ctl.py draft-claims --workspace <project>`
-- Novelty comparison lane: `python3 skills/autoresearch/scripts/research_ctl.py compare-claim --workspace <project> ...`
-- Search-plan refresh: `python3 skills/autoresearch/scripts/research_ctl.py plan-search --workspace <project>`; this refreshes the managed search view from structured claims instead of creating a new persisted truth surface
-- First-claim brief refresh: `python3 skills/autoresearch/scripts/research_ctl.py brief-first-claim --workspace <project>`; the brief lives inside `CURRENT_CONTEXT.md`, and legacy `literature/NOVELTY_BRIEF.md` is treated as removable stale output
+- Resume handoff: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- resume --workspace <project>`
+- File resync: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- sync --workspace <project>`
+- Claim drafting lane: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- draft-claims --workspace <project>`
+- Novelty comparison lane: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- compare-claim --workspace <project> ...`
+- Search-plan refresh: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- plan-search --workspace <project>`; this refreshes the managed search view from structured claims instead of creating a new persisted truth surface
+- First-claim brief refresh: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- brief-first-claim --workspace <project>`; the brief lives inside `CURRENT_CONTEXT.md`, and legacy `literature/NOVELTY_BRIEF.md` is treated as removable stale output
 
 ## Git Protocol
 

@@ -38,7 +38,7 @@ Smoke-tested locally on March 18, 2026 with:
 Some QA scripts rely on system binaries:
 
 - `soffice` / LibreOffice for PPTX to PDF conversion used by rendering workflows
-- Poppler tools for PDF raster support used by `pdf2image`
+- Poppler tools for PDF size and raster support used by Rust render paths
 - `fc-list` for font inspection
 
 If these are missing, deck generation can still work, but rendered QA may not.
@@ -71,26 +71,10 @@ What it adds to `ppt-pptx`:
 - `get` / `query` for stable-path inspection of existing decks
 - `watch` for live HTML preview when iterating on an already-generated `.pptx`
 
-## Python QA Dependencies
-
-The bundled QA scripts also expect Python packages that are separate from the Node deck toolchain:
-
-```bash
-python3 -m pip install --user pdf2image python-pptx
-```
-
-If `Pillow` or `numpy` are missing in the active Python environment, install them too:
-
-```bash
-python3 -m pip install --user pillow numpy
-```
-
 ## Recommended Workspace Bootstrap
 
 ```bash
-npm init -y
-npm install pptxgenjs skia-canvas linebreak fontkit prismjs mathjax-full js-yaml
-mkdir -p assets rendered scripts
+ppt init .
 ```
 
 Optional smoke test from the skill root:
@@ -103,8 +87,7 @@ Then copy into the workspace:
 
 - `assets/deck.template.js` as `deck.js`
 - `assets/pptxgenjs_helpers/`
-- `scripts/pptx_tool.js`
-- optional OfficeCLI-backed inspection helpers: call via `node scripts/pptx_tool.js office ...` when needed
+- optional OfficeCLI-backed inspection helpers: call via `ppt office ...` when needed
 
 Optional images:
 
@@ -148,7 +131,7 @@ Cross-platform font default:
 
 - check `officecli --version`
 - if unavailable, the deck can still build and render; only the deeper OfficeCLI audit / watch path is unavailable
-- `node scripts/pptx_tool.js office probe --json` is the quickest local check
+- `ppt office probe --json` is the quickest local check
 
 ## Smoke-Test Result
 
@@ -156,22 +139,21 @@ Verified locally on this machine on March 18, 2026:
 
 - `brew install --cask libreoffice` succeeded
 - `soffice --version` reports `LibreOffice 26.2.1.2`
-- `python3 -m pip install --user pdf2image python-pptx` succeeded
 - the template generated a real `.pptx`
-- `node scripts/pptx_tool.js render` successfully rendered that `.pptx` into slide PNGs
+- `ppt render` successfully rendered that `.pptx` into slide PNGs
 
 Useful OfficeCLI audit commands after generation:
 
 ```bash
-node scripts/pptx_tool.js office doctor deck.pptx --json
-node scripts/pptx_tool.js office outline deck.pptx --json
-node scripts/pptx_tool.js office watch deck.pptx --port 18080
+ppt office doctor deck.pptx --json
+ppt office outline deck.pptx --json
+ppt office watch deck.pptx --port 18080
 ```
 
 Recommended mixed-lane commands:
 
 ```bash
-node scripts/pptx_tool.js build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json
-node scripts/pptx_tool.js qa deck.pptx --rendered-dir rendered --json
-node scripts/pptx_tool.js intake old_deck.pptx --json
+ppt build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json
+ppt qa deck.pptx --rendered-dir rendered --json
+ppt intake old_deck.pptx --json
 ```

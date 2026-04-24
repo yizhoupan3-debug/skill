@@ -142,6 +142,16 @@
       "first_turn": true
     },
     {
+      "id": "imagegen-colloquial-chinese-case",
+      "category": "should-trigger",
+      "task": "现在帮我生图：一只蓝色小猫图标，白底，无文字。",
+      "focus_skill": "imagegen",
+      "expected_owner": "imagegen",
+      "expected_overlay": "anti-laziness",
+      "forbidden_owners": ["idea-to-plan", "infographic", "visual-review"],
+      "first_turn": true
+    },
+    {
       "id": "execution-controller-coding-should-not-overtrigger",
       "category": "should-not-trigger",
       "task": "只改一个单文件 shell 脚本，别上复杂编排。",

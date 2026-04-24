@@ -1,14 +1,13 @@
 from pathlib import Path
 import json
+import subprocess
 
 PACKAGE_TEMPLATE = Path("/Users/joe/Documents/skill/skills/ppt-pptx/assets/package.template.json")
-TOOL_RUNNER = Path("/Users/joe/Documents/skill/skills/ppt-pptx/scripts/pptx_tool.js")
 PACKAGE_JSON = Path("/Users/joe/Documents/skill/skills/ppt-pptx/package.json")
 SCRIPTS_DIR = Path("/Users/joe/Documents/skill/skills/ppt-pptx/scripts")
-
-
-def test_tool_runner_is_present() -> None:
-    assert TOOL_RUNNER.exists()
+RUST_MANIFEST = Path("/Users/joe/Documents/skill/rust_tools/pptx_tool_rs/Cargo.toml")
+RUST_MAIN = Path("/Users/joe/Documents/skill/rust_tools/pptx_tool_rs/src/main.rs")
+RUST_DIRECT_BIN = Path("/Users/joe/Documents/skill/rust_tools/pptx_tool_rs/src/bin/ppt.rs")
 
 
 def test_package_template_uses_rust_tool_runner() -> None:
@@ -16,7 +15,7 @@ def test_package_template_uses_rust_tool_runner() -> None:
     for name, command in scripts.items():
         if name == "build":
             continue
-        assert command.startswith("node scripts/pptx_tool.js"), (name, command)
+        assert command.startswith("ppt "), (name, command)
 
 
 def test_skill_package_uses_node_smoke_test() -> None:
@@ -26,3 +25,38 @@ def test_skill_package_uses_node_smoke_test() -> None:
 
 def test_skill_scripts_are_no_longer_python() -> None:
     assert not list(SCRIPTS_DIR.glob("*.py"))
+
+
+def test_rust_manifest_exposes_direct_ppt_cli() -> None:
+    manifest = RUST_MANIFEST.read_text(encoding="utf-8")
+    assert 'name = "ppt"' in manifest
+    assert 'path = "src/bin/ppt.rs"' in manifest
+    assert RUST_DIRECT_BIN.exists()
+
+
+def test_rust_cli_owns_workspace_and_outline_commands() -> None:
+    source = RUST_MAIN.read_text(encoding="utf-8")
+    assert "Init(InitArgs)" in source
+    assert "Outline(OutlineArgs)" in source
+    assert "fn init_workspace(" in source
+
+
+def test_direct_ppt_cli_help_lists_authoring_commands() -> None:
+    result = subprocess.run(
+        [
+            "cargo",
+            "run",
+            "--quiet",
+            "--manifest-path",
+            str(RUST_MANIFEST),
+            "--bin",
+            "ppt",
+            "--",
+            "--help",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "init" in result.stdout
+    assert "outline" in result.stdout

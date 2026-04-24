@@ -24,9 +24,7 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "context-remaining",
     "git-branch",
 ];
-const DEFAULT_SHARED_PROJECT_MCP_SERVERS: [&str; 3] =
-    ["browser-mcp", "framework-mcp", "openaiDeveloperDocs"];
-const OPENAI_DEVELOPER_DOCS_MCP_URL: &str = "https://developers.openai.com/mcp";
+const DEFAULT_SHARED_PROJECT_MCP_SERVERS: [&str; 1] = ["framework-mcp"];
 const PERSONAL_PLUGIN_LIVE_PROJECTION_EXCLUDES: [&str; 2] = ["skills", ".mcp.json"];
 const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 7] = [
     "SESSION_SUMMARY.md",
@@ -64,8 +62,6 @@ struct SyncManifest {
 struct RuntimeRegistry {
     #[serde(rename = "schema_version")]
     _schema_version: String,
-    #[serde(default)]
-    shared_project_mcp_servers: Vec<String>,
     #[serde(default)]
     plugins: Vec<RuntimePluginRegistration>,
     #[serde(default)]
@@ -226,12 +222,6 @@ enum Commands {
         home_claude_mcp_config_path: PathBuf,
         #[arg(long)]
         bootstrap_output_dir: Option<PathBuf>,
-        #[arg(long)]
-        skip_browser_mcp: bool,
-        #[arg(long)]
-        skip_framework_mcp: bool,
-        #[arg(long)]
-        skip_openai_developer_docs_mcp: bool,
         #[arg(long)]
         skip_framework_overlay_retirement: bool,
         #[arg(long)]
@@ -394,9 +384,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             home_claude_refresh_path,
             home_claude_mcp_config_path,
             bootstrap_output_dir,
-            skip_browser_mcp,
-            skip_framework_mcp,
-            skip_openai_developer_docs_mcp,
             skip_framework_overlay_retirement,
             skip_personal_plugin,
             skip_personal_marketplace,
@@ -415,9 +402,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             &home_claude_refresh_path,
             &home_claude_mcp_config_path,
             bootstrap_output_dir.as_deref(),
-            !skip_browser_mcp,
-            !skip_framework_mcp,
-            !skip_openai_developer_docs_mcp,
             !skip_framework_overlay_retirement,
             !skip_personal_plugin,
             !skip_personal_marketplace,
@@ -696,17 +680,6 @@ fn skill_bridge_source_rel(repo_root: &Path) -> Result<String, String> {
         .unwrap_or_else(|| "skills".to_string()))
 }
 
-fn shared_project_mcp_servers(repo_root: &Path) -> Result<Vec<String>, String> {
-    let registry = load_runtime_registry(repo_root)?;
-    if registry.shared_project_mcp_servers.is_empty() {
-        return Ok(DEFAULT_SHARED_PROJECT_MCP_SERVERS
-            .iter()
-            .map(|server| server.to_string())
-            .collect());
-    }
-    Ok(registry.shared_project_mcp_servers)
-}
-
 fn router_rs_crate_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../router-rs")
 }
@@ -798,9 +771,6 @@ fn install_native_integration(
     home_claude_refresh_path: &Path,
     home_claude_mcp_config_path: &Path,
     bootstrap_output_dir: Option<&Path>,
-    install_browser_mcp: bool,
-    install_framework_mcp: bool,
-    install_openai_developer_docs_mcp: bool,
     retire_framework_overlay_file: bool,
     install_personal_plugin: bool,
     install_personal_marketplace_entry: bool,
@@ -832,33 +802,11 @@ fn install_native_integration(
 
     let created_config = ensure_config_file(&home_config_path)?;
     let codex_hooks_feature_changed = ensure_codex_hooks_feature(&home_config_path)?;
-    let browser_changed = if install_browser_mcp {
-        install_mcp_block(
-            &home_config_path,
-            "[mcp_servers.browser-mcp]",
-            &build_browser_server_block(&repo_root),
-        )?
-    } else {
-        false
-    };
-    let framework_changed = if install_framework_mcp {
-        install_mcp_block(
-            &home_config_path,
-            "[mcp_servers.framework-mcp]",
-            &build_framework_server_block(&repo_root),
-        )?
-    } else {
-        false
-    };
-    let openai_developer_docs_changed = if install_openai_developer_docs_mcp {
-        install_mcp_block(
-            &home_config_path,
-            "[mcp_servers.openaiDeveloperDocs]",
-            &build_openai_developer_docs_server_block(),
-        )?
-    } else {
-        false
-    };
+    let framework_changed = install_mcp_block(
+        &home_config_path,
+        "[mcp_servers.framework-mcp]",
+        &build_framework_server_block(&repo_root),
+    )?;
     let tui_changed = ensure_tui_status_line(&home_config_path)?;
     let personal_plugin_changed = if install_personal_plugin {
         ensure_personal_plugin_live_projection(
@@ -923,9 +871,7 @@ fn install_native_integration(
         "repo_marketplace_path": repo_root.join(".agents/plugins/marketplace.json").to_string_lossy(),
         "created_config": created_config,
         "codex_hooks_feature_changed": codex_hooks_feature_changed,
-        "browser_mcp_changed": browser_changed,
         "framework_mcp_changed": framework_changed,
-        "openai_developer_docs_mcp_changed": openai_developer_docs_changed,
         "tui_status_line_changed": tui_changed,
         "personal_plugin_changed": personal_plugin_changed,
         "personal_marketplace_changed": personal_marketplace_changed,
@@ -1907,16 +1853,6 @@ fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
-fn build_browser_server_block(repo_root: &Path) -> String {
-    format!(
-        "[mcp_servers.browser-mcp]\ncommand = \"node\"\nargs = [\"{}\"]\ncwd = \"{}\"",
-        repo_root
-            .join("tools/browser-mcp/dist/index.js")
-            .to_string_lossy(),
-        repo_root.join("tools/browser-mcp").to_string_lossy(),
-    )
-}
-
 fn build_framework_server_block(repo_root: &Path) -> String {
     let binary_path = repo_root
         .join("scripts")
@@ -1929,13 +1865,6 @@ fn build_framework_server_block(repo_root: &Path) -> String {
         binary_path.to_string_lossy(),
         repo_root.to_string_lossy(),
         repo_root.to_string_lossy(),
-    )
-}
-
-fn build_openai_developer_docs_server_block() -> String {
-    format!(
-        "[mcp_servers.openaiDeveloperDocs]\nurl = \"{}\"",
-        OPENAI_DEVELOPER_DOCS_MCP_URL
     )
 }
 
@@ -2252,10 +2181,10 @@ fn ensure_home_claude_mcp_servers(repo_root: &Path, config_path: &Path) -> Resul
         _ => Map::new(),
     };
 
-    for server_name in shared_project_mcp_servers(repo_root)? {
+    for server_name in DEFAULT_SHARED_PROJECT_MCP_SERVERS {
         mcp_servers.insert(
-            server_name.clone(),
-            managed_home_claude_mcp_server(repo_root, &server_name)?,
+            server_name.to_string(),
+            managed_home_claude_mcp_server(repo_root, server_name)?,
         );
     }
 
@@ -2289,64 +2218,14 @@ fn validate_home_claude_mcp(config_path: &Path, repo_root: &Path) -> Result<bool
         return Ok(false);
     };
 
-    let browser = servers.get("browser-mcp").and_then(Value::as_object);
-    let framework = servers.get("framework-mcp").and_then(Value::as_object);
-    let openai_docs = servers
-        .get("openaiDeveloperDocs")
-        .and_then(Value::as_object);
-    let Some(browser) = browser else {
-        return Ok(false);
-    };
-    let Some(framework) = framework else {
-        return Ok(false);
-    };
-    let Some(openai_docs) = openai_docs else {
-        return Ok(false);
-    };
-
-    let expected_browser_command = "node";
-    let expected_browser_cwd = repo_root.join("tools/browser-mcp").to_string_lossy().into_owned();
-    let expected_browser_entrypoint = repo_root
-        .join("tools/browser-mcp/dist/index.js")
-        .to_string_lossy()
-        .into_owned();
-    let browser_ok = browser.get("command").and_then(Value::as_str)
-        == Some(expected_browser_command)
-        && browser.get("cwd").and_then(Value::as_str) == Some(expected_browser_cwd.as_str())
-        && browser
-            .get("args")
-            .and_then(Value::as_array)
-            .is_some_and(|args| args == &vec![Value::String(expected_browser_entrypoint.clone())])
-        && browser
-            .get("env")
-            .and_then(Value::as_object)
-            .is_some_and(Map::is_empty);
-    let expected_framework_command = repo_root
-        .join("scripts/router-rs/target/release/router-rs")
-        .to_string_lossy()
-        .into_owned();
-    let framework_ok = framework.get("command").and_then(Value::as_str)
-        == Some(expected_framework_command.as_str())
-        && framework.get("cwd").and_then(Value::as_str)
-            == Some(repo_root.to_string_lossy().as_ref())
-        && framework
-            .get("args")
-            .and_then(Value::as_array)
-            .is_some_and(|args| {
-                args == &vec![
-                    Value::String("--framework-mcp-stdio".to_string()),
-                    Value::String("--repo-root".to_string()),
-                    Value::String(repo_root.to_string_lossy().into_owned()),
-                ]
-            })
-        && framework
-            .get("env")
-            .and_then(Value::as_object)
-            .is_some_and(Map::is_empty);
-    let openai_docs_ok = openai_docs.get("type").and_then(Value::as_str) == Some("http")
-        && openai_docs.get("url").and_then(Value::as_str) == Some(OPENAI_DEVELOPER_DOCS_MCP_URL);
-
-    Ok(browser_ok && framework_ok && openai_docs_ok)
+    let mut expected = Map::new();
+    for server_name in DEFAULT_SHARED_PROJECT_MCP_SERVERS {
+        expected.insert(
+            server_name.to_string(),
+            managed_home_claude_mcp_server(&repo_root, server_name)?,
+        );
+    }
+    Ok(servers == &expected)
 }
 
 fn validate_personal_plugin_mcp(config_path: &Path, repo_root: &Path) -> Result<bool, String> {
@@ -2361,23 +2240,12 @@ fn validate_personal_plugin_mcp(config_path: &Path, repo_root: &Path) -> Result<
 fn managed_home_claude_mcp_server(repo_root: &Path, server_name: &str) -> Result<Value, String> {
     let repo_root_value = repo_root.to_string_lossy().into_owned();
     match server_name {
-        "browser-mcp" => Ok(json!({
-            "type": "stdio",
-            "command": "node",
-            "args": [repo_root.join("tools").join("browser-mcp").join("dist").join("index.js").to_string_lossy()],
-            "cwd": repo_root.join("tools").join("browser-mcp").to_string_lossy(),
-            "env": {},
-        })),
         "framework-mcp" => Ok(json!({
             "type": "stdio",
             "command": repo_root.join("scripts").join("router-rs").join("target").join("release").join("router-rs").to_string_lossy(),
             "args": ["--framework-mcp-stdio", "--repo-root", repo_root_value],
             "cwd": repo_root_value,
             "env": {},
-        })),
-        "openaiDeveloperDocs" => Ok(json!({
-            "type": "http",
-            "url": OPENAI_DEVELOPER_DOCS_MCP_URL,
         })),
         other => Err(format!(
             "Unsupported shared project MCP server for Claude global sync: {other}"
@@ -2387,25 +2255,12 @@ fn managed_home_claude_mcp_server(repo_root: &Path, server_name: &str) -> Result
 
 fn build_personal_plugin_mcp_payload(repo_root: &Path) -> Value {
     let repo_root_value = repo_root.to_string_lossy().into_owned();
-    let browser_entrypoint = repo_root
-        .join("tools/browser-mcp/dist/index.js")
-        .to_string_lossy()
-        .into_owned();
     json!({
         "mcpServers": {
             "framework-mcp": {
                 "command": repo_root.join("scripts").join("router-rs").join("target").join("release").join("router-rs").to_string_lossy(),
                 "args": ["--framework-mcp-stdio", "--repo-root", repo_root_value],
                 "cwd": repo_root_value,
-            },
-            "browser-mcp": {
-                "command": "node",
-                "args": [browser_entrypoint],
-                "cwd": repo_root.join("tools").join("browser-mcp").to_string_lossy(),
-            },
-            "openaiDeveloperDocs": {
-                "type": "http",
-                "url": OPENAI_DEVELOPER_DOCS_MCP_URL,
             },
         }
     })

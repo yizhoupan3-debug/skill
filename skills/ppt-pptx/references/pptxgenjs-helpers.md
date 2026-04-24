@@ -40,12 +40,14 @@ System tools used by Rust tooling:
 
 ## Script Notes
 
-- `node scripts/pptx_tool.js render <deck>`: Convert a deck to PNGs. Good for visual review and diffing.
-- `node scripts/pptx_tool.js slides-test <deck>`: Add a gray border outside the original canvas, render, and check whether any content leaks into the border.
-- `node scripts/pptx_tool.js create-montage --input-file ...`: Combine multiple rendered slide images into a single overview image.
-- `node scripts/pptx_tool.js detect-fonts <deck>`: Distinguish between fonts that are missing entirely and fonts that are installed but substituted during rendering.
-- `node scripts/pptx_tool.js office ...`: Use local `officecli` as an optional deep inspection / preview / patch layer for existing decks and rebuild input analysis.
-- `node scripts/pptx_tool.js build-qa|qa|intake`: Orchestrate the default mixed lane: author in `deck.js`, run Rust QA, then fold in OfficeCLI audit / intake results.
+- `ppt init <workdir>`: Create a ready deck workspace from the bundled templates/helpers.
+- `ppt outline <outline.yaml|outline.json> --bootstrap --build`: Generate `deck.js` from an outline and build the editable `.pptx`.
+- `ppt render <deck>`: Convert a deck to PNGs. Good for visual review and diffing.
+- `ppt slides-test <deck>`: Check whether any content leaks outside the original canvas.
+- `ppt create-montage --input-file ...`: Combine multiple rendered slide images into a single overview image.
+- `ppt detect-fonts <deck>`: Distinguish between fonts that are missing entirely and fonts that are installed but substituted during rendering.
+- `ppt office ...`: Use local `officecli` as an optional deep inspection / preview / patch layer for existing decks and rebuild input analysis.
+- `ppt build-qa|qa|intake`: Orchestrate the default mixed lane: author in `deck.js`, run Rust QA, then fold in OfficeCLI audit / intake results.
 
 ## Practical Rules
 
@@ -56,4 +58,4 @@ System tools used by Rust tooling:
 - Use `valign: "top"` for content boxes that may grow.
 - Prefer native PowerPoint charts over rendered images when the chart is simple and likely to be edited later.
 - Use SVG instead of PNG for diagrams whenever possible.
-- When rebuilding from an existing `.pptx`, use `node scripts/pptx_tool.js office doctor` or `node scripts/pptx_tool.js office view/get/query` first instead of guessing the deck structure by hand.
+- When rebuilding from an existing `.pptx`, use `ppt office doctor` or `ppt office view/get/query` first instead of guessing the deck structure by hand.

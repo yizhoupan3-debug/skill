@@ -36,12 +36,18 @@ project/
 └── sources.md
 ```
 
+Fast bootstrap:
+
+```bash
+ppt init .
+```
+
 Notes:
 
 - `assets/` can start empty; the bundled templates and `outline_to_deck.js` now fall back to placeholder panels when sample images are missing.
 - Add real local images later for final polish rather than blocking the first successful build.
 
-Optional:
+Optional compatibility wrapper:
 
 ```text
 project/
@@ -65,7 +71,7 @@ When the input is an existing `.pptx`, choose one of two modes:
 2. Rebuild mode
    - Best for major redesign, consistent visual system, repeated generation, or a deck that should become reproducible from code.
    - Extract structure/assets if helpful, then rebuild in PptxGenJS and keep `deck.js` as the source of truth.
-   - Use `pptx_tool.js office doctor|get|query` first when you need stable IDs, shape paths, or a quick structural map from the old deck.
+   - Use `ppt office doctor|get|query` first when you need stable IDs, shape paths, or a quick structural map from the old deck.
 
 Use the rebuild path when the current deck is just raw material and the real goal is a cleaner long-term authoring workflow.
 
@@ -121,10 +127,10 @@ Beauty comes from repeated visual logic, not from piling effects onto isolated s
 ## QA Loop
 
 1. Generate the `.pptx`.
-2. Run `node scripts/pptx_tool.js slides-test` when the slide is dense or edge-tight.
-3. Render the deck to PNGs with `node scripts/pptx_tool.js render`.
-4. Build a montage with `node scripts/pptx_tool.js create-montage` when the deck is long.
-5. Run `node scripts/pptx_tool.js detect-fonts` when typography is part of the design.
+2. Run `ppt slides-test` when the slide is dense or edge-tight.
+3. Render the deck to PNGs with `ppt render`.
+4. Build a montage with `ppt create-montage` when the deck is long.
+5. Run `ppt detect-fonts` when typography is part of the design.
 6. Call `$visual-review` on suspicious slides or the montage.
 7. Fix the source `.js` and repeat.
 
@@ -137,10 +143,10 @@ Use the optional OfficeCLI lane when the deck already exists and you need strong
 Recommended commands:
 
 ```bash
-node scripts/pptx_tool.js office doctor deck.pptx --json
-node scripts/pptx_tool.js office get deck.pptx '/slide[1]' --depth 2 --json
-node scripts/pptx_tool.js office query deck.pptx 'shape[font=Arial]' --json
-node scripts/pptx_tool.js office watch deck.pptx --port 18080
+ppt office doctor deck.pptx --json
+ppt office get deck.pptx '/slide[1]' --depth 2 --json
+ppt office query deck.pptx 'shape[font=Arial]' --json
+ppt office watch deck.pptx --port 18080
 ```
 
 Use this lane for:
@@ -163,9 +169,9 @@ The strongest default in this skill is now a hybrid lane:
 Recommended commands:
 
 ```bash
-node scripts/pptx_tool.js build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json
-node scripts/pptx_tool.js qa deck.pptx --rendered-dir rendered --json
-node scripts/pptx_tool.js intake old_deck.pptx --json
+ppt build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json
+ppt qa deck.pptx --rendered-dir rendered --json
+ppt intake old_deck.pptx --json
 ```
 
 Use `build-qa` for code-authored decks and `intake` for existing-deck rebuilds.

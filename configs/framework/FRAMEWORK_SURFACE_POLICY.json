@@ -61,7 +61,7 @@
   },
   "physical_boundaries": {
     "source_roots": [
-      "framework_runtime/src/",
+      "tools/browser-mcp/src/",
       "scripts/",
       "skills/",
       "docs/",

@@ -87,9 +87,9 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
     assert second["success"] is True
     assert content.count("[features]") == 1
     assert content.count("codex_hooks = true") == 1
-    assert content.count("[mcp_servers.browser-mcp]") == 1
+    assert content.count("[mcp_servers.browser-mcp]") == 0
     assert content.count("[mcp_servers.framework-mcp]") == 1
-    assert content.count("[mcp_servers.openaiDeveloperDocs]") == 1
+    assert content.count("[mcp_servers.openaiDeveloperDocs]") == 0
     assert content.count("[tui]") == 1
     assert home_codex_skills_path.is_symlink()
     assert home_codex_skills_path.resolve() == (repo_root / "skills").resolve()
@@ -100,12 +100,9 @@ def test_install_native_integration_is_idempotent(tmp_path: Path) -> None:
         "--repo-root",
         str(repo_root.resolve()),
     ]
-    assert claude_mcp_payload["mcpServers"]["browser-mcp"]["command"] == "node"
-    assert claude_mcp_payload["mcpServers"]["browser-mcp"]["args"] == [
-        str(repo_root.resolve() / "tools" / "browser-mcp" / "dist" / "index.js")
-    ]
+    assert set(claude_mcp_payload["mcpServers"]) == {"framework-mcp"}
     assert plugin_mcp_payload["mcpServers"]["framework-mcp"]["cwd"] == str(repo_root.resolve())
-    assert plugin_mcp_payload["mcpServers"]["browser-mcp"]["command"] == "node"
+    assert set(plugin_mcp_payload["mcpServers"]) == {"framework-mcp"}
     assert [plugin["name"] for plugin in marketplace["plugins"]].count("skill-framework-native") == 1
     assert first["default_bootstrap"]["status"] == "materialized"
     assert second["default_bootstrap"]["status"] == "already-present"

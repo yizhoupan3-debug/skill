@@ -23,13 +23,10 @@ def test_plugin_manifest_exposes_skills_and_mcp_bundle() -> None:
 def test_plugin_mcp_bundle_points_back_to_repo_root() -> None:
     payload = json.loads((PLUGIN_ROOT / ".mcp.json").read_text(encoding="utf-8"))
     framework = payload["mcpServers"]["framework-mcp"]
-    browser = payload["mcpServers"]["browser-mcp"]
     assert framework["command"] == "./scripts/router-rs/target/release/router-rs"
     assert framework["args"] == ["--framework-mcp-stdio", "--repo-root", "../.."]
     assert framework["cwd"] == "../.."
-    assert browser["command"] == "node"
-    assert browser["args"] == ["./tools/browser-mcp/dist/index.js"]
-    assert browser["cwd"] == "./tools/browser-mcp"
+    assert set(payload["mcpServers"]) == {"framework-mcp"}
 
 
 def test_marketplace_registers_local_plugin() -> None:

@@ -7,9 +7,7 @@
     "gemini_cli_adapter"
   ],
   "shared_project_mcp_servers": [
-    "browser-mcp",
-    "framework-mcp",
-    "openaiDeveloperDocs"
+    "framework-mcp"
   ],
   "workspace_bootstrap_defaults": {
     "skill_bridge": {
@@ -568,9 +566,10 @@
         ],
         "subagent_paths": ["~/.claude/agents/", ".claude/agents/"],
         "claude_directory_features": [".claude/settings.json", ".claude/settings.local.json", ".claude/hooks/", ".claude/agents/", ".claude/commands/", ".claude/rules/", ".claude/output-styles/"],
-        "hook_event_names": ["PreToolUse", "PostToolUse", "Notification", "Stop", "SubagentStart", "SubagentStop", "PreCompact", "PostCompact", "SessionStart", "SessionEnd", "UserPromptSubmit", "PostToolUseFailure", "StopFailure", "PermissionRequest", "PermissionDenied", "InstructionsLoaded", "ConfigChange", "CwdChanged", "FileChanged", "TaskCreated", "TaskCompleted", "WorktreeCreate", "WorktreeRemove", "TeammateIdle", "Elicitation", "ElicitationResult"],
-        "hook_handler_types": ["command", "prompt", "agent", "http"],
+        "hook_event_names": ["PreToolUse", "PostToolUse", "PostToolUseFailure", "PostToolBatch", "Notification", "Stop", "SubagentStart", "SubagentStop", "PreCompact", "PostCompact", "SessionStart", "SessionEnd", "UserPromptSubmit", "UserPromptExpansion", "StopFailure", "PermissionRequest", "PermissionDenied", "InstructionsLoaded", "ConfigChange", "CwdChanged", "FileChanged", "TaskCreated", "TaskCompleted", "WorktreeCreate", "WorktreeRemove", "TeammateIdle", "Elicitation", "ElicitationResult"],
+        "hook_handler_types": ["command", "prompt", "agent", "http", "mcp_tool"],
         "hook_control_settings": ["disableAllHooks", "allowManagedHooksOnly", "allowedHttpHookUrls", "httpHookAllowedEnvVars"],
+        "hook_execution_features": ["async", "asyncRewake", "timeout", "matcher", "if"],
         "hook_definition_sources": [
           {"source": "managed_settings", "locations": ["/Library/Application Support/ClaudeCode/managed-settings.json", "/etc/claude-code/managed-settings.json", "C:/Program Files/ClaudeCode/managed-settings.json"]},
           {"source": "user_settings", "locations": ["~/.claude/settings.json"]},

@@ -32,8 +32,7 @@ const EXECUTION_PUBLIC_RESPONSE_FIELDS: [&str; 10] = [
     "model_id",
     "metadata",
 ];
-const EXECUTION_USAGE_FIELDS: [&str; 4] =
-    ["input_tokens", "output_tokens", "total_tokens", "mode"];
+const EXECUTION_USAGE_FIELDS: [&str; 4] = ["input_tokens", "output_tokens", "total_tokens", "mode"];
 const EXECUTION_STEADY_STATE_FIELDS: [&str; 14] = [
     "execution_kernel_metadata_schema_version",
     "execution_kernel",
@@ -74,8 +73,6 @@ struct ExecutionKernelExpectations {
     execution_kernel_authority: String,
     execution_kernel_delegate: String,
     execution_kernel_delegate_authority: String,
-    execution_kernel_delegate_family: String,
-    execution_kernel_delegate_impl: String,
 }
 
 fn non_empty_string(value: Option<&Value>, fallback: &str) -> String {
@@ -91,7 +88,8 @@ fn non_empty_string(value: Option<&Value>, fallback: &str) -> String {
 }
 
 fn required_object<'a>(value: &'a Value, context: &str) -> Result<&'a Map<String, Value>, String> {
-    value.as_object()
+    value
+        .as_object()
         .ok_or_else(|| format!("{context} must decode to a JSON object."))
 }
 
@@ -547,7 +545,10 @@ pub fn build_execution_kernel_live_response_serialization_contract() -> Map<Stri
             "dry_run": dry_run,
         }),
     );
-    payload.insert("retirement_gates".to_string(), Value::Object(retirement_gates));
+    payload.insert(
+        "retirement_gates".to_string(),
+        Value::Object(retirement_gates),
+    );
     payload.insert("guardrails".to_string(), Value::Object(guardrails));
     payload
 }
@@ -594,14 +595,6 @@ fn resolve_execution_kernel_expectations(
         execution_kernel_delegate_authority: non_empty_string(
             contract.get("execution_kernel_delegate_authority"),
             EXECUTION_AUTHORITY,
-        ),
-        execution_kernel_delegate_family: non_empty_string(
-            contract.get("execution_kernel_delegate_family"),
-            EXECUTION_KERNEL_DELEGATE_FAMILY,
-        ),
-        execution_kernel_delegate_impl: non_empty_string(
-            contract.get("execution_kernel_delegate_impl"),
-            EXECUTION_KERNEL_DELEGATE_IMPL,
         ),
     }
 }
@@ -712,7 +705,9 @@ fn validate_execution_kernel_contract_impl(
         kernel_contract,
         "execution-kernel steady-state metadata returned an invalid contract",
     )
-    .map_err(|_| "execution-kernel steady-state metadata returned an invalid contract.".to_string())?;
+    .map_err(|_| {
+        "execution-kernel steady-state metadata returned an invalid contract.".to_string()
+    })?;
     let expectations = resolve_execution_kernel_expectations(Some(contract));
     validate_execution_kernel_steady_state_metadata_impl(
         kernel_contract,
@@ -728,16 +723,13 @@ fn validate_execution_kernel_steady_state_metadata_impl(
     expectations: &ExecutionKernelExpectations,
     response_shape: Option<&str>,
 ) -> Result<Map<String, Value>, String> {
-    let metadata = required_object(
-        metadata,
-        "execution-kernel steady-state metadata",
-    )
-    .map_err(|_| "execution-kernel steady-state metadata must decode to a JSON object.".to_string())?;
+    let metadata =
+        required_object(metadata, "execution-kernel steady-state metadata").map_err(|_| {
+            "execution-kernel steady-state metadata must decode to a JSON object.".to_string()
+        })?;
     let metadata_contract = build_execution_kernel_metadata_contract();
-    let metadata_contract_object = required_object(
-        &metadata_contract,
-        "execution kernel metadata contract",
-    )?;
+    let metadata_contract_object =
+        required_object(&metadata_contract, "execution kernel metadata contract")?;
     let steady_state_fields = metadata_contract_object["steady_state_fields"]
         .as_array()
         .cloned()
@@ -860,8 +852,6 @@ fn validate_execution_kernel_steady_state_metadata_impl(
         }
     }
     for field in [
-        "execution_kernel_delegate_family",
-        "execution_kernel_delegate_impl",
         "execution_kernel_live_primary",
         "execution_kernel_live_primary_authority",
     ] {
@@ -961,9 +951,9 @@ fn validate_router_rs_execution_metadata_impl(
 pub fn normalize_execution_kernel_metadata_contract_value(
     payload: Option<&Value>,
 ) -> Result<Value, String> {
-    Ok(Value::Object(normalize_execution_kernel_metadata_contract_impl(
-        payload,
-    )?))
+    Ok(Value::Object(
+        normalize_execution_kernel_metadata_contract_impl(payload)?,
+    ))
 }
 
 pub fn normalize_execution_kernel_contract_value(
@@ -1014,7 +1004,9 @@ pub fn decode_execution_response_value(
         None => None,
     };
     let metadata = validate_router_rs_execution_metadata_impl(
-        payload.get("metadata").unwrap_or(&Value::Object(Map::new())),
+        payload
+            .get("metadata")
+            .unwrap_or(&Value::Object(Map::new())),
         live_run,
         usage_payload
             .get("mode")
@@ -1026,36 +1018,30 @@ pub fn decode_execution_response_value(
     let mut usage = Map::new();
     usage.insert(
         "input_tokens".to_string(),
-        Value::Number(
-            serde_json::Number::from(
-                usage_payload
-                    .get("input_tokens")
-                    .and_then(Value::as_i64)
-                    .unwrap_or(0),
-            ),
-        ),
+        Value::Number(serde_json::Number::from(
+            usage_payload
+                .get("input_tokens")
+                .and_then(Value::as_i64)
+                .unwrap_or(0),
+        )),
     );
     usage.insert(
         "output_tokens".to_string(),
-        Value::Number(
-            serde_json::Number::from(
-                usage_payload
-                    .get("output_tokens")
-                    .and_then(Value::as_i64)
-                    .unwrap_or(0),
-            ),
-        ),
+        Value::Number(serde_json::Number::from(
+            usage_payload
+                .get("output_tokens")
+                .and_then(Value::as_i64)
+                .unwrap_or(0),
+        )),
     );
     usage.insert(
         "total_tokens".to_string(),
-        Value::Number(
-            serde_json::Number::from(
-                usage_payload
-                    .get("total_tokens")
-                    .and_then(Value::as_i64)
-                    .unwrap_or(0),
-            ),
-        ),
+        Value::Number(serde_json::Number::from(
+            usage_payload
+                .get("total_tokens")
+                .and_then(Value::as_i64)
+                .unwrap_or(0),
+        )),
     );
     usage.insert(
         "mode".to_string(),
@@ -1071,15 +1057,27 @@ pub fn decode_execution_response_value(
     let mut response = Map::new();
     response.insert(
         "session_id".to_string(),
-        Value::String(required_string_field(payload, "session_id", "router-rs execute response")?),
+        Value::String(required_string_field(
+            payload,
+            "session_id",
+            "router-rs execute response",
+        )?),
     );
     response.insert(
         "user_id".to_string(),
-        Value::String(required_string_field(payload, "user_id", "router-rs execute response")?),
+        Value::String(required_string_field(
+            payload,
+            "user_id",
+            "router-rs execute response",
+        )?),
     );
     response.insert(
         "skill".to_string(),
-        Value::String(required_string_field(payload, "skill", "router-rs execute response")?),
+        Value::String(required_string_field(
+            payload,
+            "skill",
+            "router-rs execute response",
+        )?),
     );
     response.insert(
         "overlay".to_string(),
@@ -1090,9 +1088,7 @@ pub fn decode_execution_response_value(
     response.insert("live_run".to_string(), Value::Bool(live_run));
     response.insert(
         "content".to_string(),
-        Value::String(
-            optional_string_field(payload, "content").unwrap_or_default(),
-        ),
+        Value::String(optional_string_field(payload, "content").unwrap_or_default()),
     );
     response.insert("usage".to_string(), Value::Object(usage));
     response.insert(

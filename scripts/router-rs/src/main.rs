@@ -3,13 +3,11 @@
 use chrono::Utc;
 use clap::{ArgAction, Parser};
 use regex::Regex;
-use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::fs::OpenOptions;
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -39,14 +37,8 @@ use execution_contract::{
     decode_execution_response_value, normalize_execution_kernel_contract_value,
     normalize_execution_kernel_metadata_contract_value,
     validate_execution_kernel_steady_state_metadata_value, EXECUTION_AUTHORITY,
-    EXECUTION_CONTRACT_BUNDLE_SCHEMA_VERSION, EXECUTION_KERNEL_AUTHORITY,
-    EXECUTION_KERNEL_CONTRACT_MODE, EXECUTION_KERNEL_DELEGATE_FAMILY,
-    EXECUTION_KERNEL_DELEGATE_IMPL, EXECUTION_KERNEL_FALLBACK_POLICY,
-    EXECUTION_KERNEL_KIND, EXECUTION_LIVE_RESPONSE_SERIALIZATION_CONTRACT,
-    EXECUTION_METADATA_CONTRACT_SCHEMA_VERSION, EXECUTION_METADATA_SCHEMA_VERSION,
-    EXECUTION_MODEL_ID_SOURCE, EXECUTION_PROMPT_PREVIEW_OWNER,
-    EXECUTION_RESPONSE_SHAPE_DRY_RUN, EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
-    EXECUTION_SCHEMA_VERSION,
+    EXECUTION_MODEL_ID_SOURCE, EXECUTION_RESPONSE_SHAPE_DRY_RUN,
+    EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY, EXECUTION_SCHEMA_VERSION,
 };
 use framework_mcp::run_framework_mcp_stdio_loop;
 use framework_profile::{
@@ -56,7 +48,7 @@ use framework_profile::{
 use framework_runtime::{
     build_framework_alias_envelope, build_framework_contract_summary_envelope,
     build_framework_memory_recall_envelope, build_framework_refresh_payload,
-    build_framework_runtime_snapshot_envelope, resolve_repo_root_arg,
+    build_framework_runtime_snapshot_envelope, build_framework_statusline, resolve_repo_root_arg,
     write_framework_session_artifacts,
 };
 use host_integration::run_host_integration_from_args;
@@ -68,6 +60,12 @@ use runtime_storage::{
 use session_supervisor::handle_session_supervisor_operation;
 use trace_runtime::{compact_trace_stream, record_trace_event};
 
+#[cfg(test)]
+use execution_contract::{
+    EXECUTION_KERNEL_AUTHORITY, EXECUTION_KERNEL_FALLBACK_POLICY, EXECUTION_KERNEL_KIND,
+    EXECUTION_METADATA_CONTRACT_SCHEMA_VERSION, EXECUTION_METADATA_SCHEMA_VERSION,
+    EXECUTION_PROMPT_PREVIEW_OWNER,
+};
 #[cfg(test)]
 use framework_runtime::FRAMEWORK_ALIAS_SCHEMA_VERSION;
 
@@ -230,6 +228,8 @@ struct Cli {
     framework_refresh_json: bool,
     #[arg(long)]
     framework_refresh_verbose: bool,
+    #[arg(long)]
+    framework_statusline: bool,
     #[arg(long)]
     framework_session_artifact_write_json: bool,
     #[arg(long)]
@@ -1264,6 +1264,7 @@ fn main() -> Result<(), String> {
         args.framework_contract_summary_json,
         args.framework_memory_recall_json,
         args.framework_refresh_json,
+        args.framework_statusline,
         args.framework_session_artifact_write_json,
         args.framework_alias_json,
         args.control_plane_contracts_json,
@@ -1290,7 +1291,7 @@ fn main() -> Result<(), String> {
         > 1
     {
         return Err(
-            "choose only one output mode among --json, --stdio-json, --framework-mcp-stdio, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-integrator-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --runtime-checkpoint-control-plane-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-record-event-json, --trace-stream-replay-json, --trace-stream-inspect-json, --trace-compact-json, --write-trace-compaction-delta-json, --write-trace-metadata-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-session-artifact-write-json, --framework-alias-json, --control-plane-contracts-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --sync-host-entrypoints-json, --check-host-entrypoints-json, --host-integration, --claude-hook-command, --claude-hook-audit-command, --claude-host-hook-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
+            "choose only one output mode among --json, --stdio-json, --framework-mcp-stdio, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-integrator-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --runtime-checkpoint-control-plane-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-record-event-json, --trace-stream-replay-json, --trace-stream-inspect-json, --trace-compact-json, --write-trace-compaction-delta-json, --write-trace-metadata-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-refresh-json, --framework-statusline, --framework-session-artifact-write-json, --framework-alias-json, --control-plane-contracts-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --sync-host-entrypoints-json, --check-host-entrypoints-json, --host-integration, --claude-hook-command, --claude-hook-audit-command, --claude-host-hook-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
                 .to_string(),
         );
     }
@@ -1782,6 +1783,12 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
+    if args.framework_statusline {
+        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
+        println!("{}", build_framework_statusline(&repo_root)?);
+        return Ok(());
+    }
+
     if args.framework_session_artifact_write_json {
         let payload = serde_json::from_str::<Value>(
             args.framework_session_artifact_write_input_json
@@ -2228,16 +2235,16 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
             }
         }
         "normalize_execution_kernel_contract" => {
-            let kernel_contract = payload
-                .get("kernel_contract")
-                .ok_or_else(|| "execution-kernel contract payload is missing kernel_contract.".to_string())?;
+            let kernel_contract = payload.get("kernel_contract").ok_or_else(|| {
+                "execution-kernel contract payload is missing kernel_contract.".to_string()
+            })?;
             let response_shape = payload.get("response_shape").and_then(Value::as_str);
             normalize_execution_kernel_contract_value(kernel_contract, response_shape)
         }
         "validate_execution_kernel_steady_state_metadata" => {
-            let metadata = payload
-                .get("metadata")
-                .ok_or_else(|| "execution-kernel validation payload is missing metadata.".to_string())?;
+            let metadata = payload.get("metadata").ok_or_else(|| {
+                "execution-kernel validation payload is missing metadata.".to_string()
+            })?;
             let kernel_contract = payload.get("kernel_contract");
             let response_shape = payload.get("response_shape").and_then(Value::as_str);
             validate_execution_kernel_steady_state_metadata_value(
@@ -2247,9 +2254,9 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
             )
         }
         "decode_execution_response" => {
-            let execution_payload = payload
-                .get("payload")
-                .ok_or_else(|| "execution response decode payload is missing payload.".to_string())?;
+            let execution_payload = payload.get("payload").ok_or_else(|| {
+                "execution response decode payload is missing payload.".to_string()
+            })?;
             let kernel_contract = payload.get("kernel_contract");
             let dry_run = payload.get("dry_run").and_then(Value::as_bool);
             decode_execution_response_value(execution_payload, kernel_contract, dry_run)
@@ -2304,7 +2311,9 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
         "describe_transport" => build_trace_transport_descriptor(payload),
         "describe_handoff" => build_trace_handoff_descriptor(payload),
         "checkpoint_resume_manifest" => build_checkpoint_resume_manifest(payload),
-        "runtime_checkpoint_control_plane" => build_checkpoint_control_plane_compiler_payload(payload),
+        "runtime_checkpoint_control_plane" => {
+            build_checkpoint_control_plane_compiler_payload(payload)
+        }
         "write_transport_binding" => write_transport_binding_payload(payload),
         "write_checkpoint_resume_manifest" => write_checkpoint_resume_manifest_payload(payload),
         "attach_runtime_event_transport" => attach_runtime_event_transport(payload),
@@ -2414,7 +2423,7 @@ fn run_claude_host_hook(command: &str, repo_root: &Path, max_lines: usize) -> Re
                 );
             }
         }
-        "pre-tool-use-quality" | "post-tool-audit" => {
+        "pre-tool-use-quality" | "post-tool-audit" | "post-tool-failure-audit" => {
             let payload = run_claude_audit_hook(command, repo_root)?;
             if payload.get("hookSpecificOutput").is_some() {
                 println!(
@@ -8638,6 +8647,21 @@ mod tests {
         std::env::temp_dir().join(format!("router-rs-{name}-{nonce}.json"))
     }
 
+    fn temp_dir_path(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("router-rs-{name}-{nonce}"))
+    }
+
+    fn write_text_fixture(path: &Path, content: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create fixture parent");
+        }
+        fs::write(path, content).expect("write text fixture");
+    }
+
     fn write_runtime_fixture(path: &Path, slug: &str) {
         fs::write(
             path,
@@ -8854,6 +8878,86 @@ mod tests {
         assert!(!prompt.contains("Keep this task only as recent-completed context"));
         assert!(!prompt.contains("Start a new standalone task before resuming related work"));
 
+        let _ = fs::remove_dir_all(&repo_root);
+    }
+
+    #[test]
+    fn framework_statusline_uses_rust_runtime_view() {
+        let repo_root = temp_dir_path("framework-statusline");
+        let task_id = "statusline-task-20260424120000";
+        let task_root = repo_root.join("artifacts").join("current").join(task_id);
+        write_text_fixture(
+            &task_root.join("SESSION_SUMMARY.md"),
+            "# SESSION_SUMMARY\n\n- task: Validate status line\n- phase: integration\n- status: in_progress\n",
+        );
+        write_text_fixture(
+            &task_root.join("NEXT_ACTIONS.json"),
+            &json!({"next_actions": ["Ship it"]}).to_string(),
+        );
+        write_text_fixture(
+            &task_root.join("EVIDENCE_INDEX.json"),
+            &json!({"artifacts": []}).to_string(),
+        );
+        write_text_fixture(
+            &task_root.join("TRACE_METADATA.json"),
+            &json!({"matched_skills": ["execution-controller-coding", "checklist-fixer"]})
+                .to_string(),
+        );
+        write_text_fixture(
+            &repo_root
+                .join("artifacts")
+                .join("current")
+                .join("active_task.json"),
+            &json!({"task_id": task_id, "task": "Validate status line"}).to_string(),
+        );
+        write_text_fixture(
+            &repo_root
+                .join("artifacts")
+                .join("current")
+                .join("focus_task.json"),
+            &json!({"task_id": task_id, "task": "Validate status line"}).to_string(),
+        );
+        write_text_fixture(
+            &repo_root
+                .join("artifacts")
+                .join("current")
+                .join("task_registry.json"),
+            &json!({
+                "schema_version": "task-registry-v1",
+                "focus_task_id": task_id,
+                "tasks": [
+                    {
+                        "task_id": task_id,
+                        "task": "Validate status line",
+                        "phase": "integration",
+                        "status": "in_progress",
+                        "resume_allowed": true
+                    }
+                ]
+            })
+            .to_string(),
+        );
+        write_text_fixture(
+            &repo_root.join(".supervisor_state.json"),
+            &json!({
+                "task_id": task_id,
+                "task_summary": "Validate status line",
+                "active_phase": "integration",
+                "verification": {"verification_status": "in_progress"},
+                "continuity": {"story_state": "active", "resume_allowed": true}
+            })
+            .to_string(),
+        );
+
+        let statusline = build_framework_statusline(&repo_root).expect("build statusline");
+
+        assert!(statusline.contains("task=Validate status line"));
+        assert!(statusline.contains("next=/refresh"));
+        assert!(statusline.contains("integration/in_progress"));
+        assert!(statusline.contains("route=execution-controller-coding+1"));
+        assert!(statusline.contains("others=0"));
+        assert!(statusline.contains("resumable=0"));
+        assert!(statusline.contains("git=nogit"));
         let _ = fs::remove_dir_all(&repo_root);
     }
 

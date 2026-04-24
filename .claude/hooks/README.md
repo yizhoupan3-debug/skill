@@ -20,6 +20,9 @@ Active hooks:
 | `PreToolUse` | `router-rs --claude-host-hook-command pre-tool-use-quality` | Add a short path-aware implementation reminder before editing runtime, host-entrypoint sync, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |
 | `PreToolUse` | `router-rs --claude-host-hook-command pre-tool-use` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |
 | `PostToolUse` | `router-rs --claude-host-hook-command post-tool-audit` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |
+| `PostToolUseFailure` | `router-rs --claude-host-hook-command post-tool-failure-audit` | When edits to generated host outputs fail, remind Claude to regenerate from Rust instead of retrying direct writes. |
+| `PostToolBatch` | documented surface, not installed | Available for batch-level follow-up after parallel tool calls; avoid using it for single-tool checks already covered by `PostToolUse`. |
+| `UserPromptExpansion` | documented surface, not installed | Available for slash/command expansion validation; repo slash command bodies stay static unless a concrete risk appears. |
 | `SessionEnd` | `router-rs --claude-host-hook-command session-end` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |
 | `ConfigChange` | `router-rs --claude-host-hook-command config-change` | Warn when generated Claude host files were edited directly instead of regenerated from source. |
 | `StopFailure` | `router-rs --claude-host-hook-command stop-failure` | Emit a host-private hint for selected Claude stop failures without mutating shared continuity. |
@@ -44,6 +47,13 @@ Project hook principles:
   on unrelated tool calls and normal edits stay fast.
 - Automation hooks should be additive and short: inject narrow repo context or
   launch cheap follow-up work, not essay-length prompt rewrites.
+- Prefer `command` hooks for deterministic repo guardrails. `http`,
+  `mcp_tool`, `prompt`, and `agent` hook handlers are supported by Claude Code,
+  but should only be introduced for a real repo invariant that cannot be handled
+  locally and cheaply.
+- Use `asyncRewake` only for background checks that may discover a real problem
+  after Claude has moved on; ordinary async audits should stay quiet unless they
+  have actionable feedback.
 - Keep durable implementation philosophy in `AGENT.md`; hook-time nudges should
   stay concrete, local to the current path, and local to the current delta.
 - Prefer async `PostToolUse` for cheap quality follow-up that should not block

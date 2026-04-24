@@ -6,4 +6,4 @@ fi
 if [ "${SKILL_SYNC_AUTO_PUSH:-0}" != "1" ]; then
   exit 0
 fi
-python3 scripts/sync_skills.py --post-commit-push || true
+git push || true

@@ -124,9 +124,8 @@ function addMetric(slide, x, y, value, label) {
 }
 
 function sanitizeGeneratedDeck(fileName) {
-  const script = path.resolve(process.cwd(), "scripts", "pptx_tool.js");
-  if (!fs.existsSync(script)) return;
-  const completed = spawnSync("node", [script, "sanitize-pptx", fileName], { stdio: "inherit" });
+  const tool = process.env.PPT_PPTX_RUST_TOOL_BIN || "ppt";
+  const completed = spawnSync(tool, ["sanitize-pptx", fileName], { stdio: "inherit" });
   if (completed.status !== 0) {
     throw new Error(`sanitize-pptx failed for ${fileName}`);
   }

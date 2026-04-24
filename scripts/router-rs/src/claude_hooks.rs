@@ -49,11 +49,12 @@ const HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES: [&str; 6] = [
     ".gemini",
     ".codex",
 ];
-const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 12] = [
+const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 13] = [
     "AGENT.md",
     "AGENTS.md",
     "CLAUDE.md",
     "GEMINI.md",
+    CODEX_HOOK_README_PATH,
     ".claude/agents/README.md",
     ".claude/commands/autopilot.md",
     ".claude/commands/background_batch.md",
@@ -121,11 +122,11 @@ const CLAUDE_PRE_TOOL_USE_BASH_RULES: [&str; 12] = [
     "*.codex/memory/CLAUDE_MEMORY.md*",
 ];
 const CLAUDE_QUALITY_PRE_TOOL_USE_RULES: [&str; 5] = [
-    "/framework_runtime/src/**",
     "/scripts/router-rs/src/**",
     "/scripts/install_skills.sh",
     "/tests/**",
     "/.claude/hooks/**",
+    "/tools/browser-mcp/src/**",
 ];
 const CLAUDE_STOP_FAILURE_MATCHER: &str =
     "invalid_request|server_error|max_output_tokens|rate_limit|authentication_failed|billing_error|unknown";
@@ -249,8 +250,8 @@ const USER_PROMPT_COMPAT_CONTEXT: &str =
     "如果旧 compat/fallback/过渡逻辑已经没有真实必要，优先删掉而不是继续包一层。";
 const USER_PROMPT_HOOK_CONTEXT: &str =
     "Hook 额外检查：让 hook 增加自动化，而不是只做阻拦；优先短上下文、窄触发、低开销，并尽量用 matcher/if 避免无谓触发。";
-const FALLBACK_SHARED_PROJECT_MCP_SERVERS: [&str; 3] =
-    ["browser-mcp", "framework-mcp", "openaiDeveloperDocs"];
+const CODEX_HOOK_README_PATH: &str = ".codex/README.md";
+const ALLOWED_PROJECT_MCP_SERVERS: [&str; 1] = ["framework-mcp"];
 const USER_PROMPT_EXECUTION_INTENT_PREFIX: &str = "执行意图：";
 const USER_PROMPT_STATE_COMPACT_PREFIX: &str = "当前状态：";
 const USER_PROMPT_STATE_BUDGET_CHARS: usize = 120;
@@ -263,20 +264,20 @@ const QUALITY_PYTHON_CONTEXT: &str =
     "Python 额外检查：盯住重复解析、重复读文件、wrapper-on-wrapper 和兼容别名链。";
 const QUALITY_TEST_CONTEXT: &str = "测试额外检查：锁真实契约和回归点，不给补丁式旧行为续命。";
 const QUALITY_RUNTIME_PREFIXES: [&str; 3] = [
-    "framework_runtime/src/framework_runtime/",
     "scripts/router-rs/src/",
     "scripts/router-rs/src/host_integration.rs",
+    "tools/browser-mcp/src/",
 ];
 const QUALITY_HOOK_PREFIXES: [&str; 1] = [".claude/hooks/"];
 const QUALITY_TARGET_SUFFIXES: [&str; 3] = [".py", ".rs", ".sh"];
 const PATCH_ARTIFACT_SUFFIXES: [&str; 4] = [".patch", ".diff", ".rej", ".orig"];
 const ASYNC_AUDIT_PREFIXES: [&str; 6] = [
-    "framework_runtime/src/framework_runtime/",
     "scripts/router-rs/src/",
     "scripts/router-rs/src/host_integration.rs",
     "scripts/install_skills.sh",
     "tests/",
     ".claude/hooks/",
+    "tools/browser-mcp/src/",
 ];
 const CLAUDE_HOOK_SNAPSHOT_ROOT_DIRNAME: &str = "claude_hook_audit_snapshots";
 const SNAPSHOT_MAX_BYTES: u64 = 200_000;
@@ -340,6 +341,7 @@ pub fn build_claude_hook_manifest() -> Value {
     let pre_tool_command = build_claude_host_hook_command("pre-tool-use");
     let quality_command = build_claude_host_hook_command("pre-tool-use-quality");
     let post_tool_command = build_claude_host_hook_command("post-tool-audit");
+    let post_tool_failure_command = build_claude_host_hook_command("post-tool-failure-audit");
 
     let pre_tool_hooks = build_tool_path_hooks(&CLAUDE_PRE_TOOL_USE_RULES, &pre_tool_command, None);
     let pre_tool_bash_hooks = CLAUDE_PRE_TOOL_USE_BASH_RULES
@@ -358,6 +360,11 @@ pub fn build_claude_hook_manifest() -> Value {
         &CLAUDE_QUALITY_PRE_TOOL_USE_RULES,
         &post_tool_command,
         Some(json!({"async": true, "timeout": 8})),
+    );
+    let post_tool_failure_hooks = build_tool_path_hooks(
+        &CLAUDE_PRE_TOOL_USE_RULES,
+        &post_tool_failure_command,
+        Some(json!({"timeout": 8})),
     );
 
     json!({
@@ -388,6 +395,12 @@ pub fn build_claude_hook_manifest() -> Value {
                 {
                     "matcher": "Edit|MultiEdit|Write",
                     "hooks": post_tool_hooks,
+                }
+            ],
+            "PostToolUseFailure": [
+                {
+                    "matcher": "Edit|MultiEdit|Write",
+                    "hooks": post_tool_failure_hooks,
                 }
             ],
             "UserPromptSubmit": [
@@ -437,8 +450,9 @@ pub fn build_claude_hook_manifest() -> Value {
 }
 
 pub fn build_claude_project_settings(repo_root: &Path) -> Value {
-    let allowed_mcp_servers = load_runtime_registry_shared_project_mcp_servers(repo_root)
-        .into_iter()
+    let _ = repo_root;
+    let allowed_mcp_servers = ALLOWED_PROJECT_MCP_SERVERS
+        .iter()
         .map(|server_name| json!({"serverName": server_name}))
         .collect::<Vec<_>>();
     json!({
@@ -455,13 +469,19 @@ pub fn build_codex_hook_manifest() -> Value {
     json!({
         "hooks": {
             "PreToolUse": [
-                build_codex_command_hook("pre-tool-use", "Edit"),
-                build_codex_command_hook("pre-tool-use", "MultiEdit"),
-                build_codex_command_hook("pre-tool-use", "Write"),
                 build_codex_command_hook("pre-tool-use", "Bash"),
+            ],
+            "SessionStart": [
+                build_codex_command_hook("session-start", "startup|resume"),
             ],
             "PermissionRequest": [
                 build_codex_command_hook("permission-request", "Bash"),
+            ],
+            "PostToolUse": [
+                build_codex_command_hook("post-tool-use", "Bash"),
+            ],
+            "UserPromptSubmit": [
+                build_codex_unmatched_command_hook("user-prompt-submit"),
             ],
         }
     })
@@ -617,6 +637,10 @@ fn build_host_entrypoint_files(repo_root: &Path) -> Result<BTreeMap<String, Vec<
     files.insert(
         ".codex/hooks.json".to_string(),
         serialize_pretty_json_bytes(&build_codex_hook_manifest())?,
+    );
+    files.insert(
+        CODEX_HOOK_README_PATH.to_string(),
+        build_codex_hooks_readme().into_bytes(),
     );
     files.insert(
         ".claude/settings.json".to_string(),
@@ -894,6 +918,7 @@ pub fn build_claude_hook_projection() -> Value {
         "claude_agents_readme": build_claude_agents_readme(),
         "claude_commands": build_claude_commands_projection(),
         "hooks_readme": build_claude_hooks_readme(),
+        "codex_hooks_readme": build_codex_hooks_readme(),
         "codex_hooks": build_codex_hook_manifest(),
     })
 }
@@ -914,6 +939,8 @@ Keep startup lean. Do not add `@...` imports here.\n\n\
 Treat `.claude/**` as host-shell glue, not repository truth.\n\
 The recovery projection lives at `.codex/memory/CLAUDE_MEMORY.md` for `/refresh`\n\
 or manual resume, not default startup injection.\n\n\
+GPT bridge rule:\n\n\
+- Claude Code may be pointed at a GPT model through an Anthropic-compatible bridge, but GPT-default work should prefer the native Codex/OpenAI-compatible path to avoid protocol translation and extra startup context.\n\n\
 Generated-first maintenance rule:\n\n\
 - Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then regenerate via `{HOST_ENTRYPOINT_SYNC_HINT}`.\n\
 - Host entrypoint sync runs directly through `router-rs`; do not reintroduce a Python wrapper in front of it.\n\
@@ -1112,6 +1139,9 @@ Active hooks:\n\n\
 | `PreToolUse` | `router-rs --claude-host-hook-command pre-tool-use-quality` | Add a short path-aware implementation reminder before editing runtime, host-entrypoint sync, hook, or contract-test code that is already inside the narrow quality lane, and capture a lightweight pre-edit baseline for later delta-aware review. |\n\
 | `PreToolUse` | `router-rs --claude-host-hook-command pre-tool-use` | Deny direct edits to generated host outputs and the imported Claude projection before `Edit`, `MultiEdit`, `Write`, or targeted `Bash` writes run. |\n\
 | `PostToolUse` | `router-rs --claude-host-hook-command post-tool-audit` | Run a background implementation audit after real code edits and inspect the new delta first, so only newly introduced compatibility-heavy or wasteful patterns get fed back. |\n\
+| `PostToolUseFailure` | `router-rs --claude-host-hook-command post-tool-failure-audit` | When edits to generated host outputs fail, remind Claude to regenerate from Rust instead of retrying direct writes. |\n\
+| `PostToolBatch` | documented surface, not installed | Available for batch-level follow-up after parallel tool calls; avoid using it for single-tool checks already covered by `PostToolUse`. |\n\
+| `UserPromptExpansion` | documented surface, not installed | Available for slash/command expansion validation; repo slash command bodies stay static unless a concrete risk appears. |\n\
 | `SessionEnd` | `router-rs --claude-host-hook-command session-end` | Consolidate project-local memory, refresh the Claude projection, and repair stale terminal resume state when needed. |\n\
 | `ConfigChange` | `router-rs --claude-host-hook-command config-change` | Warn when generated Claude host files were edited directly instead of regenerated from source. |\n\
 | `StopFailure` | `router-rs --claude-host-hook-command stop-failure` | Emit a host-private hint for selected Claude stop failures without mutating shared continuity. |\n\n\
@@ -1130,6 +1160,8 @@ Project hook principles:\n\n\
 - Keep hooks fast, especially `PreToolUse`, because it runs inside the agent\n  loop.\n\
 - Use `matcher` first and `if` to narrow further, so hook handlers do not spawn\n  on unrelated tool calls and normal edits stay fast.\n\
 - Automation hooks should be additive and short: inject narrow repo context or\n  launch cheap follow-up work, not essay-length prompt rewrites.\n\
+- Prefer `command` hooks for deterministic repo guardrails. `http`,\n  `mcp_tool`, `prompt`, and `agent` hook handlers are supported by Claude Code,\n  but should only be introduced for a real repo invariant that cannot be handled\n  locally and cheaply.\n\
+- Use `asyncRewake` only for background checks that may discover a real problem\n  after Claude has moved on; ordinary async audits should stay quiet unless they\n  have actionable feedback.\n\
 - Keep durable implementation philosophy in `AGENT.md`; hook-time nudges should\n  stay concrete, local to the current path, and local to the current delta.\n\
 - Prefer async `PostToolUse` for cheap quality follow-up that should not block\n  the main turn.\n\
 - Put personal notifications and local approval shortcuts in `~/.claude/settings.json`\n  or `.claude/settings.local.json`, not in committed project settings.\n\
@@ -1157,9 +1189,40 @@ Shared routing policy still comes from `../../AGENT.md`.\n"
     )
 }
 
+fn build_codex_hooks_readme() -> String {
+    "# Codex Hooks Projection\n\n\
+Codex hook config for this repo is generated from `scripts/router-rs/`.\n\n\
+Active hooks:\n\n\
+| Event | Runner | Purpose |\n\
+| --- | --- | --- |\n\
+| `SessionStart` | `router-rs --codex-hook-command session-start` | Load repo-local continuity context on startup and resume. |\n\
+| `UserPromptSubmit` | `router-rs --codex-hook-command user-prompt-submit` | Add the same repo-local memory and continuity context used by Claude. |\n\
+| `PreToolUse` | `router-rs --codex-hook-command pre-tool-use` | Guard Bash writes to generated host outputs before they run. |\n\
+| `PermissionRequest` | `router-rs --codex-hook-command permission-request` | Deny approval requests that target generated host outputs. |\n\
+| `PostToolUse` | `router-rs --codex-hook-command post-tool-use` | Surface a follow-up note if a Bash command already touched a generated output. |\n\n\
+Codex currently applies tool-event matchers to `Bash` only, so this projection does not install `Edit`, `Write`, or `MultiEdit` matchers. Keep direct file-edit policy in `AGENT.md` and Rust-owned generated-surface checks instead of pretending Codex can intercept every non-shell tool call.\n\n\
+Regenerate with:\n\n\
+```sh\n\
+cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root \"$PWD\"\n\
+```\n"
+        .to_string()
+}
+
 fn build_codex_command_hook(event: &str, matcher: &str) -> Value {
     json!({
         "matcher": matcher,
+        "hooks": [
+            {
+                "type": "command",
+                "command": build_codex_hook_command(event),
+                "timeout": 8,
+            }
+        ]
+    })
+}
+
+fn build_codex_unmatched_command_hook(event: &str) -> Value {
+    json!({
         "hooks": [
             {
                 "type": "command",
@@ -1213,56 +1276,6 @@ fn build_codex_hook_command(event: &str) -> String {
         "\"$ROUTER_RS_BIN\" --codex-hook-command {event} --repo-root \"$CODEX_PROJECT_ROOT\""
     ));
     command
-}
-
-fn load_runtime_registry_shared_project_mcp_servers_from_path(registry_path: &Path) -> Vec<String> {
-    let Ok(raw) = fs::read_to_string(registry_path) else {
-        return Vec::new();
-    };
-    let Ok(payload) = serde_json::from_str::<Value>(&raw) else {
-        return Vec::new();
-    };
-    payload
-        .get("shared_project_mcp_servers")
-        .and_then(Value::as_array)
-        .map(|servers| {
-            servers
-                .iter()
-                .filter_map(Value::as_str)
-                .map(|value| value.to_string())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default()
-}
-
-fn framework_runtime_registry_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
-        .join("configs")
-        .join("framework")
-        .join("RUNTIME_REGISTRY.json")
-}
-
-fn load_runtime_registry_shared_project_mcp_servers(repo_root: &Path) -> Vec<String> {
-    let registry_path = repo_root
-        .join("configs")
-        .join("framework")
-        .join("RUNTIME_REGISTRY.json");
-    let servers = load_runtime_registry_shared_project_mcp_servers_from_path(&registry_path);
-    if !servers.is_empty() {
-        return servers;
-    }
-    let fallback_servers = load_runtime_registry_shared_project_mcp_servers_from_path(
-        &framework_runtime_registry_path(),
-    );
-    if !fallback_servers.is_empty() {
-        return fallback_servers;
-    }
-    FALLBACK_SHARED_PROJECT_MCP_SERVERS
-        .iter()
-        .map(|server| (*server).to_string())
-        .collect()
 }
 
 fn build_tool_path_hooks(rules: &[&str], command: &str, extras: Option<Value>) -> Vec<Value> {
@@ -1325,6 +1338,7 @@ pub fn run_claude_audit_hook(command: &str, repo_root: &Path) -> Result<Value, S
         "pre-tool-use" => run_pre_tool_use(repo_root, &payload),
         "pre-tool-use-quality" => run_pre_tool_use_quality(repo_root, &payload),
         "post-tool-audit" => run_post_tool_audit(repo_root, &payload),
+        "post-tool-failure-audit" => run_post_tool_failure_audit(repo_root, &payload),
         "config-change" => run_config_change(repo_root, &payload),
         "stop-failure" => run_stop_failure(repo_root, &payload),
         _ => Err(format!("Unsupported Claude audit command: {command}")),
@@ -1336,13 +1350,12 @@ pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Va
     let payload = read_stdin_payload()?;
     match canonical {
         "pre-tool-use" => run_codex_pre_tool_use(repo_root, &payload),
+        "session-start" => run_codex_session_start(repo_root, &payload),
         "permission-request" => {
             bridge_codex_permission_request(run_pre_tool_use(repo_root, &payload)?)
         }
-        // Older project-local Codex hook installs may still invoke this event.
-        // The current Codex runtime surfaces `systemMessage` visibly and does
-        // not yet honor `suppressOutput`, so keep the compatibility path silent.
-        "user-prompt-submit" => Ok(None),
+        "post-tool-use" => run_codex_post_tool_use(repo_root, &payload),
+        "user-prompt-submit" => run_codex_user_prompt_submit(repo_root, &payload),
         _ => Err(format!("Unsupported Codex audit command: {command}")),
     }
 }
@@ -1356,6 +1369,62 @@ fn run_codex_pre_tool_use(repo_root: &Path, payload: &Value) -> Result<Option<Va
         return Ok(Some(block));
     }
     Ok(None)
+}
+
+fn run_codex_session_start(repo_root: &Path, _payload: &Value) -> Result<Option<Value>, String> {
+    let context_payload = build_user_prompt_context_payload(repo_root, "继续当前仓库任务")?;
+    let Some(context) = context_payload.get("text").and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    if context.trim().is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(json!({
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": context,
+        },
+        "contextTelemetry": context_payload.get("telemetry").cloned().unwrap_or(Value::Null),
+    })))
+}
+
+fn run_codex_post_tool_use(_repo_root: &Path, payload: &Value) -> Result<Option<Value>, String> {
+    let Some(path) = bash_generated_write_target(payload) else {
+        return Ok(None);
+    };
+    let reason = codex_pre_tool_use_reason(&pre_tool_use_message(&path));
+    Ok(Some(json!({
+        "decision": "block",
+        "reason": reason,
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": reason,
+        },
+    })))
+}
+
+fn run_codex_user_prompt_submit(
+    repo_root: &Path,
+    payload: &Value,
+) -> Result<Option<Value>, String> {
+    let base = run_user_prompt_submit(repo_root, payload)?;
+    let Some(context) = base
+        .get("hookSpecificOutput")
+        .and_then(|hook| hook.get("additionalContext"))
+        .and_then(Value::as_str)
+    else {
+        return Ok(None);
+    };
+    if context.trim().is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(json!({
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": context,
+        },
+        "contextTelemetry": base.get("contextTelemetry").cloned().unwrap_or(Value::Null),
+    })))
 }
 
 fn canonical_lifecycle_command(command: &str) -> Result<&'static str, String> {
@@ -1376,6 +1445,7 @@ fn canonical_audit_command(command: &str) -> Result<&'static str, String> {
         "pre-tool-use" => Ok("pre-tool-use"),
         "pre-tool-use-quality" => Ok("pre-tool-use-quality"),
         "post-tool-audit" => Ok("post-tool-audit"),
+        "post-tool-failure-audit" => Ok("post-tool-failure-audit"),
         "config-change" => Ok("config-change"),
         "stop-failure" => Ok("stop-failure"),
         _ => Err(format!("Unsupported Claude audit command: {command}")),
@@ -1385,7 +1455,9 @@ fn canonical_audit_command(command: &str) -> Result<&'static str, String> {
 fn canonical_codex_audit_command(command: &str) -> Result<&'static str, String> {
     match command {
         "pre-tool-use" => Ok("pre-tool-use"),
+        "session-start" => Ok("session-start"),
         "permission-request" => Ok("permission-request"),
+        "post-tool-use" => Ok("post-tool-use"),
         "user-prompt-submit" => Ok("user-prompt-submit"),
         _ => Err(format!("Unsupported Codex audit command: {command}")),
     }
@@ -2287,6 +2359,44 @@ fn run_post_tool_audit(repo_root: &Path, payload: &Value) -> Result<Value, Strin
         "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
         "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
         "command": "post-tool-audit",
+        "tool_name": tool_name,
+    }))
+}
+
+fn run_post_tool_failure_audit(repo_root: &Path, payload: &Value) -> Result<Value, String> {
+    let tool_name = payload
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let mut rel_paths = iter_payload_paths(payload)
+        .into_iter()
+        .map(|path| relative_candidate_path(&path, repo_root))
+        .collect::<Vec<_>>();
+    rel_paths.sort();
+    rel_paths.dedup();
+
+    for path in rel_paths {
+        if classify_protected_generated_path(&path).is_none() {
+            continue;
+        }
+        let message = pre_tool_use_message(&path);
+        return Ok(json!({
+            "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
+            "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
+            "command": "post-tool-failure-audit",
+            "tool_name": tool_name,
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUseFailure",
+                "additionalContext": message,
+            },
+            "additionalContext": message,
+        }));
+    }
+
+    Ok(json!({
+        "schema_version": CLAUDE_HOOK_AUDIT_SCHEMA_VERSION,
+        "authority": CLAUDE_HOOK_AUDIT_AUTHORITY,
+        "command": "post-tool-failure-audit",
         "tool_name": tool_name,
     }))
 }
@@ -3609,11 +3719,7 @@ mod tests {
         let settings = build_claude_project_settings(&repo_root);
         assert_eq!(
             settings.get("allowedMcpServers").and_then(Value::as_array),
-            Some(&vec![
-                json!({"serverName": "browser-mcp"}),
-                json!({"serverName": "framework-mcp"}),
-                json!({"serverName": "openaiDeveloperDocs"}),
-            ])
+            Some(&vec![json!({"serverName": "framework-mcp"})])
         );
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
@@ -3959,7 +4065,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_project_settings_fall_back_to_default_mcp_servers_when_repo_registry_is_missing() {
+    fn claude_project_settings_use_owned_mcp_servers_when_repo_registry_is_missing() {
         let repo_root = temp_repo_root("claude-settings-mcp-missing");
         let settings = build_claude_project_settings(&repo_root);
         let servers = settings["allowedMcpServers"]
@@ -3969,15 +4075,12 @@ mod tests {
             .iter()
             .filter_map(|row| row.get("serverName").and_then(Value::as_str))
             .collect::<Vec<_>>();
-        assert_eq!(
-            names,
-            vec!["browser-mcp", "framework-mcp", "openaiDeveloperDocs"]
-        );
+        assert_eq!(names, vec!["framework-mcp"]);
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
     #[test]
-    fn claude_project_settings_fall_back_to_default_mcp_servers_when_repo_registry_is_empty() {
+    fn claude_project_settings_ignore_repo_registry_when_empty() {
         let repo_root = temp_repo_root("claude-settings-mcp-empty");
         let registry_path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
         fs::create_dir_all(registry_path.parent().expect("registry parent"))
@@ -4000,15 +4103,12 @@ mod tests {
             .iter()
             .filter_map(|row| row.get("serverName").and_then(Value::as_str))
             .collect::<Vec<_>>();
-        assert_eq!(
-            names,
-            vec!["browser-mcp", "framework-mcp", "openaiDeveloperDocs"]
-        );
+        assert_eq!(names, vec!["framework-mcp"]);
         fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
     #[test]
-    fn claude_project_settings_use_repo_registry_mcp_servers_when_nonempty() {
+    fn claude_project_settings_ignore_repo_registry_when_nonempty() {
         let repo_root = temp_repo_root("claude-settings-mcp-repo");
         let registry_path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
         fs::create_dir_all(registry_path.parent().expect("registry parent"))
@@ -4017,7 +4117,7 @@ mod tests {
             &registry_path,
             serde_json::to_string_pretty(&json!({
                 "schema_version": "framework-runtime-registry-v1",
-                "shared_project_mcp_servers": ["framework-mcp"]
+                "shared_project_mcp_servers": ["framework-mcp", "retired-mcp"]
             }))
             .expect("serialize registry"),
         )

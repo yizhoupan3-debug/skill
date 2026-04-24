@@ -96,17 +96,22 @@ the full style guidance.
 6. Render, test overflow/fonts, and audit slide PNGs with `$visual-review`.
 7. Deliver the `.pptx`, authoring `.js`, local assets, and source log together.
 
+Default CLI:
+
+- use `ppt init <workdir>` to create a deck workspace from the Rust CLI
+- use `ppt outline <outline.yaml|outline.json> --bootstrap --build` to turn an outline into `deck.js` and `deck.pptx`
+
 Optional boost for rebuild / audit work:
 
-- use `pptx_tool_rs office doctor` for outline + issues + validation in one pass
-- use `pptx_tool_rs office get/query` when you need stable `shape[@id=...]` addressing from an old deck
-- use `pptx_tool_rs office watch` for live HTML preview of an already-generated `.pptx`
+- use `ppt office doctor` for outline + issues + validation in one pass
+- use `ppt office get/query` when you need stable `shape[@id=...]` addressing from an old deck
+- use `ppt office watch` for live HTML preview of an already-generated `.pptx`
 
 Default mixed lane:
 
-- use `pptx_tool_rs build-qa --workdir .` after `deck.js` authoring
-- use `pptx_tool_rs qa <deck.pptx> --rendered-dir rendered` for an existing generated deck
-- use `pptx_tool_rs intake <deck.pptx>` before rebuilding an old `.pptx`
+- use `ppt build-qa --workdir .` after `deck.js` authoring
+- use `ppt qa <deck.pptx> --rendered-dir rendered` for an existing generated deck
+- use `ppt intake <deck.pptx>` before rebuilding an old `.pptx`
 
 For the detailed source-first workflow, rebuild path for existing decks, notes /
 transitions guidance, and QA sequence, see [references/workflow.md](./references/workflow.md).
