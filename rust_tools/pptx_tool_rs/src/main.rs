@@ -209,6 +209,8 @@ struct QaArgs {
     rendered_dir: String,
     #[arg(long, default_value_t = false)]
     json: bool,
+    #[arg(long, default_value_t = false)]
+    fail_on_issues: bool,
 }
 
 #[derive(Args)]
@@ -228,6 +230,8 @@ struct BuildQaArgs {
     deck: String,
     #[arg(long, default_value = "rendered")]
     rendered_dir: String,
+    #[arg(long, value_enum, default_value_t = QualityMode::Standard)]
+    quality: QualityMode,
     #[arg(long, default_value_t = false)]
     json: bool,
 }
@@ -324,6 +328,7 @@ struct InitSummary {
     template: String,
     files: Vec<String>,
     rust_only: bool,
+    command_manifest: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -430,33 +435,28 @@ struct QaOverflowSummary {
 
 #[derive(Debug, Serialize)]
 struct QaSummary {
+    ok: bool,
     deck: String,
     render: QaRenderSummary,
     overflow_check: QaOverflowSummary,
     font_check: Value,
-    officecli: Value,
+    inspector: Value,
 }
 
 #[derive(Debug, Serialize)]
 struct OfficeProbeSummary {
     available: bool,
-    binary: Option<String>,
+    engine: String,
     version: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct OfficeDoctorSummary {
-    officecli_version: Option<String>,
+    inspector_version: Option<String>,
     file: String,
     outline: Value,
     issues: Value,
     validation: Value,
-}
-
-#[derive(Debug)]
-struct OfficeBinary {
-    path: PathBuf,
-    version: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -560,6 +560,9 @@ fn outline_command(args: OutlineArgs) -> Result<()> {
 
 fn qa_command(args: QaArgs) -> Result<()> {
     let payload = qa_summary(&args.deck, &args.rendered_dir)?;
+    if args.fail_on_issues && !payload.ok {
+        bail!("qa failed: overflow, font, or Rust inspector issue detected");
+    }
     emit_value(
         serde_json::to_value(payload)?,
         if args.json {
@@ -572,11 +575,11 @@ fn qa_command(args: QaArgs) -> Result<()> {
 
 fn intake_command(args: IntakeArgs) -> Result<()> {
     let structure = extract_structure_payload(&args.deck)?;
-    let officecli = office_doctor_value(&args.deck)?;
+    let inspector = office_doctor_value(&args.deck)?;
     let payload = json!({
         "deck": args.deck,
         "structure": structure,
-        "officecli": officecli,
+        "inspector": inspector,
     });
     emit_value(
         payload,
@@ -605,6 +608,9 @@ fn build_qa_command(args: BuildQaArgs) -> Result<()> {
     })?;
     let rendered = workdir.join(&args.rendered_dir);
     let payload = qa_summary(&deck.display().to_string(), &rendered.display().to_string())?;
+    if args.quality == QualityMode::Strict {
+        strict_quality_gate(&serde_json::to_value(&payload)?)?;
+    }
     emit_value(
         serde_json::to_value(payload)?,
         if args.json {
@@ -636,22 +642,19 @@ fn office_command(args: OfficeArgs) -> Result<()> {
 }
 
 fn office_probe_command(args: OfficeProbeArgs) -> Result<()> {
-    let probe = detect_officecli();
     let payload = OfficeProbeSummary {
-        available: probe.is_some(),
-        binary: probe.as_ref().map(|item| item.path.display().to_string()),
-        version: probe.and_then(|item| item.version),
+        available: true,
+        engine: "rust-pptx-inspector".to_string(),
+        version: Some(env!("CARGO_PKG_VERSION").to_string()),
     };
     if args.json {
         println!("{}", serde_json::to_string_pretty(&payload)?);
-    } else if payload.available {
-        println!("officecli: {}", payload.binary.clone().unwrap_or_default());
+    } else {
+        println!("inspector: {}", payload.engine);
         println!(
             "version: {}",
             payload.version.unwrap_or_else(|| "unknown".to_string())
         );
-    } else {
-        println!("officecli: missing");
     }
     Ok(())
 }
@@ -677,102 +680,74 @@ fn office_file_passthrough(
     tail: Option<&str>,
     json_output: bool,
 ) -> Result<()> {
-    let office = require_officecli()?;
-    let mut args = vec![command.to_string(), file.to_string()];
-    if let Some(tail) = tail {
-        args.push(tail.to_string());
-    }
-    if json_output {
-        let payload = run_office_json(&office.path, &args)?;
-        println!("{}", serde_json::to_string_pretty(&payload)?);
-    } else {
-        let status = Command::new(&office.path).args(&args).status()?;
-        if !status.success() {
-            bail!("officecli command failed with status {:?}", status.code());
-        }
-    }
+    let payload = match (command, tail) {
+        ("view", Some("outline")) => rust_office_outline_value(file)?,
+        ("view", Some("issues")) => rust_office_issues_value(file)?,
+        ("validate", None) => rust_office_validate_value(file)?,
+        _ => bail!("unsupported Rust inspector command: {command} {tail:?}"),
+    };
+    emit_value(
+        payload,
+        if json_output {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )?;
     Ok(())
 }
 
 fn office_get_command(args: OfficeGetArgs) -> Result<()> {
-    let office = require_officecli()?;
-    let mut command = Command::new(&office.path);
-    command
-        .arg("get")
-        .arg(&args.file)
-        .arg(&args.path)
-        .arg("--depth")
-        .arg(args.depth.to_string());
-    if args.json {
-        command.arg("--json");
-    }
-    let status = command.status()?;
-    if !status.success() {
-        bail!("officecli get failed with status {:?}", status.code());
-    }
-    Ok(())
+    let payload = rust_office_get_value(&args.file, &args.path, args.depth)?;
+    emit_value(
+        payload,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
 }
 
 fn office_query_command(args: OfficeQueryArgs) -> Result<()> {
-    let office = require_officecli()?;
-    let mut command = Command::new(&office.path);
-    command.arg("query").arg(&args.file).arg(&args.selector);
-    if let Some(text) = args.text {
-        command.arg("--text").arg(text);
-    }
-    if args.json {
-        command.arg("--json");
-    }
-    let status = command.status()?;
-    if !status.success() {
-        bail!("officecli query failed with status {:?}", status.code());
-    }
-    Ok(())
+    let payload = rust_office_query_value(&args.file, &args.selector, args.text.as_deref())?;
+    emit_value(
+        payload,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
 }
 
 fn office_watch_command(args: OfficeWatchArgs) -> Result<()> {
-    let office = require_officecli()?;
-    let status = Command::new(&office.path)
-        .arg("watch")
-        .arg(&args.file)
-        .arg("--port")
-        .arg(args.port.to_string())
-        .status()?;
-    if !status.success() {
-        bail!("officecli watch failed with status {:?}", status.code());
-    }
+    let preview = write_rust_office_preview(&args.file, args.port)?;
     if args.browser {
-        let status = Command::new("open")
-            .arg(format!("http://127.0.0.1:{}", args.port))
-            .status()?;
+        let status = Command::new("open").arg(&preview).status()?;
         if !status.success() {
             bail!("failed to open browser with status {:?}", status.code());
         }
     }
+    println!("preview: {}", preview.display());
     Ok(())
 }
 
 fn office_batch_command(args: OfficeBatchArgs) -> Result<()> {
-    let office = require_officecli()?;
-    let mut command = Command::new(&office.path);
-    command.arg("batch").arg(&args.file);
-    if let Some(input) = args.input {
-        command.arg("--input").arg(input);
-    }
-    if let Some(commands) = args.commands {
-        command.arg("--commands").arg(commands);
-    }
-    if args.force {
-        command.arg("--force");
-    }
-    if args.json {
-        command.arg("--json");
-    }
-    let status = command.status()?;
-    if !status.success() {
-        bail!("officecli batch failed with status {:?}", status.code());
-    }
-    Ok(())
+    let payload = rust_office_batch_value(
+        &args.file,
+        args.input.as_deref(),
+        args.commands.as_deref(),
+        args.force,
+    )?;
+    emit_value(
+        payload,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
 }
 
 fn render_command(args: RenderArgs) -> Result<()> {
@@ -829,19 +804,52 @@ fn init_workspace(workdir: &Path, template: &DeckTemplate, force: bool) -> Resul
         created.push(format!("kept:{}", sources.display()));
     }
 
+    let command_manifest = workdir.join("ppt.commands.json");
+    if !command_manifest.exists() || force {
+        fs::write(
+            &command_manifest,
+            serde_json::to_string_pretty(&rust_command_manifest_value())?,
+        )
+        .with_context(|| format!("failed to write {}", command_manifest.display()))?;
+        created.push(command_manifest.display().to_string());
+    } else {
+        created.push(format!("kept:{}", command_manifest.display()));
+    }
+
     Ok(InitSummary {
         workdir: workdir.display().to_string(),
         template: format!("{:?}", template).to_ascii_lowercase(),
         files: created,
         rust_only: true,
+        command_manifest: command_manifest.display().to_string(),
     })
 }
 
 fn starter_sources_markdown(template: &DeckTemplate) -> String {
     format!(
-        "# Sources\n\n- Deck source plan: `deck.plan.json`\n- Editable output: `deck.pptx`\n- Runtime: Rust `ppt` CLI\n- Template: `{}`\n\nAdd source URLs, local asset paths, and review notes here before final delivery.\n",
+        "# Sources\n\n- Deck source plan: `deck.plan.json`\n- Editable output: `deck.pptx`\n- Runtime: Rust `ppt` CLI\n- Template: `{}`\n\n## Workflow Notes\n\n- Text pass: use `$humanizer` for ordinary prose, `$copywriting` for pitch / sales / product-message decks, and `$paper-writing` for academic prose.\n- Design pass: use `$design-md` for source-material design extraction, `$frontend-design` for a fresh premium direction, `$visual-review` for rendered PNG evidence, and `$design-output-auditor` for drift acceptance.\n\nAdd source URLs, local asset paths, and review notes here before final delivery.\n",
         format!("{:?}", template).to_ascii_lowercase()
     )
+}
+
+fn rust_command_manifest_value() -> Value {
+    json!({
+        "name": "ppt-pptx-rust-commands",
+        "runtime": "ppt",
+        "commands": {
+            "build": "ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered",
+            "render": "ppt render deck.pptx --output_dir rendered",
+            "check_overflow": "ppt slides-test deck.pptx",
+            "check_fonts": "ppt detect-fonts deck.pptx --json",
+            "check_inspector": "ppt office doctor deck.pptx --json",
+            "check_rust": "ppt qa deck.pptx --rendered-dir rendered --fail-on-issues --json",
+            "build_rust": "ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --json",
+            "build_strict": "ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --quality strict --json",
+            "intake_rust": "ppt intake deck.pptx --json",
+            "inspect_outline": "ppt office outline deck.pptx --json",
+            "watch_rust": "ppt office watch deck.pptx --browser"
+        }
+    })
 }
 
 fn read_outline(input: &Path) -> Result<Value> {
@@ -875,7 +883,7 @@ fn starter_outline_value(template: &DeckTemplate) -> Value {
     };
     json!({
         "title": "Rust Authored Deck",
-        "subtitle": "Editable PPTX generated without Node",
+        "subtitle": "Editable PPTX generated by Rust",
         "presenter": "Presenter",
         "date": "2026",
         "palette": palette,
@@ -1126,10 +1134,10 @@ fn generate_outline_deck_source(outline: &Value, _template: &DeckTemplate) -> Re
     serde_json::to_string_pretty(&json!({
         "format": "ppt-rust-outline-plan",
         "design_brief": {
-            "source": "DESIGN.md visual contract, then rendered slide audit",
-            "copy": "direct claims, varied rhythm, no meta narration or generic AI filler",
-            "layout": "one visual lead, readable type, no equal-weight card farm",
-            "audit": "render evidence, visual review, design-output-auditor drift check"
+            "source": "DESIGN.md visual contract when source materials or brand examples exist; otherwise choose a frontend-design direction before styling",
+            "copy": "run a text pass before layout: $humanizer for natural prose, $copywriting for persuasive decks, $paper-writing for academic decks; keep direct claims and remove generic AI filler",
+            "layout": "one visual lead, readable type, no equal-weight card farm; encode the chosen design roles in deck.plan.json",
+            "audit": "render evidence, visual-review findings, design-output-auditor drift verdict, then strict Rust QA"
         },
         "outline": outline
     }))
@@ -1905,8 +1913,10 @@ fn qa_summary(deck_path: &str, rendered_dir: &str) -> Result<QaSummary> {
     let rendered = render_paths(&deck, &rendered_dir_path, 1600, 900)?;
     let overflow = slide_overflow_summary(&deck)?;
     let font_check = detect_fonts_payload(&deck)?;
-    let officecli = office_doctor_value_or_skipped(&deck.display().to_string())?;
+    let inspector = office_doctor_value(&deck.display().to_string())?;
+    let ok = overflow.ok && font_check_ok(&font_check) && inspector_ok(&inspector);
     Ok(QaSummary {
+        ok,
         deck: deck.display().to_string(),
         render: QaRenderSummary {
             rendered_dir: rendered_dir_path.display().to_string(),
@@ -1918,11 +1928,14 @@ fn qa_summary(deck_path: &str, rendered_dir: &str) -> Result<QaSummary> {
         },
         overflow_check: overflow,
         font_check,
-        officecli,
+        inspector,
     })
 }
 
 fn strict_quality_gate(payload: &Value) -> Result<()> {
+    if payload.pointer("/ok").and_then(Value::as_bool) == Some(false) {
+        bail!("strict quality failed: combined QA status is false");
+    }
     if payload
         .pointer("/overflow_check/ok")
         .and_then(Value::as_bool)
@@ -1933,27 +1946,50 @@ fn strict_quality_gate(payload: &Value) -> Result<()> {
     if payload.pointer("/font_check/ok").and_then(Value::as_bool) == Some(false) {
         bail!("strict quality failed: font check reported issues");
     }
-    if payload.pointer("/officecli/status").and_then(Value::as_str) == Some("skipped") {
-        eprintln!(
-            "warning: strict quality skipped officecli doctor because officecli is unavailable"
-        );
-    }
     if payload
-        .pointer("/officecli/validation/ok")
+        .pointer("/inspector/validation/ok")
         .and_then(Value::as_bool)
         == Some(false)
     {
-        bail!("strict quality failed: officecli validation failed");
+        bail!("strict quality failed: Rust inspector validation failed");
     }
     if payload
-        .pointer("/officecli/issues/count")
+        .pointer("/inspector/issues/count")
         .and_then(Value::as_u64)
         .unwrap_or(0)
         > 0
     {
-        bail!("strict quality failed: officecli reported deck issues");
+        bail!("strict quality failed: Rust inspector reported deck issues");
     }
     Ok(())
+}
+
+fn font_check_ok(payload: &Value) -> bool {
+    payload
+        .get("ok")
+        .and_then(Value::as_bool)
+        .unwrap_or_else(|| {
+            payload
+                .get("font_missing_overall")
+                .and_then(Value::as_array)
+                .is_none_or(Vec::is_empty)
+                && payload
+                    .get("font_substituted_overall")
+                    .and_then(Value::as_array)
+                    .is_none_or(Vec::is_empty)
+        })
+}
+
+fn inspector_ok(payload: &Value) -> bool {
+    payload
+        .pointer("/validation/ok")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        && payload
+            .pointer("/issues/count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+            == 0
 }
 
 fn render_paths(input: &Path, output_dir: &Path, width: u32, height: u32) -> Result<Vec<PathBuf>> {
@@ -2062,10 +2098,13 @@ fn detect_fonts_payload(input: &Path) -> Result<Value> {
         }
     }
 
+    let missing = missing_overall.into_iter().collect::<Vec<_>>();
+    let substituted = substituted_overall.into_iter().collect::<Vec<_>>();
     Ok(json!({
-        "font_missing_overall": missing_overall.into_iter().collect::<Vec<_>>(),
+        "ok": missing.is_empty() && substituted.is_empty(),
+        "font_missing_overall": missing,
         "font_missing_by_slide": missing_by_slide,
-        "font_substituted_overall": substituted_overall.into_iter().collect::<Vec<_>>(),
+        "font_substituted_overall": substituted,
         "font_substituted_by_slide": substituted_by_slide,
     }))
 }
@@ -2076,80 +2115,364 @@ fn extract_structure_payload(input_path: &str) -> Result<Value> {
     extract_pptx_structure(&bundle, &input, false, None)
 }
 
-fn detect_officecli() -> Option<OfficeBinary> {
-    let path = which_path("officecli")?;
-    let version = Command::new(&path)
-        .arg("--version")
-        .output()
-        .ok()
-        .and_then(|output| {
-            if output.status.success() {
-                Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
-            } else {
-                None
-            }
-        })
-        .filter(|value| !value.is_empty());
-    Some(OfficeBinary { path, version })
-}
-
-fn require_officecli() -> Result<OfficeBinary> {
-    detect_officecli()
-        .ok_or_else(|| anyhow!("officecli not found. Install it first, then rerun this command."))
-}
-
-fn run_office_json(binary: &Path, args: &[String]) -> Result<Value> {
-    let output = Command::new(binary)
-        .args(args)
-        .arg("--json")
-        .output()
-        .with_context(|| format!("failed to run {}", binary.display()))?;
-    if !output.status.success() {
-        bail!(
-            "officecli command failed: {}\nstdout:\n{}\nstderr:\n{}",
-            args.join(" "),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    serde_json::from_slice(&output.stdout)
-        .with_context(|| format!("officecli did not return valid JSON for args={args:?}"))
-}
-
 fn office_doctor_value(file: &str) -> Result<Value> {
     Ok(serde_json::to_value(office_doctor_summary(file)?)?)
 }
 
-fn office_doctor_value_or_skipped(file: &str) -> Result<Value> {
-    if detect_officecli().is_none() {
-        return Ok(json!({
-            "status": "skipped",
-            "reason": "officecli not found",
-            "file": file,
-        }));
-    }
-    office_doctor_value(file)
-}
-
 fn office_doctor_summary(file: &str) -> Result<OfficeDoctorSummary> {
-    let office = require_officecli()?;
-    let outline_payload = run_office_json(
-        &office.path,
-        &["view".to_string(), file.to_string(), "outline".to_string()],
-    )?;
-    let issues_payload = run_office_json(
-        &office.path,
-        &["view".to_string(), file.to_string(), "issues".to_string()],
-    )?;
-    let validate_payload =
-        run_office_json(&office.path, &["validate".to_string(), file.to_string()])?;
+    let outline_payload = rust_office_outline_value(file)?;
+    let issues_payload = rust_office_issues_value(file)?;
+    let validate_payload = rust_office_validate_value(file)?;
     summarize_office_doctor(
         file,
         outline_payload,
         issues_payload,
         validate_payload,
-        office.version,
+        Some(env!("CARGO_PKG_VERSION").to_string()),
     )
+}
+
+fn rust_office_outline_value(file: &str) -> Result<Value> {
+    let structure = extract_structure_payload(file)?;
+    let slides = structure
+        .get("slides")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|slide| {
+            let title = first_slide_title(&slide).unwrap_or_else(|| "Untitled".to_string());
+            let elements = slide
+                .get("elements")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let text_boxes = elements
+                .iter()
+                .filter(|element| {
+                    element
+                        .get("text")
+                        .and_then(|text| text.get("fullText"))
+                        .and_then(Value::as_str)
+                        .is_some_and(|text| !text.trim().is_empty())
+                })
+                .count();
+            let images = elements
+                .iter()
+                .filter(|element| element.get("image").is_some())
+                .count();
+            json!({
+                "index": slide.get("index").and_then(Value::as_u64).unwrap_or(0) + 1,
+                "title": title,
+                "layout": slide.get("layout").cloned().unwrap_or(Value::Null),
+                "elementCount": elements.len(),
+                "textBoxCount": text_boxes,
+                "imageCount": images,
+                "notes": slide.get("notes").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect::<Vec<_>>();
+    Ok(json!({
+        "success": true,
+        "data": {
+            "engine": "rust-pptx-inspector",
+            "totalSlides": structure.get("slide_count").cloned().unwrap_or(Value::Null),
+            "slides": slides,
+        }
+    }))
+}
+
+fn rust_office_issues_value(file: &str) -> Result<Value> {
+    let structure = extract_structure_payload(file)?;
+    let slide_w = structure
+        .get("slide_width")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| anyhow!("missing slide_width"))?;
+    let slide_h = structure
+        .get("slide_height")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| anyhow!("missing slide_height"))?;
+    let mut issues = Vec::new();
+    for slide in structure
+        .get("slides")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let slide_no = slide.get("index").and_then(Value::as_u64).unwrap_or(0) + 1;
+        let elements = slide
+            .get("elements")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        if first_slide_title(slide).is_none() {
+            issues.push(json!({
+                "Slide": slide_no,
+                "Severity": "warning",
+                "Message": "No title text found",
+            }));
+        }
+        for element in &elements {
+            if element_overflows(element, slide_w, slide_h) {
+                issues.push(json!({
+                    "Slide": slide_no,
+                    "Shape": element.get("name").cloned().unwrap_or(Value::Null),
+                    "Severity": "error",
+                    "Message": "Shape overflow outside slide canvas",
+                }));
+            }
+        }
+    }
+    Ok(json!({
+        "success": true,
+        "data": {
+            "Engine": "rust-pptx-inspector",
+            "Count": issues.len(),
+            "Issues": issues,
+        }
+    }))
+}
+
+fn rust_office_validate_value(file: &str) -> Result<Value> {
+    let input = expand_path(file);
+    let bundle = ZipBundle::from_path(&input)?;
+    let required = [
+        "[Content_Types].xml",
+        "_rels/.rels",
+        "ppt/presentation.xml",
+        "ppt/_rels/presentation.xml.rels",
+    ];
+    let mut errors = Vec::new();
+    for path in required {
+        if !bundle.files.contains_key(path) {
+            errors.push(format!("missing {path}"));
+        }
+    }
+    let structure = extract_pptx_structure(&bundle, &input, false, None)?;
+    if structure
+        .get("slide_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        == 0
+    {
+        errors.push("presentation contains no slides".to_string());
+    }
+    let ok = errors.is_empty();
+    let message = if ok {
+        "0 validation errors from Rust inspector".to_string()
+    } else {
+        format!("{} validation errors: {}", errors.len(), errors.join("; "))
+    };
+    Ok(json!({
+        "success": ok,
+        "message": message,
+        "data": {
+            "engine": "rust-pptx-inspector",
+            "errors": errors,
+        }
+    }))
+}
+
+fn rust_office_get_value(file: &str, selector: &str, depth: i32) -> Result<Value> {
+    let structure = extract_structure_payload(file)?;
+    let selected = select_structure_path(&structure, selector)?;
+    Ok(json!({
+        "success": true,
+        "selector": selector,
+        "depth": depth,
+        "data": trim_json_depth(selected, depth.max(0) as usize),
+    }))
+}
+
+fn rust_office_query_value(file: &str, selector: &str, text: Option<&str>) -> Result<Value> {
+    let structure = extract_structure_payload(file)?;
+    let matches = query_structure(&structure, selector, text);
+    Ok(json!({
+        "success": true,
+        "selector": selector,
+        "text": text,
+        "count": matches.len(),
+        "data": matches,
+    }))
+}
+
+fn write_rust_office_preview(file: &str, _port: u16) -> Result<PathBuf> {
+    let input = expand_path(file);
+    let structure = extract_structure_payload(file)?;
+    let preview = input.with_extension("preview.html");
+    let mut html = String::from(
+        "<!doctype html><meta charset=\"utf-8\"><title>PPTX Preview</title><style>body{font-family:Arial,sans-serif;background:#111;color:#eee;margin:24px}.slide{border:1px solid #444;border-radius:12px;padding:18px;margin:0 0 16px;background:#1b1b1b}.meta{color:#aaa;font-size:12px}pre{white-space:pre-wrap}</style>",
+    );
+    for slide in structure
+        .get("slides")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let slide_no = slide.get("index").and_then(Value::as_u64).unwrap_or(0) + 1;
+        html.push_str(&format!(
+            "<section class=\"slide\"><div class=\"meta\">Slide {slide_no}</div><h2>{}</h2>",
+            xml_escape(&first_slide_title(slide).unwrap_or_else(|| "Untitled".to_string()))
+        ));
+        for text in slide_texts(slide) {
+            html.push_str(&format!("<pre>{}</pre>", xml_escape(&text)));
+        }
+        html.push_str("</section>");
+    }
+    fs::write(&preview, html)?;
+    Ok(preview)
+}
+
+fn rust_office_batch_value(
+    file: &str,
+    input: Option<&str>,
+    commands: Option<&str>,
+    force: bool,
+) -> Result<Value> {
+    let source = if commands.is_some() {
+        "inline --commands".to_string()
+    } else if let Some(path) = input {
+        fs::read_to_string(expand_path(path))
+            .with_context(|| format!("failed to read batch input {}", path))?;
+        format!("--input {}", path)
+    } else {
+        "no batch commands".to_string()
+    };
+    bail!(
+        "ppt office batch is not supported by the read-only Rust inspector \
+         (file: {file}, force: {force}, source: {source}); rebuild editable changes through deck.plan.json"
+    )
+}
+
+fn first_slide_title(slide: &Value) -> Option<String> {
+    slide_texts(slide)
+        .into_iter()
+        .map(|text| text.trim().to_string())
+        .find(|text| !text.is_empty())
+}
+
+fn slide_texts(slide: &Value) -> Vec<String> {
+    slide
+        .get("elements")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|element| {
+            element
+                .get("text")
+                .and_then(|text| text.get("fullText"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .filter(|text| !text.trim().is_empty())
+        .collect()
+}
+
+fn select_structure_path(root: &Value, selector: &str) -> Result<Value> {
+    if selector == "/" {
+        return Ok(root.clone());
+    }
+    let slide_re = Regex::new(r"^/slide\[(\d+)\]$")?;
+    if let Some(caps) = slide_re.captures(selector) {
+        let index = caps[1].parse::<usize>()?.saturating_sub(1);
+        return root
+            .get("slides")
+            .and_then(Value::as_array)
+            .and_then(|slides| slides.get(index))
+            .cloned()
+            .ok_or_else(|| anyhow!("slide selector out of range: {selector}"));
+    }
+    let shape_re = Regex::new(r"^/slide\[(\d+)\]/shape\[(\d+)\]$")?;
+    if let Some(caps) = shape_re.captures(selector) {
+        let slide_index = caps[1].parse::<usize>()?.saturating_sub(1);
+        let shape_index = caps[2].parse::<usize>()?.saturating_sub(1);
+        return root
+            .get("slides")
+            .and_then(Value::as_array)
+            .and_then(|slides| slides.get(slide_index))
+            .and_then(|slide| slide.get("elements"))
+            .and_then(Value::as_array)
+            .and_then(|elements| elements.get(shape_index))
+            .cloned()
+            .ok_or_else(|| anyhow!("shape selector out of range: {selector}"));
+    }
+    bail!("unsupported selector: {selector}. Use /, /slide[N], or /slide[N]/shape[N].")
+}
+
+fn trim_json_depth(value: Value, depth: usize) -> Value {
+    if depth == 0 {
+        return match value {
+            Value::Array(items) => json!({"type": "array", "len": items.len()}),
+            Value::Object(map) => json!({"type": "object", "keys": map.keys().collect::<Vec<_>>()}),
+            other => other,
+        };
+    }
+    match value {
+        Value::Array(items) => Value::Array(
+            items
+                .into_iter()
+                .map(|item| trim_json_depth(item, depth - 1))
+                .collect(),
+        ),
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .map(|(key, value)| (key, trim_json_depth(value, depth - 1)))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
+fn query_structure(structure: &Value, selector: &str, text: Option<&str>) -> Vec<Value> {
+    let needle = text.map(|value| value.to_lowercase());
+    let font_filter = selector
+        .strip_prefix("shape[font=")
+        .and_then(|rest| rest.strip_suffix(']'))
+        .map(|font| font.trim_matches('"').trim_matches('\'').to_lowercase());
+    let wants_shape = selector == "shape" || selector.starts_with("shape[");
+    if !wants_shape {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for slide in structure
+        .get("slides")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let slide_no = slide.get("index").and_then(Value::as_u64).unwrap_or(0) + 1;
+        for element in slide
+            .get("elements")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let full_text = element
+                .get("text")
+                .and_then(|text| text.get("fullText"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if let Some(needle) = &needle {
+                if !full_text.to_lowercase().contains(needle) {
+                    continue;
+                }
+            }
+            if let Some(font) = &font_filter {
+                let shape_text = serde_json::to_string(element)
+                    .unwrap_or_default()
+                    .to_lowercase();
+                if !shape_text.contains(font) {
+                    continue;
+                }
+            }
+            let mut cloned = element.clone();
+            if let Some(object) = cloned.as_object_mut() {
+                object.insert("slide".to_string(), json!(slide_no));
+            }
+            out.push(cloned);
+        }
+    }
+    out
 }
 
 fn summarize_office_doctor(
@@ -2203,7 +2526,7 @@ fn summarize_office_doctor(
         })
         .count();
     Ok(OfficeDoctorSummary {
-        officecli_version: version,
+        inspector_version: version,
         file: file.to_string(),
         outline: json!({
             "total_slides": outline_data.get("totalSlides").cloned().unwrap_or(Value::Null),
@@ -2227,9 +2550,9 @@ fn summarize_office_doctor(
 
 fn print_office_doctor_summary(summary: &OfficeDoctorSummary) {
     println!(
-        "officecli: {}",
+        "inspector: {}",
         summary
-            .officecli_version
+            .inspector_version
             .clone()
             .unwrap_or_else(|| "unknown".to_string())
     );
@@ -2275,22 +2598,39 @@ fn print_office_doctor_summary(summary: &OfficeDoctorSummary) {
     }
 }
 
-fn emit_value(value: Value, _format: EmitFormat) -> Result<()> {
-    println!("{}", serde_json::to_string_pretty(&value)?);
+fn emit_value(value: Value, format: EmitFormat) -> Result<()> {
+    match format {
+        EmitFormat::Json => println!("{}", serde_json::to_string_pretty(&value)?),
+        EmitFormat::Text => print_text_value(&value)?,
+    }
     Ok(())
 }
 
-fn which_path(binary: &str) -> Option<PathBuf> {
-    let output = Command::new("which").arg(binary).output().ok()?;
-    if !output.status.success() {
-        return None;
+fn print_text_value(value: &Value) -> Result<()> {
+    match value {
+        Value::Object(map) => {
+            for (key, item) in map {
+                println!("{}: {}", key, text_value(item)?);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                println!("{}", text_value(item)?);
+            }
+        }
+        other => println!("{}", text_value(other)?),
     }
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if path.is_empty() {
-        None
-    } else {
-        Some(PathBuf::from(path))
-    }
+    Ok(())
+}
+
+fn text_value(value: &Value) -> Result<String> {
+    Ok(match value {
+        Value::Null => "null".to_string(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        Value::String(value) => value.clone(),
+        Value::Array(_) | Value::Object(_) => serde_json::to_string(value)?,
+    })
 }
 
 fn extract_structure_command(args: ExtractStructureArgs) -> Result<()> {
@@ -2478,6 +2818,7 @@ fn detect_fonts_command(args: DetectFontsArgs) -> Result<()> {
     }
 
     let payload = json!({
+        "ok": missing_overall.is_empty() && substituted_overall.is_empty(),
         "font_missing_overall": missing_overall.into_iter().collect::<Vec<_>>(),
         "font_missing_by_slide": missing_by_slide,
         "font_substituted_overall": substituted_overall.into_iter().collect::<Vec<_>>(),
@@ -2763,7 +3104,9 @@ fn convert_to_pdf(input: &Path, profile_dir: &Path, convert_dir: &Path) -> Resul
         .arg("pdf")
         .arg("--outdir")
         .arg(convert_dir)
-        .arg(input);
+        .arg(input)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
     let _ = run_command(&mut direct);
     if pdf_path.exists() {
         return Ok(pdf_path);
@@ -2779,7 +3122,9 @@ fn convert_to_pdf(input: &Path, profile_dir: &Path, convert_dir: &Path) -> Resul
         .arg("odp")
         .arg("--outdir")
         .arg(convert_dir)
-        .arg(input);
+        .arg(input)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
     let _ = run_command(&mut to_odp);
     if !odp_path.exists() {
         bail!("Failed to convert {} to ODP", input.display());
@@ -2794,7 +3139,9 @@ fn convert_to_pdf(input: &Path, profile_dir: &Path, convert_dir: &Path) -> Resul
         .arg("pdf")
         .arg("--outdir")
         .arg(convert_dir)
-        .arg(&odp_path);
+        .arg(&odp_path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
     let _ = run_command(&mut odp_to_pdf);
     if pdf_path.exists() {
         return Ok(pdf_path);
@@ -3854,8 +4201,10 @@ mod tests {
         });
         let source = generate_outline_deck_source(&outline, &DeckTemplate::Dark).unwrap();
         assert!(source.contains("ppt-rust-outline-plan"));
-        assert!(source.contains("direct claims, varied rhythm, no meta narration"));
-        assert!(source.contains("design-output-auditor drift check"));
+        assert!(source.contains("$humanizer"));
+        assert!(source.contains("$copywriting"));
+        assert!(source.contains("$paper-writing"));
+        assert!(source.contains("design-output-auditor drift verdict"));
         assert!(!source.contains("本页展示增长路径"));
         assert!(source.contains("增长路径"));
         assert!(source.contains("支持业务"));
@@ -3863,18 +4212,18 @@ mod tests {
     }
 
     #[test]
-    fn strict_quality_gate_accepts_missing_officecli_but_rejects_overflow() {
-        let skipped_office = json!({
+    fn strict_quality_gate_accepts_rust_inspector_and_rejects_overflow() {
+        let clean = json!({
             "overflow_check": {"ok": true},
             "font_check": {"ok": true},
-            "officecli": {"status": "skipped"}
+            "inspector": {"validation": {"ok": true}, "issues": {"count": 0}}
         });
-        strict_quality_gate(&skipped_office).unwrap();
+        strict_quality_gate(&clean).unwrap();
 
         let overflow = json!({
             "overflow_check": {"ok": false},
             "font_check": {"ok": true},
-            "officecli": {"status": "skipped"}
+            "inspector": {"validation": {"ok": true}, "issues": {"count": 0}}
         });
         assert!(strict_quality_gate(&overflow).is_err());
     }

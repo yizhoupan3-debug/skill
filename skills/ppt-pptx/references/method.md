@@ -76,6 +76,8 @@ For each slide, work in this order:
 2. hierarchy sorting
 3. visualization choice
 4. layout composition
+5. Rust source-plan encoding
+6. rendered QA
 
 This prevents the common failure mode where a slide is styled before anyone knows what matters.
 
@@ -106,3 +108,10 @@ This prevents the common failure mode where a slide is styled before anyone know
 - extract the message into 2-4 blocks
 - reduce paragraphs into claims, labels, or takeaways
 - if the page still looks like a Word document, the visualization step failed
+
+## Rust Source-First Habit
+
+- change `deck.plan.json`, then rebuild
+- use `ppt office doctor` for structural checks before visual judgment
+- keep generated `deck.pptx` editable, but do not let manual edits become the source of truth
+- record asset sources and review notes in `sources.md`

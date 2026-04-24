@@ -74,22 +74,21 @@ Use this reference when selecting or auto-assigning slide layouts based on conte
 **Design intent**: echo the cover and leave one final thought.
 **Quality gate**: closing feels intentional, not a leftover title slide or unrelated template.
 
-## Auto-Selection Algorithm
+## Auto-Selection Rules
 
-```
-function selectPattern(slideContent) {
-  if (slideContent.type === "cover")      return "cover";
-  if (slideContent.type === "closing")    return "closing";
-  if (slideContent.hasTimeline)           return "timeline";
-  if (slideContent.hasSteps)              return "process-flow";
-  if (slideContent.hasComparison)         return "comparison";
-  if (slideContent.dataPoints >= 3)       return "data-panel";
-  if (slideContent.hasImage && slideContent.bulletCount <= 2) return "hero-image";
-  if (slideContent.hasImage)              return "image-text-split";
-  if (slideContent.bulletCount >= 3)      return "multi-card";
-  return "full-text";
-}
-```
+- `type: "cover"` -> `cover`
+- `type: "closing"` -> `closing`
+- `timeline` items present -> `timeline`
+- `steps` items present -> `process-flow`
+- `comparison` present -> `comparison`
+- `metrics` or chart-like data present -> `data-panel`
+- `image` present with 1-2 bullets -> `hero-image`
+- `image` present with longer text -> `image-text-split`
+- 3-6 bullets with no dominant image -> `multi-card`
+- dense prose with no data/image -> `full-text`
+
+When two rules match, choose the pattern that creates the clearest reading path,
+not the most decorative page.
 
 ## Coordinate Quick Reference (16:9, inches)
 

@@ -76,6 +76,16 @@
       "first_turn": true
     },
     {
+      "id": "skill-framework-developer-domain-skill-optimization-case",
+      "category": "should-trigger",
+      "task": "科研的有关 skill 太不好用了，以及写作的 skill 还是不好用，持续优化，允许外部调研。",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": "anti-laziness",
+      "forbidden_owners": ["research-workbench", "paper-writing", "humanizer", "literature-synthesis"],
+      "first_turn": true
+    },
+    {
       "id": "openai-docs-source-gate-case",
       "category": "should-trigger",
       "task": "帮我看 OpenAI Responses API 最新官方文档并说明怎么用。",
@@ -230,6 +240,16 @@
       "first_turn": true
     },
     {
+      "id": "paper-writing-bad-generic-output-case",
+      "category": "wrong-owner-near-miss",
+      "task": "这段论文写作改得太泛了，继续优化写法，只改表达和故事线，不改 claim。",
+      "focus_skill": "paper-writing",
+      "expected_owner": "paper-writing",
+      "expected_overlay": null,
+      "forbidden_owners": ["humanizer", "paper-reviewer", "literature-synthesis"],
+      "first_turn": true
+    },
+    {
       "id": "paper-workbench-ref-first-manuscript-case",
       "category": "wrong-owner-near-miss",
       "task": "整体推进这篇论文，先下载20篇目标期刊相近ref，学习它们怎么讲故事，再帮我重写摘要和引言。",
@@ -267,6 +287,36 @@
       "expected_owner": "humanizer",
       "expected_overlay": null,
       "forbidden_owners": ["paper-writing"],
+      "first_turn": true
+    },
+    {
+      "id": "humanizer-ordinary-polish-case",
+      "category": "wrong-owner-near-miss",
+      "task": "帮我把这段普通中文说明润色得自然一点，不要做 AIGC 表格，直接给改后版本。",
+      "focus_skill": "humanizer",
+      "expected_owner": "humanizer",
+      "expected_overlay": null,
+      "forbidden_owners": ["paper-writing", "copywriting", "writing-skills"],
+      "first_turn": true
+    },
+    {
+      "id": "humanizer-draft-from-notes-case",
+      "category": "wrong-owner-near-miss",
+      "task": "根据这些要点写一段普通说明文字，只用我给的信息，不要写成营销文案。",
+      "focus_skill": "humanizer",
+      "expected_owner": "humanizer",
+      "expected_overlay": null,
+      "forbidden_owners": ["copywriting", "paper-writing", "prompt-engineer"],
+      "first_turn": true
+    },
+    {
+      "id": "copywriting-ux-microcopy-case",
+      "category": "wrong-owner-near-miss",
+      "task": "给这个 App 空状态写 5 个 UX 微文案，目标是提高点击创建项目的转化。",
+      "focus_skill": "copywriting",
+      "expected_owner": "copywriting",
+      "expected_overlay": null,
+      "forbidden_owners": ["humanizer", "email-template", "documentation-engineering"],
       "first_turn": true
     },
     {
@@ -417,6 +467,16 @@
       "expected_owner": "research-workbench",
       "expected_overlay": null,
       "forbidden_owners": ["autoresearch", "ai-research"],
+      "first_turn": true
+    },
+    {
+      "id": "research-workbench-external-calibration-case",
+      "category": "wrong-owner-near-miss",
+      "task": "这个科研方向下一步太飘了，允许外部调研校准 novelty、baseline 和实验优先级。",
+      "focus_skill": "research-workbench",
+      "expected_owner": "research-workbench",
+      "expected_overlay": null,
+      "forbidden_owners": ["information-retrieval", "paper-workbench", "autoresearch"],
       "first_turn": true
     },
     {

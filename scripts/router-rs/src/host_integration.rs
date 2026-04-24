@@ -795,6 +795,7 @@ fn describe_path(report_root: &Path, target_root: &Path, path: &Path) -> String 
     path.to_string_lossy().into_owned()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn install_native_integration(
     repo_root: &Path,
     home_config_path: &Path,
@@ -1540,6 +1541,7 @@ fn build_default_bootstrap_payload(
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_memory_automation(
     repo_root: &Path,
     output_dir: Option<&Path>,
@@ -1791,6 +1793,7 @@ fn scratch_artifact_root(repo_root: &Path, run_id: Option<&str>) -> PathBuf {
         .unwrap_or(root)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_memory_automation_snapshot(
     workspace: &str,
     generated_at: &str,

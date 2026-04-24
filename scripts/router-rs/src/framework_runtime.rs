@@ -6,6 +6,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::ops::Not;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -89,6 +90,90 @@ const TERMINAL_VERIFICATION_STATUSES: &[&str] = &[
 ];
 const STALE_STORY_STATES: &[&str] = &["stale", "expired", "invalid"];
 
+#[derive(Debug, Clone, Copy)]
+struct ArtifactPaths<'a> {
+    summary: &'a Path,
+    next_actions: &'a Path,
+    evidence: &'a Path,
+    trace_metadata: Option<&'a Path>,
+    journal: Option<&'a Path>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ArtifactPayloads<'a> {
+    summary_text: &'a str,
+    next_actions: &'a Value,
+    evidence: &'a Value,
+    trace_metadata: &'a Value,
+    journal: Option<&'a Value>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SupervisorStateInput<'a> {
+    task_id: &'a str,
+    task: &'a str,
+    phase: &'a str,
+    status: &'a str,
+    summary: &'a str,
+    next_actions_payload: &'a Value,
+    evidence_payload: &'a Value,
+    trace_metadata_payload: &'a Value,
+    artifact_dir: &'a Path,
+    supervisor_state: Option<&'a Value>,
+    execution_contract: Option<&'a Value>,
+    blockers: Option<&'a Value>,
+    continuity: Option<&'a Value>,
+}
+
+#[derive(Debug, Clone)]
+struct ContinuityJournalInput<'a> {
+    task_id: &'a str,
+    task: &'a str,
+    phase: &'a str,
+    status: &'a str,
+    artifact_dir: &'a Path,
+    summary_text: &'a str,
+    next_actions_payload: &'a Value,
+    evidence_payload: &'a Value,
+    trace_metadata_payload: &'a Value,
+    supervisor_state_payload: &'a Value,
+    existing_journal: Value,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TaskRegistryEntry<'a> {
+    task_id: &'a str,
+    task: &'a str,
+    phase: &'a str,
+    status: &'a str,
+    resume_allowed: Option<bool>,
+    updated_at: &'a str,
+    focus_task_id: Option<&'a str>,
+}
+
+#[derive(Debug, Clone)]
+struct SessionArtifactWritePlan {
+    task: String,
+    phase: String,
+    status: String,
+    summary: String,
+    task_id: String,
+    focus: bool,
+    repo_root: Option<PathBuf>,
+    mirror_output_dir: Option<PathBuf>,
+    summary_path: PathBuf,
+    next_actions_path: PathBuf,
+    evidence_path: PathBuf,
+    trace_metadata_path: PathBuf,
+    journal_path: PathBuf,
+    next_actions_payload: Value,
+    evidence_payload: Value,
+    trace_metadata_payload: Value,
+    supervisor_state_payload: Value,
+    journal_payload: Value,
+    changed_paths: Vec<String>,
+}
+
 #[derive(Debug, Clone)]
 struct FrameworkRuntimeView {
     session_summary_text: String,
@@ -108,6 +193,23 @@ struct FrameworkRuntimeView {
     recoverable_task_ids: Vec<String>,
     registered_tasks: Value,
     collected_at: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct FrameworkAliasBuildOptions<'a> {
+    pub max_lines: usize,
+    pub compact: bool,
+    pub host_id: Option<&'a str>,
+}
+
+impl<'a> Default for FrameworkAliasBuildOptions<'a> {
+    fn default() -> Self {
+        Self {
+            max_lines: 4,
+            compact: false,
+            host_id: None,
+        }
+    }
 }
 
 pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String> {
@@ -562,18 +664,24 @@ fn short_statusline_text(value: &str, limit: usize) -> String {
     }
 }
 
+fn string_or_null(value: String) -> Value {
+    if value.trim().is_empty() {
+        Value::Null
+    } else {
+        Value::String(value)
+    }
+}
+
 pub fn build_framework_alias_envelope(
     repo_root: &Path,
     alias_name: &str,
-    max_lines: usize,
-    compact: bool,
-    host_id: Option<&str>,
+    options: FrameworkAliasBuildOptions<'_>,
 ) -> Result<Value, String> {
     let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
     let alias_record = load_framework_alias_record(repo_root, alias_name)?;
-    let host_entrypoint = resolve_alias_host_entrypoint(&alias_record, host_id);
+    let host_entrypoint = resolve_alias_host_entrypoint(&alias_record, options.host_id);
     let canonical_owner = alias_record_text(&alias_record, &["canonical_owner"]);
     let lineage = alias_value_at_path(&alias_record, &["lineage"])
         .cloned()
@@ -587,60 +695,35 @@ pub fn build_framework_alias_envelope(
     let interaction_invariants = alias_value_at_path(&alias_record, &["interaction_invariants"])
         .cloned()
         .unwrap_or(Value::Null);
-    let routing_hints = match alias_name {
-        "autopilot" => json!({
-            "reroute_when_ambiguous": alias_record_text(&alias_record, &["reroute_when_ambiguous"]),
-            "reroute_when_root_cause_unknown": alias_record_text(&alias_record, &["reroute_when_root_cause_unknown"]),
-        }),
-        "deepinterview" => json!({
-            "review_lanes": alias_record_list(&alias_record, &["review_lanes"]),
-        }),
-        "team" => json!({
-            "delegation_gate": alias_record_text(&alias_record, &["delegation_gate"]),
-            "execution_owners": alias_record_list(&alias_record, &["execution_owners"]),
-            "auto_route_allowed": alias_record_bool(&alias_record, &["auto_route_allowed"]).unwrap_or(false),
-            "route_mode": alias_record_text(&alias_record, &["route_mode"]),
-            "selection_signals": alias_value_at_path(&alias_record, &["selection_signals"])
-                .cloned()
-                .unwrap_or(Value::Null),
-            "transition_states": alias_record_list(&alias_record, &["official_workflow", "transition_states"]),
-            "worker_lifecycle": alias_record_list(&alias_record, &["worker_lifecycle", "states"]),
-        }),
-        _ => Value::Null,
-    };
+    let routing_hints = build_framework_alias_routing_hints(alias_name, &alias_record);
     let entry_contract = build_framework_alias_entry_contract(
         alias_name,
         &alias_record,
         &continuity,
         &contract,
         &skill_path,
-        max_lines,
-        compact,
+        options.max_lines,
+        options.compact,
     );
     let state_machine = build_framework_alias_state_machine(
         alias_name,
         &alias_record,
         &continuity,
         &skill_path,
-        max_lines,
-        compact,
+        options.max_lines,
+        options.compact,
     );
-    let alias_payload = if compact {
+    let continuity_summary =
+        build_framework_alias_continuity_summary(&continuity, options.max_lines);
+    let alias_payload = if options.compact {
         json!({
             "ok": true,
             "name": alias_name,
-            "host_entrypoint": if host_entrypoint.is_empty() { Value::Null } else { Value::String(host_entrypoint) },
-            "canonical_owner": if canonical_owner.is_empty() { Value::Null } else { Value::String(canonical_owner) },
+            "host_entrypoint": string_or_null(host_entrypoint),
+            "canonical_owner": string_or_null(canonical_owner),
             "routing_hints": routing_hints,
             "interaction_invariants": interaction_invariants,
-            "continuity": {
-                "state": continuity.get("state").cloned().unwrap_or(Value::Null),
-                "can_resume": continuity.get("can_resume").cloned().unwrap_or(Value::Bool(false)),
-                "task": continuity.get("task").cloned().unwrap_or(Value::Null),
-                "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
-                "status": continuity.get("status").cloned().unwrap_or(Value::Null),
-                "next_actions": compact_alias_next_actions(&continuity, max_lines),
-            },
+            "continuity": continuity_summary,
             "state_machine": state_machine,
             "entry_contract": entry_contract,
             "compact": true,
@@ -651,22 +734,15 @@ pub fn build_framework_alias_envelope(
             "ok": true,
             "name": alias_name,
             "workspace": workspace_name_from_root(repo_root),
-            "host_entrypoint": if host_entrypoint.is_empty() { Value::Null } else { Value::String(host_entrypoint) },
-            "canonical_owner": if canonical_owner.is_empty() { Value::Null } else { Value::String(canonical_owner) },
+            "host_entrypoint": string_or_null(host_entrypoint),
+            "canonical_owner": string_or_null(canonical_owner),
             "lineage": lineage,
             "official_workflow": official_workflow,
             "implementation_bar": implementation_bar,
             "local_adaptations": local_adaptations,
             "routing_hints": routing_hints,
             "interaction_invariants": interaction_invariants,
-            "continuity": {
-                "state": continuity.get("state").cloned().unwrap_or(Value::Null),
-                "can_resume": continuity.get("can_resume").cloned().unwrap_or(Value::Bool(false)),
-                "task": continuity.get("task").cloned().unwrap_or(Value::Null),
-                "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
-                "status": continuity.get("status").cloned().unwrap_or(Value::Null),
-                "next_actions": compact_alias_next_actions(&continuity, max_lines),
-            },
+            "continuity": continuity_summary,
             "state_machine": state_machine,
             "entry_contract": entry_contract,
             "optimization_hints": [
@@ -708,6 +784,41 @@ fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) ->
         }
     }
     String::new()
+}
+
+fn build_framework_alias_routing_hints(alias_name: &str, alias_record: &Value) -> Value {
+    match alias_name {
+        "autopilot" => json!({
+            "reroute_when_ambiguous": alias_record_text(alias_record, &["reroute_when_ambiguous"]),
+            "reroute_when_root_cause_unknown": alias_record_text(alias_record, &["reroute_when_root_cause_unknown"]),
+        }),
+        "deepinterview" => json!({
+            "review_lanes": alias_record_list(alias_record, &["review_lanes"]),
+        }),
+        "team" => json!({
+            "delegation_gate": alias_record_text(alias_record, &["delegation_gate"]),
+            "execution_owners": alias_record_list(alias_record, &["execution_owners"]),
+            "auto_route_allowed": alias_record_bool(alias_record, &["auto_route_allowed"]).unwrap_or(false),
+            "route_mode": alias_record_text(alias_record, &["route_mode"]),
+            "selection_signals": alias_value_at_path(alias_record, &["selection_signals"])
+                .cloned()
+                .unwrap_or(Value::Null),
+            "transition_states": alias_record_list(alias_record, &["official_workflow", "transition_states"]),
+            "worker_lifecycle": alias_record_list(alias_record, &["worker_lifecycle", "states"]),
+        }),
+        _ => Value::Null,
+    }
+}
+
+fn build_framework_alias_continuity_summary(continuity: &Value, max_lines: usize) -> Value {
+    json!({
+        "state": continuity.get("state").cloned().unwrap_or(Value::Null),
+        "can_resume": continuity.get("can_resume").cloned().unwrap_or(Value::Bool(false)),
+        "task": continuity.get("task").cloned().unwrap_or(Value::Null),
+        "phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
+        "status": continuity.get("status").cloned().unwrap_or(Value::Null),
+        "next_actions": compact_alias_next_actions(continuity, max_lines),
+    })
 }
 
 fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Value, String> {
@@ -1096,7 +1207,7 @@ fn compact_alias_next_actions(continuity: &Value, max_lines: usize) -> Vec<Strin
         })
         .unwrap_or_default()
         .into_iter()
-        .take(max_lines.max(1).min(3))
+        .take(max_lines.clamp(1, 3))
         .collect()
 }
 
@@ -1126,7 +1237,7 @@ fn build_framework_alias_entry_contract(
     let next_actions = compact_alias_next_actions(continuity, max_lines);
     let acceptance = value_string_list(contract.get("acceptance_criteria"))
         .into_iter()
-        .take(max_lines.max(1).min(2))
+        .take(max_lines.clamp(1, 2))
         .collect::<Vec<_>>();
     let implementation_bar = alias_record_list(alias_record, &["implementation_bar"]);
     let decision_contract = if compact {
@@ -1272,7 +1383,7 @@ fn build_framework_alias_entry_contract(
     let guardrails = compact_alias_guardrails(
         implementation_bar
             .into_iter()
-            .take(max_lines.max(1).min(3))
+            .take(max_lines.clamp(1, 3))
             .collect::<Vec<_>>(),
         compact,
     );
@@ -1321,7 +1432,7 @@ fn build_framework_alias_state_machine(
     let next_steps = compact_alias_next_actions(continuity, max_lines);
     let recovery_hints = value_string_list(continuity.get("recovery_hints"))
         .into_iter()
-        .take(max_lines.max(1).min(2))
+        .take(max_lines.clamp(1, 2))
         .collect::<Vec<_>>();
     let required_anchors = continuity
         .get("paths")
@@ -1523,7 +1634,7 @@ fn build_framework_alias_state_machine(
     };
     let mut resume = Map::new();
     resume.insert("allowed".to_string(), Value::Bool(can_resume));
-    resume.insert("mode".to_string(), Value::String(resume_mode.to_string()));
+    resume.insert("mode".to_string(), Value::String(resume_mode.clone()));
     if alias_name == "autopilot" {
         resume.insert(
             "missing_recovery_anchors".to_string(),
@@ -1536,10 +1647,7 @@ fn build_framework_alias_state_machine(
             ),
         );
     }
-    resume.insert(
-        "reason".to_string(),
-        Value::String(resume_reason.to_string()),
-    );
+    resume.insert("reason".to_string(), Value::String(resume_reason.clone()));
     if !compact {
         resume.insert(
             "task".to_string(),
@@ -1660,9 +1768,8 @@ fn load_framework_runtime_view(
     artifact_root_override: Option<&Path>,
     task_id_override: Option<&str>,
 ) -> FrameworkRuntimeView {
-    let artifact_base = artifact_root_override
-        .map(|path| path.to_path_buf())
-        .unwrap_or_else(|| repo_root.join("artifacts"));
+    let artifact_base =
+        artifact_root_override.map_or_else(|| repo_root.join("artifacts"), Path::to_path_buf);
     let mirror_root = artifact_base.join(CURRENT_ARTIFACT_DIR);
     let supervisor_state = normalize_supervisor_state(&read_json_if_exists(
         &repo_root.join(SUPERVISOR_STATE_FILENAME),
@@ -1673,19 +1780,19 @@ fn load_framework_runtime_view(
         normalized_task_registry(&read_json_if_exists(&mirror_root.join(TASK_REGISTRY_NAME)));
     let focus_task_id = {
         let direct = safe_slug(&value_text(focus_pointer.get("task_id")));
-        if direct.is_empty() {
-            None
-        } else {
+        if direct.is_empty().not() {
             Some(direct)
+        } else {
+            None
         }
     };
     let active_task_id = {
         let direct = safe_slug(task_id_override.unwrap_or(""));
-        if !direct.is_empty() {
+        if direct.is_empty().not() {
             Some(direct)
         } else {
             let direct = safe_slug(&value_text(supervisor_state.get("task_id")));
-            if !direct.is_empty() {
+            if direct.is_empty().not() {
                 Some(direct)
             } else if let Some(focus_task_id) = focus_task_id.clone() {
                 Some(focus_task_id)
@@ -1722,13 +1829,11 @@ fn load_framework_runtime_view(
     }
     let task_root = active_task_id
         .as_ref()
-        .map(|task_id| mirror_root.join(task_id))
-        .unwrap_or_else(|| mirror_root.clone());
+        .map_or_else(|| mirror_root.clone(), |task_id| mirror_root.join(task_id));
     let pointer_task_id = safe_slug(&value_text(pointer.get("task_id")));
     let mirror_matches_selected = active_task_id
         .as_ref()
-        .map(|task_id| task_id == &pointer_task_id)
-        .unwrap_or(false);
+        .is_some_and(|task_id| task_id == &pointer_task_id);
     let preferred_root = if task_root.exists() {
         task_root.clone()
     } else if active_task_id.is_none() || mirror_matches_selected {
@@ -1772,16 +1877,8 @@ fn load_framework_runtime_view(
 fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
     let summary = parse_session_summary(&snapshot.session_summary_text);
     let supervisor = &snapshot.supervisor_state;
-    let verification = supervisor
-        .get("verification")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let continuity = supervisor
-        .get("continuity")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
+    let verification = object_field(supervisor, "verification");
+    let continuity = object_field(supervisor, "continuity");
     let contract = supervisor_contract(supervisor);
     let trace_task = value_text(snapshot.trace_metadata.get("task"));
     let summary_task = value_text(summary.get("task"));
@@ -1867,12 +1964,12 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
         } else {
             String::new()
         },
-        if !object_has_any_signal(&snapshot.next_actions) {
+        if object_has_any_signal(&snapshot.next_actions).not() {
             "NEXT_ACTIONS".to_string()
         } else {
             String::new()
         },
-        if !object_has_any_signal(&snapshot.trace_metadata) {
+        if object_has_any_signal(&snapshot.trace_metadata).not() {
             "TRACE_METADATA".to_string()
         } else {
             String::new()
@@ -1883,29 +1980,13 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
             String::new()
         },
     ]);
-    let terminal_reasons = stable_line_items(vec![
-        terminal_reason("summary phase is terminal", &summary_phase, TERMINAL_PHASES),
-        terminal_reason(
-            "summary status is terminal",
-            &summary_status,
-            TERMINAL_VERIFICATION_STATUSES,
-        ),
-        terminal_reason(
-            "supervisor phase is terminal",
-            &supervisor_phase,
-            TERMINAL_PHASES,
-        ),
-        terminal_reason(
-            "verification status is terminal",
-            &verification_status,
-            TERMINAL_VERIFICATION_STATUSES,
-        ),
-        terminal_reason(
-            "continuity story_state is terminal",
-            &story_state,
-            TERMINAL_STORY_STATES,
-        ),
-    ]);
+    let terminal_reasons = terminal_continuity_reasons(
+        &summary_phase,
+        &summary_status,
+        &supervisor_phase,
+        &verification_status,
+        &story_state,
+    );
     let inconsistency_reasons = stable_line_items(vec![
         if !summary_task.is_empty()
             && !trace_task.is_empty()
@@ -1944,52 +2025,19 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
             String::new()
         },
     ]);
-    let now = Local::now().fixed_offset();
-    let stale_reasons = stable_line_items(vec![
-        if is_terminal(&story_state, STALE_STORY_STATES) {
-            format!("continuity story_state is stale: {story_state}")
-        } else {
-            String::new()
+    let stale_reasons = stale_continuity_reasons(
+        StaleContinuityInputs {
+            continuity: &continuity,
+            story_state: &story_state,
+            task: &task,
+            supervisor_phase: &supervisor_phase,
+            verification_status: &verification_status,
+            next_actions: &next_actions,
+            session_summary_missing: snapshot.session_summary_text.trim().is_empty(),
+            terminal_reasons_empty: terminal_reasons.is_empty(),
         },
-        if value_bool_or_none(continuity.get("resume_allowed")) == Some(false)
-            && terminal_reasons.is_empty()
-        {
-            "continuity explicitly disallows resume".to_string()
-        } else {
-            String::new()
-        },
-        match parse_iso_timestamp(continuity.get("active_lease_expires_at")) {
-            Some(expires_at) if expires_at < now => {
-                format!(
-                    "active lease expired at {}",
-                    value_text(continuity.get("active_lease_expires_at"))
-                )
-            }
-            _ => String::new(),
-        },
-        if snapshot.session_summary_text.trim().is_empty()
-            && terminal_reasons.is_empty()
-            && (!task.is_empty()
-                || !supervisor_phase.is_empty()
-                || !verification_status.is_empty()
-                || !next_actions.is_empty())
-        {
-            "session summary mirror is missing while supervisor still looks active".to_string()
-        } else {
-            String::new()
-        },
-        if !value_text(continuity.get("state_reason")).is_empty()
-            && (is_terminal(&story_state, STALE_STORY_STATES)
-                || value_bool_or_none(continuity.get("resume_allowed")) == Some(false))
-        {
-            format!(
-                "state reason: {}",
-                value_text(continuity.get("state_reason"))
-            )
-        } else {
-            String::new()
-        },
-    ]);
+        Local::now().fixed_offset(),
+    );
     let current_execution = json!({
         "task": task,
         "phase": phase,
@@ -2091,6 +2139,104 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
     })
 }
 
+#[derive(Debug, Clone, Copy)]
+struct StaleContinuityInputs<'a> {
+    continuity: &'a Map<String, Value>,
+    story_state: &'a str,
+    task: &'a str,
+    supervisor_phase: &'a str,
+    verification_status: &'a str,
+    next_actions: &'a [String],
+    session_summary_missing: bool,
+    terminal_reasons_empty: bool,
+}
+
+fn object_field(map: &Map<String, Value>, key: &str) -> Map<String, Value> {
+    map.get(key)
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn terminal_continuity_reasons(
+    summary_phase: &str,
+    summary_status: &str,
+    supervisor_phase: &str,
+    verification_status: &str,
+    story_state: &str,
+) -> Vec<String> {
+    stable_line_items(vec![
+        terminal_reason("summary phase is terminal", summary_phase, TERMINAL_PHASES),
+        terminal_reason(
+            "summary status is terminal",
+            summary_status,
+            TERMINAL_VERIFICATION_STATUSES,
+        ),
+        terminal_reason(
+            "supervisor phase is terminal",
+            supervisor_phase,
+            TERMINAL_PHASES,
+        ),
+        terminal_reason(
+            "verification status is terminal",
+            verification_status,
+            TERMINAL_VERIFICATION_STATUSES,
+        ),
+        terminal_reason(
+            "continuity story_state is terminal",
+            story_state,
+            TERMINAL_STORY_STATES,
+        ),
+    ])
+}
+
+fn stale_continuity_reasons(
+    input: StaleContinuityInputs<'_>,
+    now: DateTime<FixedOffset>,
+) -> Vec<String> {
+    let resume_allowed = value_bool_or_none(input.continuity.get("resume_allowed"));
+    let state_reason = value_text(input.continuity.get("state_reason"));
+    stable_line_items(vec![
+        if is_terminal(input.story_state, STALE_STORY_STATES) {
+            format!("continuity story_state is stale: {}", input.story_state)
+        } else {
+            String::new()
+        },
+        if resume_allowed == Some(false) && input.terminal_reasons_empty {
+            "continuity explicitly disallows resume".to_string()
+        } else {
+            String::new()
+        },
+        match parse_iso_timestamp(input.continuity.get("active_lease_expires_at")) {
+            Some(expires_at) if expires_at < now => {
+                format!(
+                    "active lease expired at {}",
+                    value_text(input.continuity.get("active_lease_expires_at"))
+                )
+            }
+            _ => String::new(),
+        },
+        if input.session_summary_missing
+            && input.terminal_reasons_empty
+            && (!input.task.is_empty()
+                || !input.supervisor_phase.is_empty()
+                || !input.verification_status.is_empty()
+                || !input.next_actions.is_empty())
+        {
+            "session summary mirror is missing while supervisor still looks active".to_string()
+        } else {
+            String::new()
+        },
+        if !state_reason.is_empty()
+            && (is_terminal(input.story_state, STALE_STORY_STATES) || resume_allowed == Some(false))
+        {
+            format!("state reason: {state_reason}")
+        } else {
+            String::new()
+        },
+    ])
+}
+
 fn workspace_name_from_root(repo_root: &Path) -> String {
     repo_root
         .file_name()
@@ -2152,9 +2298,9 @@ fn render_framework_recap_projection(
         "目标明确时直接执行可验证的小步，不先写长计划。".to_string(),
     ];
     let reminders = stable_line_items(vec![
-        preference_lines.get(0).cloned().unwrap_or_default(),
-        stable_patterns.get(0).cloned().unwrap_or_default(),
-        stable_decisions.get(0).cloned().unwrap_or_default(),
+        preference_lines.first().cloned().unwrap_or_default(),
+        stable_patterns.first().cloned().unwrap_or_default(),
+        stable_decisions.first().cloned().unwrap_or_default(),
     ])
     .into_iter()
     .take(max_lines)
@@ -2165,7 +2311,7 @@ fn render_framework_recap_projection(
         "memory: `./.codex/memory/`".to_string(),
     ];
     let (state_title, state_items) = render_current_state_section(continuity);
-    let sections = vec![
+    let sections = [
         markdown_block("Startup Rules", &startup_rules),
         markdown_block(&state_title, &state_items),
         markdown_block("Stable Reminders", &reminders),
@@ -2341,7 +2487,7 @@ fn render_framework_refresh_prompt(
                 .take(capped_max_lines)
                 .map(|item| format!("- {item}")),
         );
-        lines.push("".to_string());
+        lines.push(String::new());
         lines.push("先看这些恢复锚点：".to_string());
         lines.extend(
             anchors
@@ -2359,7 +2505,7 @@ fn render_framework_refresh_prompt(
             .take(capped_max_lines)
             .map(|anchor| format!("- {anchor}")),
     );
-    lines.push("".to_string());
+    lines.push(String::new());
     lines.push(format!(
         "任务：{}",
         if task.is_empty() { "未记录" } else { &task }
@@ -2392,7 +2538,7 @@ fn render_framework_refresh_prompt(
         lines.push(format!("路由：{}", join_lines(&route)));
     }
     if !remaining_tasks.is_empty() {
-        lines.push("".to_string());
+        lines.push(String::new());
         lines.push("剩余：".to_string());
         lines.extend(
             remaining_tasks
@@ -2402,7 +2548,7 @@ fn render_framework_refresh_prompt(
         );
     }
     if !next_steps.is_empty() {
-        lines.push("".to_string());
+        lines.push(String::new());
         lines.push("先做：".to_string());
         lines.extend(
             next_steps
@@ -2412,7 +2558,7 @@ fn render_framework_refresh_prompt(
         );
     }
     if !blockers.is_empty() {
-        lines.push("".to_string());
+        lines.push(String::new());
         lines.push("阻塞：".to_string());
         lines.extend(
             blockers
@@ -2421,7 +2567,7 @@ fn render_framework_refresh_prompt(
                 .map(|item| format!("- {item}")),
         );
     }
-    lines.push("".to_string());
+    lines.push(String::new());
     lines.push("按既定串并行分工直接开始执行。".to_string());
     lines.join("\n") + "\n"
 }
@@ -2461,7 +2607,6 @@ fn render_current_state_section(continuity: &Value) -> (String, Vec<String>) {
     let reasons_key = match state.as_str() {
         "stale" => "stale_reasons",
         "inconsistent" => "inconsistency_reasons",
-        "missing" => "recovery_hints",
         _ => "recovery_hints",
     };
     let reasons = continuity
@@ -2537,9 +2682,9 @@ fn render_framework_memory_context(
     max_items: usize,
     mode: &str,
 ) -> Result<Value, String> {
-    fs::create_dir_all(&memory_root)
+    fs::create_dir_all(memory_root)
         .map_err(|err| format!("create framework memory root failed: {err}"))?;
-    refresh_memory_state_if_needed(snapshot, &memory_root)?;
+    refresh_memory_state_if_needed(snapshot, memory_root)?;
     let stable_documents = read_stable_memory_documents_from_root(memory_root);
     let mut sections = collect_stable_memory_sections(&stable_documents, query, max_items);
     let mut freshness = json!({
@@ -2550,7 +2695,7 @@ fn render_framework_memory_context(
     let mut active_task_included = false;
     if matches!(mode, "active" | "history" | "debug") {
         let (active_section, active_freshness) =
-            build_active_task_memory_section(snapshot, &memory_root, query);
+            build_active_task_memory_section(snapshot, memory_root, query);
         freshness = active_freshness;
         if let Some(section) = active_section {
             active_task_included = true;
@@ -2558,11 +2703,11 @@ fn render_framework_memory_context(
         }
     }
     if matches!(mode, "history" | "debug") {
-        sections.extend(collect_archive_sections(&memory_root, query, max_items));
+        sections.extend(collect_archive_sections(memory_root, query, max_items));
     }
     if mode == "debug" {
         let workspace_name = workspace_name_from_root(repo_root);
-        if let Some(sqlite_path) = resolve_memory_sqlite_path(&memory_root) {
+        if let Some(sqlite_path) = resolve_memory_sqlite_path(memory_root) {
             sections.extend(collect_sqlite_sections(
                 &workspace_name,
                 &sqlite_path,
@@ -2596,7 +2741,7 @@ fn render_framework_memory_context(
         "topic": query,
         "mode": mode,
         "memory_root": memory_root.display().to_string(),
-        "sqlite_path": resolve_memory_sqlite_path(&memory_root).map(|path| path.display().to_string()).unwrap_or_default(),
+        "sqlite_path": resolve_memory_sqlite_path(memory_root).map(|path| path.display().to_string()).unwrap_or_default(),
         "items": items,
         "context": blocks.join("\n\n").trim().to_string(),
         "active_task_included": active_task_included,
@@ -2766,10 +2911,10 @@ fn collect_archive_sections(
     files.sort();
     let mut sections = Vec::new();
     for path in files {
-        let rel_path = path
-            .strip_prefix(memory_root)
-            .map(|value| value.display().to_string())
-            .unwrap_or_else(|_| path.display().to_string());
+        let rel_path = path.strip_prefix(memory_root).map_or_else(
+            |_| path.display().to_string(),
+            |value| value.display().to_string(),
+        );
         let text = if path.extension().and_then(|value| value.to_str()) == Some("json") {
             let value = read_json_if_exists(&path);
             serde_json::to_string_pretty(&value).unwrap_or_default()
@@ -2964,7 +3109,7 @@ fn list_sqlite_memory_items(
             let score = query_tokens(query)
                 .into_iter()
                 .filter(|token| searchable.contains(token))
-                .count() as f64;
+                .count();
             Some((score, row))
         })
         .collect::<Vec<_>>();
@@ -2990,22 +3135,24 @@ fn list_sqlite_rows(
     let Ok(mut stmt) = conn.prepare(sql) else {
         return Vec::new();
     };
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
     let column_names = stmt
         .column_names()
         .into_iter()
-        .map(|value| value.to_string())
+        .map(ToString::to_string)
         .collect::<Vec<_>>();
-    let Ok(rows) = stmt.query_map(params![workspace, limit as i64], |row| {
+    let Ok(rows) = stmt.query_map(params![workspace, limit], |row| {
         let mut payload = std::collections::BTreeMap::new();
         for (index, column_name) in column_names.iter().enumerate() {
             let value = match row.get_ref(index) {
-                Ok(rusqlite::types::ValueRef::Null) => String::new(),
                 Ok(rusqlite::types::ValueRef::Integer(value)) => value.to_string(),
                 Ok(rusqlite::types::ValueRef::Real(value)) => value.to_string(),
                 Ok(rusqlite::types::ValueRef::Text(value)) => {
                     String::from_utf8_lossy(value).to_string()
                 }
-                Ok(rusqlite::types::ValueRef::Blob(_)) => String::new(),
+                Ok(rusqlite::types::ValueRef::Null | rusqlite::types::ValueRef::Blob(_)) => {
+                    String::new()
+                }
                 Err(_) => String::new(),
             };
             payload.insert(column_name.clone(), value);
@@ -3132,9 +3279,10 @@ fn build_memory_source_hash(snapshot: &FrameworkRuntimeView) -> String {
 }
 
 fn resolve_framework_memory_root(repo_root: &Path, memory_root_override: Option<&Path>) -> PathBuf {
-    memory_root_override
-        .map(|path| path.to_path_buf())
-        .unwrap_or_else(|| repo_root.join(".codex").join("memory"))
+    memory_root_override.map_or_else(
+        || repo_root.join(".codex").join("memory"),
+        Path::to_path_buf,
+    )
 }
 
 fn current_local_date() -> String {
@@ -3500,7 +3648,7 @@ fn memory_policy_conversation_sources(payload: &Value) -> Vec<MemoryPolicyTextSo
 
 fn memory_message_content_text(value: Option<&Value>) -> String {
     match value {
-        Some(Value::String(text)) => text.to_string(),
+        Some(Value::String(text)) => text.clone(),
         Some(Value::Array(parts)) => parts
             .iter()
             .filter_map(|part| {
@@ -3720,8 +3868,7 @@ fn append_memory_policy_journal(
         .iter()
         .filter(|line| {
             line.split_once(']')
-                .map(|(_, fact)| !existing_keys.contains(&fact.trim().to_lowercase()))
-                .unwrap_or(true)
+                .is_none_or(|(_, fact)| !existing_keys.contains(&fact.trim().to_lowercase()))
         })
         .cloned()
         .collect::<Vec<_>>();
@@ -3732,7 +3879,9 @@ fn append_memory_policy_journal(
     if !output.contains("## Rust memory policy facts") {
         output.push_str("\n\n## Rust memory policy facts\n");
     }
-    output.push_str(&format!("\n### {timestamp}\n"));
+    output.push_str("\n### ");
+    output.push_str(timestamp);
+    output.push('\n');
     output.push_str(&new_lines.join("\n"));
     output.push('\n');
     write_text_if_changed(path, &output)?;
@@ -3787,20 +3936,20 @@ fn compress_prompt_with_rust_policy(prompt: &str, token_budget: usize) -> Value 
         return compression_payload(
             input_token_estimate,
             estimate_token_count(&output),
-            output,
+            &output,
             "zero_budget",
             true,
-            vec!["all".to_string()],
+            &["all".to_string()],
         );
     }
     if input_token_estimate <= token_budget {
         return compression_payload(
             input_token_estimate,
             input_token_estimate,
-            prompt.to_string(),
+            prompt,
             "unchanged",
             false,
-            Vec::new(),
+            &[],
         );
     }
 
@@ -3846,10 +3995,10 @@ fn compress_prompt_with_rust_policy(prompt: &str, token_budget: usize) -> Value 
     compression_payload(
         input_token_estimate,
         estimate_token_count(&bounded_output),
-        bounded_output,
+        &bounded_output,
         &strategy,
         true,
-        omitted_sections,
+        &omitted_sections,
     )
 }
 
@@ -3873,10 +4022,10 @@ fn enforce_prompt_budget(output: String, token_budget: usize) -> String {
 fn compression_payload(
     input_token_estimate: usize,
     output_token_estimate: usize,
-    output: String,
+    output: &str,
     strategy: &str,
     truncated: bool,
-    omitted_sections: Vec<String>,
+    omitted_sections: &[String],
 ) -> Value {
     json!({
         "schema_version": FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
@@ -3903,7 +4052,7 @@ fn resolve_memory_sqlite_path(memory_root: &Path) -> Option<PathBuf> {
 fn build_framework_task_id(label: &str) -> String {
     let stamp = current_local_timestamp()
         .chars()
-        .filter(|value| value.is_ascii_alphanumeric())
+        .filter(char::is_ascii_alphanumeric)
         .collect::<String>();
     let slug = safe_slug(label);
     if stamp.is_empty() {
@@ -3988,20 +4137,28 @@ fn memory_segment_score(headings: &[String], body: &str, query: &str) -> f64 {
     if !topic_strong_match(query, &searchable) {
         return 0.0;
     }
-    let token_hits = tokens
-        .iter()
-        .filter(|token| searchable.contains(*token))
-        .count() as f64;
-    let exact_phrase = searchable.contains(&normalize_match_text(query)) as i32 as f64;
+    let token_hits = usize_to_f64(
+        tokens
+            .iter()
+            .filter(|token| searchable.contains(*token))
+            .count(),
+    );
+    let exact_phrase = f64::from(searchable.contains(&normalize_match_text(query)));
     let heading_blob = normalize_match_text(&headings.join(" "));
-    let heading_hits = tokens
-        .iter()
-        .filter(|token| heading_blob.contains(*token))
-        .count() as f64;
+    let heading_hits = usize_to_f64(
+        tokens
+            .iter()
+            .filter(|token| heading_blob.contains(*token))
+            .count(),
+    );
     (exact_phrase * 100.0)
-        + (token_hits / tokens.len() as f64) * 10.0
+        + (token_hits / usize_to_f64(tokens.len())) * 10.0
         + heading_hits * 2.0
         + token_hits
+}
+
+fn usize_to_f64(value: usize) -> f64 {
+    u32::try_from(value).map_or(f64::from(u32::MAX), f64::from)
 }
 
 fn query_tokens(query: &str) -> Vec<String> {
@@ -4115,7 +4272,7 @@ fn extract_markdown_section(text: &str, headings: &[&str]) -> String {
             if capture {
                 break;
             }
-            if headings.iter().any(|heading| title == *heading) {
+            if headings.contains(&title) {
                 capture = true;
                 continue;
             }
@@ -4206,14 +4363,14 @@ fn render_session_summary(task: &str, phase: &str, status: &str, summary: &str) 
     .join("\n")
 }
 
-fn build_next_actions_payload(actions: Vec<String>) -> Value {
+fn build_next_actions_payload(actions: &[String]) -> Value {
     json!({
         "schema_version": NEXT_ACTIONS_SCHEMA_VERSION,
         "next_actions": actions,
     })
 }
 
-fn build_evidence_index_payload(entries: Vec<Value>) -> Value {
+fn build_evidence_index_payload(entries: &[Value]) -> Value {
     json!({
         "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
         "artifacts": entries,
@@ -4254,22 +4411,9 @@ fn build_trace_metadata_payload(
     Value::Object(payload)
 }
 
-fn build_session_supervisor_state_payload(
-    task_id: &str,
-    task: &str,
-    phase: &str,
-    status: &str,
-    summary: &str,
-    next_actions_payload: &Value,
-    evidence_payload: &Value,
-    trace_metadata_payload: &Value,
-    artifact_dir: &Path,
-    supervisor_state: Option<&Value>,
-    execution_contract: Option<&Value>,
-    blockers: Option<&Value>,
-    continuity: Option<&Value>,
-) -> Value {
-    let mut payload = supervisor_state
+fn build_session_supervisor_state_payload(input: SupervisorStateInput<'_>) -> Value {
+    let mut payload = input
+        .supervisor_state
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
@@ -4277,78 +4421,85 @@ fn build_session_supervisor_state_payload(
         "schema_version".to_string(),
         Value::String(SUPERVISOR_STATE_SCHEMA_VERSION.to_string()),
     );
-    payload.insert("task_id".to_string(), Value::String(task_id.to_string()));
-    payload.insert("task_summary".to_string(), Value::String(task.to_string()));
-    payload.insert("active_phase".to_string(), Value::String(phase.to_string()));
+    payload.insert(
+        "task_id".to_string(),
+        Value::String(input.task_id.to_string()),
+    );
+    payload.insert(
+        "task_summary".to_string(),
+        Value::String(input.task.to_string()),
+    );
+    payload.insert(
+        "active_phase".to_string(),
+        Value::String(input.phase.to_string()),
+    );
     payload.insert(
         "updated_at".to_string(),
         Value::String(current_local_timestamp()),
     );
-    if !summary.is_empty() {
+    if !input.summary.is_empty() {
         payload.insert(
             "last_summary".to_string(),
-            Value::String(summary.to_string()),
+            Value::String(input.summary.to_string()),
         );
     }
     payload.insert(
         "verification".to_string(),
-        normalized_verification(payload.get("verification"), status),
+        normalized_verification(payload.get("verification"), input.status),
     );
     payload.insert(
         "continuity".to_string(),
-        normalized_continuity(continuity.or_else(|| payload.get("continuity")), status),
+        normalized_continuity(
+            input.continuity.or_else(|| payload.get("continuity")),
+            input.status,
+        ),
     );
     payload.insert(
         "next_actions".to_string(),
-        next_actions_payload
+        input
+            .next_actions_payload
             .get("next_actions")
             .cloned()
             .unwrap_or_else(|| Value::Array(Vec::new())),
     );
     payload.insert(
         "evidence_count".to_string(),
-        Value::from(normalize_evidence_index(evidence_payload).len()),
+        Value::from(normalize_evidence_index(input.evidence_payload).len()),
     );
-    if let Some(contract) = execution_contract.or_else(|| payload.get("execution_contract")) {
+    if let Some(contract) = input
+        .execution_contract
+        .or_else(|| payload.get("execution_contract"))
+    {
         payload.insert("execution_contract".to_string(), contract.clone());
     }
     payload.insert(
         "blockers".to_string(),
-        normalized_blockers(blockers.or_else(|| payload.get("blockers"))),
+        normalized_blockers(input.blockers.or_else(|| payload.get("blockers"))),
     );
-    payload.insert("trace_metadata".to_string(), trace_metadata_payload.clone());
+    payload.insert(
+        "trace_metadata".to_string(),
+        input.trace_metadata_payload.clone(),
+    );
     payload.insert(
         "artifact_refs".to_string(),
         json!({
-            "task_root": artifact_dir.display().to_string(),
-            "session_summary": artifact_dir.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-            "next_actions": artifact_dir.join(NEXT_ACTIONS_FILENAME).display().to_string(),
-            "evidence_index": artifact_dir.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
-            "trace_metadata": artifact_dir.join(TRACE_METADATA_FILENAME).display().to_string(),
-            "continuity_journal": artifact_dir.join(CONTINUITY_JOURNAL_FILENAME).display().to_string(),
+            "task_root": input.artifact_dir.display().to_string(),
+            "session_summary": input.artifact_dir.join(SESSION_SUMMARY_FILENAME).display().to_string(),
+            "next_actions": input.artifact_dir.join(NEXT_ACTIONS_FILENAME).display().to_string(),
+            "evidence_index": input.artifact_dir.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
+            "trace_metadata": input.artifact_dir.join(TRACE_METADATA_FILENAME).display().to_string(),
+            "continuity_journal": input.artifact_dir.join(CONTINUITY_JOURNAL_FILENAME).display().to_string(),
         }),
     );
     Value::Object(payload)
 }
 
-fn build_continuity_journal_payload(
-    task_id: &str,
-    task: &str,
-    phase: &str,
-    status: &str,
-    artifact_dir: &Path,
-    summary_text: &str,
-    next_actions_payload: &Value,
-    evidence_payload: &Value,
-    trace_metadata_payload: &Value,
-    supervisor_state_payload: &Value,
-    existing_journal: Value,
-) -> Value {
-    let summary_sha = sha256_hex(summary_text.as_bytes());
-    let next_actions_sha = sha256_json(next_actions_payload);
-    let evidence_sha = sha256_json(evidence_payload);
-    let trace_sha = sha256_json(trace_metadata_payload);
-    let supervisor_sha = sha256_json(supervisor_state_payload);
+fn build_continuity_journal_payload(input: ContinuityJournalInput<'_>) -> Value {
+    let summary_sha = sha256_hex(input.summary_text.as_bytes());
+    let next_actions_sha = sha256_json(input.next_actions_payload);
+    let evidence_sha = sha256_json(input.evidence_payload);
+    let trace_sha = sha256_json(input.trace_metadata_payload);
+    let supervisor_sha = sha256_json(input.supervisor_state_payload);
     let checkpoint_hash = sha256_hex(
         [
             summary_sha.as_str(),
@@ -4362,10 +4513,10 @@ fn build_continuity_journal_payload(
     );
     let checkpoint = json!({
         "checkpoint_id": checkpoint_hash,
-        "task_id": task_id,
-        "task": task,
-        "phase": phase,
-        "status": status,
+        "task_id": input.task_id,
+        "task": input.task,
+        "phase": input.phase,
+        "status": input.status,
         "created_at": current_local_timestamp(),
         "artifact_hashes": {
             "session_summary": summary_sha,
@@ -4375,14 +4526,15 @@ fn build_continuity_journal_payload(
             "supervisor_state": supervisor_sha,
         },
         "artifact_refs": {
-            "task_root": artifact_dir.display().to_string(),
-            "session_summary": artifact_dir.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-            "next_actions": artifact_dir.join(NEXT_ACTIONS_FILENAME).display().to_string(),
-            "evidence_index": artifact_dir.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
-            "trace_metadata": artifact_dir.join(TRACE_METADATA_FILENAME).display().to_string(),
+            "task_root": input.artifact_dir.display().to_string(),
+            "session_summary": input.artifact_dir.join(SESSION_SUMMARY_FILENAME).display().to_string(),
+            "next_actions": input.artifact_dir.join(NEXT_ACTIONS_FILENAME).display().to_string(),
+            "evidence_index": input.artifact_dir.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
+            "trace_metadata": input.artifact_dir.join(TRACE_METADATA_FILENAME).display().to_string(),
         }
     });
-    let mut checkpoints = existing_journal
+    let mut checkpoints = input
+        .existing_journal
         .get("checkpoints")
         .and_then(Value::as_array)
         .cloned()
@@ -4396,8 +4548,8 @@ fn build_continuity_journal_payload(
     }
     json!({
         "schema_version": CONTINUITY_JOURNAL_SCHEMA_VERSION,
-        "task_id": task_id,
-        "task": task,
+        "task_id": input.task_id,
+        "task": input.task,
         "latest_checkpoint_id": checkpoint_hash,
         "checkpoint_count": checkpoints.len(),
         "checkpoints": checkpoints,
@@ -4509,7 +4661,7 @@ fn build_task_id(task: &str, created_at: Option<&str>) -> String {
     let stamp = created_at
         .unwrap_or(&current_local_timestamp())
         .chars()
-        .filter(|value| value.is_ascii_alphanumeric())
+        .filter(char::is_ascii_alphanumeric)
         .collect::<String>();
     let slug = safe_slug(task);
     if stamp.is_empty() {
@@ -4724,82 +4876,67 @@ fn write_focus_task_pointer(
 
 fn write_task_registry_entry(
     mirror_root: &Path,
-    task_id: &str,
-    task: &str,
-    phase: &str,
-    status: &str,
-    resume_allowed: Option<bool>,
-    updated_at: &str,
-    focus_task_id: Option<&str>,
+    entry: TaskRegistryEntry<'_>,
 ) -> Result<bool, String> {
     let existing = read_json_if_exists(&mirror_root.join(TASK_REGISTRY_NAME));
-    let focus_task = focus_task_id
-        .map(ToString::to_string)
-        .unwrap_or_else(|| safe_slug(&value_text(existing.get("focus_task_id"))));
+    let focus_task = entry.focus_task_id.map_or_else(
+        || safe_slug(&value_text(existing.get("focus_task_id"))),
+        ToString::to_string,
+    );
     let mut rows = registry_rows_from_payload(&existing);
     let mut replaced = false;
-    for row in rows.iter_mut() {
+    for row in &mut rows {
         let Some(map) = row.as_object_mut() else {
             continue;
         };
-        if safe_slug(&value_text(map.get("task_id"))) != task_id {
+        if safe_slug(&value_text(map.get("task_id"))) != entry.task_id {
             continue;
         }
-        map.insert("task_id".to_string(), Value::String(task_id.to_string()));
-        map.insert("task".to_string(), Value::String(task.to_string()));
+        map.insert(
+            "task_id".to_string(),
+            Value::String(entry.task_id.to_string()),
+        );
+        map.insert("task".to_string(), Value::String(entry.task.to_string()));
         map.insert(
             "updated_at".to_string(),
-            Value::String(updated_at.to_string()),
+            Value::String(entry.updated_at.to_string()),
         );
-        map.insert("status".to_string(), Value::String(status.to_string()));
-        map.insert("phase".to_string(), Value::String(phase.to_string()));
+        map.insert(
+            "status".to_string(),
+            Value::String(entry.status.to_string()),
+        );
+        map.insert("phase".to_string(), Value::String(entry.phase.to_string()));
         map.insert(
             "resume_allowed".to_string(),
-            resume_allowed.map(Value::Bool).unwrap_or(Value::Null),
+            entry.resume_allowed.map_or(Value::Null, Value::Bool),
         );
         replaced = true;
         break;
     }
     if !replaced {
         rows.push(json!({
-            "task_id": task_id,
-            "task": task,
-            "updated_at": updated_at,
-            "status": status,
-            "phase": phase,
-            "resume_allowed": resume_allowed,
+            "task_id": entry.task_id,
+            "task": entry.task,
+            "updated_at": entry.updated_at,
+            "status": entry.status,
+            "phase": entry.phase,
+            "resume_allowed": entry.resume_allowed,
         }));
     }
     let compacted = normalize_task_registry_rows(focus_task, rows).0;
     write_json_if_changed(&mirror_root.join(TASK_REGISTRY_NAME), &compacted)
 }
 
-pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
-    let output_dir = value_text(payload.get("output_dir"));
-    if output_dir.is_empty() {
-        return Err("framework session artifact writer requires output_dir".to_string());
+fn defaulted_payload_text(payload: &Value, key: &str, fallback: &str) -> String {
+    let value = value_text(payload.get(key));
+    if value.is_empty() {
+        fallback.to_string()
+    } else {
+        value
     }
-    let task = value_text(payload.get("task"));
-    if task.is_empty() {
-        return Err("framework session artifact writer requires task".to_string());
-    }
-    let phase = {
-        let value = value_text(payload.get("phase"));
-        if value.is_empty() {
-            "implementation".to_string()
-        } else {
-            value
-        }
-    };
-    let status = {
-        let value = value_text(payload.get("status"));
-        if value.is_empty() {
-            "in_progress".to_string()
-        } else {
-            value
-        }
-    };
-    let summary = value_text(payload.get("summary"));
+}
+
+fn session_artifact_payloads(payload: &Value) -> (Vec<String>, Vec<Value>) {
     let next_actions = payload
         .get("next_actions")
         .and_then(Value::as_array)
@@ -4815,16 +4952,40 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
         .cloned()
         .unwrap_or_default()
         .into_iter()
-        .filter(|item| item.is_object())
+        .filter(Value::is_object)
         .collect::<Vec<_>>();
-    let task_id = {
-        let direct = safe_slug(&value_text(payload.get("task_id")));
-        if direct.is_empty() {
-            build_task_id(&task, None)
-        } else {
-            direct
-        }
-    };
+    (next_actions, evidence)
+}
+
+fn required_payload_text(payload: &Value, key: &str, context: &str) -> Result<String, String> {
+    let value = value_text(payload.get(key));
+    if value.is_empty() {
+        Err(format!("{context} requires {key}"))
+    } else {
+        Ok(value)
+    }
+}
+
+fn resolve_session_task_id(payload: &Value, task: &str) -> String {
+    let direct = safe_slug(&value_text(payload.get("task_id")));
+    if direct.is_empty() {
+        build_task_id(task, None)
+    } else {
+        direct
+    }
+}
+
+fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactWritePlan, String> {
+    let output_dir = value_text(payload.get("output_dir"));
+    if output_dir.is_empty() {
+        return Err("framework session artifact writer requires output_dir".to_string());
+    }
+    let task = required_payload_text(payload, "task", "framework session artifact writer")?;
+    let phase = defaulted_payload_text(payload, "phase", "implementation");
+    let status = defaulted_payload_text(payload, "status", "in_progress");
+    let summary = value_text(payload.get("summary"));
+    let (next_actions, evidence) = session_artifact_payloads(payload);
+    let task_id = resolve_session_task_id(payload, &task);
     let focus = value_bool_or_none(payload.get("focus")).unwrap_or(false);
     let repo_root = value_text(payload.get("repo_root"));
     let mirror_output_dir = value_text(payload.get("mirror_output_dir"));
@@ -4840,8 +5001,8 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
     let trace_metadata_path = primary_dir.join(TRACE_METADATA_FILENAME);
     let journal_path = primary_dir.join(CONTINUITY_JOURNAL_FILENAME);
     let summary_text = render_session_summary(&task, &phase, &status, &summary);
-    let next_actions_payload = build_next_actions_payload(next_actions);
-    let evidence_payload = build_evidence_index_payload(evidence);
+    let next_actions_payload = build_next_actions_payload(&next_actions);
+    let evidence_payload = build_evidence_index_payload(&evidence);
     let trace_metadata_payload = build_trace_metadata_payload(
         &task,
         &phase,
@@ -4849,185 +5010,282 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
         payload.get("trace_metadata"),
         payload.get("matched_skills"),
     );
-    let supervisor_state_payload = build_session_supervisor_state_payload(
-        &task_id,
-        &task,
-        &phase,
-        &status,
-        summary.trim(),
-        &next_actions_payload,
-        &evidence_payload,
-        &trace_metadata_payload,
-        &primary_dir,
-        payload.get("supervisor_state"),
-        payload.get("execution_contract"),
-        payload.get("blockers"),
-        payload.get("continuity"),
-    );
-    let journal_payload = build_continuity_journal_payload(
-        &task_id,
-        &task,
-        &phase,
-        &status,
-        &primary_dir,
-        &summary_text,
-        &next_actions_payload,
-        &evidence_payload,
-        &trace_metadata_payload,
-        &supervisor_state_payload,
-        read_json_if_exists(&journal_path),
-    );
+    let supervisor_state_payload = build_session_supervisor_state_payload(SupervisorStateInput {
+        task_id: &task_id,
+        task: &task,
+        phase: &phase,
+        status: &status,
+        summary: summary.trim(),
+        next_actions_payload: &next_actions_payload,
+        evidence_payload: &evidence_payload,
+        trace_metadata_payload: &trace_metadata_payload,
+        artifact_dir: &primary_dir,
+        supervisor_state: payload.get("supervisor_state"),
+        execution_contract: payload.get("execution_contract"),
+        blockers: payload.get("blockers"),
+        continuity: payload.get("continuity"),
+    });
+    let journal_payload = build_continuity_journal_payload(ContinuityJournalInput {
+        task_id: &task_id,
+        task: &task,
+        phase: &phase,
+        status: &status,
+        artifact_dir: &primary_dir,
+        summary_text: &summary_text,
+        next_actions_payload: &next_actions_payload,
+        evidence_payload: &evidence_payload,
+        trace_metadata_payload: &trace_metadata_payload,
+        supervisor_state_payload: &supervisor_state_payload,
+        existing_journal: read_json_if_exists(&journal_path),
+    });
+    Ok(SessionArtifactWritePlan {
+        task,
+        phase,
+        status,
+        summary,
+        task_id,
+        focus,
+        repo_root: (!repo_root.is_empty()).then(|| PathBuf::from(repo_root)),
+        mirror_output_dir: (!mirror_output_dir.is_empty())
+            .then(|| PathBuf::from(mirror_output_dir)),
+        summary_path,
+        next_actions_path,
+        evidence_path,
+        trace_metadata_path,
+        journal_path,
+        next_actions_payload,
+        evidence_payload,
+        trace_metadata_payload,
+        supervisor_state_payload,
+        journal_payload,
+        changed_paths: Vec::new(),
+    })
+}
 
-    let mut changed_paths = Vec::new();
+fn write_primary_session_artifacts(plan: &mut SessionArtifactWritePlan) -> Result<(), String> {
+    let summary_text = render_session_summary(&plan.task, &plan.phase, &plan.status, &plan.summary);
+    let next_actions_payload = plan.next_actions_payload.clone();
+    let evidence_payload = plan.evidence_payload.clone();
+    let trace_metadata_payload = plan.trace_metadata_payload.clone();
+    let journal_payload = plan.journal_payload.clone();
     write_session_artifact_set(
-        &summary_path,
-        &next_actions_path,
-        &evidence_path,
-        Some(&trace_metadata_path),
-        &summary_text,
-        &next_actions_payload,
-        &evidence_payload,
-        Some(&trace_metadata_payload),
-        &mut changed_paths,
-    )?;
-    if write_json_if_changed(&journal_path, &journal_payload)? {
-        changed_paths.push(journal_path.display().to_string());
-    }
+        ArtifactPaths {
+            summary: &plan.summary_path,
+            next_actions: &plan.next_actions_path,
+            evidence: &plan.evidence_path,
+            trace_metadata: Some(&plan.trace_metadata_path),
+            journal: Some(&plan.journal_path),
+        },
+        ArtifactPayloads {
+            summary_text: &summary_text,
+            next_actions: &next_actions_payload,
+            evidence: &evidence_payload,
+            trace_metadata: &trace_metadata_payload,
+            journal: Some(&journal_payload),
+        },
+        &mut plan.changed_paths,
+    )
+}
 
-    if !mirror_output_dir.is_empty() && focus {
-        let mirror_root = PathBuf::from(mirror_output_dir);
+fn write_optional_session_mirror(plan: &mut SessionArtifactWritePlan) -> Result<(), String> {
+    if plan.focus {
+        let Some(mirror_root) = plan.mirror_output_dir.clone() else {
+            return Ok(());
+        };
         let mirror_summary = mirror_root.join(SESSION_SUMMARY_FILENAME);
         let mirror_next_actions = mirror_root.join(NEXT_ACTIONS_FILENAME);
         let mirror_evidence = mirror_root.join(EVIDENCE_INDEX_FILENAME);
-        write_session_artifact_set(
-            &mirror_summary,
-            &mirror_next_actions,
-            &mirror_evidence,
-            Some(&mirror_root.join(TRACE_METADATA_FILENAME)),
-            &summary_text,
-            &next_actions_payload,
-            &evidence_payload,
-            Some(&trace_metadata_payload),
-            &mut changed_paths,
-        )?;
+        let mirror_trace = mirror_root.join(TRACE_METADATA_FILENAME);
         let mirror_journal = mirror_root.join(CONTINUITY_JOURNAL_FILENAME);
-        if write_json_if_changed(&mirror_journal, &journal_payload)? {
-            changed_paths.push(mirror_journal.display().to_string());
-        }
+        let summary_text =
+            render_session_summary(&plan.task, &plan.phase, &plan.status, &plan.summary);
+        let next_actions_payload = plan.next_actions_payload.clone();
+        let evidence_payload = plan.evidence_payload.clone();
+        let trace_metadata_payload = plan.trace_metadata_payload.clone();
+        let journal_payload = plan.journal_payload.clone();
+        write_session_artifact_set(
+            ArtifactPaths {
+                summary: &mirror_summary,
+                next_actions: &mirror_next_actions,
+                evidence: &mirror_evidence,
+                trace_metadata: Some(&mirror_trace),
+                journal: Some(&mirror_journal),
+            },
+            ArtifactPayloads {
+                summary_text: &summary_text,
+                next_actions: &next_actions_payload,
+                evidence: &evidence_payload,
+                trace_metadata: &trace_metadata_payload,
+                journal: Some(&journal_payload),
+            },
+            &mut plan.changed_paths,
+        )?;
     }
+    Ok(())
+}
 
-    if !repo_root.is_empty() {
-        let repo_root = PathBuf::from(repo_root);
-        let mirror_root = repo_root.join("artifacts").join(CURRENT_ARTIFACT_DIR);
-        let updated_at = current_local_timestamp();
-        if write_task_registry_entry(
-            &mirror_root,
-            &task_id,
-            &task,
-            &phase,
-            &status,
-            Some(!is_terminal(&status, TERMINAL_VERIFICATION_STATUSES)),
-            &updated_at,
-            if focus { Some(task_id.as_str()) } else { None },
-        )? {
-            changed_paths.push(mirror_root.join(TASK_REGISTRY_NAME).display().to_string());
-        }
-        if focus {
-            let root_summary = repo_root.join(SESSION_SUMMARY_FILENAME);
-            let root_next_actions = repo_root.join(NEXT_ACTIONS_FILENAME);
-            let root_evidence = repo_root.join(EVIDENCE_INDEX_FILENAME);
-            let root_trace = repo_root.join(TRACE_METADATA_FILENAME);
-            let mirror_summary = mirror_root.join(SESSION_SUMMARY_FILENAME);
-            let mirror_next_actions = mirror_root.join(NEXT_ACTIONS_FILENAME);
-            let mirror_evidence = mirror_root.join(EVIDENCE_INDEX_FILENAME);
-            let mirror_trace = mirror_root.join(TRACE_METADATA_FILENAME);
-            let root_journal = repo_root.join(CONTINUITY_JOURNAL_FILENAME);
-            let mirror_journal = mirror_root.join(CONTINUITY_JOURNAL_FILENAME);
-            let active_pointer = mirror_root.join(ACTIVE_TASK_POINTER_NAME);
-            write_session_artifact_set(
-                &root_summary,
-                &root_next_actions,
-                &root_evidence,
-                Some(&root_trace),
-                &summary_text,
-                &next_actions_payload,
-                &evidence_payload,
-                Some(&trace_metadata_payload),
-                &mut changed_paths,
-            )?;
-            if write_json_if_changed(&root_journal, &journal_payload)? {
-                changed_paths.push(root_journal.display().to_string());
-            }
-            write_session_artifact_set(
-                &mirror_summary,
-                &mirror_next_actions,
-                &mirror_evidence,
-                Some(&mirror_trace),
-                &summary_text,
-                &next_actions_payload,
-                &evidence_payload,
-                Some(&trace_metadata_payload),
-                &mut changed_paths,
-            )?;
-            if write_json_if_changed(&mirror_journal, &journal_payload)? {
-                changed_paths.push(mirror_journal.display().to_string());
-            }
-            if write_json_if_changed(
-                &active_pointer,
-                &json!({
-                    "task_id": task_id,
-                    "task": task,
-                    "updated_at": updated_at,
-                }),
-            )? {
-                changed_paths.push(active_pointer.display().to_string());
-            }
-            let focus_pointer = mirror_root.join(FOCUS_TASK_POINTER_NAME);
-            if write_focus_task_pointer(&mirror_root, &task_id, &task, &updated_at)? {
-                changed_paths.push(focus_pointer.display().to_string());
-            }
-            let supervisor_state_path = repo_root.join(SUPERVISOR_STATE_FILENAME);
-            if write_json_if_changed(&supervisor_state_path, &supervisor_state_payload)? {
-                changed_paths.push(supervisor_state_path.display().to_string());
-            }
-        }
+fn write_repo_session_focus(plan: &mut SessionArtifactWritePlan) -> Result<(), String> {
+    let Some(repo_root) = plan.repo_root.clone() else {
+        return Ok(());
+    };
+    let mirror_root = repo_root.join("artifacts").join(CURRENT_ARTIFACT_DIR);
+    let updated_at = current_local_timestamp();
+    if write_task_registry_entry(
+        &mirror_root,
+        TaskRegistryEntry {
+            task_id: &plan.task_id,
+            task: &plan.task,
+            phase: &plan.phase,
+            status: &plan.status,
+            resume_allowed: Some(!is_terminal(&plan.status, TERMINAL_VERIFICATION_STATUSES)),
+            updated_at: &updated_at,
+            focus_task_id: if plan.focus {
+                Some(plan.task_id.as_str())
+            } else {
+                None
+            },
+        },
+    )? {
+        plan.changed_paths
+            .push(mirror_root.join(TASK_REGISTRY_NAME).display().to_string());
     }
+    if plan.focus {
+        write_focused_repo_mirrors(plan, &repo_root, &mirror_root, &updated_at)?;
+    }
+    Ok(())
+}
 
-    Ok(json!({
-        "schema_version": FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
-        "authority": FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
-        "summary": summary_path.display().to_string(),
-        "next_actions": next_actions_path.display().to_string(),
-        "evidence": evidence_path.display().to_string(),
-        "task_id": task_id,
-        "changed_paths": changed_paths,
-    }))
+fn write_focused_repo_mirrors(
+    plan: &mut SessionArtifactWritePlan,
+    repo_root: &Path,
+    mirror_root: &Path,
+    updated_at: &str,
+) -> Result<(), String> {
+    let root_summary = repo_root.join(SESSION_SUMMARY_FILENAME);
+    let root_next_actions = repo_root.join(NEXT_ACTIONS_FILENAME);
+    let root_evidence = repo_root.join(EVIDENCE_INDEX_FILENAME);
+    let root_trace = repo_root.join(TRACE_METADATA_FILENAME);
+    let mirror_summary = mirror_root.join(SESSION_SUMMARY_FILENAME);
+    let mirror_next_actions = mirror_root.join(NEXT_ACTIONS_FILENAME);
+    let mirror_evidence = mirror_root.join(EVIDENCE_INDEX_FILENAME);
+    let mirror_trace = mirror_root.join(TRACE_METADATA_FILENAME);
+    let root_journal = repo_root.join(CONTINUITY_JOURNAL_FILENAME);
+    let mirror_journal = mirror_root.join(CONTINUITY_JOURNAL_FILENAME);
+    let active_pointer = mirror_root.join(ACTIVE_TASK_POINTER_NAME);
+    let summary_text = render_session_summary(&plan.task, &plan.phase, &plan.status, &plan.summary);
+    let next_actions_payload = plan.next_actions_payload.clone();
+    let evidence_payload = plan.evidence_payload.clone();
+    let trace_metadata_payload = plan.trace_metadata_payload.clone();
+    let journal_payload = plan.journal_payload.clone();
+    write_session_artifact_set(
+        ArtifactPaths {
+            summary: &root_summary,
+            next_actions: &root_next_actions,
+            evidence: &root_evidence,
+            trace_metadata: Some(&root_trace),
+            journal: Some(&root_journal),
+        },
+        ArtifactPayloads {
+            summary_text: &summary_text,
+            next_actions: &next_actions_payload,
+            evidence: &evidence_payload,
+            trace_metadata: &trace_metadata_payload,
+            journal: Some(&journal_payload),
+        },
+        &mut plan.changed_paths,
+    )?;
+    write_session_artifact_set(
+        ArtifactPaths {
+            summary: &mirror_summary,
+            next_actions: &mirror_next_actions,
+            evidence: &mirror_evidence,
+            trace_metadata: Some(&mirror_trace),
+            journal: Some(&mirror_journal),
+        },
+        ArtifactPayloads {
+            summary_text: &summary_text,
+            next_actions: &next_actions_payload,
+            evidence: &evidence_payload,
+            trace_metadata: &trace_metadata_payload,
+            journal: Some(&journal_payload),
+        },
+        &mut plan.changed_paths,
+    )?;
+    if write_json_if_changed(
+        &active_pointer,
+        &json!({
+            "task_id": plan.task_id,
+            "task": plan.task,
+            "updated_at": updated_at,
+        }),
+    )? {
+        plan.changed_paths
+            .push(active_pointer.display().to_string());
+    }
+    let focus_pointer = mirror_root.join(FOCUS_TASK_POINTER_NAME);
+    if write_focus_task_pointer(mirror_root, &plan.task_id, &plan.task, updated_at)? {
+        plan.changed_paths.push(focus_pointer.display().to_string());
+    }
+    let supervisor_state_path = repo_root.join(SUPERVISOR_STATE_FILENAME);
+    if write_json_if_changed(&supervisor_state_path, &plan.supervisor_state_payload)? {
+        plan.changed_paths
+            .push(supervisor_state_path.display().to_string());
+    }
+    Ok(())
+}
+
+impl SessionArtifactWritePlan {
+    fn into_response(self) -> Value {
+        json!({
+            "schema_version": FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
+            "authority": FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
+            "summary": self.summary_path.display().to_string(),
+            "next_actions": self.next_actions_path.display().to_string(),
+            "evidence": self.evidence_path.display().to_string(),
+            "task_id": self.task_id,
+            "changed_paths": self.changed_paths,
+        })
+    }
+}
+
+pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
+    let mut plan = build_session_artifact_write_plan(&payload)?;
+    write_primary_session_artifacts(&mut plan)?;
+    write_optional_session_mirror(&mut plan)?;
+    write_repo_session_focus(&mut plan)?;
+    Ok(plan.into_response())
 }
 
 fn write_session_artifact_set(
-    summary_path: &Path,
-    next_actions_path: &Path,
-    evidence_path: &Path,
-    trace_metadata_path: Option<&Path>,
-    summary_text: &str,
-    next_actions_payload: &Value,
-    evidence_payload: &Value,
-    trace_metadata_payload: Option<&Value>,
+    paths: ArtifactPaths<'_>,
+    payloads: ArtifactPayloads<'_>,
     changed_paths: &mut Vec<String>,
 ) -> Result<(), String> {
-    if write_text_if_changed(summary_path, summary_text)? {
-        changed_paths.push(summary_path.display().to_string());
+    if write_text_if_changed(paths.summary, payloads.summary_text)? {
+        changed_paths.push(paths.summary.display().to_string());
     }
-    if write_json_if_changed(next_actions_path, next_actions_payload)? {
-        changed_paths.push(next_actions_path.display().to_string());
+    if write_json_if_changed(paths.next_actions, payloads.next_actions)? {
+        changed_paths.push(paths.next_actions.display().to_string());
     }
-    if write_json_if_changed(evidence_path, evidence_payload)? {
-        changed_paths.push(evidence_path.display().to_string());
+    if write_json_if_changed(paths.evidence, payloads.evidence)? {
+        changed_paths.push(paths.evidence.display().to_string());
     }
-    if let (Some(path), Some(payload)) = (trace_metadata_path, trace_metadata_payload) {
-        if write_json_if_changed(path, payload)? {
-            changed_paths.push(path.display().to_string());
-        }
+    if let Some(path) = paths.trace_metadata {
+        write_json_artifact_if_changed(path, payloads.trace_metadata, changed_paths)?;
+    }
+    if let (Some(path), Some(payload)) = (paths.journal, payloads.journal) {
+        write_json_artifact_if_changed(path, payload, changed_paths)?;
+    }
+    Ok(())
+}
+
+fn write_json_artifact_if_changed(
+    path: &Path,
+    payload: &Value,
+    changed_paths: &mut Vec<String>,
+) -> Result<(), String> {
+    if write_json_if_changed(path, payload)? {
+        changed_paths.push(path.display().to_string());
     }
     Ok(())
 }

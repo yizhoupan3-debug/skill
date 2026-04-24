@@ -734,18 +734,12 @@ pub(crate) fn runtime_storage_operation(
                     storage_root,
                 } => sqlite_write_text(&path, db_path, storage_root, &payload)?,
             }
-            (
-                true,
-                None,
-                Some(payload.as_bytes().len()),
-                Some(digest),
-                None,
-            )
+            (true, None, Some(payload.len()), Some(digest), None)
         }
         "append_text" => {
             let payload = payload_text
                 .ok_or_else(|| "runtime_storage append_text requires payload_text".to_string())?;
-            let bytes_written = payload.as_bytes().len();
+            let bytes_written = payload.len();
             match &backend {
                 ResolvedStorageBackend::Filesystem => filesystem_append_text(&path, &payload)?,
                 ResolvedStorageBackend::Memory => {

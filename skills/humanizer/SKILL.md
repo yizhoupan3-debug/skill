@@ -1,20 +1,30 @@
 ---
 name: humanizer
 description: |
-  Audit existing prose for machine-like writing signals, then naturalize only where needed.
-  Use for: 逐句评估 AIGC, 逐句判断是否要改, 精修, 文本精修, humanize, 自然化改写, 去模板腔, 降 AI 味/AIGC 率, 去 AI 感, 像人写的, anti-AI.
-  Acts as a **Sentence-First AIGC Auditor and Style Naturalizer**. It scores each sentence for machine-like signals before any rewrite, preserving facts, register, and authorial voice.
+  General prose polish and style naturalization for existing drafts or supplied notes.
+  Use for ordinary writing asks such as 润色这段话, 文本精修, 改自然, 表达优化,
+  邮件/申请文书/博客/说明文字润色, humanize, 去模板腔, or 像人写的.
+  Use sentence-level AIGC audit only when the user explicitly asks for AIGC,
+  AI 味, detector, Turnitin, or 逐句评估. Preserve facts, register, and authorial voice.
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
 session_start: n/a
 trigger_hints:
-  - writing
-  - rewrite
-  - prose
-  - naturalization
-  - style
-  - voice
+  - 润色这段话
+  - 文本润色
+  - 文本精修
+  - 改自然
+  - 表达优化
+  - 普通写作
+  - 邮件润色
+  - 申请文书润色
+  - 博客润色
+  - 说明文字润色
+  - 自然化改写
+  - 去模板腔
+  - 像人写的
+  - humanize
   - 逐句评估
   - 逐句判断是否要改
   - 逐句判断 aigc
@@ -25,8 +35,10 @@ trigger_hints:
   - 去 ai 感
   - 不要直接重写
   - 先评估再改
+  - 文本精修不好用
+  - 持续优化写作
 metadata:
-  version: "3.3.0"
+  version: "3.5.0"
   platforms: [codex, antigravity]
   tags: [writing, rewrite, prose, naturalization, style, voice, humanize, anti-aigc, aigc-reduction, sentence-audit, sentence-grading]
 risk: medium
@@ -53,8 +65,12 @@ source: local
 
 | Request type | Route to |
 |---|---|
-| Generic prose naturalization, 降 AI 味, 降 AIGC 率, 逐句评估 AIGC | `$humanizer` (this skill) |
+| Ordinary prose polish, general writing from supplied notes, naturalization | `$humanizer` (this skill) |
+| 降 AI 味, 降 AIGC 率, 逐句评估 AIGC | `$humanizer` in audit-first mode |
 | Paper-specific prose revision | `$paper-writing` |
+| Marketing, landing page, sales, UX microcopy | `$copywriting` |
+| README, API docs, ADR, developer docs | `$documentation-engineering` |
+| Skill documentation or `SKILL.md` writing | `$writing-skills` / `$skill-framework-developer` |
 | Scientific logic / novelty / evidence review | `$paper-logic` or `$paper-reviewer` |
 | Translation or summarization only | Do not use this skill |
 
@@ -62,6 +78,8 @@ source: local
 
 - User wants sentence-by-sentence AIGC assessment before rewriting
 - User wants existing text to sound more natural, less robotic, or less templated
+- User wants a normal paragraph, email, statement, post, or explanation polished without a commercial or manuscript context
+- User provides bullet points or rough notes and wants a short prose draft from those supplied facts
 - User says "humanize", "去模板腔", "降 AI 味", "降低 AIGC 率", "降 aigc", "去 AI 感", "像人写的", "不像机器", "anti-AI", or "精修" (as a style overlay)
 - User says "逐句评估", "先别改写", "先判断哪些句子 AI 味重", "逐句判断 AIGC", "哪些句子不用改 / 哪些要重写"
 - Draft contains chatbot artifacts, vague praise, filler, repetitive rhythm, or generic conclusions
@@ -76,21 +94,33 @@ Choose the narrowest mode that matches the request:
 
 | Mode | When to use | Default output |
 |---|---|---|
+| **Direct Polish** | User says 精修/润色/自然化 but does not mention AIGC, detector, or sentence audit | Revised text first + at most 3 notes |
+| **Draft from Notes** | User gives facts/bullets and asks for an email, statement, post, or explanation | Draft text + `[VERIFY: ...]` placeholders for missing facts |
 | **Audit-only** | User wants judgment first, says "逐句评估/分级/先别改" | Sentence table + overall judgment |
 | **Audit + Patch** | User wants risky sentences fixed but does not want a full rewrite | Sentence table + only rewritten risky lines |
 | **Full Rewrite** | User explicitly asks for full naturalization or full anti-AIGC rewrite | Sentence table + full revised text + revision record |
 
-If the request is ambiguous, start with **Audit-only**.
+If the request is ambiguous but does not mention AIGC/detectors, start with **Direct Polish**. If it mentions AIGC/detectors, start with **Audit-only**.
 
 ## Default mode
 
-Default to **audit first, rewrite second**:
+Default to **audit first, rewrite second** only for AIGC/detector-shaped asks:
 
 1. Split the text into sentences.
 2. Judge each sentence with the rubric in `references/sentence-risk-rubric.md`.
 3. Only rewrite the sentences marked `需要自然话改写` or `需要完全重写`, or when the user explicitly asks for a full rewrite.
 
 Do **not** jump straight into a full "降 AIGC" rewrite unless the user clearly asks for rewriting rather than evaluation.
+For ordinary polishing, skip the visible sentence table and deliver improved prose first.
+For note-to-prose drafting, write only from supplied facts and mark missing specifics with `[VERIFY: ...]`.
+
+## Output Defaults
+
+- For normal polish: return the revised text first.
+- For small edits: do not include a table, score, or long explanation.
+- For note-to-prose drafting: return a ready-to-use draft, then at most three missing-info notes.
+- For AIGC/detector asks: use the sentence audit table before rewriting unless the user says to skip it.
+- For long documents: work section by section and keep notes local to the edited section.
 
 ## Output Format: Sentence Audit Record (逐句评估记录)
 
@@ -121,8 +151,11 @@ When the user asks to lower AIGC, evaluate sentence-by-sentence first unless the
 
 - Main task is scientific review or claims-vs-evidence critique → `$paper-logic` / `$paper-reviewer`
 - Task is manuscript prose revision in clear paper context → `$paper-writing`
+- Task is improving skill documentation or `SKILL.md` files → `$writing-skills` / `$skill-framework-developer`
+- Task is commercial copy, ads, landing pages, product positioning, or CTA writing → `$copywriting`
+- Task is developer documentation, README, API docs, ADR, or changelog prose → `$documentation-engineering`
 - Task is only translation or summarization
-- User wants entirely new content ghostwritten from zero (no existing text to naturalize)
+- User wants entirely new content ghostwritten from zero with no facts, notes, or intended message
 - User wants fake authorship or fabricated personal experience
 - User asks for guaranteed detector outcomes, pass guarantees, or bypass claims
 
@@ -199,6 +232,15 @@ Rules:
 - Never insert fake anecdotes, fake opinions, or fake sourcing.
 - **Quality guard**: never reduce information density, specificity, or professional tone to lower a detector score. If a rewrite trades accuracy for "naturalness", revert.
 - Do not force extra personality as a default tactic. Prefer clarity, specificity, honest limits, and natural rhythm.
+- If the user asked for usable writing, do not stop at critique; produce the revised or drafted text.
+
+Anti-bad-output rules:
+- Do not force an audit table when the user only asked for smoother prose.
+- Do not rewrite everything if only two sentences are the problem.
+- Do not make the text casual just to make it "human"; match the requested register.
+- Do not replace precise technical language with vague everyday wording.
+- Do not provide detector-score promises or percentage claims.
+- Do not append generic "writing tips" after a usable rewrite unless risk remains.
 
 ### Step 4 — Self-audit
 

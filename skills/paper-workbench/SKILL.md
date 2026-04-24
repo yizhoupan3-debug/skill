@@ -7,9 +7,10 @@ description: |
   "根据 reviewer comments 改到能投", "先审再改", "整体推进这篇论文", or
   "这篇稿子现在该怎么处理". Also use when manuscript preparation should start
   from target-journal refs, e.g. "先下载20篇目标期刊相近ref再写" or "学ref讲故事".
-  "paper review不好用，彻底优化", or "允许外部调研". This skill picks the right
-  paper lane first, allows external literature / venue lookup when useful, and
-  keeps the workflow continuous without making the user switch skills.
+  Also use for feedback/repair asks like "paper review不好用，彻底优化",
+  "论文写作不好用，持续优化", or "允许外部调研". This skill picks the right paper
+  lane first, allows external literature / venue lookup when useful, and keeps
+  the workflow continuous without making the user switch skills.
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
@@ -26,6 +27,8 @@ trigger_hints:
   - paper review 不好用
   - paper review优化
   - paper reviewer优化
+  - 论文写作不好用
+  - 持续优化论文工作流
   - 外部调研 paper review
   - 允许外部调研
   - 查文献后审 paper
@@ -56,7 +59,7 @@ trigger_hints:
   - paper workflow
   - paper workbench
 metadata:
-  version: "1.2.0"
+  version: "1.3.0"
   platforms: [codex]
   tags: [paper, manuscript, review, revise, submission, orchestrator]
 framework_roles:
@@ -90,6 +93,8 @@ It exists so the user does not need to decide first whether the job is
 - The user wants to prepare or rewrite a manuscript by first learning target-journal reference papers
 - The user says `先审再改`, `改到能投`, `整体推进这篇论文`, or similarly workflow-shaped asks
 - The task may need claim narrowing, appendix routing, figure/table cleanup, or local prose polish after the main decision is clear
+- The user complains that paper review, revision, or writing skills are poor and wants the manuscript workflow tightened
+- External calibration can change the verdict, baseline expectations, novelty bar, or target-journal fit
 
 ## Do not use
 
@@ -117,6 +122,7 @@ Rules:
 - target-journal ref-first asks default to `先学ref再写`
 - explicit dimension asks use `单维度会诊`
 - local section rewrite with fixed claim boundary uses `局部精修`
+- workflow-quality complaints default to the nearest failed lane, then patch the handoff or routing case that would prevent the same failure next time
 
 Do not make the user switch skills just because the work naturally moves from
 judgment to revision.
@@ -124,6 +130,15 @@ judgment to revision.
 For review-like asks, do not block on missing target venue or reference corpus:
 start with a provisional bar, run external calibration when useful, and clearly
 separate "known blocker" from "uncertainty that needs lookup".
+
+## Anti-bad-output rules
+
+- Do not start with language polish when claim/evidence, novelty, baseline, or target-venue fit is unresolved.
+- Do not give a long review taxonomy before the verdict; lead with verdict, blockers, evidence, and next edit target.
+- Do not say "needs more experiments" without naming the missing comparison, measurement, or failure case.
+- Do not let external research become a separate literature-review task unless the paper cannot be judged without a corpus.
+- Do not preserve every manuscript section by default; cut, narrow, move to appendix, or stop defending weak claims when that is the honest route.
+- Do not end at critique if the user asked to get the paper closer to submission; convert findings into ordered edits.
 
 ## Internal lane map
 
@@ -153,6 +168,16 @@ Keep the user-facing output simple:
 1. what mode the paper is in now
 2. the real blockers or active edit target
 3. the next honest move
+
+When the ask is whole-paper or workflow repair, the minimum useful decision card is:
+
+```text
+mode:
+verdict_or_blocker:
+active_lane:
+next_edit:
+external_calibration_needed:
+```
 
 Behind the scenes, this skill may switch lanes. The user should not need to.
 

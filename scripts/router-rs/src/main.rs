@@ -2,6 +2,8 @@
 
 use chrono::Utc;
 use clap::{ArgAction, Parser};
+use rayon::prelude::*;
+use rayon::ThreadPoolBuilder;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -54,7 +56,7 @@ use framework_runtime::{
     build_framework_memory_policy_envelope, build_framework_memory_recall_envelope,
     build_framework_prompt_compression_envelope, build_framework_refresh_payload,
     build_framework_runtime_snapshot_envelope, build_framework_statusline, resolve_repo_root_arg,
-    write_framework_session_artifacts,
+    write_framework_session_artifacts, FrameworkAliasBuildOptions,
 };
 use host_integration::run_host_integration_from_args;
 use runtime_storage::{
@@ -89,6 +91,7 @@ const RUNTIME_INTEGRATOR_SCHEMA_VERSION: &str = "router-rs-runtime-integrator-v1
 const RUNTIME_INTEGRATOR_AUTHORITY: &str = "rust-runtime-integrator";
 const SANDBOX_CONTROL_SCHEMA_VERSION: &str = "router-rs-sandbox-control-v1";
 const SANDBOX_CONTROL_AUTHORITY: &str = "rust-sandbox-control";
+const SANDBOX_EVENT_SCHEMA_VERSION: &str = "runtime-sandbox-event-v1";
 const BACKGROUND_CONTROL_SCHEMA_VERSION: &str = "router-rs-background-control-v1";
 const BACKGROUND_CONTROL_AUTHORITY: &str = "rust-background-control";
 const TRACE_DESCRIPTOR_SCHEMA_VERSION: &str = "router-rs-trace-descriptor-v1";
@@ -151,6 +154,10 @@ const DEFAULT_SUBAGENT_TIMEOUT_SECONDS: u64 = 900;
 const DEFAULT_MAX_BACKGROUND_JOBS: usize = 16;
 const MAX_BACKGROUND_JOBS_LIMIT: usize = 64;
 const DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS: u64 = 600;
+const DEFAULT_COMPUTE_THREADS: usize = 0;
+const MAX_COMPUTE_THREADS: usize = 64;
+const PARALLEL_RECORD_SCAN_MIN: usize = 48;
+const PARALLEL_EVAL_CASE_MIN: usize = 8;
 
 #[derive(Parser, Debug)]
 #[command(name = "router-rs")]
@@ -174,6 +181,8 @@ struct Cli {
     stdio_json: bool,
     #[arg(long)]
     stdio_max_concurrency: Option<usize>,
+    #[arg(long)]
+    compute_threads: Option<usize>,
     #[arg(long)]
     framework_mcp_stdio: bool,
     #[arg(long)]
@@ -640,6 +649,11 @@ struct RoutingEvalReportPayload {
     results: Vec<RoutingEvalResultPayload>,
 }
 
+struct EvaluatedRoutingCase {
+    input_index: usize,
+    result: RoutingEvalResultPayload,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ExecuteRequestPayload {
     schema_version: String,
@@ -713,6 +727,8 @@ struct BackgroundControlRequestPayload {
 struct SandboxControlRequestPayload {
     schema_version: String,
     operation: String,
+    sandbox_id: Option<String>,
+    profile_id: Option<String>,
     current_state: Option<String>,
     next_state: Option<String>,
     cleanup_failed: Option<bool>,
@@ -728,6 +744,8 @@ struct SandboxControlRequestPayload {
     probe_wall_clock: Option<f64>,
     probe_output_size: Option<i64>,
     error_kind: Option<String>,
+    event_log_path: Option<String>,
+    trace_event: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -745,6 +763,12 @@ struct SandboxControlResponsePayload {
     budget_violation: Option<String>,
     cleanup_required: Option<bool>,
     quarantined: Option<bool>,
+    effective_capabilities: Option<Vec<String>>,
+    sandbox_id: Option<String>,
+    profile_id: Option<String>,
+    event_schema_version: Option<String>,
+    event_log_path: Option<String>,
+    event_written: bool,
     event_kind: Option<String>,
 }
 
@@ -967,8 +991,18 @@ struct StdioRouterConcurrencyDescriptor {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct ComputeConcurrencyDescriptor {
+    default_threads: usize,
+    max_threads: usize,
+    env_keys: Vec<&'static str>,
+    cli_arg: &'static str,
+    scheduling: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct RuntimeConcurrencyDefaultsPayload {
     router_stdio: StdioRouterConcurrencyDescriptor,
+    compute: ComputeConcurrencyDescriptor,
     max_background_jobs: usize,
     max_background_jobs_limit: usize,
     background_job_timeout_seconds: u64,
@@ -1158,31 +1192,21 @@ fn write_trace_metadata(
         .unwrap_or_else(|| load_trace_routing_runtime_version(payload.runtime_path.as_deref()));
     let metadata_schema_version = payload
         .metadata_schema_version
+        .as_deref()
+        .map(str::to_string)
         .unwrap_or_else(default_trace_metadata_schema_version);
     let framework_version = payload
         .framework_version
+        .as_deref()
+        .map(str::to_string)
         .unwrap_or_else(default_trace_framework_version);
-    let timestamp = payload.ts.unwrap_or_else(|| timestamp_now());
+    let timestamp = payload.ts.clone().unwrap_or_else(timestamp_now);
     let resolved_trace = if payload.events.is_none()
         || payload.stream.is_none()
         || payload.reroute_count.is_none()
         || payload.retry_count.is_none()
     {
-        match resolve_trace_source(
-            payload.event_stream_path.as_deref(),
-            payload.event_stream_text.as_deref(),
-            payload.compaction_manifest_path.as_deref(),
-            payload.compaction_manifest_text.as_deref(),
-            payload.compaction_state_text.as_deref(),
-            payload.compaction_artifact_index_text.as_deref(),
-            payload.compaction_delta_text.as_deref(),
-            payload.session_id.as_deref(),
-            payload.job_id.as_deref(),
-            &payload.stream_scope_fields,
-        ) {
-            Ok(value) => Some(value),
-            Err(_) => None,
-        }
+        resolve_trace_source(TraceSourceRequest::from_metadata_payload(&payload)).ok()
     } else {
         None
     };
@@ -1299,7 +1323,7 @@ fn write_trace_metadata(
         authority: TRACE_METADATA_WRITE_AUTHORITY.to_string(),
         output_path: payload.output_path,
         mirror_paths: payload.mirror_paths,
-        bytes_written: serialized.as_bytes().len(),
+        bytes_written: serialized.len(),
         routing_runtime_version,
         payload_text: serialized,
     })
@@ -1307,6 +1331,7 @@ fn write_trace_metadata(
 
 fn main() -> Result<(), String> {
     let args = Cli::parse();
+    configure_compute_parallelism(args.compute_threads)?;
     if [
         args.json,
         args.stdio_json,
@@ -1963,9 +1988,11 @@ fn main() -> Result<(), String> {
             serde_json::to_string(&build_framework_alias_envelope(
                 &repo_root,
                 alias_name,
-                args.claude_hook_max_lines,
-                args.compact_output,
-                args.framework_host_id.as_deref(),
+                FrameworkAliasBuildOptions {
+                    max_lines: args.claude_hook_max_lines,
+                    compact: args.compact_output,
+                    host_id: args.framework_host_id.as_deref(),
+                },
             )?)
             .map_err(|err| format!("serialize output failed: {err}"))?
         );
@@ -2939,9 +2966,11 @@ fn dispatch_stdio_framework_alias(payload: Value) -> Result<Value, String> {
     serde_json::to_value(build_framework_alias_envelope(
         Path::new(&repo_root),
         &alias_name,
-        max_lines,
-        compact,
-        host_id,
+        FrameworkAliasBuildOptions {
+            max_lines,
+            compact,
+            host_id,
+        },
     )?)
     .map_err(|err| format!("serialize framework alias output failed: {err}"))
 }
@@ -2989,6 +3018,13 @@ fn runtime_concurrency_defaults_payload() -> RuntimeConcurrencyDefaultsPayload {
             backpressure:
                 "reader stops admitting new work while in-flight requests reach the limit",
         },
+        compute: ComputeConcurrencyDescriptor {
+            default_threads: DEFAULT_COMPUTE_THREADS,
+            max_threads: MAX_COMPUTE_THREADS,
+            env_keys: vec!["ROUTER_RS_COMPUTE_THREADS", "RAYON_NUM_THREADS"],
+            cli_arg: "--compute-threads",
+            scheduling: "bounded Rayon work-stealing for CPU record scans and batch eval",
+        },
         max_background_jobs: DEFAULT_MAX_BACKGROUND_JOBS,
         max_background_jobs_limit: MAX_BACKGROUND_JOBS_LIMIT,
         background_job_timeout_seconds: DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS,
@@ -3004,6 +3040,20 @@ fn resolve_stdio_max_concurrency(override_value: Option<usize>) -> usize {
         .or_else(|| env_usize("ROUTER_RS_STDIO_POOL_SIZE"))
         .unwrap_or(DEFAULT_STDIO_MAX_CONCURRENCY)
         .clamp(1, MAX_STDIO_MAX_CONCURRENCY)
+}
+
+fn configure_compute_parallelism(override_value: Option<usize>) -> Result<(), String> {
+    let Some(thread_count) = override_value
+        .or_else(|| env_usize("ROUTER_RS_COMPUTE_THREADS"))
+        .filter(|value| *value > 0)
+        .map(|value| value.clamp(1, MAX_COMPUTE_THREADS))
+    else {
+        return Ok(());
+    };
+    ThreadPoolBuilder::new()
+        .num_threads(thread_count)
+        .build_global()
+        .map_err(|err| format!("configure compute thread pool failed: {err}"))
 }
 
 fn env_usize(name: &str) -> Option<usize> {
@@ -3023,12 +3073,7 @@ fn load_records(
             if let Some(manifest) = manifest_path {
                 if manifest.exists() {
                     let meta = load_manifest_route_meta(manifest)?;
-                    for record in &mut records {
-                        if let Some((priority, session_start)) = meta.get(&record.slug) {
-                            record.priority = priority.clone();
-                            record.session_start = session_start.clone();
-                        }
-                    }
+                    apply_manifest_route_meta(&mut records, &meta);
                 }
             }
             return Ok(records);
@@ -3047,27 +3092,132 @@ fn load_inline_records(payload: &Value) -> Result<Vec<SkillRecord>, String> {
         .get("skills")
         .and_then(Value::as_array)
         .ok_or_else(|| "inline route requires a skills array".to_string())?;
-    let mut records = Vec::with_capacity(rows.len());
-    for row in rows {
-        let skill = serde_json::from_value::<InlineSkillRecordPayload>(row.clone())
-            .map_err(|err| format!("parse inline skill payload failed: {err}"))?;
-        records.push(SkillRecord::from_raw(RawSkillRecord {
-            slug: skill.name,
-            layer: skill.routing_layer,
-            owner: skill.routing_owner,
-            gate: skill.routing_gate,
-            priority: skill.routing_priority,
-            session_start: skill.session_start,
-            summary: skill.description,
-            short_description: skill.short_description,
-            when_to_use: skill.when_to_use,
-            do_not_use: skill.do_not_use,
-            tags: skill.tags,
-            trigger_hints: skill.trigger_hints,
-            health: skill.health,
-        }));
+    if rows.len() < PARALLEL_RECORD_SCAN_MIN {
+        return rows.iter().map(inline_skill_record).collect();
     }
-    Ok(records)
+    rows.par_iter().map(inline_skill_record).collect()
+}
+
+fn inline_skill_record(row: &Value) -> Result<SkillRecord, String> {
+    let skill = serde_json::from_value::<InlineSkillRecordPayload>(row.clone())
+        .map_err(|err| format!("parse inline skill payload failed: {err}"))?;
+    Ok(SkillRecord::from_raw(RawSkillRecord {
+        slug: skill.name,
+        layer: skill.routing_layer,
+        owner: skill.routing_owner,
+        gate: skill.routing_gate,
+        priority: skill.routing_priority,
+        session_start: skill.session_start,
+        summary: skill.description,
+        short_description: skill.short_description,
+        when_to_use: skill.when_to_use,
+        do_not_use: skill.do_not_use,
+        tags: skill.tags,
+        trigger_hints: skill.trigger_hints,
+        health: skill.health,
+    }))
+}
+
+fn build_skill_record_from_indexed_row(row: &[Value], indexes: &RecordRowIndexes) -> SkillRecord {
+    SkillRecord::from_raw(RawSkillRecord {
+        slug: value_to_string(&row[indexes.slug]),
+        layer: value_to_string(&row[indexes.layer]),
+        owner: value_to_string(&row[indexes.owner]),
+        gate: value_to_string(&row[indexes.gate]),
+        priority: indexes
+            .priority
+            .and_then(|idx| row.get(idx))
+            .map(value_to_string)
+            .unwrap_or_else(|| "P2".to_string()),
+        session_start: indexes
+            .session_start
+            .and_then(|idx| row.get(idx))
+            .map(value_to_string)
+            .unwrap_or_else(|| "n/a".to_string()),
+        summary: value_to_string(&row[indexes.summary]),
+        short_description: String::new(),
+        when_to_use: String::new(),
+        do_not_use: String::new(),
+        tags: Vec::new(),
+        trigger_hints: value_to_string_list(&row[indexes.trigger_hints]),
+        health: value_to_f64(&row[indexes.health]).unwrap_or(100.0),
+    })
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RecordRowIndexes {
+    slug: usize,
+    layer: usize,
+    owner: usize,
+    gate: usize,
+    summary: usize,
+    trigger_hints: usize,
+    health: usize,
+    priority: Option<usize>,
+    session_start: Option<usize>,
+    required_max: usize,
+}
+
+impl RecordRowIndexes {
+    fn from_required(
+        required: [usize; 7],
+        priority: Option<usize>,
+        session_start: Option<usize>,
+    ) -> Self {
+        let [slug, layer, owner, gate, summary, trigger_hints, health] = required;
+        let required_max = *required.iter().max().expect("required columns");
+        Self {
+            slug,
+            layer,
+            owner,
+            gate,
+            summary,
+            trigger_hints,
+            health,
+            priority,
+            session_start,
+            required_max,
+        }
+    }
+}
+
+fn collect_skill_records_from_rows(rows: &[Value], indexes: RecordRowIndexes) -> Vec<SkillRecord> {
+    let iter = || {
+        rows.iter()
+            .filter_map(Value::as_array)
+            .filter(|row| row.len() > indexes.required_max)
+            .map(|row| build_skill_record_from_indexed_row(row, &indexes))
+            .collect::<Vec<_>>()
+    };
+    if rows.len() < PARALLEL_RECORD_SCAN_MIN {
+        return iter();
+    }
+    rows.par_iter()
+        .filter_map(Value::as_array)
+        .filter(|row| row.len() > indexes.required_max)
+        .map(|row| build_skill_record_from_indexed_row(row, &indexes))
+        .collect()
+}
+
+fn apply_manifest_route_meta(
+    records: &mut [SkillRecord],
+    meta: &HashMap<String, (String, String)>,
+) {
+    if records.len() < PARALLEL_RECORD_SCAN_MIN {
+        for record in records {
+            if let Some((priority, session_start)) = meta.get(&record.slug) {
+                record.priority = priority.clone();
+                record.session_start = session_start.clone();
+            }
+        }
+        return;
+    }
+    records.par_iter_mut().for_each(|record| {
+        if let Some((priority, session_start)) = meta.get(&record.slug) {
+            record.priority = priority.clone();
+            record.session_start = session_start.clone();
+        }
+    });
 }
 
 fn records_cache_key(runtime_path: Option<&Path>, manifest_path: Option<&Path>) -> RecordsCacheKey {
@@ -3209,46 +3359,21 @@ fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String> {
         .ok_or_else(|| format!("runtime index missing health key: {}", path.display()))?;
     let idx_priority = index.get("priority").copied();
     let idx_session_start = index.get("session_start").copied();
-    let required_max = *[
-        idx_slug,
-        idx_layer,
-        idx_owner,
-        idx_gate,
-        idx_summary,
-        idx_trigger_hints,
-        idx_health,
-    ]
-    .iter()
-    .max()
-    .expect("required columns");
+    let indexes = RecordRowIndexes::from_required(
+        [
+            idx_slug,
+            idx_layer,
+            idx_owner,
+            idx_gate,
+            idx_summary,
+            idx_trigger_hints,
+            idx_health,
+        ],
+        idx_priority,
+        idx_session_start,
+    );
 
-    rows.iter()
-        .filter_map(Value::as_array)
-        .filter(|row| row.len() > required_max)
-        .map(|row| {
-            Ok(SkillRecord::from_raw(RawSkillRecord {
-                slug: value_to_string(&row[idx_slug]),
-                layer: value_to_string(&row[idx_layer]),
-                owner: value_to_string(&row[idx_owner]),
-                gate: value_to_string(&row[idx_gate]),
-                priority: idx_priority
-                    .and_then(|idx| row.get(idx))
-                    .map(value_to_string)
-                    .unwrap_or_else(|| "P2".to_string()),
-                session_start: idx_session_start
-                    .and_then(|idx| row.get(idx))
-                    .map(value_to_string)
-                    .unwrap_or_else(|| "n/a".to_string()),
-                summary: value_to_string(&row[idx_summary]),
-                short_description: String::new(),
-                when_to_use: String::new(),
-                do_not_use: String::new(),
-                tags: Vec::new(),
-                trigger_hints: value_to_string_list(&row[idx_trigger_hints]),
-                health: value_to_f64(&row[idx_health]).unwrap_or(100.0),
-            }))
-        })
-        .collect()
+    Ok(collect_skill_records_from_rows(rows, indexes))
 }
 
 fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, String> {
@@ -3293,46 +3418,21 @@ fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, String> {
         .ok_or_else(|| format!("manifest missing health key: {}", path.display()))?;
     let idx_priority = key_index.get("priority").copied();
     let idx_session_start = key_index.get("session_start").copied();
-    let required_max = *[
-        idx_slug,
-        idx_layer,
-        idx_owner,
-        idx_gate,
-        idx_desc,
-        idx_trigger_hints,
-        idx_health,
-    ]
-    .iter()
-    .max()
-    .expect("required columns");
+    let indexes = RecordRowIndexes::from_required(
+        [
+            idx_slug,
+            idx_layer,
+            idx_owner,
+            idx_gate,
+            idx_desc,
+            idx_trigger_hints,
+            idx_health,
+        ],
+        idx_priority,
+        idx_session_start,
+    );
 
-    rows.iter()
-        .filter_map(Value::as_array)
-        .filter(|row| row.len() > required_max)
-        .map(|row| {
-            Ok(SkillRecord::from_raw(RawSkillRecord {
-                slug: value_to_string(&row[idx_slug]),
-                layer: value_to_string(&row[idx_layer]),
-                owner: value_to_string(&row[idx_owner]),
-                gate: value_to_string(&row[idx_gate]),
-                priority: idx_priority
-                    .and_then(|idx| row.get(idx))
-                    .map(value_to_string)
-                    .unwrap_or_else(|| "P2".to_string()),
-                session_start: idx_session_start
-                    .and_then(|idx| row.get(idx))
-                    .map(value_to_string)
-                    .unwrap_or_else(|| "n/a".to_string()),
-                summary: value_to_string(&row[idx_desc]),
-                short_description: String::new(),
-                when_to_use: String::new(),
-                do_not_use: String::new(),
-                tags: Vec::new(),
-                trigger_hints: value_to_string_list(&row[idx_trigger_hints]),
-                health: value_to_f64(&row[idx_health]).unwrap_or(100.0),
-            }))
-        })
-        .collect()
+    Ok(collect_skill_records_from_rows(rows, indexes))
 }
 
 fn read_json(path: &Path) -> Result<Value, String> {
@@ -3594,6 +3694,9 @@ fn term_score(term: &str, record: &SkillRecord) -> f64 {
 }
 
 fn search_skills(records: &[SkillRecord], query: &str, limit: usize) -> Vec<MatchRow> {
+    if limit == 0 {
+        return Vec::new();
+    }
     let terms = tokenize_query(query);
     if terms.is_empty() {
         return Vec::new();
@@ -3605,9 +3708,7 @@ fn search_skills(records: &[SkillRecord], query: &str, limit: usize) -> Vec<Matc
         usize::max(2, ((terms.len() as f64) * 0.4).ceil() as usize)
     };
 
-    let mut rows = Vec::new();
-
-    for record in records {
+    let score_record = |record: &SkillRecord| -> Option<MatchRow> {
         let mut matched_terms = 0usize;
         let mut score = 0.0f64;
         for term in &terms {
@@ -3618,13 +3719,13 @@ fn search_skills(records: &[SkillRecord], query: &str, limit: usize) -> Vec<Matc
             }
         }
         if matched_terms < required_matches {
-            continue;
+            return None;
         }
         score += record.health.min(100.0) / 100.0;
-        if normalize_text(&record.gate) != "none" {
+        if record.gate_lower != "none" {
             score += 0.25;
         }
-        rows.push(MatchRow {
+        Some(MatchRow {
             slug: record.slug.clone(),
             layer: record.layer.clone(),
             owner: record.owner.clone(),
@@ -3633,10 +3734,18 @@ fn search_skills(records: &[SkillRecord], query: &str, limit: usize) -> Vec<Matc
             score: round2(score),
             matched_terms,
             total_terms: terms.len(),
-        });
-    }
+        })
+    };
+    let mut rows = if records.len() < PARALLEL_RECORD_SCAN_MIN {
+        records.iter().filter_map(score_record).collect::<Vec<_>>()
+    } else {
+        records
+            .par_iter()
+            .filter_map(score_record)
+            .collect::<Vec<_>>()
+    };
 
-    rows.sort_by(|left, right| {
+    rows.sort_unstable_by(|left, right| {
         right
             .score
             .partial_cmp(&left.score)
@@ -3666,22 +3775,28 @@ fn route_task(
         .cloned()
         .collect::<HashSet<String>>();
 
-    let candidates = records
-        .iter()
-        .map(|record| {
-            score_route_candidate(
-                record,
-                &normalized_query,
-                &query_token_list,
-                &query_tokens,
-                first_turn,
-            )
-        })
-        .collect::<Vec<_>>();
-    let viable = candidates
-        .into_iter()
-        .filter(|candidate| candidate.score > 0.0)
-        .collect::<Vec<_>>();
+    let score = |record| {
+        score_route_candidate(
+            record,
+            &normalized_query,
+            &query_token_list,
+            &query_tokens,
+            first_turn,
+        )
+    };
+    let viable = if records.len() < PARALLEL_RECORD_SCAN_MIN {
+        records
+            .iter()
+            .map(score)
+            .filter(|candidate| candidate.score > 0.0)
+            .collect::<Vec<_>>()
+    } else {
+        records
+            .par_iter()
+            .map(score)
+            .filter(|candidate| candidate.score > 0.0)
+            .collect::<Vec<_>>()
+    };
 
     if viable.is_empty() {
         let fallback = fallback_owner(records)?;
@@ -3716,7 +3831,7 @@ fn route_task(
             records,
             &normalized_query,
             &query_token_list,
-            &selected.record,
+            selected.record,
         )
     } else {
         None
@@ -3904,12 +4019,11 @@ fn evaluate_routing_cases(
     cases_payload: RoutingEvalCasesPayload,
 ) -> Result<RoutingEvalReportPayload, String> {
     let mut metrics = RoutingEvalMetricsPayload::default();
-    let mut results = Vec::new();
-
-    for case in cases_payload.cases {
+    let cases = cases_payload.cases;
+    let evaluate_one = |(input_index, case): (usize, RoutingEvalCasePayload)| -> Result<Option<EvaluatedRoutingCase>, String> {
         let task = case.task.trim().to_string();
         if task.is_empty() {
-            continue;
+            return Ok(None);
         }
 
         let session_suffix = case
@@ -3917,7 +4031,7 @@ fn evaluate_routing_cases(
             .as_ref()
             .map(value_to_string)
             .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| (metrics.case_count + 1).to_string());
+            .unwrap_or_else(|| (input_index + 1).to_string());
         let decision = route_task(
             records,
             &task,
@@ -3927,7 +4041,6 @@ fn evaluate_routing_cases(
         )?;
         let selected_owner = decision.selected_skill.clone();
         let selected_overlay = decision.overlay_skill.clone();
-        metrics.case_count += 1;
 
         let category = case.category.trim().to_string();
         let expected_owner = normalize_optional_text(case.expected_owner);
@@ -3957,60 +4070,87 @@ fn evaluate_routing_cases(
                     .as_ref()
                     .map(|focus| focus == &selected_owner)
                     .unwrap_or(false);
-                if trigger_hit {
-                    metrics.trigger_hit += 1;
-                } else {
-                    metrics.trigger_miss += 1;
-                }
             }
             "should-not-trigger" => {
                 overtrigger = forbidden_owners.contains(&selected_owner);
-                if overtrigger {
-                    metrics.overtrigger += 1;
-                }
             }
             "wrong-owner-near-miss" | "gate-vs-owner-conflict" => {
                 trigger_hit = focus_skill
                     .as_ref()
                     .map(|focus| focus == &selected_owner)
                     .unwrap_or(false);
-                if trigger_hit {
-                    metrics.trigger_hit += 1;
-                } else {
-                    metrics.trigger_miss += 1;
-                }
                 if forbidden_owners.contains(&selected_owner) {
                     overtrigger = true;
-                    metrics.overtrigger += 1;
                 }
             }
             _ => {}
         }
 
-        if owner_correct {
-            metrics.owner_correct += 1;
-        }
-        if overlay_correct {
-            metrics.overlay_correct += 1;
-        }
-
         let mut forbidden_owner_list = forbidden_owners.into_iter().collect::<Vec<_>>();
         forbidden_owner_list.sort();
-        results.push(RoutingEvalResultPayload {
-            id: case.id,
-            category,
-            task,
-            focus_skill,
-            selected_owner,
-            selected_overlay,
-            expected_owner,
-            expected_overlay,
-            forbidden_owners: forbidden_owner_list,
-            trigger_hit,
-            overtrigger,
-            owner_correct,
-            overlay_correct,
-        });
+        Ok(Some(EvaluatedRoutingCase {
+            input_index,
+            result: RoutingEvalResultPayload {
+                id: case.id,
+                category,
+                task,
+                focus_skill,
+                selected_owner,
+                selected_overlay,
+                expected_owner,
+                expected_overlay,
+                forbidden_owners: forbidden_owner_list,
+                trigger_hit,
+                overtrigger,
+                owner_correct,
+                overlay_correct,
+            },
+        }))
+    };
+
+    let mut evaluated = if cases.len() < PARALLEL_EVAL_CASE_MIN {
+        cases
+            .into_iter()
+            .enumerate()
+            .map(evaluate_one)
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        cases
+            .into_par_iter()
+            .enumerate()
+            .map(evaluate_one)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?
+    }
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    evaluated.sort_by_key(|row| row.input_index);
+
+    let mut results = Vec::with_capacity(evaluated.len());
+    for row in evaluated {
+        metrics.case_count += 1;
+        match row.result.category.as_str() {
+            "should-trigger" | "wrong-owner-near-miss" | "gate-vs-owner-conflict" => {
+                if row.result.trigger_hit {
+                    metrics.trigger_hit += 1;
+                } else {
+                    metrics.trigger_miss += 1;
+                }
+            }
+            _ => {}
+        }
+        if row.result.overtrigger {
+            metrics.overtrigger += 1;
+        }
+        if row.result.owner_correct {
+            metrics.owner_correct += 1;
+        }
+        if row.result.overlay_correct {
+            metrics.overlay_correct += 1;
+        }
+        results.push(row.result);
     }
 
     Ok(RoutingEvalReportPayload {
@@ -4746,8 +4886,9 @@ fn sandbox_transition_allowed(current_state: &str, next_state: &str) -> bool {
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn sandbox_response(
-    operation: &str,
+    request: &SandboxControlRequestPayload,
     current_state: Option<String>,
     next_state: Option<String>,
     allowed: bool,
@@ -4758,12 +4899,13 @@ fn sandbox_response(
     budget_violation: Option<String>,
     cleanup_required: Option<bool>,
     quarantined: Option<bool>,
+    effective_capabilities: Option<Vec<String>>,
     event_kind: Option<&str>,
 ) -> SandboxControlResponsePayload {
     SandboxControlResponsePayload {
         schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
         authority: SANDBOX_CONTROL_AUTHORITY.to_string(),
-        operation: operation.to_string(),
+        operation: request.operation.clone(),
         current_state,
         next_state,
         allowed,
@@ -4774,14 +4916,74 @@ fn sandbox_response(
         budget_violation,
         cleanup_required,
         quarantined,
+        effective_capabilities,
+        sandbox_id: request.sandbox_id.clone(),
+        profile_id: request.profile_id.clone(),
+        event_schema_version: Some(SANDBOX_EVENT_SCHEMA_VERSION.to_string()),
+        event_log_path: request.event_log_path.clone(),
+        event_written: false,
         event_kind: event_kind.map(|value| value.to_string()),
     }
+}
+
+fn maybe_record_sandbox_event(
+    response: &mut SandboxControlResponsePayload,
+    request: &SandboxControlRequestPayload,
+) -> Result<(), String> {
+    if request.trace_event != Some(true) {
+        return Ok(());
+    }
+    let path = request
+        .event_log_path
+        .as_deref()
+        .ok_or_else(|| "sandbox event tracing requires event_log_path".to_string())?;
+    let event = json!({
+        "schema_version": SANDBOX_EVENT_SCHEMA_VERSION,
+        "authority": SANDBOX_CONTROL_AUTHORITY,
+        "ts": Utc::now().to_rfc3339(),
+        "kind": response.event_kind,
+        "operation": response.operation,
+        "sandbox_id": response.sandbox_id,
+        "profile_id": response.profile_id,
+        "current_state": response.current_state,
+        "next_state": response.next_state,
+        "resolved_state": response.resolved_state,
+        "allowed": response.allowed,
+        "reason": response.reason,
+        "failure_reason": response.failure_reason,
+        "budget_violation": response.budget_violation,
+        "cleanup_required": response.cleanup_required,
+        "quarantined": response.quarantined,
+        "effective_capabilities": response.effective_capabilities,
+    });
+    let serialized = serde_json::to_string(&event)
+        .map_err(|err| format!("serialize sandbox event failed: {err}"))?
+        + "\n";
+    let path = PathBuf::from(path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "create sandbox event parent failed for {}: {err}",
+                parent.display()
+            )
+        })?;
+    }
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|err| format!("open sandbox event log failed for {}: {err}", path.display()))?;
+    file.write_all(serialized.as_bytes())
+        .map_err(|err| format!("write sandbox event failed for {}: {err}", path.display()))?;
+    response.event_log_path = Some(path.display().to_string());
+    response.event_written = true;
+    Ok(())
 }
 
 fn build_sandbox_control_response(
     payload: SandboxControlRequestPayload,
 ) -> Result<SandboxControlResponsePayload, String> {
-    match payload.operation.as_str() {
+    let mut response = match payload.operation.as_str() {
         "transition" => {
             let current_state = payload
                 .current_state
@@ -4792,8 +4994,8 @@ fn build_sandbox_control_response(
                 .clone()
                 .ok_or_else(|| "sandbox control transition requires next_state".to_string())?;
             let allowed = sandbox_transition_allowed(&current_state, &next_state);
-            Ok(sandbox_response(
-                &payload.operation,
+            sandbox_response(
+                &payload,
                 Some(current_state.clone()),
                 Some(next_state.clone()),
                 allowed,
@@ -4815,8 +5017,9 @@ fn build_sandbox_control_response(
                 None,
                 None,
                 None,
+                payload.capability_categories.clone(),
                 None,
-            ))
+            )
         }
         "cleanup" => {
             let current_state = payload
@@ -4826,8 +5029,8 @@ fn build_sandbox_control_response(
             let cleanup_failed = payload.cleanup_failed.unwrap_or(false);
             let resolved_state = if cleanup_failed { "failed" } else { "recycled" };
             let allowed = matches!(current_state.as_str(), "draining");
-            Ok(sandbox_response(
-                &payload.operation,
+            sandbox_response(
+                &payload,
                 Some(current_state.clone()),
                 Some(resolved_state.to_string()),
                 allowed,
@@ -4854,12 +5057,13 @@ fn build_sandbox_control_response(
                 None,
                 Some(false),
                 Some(cleanup_failed),
+                payload.capability_categories.clone(),
                 Some(if cleanup_failed {
                     "sandbox.cleanup_failed"
                 } else {
                     "sandbox.cleanup_completed"
                 }),
-            ))
+            )
         }
         "admit" => {
             let current_state = payload
@@ -4905,9 +5109,13 @@ fn build_sandbox_control_response(
             } else {
                 None
             };
-            if let Some(reason) = failure_reason {
-                return Ok(sandbox_response(
-                    &payload.operation,
+            if let Some(reason) = failure_reason.or_else(|| {
+                (!sandbox_transition_allowed(&current_state, "busy")).then(|| {
+                    format!("invalid sandbox admission state: {current_state:?} -> \"busy\"")
+                })
+            }) {
+                sandbox_response(
+                    &payload,
                     Some(current_state.clone()),
                     Some("failed".to_string()),
                     false,
@@ -4918,23 +5126,26 @@ fn build_sandbox_control_response(
                     None,
                     Some(false),
                     Some(true),
+                    Some(categories.clone()),
                     Some("sandbox.failed"),
-                ));
+                )
+            } else {
+                sandbox_response(
+                    &payload,
+                    Some(current_state.clone()),
+                    Some("busy".to_string()),
+                    true,
+                    Some("busy".to_string()),
+                    "admission-accepted",
+                    None,
+                    None,
+                    None,
+                    Some(false),
+                    Some(false),
+                    Some(categories.clone()),
+                    Some("sandbox.execution_started"),
+                )
             }
-            Ok(sandbox_response(
-                &payload.operation,
-                Some(current_state.clone()),
-                Some("busy".to_string()),
-                sandbox_transition_allowed(&current_state, "busy"),
-                Some("busy".to_string()),
-                "admission-accepted",
-                None,
-                None,
-                None,
-                Some(false),
-                Some(false),
-                Some("sandbox.execution_started"),
-            ))
         }
         "execution_result" => {
             let current_state = payload
@@ -4979,8 +5190,8 @@ fn build_sandbox_control_response(
                 } else {
                     "failed"
                 };
-                return Ok(sandbox_response(
-                    &payload.operation,
+                sandbox_response(
+                    &payload,
                     Some(current_state.clone()),
                     Some(resolved_state.to_string()),
                     sandbox_transition_allowed(&current_state, resolved_state),
@@ -4995,16 +5206,16 @@ fn build_sandbox_control_response(
                     None,
                     Some(resolved_state == "draining"),
                     Some(resolved_state == "failed"),
+                    payload.capability_categories.clone(),
                     Some(if resolved_state == "draining" {
                         "sandbox.timeout"
                     } else {
                         "sandbox.failed"
                     }),
-                ));
-            }
-            if let Some(violation) = budget_violation {
-                return Ok(sandbox_response(
-                    &payload.operation,
+                )
+            } else if let Some(violation) = budget_violation {
+                sandbox_response(
+                    &payload,
                     Some(current_state.clone()),
                     Some("draining".to_string()),
                     sandbox_transition_allowed(&current_state, "draining"),
@@ -5015,26 +5226,31 @@ fn build_sandbox_control_response(
                     Some(violation),
                     Some(true),
                     Some(false),
+                    payload.capability_categories.clone(),
                     Some("sandbox.budget_exceeded"),
-                ));
+                )
+            } else {
+                sandbox_response(
+                    &payload,
+                    Some(current_state.clone()),
+                    Some("draining".to_string()),
+                    sandbox_transition_allowed(&current_state, "draining"),
+                    Some("draining".to_string()),
+                    "execution-completed",
+                    None,
+                    None,
+                    None,
+                    Some(true),
+                    Some(false),
+                    payload.capability_categories.clone(),
+                    Some("sandbox.execution_completed"),
+                )
             }
-            Ok(sandbox_response(
-                &payload.operation,
-                Some(current_state.clone()),
-                Some("draining".to_string()),
-                sandbox_transition_allowed(&current_state, "draining"),
-                Some("draining".to_string()),
-                "execution-completed",
-                None,
-                None,
-                None,
-                Some(true),
-                Some(false),
-                Some("sandbox.execution_completed"),
-            ))
         }
-        other => Err(format!("unsupported sandbox control operation: {other}")),
-    }
+        other => return Err(format!("unsupported sandbox control operation: {other}")),
+    };
+    maybe_record_sandbox_event(&mut response, &payload)?;
+    Ok(response)
 }
 
 fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
@@ -6627,7 +6843,14 @@ pub(crate) fn build_runtime_control_plane_payload() -> Value {
                 ],
                 "cleanup_mode": "async-drain-and-recycle",
                 "event_log_artifact": "runtime_sandbox_events.jsonl",
-                "control_operations": ["transition", "cleanup"],
+                "event_schema_version": SANDBOX_EVENT_SCHEMA_VERSION,
+                "event_tracing": {
+                    "request_flag": "trace_event",
+                    "path_field": "event_log_path",
+                    "response_flag": "event_written",
+                    "effective_capabilities_field": "effective_capabilities"
+                },
+                "control_operations": ["transition", "cleanup", "admit", "execution_result"],
                 "runtime_probe_dimensions": ["cpu", "memory", "wall_clock", "output_size"],
             },
         },
@@ -6747,6 +6970,12 @@ pub(crate) fn build_runtime_control_plane_payload() -> Value {
                 "router_stdio_backpressure": concurrency_defaults.router_stdio.backpressure,
                 "stdio_max_concurrency_arg": concurrency_defaults.router_stdio.stdio_max_concurrency_arg,
                 "request_concurrency_field": concurrency_defaults.router_stdio.request_concurrency_field,
+                "compute_threads_owner": "rust-control-plane",
+                "compute_threads_default": concurrency_defaults.compute.default_threads,
+                "compute_threads_max": concurrency_defaults.compute.max_threads,
+                "compute_threads_env_keys": concurrency_defaults.compute.env_keys,
+                "compute_threads_arg": concurrency_defaults.compute.cli_arg,
+                "compute_threads_scheduling": concurrency_defaults.compute.scheduling,
                 "max_background_jobs": concurrency_defaults.max_background_jobs,
                 "max_background_jobs_limit": concurrency_defaults.max_background_jobs_limit,
                 "max_concurrent_subagents": concurrency_defaults.max_concurrent_subagents,
@@ -8310,32 +8539,30 @@ fn fallback_owner(records: &[SkillRecord]) -> Result<&SkillRecord, String> {
 }
 
 fn pick_owner<'a>(candidates: Vec<RouteCandidate<'a>>) -> RouteCandidate<'a> {
-    let mut gate_candidates = candidates
-        .iter()
-        .filter(|candidate| {
-            candidate.record.owner_lower == "gate" || candidate.record.gate_lower != "none"
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    gate_candidates.sort_by(route_candidate_cmp);
     let mut owner_candidates = candidates
         .iter()
-        .filter(|candidate| can_be_primary_owner(&candidate.record))
+        .filter(|candidate| can_be_primary_owner(candidate.record))
         .cloned()
         .collect::<Vec<_>>();
-    owner_candidates.sort_by(route_candidate_cmp);
+    owner_candidates.sort_unstable_by(route_candidate_cmp);
     let top_owner_score = owner_candidates
         .first()
         .map(|candidate| candidate.score)
         .unwrap_or(f64::NEG_INFINITY);
-    if let Some(top_gate) = gate_candidates.first().cloned() {
-        if top_gate.score >= 30.0 && top_gate.score >= top_owner_score {
-            let mut selected = top_gate;
-            selected
-                .reasons
-                .push("Prioritized via gate-before-owner precedence.".to_string());
-            return selected;
-        }
+    let top_gate = candidates
+        .iter()
+        .filter(|candidate| {
+            candidate.record.owner_lower == "gate" || candidate.record.gate_lower != "none"
+        })
+        .min_by(|left, right| route_candidate_cmp(left, right))
+        .cloned();
+    if let Some(mut top_gate) =
+        top_gate.filter(|candidate| candidate.score >= 30.0 && candidate.score >= top_owner_score)
+    {
+        top_gate
+            .reasons
+            .push("Prioritized via gate-before-owner precedence.".to_string());
+        return top_gate;
     }
 
     let owner_pool = if owner_candidates.is_empty() {
@@ -8350,7 +8577,7 @@ fn pick_owner<'a>(candidates: Vec<RouteCandidate<'a>>) -> RouteCandidate<'a> {
         .collect::<HashSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
-    layers.sort_by_key(|layer| layer_rank(layer));
+    layers.sort_unstable_by_key(|layer| layer_rank(layer));
 
     for layer in layers {
         let mut layer_candidates = owner_pool
@@ -8358,7 +8585,7 @@ fn pick_owner<'a>(candidates: Vec<RouteCandidate<'a>>) -> RouteCandidate<'a> {
             .filter(|candidate| candidate.record.layer == layer)
             .cloned()
             .collect::<Vec<_>>();
-        layer_candidates.sort_by(route_candidate_cmp);
+        layer_candidates.sort_unstable_by(route_candidate_cmp);
         if let Some(top) = layer_candidates.first().cloned() {
             if top.score >= layer_threshold(&layer) {
                 return top;
@@ -8367,7 +8594,7 @@ fn pick_owner<'a>(candidates: Vec<RouteCandidate<'a>>) -> RouteCandidate<'a> {
     }
 
     let mut fallback_pool = owner_pool;
-    fallback_pool.sort_by(|left, right| {
+    fallback_pool.sort_unstable_by(|left, right| {
         layer_rank(&left.record.layer)
             .cmp(&layer_rank(&right.record.layer))
             .then_with(|| {
@@ -8405,7 +8632,7 @@ fn pick_overlay(
     let anti_laziness = records.iter().find(|record| record.slug == "anti-laziness");
 
     let mut ordered = records.iter().collect::<Vec<_>>();
-    ordered.sort_by(|left, right| {
+    ordered.sort_unstable_by(|left, right| {
         layer_rank(&left.layer)
             .cmp(&layer_rank(&right.layer))
             .then_with(|| priority_rank(&left.priority).cmp(&priority_rank(&right.priority)))
@@ -8659,7 +8886,7 @@ fn trace_event_matches_scope(
     true
 }
 
-fn trace_scope_fields<'a>(payload: &'a Option<Vec<String>>) -> Option<&'a [String]> {
+fn trace_scope_fields(payload: &Option<Vec<String>>) -> Option<&[String]> {
     payload.as_deref().filter(|fields| !fields.is_empty())
 }
 
@@ -8698,7 +8925,7 @@ fn load_trace_stream_events(
             continue;
         }
         let event_payload = hydrate_trace_event_object(
-            trace_event_object(serde_json::from_str::<Value>(&raw_line).map_err(|err| {
+            trace_event_object(serde_json::from_str::<Value>(raw_line).map_err(|err| {
                 format!("parse trace stream line {} failed: {err}", line_number + 1)
             })?)?,
             line_number + 1,
@@ -8826,6 +9053,24 @@ fn compaction_delta_to_trace_event(
     Ok(event)
 }
 
+fn validate_compaction_artifact_digest(
+    artifact_ref: &Map<String, Value>,
+    payload_text: &str,
+    label: &str,
+) -> Result<(), String> {
+    let expected = artifact_ref
+        .get("digest")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("compaction {label} artifact ref is missing digest"))?;
+    let actual = sha256_hex(payload_text.as_bytes());
+    if expected != actual {
+        return Err(format!(
+            "Compaction recovery failed closed because {label} artifact digest mismatched."
+        ));
+    }
+    Ok(())
+}
+
 struct ResolvedTraceSource {
     path: PathBuf,
     source_kind: &'static str,
@@ -8837,16 +9082,90 @@ struct ResolvedTraceSource {
     recovery: Option<Value>,
 }
 
+struct TraceSourceRequest<'a> {
+    path: Option<&'a str>,
+    event_stream_text: Option<&'a str>,
+    compaction_manifest_path: Option<&'a str>,
+    compaction_manifest_text: Option<&'a str>,
+    compaction_state_text: Option<&'a str>,
+    compaction_artifact_index_text: Option<&'a str>,
+    compaction_delta_text: Option<&'a str>,
+    session_id: Option<&'a str>,
+    job_id: Option<&'a str>,
+    stream_scope_fields: &'a Option<Vec<String>>,
+}
+
+struct CompactionRecoveryRequest<'a> {
+    manifest_path: &'a Path,
+    manifest_text: Option<&'a str>,
+    state_text: Option<&'a str>,
+    artifact_index_text: Option<&'a str>,
+    delta_text: Option<&'a str>,
+    session_id: Option<&'a str>,
+    job_id: Option<&'a str>,
+    stream_scope_fields: &'a Option<Vec<String>>,
+}
+
+impl<'a> TraceSourceRequest<'a> {
+    fn from_metadata_payload(payload: &'a TraceMetadataWriteRequestPayload) -> Self {
+        Self {
+            path: payload.event_stream_path.as_deref(),
+            event_stream_text: payload.event_stream_text.as_deref(),
+            compaction_manifest_path: payload.compaction_manifest_path.as_deref(),
+            compaction_manifest_text: payload.compaction_manifest_text.as_deref(),
+            compaction_state_text: payload.compaction_state_text.as_deref(),
+            compaction_artifact_index_text: payload.compaction_artifact_index_text.as_deref(),
+            compaction_delta_text: payload.compaction_delta_text.as_deref(),
+            session_id: payload.session_id.as_deref(),
+            job_id: payload.job_id.as_deref(),
+            stream_scope_fields: &payload.stream_scope_fields,
+        }
+    }
+
+    fn from_inspect_payload(payload: &'a TraceStreamInspectRequestPayload) -> Self {
+        Self {
+            path: payload.path.as_deref(),
+            event_stream_text: payload.event_stream_text.as_deref(),
+            compaction_manifest_path: payload.compaction_manifest_path.as_deref(),
+            compaction_manifest_text: payload.compaction_manifest_text.as_deref(),
+            compaction_state_text: payload.compaction_state_text.as_deref(),
+            compaction_artifact_index_text: payload.compaction_artifact_index_text.as_deref(),
+            compaction_delta_text: payload.compaction_delta_text.as_deref(),
+            session_id: payload.session_id.as_deref(),
+            job_id: payload.job_id.as_deref(),
+            stream_scope_fields: &payload.stream_scope_fields,
+        }
+    }
+
+    fn from_replay_payload(payload: &'a TraceStreamReplayRequestPayload) -> Self {
+        Self {
+            path: payload.path.as_deref(),
+            event_stream_text: payload.event_stream_text.as_deref(),
+            compaction_manifest_path: payload.compaction_manifest_path.as_deref(),
+            compaction_manifest_text: payload.compaction_manifest_text.as_deref(),
+            compaction_state_text: payload.compaction_state_text.as_deref(),
+            compaction_artifact_index_text: payload.compaction_artifact_index_text.as_deref(),
+            compaction_delta_text: payload.compaction_delta_text.as_deref(),
+            session_id: payload.session_id.as_deref(),
+            job_id: payload.job_id.as_deref(),
+            stream_scope_fields: &payload.stream_scope_fields,
+        }
+    }
+}
+
 fn load_compaction_recovery(
-    manifest_path: &Path,
-    manifest_text: Option<&str>,
-    state_text: Option<&str>,
-    artifact_index_text: Option<&str>,
-    delta_text: Option<&str>,
-    session_id: Option<&str>,
-    job_id: Option<&str>,
-    stream_scope_fields: &Option<Vec<String>>,
+    request: CompactionRecoveryRequest<'_>,
 ) -> Result<ResolvedTraceSource, String> {
+    let CompactionRecoveryRequest {
+        manifest_path,
+        manifest_text,
+        state_text,
+        artifact_index_text,
+        delta_text,
+        session_id,
+        job_id,
+        stream_scope_fields,
+    } = request;
     let storage_backend = resolve_storage_backend(&[manifest_path.to_path_buf()]);
     let manifest_raw = match manifest_text {
         Some(value) => value.to_string(),
@@ -8868,18 +9187,26 @@ fn load_compaction_recovery(
         .get("latest_stable_snapshot")
         .and_then(Value::as_object)
         .ok_or_else(|| "compaction manifest is missing latest_stable_snapshot".to_string())?;
-    let state_ref_uri = snapshot
+    let state_ref = snapshot
         .get("state_ref")
         .and_then(Value::as_object)
-        .and_then(|payload| payload.get("uri"))
+        .ok_or_else(|| {
+            "compaction manifest is missing required recovery artifact refs.".to_string()
+        })?;
+    let artifact_index_ref = snapshot
+        .get("artifact_index_ref")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            "compaction manifest is missing required recovery artifact refs.".to_string()
+        })?;
+    let state_ref_uri = state_ref
+        .get("uri")
         .and_then(Value::as_str)
         .ok_or_else(|| {
             "compaction manifest is missing required recovery artifact refs.".to_string()
         })?;
-    let artifact_index_uri = snapshot
-        .get("artifact_index_ref")
-        .and_then(Value::as_object)
-        .and_then(|payload| payload.get("uri"))
+    let artifact_index_uri = artifact_index_ref
+        .get("uri")
         .and_then(Value::as_str)
         .ok_or_else(|| {
             "compaction manifest is missing required recovery artifact refs.".to_string()
@@ -8900,6 +9227,7 @@ fn load_compaction_recovery(
         Some(value) => value.to_string(),
         None => storage_read_text(&state_path, storage_backend.as_ref())?,
     };
+    validate_compaction_artifact_digest(state_ref, &state_raw, "state_ref")?;
     let state_payload = serde_json::from_str::<Value>(&state_raw).map_err(|err| {
         format!(
             "parse compaction state failed for {}: {err}",
@@ -8910,6 +9238,11 @@ fn load_compaction_recovery(
         Some(value) => value.to_string(),
         None => storage_read_text(&artifact_index_path, storage_backend.as_ref())?,
     };
+    validate_compaction_artifact_digest(
+        artifact_index_ref,
+        &artifact_index_raw,
+        "artifact_index_ref",
+    )?;
     let artifact_index_payload =
         serde_json::from_str::<Value>(&artifact_index_raw).map_err(|err| {
             format!(
@@ -8937,7 +9270,7 @@ fn load_compaction_recovery(
                 if raw_line.trim().is_empty() {
                     continue;
                 }
-                let delta_payload = serde_json::from_str::<Value>(&raw_line).map_err(|err| {
+                let delta_payload = serde_json::from_str::<Value>(raw_line).map_err(|err| {
                     format!(
                         "parse compaction delta line {} failed: {err}",
                         line_number + 1
@@ -9021,45 +9354,39 @@ fn load_compaction_recovery(
     })
 }
 
-fn resolve_trace_source(
-    path: Option<&str>,
-    event_stream_text: Option<&str>,
-    compaction_manifest_path: Option<&str>,
-    compaction_manifest_text: Option<&str>,
-    compaction_state_text: Option<&str>,
-    compaction_artifact_index_text: Option<&str>,
-    compaction_delta_text: Option<&str>,
-    session_id: Option<&str>,
-    job_id: Option<&str>,
-    stream_scope_fields: &Option<Vec<String>>,
-) -> Result<ResolvedTraceSource, String> {
-    if compaction_manifest_path.is_some() || compaction_manifest_text.is_some() {
-        let compaction_path = compaction_manifest_path.unwrap_or("<inline-compaction-manifest>");
-        return load_compaction_recovery(
-            &PathBuf::from(compaction_path),
-            compaction_manifest_text,
-            compaction_state_text,
-            compaction_artifact_index_text,
-            compaction_delta_text,
-            session_id,
-            job_id,
-            stream_scope_fields,
-        );
+fn resolve_trace_source(request: TraceSourceRequest<'_>) -> Result<ResolvedTraceSource, String> {
+    if request.compaction_manifest_path.is_some() || request.compaction_manifest_text.is_some() {
+        let compaction_path = request
+            .compaction_manifest_path
+            .unwrap_or("<inline-compaction-manifest>");
+        return load_compaction_recovery(CompactionRecoveryRequest {
+            manifest_path: &PathBuf::from(compaction_path),
+            manifest_text: request.compaction_manifest_text,
+            state_text: request.compaction_state_text,
+            artifact_index_text: request.compaction_artifact_index_text,
+            delta_text: request.compaction_delta_text,
+            session_id: request.session_id,
+            job_id: request.job_id,
+            stream_scope_fields: request.stream_scope_fields,
+        });
     }
-    let path = path.or(if event_stream_text.is_some() {
-        Some("<inline-trace-stream>")
-    } else {
-        None
-    }).ok_or_else(|| {
-        "trace stream replay requires path, event_stream_text, compaction_manifest_path, or compaction_manifest_text".to_string()
-    })?;
+    let path = request
+        .path
+        .or(if request.event_stream_text.is_some() {
+            Some("<inline-trace-stream>")
+        } else {
+            None
+        })
+        .ok_or_else(|| {
+            "trace stream replay requires path, event_stream_text, compaction_manifest_path, or compaction_manifest_text".to_string()
+        })?;
     let path_buf = PathBuf::from(path);
     let events = load_trace_stream_events(
         &path_buf,
-        event_stream_text,
-        session_id,
-        job_id,
-        stream_scope_fields,
+        request.event_stream_text,
+        request.session_id,
+        request.job_id,
+        request.stream_scope_fields,
     )?;
     let latest_event = events.last();
     Ok(ResolvedTraceSource {
@@ -9080,18 +9407,7 @@ fn resolve_trace_source(
 pub(crate) fn inspect_trace_stream(
     payload: TraceStreamInspectRequestPayload,
 ) -> Result<TraceStreamInspectResponsePayload, String> {
-    let resolved = resolve_trace_source(
-        payload.path.as_deref(),
-        payload.event_stream_text.as_deref(),
-        payload.compaction_manifest_path.as_deref(),
-        payload.compaction_manifest_text.as_deref(),
-        payload.compaction_state_text.as_deref(),
-        payload.compaction_artifact_index_text.as_deref(),
-        payload.compaction_delta_text.as_deref(),
-        payload.session_id.as_deref(),
-        payload.job_id.as_deref(),
-        &payload.stream_scope_fields,
-    )?;
+    let resolved = resolve_trace_source(TraceSourceRequest::from_inspect_payload(&payload))?;
     let reroute_count = trace_reroute_count(&resolved.events);
     let retry_count = trace_retry_count(&resolved.events);
 
@@ -9114,18 +9430,7 @@ pub(crate) fn inspect_trace_stream(
 pub(crate) fn replay_trace_stream(
     payload: TraceStreamReplayRequestPayload,
 ) -> Result<TraceStreamReplayResponsePayload, String> {
-    let resolved = resolve_trace_source(
-        payload.path.as_deref(),
-        payload.event_stream_text.as_deref(),
-        payload.compaction_manifest_path.as_deref(),
-        payload.compaction_manifest_text.as_deref(),
-        payload.compaction_state_text.as_deref(),
-        payload.compaction_artifact_index_text.as_deref(),
-        payload.compaction_delta_text.as_deref(),
-        payload.session_id.as_deref(),
-        payload.job_id.as_deref(),
-        &payload.stream_scope_fields,
-    )?;
+    let resolved = resolve_trace_source(TraceSourceRequest::from_replay_payload(&payload))?;
     let after_event_id = payload.after_event_id.clone();
     let limit = payload.limit.unwrap_or(usize::MAX);
     let mut anchor_found = after_event_id.is_none();
@@ -9300,7 +9605,7 @@ fn write_trace_compaction_delta(
         schema_version: TRACE_COMPACTION_DELTA_WRITE_SCHEMA_VERSION.to_string(),
         authority: TRACE_STREAM_IO_AUTHORITY.to_string(),
         path: path.display().to_string(),
-        bytes_written: serialized.as_bytes().len(),
+        bytes_written: serialized.len(),
     })
 }
 
@@ -9899,8 +10204,16 @@ mod tests {
         )
         .expect("write supervisor state");
 
-        let payload = build_framework_alias_envelope(&repo_root, "autopilot", 4, false, None)
-            .expect("build alias payload");
+        let payload = build_framework_alias_envelope(
+            &repo_root,
+            "autopilot",
+            FrameworkAliasBuildOptions {
+                max_lines: 4,
+                compact: false,
+                host_id: None,
+            },
+        )
+        .expect("build alias payload");
         let alias = payload
             .get("alias")
             .and_then(Value::as_object)
@@ -9992,8 +10305,16 @@ mod tests {
         )
         .expect("write supervisor state");
 
-        let payload = build_framework_alias_envelope(&repo_root, "deepinterview", 5, false, None)
-            .expect("build alias payload");
+        let payload = build_framework_alias_envelope(
+            &repo_root,
+            "deepinterview",
+            FrameworkAliasBuildOptions {
+                max_lines: 5,
+                compact: false,
+                host_id: None,
+            },
+        )
+        .expect("build alias payload");
         let alias = payload
             .get("alias")
             .and_then(Value::as_object)
@@ -10077,8 +10398,16 @@ mod tests {
         )
         .expect("write supervisor state");
 
-        let payload = build_framework_alias_envelope(&repo_root, "team", 5, false, None)
-            .expect("build alias payload");
+        let payload = build_framework_alias_envelope(
+            &repo_root,
+            "team",
+            FrameworkAliasBuildOptions {
+                max_lines: 5,
+                compact: false,
+                host_id: None,
+            },
+        )
+        .expect("build alias payload");
         let alias = payload
             .get("alias")
             .and_then(Value::as_object)
@@ -10165,8 +10494,16 @@ mod tests {
         )
         .expect("write supervisor state");
 
-        let payload = build_framework_alias_envelope(&repo_root, "autopilot", 3, true, None)
-            .expect("build alias payload");
+        let payload = build_framework_alias_envelope(
+            &repo_root,
+            "autopilot",
+            FrameworkAliasBuildOptions {
+                max_lines: 3,
+                compact: true,
+                host_id: None,
+            },
+        )
+        .expect("build alias payload");
         let alias = payload
             .get("alias")
             .and_then(Value::as_object)
@@ -10983,6 +11320,19 @@ mod tests {
             Value::String("cleanup".to_string())
         );
         assert_eq!(
+            payload["services"]["execution"]["sandbox_lifecycle_contract"]["control_operations"][2],
+            Value::String("admit".to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["sandbox_lifecycle_contract"]["event_schema_version"],
+            Value::String(SANDBOX_EVENT_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["sandbox_lifecycle_contract"]["event_tracing"]
+                ["response_flag"],
+            Value::String("event_written".to_string())
+        );
+        assert_eq!(
             payload["services"]["checkpoint"]["delegate_kind"],
             Value::String("filesystem-checkpointer".to_string())
         );
@@ -11313,10 +11663,90 @@ mod tests {
         assert_eq!(failed.resolved_state.as_deref(), Some("failed"));
     }
 
+    #[test]
+    fn sandbox_control_records_durable_event_when_requested() {
+        let path = temp_trace_path("sandbox-events");
+        let response = build_sandbox_control_response(SandboxControlRequestPayload {
+            schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "admit".to_string(),
+            sandbox_id: Some("sandbox-1".to_string()),
+            profile_id: Some("workspace".to_string()),
+            current_state: Some("warm".to_string()),
+            tool_category: Some("workspace_mutating".to_string()),
+            capability_categories: Some(vec![
+                "read_only".to_string(),
+                "workspace_mutating".to_string(),
+            ]),
+            budget_cpu: Some(1.0),
+            budget_memory: Some(1024),
+            budget_wall_clock: Some(5.0),
+            budget_output_size: Some(4096),
+            event_log_path: Some(path.display().to_string()),
+            trace_event: Some(true),
+            ..sandbox_control_request_defaults()
+        })
+        .expect("sandbox event response");
+
+        assert!(response.allowed);
+        assert!(response.event_written);
+        assert_eq!(
+            response.event_schema_version.as_deref(),
+            Some(SANDBOX_EVENT_SCHEMA_VERSION)
+        );
+        assert_eq!(
+            response.effective_capabilities,
+            Some(vec![
+                "read_only".to_string(),
+                "workspace_mutating".to_string()
+            ])
+        );
+
+        let line = fs::read_to_string(&path).expect("sandbox event log");
+        let event: Value = serde_json::from_str(line.trim()).expect("sandbox event json");
+        assert_eq!(
+            event["schema_version"],
+            Value::String(SANDBOX_EVENT_SCHEMA_VERSION.to_string())
+        );
+        assert_eq!(event["kind"], Value::String("sandbox.execution_started".to_string()));
+        assert_eq!(event["sandbox_id"], Value::String("sandbox-1".to_string()));
+        assert_eq!(
+            event["effective_capabilities"][1],
+            Value::String("workspace_mutating".to_string())
+        );
+    }
+
+    #[test]
+    fn sandbox_control_rejects_admission_from_invalid_state() {
+        let response = build_sandbox_control_response(SandboxControlRequestPayload {
+            schema_version: SANDBOX_CONTROL_SCHEMA_VERSION.to_string(),
+            operation: "admit".to_string(),
+            current_state: Some("failed".to_string()),
+            tool_category: Some("read_only".to_string()),
+            capability_categories: Some(vec!["read_only".to_string()]),
+            budget_cpu: Some(1.0),
+            budget_memory: Some(1024),
+            budget_wall_clock: Some(5.0),
+            budget_output_size: Some(4096),
+            ..sandbox_control_request_defaults()
+        })
+        .expect("sandbox invalid admission response");
+
+        assert!(!response.allowed);
+        assert_eq!(response.reason, "admission-rejected");
+        assert_eq!(response.resolved_state.as_deref(), Some("failed"));
+        assert_eq!(response.quarantined, Some(true));
+        assert_eq!(
+            response.failure_reason.as_deref(),
+            Some("invalid sandbox admission state: \"failed\" -> \"busy\"")
+        );
+    }
+
     fn sandbox_control_request_defaults() -> SandboxControlRequestPayload {
         SandboxControlRequestPayload {
             schema_version: String::new(),
             operation: String::new(),
+            sandbox_id: None,
+            profile_id: None,
             current_state: None,
             next_state: None,
             cleanup_failed: None,
@@ -11332,6 +11762,8 @@ mod tests {
             probe_wall_clock: None,
             probe_output_size: None,
             error_kind: None,
+            event_log_path: None,
+            trace_event: None,
         }
     }
 

@@ -991,6 +991,7 @@ fn shared_contract_workspace_bridges(shared_contract: &Map<String, Value>) -> Va
         .unwrap_or_else(|| Value::Object(Map::new()))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_source_contract(
     canonical_adapter_id: &str,
     shared_contract_field: &str,
@@ -1298,9 +1299,7 @@ fn complete_cli_host_adapter_payload(
     completed
 }
 
-fn adapter_host_payload<'a>(
-    adapter: &'a Map<String, Value>,
-) -> Result<&'a Map<String, Value>, String> {
+fn adapter_host_payload(adapter: &Map<String, Value>) -> Result<&Map<String, Value>, String> {
     adapter
         .get(HOST_ADAPTER_PAYLOAD_KEY)
         .and_then(Value::as_object)

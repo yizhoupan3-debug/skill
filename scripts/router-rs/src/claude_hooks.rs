@@ -33,10 +33,12 @@ const STABLE_DOCUMENTS: [&str; 5] = [
     "lessons.md",
     "runbooks.md",
 ];
-const GENERATED_PATHS: [&str; 3] = [
+const GENERATED_PATHS: [&str; 5] = [
     ".claude/settings.json",
     ".claude/hooks/README.md",
     ".codex/hooks.json",
+    ".codex/README.md",
+    ".gemini/settings.json",
 ];
 const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
@@ -95,7 +97,7 @@ const MORE_RETIRED_HOST_ENTRYPOINT_PATHS: [&str; 13] = [
     ".claude/hooks/config_change.sh",
     ".claude/hooks/stop_failure.sh",
 ];
-const CLAUDE_PRE_TOOL_USE_RULES: [&str; 12] = [
+const CLAUDE_PRE_TOOL_USE_RULES: [&str; 13] = [
     "/AGENT.md",
     "/AGENTS.md",
     "/CLAUDE.md",
@@ -106,10 +108,11 @@ const CLAUDE_PRE_TOOL_USE_RULES: [&str; 12] = [
     "/.claude/hooks/*.sh",
     "/.claude/commands/**",
     "/.codex/hooks.json",
+    "/.codex/README.md",
     "/.codex/host_entrypoints_sync_manifest.json",
     "/.codex/memory/CLAUDE_MEMORY.md",
 ];
-const CLAUDE_PRE_TOOL_USE_BASH_RULES: [&str; 11] = [
+const CLAUDE_PRE_TOOL_USE_BASH_RULES: [&str; 12] = [
     "*AGENT.md*",
     "*AGENTS.md*",
     "*CLAUDE.md*",
@@ -119,6 +122,7 @@ const CLAUDE_PRE_TOOL_USE_BASH_RULES: [&str; 11] = [
     "*.claude/hooks/*",
     "*.claude/commands/*",
     "*.codex/hooks.json*",
+    "*.codex/README.md*",
     "*.codex/host_entrypoints_sync_manifest.json*",
     "*.codex/memory/CLAUDE_MEMORY.md*",
 ];
@@ -128,7 +132,7 @@ const CLAUDE_QUALITY_PRE_TOOL_USE_RULES: [&str; 4] = [
     "/.claude/hooks/**",
     "/tools/browser-mcp/src/**",
 ];
-const PROTECTED_GENERATED_PATHS: [&str; 9] = [
+const PROTECTED_GENERATED_PATHS: [&str; 10] = [
     "AGENT.md",
     "AGENTS.md",
     "CLAUDE.md",
@@ -136,11 +140,12 @@ const PROTECTED_GENERATED_PATHS: [&str; 9] = [
     ".gemini/settings.json",
     ".claude/settings.json",
     ".codex/hooks.json",
+    ".codex/README.md",
     ".codex/host_entrypoints_sync_manifest.json",
     ".codex/memory/CLAUDE_MEMORY.md",
 ];
 const PROTECTED_GENERATED_PREFIXES: [&str; 2] = [".claude/hooks/", ".claude/commands/"];
-const PROTECTED_BASH_PATH_HINTS: [&str; 11] = [
+const PROTECTED_BASH_PATH_HINTS: [&str; 12] = [
     "AGENT.md",
     "AGENTS.md",
     "CLAUDE.md",
@@ -148,6 +153,7 @@ const PROTECTED_BASH_PATH_HINTS: [&str; 11] = [
     ".gemini/settings.json",
     ".claude/settings.json",
     ".codex/hooks.json",
+    ".codex/README.md",
     ".claude/hooks/",
     ".claude/commands/",
     ".codex/host_entrypoints_sync_manifest.json",
@@ -1004,7 +1010,11 @@ fn build_codex_command_hook(event: &str, matcher: &str) -> Value {
     })
 }
 
-fn build_hook_binary_preamble(project_var: &str, env_var: &str) -> String {
+fn build_hook_binary_preamble(
+    project_var: &str,
+    env_var: &str,
+    missing_binary_fallback: &str,
+) -> String {
     let mut command = String::new();
     command.push_str(&format!(
         "{project_var}=\"${{{env_var}:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}\"; "
@@ -1015,26 +1025,27 @@ fn build_hook_binary_preamble(project_var: &str, env_var: &str) -> String {
     command.push_str(&format!(
         "ROUTER_RS_DEBUG_BIN=\"${project_var}/scripts/router-rs/target/debug/router-rs\"; "
     ));
-    command.push_str(&format!("ROUTER_RS_BIN=\"\"; "));
     command
-        .push_str("if [ -x \"$ROUTER_RS_RELEASE_BIN\" ] && [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ");
+        .push_str("ROUTER_RS_SHARED_TARGET_DIR=\"${CARGO_TARGET_DIR:-/tmp/skill-cargo-target}\"; ");
     command.push_str(
-        "if [ \"$ROUTER_RS_DEBUG_BIN\" -nt \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; else ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; fi; ",
+        "ROUTER_RS_SHARED_RELEASE_BIN=\"$ROUTER_RS_SHARED_TARGET_DIR/release/router-rs\"; ",
     );
-    command.push_str(
-        "elif [ -x \"$ROUTER_RS_RELEASE_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_RELEASE_BIN\"; ",
-    );
-    command.push_str(
-        "elif [ -x \"$ROUTER_RS_DEBUG_BIN\" ]; then ROUTER_RS_BIN=\"$ROUTER_RS_DEBUG_BIN\"; fi; ",
-    );
-    command.push_str(
-        "if [ -z \"$ROUTER_RS_BIN\" ]; then echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1; fi; ",
-    );
+    command
+        .push_str("ROUTER_RS_SHARED_DEBUG_BIN=\"$ROUTER_RS_SHARED_TARGET_DIR/debug/router-rs\"; ");
+    command.push_str("ROUTER_RS_BIN=\"\"; ");
+    command.push_str("for ROUTER_RS_CANDIDATE in \"$ROUTER_RS_RELEASE_BIN\" \"$ROUTER_RS_DEBUG_BIN\" \"$ROUTER_RS_SHARED_RELEASE_BIN\" \"$ROUTER_RS_SHARED_DEBUG_BIN\"; do if [ -x \"$ROUTER_RS_CANDIDATE\" ] && { [ -z \"$ROUTER_RS_BIN\" ] || [ \"$ROUTER_RS_CANDIDATE\" -nt \"$ROUTER_RS_BIN\" ]; }; then ROUTER_RS_BIN=\"$ROUTER_RS_CANDIDATE\"; fi; done; ");
+    command.push_str("if [ -z \"$ROUTER_RS_BIN\" ]; then ");
+    command.push_str(missing_binary_fallback);
+    command.push_str("; fi; ");
     command
 }
 
 fn build_claude_host_hook_command(event: &str) -> String {
-    let mut command = build_hook_binary_preamble("CLAUDE_PROJECT_DIR", "CLAUDE_PROJECT_DIR");
+    let mut command = build_hook_binary_preamble(
+        "CLAUDE_PROJECT_DIR",
+        "CLAUDE_PROJECT_DIR",
+        "echo \"Missing required router-rs binary: $ROUTER_RS_RELEASE_BIN or $ROUTER_RS_DEBUG_BIN\" >&2; exit 1",
+    );
     command.push_str(&format!(
         "\"$ROUTER_RS_BIN\" --claude-host-hook-command {event} --repo-root \"$CLAUDE_PROJECT_DIR\""
     ));
@@ -1042,7 +1053,8 @@ fn build_claude_host_hook_command(event: &str) -> String {
 }
 
 fn build_codex_hook_command(event: &str) -> String {
-    let mut command = build_hook_binary_preamble("CODEX_PROJECT_ROOT", "CODEX_PROJECT_ROOT");
+    let mut command =
+        build_hook_binary_preamble("CODEX_PROJECT_ROOT", "CODEX_PROJECT_ROOT", "exit 0");
     command.push_str(&format!(
         "\"$ROUTER_RS_BIN\" --codex-hook-command {event} --repo-root \"$CODEX_PROJECT_ROOT\""
     ));
@@ -3283,14 +3295,17 @@ fn extract_memory_segments(raw: &str) -> Vec<(Vec<String>, String)> {
         segments.push((heading_stack.clone(), body));
     };
 
+    let heading_regex = Regex::new(r"^(#{1,6})\s+(.*)$").ok();
+    let list_item_regex = Regex::new(r"^(?:[-*]|\d+[.)])\s+(.*)$").ok();
+
     for raw_line in raw.lines() {
         let stripped = raw_line.trim();
         if stripped.is_empty() {
             flush_paragraph(&mut segments, &heading_stack, &mut paragraph);
             continue;
         }
-        if let Some(captures) = Regex::new(r"^(#{1,6})\s+(.*)$")
-            .ok()
+        if let Some(captures) = heading_regex
+            .as_ref()
             .and_then(|regex| regex.captures(stripped))
         {
             flush_paragraph(&mut segments, &heading_stack, &mut paragraph);
@@ -3311,8 +3326,8 @@ fn extract_memory_segments(raw: &str) -> Vec<(Vec<String>, String)> {
             heading_stack.push(title);
             continue;
         }
-        if let Some(captures) = Regex::new(r"^(?:[-*]|\d+[.)])\s+(.*)$")
-            .ok()
+        if let Some(captures) = list_item_regex
+            .as_ref()
             .and_then(|regex| regex.captures(stripped))
         {
             flush_paragraph(&mut segments, &heading_stack, &mut paragraph);
