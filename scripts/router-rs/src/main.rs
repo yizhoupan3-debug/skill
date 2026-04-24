@@ -7,6 +7,7 @@ use rayon::ThreadPoolBuilder;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
@@ -7068,6 +7069,7 @@ fn runtime_observability_base_dimensions() -> Vec<&'static str> {
         "runtime.attempt",
         "runtime.worker_id",
         "runtime.generation",
+        "runtime.schema_version",
     ]
 }
 
@@ -7337,6 +7339,7 @@ fn build_runtime_metric_record(payload: Value) -> Result<Value, String> {
             "runtime.attempt": attempt,
             "runtime.worker_id": worker_id,
             "runtime.generation": generation,
+            "runtime.schema_version": RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION,
             "runtime.stage": "runtime.metric",
             "runtime.status": "ok",
         },
@@ -9069,6 +9072,12 @@ fn validate_compaction_artifact_digest(
         ));
     }
     Ok(())
+}
+
+fn sha256_hex(payload: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(payload);
+    format!("{:x}", hasher.finalize())
 }
 
 struct ResolvedTraceSource {
