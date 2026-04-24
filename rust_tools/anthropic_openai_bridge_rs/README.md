@@ -39,6 +39,14 @@ Useful loss-control knobs:
   model names and `max_tokens` for older chat-compatible names.
 - `AOB_STREAM_HEARTBEAT_SECS=5`: emits SSE comments during upstream pauses so
   Claude Code keeps the stream alive and feels less stuck.
+- `AOB_MAX_REQUEST_BYTES=67108864`: caps Anthropic request bodies before JSON
+  parsing so large tool transcripts do not grow memory without bound.
+- `AOB_UPSTREAM_CONNECT_TIMEOUT_SECS=10`: fails bad upstream endpoints quickly
+  instead of tying up bridge workers.
+- `AOB_UPSTREAM_POOL_MAX_IDLE_PER_HOST=128`: keeps enough warm upstream
+  connections for parallel Claude tool loops.
+- `AOB_STREAM_CHANNEL_DEPTH=64`: bounds queued SSE bytes per stream while still
+  allowing short upstream bursts.
 
 Then point Claude Code at:
 

@@ -1,4 +1,5 @@
 use axum::body::Body;
+use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -58,6 +59,18 @@ struct Cli {
     max_tokens_field: String,
     #[arg(long, env = "AOB_STREAM_HEARTBEAT_SECS", default_value_t = 5)]
     stream_heartbeat_secs: u64,
+    #[arg(long, env = "AOB_MAX_REQUEST_BYTES", default_value_t = 64 * 1024 * 1024)]
+    max_request_bytes: usize,
+    #[arg(long, env = "AOB_UPSTREAM_CONNECT_TIMEOUT_SECS", default_value_t = 10)]
+    upstream_connect_timeout_secs: u64,
+    #[arg(
+        long,
+        env = "AOB_UPSTREAM_POOL_MAX_IDLE_PER_HOST",
+        default_value_t = 128
+    )]
+    upstream_pool_max_idle_per_host: usize,
+    #[arg(long, env = "AOB_STREAM_CHANNEL_DEPTH", default_value_t = 64)]
+    stream_channel_depth: usize,
 }
 
 #[derive(Clone)]
@@ -73,6 +86,8 @@ struct AppState {
     stream_obfuscation: StreamObfuscation,
     max_tokens_field: String,
     stream_heartbeat_secs: u64,
+    max_request_bytes: usize,
+    stream_channel_depth: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -131,9 +146,13 @@ struct AnthropicResponse {
 async fn main() -> Result<(), String> {
     let cli = Cli::parse();
     let client = Client::builder()
+        .connect_timeout(Duration::from_secs(cli.upstream_connect_timeout_secs))
+        .pool_max_idle_per_host(cli.upstream_pool_max_idle_per_host)
         .tcp_nodelay(true)
         .build()
         .map_err(|err| format!("client build failed: {err}"))?;
+    let max_request_bytes = cli.max_request_bytes.max(1024);
+    let stream_channel_depth = cli.stream_channel_depth.clamp(1, 1024);
     let state = Arc::new(AppState {
         client,
         upstream_base: cli.upstream_base.trim_end_matches('/').to_string(),
@@ -146,12 +165,15 @@ async fn main() -> Result<(), String> {
         stream_obfuscation: parse_stream_obfuscation(&cli.stream_obfuscation)?,
         max_tokens_field: cli.max_tokens_field,
         stream_heartbeat_secs: cli.stream_heartbeat_secs,
+        max_request_bytes,
+        stream_channel_depth,
     });
     let app = Router::new()
         .route("/health", get(health))
         .route("/v1/models", get(models))
         .route("/v1/messages", post(messages))
         .route("/v1/messages/count_tokens", post(count_tokens))
+        .layer(DefaultBodyLimit::max(max_request_bytes))
         .with_state(state);
     let listener = tokio::net::TcpListener::bind(cli.listen)
         .await
@@ -173,6 +195,8 @@ async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         "stream_include_usage": state.stream_include_usage,
         "stream_obfuscation": stream_obfuscation_label(&state.stream_obfuscation),
         "max_tokens_field": resolve_max_tokens_field(&state.max_tokens_field, &state.model),
+        "max_request_bytes": state.max_request_bytes,
+        "stream_channel_depth": state.stream_channel_depth,
         "sampling_parameters": if supports_sampling_parameters(&state.model) { "forwarded" } else { "dropped_for_reasoning_model" },
         "stream_heartbeat_secs": state.stream_heartbeat_secs,
         "loss_reduction": {
@@ -257,6 +281,7 @@ async fn handle_messages(
             upstream_model,
             estimated_input_tokens,
             state.stream_heartbeat_secs,
+            state.stream_channel_depth,
         ));
     }
     let text = response
@@ -433,6 +458,10 @@ fn append_user_message(messages: &mut Vec<Value>, content: &Value) {
     for block in blocks {
         match block.get("type").and_then(Value::as_str) {
             Some("tool_result") => {
+                if !user_parts.is_empty() {
+                    messages
+                        .push(json!({"role": "user", "content": std::mem::take(&mut user_parts)}));
+                }
                 let text = content_value_to_text(block.get("content").unwrap_or(&Value::Null));
                 messages.push(json!({
                     "role": "tool",
@@ -748,9 +777,19 @@ fn usage_token(usage: &Value, keys: &[&str]) -> Option<u64> {
 
 fn parse_tool_arguments(value: Option<&Value>) -> Option<Value> {
     match value? {
-        Value::String(text) => serde_json::from_str(text).ok(),
-        Value::Object(_) => value.cloned(),
+        Value::String(text) => parse_tool_arguments_text(text),
+        Value::Object(_) | Value::Array(_) => value.cloned(),
         _ => None,
+    }
+}
+
+fn parse_tool_arguments_text(text: &str) -> Option<Value> {
+    if text.trim().is_empty() {
+        return Some(json!({}));
+    }
+    match serde_json::from_str(text) {
+        Ok(value) => Some(value),
+        Err(_) => Some(json!({"_raw": text})),
     }
 }
 
@@ -870,8 +909,9 @@ fn openai_stream_to_anthropic_response(
     default_model: String,
     estimated_input_tokens: u64,
     heartbeat_secs: u64,
+    channel_depth: usize,
 ) -> Response {
-    let (tx, rx) = mpsc::channel::<Result<Bytes, Infallible>>(256);
+    let (tx, rx) = mpsc::channel::<Result<Bytes, Infallible>>(channel_depth);
     tokio::spawn(async move {
         bridge_openai_stream(
             response,
@@ -1072,6 +1112,7 @@ struct ToolStreamBlock {
     content_index: Option<usize>,
     id: Option<String>,
     name: Option<String>,
+    emitted_arguments: bool,
 }
 
 impl StreamBridgeState {
@@ -1149,6 +1190,7 @@ impl StreamBridgeState {
                 content_index: None,
                 id: None,
                 name: None,
+                emitted_arguments: false,
             });
         let name = block
             .name
@@ -1178,6 +1220,7 @@ impl StreamBridgeState {
                 content_index: None,
                 id: None,
                 name: None,
+                emitted_arguments: false,
             });
         if let Some(id) = id {
             block.id = Some(id.to_string());
@@ -1195,7 +1238,9 @@ impl StreamBridgeState {
         for tool_index in self
             .tool_blocks
             .iter()
-            .filter_map(|(tool_index, block)| block.content_index.is_none().then_some(*tool_index))
+            .filter_map(|(tool_index, block)| {
+                (block.content_index.is_none() && block.emitted_arguments).then_some(*tool_index)
+            })
             .collect::<Vec<_>>()
         {
             self.ensure_tool_block(tool_index, None, None, events);
@@ -1286,6 +1331,9 @@ fn openai_stream_chunk_to_anthropic_events(
                 let index = state.ensure_tool_block(tool_index, tool_id, tool_name, &mut events);
                 if let Some(arguments) = function.get("arguments").and_then(Value::as_str) {
                     if !arguments.is_empty() {
+                        if let Some(block) = state.tool_blocks.get_mut(&tool_index) {
+                            block.emitted_arguments = true;
+                        }
                         state.output_chars += arguments.chars().count() as u64;
                         state.stream_events += 1;
                         events.push((
@@ -1310,6 +1358,9 @@ fn openai_stream_chunk_to_anthropic_events(
                 state.ensure_tool_block(LEGACY_FUNCTION_TOOL_INDEX, None, tool_name, &mut events);
             if let Some(arguments) = function.get("arguments").and_then(Value::as_str) {
                 if !arguments.is_empty() {
+                    if let Some(block) = state.tool_blocks.get_mut(&LEGACY_FUNCTION_TOOL_INDEX) {
+                        block.emitted_arguments = true;
+                    }
                     state.output_chars += arguments.chars().count() as u64;
                     state.stream_events += 1;
                     events.push((
@@ -1388,6 +1439,8 @@ mod tests {
             stream_obfuscation: StreamObfuscation::Include(false),
             max_tokens_field: "auto".to_string(),
             stream_heartbeat_secs: 5,
+            max_request_bytes: 64 * 1024 * 1024,
+            stream_channel_depth: 64,
         }
     }
 
@@ -1473,6 +1526,34 @@ mod tests {
     }
 
     #[test]
+    fn flushes_user_text_before_tool_result_to_preserve_order() {
+        let request = AnthropicRequest {
+            model: None,
+            max_tokens: None,
+            system: None,
+            tools: None,
+            tool_choice: None,
+            temperature: None,
+            top_p: None,
+            stop_sequences: None,
+            stream: false,
+            messages: vec![AnthropicMessage {
+                role: "user".to_string(),
+                content: json!([
+                    {"type":"text","text":"before"},
+                    {"type":"tool_result","tool_use_id":"toolu_1","content":"ok"},
+                    {"type":"text","text":"after"}
+                ]),
+            }],
+        };
+        let mapped = build_openai_request(&state(), &request, false).expect("mapped");
+        assert_eq!(mapped["messages"][0]["role"], "user");
+        assert_eq!(mapped["messages"][0]["content"][0]["text"], "before");
+        assert_eq!(mapped["messages"][1]["role"], "tool");
+        assert_eq!(mapped["messages"][2]["content"][0]["text"], "after");
+    }
+
+    #[test]
     fn ignores_tool_choice_without_tools() {
         let request = AnthropicRequest {
             model: None,
@@ -1555,6 +1636,13 @@ mod tests {
         assert_eq!(mapped["stream"], true);
         assert_eq!(mapped["stream_options"]["include_usage"], true);
         assert_eq!(mapped["stream_options"]["include_obfuscation"], false);
+    }
+
+    #[test]
+    fn state_defaults_keep_pressure_knobs_bounded() {
+        let state = state();
+        assert_eq!(state.max_request_bytes, 64 * 1024 * 1024);
+        assert_eq!(state.stream_channel_depth, 64);
     }
 
     #[test]
@@ -1720,6 +1808,27 @@ mod tests {
     }
 
     #[test]
+    fn preserves_malformed_tool_arguments_in_raw_field() {
+        let response = openai_to_anthropic(
+            "gpt-5.5",
+            &json!({
+                "choices": [{
+                    "message": {
+                        "tool_calls": [{
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "write_file", "arguments": "{\"path\""}
+                        }]
+                    },
+                    "finish_reason": "tool_calls"
+                }]
+            }),
+        );
+        assert_eq!(response.stop_reason, "tool_use");
+        assert_eq!(response.content[0]["input"]["_raw"], "{\"path\"");
+    }
+
+    #[test]
     fn stream_response_uses_anthropic_event_sequence() {
         let message = AnthropicResponse {
             id: "msg_test".to_string(),
@@ -1864,6 +1973,36 @@ mod tests {
         assert_eq!(argument_events[0].1["content_block"]["id"], "call_1");
         assert_eq!(argument_events[0].1["content_block"]["name"], "read_file");
         assert_eq!(argument_events[1].1["delta"]["partial_json"], "{\"path\"");
+    }
+
+    #[test]
+    fn finish_does_not_emit_empty_tool_block_from_name_only_delta() {
+        let mut state = StreamBridgeState::new("gpt-5.5".to_string(), 1);
+        let events = openai_stream_chunk_to_anthropic_events(
+            &mut state,
+            &json!({
+                "choices": [{
+                    "delta": {
+                        "tool_calls": [{
+                            "index": 0,
+                            "id": "call_1",
+                            "function": {"name": "read_file"}
+                        }]
+                    },
+                    "finish_reason": "stop"
+                }]
+            }),
+        );
+        assert!(events.is_empty());
+        let mut finish_events = Vec::new();
+        state.finish(&mut finish_events);
+        assert!(finish_events
+            .iter()
+            .all(|event| event.0 != "content_block_start"));
+        assert_eq!(
+            finish_events.last().map(|event| event.0),
+            Some("message_stop")
+        );
     }
 
     #[test]
