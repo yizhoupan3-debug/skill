@@ -17,7 +17,19 @@ Keep the existing Playwright CLI workflow as the fallback path when:
 Local setup in this repo:
 
 ```bash
-python3 /Users/joe/Documents/skill/scripts/install_browser_mcp_codex.py
+cargo build --manifest-path /Users/joe/Documents/skill/scripts/router-rs/Cargo.toml --release
 ```
 
-Then restart Codex so it reloads MCP servers from `~/.codex/config.toml`.
+Add or verify this MCP server block in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.browser-mcp]
+command = "/Users/joe/Documents/skill/scripts/router-rs/target/release/router-rs"
+args = ["--browser-mcp-stdio", "--repo-root", "/Users/joe/Documents/skill"]
+cwd = "/Users/joe/Documents/skill"
+```
+
+If you use the repo's native installer flow, keep the same Rust-owned route by
+passing `--with-browser-mcp` to `router-rs --host-integration
+install-native-integration`. Then restart Codex so it reloads MCP servers from
+`~/.codex/config.toml`.

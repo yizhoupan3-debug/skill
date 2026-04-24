@@ -190,6 +190,7 @@ disk:
 - Use `$paper-logic` for claim, novelty, evidence, and experiment-depth subanalysis
 - Use `$literature-synthesis` only for a heavier external corpus or novelty
   sweep; do not force the user to switch skills for a normal reviewer lookup
+- When a review reveals story/positioning weakness but the user wants target-journal imitation before rewriting, hand back to `$paper-workbench` ref-first workflow rather than doing prose edits here
 - Use `$citation-management` for citation truth and venue calibration
 - Use `$paper-visuals`, `$visual-review`, and `$pdf` for final-scale figure, table, and layout checks
 

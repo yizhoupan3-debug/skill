@@ -1,6 +1,6 @@
 # Rust 下一阶段执行清单
 
-> 状态：当前活跃方向。上一阶段“压缩 Python 主面”已经结束；这一轮只做 Rust-owned 能力深化。
+> 状态：已收口，保留为后续 Rust-owned 能力深化的边界清单。上一阶段“压缩 Python 主面”已经结束；后续只做 Rust-owned 能力深化。
 
 ## 当前起点
 
@@ -10,7 +10,7 @@
 
 ## 本轮目标
 
-把现有 Rust surface 从“可用”推进到“更稳、更少歧义、更好恢复”：
+把现有 Rust surface 从“可用”推进到“更稳、更少歧义、更好恢复”。当前主线已经完成 Rust authority 收口，后续按能力面继续增量推进：
 
 | ID | 任务 | 目标 | 主要写入范围 |
 | --- | --- | --- | --- |
@@ -19,10 +19,12 @@
 | 3 | Sandbox control plane | 把 `docs/runtime_sandbox_contract.md` 的 state machine 接入可验证 Rust payload | `scripts/router-rs/src/main.rs`, sandbox/control tests |
 | 4 | Host integration polish | 继续收紧 install/bootstrap/sync-skills/entrypoint sync 的 Rust-only 体验 | `scripts/router-rs/src/host_integration.rs`, `scripts/router-rs/src/claude_hooks.rs`, host integration tests |
 | 5 | Docs / generated consistency | 只刷新仍描述旧 Python/OMC/aionrs 主线的文档和生成面 | docs, root checklists, `skills/SKILL_*`, targeted doc tests |
+| 6 | Memory policy journal | 让 Rust memory policy 同时拥有 SQLite row 与 stable `decisions.md` journal contract | `scripts/router-rs/src/framework_runtime.rs`, memory policy tests, Rust contract docs |
 
 ## 验收标准
 
 - 不出现新的 `framework_runtime/` Python 包、`scripts/*.py` runtime wrapper、pytest 配置或 Python fallback 文案。
+- memory policy 产物只能由 `router-rs` 写入；不得新增 Python journal writer 或第二套 memory artifact emitter。
 - `cargo test --test policy_contracts` 和 `cargo test --test documentation_contracts` 继续锁住退场边界。
 - 涉及 host entrypoint 的改动必须通过：
   `cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root "$PWD"`。

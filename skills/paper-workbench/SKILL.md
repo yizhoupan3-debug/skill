@@ -142,6 +142,10 @@ Use [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md) when the work needs
 filesystem-backed whole-paper state, frozen gate decisions, or bounded parallel
 lanes.
 
+For target-journal ref-first writing, use
+[`references/ref-first-writing-workflow.md`](references/ref-first-writing-workflow.md)
+as the compact workflow contract.
+
 ## What this skill should deliver
 
 Keep the user-facing output simple:
@@ -166,6 +170,13 @@ The handoff artifact should be simple:
 ```text
 target venue -> 20-ref corpus -> venue story norm -> our paper's story spine -> sections to rewrite
 ```
+
+In filesystem-backed work, the stable artifacts are:
+
+- `refs/ref_learning_brief.md`
+- `paper_story/STORY_CARD.md`
+- `paper_story/SECTION_REWRITE_PLAN.md`
+- rewritten manuscript sections or patch notes
 
 ## Hard rules
 
