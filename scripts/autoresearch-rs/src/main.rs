@@ -2,12 +2,15 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Local, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
 use regex::Regex;
+use reqwest::blocking::Client;
+use reqwest::header::{ACCEPT, USER_AGENT};
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 use uuid::Uuid;
 
 const SCHEMA_VERSION: i64 = 3;
@@ -19,6 +22,10 @@ const STALE_STATE_DAYS: i64 = 10;
 const RECENT_ACTIVITY_DAYS: i64 = 14;
 const FALLBACK_ACTIVITY_LIMIT: usize = 3;
 const TEMPLATES_DIR: &str = "skills/autoresearch/templates";
+const DEFAULT_RESEARCH_RESULT_LIMIT: usize = 5;
+const DEFAULT_EXTERNAL_TIMEOUT_SECS: u64 = 20;
+const SEMANTIC_SCHOLAR_BASE_URL: &str = "https://api.semanticscholar.org/graph/v1/paper/search";
+const ARXIV_BASE_URL: &str = "https://export.arxiv.org/api/query";
 
 const FINDINGS_BLOCK_START: &str = "<!-- autoresearch:findings:start -->";
 const FINDINGS_BLOCK_END: &str = "<!-- autoresearch:findings:end -->";
@@ -26,6 +33,8 @@ const NOVELTY_BLOCK_START: &str = "<!-- autoresearch:novelty:start -->";
 const NOVELTY_BLOCK_END: &str = "<!-- autoresearch:novelty:end -->";
 const SEARCH_PLAN_BLOCK_START: &str = "<!-- autoresearch:search-plan:start -->";
 const SEARCH_PLAN_BLOCK_END: &str = "<!-- autoresearch:search-plan:end -->";
+const EXTERNAL_RESEARCH_BLOCK_START: &str = "<!-- autoresearch:external-research:start -->";
+const EXTERNAL_RESEARCH_BLOCK_END: &str = "<!-- autoresearch:external-research:end -->";
 const CLAIMS_BLOCK_START: &str = "<!-- autoresearch:claims:start -->";
 const CLAIMS_BLOCK_END: &str = "<!-- autoresearch:claims:end -->";
 const CONTEXT_BLOCK_START: &str = "<!-- autoresearch:context:start -->";
@@ -78,6 +87,20 @@ enum Commands {
     PlanSearch {
         #[arg(long)]
         workspace: PathBuf,
+    },
+    ResearchClaim {
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long = "claim-id")]
+        claim_id: Option<String>,
+        #[arg(long)]
+        query: Option<String>,
+        #[arg(long, value_enum, default_value_t = ExternalSourceArg::All)]
+        source: ExternalSourceArg,
+        #[arg(long, default_value_t = DEFAULT_RESEARCH_RESULT_LIMIT)]
+        limit: usize,
+        #[arg(long = "timeout-secs", default_value_t = DEFAULT_EXTERNAL_TIMEOUT_SECS)]
+        timeout_secs: u64,
     },
     BriefFirstClaim {
         #[arg(long)]
@@ -208,6 +231,14 @@ enum GateStatusArg {
 }
 
 #[derive(Clone, ValueEnum)]
+enum ExternalSourceArg {
+    All,
+    #[value(name = "semantic-scholar")]
+    SemanticScholar,
+    Arxiv,
+}
+
+#[derive(Clone, ValueEnum)]
 enum OverlapArg {
     Low,
     Medium,
@@ -335,6 +366,54 @@ fn main() -> Result<()> {
                 json!({ "entries": current_search_plan(&updated).len() }),
             )?;
             println!("Refreshed novelty search plan for {}", workspace.display());
+        }
+        Commands::ResearchClaim {
+            workspace,
+            claim_id,
+            query,
+            source,
+            limit,
+            timeout_secs,
+        } => {
+            let (workspace, state_path) = ensure_workspace(&workspace)?;
+            let state = load_state(&state_path)?;
+            let research = research_claim(
+                &state,
+                claim_id.as_deref(),
+                query.as_deref(),
+                &source,
+                limit,
+                timeout_secs,
+            )?;
+            let updated = add_external_research(&state, research);
+            dump_state(&state_path, &updated)?;
+            sync_workspace_files(&workspace, &updated)?;
+            if let Some(entry) = latest_external_research(&updated) {
+                append_research_log(
+                    &workspace,
+                    &format!(
+                        "External research recorded ({})",
+                        str_field(entry, "research_id")
+                    ),
+                    vec![
+                        format!("claim: {}", str_field_default(entry, "claim_id", "custom")),
+                        format!("query: {}", str_field(entry, "query")),
+                        format!("results: {}", external_research_result_count(entry)),
+                    ],
+                )?;
+                append_ledger_event(
+                    &workspace,
+                    "external_research.recorded",
+                    json!({
+                        "research_id": entry.get("research_id").cloned().unwrap_or(Value::Null),
+                        "claim_id": entry.get("claim_id").cloned().unwrap_or(Value::Null),
+                        "query": entry.get("query").cloned().unwrap_or(Value::Null),
+                        "source": entry.get("source").cloned().unwrap_or(Value::Null),
+                        "results": external_research_result_count(entry),
+                    }),
+                )?;
+            }
+            println!("Recorded external research for {}", workspace.display());
         }
         Commands::BriefFirstClaim { workspace } => {
             let (workspace, state_path) = ensure_workspace(&workspace)?;
@@ -685,6 +764,16 @@ impl GateStatusArg {
     }
 }
 
+impl ExternalSourceArg {
+    fn as_str(&self) -> &'static str {
+        match self {
+            ExternalSourceArg::All => "all",
+            ExternalSourceArg::SemanticScholar => "semantic-scholar",
+            ExternalSourceArg::Arxiv => "arxiv",
+        }
+    }
+}
+
 impl OverlapArg {
     fn as_str(&self) -> &'static str {
         match self {
@@ -897,6 +986,7 @@ fn default_state(project: &str, question: &str, mode: &str) -> Value {
         "hypotheses": [],
         "hypothesis_backlog": [],
         "run_history": [],
+        "external_research": [],
         "evidence_index": [],
         "blockers": [],
         "decisions": [],
@@ -925,6 +1015,7 @@ fn ensure_state_defaults(state: &Value) -> Value {
         root.entry("hypotheses").or_insert(json!([]));
         root.entry("hypothesis_backlog").or_insert(json!([]));
         root.entry("run_history").or_insert(json!([]));
+        root.entry("external_research").or_insert(json!([]));
         root.entry("evidence_index").or_insert(json!([]));
         root.entry("blockers").or_insert(json!([]));
         root.entry("decisions").or_insert(json!([]));
@@ -985,6 +1076,17 @@ fn ensure_state_defaults(state: &Value) -> Value {
         item.entry("override_reason").or_insert(Value::Null);
         item.entry("environment_fingerprint").or_insert(Value::Null);
         item.entry("git_provenance").or_insert(Value::Null);
+    }
+    for record in arr_mut(&mut hydrated, "external_research") {
+        let item = record
+            .as_object_mut()
+            .expect("external research record must be object");
+        item.entry("claim_id").or_insert(Value::Null);
+        item.entry("source").or_insert(json!("all"));
+        item.entry("results").or_insert(json!([]));
+        item.entry("errors").or_insert(json!([]));
+        item.entry("created_at")
+            .or_insert_with(|| json!(updated_at.clone()));
     }
     set_key(&mut hydrated, "schema_version", json!(SCHEMA_VERSION));
     hydrated
@@ -1075,6 +1177,9 @@ fn migrate_state(state: &Value) -> Value {
         item.entry("environment_fingerprint").or_insert(Value::Null);
         item.entry("git_provenance").or_insert(Value::Null);
     }
+    obj_mut(&mut migrated)
+        .entry("external_research")
+        .or_insert(json!([]));
     set_key(&mut migrated, "schema_version", json!(SCHEMA_VERSION));
     migrated
 }
@@ -1220,6 +1325,7 @@ fn capture_environment_fingerprint(workspace: &Path) -> Value {
         "platform": std::env::consts::OS,
         "machine": std::env::consts::ARCH,
         "yaml_available": true,
+        "external_research_http": true,
         "workspace": workspace.display().to_string(),
     })
 }
@@ -1741,6 +1847,268 @@ fn current_brief(state: &Value) -> Option<Value> {
     }))
 }
 
+fn normalize_limit(limit: usize) -> usize {
+    limit.clamp(1, 20)
+}
+
+fn xml_text_between(raw: &str, tag: &str) -> Option<String> {
+    let pattern = Regex::new(&format!(r"(?s)<{tag}(?:\s[^>]*)?>(.*?)</{tag}>")).ok()?;
+    let captures = pattern.captures(raw)?;
+    Some(decode_xml_entities(captures.get(1)?.as_str().trim()))
+}
+
+fn decode_xml_entities(raw: &str) -> String {
+    raw.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn markdown_link(value: Option<&str>) -> String {
+    value
+        .filter(|item| !item.trim().is_empty())
+        .map(|item| format!("[link]({})", item.trim()))
+        .unwrap_or_else(|| "-".into())
+}
+
+fn http_client(timeout_secs: u64) -> Result<Client> {
+    Client::builder()
+        .timeout(Duration::from_secs(timeout_secs.clamp(3, 120)))
+        .build()
+        .context("failed to build HTTP client")
+}
+
+fn fetch_semantic_scholar(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> {
+    let response: Value = client
+        .get(SEMANTIC_SCHOLAR_BASE_URL)
+        .header(USER_AGENT, "autoresearch-rs/0.1")
+        .header(ACCEPT, "application/json")
+        .query(&[
+            ("query", query),
+            (
+                "fields",
+                "title,authors,year,venue,url,abstract,citationCount,externalIds",
+            ),
+            ("limit", &normalize_limit(limit).to_string()),
+        ])
+        .send()
+        .context("Semantic Scholar request failed")?
+        .error_for_status()
+        .context("Semantic Scholar returned an error")?
+        .json()
+        .context("Semantic Scholar returned invalid JSON")?;
+    let mut results = Vec::new();
+    for item in response
+        .get("data")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+    {
+        let authors = item
+            .get("authors")
+            .and_then(Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|author| author.get("name").and_then(Value::as_str))
+                    .take(4)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        results.push(json!({
+            "source": "Semantic Scholar",
+            "title": str_field_default(&item, "title", "_untitled_"),
+            "authors": authors,
+            "year": item.get("year").cloned().unwrap_or(Value::Null),
+            "venue": item.get("venue").cloned().unwrap_or(Value::Null),
+            "url": item.get("url").cloned().unwrap_or(Value::Null),
+            "abstract": item.get("abstract").cloned().unwrap_or(Value::Null),
+            "citation_count": item.get("citationCount").cloned().unwrap_or(Value::Null),
+            "external_ids": item.get("externalIds").cloned().unwrap_or(Value::Null),
+        }));
+    }
+    Ok(results)
+}
+
+fn fetch_arxiv(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> {
+    let raw = client
+        .get(ARXIV_BASE_URL)
+        .header(USER_AGENT, "autoresearch-rs/0.1")
+        .query(&[
+            ("search_query", format!("all:{query}")),
+            ("start", "0".to_string()),
+            ("max_results", normalize_limit(limit).to_string()),
+            ("sortBy", "relevance".to_string()),
+            ("sortOrder", "descending".to_string()),
+        ])
+        .send()
+        .context("arXiv request failed")?
+        .error_for_status()
+        .context("arXiv returned an error")?
+        .text()
+        .context("arXiv returned invalid text")?;
+    let entry_re = Regex::new(r"(?s)<entry>(.*?)</entry>").unwrap();
+    let author_re = Regex::new(r"(?s)<author>.*?<name>(.*?)</name>.*?</author>").unwrap();
+    let mut results = Vec::new();
+    for entry in entry_re.captures_iter(&raw) {
+        let entry_raw = entry.get(1).map(|item| item.as_str()).unwrap_or("");
+        let authors = author_re
+            .captures_iter(entry_raw)
+            .filter_map(|cap| cap.get(1).map(|item| decode_xml_entities(item.as_str())))
+            .take(4)
+            .collect::<Vec<_>>()
+            .join(", ");
+        results.push(json!({
+            "source": "arXiv",
+            "title": xml_text_between(entry_raw, "title").unwrap_or_else(|| "_untitled_".into()),
+            "authors": authors,
+            "year": xml_text_between(entry_raw, "published").map(|date| date.chars().take(4).collect::<String>()).unwrap_or_default(),
+            "venue": "arXiv",
+            "url": xml_text_between(entry_raw, "id").unwrap_or_default(),
+            "abstract": xml_text_between(entry_raw, "summary").unwrap_or_default(),
+            "citation_count": Value::Null,
+            "external_ids": Value::Null,
+        }));
+    }
+    Ok(results)
+}
+
+fn dedupe_research_results(results: Vec<Value>) -> Vec<Value> {
+    let mut seen = HashSet::new();
+    let mut deduped = Vec::new();
+    for result in results {
+        let key = format!(
+            "{}::{}",
+            str_field_default(&result, "source", "-").to_lowercase(),
+            str_field_default(&result, "title", "-").to_lowercase()
+        );
+        if seen.insert(key) {
+            deduped.push(result);
+        }
+    }
+    deduped
+}
+
+fn claim_record_for_research(state: &Value, claim_id: Option<&str>) -> Option<Value> {
+    if let Some(desired) = claim_id {
+        for key in ["claim_records", "draft_claims"] {
+            if let Some(record) = novelty_gate(state)
+                .get(key)
+                .and_then(Value::as_array)
+                .and_then(|items| {
+                    items
+                        .iter()
+                        .find(|item| item.get("claim_id").and_then(Value::as_str) == Some(desired))
+                })
+            {
+                return Some(record.clone());
+            }
+        }
+    }
+    top_priority_claim(state)
+}
+
+fn default_research_query(record: Option<&Value>, explicit_query: Option<&str>) -> Result<String> {
+    if let Some(query) = explicit_query
+        .map(str::trim)
+        .filter(|query| !query.is_empty())
+    {
+        return Ok(query.to_string());
+    }
+    if let Some(record) = record {
+        if let Some(query) = build_search_queries(
+            &str_field_default(record, "claim", ""),
+            &str_field_default(record, "axis", "claim"),
+        )
+        .into_iter()
+        .find(|item| item.get("label").and_then(Value::as_str) == Some("focused"))
+        .and_then(|item| {
+            item.get("query")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        }) {
+            return Ok(query);
+        }
+    }
+    bail!("No query available. Run draft-claims first or pass --query.");
+}
+
+fn research_claim(
+    state: &Value,
+    claim_id: Option<&str>,
+    explicit_query: Option<&str>,
+    source: &ExternalSourceArg,
+    limit: usize,
+    timeout_secs: u64,
+) -> Result<Value> {
+    let source_record = claim_record_for_research(state, claim_id);
+    if claim_id.is_some() && source_record.is_none() {
+        bail!("Unknown claim id: {}", claim_id.unwrap());
+    }
+    let query = default_research_query(source_record.as_ref(), explicit_query)?;
+    let client = http_client(timeout_secs)?;
+    let mut results = Vec::new();
+    let mut errors = Vec::new();
+    if matches!(
+        source,
+        ExternalSourceArg::All | ExternalSourceArg::SemanticScholar
+    ) {
+        match fetch_semantic_scholar(&client, &query, limit) {
+            Ok(items) => results.extend(items),
+            Err(err) => errors.push(format!("semantic-scholar: {err}")),
+        }
+    }
+    if matches!(source, ExternalSourceArg::All | ExternalSourceArg::Arxiv) {
+        match fetch_arxiv(&client, &query, limit) {
+            Ok(items) => results.extend(items),
+            Err(err) => errors.push(format!("arxiv: {err}")),
+        }
+    }
+    if results.is_empty() && !errors.is_empty() {
+        bail!("External research failed: {}", errors.join("; "));
+    }
+    Ok(json!({
+        "research_id": format!("ext-{}", Uuid::new_v4().simple().to_string().chars().take(8).collect::<String>()),
+        "claim_id": source_record
+            .as_ref()
+            .and_then(|item| item.get("claim_id"))
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+        "claim": source_record
+            .as_ref()
+            .map(|item| str_field_default(item, "claim", "-"))
+            .unwrap_or_else(|| explicit_query.unwrap_or("-").to_string()),
+        "query": query,
+        "source": source.as_str(),
+        "results": dedupe_research_results(results),
+        "errors": errors,
+        "created_at": now_iso(),
+    }))
+}
+
+fn add_external_research(state: &Value, research: Value) -> Value {
+    let mut next_state = ensure_state_defaults(state);
+    arr_mut(&mut next_state, "external_research").push(research);
+    next_state
+}
+
+fn latest_external_research(state: &Value) -> Option<&Value> {
+    arr(state, "external_research").last()
+}
+
+fn external_research_result_count(entry: &Value) -> usize {
+    entry
+        .get("results")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0)
+}
+
 fn cleanup_question_text(question: &str) -> String {
     let trimmed = question.trim().trim_end_matches(['?', '.', '!']);
     let re = Regex::new(
@@ -2120,6 +2488,9 @@ fn recommend_next_actions(state: &Value) -> Vec<String> {
             actions
                 .push("提炼 3 到 5 条 novelty claims，先写进 literature/NOVELTY_GATE.md。".into());
         }
+        actions.push(
+            "用 research-claim 做一轮外部检索，把最近论文证据写进 EXTERNAL_RESEARCH.md。".into(),
+        );
         actions.push("先完成 novelty gate，再启动高成本实验。".into());
         if gate_status == "pending" {
             actions.push("给每条 claim 标注 overlap level，并写 differentiation strategy。".into());
@@ -2751,6 +3122,14 @@ fn render_findings_summary(state: &Value) -> String {
                 .unwrap_or("_Not recorded yet._")
         ),
     ]);
+    if let Some(entry) = latest_external_research(state) {
+        lines.extend([
+            String::new(),
+            "### Latest External Research".into(),
+            format!("- query: {}", str_field_default(entry, "query", "-")),
+            format!("- results: {}", external_research_result_count(entry)),
+        ]);
+    }
     lines.join("\n")
 }
 
@@ -2893,6 +3272,84 @@ fn render_search_plan_summary(state: &Value) -> String {
             .unwrap_or(&Vec::new())
         {
             lines.push(format!("- {}", item.as_str().unwrap_or("")));
+        }
+        lines.push(String::new());
+    }
+    lines.join("\n").trim_end().to_string()
+}
+
+fn render_external_research_summary(state: &Value) -> String {
+    let entries = arr(state, "external_research");
+    let mut lines = vec![
+        "## Managed External Research".into(),
+        String::new(),
+        format!("- recorded searches: {}", entries.len()),
+        "- sources: Semantic Scholar, arXiv".into(),
+        String::new(),
+    ];
+    if entries.is_empty() {
+        lines.push(
+            "_No external research recorded yet. Run `research-claim` after drafting claims._"
+                .into(),
+        );
+        return lines.join("\n");
+    }
+    for entry in entries.iter().rev().take(5) {
+        lines.extend([
+            format!(
+                "### {} — {}",
+                str_field_default(entry, "research_id", "ext-?"),
+                str_field_default(entry, "query", "-")
+            ),
+            String::new(),
+            format!(
+                "- claim: {}",
+                str_field_default(entry, "claim_id", "custom")
+            ),
+            format!(
+                "- source mode: {}",
+                str_field_default(entry, "source", "all")
+            ),
+            format!(
+                "- captured at: {}",
+                str_field_default(entry, "created_at", "-")
+            ),
+            format!("- result count: {}", external_research_result_count(entry)),
+            String::new(),
+        ]);
+        for result in entry
+            .get("results")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .take(8)
+        {
+            let year = result
+                .get("year")
+                .map(value_to_string)
+                .filter(|value| !value.is_empty() && value != "null")
+                .unwrap_or_else(|| "-".into());
+            lines.push(format!(
+                "- {} ({}, {}): {}",
+                str_field_default(result, "title", "_untitled_"),
+                year,
+                str_field_default(result, "source", "-"),
+                markdown_link(result.get("url").and_then(Value::as_str))
+            ));
+        }
+        let errors = entry
+            .get("errors")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            })
+            .unwrap_or_default();
+        if !errors.is_empty() {
+            lines.push(format!("- source errors: {errors}"));
         }
         lines.push(String::new());
     }
@@ -3362,6 +3819,13 @@ fn sync_workspace_files(workspace: &Path, state: &Value) -> Result<()> {
         render_search_plan_summary(state),
     )?;
     sync_managed_file(
+        &workspace.join("literature/EXTERNAL_RESEARCH.md"),
+        "# External Research\n\n",
+        EXTERNAL_RESEARCH_BLOCK_START,
+        EXTERNAL_RESEARCH_BLOCK_END,
+        render_external_research_summary(state),
+    )?;
+    sync_managed_file(
         &workspace.join("CURRENT_CONTEXT.md"),
         "# Current Context\n\n",
         CONTEXT_BLOCK_START,
@@ -3399,6 +3863,10 @@ fn format_status(state: &Value) -> String {
         ),
         format!("hypotheses: {}", arr(state, "hypotheses").len()),
         format!("runs: {}", arr(state, "run_history").len()),
+        format!(
+            "external_research: {}",
+            arr(state, "external_research").len()
+        ),
         format!("blockers: {}", arr(state, "blockers").len()),
         "next_actions:".into(),
     ];
@@ -3501,6 +3969,10 @@ fn format_resume(state: &Value) -> String {
     lines.push(format!(
         "search_plan_entries: {}",
         current_search_plan(state).len()
+    ));
+    lines.push(format!(
+        "external_research_entries: {}",
+        arr(state, "external_research").len()
     ));
     lines.push("guardrail: trust CURRENT_CONTEXT.md and research-state.yaml first; treat older logs as background.".into());
     lines.push("next_actions:".into());

@@ -392,7 +392,6 @@ def test_router_rs_exports_claude_hook_manifest() -> None:
     assert "/.claude/settings.json" in manifest["protected_paths"]["edit_write"]
     assert "*.claude/settings.json*" in manifest["protected_paths"]["bash"]
     assert "/scripts/router-rs/src/**" in manifest["protected_paths"]["quality"]
-    assert "/scripts/install_skills.sh" in manifest["protected_paths"]["quality"]
     assert "/tests/**" in manifest["protected_paths"]["quality"]
     assert "/.claude/hooks/**" in manifest["protected_paths"]["quality"]
     assert set(manifest["settings_hooks"]) == {
@@ -607,7 +606,6 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     quality_hooks = settings["hooks"]["PreToolUse"][2]["hooks"]
     assert any(item["if"] == "Edit(/scripts/router-rs/src/**)" for item in quality_hooks)
     assert any(item["if"] == "Write(/tools/browser-mcp/src/**)" for item in quality_hooks)
-    assert any(item["if"] == "Edit(/scripts/install_skills.sh)" for item in quality_hooks)
     assert any(item["if"] == "Edit(/tests/**)" for item in quality_hooks)
     assert any(item["if"] == "Edit(/.claude/hooks/**)" for item in quality_hooks)
     assert not any(item["if"] == "Edit(/scripts/**)" for item in quality_hooks)
@@ -615,7 +613,6 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert settings["hooks"]["PostToolUse"][0]["matcher"] == "Edit|MultiEdit|Write"
     assert any(item["if"] == "Edit(/scripts/router-rs/src/**)" for item in post_tool_hooks)
     assert any(item["if"] == "Write(/tools/browser-mcp/src/**)" for item in post_tool_hooks)
-    assert any(item["if"] == "Edit(/scripts/install_skills.sh)" for item in post_tool_hooks)
     assert any(item["if"] == "Edit(/tests/**)" for item in post_tool_hooks)
     assert any(item["if"] == "Edit(/.claude/hooks/**)" for item in post_tool_hooks)
     assert not any(item["if"] == "Edit(/scripts/**)" for item in post_tool_hooks)

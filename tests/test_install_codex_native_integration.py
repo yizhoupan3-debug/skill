@@ -134,6 +134,99 @@ def test_ensure_default_bootstrap_is_idempotent(tmp_path: Path) -> None:
     assert second["status"] == "already-present"
 
 
+def test_install_native_integration_can_opt_into_rust_browser_mcp(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    (repo_root / ".codex").mkdir(parents=True)
+    (repo_root / "skills").mkdir(parents=True)
+    plugin_root = repo_root / "plugins" / "skill-framework-native" / ".codex-plugin"
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "plugin.json").write_text('{"name":"skill-framework-native"}\n', encoding="utf-8")
+
+    home_config_path = tmp_path / "home" / ".codex" / "config.toml"
+    command = [
+        "install-native-integration",
+        "--repo-root",
+        str(repo_root),
+        "--home-config-path",
+        str(home_config_path),
+        "--home-plugin-root",
+        str(tmp_path / "home" / ".codex" / "plugins" / "skill-framework-native"),
+        "--home-marketplace-path",
+        str(tmp_path / "home" / ".agents" / "plugins" / "marketplace.json"),
+        "--home-codex-skills-path",
+        str(tmp_path / "home" / ".codex" / "skills"),
+        "--home-claude-skills-path",
+        str(tmp_path / "home" / ".claude" / "skills"),
+        "--home-claude-refresh-path",
+        str(tmp_path / "home" / ".claude" / "commands" / "refresh.md"),
+        "--home-claude-mcp-config-path",
+        str(tmp_path / "home" / ".claude.json"),
+        "--with-browser-mcp",
+        "--skip-personal-plugin",
+        "--skip-personal-marketplace",
+        "--skip-home-codex-skills-link",
+        "--skip-home-claude-skills-link",
+        "--skip-home-claude-refresh",
+        "--skip-home-claude-mcp-sync",
+        "--skip-default-bootstrap",
+    ]
+
+    result = _run_host_integration(*command)
+    content = home_config_path.read_text(encoding="utf-8")
+
+    assert result["browser_mcp_changed"] is True
+    assert "[mcp_servers.browser-mcp]" in content
+    assert (
+        'command = "'
+        + str(repo_root / "scripts" / "router-rs" / "target" / "release" / "router-rs")
+        + '"'
+    ) in content
+    assert "--browser-mcp-stdio" in content
+    assert "tools/browser-mcp/dist/index.js" not in content
+    assert 'command = "node"' not in content
+
+
+def test_install_skills_rust_entrypoint_links_supported_tools(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    home = tmp_path / "home"
+    (repo_root / ".codex").mkdir(parents=True)
+    (repo_root / "skills" / "demo").mkdir(parents=True)
+    plugin_root = repo_root / "plugins" / "skill-framework-native" / ".codex-plugin"
+    plugin_root.mkdir(parents=True)
+    (plugin_root / "plugin.json").write_text('{"name":"skill-framework-native"}\n', encoding="utf-8")
+
+    first = _run_host_integration(
+        "install-skills",
+        "--repo-root",
+        str(repo_root),
+        "--home",
+        str(home),
+        "--bootstrap-output-dir",
+        str(tmp_path / "bootstrap"),
+        "all",
+    )
+    second = _run_host_integration(
+        "install-skills",
+        "--repo-root",
+        str(repo_root),
+        "--home",
+        str(home),
+        "--bootstrap-output-dir",
+        str(tmp_path / "bootstrap"),
+        "status",
+    )
+
+    assert first["success"] is True
+    assert first["results"]["codex"]["status"] == "installed"
+    assert first["results"]["agents"]["status"] == "linked"
+    assert first["results"]["gemini"]["status"] == "linked"
+    assert (home / ".agents" / "skills").resolve() == (repo_root / "skills").resolve()
+    assert (home / ".gemini" / "skills").resolve() == (repo_root / "skills").resolve()
+    assert second["results"]["codex"]["ready"] is True
+    assert second["results"]["agents"]["ready"] is True
+    assert second["results"]["gemini"]["ready"] is True
+
+
 def test_validation_subcommands_cover_install_skills_contract(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     repo_root.mkdir(parents=True)

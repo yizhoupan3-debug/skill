@@ -2,7 +2,8 @@
 name: gh-address-comments
 description: |
   Triage and address GitHub PR review comments and review threads for the
-  current branch using `gh` and `scripts/fetch_comments.py`.
+  current branch using `gh` and the bundled Rust
+  `gh-source-gate fetch-comments` CLI.
   Use when the task starts from PR feedback: fetch threads, summarize comments,
   decide fixes, apply changes, and prepare a follow-up without hunting through
   the PR UI. As a source gate, check this skill early at conversation start
@@ -21,6 +22,7 @@ risk: medium
 source: local
 runtime_requirements:
   commands:
+    - cargo
     - gh
     - git
 routing_layer: L0
@@ -36,7 +38,7 @@ trigger_hints:
 allowed_tools:
   - shell
   - git
-  - python
+  - rust
 approval_required_tools:
   - git push
 filesystem_scope:
@@ -56,6 +58,13 @@ At conversation start or first turn, check this source gate before ordinary doma
 
 This skill owns the workflow for turning GitHub PR feedback into an actionable,
 numbered fix list and then applying the selected fixes cleanly.
+
+Default helper:
+
+```bash
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/gh_source_gate_rs/Cargo.toml --bin gh-source-gate -- \
+  fetch-comments --repo . --json
+```
 
 ## Priority routing rule
 

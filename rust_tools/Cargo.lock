@@ -1374,6 +1374,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gh_source_gate_rs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "regex",
+ "serde_json",
+]
+
+[[package]]
 name = "gif"
 version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3358,6 +3368,7 @@ dependencies = [
  "clap",
  "core-graphics",
  "image 0.25.10",
+ "serde_json",
  "xcap",
 ]
 

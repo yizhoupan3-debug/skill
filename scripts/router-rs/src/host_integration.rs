@@ -25,6 +25,7 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "git-branch",
 ];
 const DEFAULT_SHARED_PROJECT_MCP_SERVERS: [&str; 1] = ["framework-mcp"];
+const INSTALL_SKILLS_TOOLS: [&str; 3] = ["codex", "agents", "gemini"];
 const PERSONAL_PLUGIN_LIVE_PROJECTION_EXCLUDES: [&str; 2] = ["skills", ".mcp.json"];
 const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 7] = [
     "SESSION_SUMMARY.md",
@@ -241,6 +242,20 @@ enum Commands {
         #[arg(long)]
         skip_default_bootstrap: bool,
     },
+    InstallSkills {
+        #[arg(long)]
+        repo_root: PathBuf,
+        #[arg(long)]
+        home: Option<PathBuf>,
+        #[arg(long)]
+        bootstrap_output_dir: Option<PathBuf>,
+        #[arg(long)]
+        skip_default_bootstrap: bool,
+        #[arg(default_value = "status")]
+        command: String,
+        #[arg()]
+        tools: Vec<String>,
+    },
 }
 
 #[derive(Default, Serialize)]
@@ -414,6 +429,21 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             !skip_home_claude_refresh,
             !skip_home_claude_mcp_sync,
             !skip_default_bootstrap,
+        )?,
+        Commands::InstallSkills {
+            repo_root,
+            home,
+            bootstrap_output_dir,
+            skip_default_bootstrap,
+            command,
+            tools,
+        } => install_skills_command(
+            &repo_root,
+            home.as_deref(),
+            bootstrap_output_dir.as_deref(),
+            skip_default_bootstrap,
+            &command,
+            &tools,
         )?,
     };
     Ok(payload)
@@ -897,6 +927,398 @@ fn install_native_integration(
         "framework_overlay_retirement": framework_overlay_result,
         "default_bootstrap": default_bootstrap,
     }))
+}
+
+fn install_skills_command(
+    repo_root: &Path,
+    home: Option<&Path>,
+    bootstrap_output_dir: Option<&Path>,
+    skip_default_bootstrap: bool,
+    command: &str,
+    tools: &[String],
+) -> Result<Value, String> {
+    let repo_root = normalize_path(repo_root)?;
+    let home = home
+        .map(normalize_path)
+        .transpose()?
+        .unwrap_or_else(default_home_dir);
+    let bootstrap_output_dir = bootstrap_output_dir.map(normalize_path).transpose()?;
+    let command = canonical_install_skills_command(command);
+
+    match command.as_str() {
+        "init" | "all" | "install" => {
+            let selected_tools = selected_install_tools(tools, true)?;
+            let mut results = Map::new();
+            for tool in selected_tools {
+                results.insert(
+                    tool.to_string(),
+                    install_skill_tool(
+                        &repo_root,
+                        &home,
+                        tool,
+                        bootstrap_output_dir.as_deref(),
+                        skip_default_bootstrap,
+                    )?,
+                );
+            }
+            Ok(json!({
+                "success": true,
+                "command": command,
+                "repo_root": repo_root.to_string_lossy(),
+                "home": home.to_string_lossy(),
+                "results": results,
+            }))
+        }
+        "status" | "ls" => {
+            let mut results = Map::new();
+            for tool in INSTALL_SKILLS_TOOLS {
+                results.insert(
+                    tool.to_string(),
+                    skill_tool_status_with_bootstrap(
+                        &repo_root,
+                        &home,
+                        tool,
+                        bootstrap_output_dir.as_deref(),
+                    )?,
+                );
+            }
+            Ok(json!({
+                "success": true,
+                "command": "status",
+                "repo_root": repo_root.to_string_lossy(),
+                "home": home.to_string_lossy(),
+                "skills_source": shared_skills_source(&repo_root)?.to_string_lossy(),
+                "total_skills": count_top_level_skills(&shared_skills_source(&repo_root)?)?,
+                "results": results,
+            }))
+        }
+        "remove" | "rm" => {
+            if tools.is_empty() {
+                return Err("install-skills remove requires at least one tool".to_string());
+            }
+            let selected_tools = selected_install_tools(tools, false)?;
+            let mut results = Map::new();
+            for tool in selected_tools {
+                results.insert(
+                    tool.to_string(),
+                    remove_skill_tool(&repo_root, &home, tool)?,
+                );
+            }
+            Ok(json!({
+                "success": true,
+                "command": "remove",
+                "repo_root": repo_root.to_string_lossy(),
+                "home": home.to_string_lossy(),
+                "results": results,
+            }))
+        }
+        other => {
+            let selected_tools = selected_install_tools(&[other.to_string()], false)?;
+            let mut results = Map::new();
+            for tool in selected_tools {
+                results.insert(
+                    tool.to_string(),
+                    install_skill_tool(
+                        &repo_root,
+                        &home,
+                        tool,
+                        bootstrap_output_dir.as_deref(),
+                        skip_default_bootstrap,
+                    )?,
+                );
+            }
+            Ok(json!({
+                "success": true,
+                "command": "install",
+                "repo_root": repo_root.to_string_lossy(),
+                "home": home.to_string_lossy(),
+                "results": results,
+            }))
+        }
+    }
+}
+
+fn canonical_install_skills_command(command: &str) -> String {
+    match command.trim() {
+        "" => "status".to_string(),
+        raw => raw.to_lowercase(),
+    }
+}
+
+fn selected_install_tools(
+    raw_tools: &[String],
+    default_all: bool,
+) -> Result<Vec<&'static str>, String> {
+    if raw_tools.is_empty() && default_all {
+        return Ok(INSTALL_SKILLS_TOOLS.to_vec());
+    }
+    let mut selected = Vec::new();
+    for raw in raw_tools {
+        let tool = canonical_tool_name(raw)?;
+        if !selected.contains(&tool) {
+            selected.push(tool);
+        }
+    }
+    Ok(selected)
+}
+
+fn canonical_tool_name(raw: &str) -> Result<&'static str, String> {
+    match raw.trim().to_lowercase().as_str() {
+        "codex" => Ok("codex"),
+        "agents" => Ok("agents"),
+        "gemini" => Ok("gemini"),
+        "claude" => Err(
+            "Claude Code uses repo-local .claude commands and project skills by default."
+                .to_string(),
+        ),
+        other => Err(format!(
+            "Unknown tool: {other}. Supported tools: {}",
+            INSTALL_SKILLS_TOOLS.join(" ")
+        )),
+    }
+}
+
+fn install_skill_tool(
+    repo_root: &Path,
+    home: &Path,
+    tool: &str,
+    bootstrap_output_dir: Option<&Path>,
+    skip_default_bootstrap: bool,
+) -> Result<Value, String> {
+    if tool == "codex" {
+        let payload = install_native_integration(
+            repo_root,
+            &home.join(".codex").join("config.toml"),
+            &home.join(".codex/plugins").join("skill-framework-native"),
+            &home.join(".agents/plugins").join("marketplace.json"),
+            &home.join(".codex").join("skills"),
+            &home.join(".claude").join("skills"),
+            &home.join(".claude/commands").join("refresh.md"),
+            &home.join(".claude.json"),
+            bootstrap_output_dir,
+            false,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+            true,
+            !skip_default_bootstrap,
+        )?;
+        return Ok(json!({
+            "status": "installed",
+            "changed": install_native_integration_changed(&payload),
+            "native_integration": payload,
+        }));
+    }
+
+    let target = tool_skill_path(home, tool)?;
+    let changed = ensure_home_skills_link(repo_root, &target)?;
+    Ok(json!({
+        "status": if changed { "linked" } else { "already-linked" },
+        "changed": changed,
+        "target": target.to_string_lossy(),
+        "source": shared_skills_source(repo_root)?.to_string_lossy(),
+    }))
+}
+
+fn install_native_integration_changed(payload: &Value) -> bool {
+    [
+        "created_config",
+        "codex_hooks_feature_changed",
+        "browser_mcp_changed",
+        "framework_mcp_changed",
+        "tui_status_line_changed",
+        "personal_plugin_changed",
+        "personal_marketplace_changed",
+        "home_codex_skills_link_changed",
+        "home_claude_skills_link_changed",
+        "home_claude_refresh_changed",
+        "home_claude_mcp_config_changed",
+    ]
+    .iter()
+    .any(|key| payload.get(*key).and_then(Value::as_bool) == Some(true))
+        || payload
+            .get("default_bootstrap")
+            .and_then(|value| value.get("changed"))
+            .and_then(Value::as_bool)
+            == Some(true)
+        || payload
+            .get("framework_overlay_retirement")
+            .and_then(|value| value.get("changed"))
+            .and_then(Value::as_bool)
+            == Some(true)
+}
+
+fn remove_skill_tool(repo_root: &Path, home: &Path, tool: &str) -> Result<Value, String> {
+    if tool == "codex" {
+        let target = home.join(".codex").join("skills");
+        let changed = retire_home_skills_link(repo_root, &target)?;
+        return Ok(json!({
+            "status": if changed { "removed-link" } else { "native-surfaces-left-in-place" },
+            "changed": changed,
+            "target": target.to_string_lossy(),
+        }));
+    }
+
+    let target = tool_skill_path(home, tool)?;
+    let changed = retire_home_skills_link(repo_root, &target)?;
+    Ok(json!({
+        "status": if changed { "removed-link" } else { "not-installed-or-unmanaged" },
+        "changed": changed,
+        "target": target.to_string_lossy(),
+    }))
+}
+
+fn skill_tool_status_with_bootstrap(
+    repo_root: &Path,
+    home: &Path,
+    tool: &str,
+    bootstrap_output_dir: Option<&Path>,
+) -> Result<Value, String> {
+    if tool == "codex" {
+        return codex_install_status_with_bootstrap(repo_root, home, bootstrap_output_dir);
+    }
+
+    let target = tool_skill_path(home, tool)?;
+    let source = shared_skills_source(repo_root)?;
+    let link_ok = skills_link_matches_source(&target, &source)?;
+    Ok(json!({
+        "ready": link_ok,
+        "target": target.to_string_lossy(),
+        "source": source.to_string_lossy(),
+        "status": if link_ok {
+            "linked"
+        } else if target.exists() || symlink_exists(&target) {
+            "unmanaged"
+        } else {
+            "not-installed"
+        },
+    }))
+}
+
+fn codex_install_status_with_bootstrap(
+    repo_root: &Path,
+    home: &Path,
+    bootstrap_output_dir: Option<&Path>,
+) -> Result<Value, String> {
+    let config_path = home.join(".codex").join("config.toml");
+    let plugin_root = home.join(".codex/plugins").join("skill-framework-native");
+    let marketplace_path = home.join(".agents/plugins").join("marketplace.json");
+    let codex_skills_path = home.join(".codex").join("skills");
+    let claude_skills_path = home.join(".claude").join("skills");
+    let claude_mcp_config_path = home.join(".claude.json");
+    let bootstrap_path = bootstrap_output_dir
+        .map(default_bootstrap_mirror_path)
+        .unwrap_or_else(|| {
+            default_bootstrap_output_dir(repo_root).join("framework_default_bootstrap.json")
+        });
+    let source = shared_skills_source(repo_root)?;
+
+    let config_ok = codex_config_matches_contract(&config_path)?;
+    let bootstrap_ok = validate_default_bootstrap(&bootstrap_path, repo_root)?;
+    let plugin_ok = plugin_root.join(".codex-plugin/plugin.json").is_file();
+    let plugin_skills_ok = skills_link_matches_source(&plugin_root.join("skills"), &source)?;
+    let plugin_mcp_ok = validate_personal_plugin_mcp(&plugin_root.join(".mcp.json"), repo_root)?;
+    let marketplace_ok = validate_marketplace_plugin(&marketplace_path, "skill-framework-native")?;
+    let codex_skills_ok = skills_link_matches_source(&codex_skills_path, &source)?;
+    let claude_skills_ok = !path_or_symlink_exists(&claude_skills_path)
+        || skills_link_matches_source(&claude_skills_path, &source)?;
+    let claude_mcp_ok = validate_home_claude_mcp(&claude_mcp_config_path, repo_root)?;
+    let overlay_ok = retired_overlay_ok(&repo_root.join(RETIRED_CODEX_MODEL_INSTRUCTIONS_PATH))?;
+    let ready = config_ok
+        && bootstrap_ok
+        && plugin_ok
+        && plugin_skills_ok
+        && plugin_mcp_ok
+        && marketplace_ok
+        && codex_skills_ok
+        && claude_skills_ok
+        && claude_mcp_ok
+        && overlay_ok;
+
+    Ok(json!({
+        "ready": ready,
+        "status": if ready { "native-integration-ready" } else { "native-integration-incomplete" },
+        "target": codex_skills_path.to_string_lossy(),
+        "source": source.to_string_lossy(),
+        "checks": {
+            "config": config_ok,
+            "bootstrap": bootstrap_ok,
+            "plugin": plugin_ok,
+            "plugin_skills": plugin_skills_ok,
+            "plugin_mcp": plugin_mcp_ok,
+            "marketplace": marketplace_ok,
+            "codex_skills": codex_skills_ok,
+            "claude_skills": claude_skills_ok,
+            "claude_mcp": claude_mcp_ok,
+            "overlay": overlay_ok,
+        },
+    }))
+}
+
+fn codex_config_matches_contract(config_path: &Path) -> Result<bool, String> {
+    let Some(content) = read_text_if_exists(config_path)? else {
+        return Ok(false);
+    };
+    Ok(content.contains("[mcp_servers.framework-mcp]")
+        && content.contains("[tui]")
+        && content.lines().any(is_status_line))
+}
+
+fn retired_overlay_ok(path: &Path) -> Result<bool, String> {
+    let Some(content) = read_text_if_exists(path)? else {
+        return Ok(true);
+    };
+    Ok(!content.contains(FRAMEWORK_START_MARKER))
+}
+
+fn tool_skill_path(home: &Path, tool: &str) -> Result<PathBuf, String> {
+    match tool {
+        "codex" => Ok(home.join(".codex").join("skills")),
+        "agents" => Ok(home.join(".agents").join("skills")),
+        "gemini" => Ok(home.join(".gemini").join("skills")),
+        other => Err(format!("Unsupported tool: {other}")),
+    }
+}
+
+fn shared_skills_source(repo_root: &Path) -> Result<PathBuf, String> {
+    Ok(repo_root.join(skill_bridge_source_rel(repo_root)?))
+}
+
+fn skills_link_matches_source(target_path: &Path, expected_source: &Path) -> Result<bool, String> {
+    let metadata = match fs::symlink_metadata(target_path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(err) => return Err(err.to_string()),
+    };
+    if !metadata.file_type().is_symlink() {
+        return Ok(false);
+    }
+    let resolved_target = target_path.canonicalize().map_err(|err| err.to_string())?;
+    let resolved_source = expected_source
+        .canonicalize()
+        .map_err(|err| err.to_string())?;
+    Ok(resolved_target == resolved_source)
+}
+
+fn count_top_level_skills(skills_root: &Path) -> Result<usize, String> {
+    let mut count = 0usize;
+    for entry in fs::read_dir(skills_root).map_err(|err| err.to_string())? {
+        let entry = entry.map_err(|err| err.to_string())?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if entry.path().is_dir() && !name.starts_with('.') && name != "dist" {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+fn default_home_dir() -> PathBuf {
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 fn default_bootstrap_output_dir(repo_root: &Path) -> PathBuf {
@@ -2549,4 +2971,8 @@ fn symlink_exists(path: &Path) -> bool {
     fs::symlink_metadata(path)
         .map(|metadata| metadata.file_type().is_symlink())
         .unwrap_or(false)
+}
+
+fn path_or_symlink_exists(path: &Path) -> bool {
+    path.exists() || symlink_exists(path)
 }

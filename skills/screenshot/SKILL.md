@@ -46,7 +46,7 @@ Follow these save-location rules every time:
 ## macOS permission preflight
 
 ```bash
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- \
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- \
   --ensure-macos-permissions
 ```
 
@@ -54,19 +54,20 @@ cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --rele
 
 ```bash
 # macOS: preflight + app capture to temp
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- \
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- \
   --ensure-macos-permissions && \
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- \
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- \
   --app "<App>" --mode temp
 ```
 
 > Full OS-specific commands (macOS/Linux/Windows): [references/os_commands.md](references/os_commands.md)
 
 The Rust helper prints one path per capture. When multiple windows/displays match, it prints multiple paths.
+Use `--json` when another tool or host process needs stable machine-readable output instead of line-oriented paths.
 
 ## Error handling
 
-- Run `screenshot_rs --ensure-macos-permissions` first to request Screen Recording permission.
+- Run `screenshot --ensure-macos-permissions` first to request Screen Recording permission.
 - If app/window capture returns no matches, run `--list-windows --app "AppName"` and retry with `--window-id`.
 - Always report the saved file path in the response.
 

@@ -45,7 +45,7 @@ If the task shifts to adjacent skill territory, route to:
   - current branch PR by default
   - user-provided PR number or URL if given
 - Preferred helper:
-  - `/Users/joe/Documents/skill/skills/gh-fix-ci/scripts/inspect_pr_checks.py`
+  - `cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/gh_source_gate_rs/Cargo.toml --bin gh-source-gate -- inspect-pr-checks --repo . --json`
 
 ### 2. Inspect failures
 
@@ -137,6 +137,6 @@ Recommended structure:
 
 ## Optional supporting assets
 
-- `scripts/inspect_pr_checks.py`
+- Rust CLI: `/Users/joe/Documents/skill/rust_tools/gh_source_gate_rs`
 - `assets/`
 - `agents/`

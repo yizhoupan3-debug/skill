@@ -1318,7 +1318,7 @@ impl BrowserRuntime {
                 },
                 current_tab_id: None,
                 tabs: HashMap::new(),
-                browser_pid,
+                _browser_pid: browser_pid,
                 user_data_dir,
                 cdp: CdpClient::connect(port)?,
             },
@@ -1654,7 +1654,7 @@ impl BrowserRuntime {
                     .get("testId")
                     .and_then(Value::as_str)
                     .map(str::to_string),
-                ordinal: item.get("ordinal").and_then(Value::as_u64).unwrap_or(0) as usize,
+                _ordinal: item.get("ordinal").and_then(Value::as_u64).unwrap_or(0) as usize,
                 selector: value_str(item.get("selector")).to_string(),
             });
         }
@@ -1805,14 +1805,14 @@ impl BrowserRuntime {
         session_id: &str,
         tab_id: &str,
         declaration: &str,
-        timeout_ms: u64,
+        _timeout_ms: u64,
     ) -> Result<Value, Value> {
         let session_cdp_id = self.tab_session_id(session_id, tab_id)?;
         let cdp = self.cdp_mut(session_id)?;
         let response = cdp.call(
             Some(&session_cdp_id),
-            "Runtime.callFunctionOn",
-            json!({"functionDeclaration": declaration, "executionContextId": 1, "awaitPromise": true, "returnByValue": true, "timeout": timeout_ms}),
+            "Runtime.evaluate",
+            json!({"expression": format!("({declaration})()"), "awaitPromise": true, "returnByValue": true}),
         )?;
         if response.get("exceptionDetails").is_some() {
             return Err(browser_error(

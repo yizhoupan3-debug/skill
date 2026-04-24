@@ -62,7 +62,7 @@ smallest safe library patch.
 
 - A finished or in-progress task exposed **Routing Drift**, **Struggle**, or **Missing Gate/Context**
 - The user asks: "顺手把这个 skill 修一下", "这次为什么没触发", or "以后别再选错"
-- `audit_evolution.py` or `.evolution_journal.jsonl` shows a recurring reroute pattern
+- `scripts/evolution-rs` or `.evolution_journal.jsonl` shows a recurring reroute pattern
 - A gate should have fired first but did not
 - A newly added skill did not enter the expected **维护规范 / 维护流程 / 自优化** path
 - The right fix is to tighten an incumbent skill because of **边界重叠 / 修改旧 skill / 顺手修旧 skill / 旧 skill** confusion

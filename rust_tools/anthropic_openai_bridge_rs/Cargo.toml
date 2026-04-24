@@ -3,6 +3,8 @@ name = "anthropic_openai_bridge_rs"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+
 [dependencies]
 axum = "0.7.9"
 bytes = "1.10.1"
