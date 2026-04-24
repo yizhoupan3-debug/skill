@@ -50,17 +50,19 @@ const EXECUTION_STEADY_STATE_FIELDS: [&str; 14] = [
     "execution_kernel_prompt_preview_owner",
 ];
 const EXECUTION_SHARED_RUNTIME_FIELDS: [&str; 2] = ["trace_event_count", "trace_output_path"];
-const EXECUTION_LIVE_PRIMARY_REQUIRED_RUNTIME_FIELDS: [&str; 5] = [
+const EXECUTION_LIVE_PRIMARY_REQUIRED_RUNTIME_FIELDS: [&str; 6] = [
     "run_id",
     "status",
+    "execution_mode",
     "execution_kernel_model_id_source",
     "trace_event_count",
     "trace_output_path",
 ];
-const EXECUTION_LIVE_PRIMARY_PASSTHROUGH_RUNTIME_FIELDS: [&str; 3] =
-    ["execution_mode", "route_engine", "diagnostic_route_mode"];
-const EXECUTION_DRY_RUN_REQUIRED_RUNTIME_FIELDS: [&str; 5] = [
+const EXECUTION_LIVE_PRIMARY_PASSTHROUGH_RUNTIME_FIELDS: [&str; 2] =
+    ["route_engine", "diagnostic_route_mode"];
+const EXECUTION_DRY_RUN_REQUIRED_RUNTIME_FIELDS: [&str; 6] = [
     "reason",
+    "execution_mode",
     "execution_kernel_contract_mode",
     "execution_kernel_fallback_policy",
     "trace_event_count",

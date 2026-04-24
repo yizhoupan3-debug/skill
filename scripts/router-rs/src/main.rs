@@ -11304,7 +11304,12 @@ mod tests {
         );
         assert_eq!(
             payload["services"]["execution"]["kernel_metadata_contract"]["runtime_fields"]
-                ["live_primary_passthrough"][2],
+                ["live_primary_required"][2],
+            Value::String("execution_mode".to_string())
+        );
+        assert_eq!(
+            payload["services"]["execution"]["kernel_metadata_contract"]["runtime_fields"]
+                ["live_primary_passthrough"][1],
             Value::String("diagnostic_route_mode".to_string())
         );
         assert_eq!(
@@ -11505,6 +11510,9 @@ mod tests {
         assert!(resource_dimensions
             .iter()
             .any(|value| value == "runtime.generation"));
+        assert!(resource_dimensions
+            .iter()
+            .any(|value| value == "runtime.schema_version"));
 
         let record = build_runtime_metric_record(json!({
             "metric_name": "runtime.route_mismatch_total",
@@ -11533,6 +11541,10 @@ mod tests {
         assert_eq!(
             record["dimensions"]["runtime.status"],
             Value::String("ok".to_string())
+        );
+        assert_eq!(
+            record["dimensions"]["runtime.schema_version"],
+            Value::String(RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION.to_string())
         );
         assert_eq!(
             record["ownership"]["exporter_authority"],
@@ -13228,46 +13240,42 @@ mod tests {
         let state_path = artifact_dir.join("stream.state.json");
         let artifact_index_path = artifact_dir.join("stream.artifacts.json");
         fs::create_dir_all(&artifact_dir).expect("create artifact dir");
-        fs::write(
-            &state_path,
-            serde_json::to_string_pretty(&json!({
+        let state_text = serde_json::to_string_pretty(&json!({
+            "session_id": "session-compact",
+            "job_id": "job-compact",
+            "latest_cursor": {
+                "schema_version": "runtime-trace-cursor-v1",
                 "session_id": "session-compact",
                 "job_id": "job-compact",
-                "latest_cursor": {
-                    "schema_version": "runtime-trace-cursor-v1",
-                    "session_id": "session-compact",
-                    "job_id": "job-compact",
-                    "generation": 0,
-                    "seq": 2,
-                    "event_id": "evt-snapshot",
-                    "cursor": "g0:s2:evt-snapshot"
-                },
-                "latest_event": {
-                    "event_id": "evt-snapshot",
-                    "kind": "job.progress",
-                    "stage": "background",
-                    "status": "ok",
-                    "ts": "2026-04-22T10:00:00.000Z"
-                }
-            }))
-            .expect("serialize state"),
-        )
-        .expect("write state");
-        fs::write(
-            &artifact_index_path,
-            serde_json::to_string_pretty(&json!([
-                {
-                    "schema_version": "runtime-trace-artifact-ref-v1",
-                    "artifact_id": "art-state",
-                    "kind": "state_ref",
-                    "uri": state_path.display().to_string(),
-                    "digest": "abc",
-                    "size_bytes": 10
-                }
-            ]))
-            .expect("serialize artifact index"),
-        )
-        .expect("write artifact index");
+                "generation": 0,
+                "seq": 2,
+                "event_id": "evt-snapshot",
+                "cursor": "g0:s2:evt-snapshot"
+            },
+            "latest_event": {
+                "event_id": "evt-snapshot",
+                "kind": "job.progress",
+                "stage": "background",
+                "status": "ok",
+                "ts": "2026-04-22T10:00:00.000Z"
+            }
+        }))
+        .expect("serialize state");
+        fs::write(&state_path, &state_text).expect("write state");
+        let state_digest = sha256_hex(state_text.as_bytes());
+        let artifact_index_text = serde_json::to_string_pretty(&json!([
+            {
+                "schema_version": "runtime-trace-artifact-ref-v1",
+                "artifact_id": "art-state",
+                "kind": "state_ref",
+                "uri": state_path.display().to_string(),
+                "digest": state_digest,
+                "size_bytes": state_text.len()
+            }
+        ]))
+        .expect("serialize artifact index");
+        fs::write(&artifact_index_path, &artifact_index_text).expect("write artifact index");
+        let artifact_index_digest = sha256_hex(artifact_index_text.as_bytes());
         fs::write(
             &delta_path,
             concat!(
@@ -13297,16 +13305,16 @@ mod tests {
                         "artifact_id": "art-index",
                         "kind": "artifact_index_ref",
                         "uri": artifact_index_path.display().to_string(),
-                        "digest": "artifact-digest",
-                        "size_bytes": 10
+                        "digest": artifact_index_digest,
+                        "size_bytes": artifact_index_text.len()
                     },
                     "state_ref": {
                         "schema_version": "runtime-trace-artifact-ref-v1",
                         "artifact_id": "art-state",
                         "kind": "state_ref",
                         "uri": state_path.display().to_string(),
-                        "digest": "state-digest",
-                        "size_bytes": 10
+                        "digest": state_digest,
+                        "size_bytes": state_text.len()
                     }
                 },
                 "active_generation": 1,
@@ -13364,6 +13372,100 @@ mod tests {
         );
 
         fs::remove_dir_all(&trace_root).expect("cleanup compaction root");
+    }
+
+    #[test]
+    fn trace_compaction_recovery_fails_closed_on_artifact_digest_mismatch() {
+        let temp_root = temp_trace_path("trace-compaction-digest-mismatch");
+        let trace_root = temp_root.parent().expect("temp root parent").join(
+            temp_root
+                .file_stem()
+                .expect("temp root stem")
+                .to_string_lossy()
+                .to_string(),
+        );
+        let manifest_path = trace_root.join("stream.manifest.json");
+        let artifact_dir = trace_root.join("artifacts");
+        let state_path = artifact_dir.join("stream.state.json");
+        let artifact_index_path = artifact_dir.join("stream.artifacts.json");
+        fs::create_dir_all(&artifact_dir).expect("create digest mismatch artifact dir");
+        let state_text = serde_json::to_string_pretty(&json!({
+            "session_id": "session-compact",
+            "job_id": "job-compact",
+            "latest_cursor": {
+                "schema_version": "runtime-trace-cursor-v1",
+                "session_id": "session-compact",
+                "job_id": "job-compact",
+                "generation": 0,
+                "seq": 1,
+                "event_id": "evt-snapshot",
+                "cursor": "g0:s1:evt-snapshot"
+            }
+        }))
+        .expect("serialize digest mismatch state");
+        fs::write(&state_path, &state_text).expect("write digest mismatch state");
+        let artifact_index_text = "[]";
+        fs::write(&artifact_index_path, artifact_index_text)
+            .expect("write digest mismatch artifact index");
+        fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "runtime-trace-compaction-manifest-v1",
+                "session_id": "session-compact",
+                "job_id": "job-compact",
+                "latest_stable_snapshot": {
+                    "schema_version": "runtime-trace-compaction-snapshot-v1",
+                    "generation": 0,
+                    "snapshot_id": "snap-1",
+                    "session_id": "session-compact",
+                    "job_id": "job-compact",
+                    "state_ref": {
+                        "schema_version": "runtime-trace-artifact-ref-v1",
+                        "artifact_id": "art-state",
+                        "kind": "state_ref",
+                        "uri": state_path.display().to_string(),
+                        "digest": "not-the-real-digest",
+                        "size_bytes": state_text.len()
+                    },
+                    "artifact_index_ref": {
+                        "schema_version": "runtime-trace-artifact-ref-v1",
+                        "artifact_id": "art-index",
+                        "kind": "artifact_index_ref",
+                        "uri": artifact_index_path.display().to_string(),
+                        "digest": sha256_hex(artifact_index_text.as_bytes()),
+                        "size_bytes": artifact_index_text.len()
+                    }
+                },
+                "active_generation": 1,
+                "active_parent_snapshot_id": "snap-1",
+                "manifest_path": manifest_path.display().to_string(),
+                "artifact_index_path": artifact_index_path.display().to_string(),
+                "state_path": state_path.display().to_string()
+            }))
+            .expect("serialize digest mismatch manifest"),
+        )
+        .expect("write digest mismatch manifest");
+
+        let err = inspect_trace_stream(TraceStreamInspectRequestPayload {
+            path: None,
+            event_stream_text: None,
+            compaction_manifest_path: Some(manifest_path.display().to_string()),
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
+            session_id: Some("session-compact".to_string()),
+            job_id: Some("job-compact".to_string()),
+            stream_scope_fields: None,
+        })
+        .expect_err("digest mismatch must fail closed");
+
+        assert_eq!(
+            err,
+            "Compaction recovery failed closed because state_ref artifact digest mismatched."
+        );
+
+        fs::remove_dir_all(&trace_root).expect("cleanup digest mismatch compaction root");
     }
 
     #[test]
