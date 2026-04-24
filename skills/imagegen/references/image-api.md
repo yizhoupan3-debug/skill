@@ -66,12 +66,12 @@ The script uses `input_image` items inside `input` and sends local files as Base
 
 ## Output extraction
 
-Look for `output[*].type == "image_generation_call"` and decode `result` from Base64 into a file.
+Look for `output[*].type == "image_generation_call"` and decode `result` into a file. The CLI accepts either raw Base64 or a Base64 data URL.
 
 ## Notes
 
-- This script uses the Responses API image-generation tool, not the legacy image-generation endpoints.
-- The script keeps `generate`, `edit`, and `generate-batch`, but internally uses repeated single-image Responses calls.
+- This CLI uses the Responses API image-generation tool, not the legacy image-generation endpoints.
+- The CLI keeps `generate`, `edit`, and `generate-batch`, but internally uses repeated single-image Responses calls.
 - Local input images are sent as data URLs.
-- `--mask` is currently unsupported in this script because that would require a separate mask/file-upload path.
+- `--mask` is currently unsupported in this CLI because that would require a separate mask/file-upload path.
 - The default model is `gpt-5.4`, but `--model` can override it.
