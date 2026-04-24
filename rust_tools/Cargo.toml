@@ -5,6 +5,7 @@ members = [
   "image_process_rs",
   "ooxml_parser_rs",
   "financial_data_rs",
+  "gh_source_gate_rs",
   "pptx_tool_rs",
   "screenshot_rs",
 ]

@@ -78,7 +78,8 @@ spans sessions.
 ### Bootstrap
 
 1. Scope the question and name the expected contribution.
-2. Search literature enough to identify the novelty boundary.
+2. Search literature enough to identify the novelty boundary. External web and
+   scholarly-API lookup is allowed; keep the captured evidence in the workspace.
 3. Extract 3 to 5 core claims and run a novelty check.
 4. Write the first protocol before any experiment starts.
 
@@ -121,6 +122,8 @@ spans sessions.
 - Keep experiment folders append-only after a run is labeled complete.
 - Prefer the bundled Rust controller `../../scripts/autoresearch-rs` over ad hoc manual edits for
   init, queued hypotheses, run records, reflections, and next-step suggestions.
+- Keep external lookup inside the Rust controller path (`research-claim`) when
+  possible; do not add Python helper scripts for search or state mutation.
 
 ## Minimum Run Record
 
@@ -224,6 +227,7 @@ slices as follows before expensive runs.
 - Resume handoff: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- resume --workspace <project>`
 - File resync: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- sync --workspace <project>`
 - Claim drafting lane: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- draft-claims --workspace <project>`
+- External research lane: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- research-claim --workspace <project> --claim-id C1`; this queries Semantic Scholar/arXiv from Rust and writes `literature/EXTERNAL_RESEARCH.md`
 - Novelty comparison lane: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- compare-claim --workspace <project> ...`
 - Search-plan refresh: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- plan-search --workspace <project>`; this refreshes the managed search view from structured claims instead of creating a new persisted truth surface
 - First-claim brief refresh: `cargo run --manifest-path scripts/autoresearch-rs/Cargo.toml -- brief-first-claim --workspace <project>`; the brief lives inside `CURRENT_CONTEXT.md`, and legacy `literature/NOVELTY_BRIEF.md` is treated as removable stale output

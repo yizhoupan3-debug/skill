@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use bytes::Bytes;
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -14,8 +14,9 @@ use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
+use tokio::time;
 use tokio_stream::wrappers::ReceiverStream;
 
 #[derive(Parser, Debug)]
@@ -34,8 +35,25 @@ struct Cli {
     upstream_key: String,
     #[arg(long, env = "AOB_MODEL", default_value = "gpt-5.5")]
     model: String,
+    #[arg(long, env = "AOB_PRESERVE_REQUEST_MODEL", default_value_t = false)]
+    preserve_request_model: bool,
     #[arg(long, env = "AOB_SYSTEM_ROLE", default_value = "developer")]
     system_role: String,
+    #[arg(long, env = "AOB_REASONING_EFFORT")]
+    reasoning_effort: Option<String>,
+    #[arg(
+        long,
+        env = "AOB_STREAM_INCLUDE_USAGE",
+        default_value_t = true,
+        action = ArgAction::Set
+    )]
+    stream_include_usage: bool,
+    #[arg(long, env = "AOB_STREAM_OBFUSCATION", default_value = "false")]
+    stream_obfuscation: String,
+    #[arg(long, env = "AOB_MAX_TOKENS_FIELD", default_value = "auto")]
+    max_tokens_field: String,
+    #[arg(long, env = "AOB_STREAM_HEARTBEAT_SECS", default_value_t = 5)]
+    stream_heartbeat_secs: u64,
 }
 
 #[derive(Clone)]
@@ -44,7 +62,19 @@ struct AppState {
     upstream_base: String,
     upstream_key: String,
     model: String,
+    preserve_request_model: bool,
     system_role: String,
+    reasoning_effort: Option<String>,
+    stream_include_usage: bool,
+    stream_obfuscation: StreamObfuscation,
+    max_tokens_field: String,
+    stream_heartbeat_secs: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum StreamObfuscation {
+    Omit,
+    Include(bool),
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,12 +126,22 @@ struct AnthropicResponse {
 #[tokio::main]
 async fn main() -> Result<(), String> {
     let cli = Cli::parse();
+    let client = Client::builder()
+        .tcp_nodelay(true)
+        .build()
+        .map_err(|err| format!("client build failed: {err}"))?;
     let state = Arc::new(AppState {
-        client: Client::new(),
+        client,
         upstream_base: cli.upstream_base.trim_end_matches('/').to_string(),
         upstream_key: cli.upstream_key,
         model: cli.model,
+        preserve_request_model: cli.preserve_request_model,
         system_role: cli.system_role,
+        reasoning_effort: cli.reasoning_effort,
+        stream_include_usage: cli.stream_include_usage,
+        stream_obfuscation: parse_stream_obfuscation(&cli.stream_obfuscation)?,
+        max_tokens_field: cli.max_tokens_field,
+        stream_heartbeat_secs: cli.stream_heartbeat_secs,
     });
     let app = Router::new()
         .route("/health", get(health))
@@ -123,10 +163,18 @@ async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         "bridge": "anthropic-openai-bridge-rs",
         "upstream_base": state.upstream_base,
         "model": state.model,
+        "preserve_request_model": state.preserve_request_model,
+        "system_role": state.system_role,
+        "reasoning_effort": state.reasoning_effort,
+        "stream_include_usage": state.stream_include_usage,
+        "stream_obfuscation": stream_obfuscation_label(&state.stream_obfuscation),
+        "max_tokens_field": resolve_max_tokens_field(&state.max_tokens_field, &state.model),
+        "stream_heartbeat_secs": state.stream_heartbeat_secs,
         "loss_reduction": {
             "system": "top-level Anthropic system maps to a dedicated OpenAI message",
             "tools": "Anthropic tools map to OpenAI function tools",
-            "streaming": "OpenAI SSE chunks are translated to Anthropic SSE chunks as they arrive"
+            "streaming": "OpenAI SSE chunks are translated to Anthropic SSE chunks as they arrive",
+            "request": "Claude-host-only fields are stripped instead of serialized into GPT context"
         }
     }))
 }
@@ -145,8 +193,16 @@ async fn models(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     }))
 }
 
-async fn count_tokens(Json(request): Json<Value>) -> impl IntoResponse {
-    let estimated = estimate_tokens(&request.to_string());
+async fn count_tokens(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<Value>,
+) -> impl IntoResponse {
+    let estimated = match serde_json::from_value::<AnthropicRequest>(request.clone()) {
+        Ok(request) => build_openai_request(&state, &request, false)
+            .map(|mapped| estimate_openai_request_tokens(&mapped))
+            .unwrap_or_else(|_| estimate_tokens(&request_to_lossy_text(&request))),
+        Err(_) => estimate_tokens(&request.to_string()),
+    };
     Json(json!({"input_tokens": estimated.max(1)}))
 }
 
@@ -185,7 +241,11 @@ async fn handle_messages(
                 .map_err(|err| format!("read upstream response failed: {err}"))?;
             return Ok(json_error(status, &text));
         }
-        return Ok(openai_stream_to_anthropic_response(response, state.model.clone()));
+        return Ok(openai_stream_to_anthropic_response(
+            response,
+            state.model.clone(),
+            state.stream_heartbeat_secs,
+        ));
     }
     let text = response
         .text()
@@ -228,16 +288,23 @@ fn build_openai_request(
     stream: bool,
 ) -> Result<Value, String> {
     let mut body = Map::new();
-    body.insert(
-        "model".to_string(),
-        Value::String(request.model.clone().unwrap_or_else(|| state.model.clone())),
-    );
+    let model = resolve_upstream_model(state, request);
+    body.insert("model".to_string(), Value::String(model.clone()));
     body.insert(
         "messages".to_string(),
         Value::Array(build_openai_messages(state, request)?),
     );
     if let Some(max_tokens) = request.max_tokens {
-        body.insert("max_tokens".to_string(), Value::Number(max_tokens.into()));
+        body.insert(
+            resolve_max_tokens_field(&state.max_tokens_field, &model),
+            Value::Number(max_tokens.into()),
+        );
+    }
+    if let Some(effort) = &state.reasoning_effort {
+        body.insert(
+            "reasoning_effort".to_string(),
+            Value::String(effort.to_string()),
+        );
     }
     if let Some(value) = request.temperature {
         insert_number(&mut body, "temperature", value);
@@ -260,13 +327,37 @@ fn build_openai_request(
         }
     }
     body.insert("stream".to_string(), Value::Bool(stream));
-    if stream {
+    if stream && state.stream_include_usage {
         body.insert(
             "stream_options".to_string(),
-            json!({"include_usage": true}),
+            build_stream_options(&state.stream_obfuscation),
         );
     }
     Ok(Value::Object(body))
+}
+
+fn resolve_upstream_model(state: &AppState, request: &AnthropicRequest) -> String {
+    if state.preserve_request_model {
+        return request.model.clone().unwrap_or_else(|| state.model.clone());
+    }
+    state.model.clone()
+}
+
+fn resolve_max_tokens_field(configured: &str, model: &str) -> String {
+    match configured.trim().to_ascii_lowercase().as_str() {
+        "" | "auto" => {
+            if model.starts_with("gpt-5")
+                || model.starts_with("o1")
+                || model.starts_with("o3")
+                || model.starts_with("o4")
+            {
+                "max_completion_tokens".to_string()
+            } else {
+                "max_tokens".to_string()
+            }
+        }
+        value => value.to_string(),
+    }
 }
 
 fn build_openai_messages(
@@ -311,6 +402,7 @@ fn append_user_message(messages: &mut Vec<Value>, content: &Value) {
                     }
                 }
             }
+            Some("thinking") | Some("redacted_thinking") => {}
             _ => {
                 let text = content_value_to_text(&block);
                 if !text.trim().is_empty() {
@@ -340,6 +432,7 @@ fn append_assistant_message(messages: &mut Vec<Value>, content: &Value) {
                     }
                 }));
             }
+            Some("thinking") | Some("redacted_thinking") => {}
             _ => {
                 let text = content_value_to_text(&block);
                 if !text.trim().is_empty() {
@@ -380,6 +473,7 @@ fn content_value_to_text(value: &Value) -> String {
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string(),
+            Some("thinking") | Some("redacted_thinking") => String::new(),
             Some("tool_result") => {
                 content_value_to_text(map.get("content").unwrap_or(&Value::Null))
             }
@@ -387,6 +481,61 @@ fn content_value_to_text(value: &Value) -> String {
         },
         Value::Null => String::new(),
         _ => value.to_string(),
+    }
+}
+
+fn request_to_lossy_text(request: &AnthropicRequest) -> String {
+    let mut parts = Vec::new();
+    if let Some(system) = &request.system {
+        parts.push(content_value_to_text(system));
+    }
+    for message in &request.messages {
+        parts.push(content_value_to_text(&message.content));
+    }
+    parts.join("\n")
+}
+
+fn estimate_openai_request_tokens(request: &Value) -> u64 {
+    let Some(messages) = request.get("messages").and_then(Value::as_array) else {
+        return estimate_tokens(&request.to_string());
+    };
+    let mut chars = 0_u64;
+    for message in messages {
+        chars += message
+            .get("role")
+            .and_then(Value::as_str)
+            .map(|role| role.chars().count() as u64)
+            .unwrap_or(0);
+        chars += estimate_content_chars(message.get("content").unwrap_or(&Value::Null));
+        if let Some(tool_calls) = message.get("tool_calls").and_then(Value::as_array) {
+            for tool_call in tool_calls {
+                chars += estimate_content_chars(tool_call);
+            }
+        }
+    }
+    if let Some(tools) = request.get("tools").and_then(Value::as_array) {
+        for tool in tools {
+            chars += estimate_content_chars(tool) / 3;
+        }
+    }
+    estimate_tokens_by_chars(chars)
+}
+
+fn estimate_content_chars(value: &Value) -> u64 {
+    match value {
+        Value::String(text) => text.chars().count() as u64,
+        Value::Array(items) => items.iter().map(estimate_content_chars).sum(),
+        Value::Object(map) => {
+            if let Some(text) = map.get("text").and_then(Value::as_str) {
+                return text.chars().count() as u64;
+            }
+            if let Some(image) = map.get("image_url") {
+                return estimate_content_chars(image).min(4096);
+            }
+            value.to_string().chars().count() as u64
+        }
+        Value::Null => 0,
+        _ => value.to_string().chars().count() as u64,
     }
 }
 
@@ -426,6 +575,34 @@ fn anthropic_tool_choice_to_openai(choice: &Value) -> Option<Value> {
             .and_then(Value::as_str)
             .map(|name| json!({"type": "function", "function": {"name": name}})),
         _ => None,
+    }
+}
+
+fn parse_stream_obfuscation(raw: &str) -> Result<StreamObfuscation, String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "" | "omit" | "none" | "off" => Ok(StreamObfuscation::Omit),
+        "true" | "1" | "yes" | "on" => Ok(StreamObfuscation::Include(true)),
+        "false" | "0" | "no" => Ok(StreamObfuscation::Include(false)),
+        value => Err(format!(
+            "unsupported AOB_STREAM_OBFUSCATION value: {value}; use omit, true, or false"
+        )),
+    }
+}
+
+fn build_stream_options(obfuscation: &StreamObfuscation) -> Value {
+    let mut options = Map::new();
+    options.insert("include_usage".to_string(), Value::Bool(true));
+    if let StreamObfuscation::Include(value) = obfuscation {
+        options.insert("include_obfuscation".to_string(), Value::Bool(*value));
+    }
+    Value::Object(options)
+}
+
+fn stream_obfuscation_label(obfuscation: &StreamObfuscation) -> &'static str {
+    match obfuscation {
+        StreamObfuscation::Omit => "omit",
+        StreamObfuscation::Include(true) => "true",
+        StreamObfuscation::Include(false) => "false",
     }
 }
 
@@ -591,16 +768,21 @@ fn sse_response(message: &AnthropicResponse) -> Response {
         .expect("valid SSE response")
 }
 
-fn openai_stream_to_anthropic_response(response: reqwest::Response, default_model: String) -> Response {
-    let (tx, rx) = mpsc::channel::<Result<Bytes, Infallible>>(64);
+fn openai_stream_to_anthropic_response(
+    response: reqwest::Response,
+    default_model: String,
+    heartbeat_secs: u64,
+) -> Response {
+    let (tx, rx) = mpsc::channel::<Result<Bytes, Infallible>>(256);
     tokio::spawn(async move {
-        bridge_openai_stream(response, default_model, tx).await;
+        bridge_openai_stream(response, default_model, heartbeat_secs, tx).await;
     });
     Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "text/event-stream")
         .header(header::CACHE_CONTROL, "no-cache")
         .header(header::CONNECTION, "keep-alive")
+        .header("x-accel-buffering", "no")
         .body(Body::from_stream(ReceiverStream::new(rx)))
         .expect("valid streaming SSE response")
 }
@@ -608,6 +790,7 @@ fn openai_stream_to_anthropic_response(response: reqwest::Response, default_mode
 async fn bridge_openai_stream(
     response: reqwest::Response,
     default_model: String,
+    heartbeat_secs: u64,
     tx: mpsc::Sender<Result<Bytes, Infallible>>,
 ) {
     let mut state = StreamBridgeState::new(default_model);
@@ -635,7 +818,24 @@ async fn bridge_openai_stream(
 
     let mut stream = response.bytes_stream();
     let mut buffer = Vec::new();
-    while let Some(chunk) = stream.next().await {
+    let heartbeat = Duration::from_secs(heartbeat_secs);
+    loop {
+        let chunk = if heartbeat_secs == 0 {
+            stream.next().await
+        } else {
+            match time::timeout(heartbeat, stream.next()).await {
+                Ok(chunk) => chunk,
+                Err(_) => {
+                    if !send_comment(&tx, "keep-alive").await {
+                        return;
+                    }
+                    continue;
+                }
+            }
+        };
+        let Some(chunk) = chunk else {
+            break;
+        };
         let chunk = match chunk {
             Ok(chunk) => chunk,
             Err(err) => {
@@ -690,12 +890,16 @@ async fn finish_stream(
     }
 }
 
-async fn send_sse(
-    tx: &mpsc::Sender<Result<Bytes, Infallible>>,
-    event: &str,
-    data: &Value,
-) -> bool {
-    tx.send(Ok(Bytes::from(sse_event(event, data)))).await.is_ok()
+async fn send_sse(tx: &mpsc::Sender<Result<Bytes, Infallible>>, event: &str, data: &Value) -> bool {
+    tx.send(Ok(Bytes::from(sse_event(event, data))))
+        .await
+        .is_ok()
+}
+
+async fn send_comment(tx: &mpsc::Sender<Result<Bytes, Infallible>>, comment: &str) -> bool {
+    tx.send(Ok(Bytes::from(format!(": {comment}\n\n"))))
+        .await
+        .is_ok()
 }
 
 fn sse_event(event: &str, data: &Value) -> String {
@@ -712,6 +916,9 @@ fn find_sse_frame(buffer: &[u8]) -> Option<(usize, usize)> {
         if index + 4 <= buffer.len() && &buffer[index..index + 4] == b"\r\n\r\n" {
             return Some((index, index + 4));
         }
+    }
+    if buffer.ends_with(b"\r\n") || buffer.ends_with(b"\n") {
+        return Some((buffer.len(), buffer.len()));
     }
     None
 }
@@ -743,8 +950,6 @@ struct StreamBridgeState {
 #[derive(Debug)]
 struct ToolStreamBlock {
     content_index: usize,
-    id: String,
-    name: String,
 }
 
 impl StreamBridgeState {
@@ -798,8 +1003,6 @@ impl StreamBridgeState {
             tool_index,
             ToolStreamBlock {
                 content_index: index,
-                id: id.clone(),
-                name: name.clone(),
             },
         );
         events.push((
@@ -837,10 +1040,7 @@ impl StreamBridgeState {
                 "usage": {"output_tokens": self.output_tokens}
             }),
         ));
-        events.push((
-            "message_stop".to_string(),
-            json!({"type": "message_stop"}),
-        ));
+        events.push(("message_stop".to_string(), json!({"type": "message_stop"})));
     }
 }
 
@@ -965,14 +1165,20 @@ mod tests {
             upstream_base: "http://127.0.0.1:8318/v1".to_string(),
             upstream_key: "sk-dummy".to_string(),
             model: "gpt-5.5".to_string(),
+            preserve_request_model: false,
             system_role: "developer".to_string(),
+            reasoning_effort: None,
+            stream_include_usage: true,
+            stream_obfuscation: StreamObfuscation::Include(false),
+            max_tokens_field: "auto".to_string(),
+            stream_heartbeat_secs: 5,
         }
     }
 
     #[test]
     fn maps_system_tools_and_tool_results_without_text_wrapping() {
         let request = AnthropicRequest {
-            model: None,
+            model: Some("claude-sonnet-4-5".to_string()),
             max_tokens: Some(128),
             system: Some(Value::String("You are direct.".to_string())),
             tools: Some(vec![
@@ -991,6 +1197,7 @@ mod tests {
                 AnthropicMessage {
                     role: "assistant".to_string(),
                     content: json!([
+                        {"type":"thinking","thinking":"Claude-only hidden chain"},
                         {"type":"tool_use","id":"toolu_1","name":"read_file","input":{"path":"README.md"}}
                     ]),
                 },
@@ -1007,6 +1214,9 @@ mod tests {
             mapped["messages"][0],
             json!({"role":"developer","content":"You are direct."})
         );
+        assert_eq!(mapped["model"], "gpt-5.5");
+        assert_eq!(mapped["max_completion_tokens"], 128);
+        assert_eq!(mapped["messages"][2]["content"], "");
         assert_eq!(
             mapped["messages"][2]["tool_calls"][0]["function"]["name"],
             "read_file"
@@ -1042,6 +1252,86 @@ mod tests {
         let mapped = build_openai_request(&state(), &request, true).expect("mapped");
         assert_eq!(mapped["stream"], true);
         assert_eq!(mapped["stream_options"]["include_usage"], true);
+        assert_eq!(mapped["stream_options"]["include_obfuscation"], false);
+    }
+
+    #[test]
+    fn can_preserve_request_model_and_force_reasoning_knobs() {
+        let mut state = state();
+        state.preserve_request_model = true;
+        state.reasoning_effort = Some("low".to_string());
+        state.max_tokens_field = "max_completion_tokens".to_string();
+        state.stream_obfuscation = StreamObfuscation::Include(false);
+        let request = AnthropicRequest {
+            model: Some("claude-sonnet-4-5".to_string()),
+            max_tokens: Some(128),
+            system: None,
+            tools: None,
+            tool_choice: None,
+            temperature: None,
+            top_p: None,
+            stop_sequences: None,
+            stream: true,
+            messages: vec![AnthropicMessage {
+                role: "user".to_string(),
+                content: Value::String("ping".to_string()),
+            }],
+        };
+        let mapped = build_openai_request(&state, &request, true).expect("mapped");
+        assert_eq!(mapped["model"], "claude-sonnet-4-5");
+        assert_eq!(mapped["reasoning_effort"], "low");
+        assert_eq!(mapped["max_completion_tokens"], 128);
+        assert_eq!(mapped["stream_options"]["include_obfuscation"], false);
+    }
+
+    #[test]
+    fn auto_max_tokens_uses_legacy_field_for_non_reasoning_models() {
+        let mut state = state();
+        state.model = "gpt-4o".to_string();
+        let request = AnthropicRequest {
+            model: None,
+            max_tokens: Some(128),
+            system: None,
+            tools: None,
+            tool_choice: None,
+            temperature: None,
+            top_p: None,
+            stop_sequences: None,
+            stream: false,
+            messages: vec![AnthropicMessage {
+                role: "user".to_string(),
+                content: Value::String("ping".to_string()),
+            }],
+        };
+        let mapped = build_openai_request(&state, &request, false).expect("mapped");
+        assert_eq!(mapped["max_tokens"], 128);
+        assert!(mapped.get("max_completion_tokens").is_none());
+    }
+
+    #[test]
+    fn count_tokens_estimates_translated_request_not_raw_claude_json() {
+        let request = AnthropicRequest {
+            model: None,
+            max_tokens: None,
+            system: Some(Value::String("System".to_string())),
+            tools: None,
+            tool_choice: None,
+            temperature: None,
+            top_p: None,
+            stop_sequences: None,
+            stream: false,
+            messages: vec![AnthropicMessage {
+                role: "assistant".to_string(),
+                content: json!([
+                    {"type":"thinking","thinking":"this should not count"},
+                    {"type":"text","text":"visible"}
+                ]),
+            }],
+        };
+        let mapped = build_openai_request(&state(), &request, false).expect("mapped");
+        let translated = estimate_openai_request_tokens(&mapped);
+        let raw = estimate_tokens(&serde_json::to_string(&mapped).expect("json"));
+        assert!(translated < raw);
     }
 
     #[test]

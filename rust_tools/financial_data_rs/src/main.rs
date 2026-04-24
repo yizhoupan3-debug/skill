@@ -48,6 +48,21 @@ struct OhlcvArgs {
     format: OutputFormat,
 }
 
+impl OhlcvArgs {
+    fn validate(&self) -> Result<()> {
+        if self.limit == 0 {
+            bail!("--limit must be greater than zero");
+        }
+        if self.market == Market::Crypto && self.limit > 1000 {
+            bail!("--limit must be at most 1000 for crypto OHLCV");
+        }
+        if self.market == Market::Us && self.adjusted && self.source == UsSource::Stooq {
+            bail!("Stooq does not support adjusted OHLCV in the Rust path");
+        }
+        Ok(())
+    }
+}
+
 #[derive(Args, Clone)]
 struct ExportArgs {
     #[command(flatten)]
@@ -213,11 +228,15 @@ impl FetchResult {
 
     fn columns(&self) -> Vec<&'static str> {
         let mut cols = vec!["timestamp", "open", "high", "low", "close"];
-        if self.records.iter().any(|record| record.adj_close.is_some()) {
+        if self.has_adj_close() {
             cols.push("adj_close");
         }
         cols.extend(["volume", "symbol", "market", "source"]);
         cols
+    }
+
+    fn has_adj_close(&self) -> bool {
+        self.records.iter().any(|record| record.adj_close.is_some())
     }
 }
 
@@ -236,10 +255,12 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Ohlcv(args) => {
+            args.validate()?;
             let result = fetch_ohlcv(&http, &args).await?;
             emit_result(&result, args.format)?;
         }
         Commands::Export(args) => {
+            args.ohlcv.validate()?;
             let result = fetch_ohlcv(&http, &args.ohlcv).await?;
             export_backtest(&result, &args)?;
         }
@@ -277,12 +298,12 @@ async fn fetch_crypto_ohlcv(http: &HttpClient, args: &OhlcvArgs) -> Result<Fetch
 }
 
 async fn fetch_us_ohlcv(http: &HttpClient, args: &OhlcvArgs) -> Result<FetchResult> {
-    if args.adjusted {
-        bail!("Rust OHLCV path does not support --adjusted yet");
-    }
-
     let attempts = match args.source {
+        UsSource::Auto if args.adjusted => vec![UsSource::Yahoo],
         UsSource::Auto => vec![UsSource::Yahoo, UsSource::Stooq],
+        UsSource::Stooq if args.adjusted => {
+            bail!("Stooq does not support adjusted OHLCV in the Rust path")
+        }
         source => vec![source],
     };
     let mut last_error: Option<anyhow::Error> = None;
@@ -290,7 +311,14 @@ async fn fetch_us_ohlcv(http: &HttpClient, args: &OhlcvArgs) -> Result<FetchResu
     for source in attempts {
         let attempt = match source {
             UsSource::Yahoo => {
-                fetch_yahoo_ohlcv(http, &args.symbol, &args.interval, &args.period).await
+                fetch_yahoo_ohlcv(
+                    http,
+                    &args.symbol,
+                    &args.interval,
+                    &args.period,
+                    args.adjusted,
+                )
+                .await
             }
             UsSource::Stooq => fetch_stooq_ohlcv(http, &args.symbol).await,
             UsSource::Auto => unreachable!(),
@@ -493,6 +521,7 @@ async fn fetch_yahoo_ohlcv(
     symbol: &str,
     interval: &str,
     period: &str,
+    adjusted: bool,
 ) -> Result<FetchResult> {
     let payload = http
         .get_json(
@@ -559,6 +588,17 @@ async fn fetch_yahoo_ohlcv(
                 .and_then(|items| items.get(index))
                 .map(value_to_f64)
                 .transpose()?;
+            let (open, high, low, close) = if adjusted {
+                let adj_close =
+                    adj_value.context("Yahoo payload missing adjusted close for adjusted fetch")?;
+                if close == 0.0 {
+                    bail!("cannot adjust Yahoo OHLCV with zero close for {symbol}");
+                }
+                let factor = adj_close / close;
+                (open * factor, high * factor, low * factor, adj_close)
+            } else {
+                (open, high, low, close)
+            };
             records.push(OhlcvRecord {
                 timestamp: epoch_seconds_to_iso(timestamp)?,
                 open,
@@ -566,7 +606,7 @@ async fn fetch_yahoo_ohlcv(
                 low,
                 close,
                 volume,
-                adj_close: adj_value,
+                adj_close: if adjusted { None } else { adj_value },
                 symbol: symbol.to_string(),
                 market: "us".to_string(),
                 source: "yahoo".to_string(),
@@ -581,12 +621,17 @@ async fn fetch_yahoo_ohlcv(
         symbol: symbol.to_string(),
         interval: Some(interval.to_string()),
         timezone: Some(timezone),
-        adjusted: Some(false),
+        adjusted: Some(adjusted),
         fetched_at_utc: now_utc(),
         records,
         notes: vec![
             format!("period={period}"),
             "public chart endpoint".to_string(),
+            if adjusted {
+                "OHLC adjusted with Yahoo adjclose ratio".to_string()
+            } else {
+                "unadjusted OHLC with adj_close column when available".to_string()
+            },
         ],
     })
 }
@@ -739,7 +784,7 @@ async fn run_validate(http: &HttpClient) -> Result<Value> {
         let http = http.clone();
         tasks.push(tokio::spawn(async move {
             run_probe("us.yahoo.AAPL.1h".to_string(), async move {
-                fetch_yahoo_ohlcv(&http, "AAPL", "1h", "5d").await
+                fetch_yahoo_ohlcv(&http, "AAPL", "1h", "5d", false).await
             })
             .await
         }));
@@ -895,9 +940,10 @@ fn records_to_csv(records: &[OhlcvRecord]) -> Result<String> {
 
 fn backtest_csv(result: &FetchResult, schema: BacktestSchema) -> Result<String> {
     let mut writer = csv::Writer::from_writer(Vec::new());
+    let include_adj_close = result.has_adj_close();
     match schema {
         BacktestSchema::Generic => {
-            writer.write_record([
+            let mut header = vec![
                 "timestamp",
                 "open",
                 "high",
@@ -907,10 +953,13 @@ fn backtest_csv(result: &FetchResult, schema: BacktestSchema) -> Result<String> 
                 "symbol",
                 "market",
                 "source",
-                "adj_close",
-            ])?;
+            ];
+            if include_adj_close {
+                header.push("adj_close");
+            }
+            writer.write_record(header)?;
             for record in &result.records {
-                writer.write_record([
+                let mut row = vec![
                     record.timestamp.clone(),
                     record.open.to_string(),
                     record.high.to_string(),
@@ -920,36 +969,49 @@ fn backtest_csv(result: &FetchResult, schema: BacktestSchema) -> Result<String> 
                     record.symbol.clone(),
                     record.market.clone(),
                     record.source.clone(),
-                    record
-                        .adj_close
-                        .map(|value| value.to_string())
-                        .unwrap_or_default(),
-                ])?;
+                ];
+                if include_adj_close {
+                    row.push(
+                        record
+                            .adj_close
+                            .map(|value| value.to_string())
+                            .unwrap_or_default(),
+                    );
+                }
+                writer.write_record(row)?;
             }
         }
         BacktestSchema::Vectorbt => {
-            writer.write_record([
+            let mut header = vec![
                 "timestamp",
                 "Open",
                 "High",
                 "Low",
                 "Close",
                 "Volume",
-                "Adj Close",
-            ])?;
+            ];
+            if include_adj_close {
+                header.push("Adj Close");
+            }
+            writer.write_record(header)?;
             for record in &result.records {
-                writer.write_record([
+                let mut row = vec![
                     record.timestamp.clone(),
                     record.open.to_string(),
                     record.high.to_string(),
                     record.low.to_string(),
                     record.close.to_string(),
                     record.volume.to_string(),
-                    record
-                        .adj_close
-                        .map(|value| value.to_string())
-                        .unwrap_or_default(),
-                ])?;
+                ];
+                if include_adj_close {
+                    row.push(
+                        record
+                            .adj_close
+                            .map(|value| value.to_string())
+                            .unwrap_or_default(),
+                    );
+                }
+                writer.write_record(row)?;
             }
         }
         BacktestSchema::Backtrader => {
@@ -979,12 +1041,13 @@ fn backtest_csv(result: &FetchResult, schema: BacktestSchema) -> Result<String> 
 }
 
 fn backtest_json(result: &FetchResult, schema: BacktestSchema) -> Result<Value> {
+    let include_adj_close = result.has_adj_close();
     let records = match schema {
         BacktestSchema::Generic => result
             .records
             .iter()
             .map(|record| {
-                json!({
+                let mut item = json!({
                     "timestamp": record.timestamp,
                     "open": record.open,
                     "high": record.high,
@@ -994,23 +1057,29 @@ fn backtest_json(result: &FetchResult, schema: BacktestSchema) -> Result<Value> 
                     "symbol": record.symbol,
                     "market": record.market,
                     "source": record.source,
-                    "adj_close": record.adj_close,
-                })
+                });
+                if include_adj_close {
+                    item["adj_close"] = json!(record.adj_close);
+                }
+                item
             })
             .collect(),
         BacktestSchema::Vectorbt => result
             .records
             .iter()
             .map(|record| {
-                json!({
+                let mut item = json!({
                     "timestamp": record.timestamp,
                     "Open": record.open,
                     "High": record.high,
                     "Low": record.low,
                     "Close": record.close,
                     "Volume": record.volume,
-                    "Adj Close": record.adj_close,
-                })
+                });
+                if include_adj_close {
+                    item["Adj Close"] = json!(record.adj_close);
+                }
+                item
             })
             .collect(),
         BacktestSchema::Backtrader => result

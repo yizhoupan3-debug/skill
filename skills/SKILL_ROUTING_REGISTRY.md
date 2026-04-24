@@ -60,7 +60,7 @@
 | `frontend-debugging` | Active | P2 | L1 | owner | none | project | ✓ 95.8 | Diagnose frontend runtime bugs with a five-layer model (component → state → rend |
 | `frontend-design` | Active | P2 | L3 | owner | none | project | ✓ 95.2 | Guide distinctive, high-end UI design: aesthetic direction, typography, color, m |
 | `gh-address-comments` | Active | P2 | L0 | gate | source | project | ✓ 94.0 | Triage and address GitHub PR review comments and review threads for the current  |
-| `gh-fix-ci` | Active | P2 | L0 | gate | source | project | ✓ 93.5 | Triage failing GitHub Actions PR checks with `gh` and `scripts/inspect_pr_checks |
+| `gh-fix-ci` | Active | P2 | L0 | gate | source | project | ✓ 93.5 | Triage failing GitHub Actions PR checks with `gh` and the bundled Rust `gh-sourc |
 | `gh-pr-triage` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Triage GitHub pull requests by collecting PR metadata, comments, reviewer state, |
 | `github-actions-authoring` | Active | P2 | L3 | owner | none | project | ✓ 97.7 | Produce GitHub Actions workflow YAML with minimal permissions, stable cache keys |
 | `github-investigator` | Active | P2 | L2 | owner | none | project | ⚠ 64.0 | Deep GitHub repo research with issue/PR timeline and code-history evidence |
@@ -151,5 +151,5 @@
 | `web-scraping` | Active | P2 | L4 | owner | none | project | ✓ 99.2 | Plan and implement web scraping and structured data extraction workflows. Use wh |
 | `webhook-security` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Secure webhook receivers and callback endpoints for Stripe, GitHub, Slack, Clerk |
 | `writing-skills` | Active | P2 | L0 | overlay | none | project | ✓ 95.2 | Standardize and strengthen multiple `SKILL.md` files and shared skill-writing do |
-| `xlsx` | Active | P2 | L3 | owner | none | project | ✓ 98.3 | Use after the `$spreadsheets` gate when the user explicitly wants an `openpyxl`  |
+| `xlsx` | Active | P2 | L3 | owner | none | project | ✓ 98.3 | Read, create, edit, repair, render, and review Excel `.xlsx` workbooks when form |
 | `youtube-summarizer` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Extract transcripts from YouTube videos and turn them into summaries, notes, key |

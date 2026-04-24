@@ -19,6 +19,8 @@ struct Cli {
     health_manifest: PathBuf,
     #[arg(long)]
     json: bool,
+    #[arg(long)]
+    apply: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +93,10 @@ fn main() -> Result<(), String> {
     let skill_entries = collect_skill_entries(&args.skills_root, &docs, &source_manifest)?;
     let bundle = compile_bundle(&docs, &skill_entries, &source_manifest, &health_data)?;
 
+    if args.apply {
+        write_bundle(&args.skills_root, &bundle)?;
+    }
+
     if args.json {
         println!(
             "{}",
@@ -102,6 +108,49 @@ fn main() -> Result<(), String> {
 
     println!("{}", bundle.registry);
     Ok(())
+}
+
+fn write_bundle(skills_root: &Path, bundle: &SkillBundle) -> Result<(), String> {
+    write_text_if_changed(
+        &skills_root.join("SKILL_ROUTING_REGISTRY.md"),
+        &bundle.registry,
+    )?;
+    write_text_if_changed(&skills_root.join("SKILL_ROUTING_INDEX.md"), &bundle.index)?;
+    write_json_if_changed(&skills_root.join("SKILL_MANIFEST.json"), &bundle.manifest)?;
+    write_json_if_changed(
+        &skills_root.join("SKILL_ROUTING_RUNTIME.json"),
+        &bundle.runtime_index,
+    )?;
+    write_json_if_changed(
+        &skills_root.join("SKILL_SHADOW_MAP.json"),
+        &bundle.shadow_map,
+    )?;
+    write_json_if_changed(
+        &skills_root.join("SKILL_APPROVAL_POLICY.json"),
+        &bundle.approval_policy,
+    )?;
+    Ok(())
+}
+
+fn write_text_if_changed(path: &Path, content: &str) -> Result<(), String> {
+    let content = if content.ends_with('\n') {
+        content.to_string()
+    } else {
+        format!("{content}\n")
+    };
+    if fs::read_to_string(path).ok().as_deref() == Some(content.as_str()) {
+        return Ok(());
+    }
+    fs::write(path, content).map_err(|err| format!("failed writing {}: {err}", path.display()))
+}
+
+fn write_json_if_changed(path: &Path, payload: &Value) -> Result<(), String> {
+    let content = format!(
+        "{}\n",
+        serde_json::to_string(payload)
+            .map_err(|err| format!("failed formatting {}: {err}", path.display()))?
+    );
+    write_text_if_changed(path, &content)
 }
 
 fn compile_bundle(
@@ -516,7 +565,10 @@ fn build_registry_and_manifest(
     Ok((registry, json!({"keys": keys, "skills": skills})))
 }
 
-fn select_manifest_docs<'a>(docs: &'a [SkillDoc], skill_entries: &[SkillEntry]) -> Vec<&'a SkillDoc> {
+fn select_manifest_docs<'a>(
+    docs: &'a [SkillDoc],
+    skill_entries: &[SkillEntry],
+) -> Vec<&'a SkillDoc> {
     let mut ordered_entries = skill_entries.iter().collect::<Vec<_>>();
     ordered_entries.sort_by(|left, right| {
         left.source_position
@@ -1029,7 +1081,10 @@ mod tests {
     #[test]
     fn iter_skill_dirs_discovers_nested_system_skills() {
         let skills_root = temp_skills_root("nested-system");
-        write_skill(&skills_root.join(".system").join("openai-docs"), "openai-docs");
+        write_skill(
+            &skills_root.join(".system").join("openai-docs"),
+            "openai-docs",
+        );
 
         let discovered = iter_skill_dirs(&skills_root).expect("discover skills");
         let discovered_paths = discovered

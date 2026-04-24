@@ -121,9 +121,8 @@ const CLAUDE_PRE_TOOL_USE_BASH_RULES: [&str; 12] = [
     "*.codex/host_entrypoints_sync_manifest.json*",
     "*.codex/memory/CLAUDE_MEMORY.md*",
 ];
-const CLAUDE_QUALITY_PRE_TOOL_USE_RULES: [&str; 5] = [
+const CLAUDE_QUALITY_PRE_TOOL_USE_RULES: [&str; 4] = [
     "/scripts/router-rs/src/**",
-    "/scripts/install_skills.sh",
     "/tests/**",
     "/.claude/hooks/**",
     "/tools/browser-mcp/src/**",
@@ -271,10 +270,9 @@ const QUALITY_RUNTIME_PREFIXES: [&str; 3] = [
 const QUALITY_HOOK_PREFIXES: [&str; 1] = [".claude/hooks/"];
 const QUALITY_TARGET_SUFFIXES: [&str; 3] = [".py", ".rs", ".sh"];
 const PATCH_ARTIFACT_SUFFIXES: [&str; 4] = [".patch", ".diff", ".rej", ".orig"];
-const ASYNC_AUDIT_PREFIXES: [&str; 6] = [
+const ASYNC_AUDIT_PREFIXES: [&str; 5] = [
     "scripts/router-rs/src/",
     "scripts/router-rs/src/host_integration.rs",
-    "scripts/install_skills.sh",
     "tests/",
     ".claude/hooks/",
     "tools/browser-mcp/src/",
@@ -2857,8 +2855,7 @@ fn quality_target_context(path: &str) -> Option<String> {
         .any(|prefix| path.starts_with(prefix))
         || lowered_path.contains("hook");
     let is_test = path.starts_with("tests/");
-    let is_host_entrypoint_runtime =
-        path == "scripts/install_skills.sh" || path == "scripts/router-rs/src/host_integration.rs";
+    let is_host_entrypoint_runtime = path == "scripts/router-rs/src/host_integration.rs";
     if !(is_runtime || is_hook || is_test || is_host_entrypoint_runtime) {
         return None;
     }

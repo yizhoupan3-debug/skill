@@ -69,12 +69,13 @@ def test_repo_local_codex_framework_mcp_uses_rust_only_entrypoint() -> None:
 
 
 def test_install_skills_uses_rust_only_entrypoints() -> None:
-    source = (PROJECT_ROOT / "scripts" / "install_skills.sh").read_text(encoding="utf-8")
-    assert "python3" not in source
-    assert "router-rs/Cargo.toml" in source
-    assert "--host-integration" in source
-    assert "install-native-integration" in source
-    assert "validate-default-bootstrap" in source
+    assert not (PROJECT_ROOT / "scripts" / "install_skills.sh").exists()
+    source = (PROJECT_ROOT / "scripts" / "router-rs" / "src" / "host_integration.rs").read_text(
+        encoding="utf-8"
+    )
+    assert "InstallSkills" in source
+    assert "InstallNativeIntegration" in source
+    assert "validate_default_bootstrap" in source
 
 
 def test_sync_skills_uses_router_rs_directly() -> None:
@@ -92,3 +93,20 @@ def test_memory_automation_lives_in_rust_host_integration() -> None:
 
     assert "RunMemoryAutomation" in source
     assert "run_memory_automation(" in source
+
+
+def test_screenshot_skill_uses_workspace_rust_binary_entrypoint() -> None:
+    skill_doc = (PROJECT_ROOT / "skills" / "screenshot" / "SKILL.md").read_text(encoding="utf-8")
+    reference_doc = (
+        PROJECT_ROOT / "skills" / "screenshot" / "references" / "os_commands.md"
+    ).read_text(encoding="utf-8")
+    manifest = (PROJECT_ROOT / "rust_tools" / "screenshot_rs" / "Cargo.toml").read_text(
+        encoding="utf-8"
+    )
+
+    assert '[[bin]]\nname = "screenshot"' in manifest
+    assert '[[bin]]\nname = "screenshot_rs"' not in manifest
+    assert "rust_tools/Cargo.toml --release --bin screenshot" in skill_doc
+    assert "rust_tools/Cargo.toml --release --bin screenshot" in reference_doc
+    assert "rust_tools/screenshot_rs/Cargo.toml --release" not in skill_doc
+    assert "rust_tools/screenshot_rs/Cargo.toml --release" not in reference_doc

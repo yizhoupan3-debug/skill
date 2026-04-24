@@ -33,8 +33,8 @@ This skill owns **data acquisition, validation, normalization, and export only**
 - Backtest export files
 
 ### Runtime split
-- Rust core: default crypto / U.S. OHLCV fetching, retries/timeouts, probe concurrency, backtest export
-- Python layer: adjusted U.S. OHLCV, fundamentals, holders, capital metrics, China index / A-share data
+- Rust core: crypto / U.S. OHLCV fetching, retries/timeouts, probe concurrency, backtest export
+- Python layer: fundamentals, holders, capital metrics, China index / A-share data
 
 ### Current source status
 - Crypto: Rust native HTTP clients for `binance`, `kraken`, `coinbase`
@@ -194,7 +194,7 @@ datetime index named `datetime`, columns: `open`, `high`, `low`, `close`, `volum
 Prefer `CCXT` for unified exchange access.
 
 - Prefer the Rust Yahoo chart path for OHLCV.
-- Prefer `yfinance` for adjusted OHLCV, fundamentals, holders, and capital metrics.
+- Prefer `yfinance` for fundamentals, holders, and capital metrics.
 - Prefer `Stooq` only when daily public OHLCV fallback is enough.
 - Treat both as **research-grade**, not exchange-direct execution-grade feeds.
 

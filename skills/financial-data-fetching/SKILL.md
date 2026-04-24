@@ -139,7 +139,7 @@ This skill does **not** own:
 ## Runtime split
 
 - Rust owns the hot path: crypto / U.S. OHLCV fetch, retries, timeouts, concurrent probes, and backtest export.
-- Python remains the compatibility layer for adjusted U.S. OHLCV, fundamentals, holders, capital metrics, and China AKShare-backed surfaces.
+- Python remains the compatibility layer for fundamentals, holders, capital metrics, and China AKShare-backed surfaces.
 
 ## Verified no-token source map
 

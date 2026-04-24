@@ -40,6 +40,7 @@ def test_rust_autoresearch_full_loop(tmp_path: Path) -> None:
     state = load_state(root)
     assert len(state["novelty_gate"]["draft_claims"]) == 4
     assert "recommended first search target" in (root / "literature" / "NOVELTY_SEARCH_PLAN.md").read_text(encoding="utf-8")
+    assert "research-claim" in (root / "literature" / "EXTERNAL_RESEARCH.md").read_text(encoding="utf-8")
 
     run_ctl(
         "compare-claim",
@@ -112,3 +113,33 @@ def test_rust_autoresearch_full_loop(tmp_path: Path) -> None:
     assert "latest_direction: DEEPEN" in run_ctl("resume", "--workspace", str(root))
     ledger = (root / "run-ledger.jsonl").read_text(encoding="utf-8").splitlines()
     assert any(json.loads(line)["kind"] == "run.recorded" for line in ledger)
+
+
+def test_autoresearch_can_record_external_research_from_arxiv(tmp_path: Path) -> None:
+    run_ctl(
+        "init",
+        "--project",
+        "external-research",
+        "--question",
+        "Can retrieval augmented generation improve citation grounded research?",
+        "--dir",
+        str(tmp_path),
+    )
+    root = tmp_path / "external-research"
+    run_ctl("draft-claims", "--workspace", str(root), "--count", "2")
+    run_ctl(
+        "research-claim",
+        "--workspace",
+        str(root),
+        "--claim-id",
+        "C1",
+        "--source",
+        "arxiv",
+        "--limit",
+        "1",
+    )
+    state = load_state(root)
+    assert len(state["external_research"]) == 1
+    assert state["external_research"][0]["query"]
+    assert state["external_research"][0]["results"]
+    assert "Managed External Research" in (root / "literature" / "EXTERNAL_RESEARCH.md").read_text(encoding="utf-8")

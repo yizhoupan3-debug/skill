@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +17,7 @@ from financial_data import MarketDataClient  # noqa: E402
 
 REPO_ROOT = ROOT.parents[1]
 RUST_MANIFEST = REPO_ROOT / "rust_tools/financial_data_rs/Cargo.toml"
+RUST_BIN = REPO_ROOT / "rust_tools/target/debug/financial_data_rs"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -92,30 +94,38 @@ def emit_result(result, fmt: str) -> None:
 def should_use_rust(args: argparse.Namespace) -> bool:
     """Route network-heavy paths to Rust when the feature set matches."""
     if args.command == "ohlcv":
-        return args.market in {"crypto", "us"} and not args.adjusted
+        return args.market in {"crypto", "us"}
     if args.command == "export":
         return (
             args.market in {"crypto", "us"}
             and args.file_format in {"csv", "json"}
-            and not args.adjusted
         )
     return False
 
 
 def run_rust_cli(extra_args: list[str]) -> None:
     """Run the Rust core CLI and forward its output."""
-    cmd = [
+    cmd = rust_command_prefix() + extra_args
+    completed = subprocess.run(cmd, check=False)
+    if completed.returncode != 0:
+        raise SystemExit(completed.returncode)
+
+
+def rust_command_prefix() -> list[str]:
+    """Prefer a built Rust binary and fall back to cargo run."""
+    override = os.environ.get("FINANCIAL_DATA_RS_BIN")
+    if override:
+        return [override]
+    if RUST_BIN.exists():
+        return [str(RUST_BIN)]
+    return [
         "cargo",
         "run",
         "--quiet",
         "--manifest-path",
         str(RUST_MANIFEST),
         "--",
-        *extra_args,
     ]
-    completed = subprocess.run(cmd, check=False)
-    if completed.returncode != 0:
-        raise SystemExit(completed.returncode)
 
 
 def rust_args_for_ohlcv(args: argparse.Namespace) -> list[str]:

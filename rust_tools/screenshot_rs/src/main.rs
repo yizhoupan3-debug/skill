@@ -2,6 +2,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::Local;
 use clap::Parser;
 use image::{imageops, DynamicImage, ImageBuffer, ImageFormat, Rgba, RgbaImage};
+use serde_json::json;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -73,6 +74,9 @@ struct Cli {
 
     #[arg(long)]
     ensure_macos_permissions: bool,
+
+    #[arg(long)]
+    json: bool,
 }
 
 fn main() {
@@ -104,7 +108,8 @@ fn run_cli() -> Result<()> {
     }
 
     if args.list_windows {
-        list_windows(&args)?;
+        let windows = list_windows(&args)?;
+        emit_window_list(&windows, args.json)?;
         return Ok(());
     }
 
@@ -112,14 +117,12 @@ fn run_cli() -> Result<()> {
 
     if args.interactive {
         capture_interactive(&args, &output, &system)?;
-        println!("{}", output.display());
+        emit_capture_paths(&[output], &args, &system)?;
         return Ok(());
     }
 
     let paths = capture(&args, &output, &system)?;
-    for path in paths {
-        println!("{}", path.display());
-    }
+    emit_capture_paths(&paths, &args, &system)?;
     Ok(())
 }
 
@@ -257,7 +260,8 @@ fn test_display_ids() -> Vec<u32> {
 
 fn run_test_mode(args: &Cli, system: &str) -> Result<()> {
     if args.list_windows {
-        list_test_windows(args);
+        let windows = list_test_windows(args);
+        emit_window_list(&windows, args.json)?;
         return Ok(());
     }
 
@@ -286,13 +290,11 @@ fn run_test_mode(args: &Cli, system: &str) -> Result<()> {
     for path in &paths {
         write_test_image(path, &args.format)?;
     }
-    for path in paths {
-        println!("{}", path.display());
-    }
+    emit_capture_paths(&paths, args, system)?;
     Ok(())
 }
 
-fn list_test_windows(args: &Cli) {
+fn list_test_windows(args: &Cli) -> Vec<WindowMeta> {
     let owner = args.app.as_deref().unwrap_or("TestApp");
     let title = args.window_name.as_deref().unwrap_or("");
     let ids: Vec<u32> = if args.active_window {
@@ -300,14 +302,24 @@ fn list_test_windows(args: &Cli) {
     } else {
         test_window_ids()
     };
-    for (idx, id) in ids.iter().enumerate() {
-        let name = if title.is_empty() {
-            format!("Window {}", idx + 1)
-        } else {
-            title.to_string()
-        };
-        println!("{id}\t{owner}\t{name}\t800x600+0+0");
-    }
+    ids.into_iter()
+        .enumerate()
+        .map(|(idx, id)| WindowMeta {
+            id,
+            owner: owner.to_string(),
+            title: if title.is_empty() {
+                format!("Window {}", idx + 1)
+            } else {
+                title.to_string()
+            },
+            x: 0,
+            y: 0,
+            width: 800,
+            height: 600,
+            layer: 0,
+            focused: idx == 0,
+        })
+        .collect()
 }
 
 fn test_window_targets(args: &Cli) -> Vec<u32> {
@@ -488,12 +500,29 @@ fn capture(args: &Cli, output: &Path, system: &str) -> Result<Vec<PathBuf>> {
     capture_full_screen(output, &args.format, system)
 }
 
-fn list_windows(args: &Cli) -> Result<()> {
+fn list_windows(args: &Cli) -> Result<Vec<WindowMeta>> {
     let mut windows = window_metas()?;
     windows.retain(|window| window_matches(window, args));
     if args.active_window {
         windows.retain(|window| window.focused);
     }
+    Ok(windows)
+}
+
+fn emit_window_list(windows: &[WindowMeta], json_output: bool) -> Result<()> {
+    if json_output {
+        let rows = windows.iter().map(window_meta_json).collect::<Vec<_>>();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "screenshot-rs-window-list-v1",
+                "ok": true,
+                "windows": rows,
+            }))?
+        );
+        return Ok(());
+    }
+
     if windows.is_empty() {
         println!("no matching windows found");
         return Ok(());
@@ -505,6 +534,62 @@ fn list_windows(args: &Cli) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn emit_capture_paths(paths: &[PathBuf], args: &Cli, system: &str) -> Result<()> {
+    if args.json {
+        let path_values = paths
+            .iter()
+            .map(|path| path.to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "screenshot-rs-capture-v1",
+                "ok": true,
+                "kind": capture_kind(args),
+                "system": system,
+                "format": normalized_format(&args.format),
+                "paths": path_values,
+            }))?
+        );
+        return Ok(());
+    }
+
+    for path in paths {
+        println!("{}", path.display());
+    }
+    Ok(())
+}
+
+fn window_meta_json(window: &WindowMeta) -> serde_json::Value {
+    json!({
+        "id": window.id,
+        "owner": window.owner,
+        "title": window.title,
+        "x": window.x,
+        "y": window.y,
+        "width": window.width,
+        "height": window.height,
+        "layer": window.layer,
+        "focused": window.focused,
+    })
+}
+
+fn capture_kind(args: &Cli) -> &'static str {
+    if args.interactive {
+        "interactive"
+    } else if args.window_id.is_some()
+        || args.active_window
+        || args.app.is_some()
+        || args.window_name.is_some()
+    {
+        "window"
+    } else if args.region.is_some() {
+        "region"
+    } else {
+        "screen"
+    }
 }
 
 fn matching_windows(args: &Cli) -> Result<Vec<Window>> {

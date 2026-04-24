@@ -40,7 +40,7 @@ If the task shifts to adjacent skill territory, route to:
 - Resolve the current branch PR:
   - `gh pr view --json number,url,title`
 - Use the bundled helper first:
-  - `/Users/joe/Documents/skill/skills/gh-address-comments/scripts/fetch_comments.py`
+  - `cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/gh_source_gate_rs/Cargo.toml --bin gh-source-gate -- fetch-comments --repo . --json`
 
 ### 2. Fetch and classify feedback
 
@@ -137,6 +137,6 @@ Recommended structure:
 
 ## Optional supporting assets
 
-- `scripts/fetch_comments.py`
+- Rust CLI: `/Users/joe/Documents/skill/rust_tools/gh_source_gate_rs`
 - `assets/`
 - `agents/`

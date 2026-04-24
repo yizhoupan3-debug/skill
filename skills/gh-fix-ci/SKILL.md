@@ -1,8 +1,8 @@
 ---
 name: gh-fix-ci
 description: |
-  Triage failing GitHub Actions PR checks with `gh` and
-  `scripts/inspect_pr_checks.py`.
+  Triage failing GitHub Actions PR checks with `gh` and the bundled
+  Rust `gh-source-gate inspect-pr-checks` CLI.
   Use when the task starts from broken PR checks: inspect logs, summarize
   failures, identify likely root causes, and draft or implement a fix plan
   after approval. Treat non-GitHub-Actions CI as external evidence only. As a
@@ -20,6 +20,7 @@ metadata:
 
 runtime_requirements:
   commands:
+    - cargo
     - gh
     - git
 routing_layer: L0
@@ -35,7 +36,7 @@ trigger_hints:
 allowed_tools:
   - shell
   - git
-  - python
+  - rust
 approval_required_tools:
   - git push
 filesystem_scope:
@@ -54,6 +55,13 @@ At conversation start or first turn, check this source gate before ordinary doma
 
 
 This skill owns GitHub Actions PR-check triage: turning failing checks into a ranked failure summary and a fix plan.
+
+Default helper:
+
+```bash
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/gh_source_gate_rs/Cargo.toml --bin gh-source-gate -- \
+  inspect-pr-checks --repo . --json
+```
 
 ## Priority routing rule
 

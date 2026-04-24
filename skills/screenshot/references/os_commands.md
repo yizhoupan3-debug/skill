@@ -3,22 +3,23 @@
 ## Rust helper
 
 ```bash
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release --  # default location
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --mode temp
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --path output/screen.png
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --app "Codex"
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --app "Codex" --window-name "Settings"
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --list-windows --app "Codex"
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --mode temp --region 100,200,800,600
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --mode temp --active-window
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --window-id 12345
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot --  # default location
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- --mode temp
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- --path output/screen.png
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- --app "Codex"
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- --app "Codex" --window-name "Settings"
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- --list-windows --app "Codex"
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- --mode temp --region 100,200,800,600
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- --mode temp --active-window
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- --window-id 12345
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- --mode temp --json
 ```
 
 Combine preflight + capture:
 ```bash
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- \
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- \
   --ensure-macos-permissions && \
-cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- \
+cargo run --manifest-path <repo-root>/rust_tools/Cargo.toml --release --bin screenshot -- \
   --app "<App>" --mode temp
 ```
 

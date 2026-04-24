@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from io import StringIO
 from pathlib import Path
 from typing import Any, Literal
 
@@ -33,6 +33,7 @@ requests = require_dependency("requests", feature="HTTP financial data access")
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[1]
 RUST_MANIFEST = REPO_ROOT / "rust_tools/financial_data_rs/Cargo.toml"
+RUST_BIN = REPO_ROOT / "rust_tools/target/debug/financial_data_rs"
 
 
 @dataclass(slots=True)
@@ -191,17 +192,6 @@ class MarketDataClient:
         return mapping[key]
 
     @staticmethod
-    def _normalize_yf_columns(df: pd.DataFrame) -> pd.DataFrame:
-        if isinstance(df.columns, pd.MultiIndex):
-            cols = []
-            for col in df.columns:
-                parts = [str(x) for x in col if x not in (None, "")]
-                cols.append("_".join(parts).strip("_"))
-            df = df.copy()
-            df.columns = cols
-        return df
-
-    @staticmethod
     def _ensure_monotonic(df: pd.DataFrame, column: str) -> pd.DataFrame:
         out = df.sort_values(column).drop_duplicates(subset=[column]).reset_index(drop=True)
         return out
@@ -298,32 +288,16 @@ class MarketDataClient:
         source: Literal["auto", "yfinance", "stooq"] = "auto",
         adjusted: bool = False,
     ) -> FetchResult:
-        if not adjusted:
-            return self._fetch_rust_ohlcv(
-                market="us",
-                symbol=symbol,
-                exchange="binance",
-                interval=interval,
-                limit=200,
-                period=period,
-                source=source,
-                adjusted=adjusted,
-            )
-
-        attempts = [source] if source != "auto" else ["yfinance", "stooq"]
-        last_error: Exception | None = None
-        for candidate in attempts:
-            try:
-                if candidate == "yfinance":
-                    return self._fetch_us_yfinance(symbol=symbol, interval=interval, period=period, adjusted=adjusted)
-                if candidate == "stooq":
-                    return self._fetch_us_stooq(symbol=symbol)
-                raise ValueError(f"Unsupported U.S. source: {candidate}")
-            except Exception as exc:  # noqa: BLE001
-                last_error = exc
-                if source != "auto":
-                    raise
-        raise RuntimeError(f"All U.S. data sources failed for {symbol}") from last_error
+        return self._fetch_rust_ohlcv(
+            market="us",
+            symbol=symbol,
+            exchange="binance",
+            interval=interval,
+            limit=200,
+            period=period,
+            source=source,
+            adjusted=adjusted,
+        )
 
     def _fetch_rust_ohlcv(
         self,
@@ -338,13 +312,7 @@ class MarketDataClient:
         adjusted: bool,
     ) -> FetchResult:
         rust_source = "yahoo" if source == "yfinance" else source
-        cmd = [
-            "cargo",
-            "run",
-            "--quiet",
-            "--manifest-path",
-            str(RUST_MANIFEST),
-            "--",
+        cmd = self._rust_command_prefix() + [
             "ohlcv",
             "--market",
             market,
@@ -400,97 +368,21 @@ class MarketDataClient:
             notes=notes,
         )
 
-    def _fetch_us_yfinance(
-        self,
-        *,
-        symbol: str,
-        interval: str,
-        period: str,
-        adjusted: bool,
-    ) -> FetchResult:
-        yf = require_dependency("yfinance", feature="US equity market data fetching")
-
-        raw = yf.download(
-            symbol,
-            period=period,
-            interval=interval,
-            auto_adjust=adjusted,
-            progress=False,
-            threads=False,
-        )
-        if raw is None or raw.empty:
-            raise ValueError(f"yfinance returned empty data for {symbol}")
-        df = self._normalize_yf_columns(raw).reset_index()
-        time_col = "Datetime" if "Datetime" in df.columns else "Date"
-        rename_map = {
-            time_col: "timestamp",
-            f"Open_{symbol}": "open",
-            f"High_{symbol}": "high",
-            f"Low_{symbol}": "low",
-            f"Close_{symbol}": "close",
-            f"Volume_{symbol}": "volume",
-        }
-        if not adjusted and f"Adj Close_{symbol}" in df.columns:
-            rename_map[f"Adj Close_{symbol}"] = "adj_close"
-        df = df.rename(columns=rename_map)
-        keep = [c for c in ["timestamp", "open", "high", "low", "close", "adj_close", "volume"] if c in df.columns]
-        df = df[keep]
-        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-        df["symbol"] = symbol
-        df["market"] = "us"
-        df["source"] = "yfinance"
-        df = self._ensure_monotonic(df, "timestamp")
-        return FetchResult(
-            dataset="ohlcv",
-            source="yfinance",
-            market="us",
-            symbol=symbol,
-            interval=interval,
-            timezone="UTC",
-            adjusted=adjusted,
-            fetched_at_utc=self._now_utc(),
-            data=df,
-            notes=["no-token source", f"period={period}"],
-        )
-
-    def _fetch_us_stooq(self, *, symbol: str) -> FetchResult:
-        normalized = f"{symbol.lower()}.us"
-        url = f"https://stooq.com/q/d/l/?s={normalized}&i=d"
-        response = self.session.get(url, timeout=self.timeout)
-        response.raise_for_status()
-        text = response.text.strip()
-        if not text or text.lower().startswith("no data"):
-            raise ValueError(f"stooq returned no data for {symbol}")
-        df = pd.read_csv(StringIO(text))
-        if df.empty:
-            raise ValueError(f"stooq returned empty csv for {symbol}")
-        df = df.rename(
-            columns={
-                "Date": "timestamp",
-                "Open": "open",
-                "High": "high",
-                "Low": "low",
-                "Close": "close",
-                "Volume": "volume",
-            }
-        )
-        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-        df["symbol"] = symbol.upper()
-        df["market"] = "us"
-        df["source"] = "stooq"
-        df = self._ensure_monotonic(df, "timestamp")
-        return FetchResult(
-            dataset="ohlcv",
-            source="stooq",
-            market="us",
-            symbol=symbol.upper(),
-            interval="1d",
-            timezone="UTC",
-            adjusted=False,
-            fetched_at_utc=self._now_utc(),
-            data=df,
-            notes=["no-token daily csv source", "daily-only"],
-        )
+    @staticmethod
+    def _rust_command_prefix() -> list[str]:
+        override = os.environ.get("FINANCIAL_DATA_RS_BIN")
+        if override:
+            return [override]
+        if RUST_BIN.exists():
+            return [str(RUST_BIN)]
+        return [
+            "cargo",
+            "run",
+            "--quiet",
+            "--manifest-path",
+            str(RUST_MANIFEST),
+            "--",
+        ]
 
     def fetch_cn_index_ohlcv(self, *, index_code: str) -> FetchResult:
         ak = require_dependency("akshare", feature="China index market data fetching")

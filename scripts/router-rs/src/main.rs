@@ -6352,6 +6352,25 @@ pub(crate) fn build_runtime_control_plane_payload() -> Value {
             "runtime_primary_owner": "rust-control-plane",
             "runtime_primary_owner_authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "hot_path_projection_mode": "descriptor-driven",
+            "framework_runtime_package_status": "retired",
+            "framework_runtime_python_projection_required": false,
+            "framework_runtime_replacement": "router-rs::framework_runtime",
+            "framework_runtime_replacement_authority": framework_runtime::FRAMEWORK_RUNTIME_AUTHORITY,
+        },
+        "framework_runtime_package_retirement": {
+            "authority": framework_runtime::FRAMEWORK_RUNTIME_AUTHORITY,
+            "package_path": "framework_runtime/",
+            "steady_state_available": false,
+            "import_contract": "ModuleNotFoundError",
+            "replacement_surfaces": [
+                "router-rs --framework-runtime-snapshot-json",
+                "router-rs --framework-contract-summary-json",
+                "router-rs --framework-memory-recall-json",
+                "router-rs --framework-session-artifact-write-json",
+                "router-rs --framework-mcp-stdio"
+            ],
+            "python_wrapper_allowed": false,
+            "host_private_policy_exception": "outside-framework-runtime-only",
         },
         "runtime_host": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
@@ -9953,6 +9972,34 @@ mod tests {
         assert_eq!(
             payload["rustification_status"]["hot_path_projection_mode"],
             Value::String("descriptor-driven".to_string())
+        );
+        assert_eq!(
+            payload["rustification_status"]["framework_runtime_package_status"],
+            Value::String("retired".to_string())
+        );
+        assert_eq!(
+            payload["rustification_status"]["framework_runtime_python_projection_required"],
+            Value::Bool(false)
+        );
+        assert_eq!(
+            payload["rustification_status"]["framework_runtime_replacement"],
+            Value::String("router-rs::framework_runtime".to_string())
+        );
+        assert_eq!(
+            payload["framework_runtime_package_retirement"]["steady_state_available"],
+            Value::Bool(false)
+        );
+        assert_eq!(
+            payload["framework_runtime_package_retirement"]["import_contract"],
+            Value::String("ModuleNotFoundError".to_string())
+        );
+        assert_eq!(
+            payload["framework_runtime_package_retirement"]["replacement_surfaces"][0],
+            Value::String("router-rs --framework-runtime-snapshot-json".to_string())
+        );
+        assert_eq!(
+            payload["framework_runtime_package_retirement"]["python_wrapper_allowed"],
+            Value::Bool(false)
         );
         assert_eq!(
             payload["runtime_host"]["role"],

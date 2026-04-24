@@ -132,14 +132,16 @@ The benchmark implication for this repo is:
 
 The active runtime wave is now Rust-authoritative across the default runtime:
 
-- `route_engine_mode` defaults to `rust`, so routing authority is Rust unless a
-  caller explicitly chooses `python` / `shadow` / `verify` or requests rollback
+- `route_engine_mode` defaults to `rust`, so routing authority is Rust; the old
+  `python` route engine is retired, and only diagnostic `shadow` / `verify`
+  modes remain
 - live execution and dry-run preview stay Rust-only by default, and
   compatibility live fallback is retired with explicit requests rejected
 - the runtime control plane now publishes a Rust-owned authority descriptor for
-  `router` / `state` / `trace` / `memory` / `background`, while the in-process
-  Python layer remains a thin projection over the frozen contracts and storage
-  backends
+  `router` / `state` / `trace` / `memory` / `background`
+- the `framework_runtime/` Python package is retired; framework snapshot,
+  contract summary, memory recall, session artifact writing, and framework MCP
+  now use `router-rs::framework_runtime` surfaces directly
 - framework truth stays unchanged; the migration closes default-Python
   authority, not by forking artifacts or host semantics
 
@@ -232,7 +234,7 @@ The implemented runtime control-plane surface in this wave is:
 - background queue admission now checks an explicit admitted-job count instead
   of peeking into `Semaphore._value`
 - runtime health now exposes a Rust-owned control-plane descriptor, so default
-  routing and control-plane authority can be verified without inferring from the
+  routing and control-plane authority can be verified without inferring from any
   Python projection layer
 
 One additional Rust-authority slice is now implemented in this wave:
@@ -241,22 +243,20 @@ One additional Rust-authority slice is now implemented in this wave:
   directly to `router-rs`, so the non-runtime CLI surface no longer carries a
   second Python route authority
 - `router-rs` now also emits a stable route-policy payload for
-  `python/shadow/verify/rust` plus rollback activation, so route mode /
-  rollback / primary-authority decisions are no longer hardcoded in Python
-  `RouterService`
+  `shadow/verify/rust`, so route mode / primary-authority decisions stay in
+  Rust
 - `router-rs` route JSON now carries an explicit authority marker and decision
-  schema version, and the Python runtime adapter validates those fields before
-  trusting the result
+  schema version, and consumers must validate those fields before trusting the
+  result
 - `router-rs` now also owns the stable `RouteDiffReport` compare path for
   `shadow` / `verify` / rollback semantics, so Python no longer computes the
   Rust-side mismatch vocabulary locally
-- `RustRouteAdapter` now also exposes typed
+- typed
   `route_contract / route_policy_contract / route_report_contract / route_snapshot_contract`
-  entrypoints, so the Python runtime can consume validated Rust-owned route
-  contracts instead of continuing to stitch raw JSON payloads ad hoc
-- `RouterService` now consumes those typed route contracts directly, and an
-  unknown Rust-selected skill now fails closed in the Python host instead of
-  silently drifting into a host-side fallback interpretation
+  entrypoints are now Rust-owned contract surfaces instead of ad hoc raw JSON
+  helper lanes
+- an unknown Rust-selected skill must fail closed in consumers instead of
+  silently drifting into host-side fallback interpretation
 - typed route-contract consumption now also reaches fixture/live parity
   regressions, and the adapter supports explicit `runtime_path` /
   `manifest_path` overrides so fixture-backed Rust parity no longer needs to
@@ -280,7 +280,7 @@ One additional Rust-authority slice is now implemented in this wave:
 ### 下一 safe slice
 
 - keep route-side compatibility helpers retired, so adjacent evaluation/test
-  helpers cannot reintroduce privileged raw-JSON Python consumers
+  helpers cannot reintroduce privileged raw-JSON consumers
 - keep pushing execution-kernel metadata / naming bridge canonicalization
   toward Rust without reopening a Python live authority path
 - keep the native install/bootstrap lane closed: a fresh machine should keep
@@ -334,9 +334,9 @@ Purpose:
 
 Compatibility targets:
 
-- `framework_runtime.router.SkillRouter.route()`
-- `PrepareSessionResponse`
-- `RoutingResult`
+- `router-rs --route-json`
+- `router-rs --route-policy-json`
+- `router-rs --route-report-json`
 
 Required fields:
 
@@ -365,8 +365,6 @@ Rust migration note:
 - Rust owns scoring, route picking, route-mode policy, and canonical route
   snapshot shaping through versioned route, snapshot, and diagnostic-report
   contracts
-- Python may continue hydrating full skill bodies where the runtime still needs
-  host-local text assembly
 - Python no longer owns a primary route-result lane, rollback lane, or parity
   diff vocabulary in the runtime contract
 
@@ -374,14 +372,13 @@ Rust migration note:
 
 Purpose:
 
-- define the stable Rust-only route-mode policy shared by `RouterService`,
+- define the stable Rust-only route-mode policy shared by route consumers,
   health reporting, and shadow/verify selection
 
 Compatibility targets:
 
-- `RouterService.route()`
-- `RouterService.health()`
-- `RustRouteAdapter.route_policy()`
+- `router-rs --route-policy-json`
+- `router-rs --runtime-control-plane-json`
 
 Required fields:
 
@@ -408,7 +405,7 @@ Purpose:
 
 Compatibility targets:
 
-- `RouterService.route()`
+- `router-rs --route-report-json`
 - `PrepareSessionResponse.route_diagnostic_report`
 - `RoutingResult.route_diagnostic_report`
 - `route.selected` trace payload
@@ -586,8 +583,7 @@ Invariants:
 
 Rust migration note:
 
-- Rust should own event typing and writing
-- Python may still provide event producers initially
+- Rust owns event typing and the framework/control-plane writer surfaces
 - OpenTelemetry-ready shared dimensions, metrics catalog, and JSONL vocabulary
   mapping are defined in `docs/runtime_observability_contract.md`
 

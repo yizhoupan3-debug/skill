@@ -71,7 +71,7 @@ git worktree list --porcelain
 ## 技能演化与凝结 (Evolution & Condensation)
 
 ### 1. 自动演化审计
-每周 Cron 任务通过 `evolution_engine.py` 自动执行：
+每周 Cron 任务通过 `scripts/evolution-rs` 自动执行：
 - **动态健康分**：结合静态评分与路由记录。低于 60 分即标记为 `Critical Outlier`。
 - **冲突审计**：识别高频错配对（Reroute Pairs），强制建议收紧 `init` 技能边界。
 
