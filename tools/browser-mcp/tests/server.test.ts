@@ -45,4 +45,15 @@ describe('createBrowserMcpServer', () => {
     expect(tools.browser_restore_session?.description).toContain('Restore a previously saved browser session');
     expect(tools.browser_get_attached_runtime_events?.description).toContain('Replay runtime events');
   });
+
+  it('declares output schemas for every tool so MCP clients can validate structured results', () => {
+    const runtime = {
+      setLogEmitter: vi.fn(),
+    };
+
+    const server = createBrowserMcpServer(runtime as never);
+    const tools = (server as unknown as { _registeredTools: Record<string, { outputSchema?: unknown }> })._registeredTools;
+
+    expect(Object.values(tools).every((tool) => tool.outputSchema)).toBe(true);
+  });
 });

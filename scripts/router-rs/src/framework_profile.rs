@@ -118,6 +118,7 @@ const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
     "hook_definition_sources",
     "hook_environment_markers",
     "hook_event_names",
+    "hook_execution_features",
     "hook_handler_types",
     "hook_inspection_commands",
     "managed_mcp_paths",
@@ -1364,6 +1365,19 @@ fn build_codex_host_adapter_payload() -> Map<String, Value> {
         "framework_alias_entrypoints".to_string(),
         build_host_alias_entrypoints("codex-cli"),
     );
+    projection.insert(
+        "gpt_model_path_contract".to_string(),
+        json!({
+            "path_kind": "native-openai-compatible",
+            "preferred_for_gpt_family": true,
+            "adapter_loss_profile": "minimal",
+            "avoidable_loss_sources": [],
+            "reduce_loss_by": [
+                "use /v1 OpenAI-compatible endpoint directly",
+                "avoid Anthropic-compatible request/response translation for GPT-default work"
+            ]
+        }),
+    );
     projection
 }
 
@@ -1458,6 +1472,8 @@ fn build_claude_host_adapter_payload() -> Map<String, Value> {
         json!([
             "PreToolUse",
             "PostToolUse",
+            "PostToolUseFailure",
+            "PostToolBatch",
             "Notification",
             "Stop",
             "SubagentStart",
@@ -1467,7 +1483,7 @@ fn build_claude_host_adapter_payload() -> Map<String, Value> {
             "SessionStart",
             "SessionEnd",
             "UserPromptSubmit",
-            "PostToolUseFailure",
+            "UserPromptExpansion",
             "StopFailure",
             "PermissionRequest",
             "PermissionDenied",
@@ -1486,7 +1502,7 @@ fn build_claude_host_adapter_payload() -> Map<String, Value> {
     );
     projection.insert(
         "hook_handler_types".to_string(),
-        json!(["command", "prompt", "agent", "http"]),
+        json!(["command", "prompt", "agent", "http", "mcp_tool"]),
     );
     projection.insert(
         "hook_control_settings".to_string(),
@@ -1496,6 +1512,10 @@ fn build_claude_host_adapter_payload() -> Map<String, Value> {
             "allowedHttpHookUrls",
             "httpHookAllowedEnvVars"
         ]),
+    );
+    projection.insert(
+        "hook_execution_features".to_string(),
+        json!(["async", "asyncRewake", "timeout", "matcher", "if"]),
     );
     projection.insert(
         "hook_definition_sources".to_string(),
@@ -1589,6 +1609,23 @@ fn build_claude_host_adapter_payload() -> Map<String, Value> {
     projection.insert(
         "framework_alias_entrypoints".to_string(),
         build_host_alias_entrypoints("claude-code"),
+    );
+    projection.insert(
+        "gpt_model_path_contract".to_string(),
+        json!({
+            "path_kind": "anthropic-compatible-bridge",
+            "preferred_for_gpt_family": false,
+            "adapter_loss_profile": "translation-and-startup-context-overhead",
+            "avoidable_loss_sources": [
+                "Anthropic-to-OpenAI message mapping",
+                "Claude model alias environment overrides",
+                "Claude startup/context injection before GPT execution"
+            ],
+            "reduce_loss_by": [
+                "use Codex/OpenAI-compatible endpoint for GPT-default work",
+                "keep CLAUDE.md lean when Claude host behavior is required"
+            ]
+        }),
     );
     projection
 }
@@ -2135,6 +2172,7 @@ fn build_cli_family_capability_discovery_entry(
         "session_supervisor_driver",
         "resume_command_examples",
         "framework_alias_entrypoints",
+        "gpt_model_path_contract",
     ] {
         payload.insert(
             field.to_string(),
@@ -2146,6 +2184,7 @@ fn build_cli_family_capability_discovery_entry(
                     "checkpointing_supported" => Value::Bool(false),
                     "session_supervisor_driver" => Value::Null,
                     "framework_alias_entrypoints" => Value::Object(Map::new()),
+                    "gpt_model_path_contract" => Value::Null,
                     _ => Value::Array(vec![]),
                 }),
         );
@@ -2295,6 +2334,13 @@ fn build_cli_family_snapshot_entry(adapter: &Map<String, Value>) -> Result<Value
             "hook_control_settings",
             host_adapter_payload
                 .get("hook_control_settings")
+                .cloned()
+                .unwrap_or_else(|| Value::Array(vec![])),
+        ),
+        (
+            "hook_execution_features",
+            host_adapter_payload
+                .get("hook_execution_features")
                 .cloned()
                 .unwrap_or_else(|| Value::Array(vec![])),
         ),
@@ -3693,6 +3739,21 @@ mod tests {
             artifacts["cli_family_capability_discovery"]["cli_hosts"]["claude_code_adapter"]
                 ["transport"],
             Value::String("headless-exec".to_string())
+        );
+        assert_eq!(
+            artifacts["codex_cli_adapter"]["host_adapter_payload"]["gpt_model_path_contract"]
+                ["preferred_for_gpt_family"],
+            Value::Bool(true)
+        );
+        assert_eq!(
+            artifacts["claude_code_adapter"]["host_adapter_payload"]["gpt_model_path_contract"]
+                ["preferred_for_gpt_family"],
+            Value::Bool(false)
+        );
+        assert_eq!(
+            artifacts["cli_family_capability_discovery"]["cli_hosts"]["claude_code_adapter"]
+                ["gpt_model_path_contract"]["path_kind"],
+            Value::String("anthropic-compatible-bridge".to_string())
         );
         assert_eq!(
             artifacts["codex_common_adapter"]["controller_boundary"]["framework_truth"],

@@ -1,0 +1,22 @@
+[package]
+name = "screenshot_rs"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "screenshot_rs"
+path = "src/main.rs"
+
+[[bin]]
+name = "screenshot"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+clap = { version = "4.5", features = ["derive"] }
+image = "0.25"
+xcap = { version = "0.9", features = ["image"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.25"

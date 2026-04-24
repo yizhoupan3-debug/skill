@@ -1242,6 +1242,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "image_gen_rs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "clap",
+ "image 0.25.10",
+ "reqwest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "image_process_rs"
 version = "0.1.0"
 dependencies = [
@@ -1678,6 +1691,7 @@ dependencies = [
  "quick-xml",
  "serde",
  "serde_json",
+ "tempfile",
  "zip 0.6.6",
 ]
 
@@ -2162,7 +2176,9 @@ checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
 dependencies = [
  "base64",
  "bytes",
+ "futures-channel",
  "futures-core",
+ "futures-util",
  "http",
  "http-body",
  "http-body-util",

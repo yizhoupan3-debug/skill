@@ -24,5 +24,5 @@ This skill's default image path calls a local VibeProxy endpoint:
 ## Troubleshooting
 
 - First verify the proxy is listening on `127.0.0.1:8318`.
-- Then run `python "$IMAGE_GEN" generate --prompt "Test" --dry-run` to confirm the request shape.
+- Then run `cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/image_gen_rs/Cargo.toml -- generate --prompt "Test" --dry-run` to confirm the request shape.
 - If live calls fail, compare the bundled CLI payload against a direct working `curl` to `/v1/responses`.

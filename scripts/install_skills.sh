@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install_skills.sh — Compatibility installer.
+# install_skills.sh — Rust-native installer entrypoint.
 #
 # Usage:
 #   bash scripts/install_skills.sh init     # First-time setup
@@ -186,9 +186,7 @@ show_codex_status() {
   fi
 
   if [ -f "$config_path" ] \
-    && grep -q '\[mcp_servers.browser-mcp\]' "$config_path" \
     && grep -q '\[mcp_servers.framework-mcp\]' "$config_path" \
-    && grep -q '\[mcp_servers.openaiDeveloperDocs\]' "$config_path" \
     && grep -q '^\[tui\]' "$config_path" \
     && grep -Eq '^[[:space:]]*status_line[[:space:]]*=' "$config_path"; then
     config_ok="true"

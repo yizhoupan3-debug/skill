@@ -1,26 +1,28 @@
 # Screenshot OS-Specific Commands
 
-## macOS (Python helper)
+## Rust helper
 
 ```bash
-python3 <path-to-skill>/scripts/take_screenshot.py                           # default location
-python3 <path-to-skill>/scripts/take_screenshot.py --mode temp               # temp (Codex inspection)
-python3 <path-to-skill>/scripts/take_screenshot.py --path output/screen.png  # explicit path
-python3 <path-to-skill>/scripts/take_screenshot.py --app "Codex"             # app window capture
-python3 <path-to-skill>/scripts/take_screenshot.py --app "Codex" --window-name "Settings"  # specific window
-python3 <path-to-skill>/scripts/take_screenshot.py --list-windows --app "Codex"   # list windows
-python3 <path-to-skill>/scripts/take_screenshot.py --mode temp --region 100,200,800,600  # region
-python3 <path-to-skill>/scripts/take_screenshot.py --mode temp --active-window   # focused window
-python3 <path-to-skill>/scripts/take_screenshot.py --window-id 12345              # specific window id
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release --  # default location
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --mode temp
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --path output/screen.png
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --app "Codex"
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --app "Codex" --window-name "Settings"
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --list-windows --app "Codex"
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --mode temp --region 100,200,800,600
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --mode temp --active-window
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- --window-id 12345
 ```
 
 Combine preflight + capture:
 ```bash
-bash <path-to-skill>/scripts/ensure_macos_permissions.sh && \
-python3 <path-to-skill>/scripts/take_screenshot.py --app "<App>" --mode temp
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- \
+  --ensure-macos-permissions && \
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- \
+  --app "<App>" --mode temp
 ```
 
-### Multi-display: full-screen saves one file per display on macOS.
+### Multi-display: full-screen saves one file per display on macOS and one stitched image on other platforms.
 
 ## macOS direct commands (fallback)
 
@@ -47,15 +49,4 @@ import -window root output/screen.png    # full screen (ImageMagick)
 import -window root -crop 800x600+100+200 output/region.png  # region
 ```
 
-`--app`, `--window-name`, `--list-windows` are macOS-only. On Linux use `--active-window` or `--window-id`.
-
-## Windows (PowerShell helper)
-
-```powershell
-powershell -ExecutionPolicy Bypass -File <path-to-skill>/scripts/take_screenshot.ps1              # default
-powershell -ExecutionPolicy Bypass -File <path-to-skill>/scripts/take_screenshot.ps1 -Mode temp   # temp
-powershell -ExecutionPolicy Bypass -File <path-to-skill>/scripts/take_screenshot.ps1 -Path "C:\Temp\screen.png"  # explicit
-powershell -ExecutionPolicy Bypass -File <path-to-skill>/scripts/take_screenshot.ps1 -Mode temp -Region 100,200,800,600  # region
-powershell -ExecutionPolicy Bypass -File <path-to-skill>/scripts/take_screenshot.ps1 -Mode temp -ActiveWindow  # active window
-powershell -ExecutionPolicy Bypass -File <path-to-skill>/scripts/take_screenshot.ps1 -WindowHandle 123456  # specific handle
-```
+`--app`, `--window-name`, `--list-windows`, and `--interactive` are macOS-only. On Linux and Windows use `--active-window`, `--window-id`, full-screen, or `--region`.

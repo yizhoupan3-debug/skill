@@ -4,9 +4,9 @@ description: |
   Read, create, edit, repair, and review `.docx` Word documents when layout and
   Word-native structure matter.
   Use when the user wants structured Word edits, 模板化文档生成, 表格或版式修复,
-  or render-aware `.docx` verification with `python-docx`, LibreOffice, and
-  `scripts/render_docx.py`. As an artifact gate, check this skill early at
-  conversation start / first turn when the primary artifact is a `.docx`.
+  or render-aware `.docx` verification with the Rust OOXML CLI and LibreOffice.
+  As an artifact gate, check this skill early at conversation start / first
+  turn when the primary artifact is a `.docx`.
 routing_layer: L3
 routing_owner: gate
 routing_gate: artifact
@@ -19,13 +19,11 @@ trigger_hints:
   - render-aware
   - docx
   - word
-  - python docx
   - pagination
   - document layout
 runtime_requirements:
-  python:
-    - pdf2image
   commands:
+    - cargo
     - soffice
     - pdftoppm
 metadata:
@@ -34,7 +32,7 @@ metadata:
   tags:
     - docx
     - word
-    - python-docx
+    - rust
     - pagination
     - document-layout
 framework_roles:
@@ -52,7 +50,7 @@ risk: low
 source: local
 allowed_tools:
   - shell
-  - python
+  - rust
 approval_required_tools:
   - file overwrite
 filesystem_scope:
@@ -68,8 +66,7 @@ artifact_outputs:
 
 At conversation start or first turn, check this artifact gate early whenever the main object is a `.docx` file or the workflow should stay Word-native.
 
-
-This skill owns `.docx` work where professional document structure and rendered appearance both matter.
+This skill owns `.docx` work where professional document structure and rendered appearance both matter. The operational lane is Rust-first: inspect with `docx`, render with `render-docx`, and only use other editors when the actual document mutation requires it.
 
 ## Priority routing rule
 
@@ -82,6 +79,18 @@ In that case:
 1. this skill owns the Word-native structure-preserving workflow
 2. paired skills should only layer on top after the `.docx` artifact is handled
    correctly
+
+## Rust CLI quick path
+
+Use these as the default inspection and verification commands:
+
+```bash
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx>
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- docx <docx> --json
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/ooxml_parser_rs/Cargo.toml -- render-docx <docx> --output-dir <dir>
+```
+
+`docx` reports paragraphs, heading outline, tables, sections, page size, images, hyperlinks, footnotes, endnotes, and comments. `render-docx` converts the document to PNG pages for layout review.
 
 ## When to use
 
@@ -96,10 +105,25 @@ In that case:
 
 ## Do not use
 
-- The file is primarily a PDF artifact → use `$pdf`
+- The file is primarily a PDF artifact - use `$pdf`
 - The user wants a slide deck rather than a document
 - The task is plain text editing with no Word/document structure concerns
 - The user pasted text directly and only wants rewriting
+
+## Integrity checklist
+
+- Confirm the heading outline did not drift.
+- Confirm table count and table layout are still plausible.
+- Confirm sections and page size are still expected.
+- Confirm images, links, notes, and comments were not dropped accidentally.
+- Re-render when pagination, tables, or visual layout matters.
+
+## Hard constraints
+
+- Do not treat extracted text as enough when layout is in scope.
+- Do not silently flatten a Word document into plain text.
+- Do not rewrite raw OOXML unless a structured edit path cannot preserve the needed feature.
+- If render tooling is missing, say exactly what confidence is limited.
 
 ## Reference
 

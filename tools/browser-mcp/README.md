@@ -59,24 +59,17 @@ node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js
 node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js --transport http --port 3721
 ```
 
-## Codex integration
-
-```bash
-python3 /Users/joe/Documents/skill/scripts/install_browser_mcp_codex.py
-```
-
-Adds a `browser-mcp` stdio entry that launches the prebuilt `dist/index.js` directly. Restart Codex after updating.
-
-### Smoke test
+## Smoke test
 
 ```bash
 node /Users/joe/Documents/skill/tools/browser-mcp/dist/index.js
 ```
 
-### Routing
+## Routing
 
-When `browser-mcp` is enabled in Codex, browser tasks prefer `browser_*` MCP tools.
-The Playwright skill CLI flow is the fallback when the MCP server is unavailable.
+Browser tasks prefer the first-class `browser_*` MCP tools when this server is
+available. Project install state is Rust-owned and no longer managed by a Python
+installer under `scripts/`.
 
 ## Network body capture
 

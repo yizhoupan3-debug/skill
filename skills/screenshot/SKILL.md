@@ -21,9 +21,7 @@ trigger_hints:
   - screenshot
 runtime_requirements:
   commands:
-    - osascript
-    - screencapture
-    - swift
+    - cargo
 metadata:
   version: "1.0.0"
   platforms: [codex]
@@ -48,24 +46,27 @@ Follow these save-location rules every time:
 ## macOS permission preflight
 
 ```bash
-bash <path-to-skill>/scripts/ensure_macos_permissions.sh
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- \
+  --ensure-macos-permissions
 ```
 
 ## Quick capture
 
 ```bash
 # macOS: preflight + app capture to temp
-bash <path-to-skill>/scripts/ensure_macos_permissions.sh && \
-python3 <path-to-skill>/scripts/take_screenshot.py --app "<App>" --mode temp
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- \
+  --ensure-macos-permissions && \
+cargo run --manifest-path <repo-root>/rust_tools/screenshot_rs/Cargo.toml --release -- \
+  --app "<App>" --mode temp
 ```
 
 > Full OS-specific commands (macOS/Linux/Windows): [references/os_commands.md](references/os_commands.md)
 
-The script prints one path per capture. When multiple windows/displays match, it prints multiple paths.
+The Rust helper prints one path per capture. When multiple windows/displays match, it prints multiple paths.
 
 ## Error handling
 
-- Run `ensure_macos_permissions.sh` first to request Screen Recording permission.
+- Run `screenshot_rs --ensure-macos-permissions` first to request Screen Recording permission.
 - If app/window capture returns no matches, run `--list-windows --app "AppName"` and retry with `--window-id`.
 - Always report the saved file path in the response.
 

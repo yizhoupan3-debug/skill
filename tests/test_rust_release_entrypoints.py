@@ -64,11 +64,11 @@ def test_install_skills_uses_rust_only_entrypoints() -> None:
 
 
 def test_sync_skills_uses_router_rs_directly() -> None:
-    source = (PROJECT_ROOT / "scripts" / "sync_skills.py").read_text(encoding="utf-8")
-
-    assert "materialize_cli_host_entrypoints" not in source
-    assert "cargo" in source
-    assert "--sync-host-entrypoints-json" in source
+    assert not (PROJECT_ROOT / "scripts" / "sync_skills.py").exists()
+    source = (PROJECT_ROOT / "scripts" / "router-rs" / "src" / "claude_hooks.rs").read_text(
+        encoding="utf-8"
+    )
+    assert "sync_host_entrypoints" in source
 
 
 def test_memory_automation_lives_in_rust_host_integration() -> None:

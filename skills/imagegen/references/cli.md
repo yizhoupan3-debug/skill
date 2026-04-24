@@ -1,6 +1,6 @@
-# CLI reference (`scripts/image_gen.py`)
+# CLI reference (`rust_tools/image_gen_rs`)
 
-This CLI is the default image-generation path for this skill library.
+This Rust CLI is the default image-generation path for this skill library.
 
 ## What it does
 
@@ -20,20 +20,19 @@ Real runs use:
 Set a stable path to the skill CLI:
 
 ```bash
-export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-export IMAGE_GEN="$CODEX_HOME/skills/imagegen/scripts/image_gen.py"
+export IMAGE_GEN_MANIFEST="/Users/joe/Documents/skill/rust_tools/image_gen_rs/Cargo.toml"
 ```
 
 Dry-run:
 
 ```bash
-python "$IMAGE_GEN" generate --prompt "Test" --dry-run
+cargo run --manifest-path "$IMAGE_GEN_MANIFEST" -- generate --prompt "Test" --dry-run
 ```
 
 Generate:
 
 ```bash
-python "$IMAGE_GEN" generate \
+cargo run --manifest-path "$IMAGE_GEN_MANIFEST" -- generate \
   --prompt "A cozy alpine cabin at dawn" \
   --out output/imagegen/alpine-cabin.png
 ```
@@ -41,7 +40,7 @@ python "$IMAGE_GEN" generate \
 Edit:
 
 ```bash
-python "$IMAGE_GEN" edit \
+cargo run --manifest-path "$IMAGE_GEN_MANIFEST" -- edit \
   --image input.png \
   --prompt "Replace only the background with a warm sunset" \
   --out output/imagegen/sunset-edit.png
@@ -50,7 +49,7 @@ python "$IMAGE_GEN" edit \
 Batch:
 
 ```bash
-python "$IMAGE_GEN" generate-batch \
+cargo run --manifest-path "$IMAGE_GEN_MANIFEST" -- generate-batch \
   --input tmp/imagegen/prompts.jsonl \
   --out-dir output/imagegen/batch
 ```
@@ -72,7 +71,7 @@ python "$IMAGE_GEN" generate-batch \
 
 ## Guardrails
 
-- Use the bundled CLI directly (`python "$IMAGE_GEN" ...`).
+- Use the bundled Rust CLI directly (`cargo run --manifest-path "$IMAGE_GEN_MANIFEST" -- ...`).
 - Do not create one-off image runners unless the user explicitly asks for a custom wrapper.
 - Keep final outputs in the workspace for project-bound assets.
 - `--mask` is currently unsupported on this direct Responses path.
@@ -82,7 +81,7 @@ python "$IMAGE_GEN" generate-batch \
 Generate with prompt augmentation fields:
 
 ```bash
-python "$IMAGE_GEN" generate \
+cargo run --manifest-path "$IMAGE_GEN_MANIFEST" -- generate \
   --prompt "A minimal hero image of a ceramic coffee mug" \
   --use-case "product-mockup" \
   --style "clean product photography" \
@@ -94,7 +93,7 @@ python "$IMAGE_GEN" generate \
 Generate and write a downscaled web copy:
 
 ```bash
-python "$IMAGE_GEN" generate \
+cargo run --manifest-path "$IMAGE_GEN_MANIFEST" -- generate \
   --prompt "A cozy alpine cabin at dawn" \
   --downscale-max-dim 1024 \
   --out output/imagegen/alpine-cabin.png
@@ -109,7 +108,7 @@ cat > tmp/imagegen/prompts.jsonl << 'EOF'
 {"prompt":"Gray wolf in profile in a snowy forest","use_case":"photorealistic-natural","composition":"eye-level","constraints":"no logos or trademarks; no watermark","size":"1024x1024"}
 EOF
 
-python "$IMAGE_GEN" generate-batch \
+cargo run --manifest-path "$IMAGE_GEN_MANIFEST" -- generate-batch \
   --input tmp/imagegen/prompts.jsonl \
   --out-dir output/imagegen/batch \
   --concurrency 5
@@ -120,7 +119,7 @@ python "$IMAGE_GEN" generate-batch \
 - `--n` is preserved for compatibility; the script realizes multiple variants by sending repeated single-image Responses calls.
 - `edit` accepts repeated `--image` flags and sends them as ordered `input_image` items.
 - `input-fidelity` is edit-only.
-- Downscaling requires Pillow.
+- Downscaling is handled by Rust and requires no Python/Pillow dependency.
 
 ## See also
 

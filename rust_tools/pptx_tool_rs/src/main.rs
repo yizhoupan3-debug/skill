@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail, Context, Result};
-use clap::{Args, Parser, Subcommand};
-use font8x8::{BASIC_FONTS, UnicodeFonts};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use font8x8::{UnicodeFonts, BASIC_FONTS};
 use image::{
     imageops::{self, FilterType},
     DynamicImage, Rgba, RgbaImage,
@@ -34,6 +34,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    Init(InitArgs),
+    New(NewArgs),
+    Outline(OutlineArgs),
     Render(RenderArgs),
     ExtractStructure(ExtractStructureArgs),
     EnsureRasterImage(EnsureRasterImageArgs),
@@ -45,6 +48,62 @@ enum Commands {
     Intake(IntakeArgs),
     BuildQa(BuildQaArgs),
     Office(OfficeArgs),
+}
+
+#[derive(ValueEnum, Clone, Debug)]
+enum DeckTemplate {
+    Dark,
+    Light,
+    Corporate,
+}
+
+impl DeckTemplate {
+    fn asset_file(&self) -> &'static str {
+        match self {
+            Self::Dark => "deck.template.js",
+            Self::Light => "template_light.js",
+            Self::Corporate => "template_corporate.js",
+        }
+    }
+}
+
+#[derive(Args)]
+struct InitArgs {
+    #[arg(default_value = ".")]
+    workdir: String,
+    #[arg(long, value_enum, default_value_t = DeckTemplate::Dark)]
+    template: DeckTemplate,
+    #[arg(long, default_value_t = false)]
+    force: bool,
+    #[arg(long, default_value_t = false)]
+    skip_npm_install: bool,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+struct NewArgs {
+    #[command(flatten)]
+    init: InitArgs,
+}
+
+#[derive(Args)]
+struct OutlineArgs {
+    input: String,
+    #[arg(short, long, default_value = "deck.js")]
+    output: String,
+    #[arg(long, value_enum, default_value_t = DeckTemplate::Dark)]
+    template: DeckTemplate,
+    #[arg(long, default_value_t = false)]
+    bootstrap: bool,
+    #[arg(long, default_value_t = false)]
+    build: bool,
+    #[arg(long, default_value_t = false)]
+    qa: bool,
+    #[arg(long, default_value = "rendered")]
+    rendered_dir: String,
+    #[arg(long, default_value_t = false)]
+    json: bool,
 }
 
 #[derive(Args)]
@@ -106,7 +165,11 @@ struct CreateMontageArgs {
     gap: u32,
     #[arg(long, visible_alias = "label_mode", value_enum, default_value_t = LabelMode::Number)]
     label_mode: LabelMode,
-    #[arg(long, visible_alias = "retain_converted_files", default_value_t = false)]
+    #[arg(
+        long,
+        visible_alias = "retain_converted_files",
+        default_value_t = false
+    )]
     retain_converted_files: bool,
     #[arg(long, visible_alias = "fail_on_image_error", default_value_t = false)]
     fail_on_image_error: bool,
@@ -257,6 +320,23 @@ struct OfficeBatchArgs {
     json: bool,
 }
 
+#[derive(Debug, Serialize)]
+struct InitSummary {
+    workdir: String,
+    template: String,
+    files: Vec<String>,
+    npm_install: String,
+}
+
+#[derive(Debug, Serialize)]
+struct OutlineSummary {
+    input: String,
+    output: String,
+    bootstrapped: bool,
+    built: bool,
+    qa: Option<Value>,
+}
+
 #[derive(Debug, Clone)]
 struct ZipBundle {
     files: HashMap<String, Vec<u8>>,
@@ -387,10 +467,12 @@ enum EmitFormat {
     Text,
 }
 
-
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
+        Commands::Init(args) => init_command(args)?,
+        Commands::New(args) => init_command(args.init)?,
+        Commands::Outline(args) => outline_command(args)?,
         Commands::Render(args) => render_command(args)?,
         Commands::ExtractStructure(args) => extract_structure_command(args)?,
         Commands::EnsureRasterImage(args) => ensure_raster_image_command(args)?,
@@ -406,9 +488,99 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+fn init_command(args: InitArgs) -> Result<()> {
+    let workdir = expand_path(&args.workdir);
+    let summary = init_workspace(&workdir, &args.template, args.force, !args.skip_npm_install)?;
+    emit_value(
+        serde_json::to_value(summary)?,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
+}
+
+fn outline_command(args: OutlineArgs) -> Result<()> {
+    let input = expand_path(&args.input);
+    let workdir = input
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+
+    if args.bootstrap {
+        init_workspace(&workdir, &args.template, false, false)?;
+    }
+
+    let output = expand_path(&args.output);
+    let output = if output.is_absolute() {
+        output
+    } else {
+        workdir.join(output)
+    };
+
+    let outline = read_outline(&input)?;
+    let generated = generate_outline_deck_source(&outline, &args.template)?;
+    fs::write(&output, generated)
+        .with_context(|| format!("failed to write {}", output.display()))?;
+
+    let mut qa_payload = None;
+    if args.build || args.qa {
+        let tool_bin = std::env::current_exe()
+            .context("failed to locate current executable")?
+            .display()
+            .to_string();
+        let entry = output
+            .file_name()
+            .and_then(OsStr::to_str)
+            .ok_or_else(|| anyhow!("invalid deck source path {}", output.display()))?;
+        let status = Command::new("node")
+            .arg(entry)
+            .current_dir(&workdir)
+            .env("PPT_PPTX_RUST_TOOL_BIN", tool_bin)
+            .status()
+            .with_context(|| format!("failed to run node {}", output.display()))?;
+        if !status.success() {
+            bail!(
+                "node {} failed with status {:?}",
+                output.display(),
+                status.code()
+            );
+        }
+    }
+    if args.qa {
+        qa_payload = Some(serde_json::to_value(qa_summary(
+            &workdir.join("deck.pptx").display().to_string(),
+            &workdir.join(&args.rendered_dir).display().to_string(),
+        )?)?);
+    }
+
+    emit_value(
+        serde_json::to_value(OutlineSummary {
+            input: input.display().to_string(),
+            output: output.display().to_string(),
+            bootstrapped: args.bootstrap,
+            built: args.build || args.qa,
+            qa: qa_payload,
+        })?,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
+}
+
 fn qa_command(args: QaArgs) -> Result<()> {
     let payload = qa_summary(&args.deck, &args.rendered_dir)?;
-    emit_value(serde_json::to_value(payload)?, if args.json { EmitFormat::Json } else { EmitFormat::Text })
+    emit_value(
+        serde_json::to_value(payload)?,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
 }
 
 fn intake_command(args: IntakeArgs) -> Result<()> {
@@ -419,7 +591,14 @@ fn intake_command(args: IntakeArgs) -> Result<()> {
         "structure": structure,
         "officecli": officecli,
     });
-    emit_value(payload, if args.json { EmitFormat::Json } else { EmitFormat::Text })
+    emit_value(
+        payload,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
 }
 
 fn build_qa_command(args: BuildQaArgs) -> Result<()> {
@@ -435,16 +614,29 @@ fn build_qa_command(args: BuildQaArgs) -> Result<()> {
     let deck = workdir.join(&args.deck);
     let rendered = workdir.join(&args.rendered_dir);
     let payload = qa_summary(&deck.display().to_string(), &rendered.display().to_string())?;
-    emit_value(serde_json::to_value(payload)?, if args.json { EmitFormat::Json } else { EmitFormat::Text })
+    emit_value(
+        serde_json::to_value(payload)?,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
 }
 
 fn office_command(args: OfficeArgs) -> Result<()> {
     match args.command {
         OfficeCommands::Probe(args) => office_probe_command(args),
         OfficeCommands::Doctor(args) => office_doctor_command(args),
-        OfficeCommands::Outline(args) => office_file_passthrough("view", &args.file, Some("outline"), args.json),
-        OfficeCommands::Issues(args) => office_file_passthrough("view", &args.file, Some("issues"), args.json),
-        OfficeCommands::Validate(args) => office_file_passthrough("validate", &args.file, None, args.json),
+        OfficeCommands::Outline(args) => {
+            office_file_passthrough("view", &args.file, Some("outline"), args.json)
+        }
+        OfficeCommands::Issues(args) => {
+            office_file_passthrough("view", &args.file, Some("issues"), args.json)
+        }
+        OfficeCommands::Validate(args) => {
+            office_file_passthrough("validate", &args.file, None, args.json)
+        }
         OfficeCommands::Get(args) => office_get_command(args),
         OfficeCommands::Query(args) => office_query_command(args),
         OfficeCommands::Watch(args) => office_watch_command(args),
@@ -463,7 +655,10 @@ fn office_probe_command(args: OfficeProbeArgs) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&payload)?);
     } else if payload.available {
         println!("officecli: {}", payload.binary.clone().unwrap_or_default());
-        println!("version: {}", payload.version.unwrap_or_else(|| "unknown".to_string()));
+        println!(
+            "version: {}",
+            payload.version.unwrap_or_else(|| "unknown".to_string())
+        );
     } else {
         println!("officecli: missing");
     }
@@ -485,7 +680,12 @@ fn office_doctor_command(args: OfficeDoctorArgs) -> Result<()> {
     Ok(())
 }
 
-fn office_file_passthrough(command: &str, file: &str, tail: Option<&str>, json_output: bool) -> Result<()> {
+fn office_file_passthrough(
+    command: &str,
+    file: &str,
+    tail: Option<&str>,
+    json_output: bool,
+) -> Result<()> {
     let office = require_officecli()?;
     let mut args = vec![command.to_string(), file.to_string()];
     if let Some(tail) = tail {
@@ -584,7 +784,6 @@ fn office_batch_command(args: OfficeBatchArgs) -> Result<()> {
     Ok(())
 }
 
-
 fn render_command(args: RenderArgs) -> Result<()> {
     let input = expand_path(&args.input_path);
     let output_dir = args
@@ -595,6 +794,837 @@ fn render_command(args: RenderArgs) -> Result<()> {
     let rendered = render_paths(&input, &output_dir, args.width, args.height)?;
     for path in rendered {
         println!("{}", path.display());
+    }
+    Ok(())
+}
+
+fn init_workspace(
+    workdir: &Path,
+    template: &DeckTemplate,
+    force: bool,
+    run_install: bool,
+) -> Result<InitSummary> {
+    let skill_root = resolve_skill_root()?;
+    let assets_root = skill_root.join("assets");
+    let scripts_root = skill_root.join("scripts");
+    let mut created = Vec::new();
+
+    fs::create_dir_all(workdir)?;
+    fs::create_dir_all(workdir.join("assets"))?;
+    fs::create_dir_all(workdir.join("rendered"))?;
+    fs::create_dir_all(workdir.join("scripts"))?;
+
+    copy_file_checked(
+        &assets_root.join(template.asset_file()),
+        &workdir.join("deck.js"),
+        force,
+        &mut created,
+    )?;
+    copy_file_checked(
+        &assets_root.join("package.template.json"),
+        &workdir.join("package.json"),
+        force,
+        &mut created,
+    )?;
+    copy_file_checked(
+        &scripts_root.join("outline_to_deck.js"),
+        &workdir.join("scripts").join("outline_to_deck.js"),
+        force,
+        &mut created,
+    )?;
+    copy_dir_checked(
+        &assets_root.join("pptxgenjs_helpers"),
+        &workdir.join("pptxgenjs_helpers"),
+        force,
+        &mut created,
+    )?;
+
+    let npm_install = if run_install {
+        let status = Command::new("npm")
+            .arg("install")
+            .current_dir(workdir)
+            .status()
+            .context("failed to run npm install")?;
+        if !status.success() {
+            bail!("npm install failed with status {:?}", status.code());
+        }
+        "ran".to_string()
+    } else {
+        "skipped".to_string()
+    };
+
+    Ok(InitSummary {
+        workdir: workdir.display().to_string(),
+        template: format!("{:?}", template).to_ascii_lowercase(),
+        files: created,
+        npm_install,
+    })
+}
+
+fn read_outline(input: &Path) -> Result<Value> {
+    let raw = fs::read_to_string(input)
+        .with_context(|| format!("failed to read outline {}", input.display()))?;
+    if has_extension(input, "json") {
+        return serde_json::from_str(&raw).context("failed to parse JSON outline");
+    }
+    parse_outline_yaml_subset(&raw)
+}
+
+fn parse_outline_yaml_subset(raw: &str) -> Result<Value> {
+    let mut root = serde_json::Map::new();
+    let mut slides = Vec::new();
+    let mut current_slide: Option<serde_json::Map<String, Value>> = None;
+    let mut current_list: Option<String> = None;
+    let mut current_object: Option<String> = None;
+
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        if !line.starts_with(' ') && trimmed.ends_with(':') {
+            current_list = None;
+            current_object = None;
+            continue;
+        }
+
+        if !line.starts_with(' ') {
+            if let Some((key, value)) = trimmed.split_once(':') {
+                root.insert(key.trim().to_string(), parse_yaml_scalar(value.trim()));
+            }
+            continue;
+        }
+
+        if trimmed.starts_with("- ") && line.starts_with("  - ") {
+            if let Some(slide) = current_slide.take() {
+                slides.push(Value::Object(slide));
+            }
+            let mut slide = serde_json::Map::new();
+            let rest = trimmed.trim_start_matches("- ").trim();
+            if let Some((key, value)) = rest.split_once(':') {
+                slide.insert(key.trim().to_string(), parse_yaml_scalar(value.trim()));
+            }
+            current_slide = Some(slide);
+            current_list = None;
+            current_object = None;
+            continue;
+        }
+
+        let Some(slide) = current_slide.as_mut() else {
+            continue;
+        };
+
+        if line.starts_with("    ") && !line.starts_with("      ") {
+            if let Some((key, value)) = trimmed.split_once(':') {
+                let key = key.trim().to_string();
+                let value = value.trim();
+                current_list = None;
+                current_object = None;
+                if value.is_empty() {
+                    slide.insert(key.clone(), Value::Array(Vec::new()));
+                    current_list = Some(key);
+                } else {
+                    slide.insert(key, parse_yaml_scalar(value));
+                }
+            }
+            continue;
+        }
+
+        if line.starts_with("      - ") {
+            let Some(list_key) = current_list.clone() else {
+                continue;
+            };
+            let item = trimmed.trim_start_matches("- ").trim();
+            if let Some(array) = slide.get_mut(&list_key).and_then(Value::as_array_mut) {
+                array.push(parse_yaml_inline_value(item));
+            }
+            continue;
+        }
+
+        if line.starts_with("      ") && !line.starts_with("        ") {
+            if let Some((key, value)) = trimmed.split_once(':') {
+                let key = key.trim().to_string();
+                let value = value.trim();
+                if value.is_empty() {
+                    slide.insert(key.clone(), json!({}));
+                    current_object = Some(key);
+                } else {
+                    slide.insert(key, parse_yaml_scalar(value));
+                    current_object = None;
+                }
+            }
+            continue;
+        }
+
+        if line.starts_with("        - ") {
+            let Some(object_key) = current_object.clone() else {
+                continue;
+            };
+            let item = trimmed.trim_start_matches("- ").trim();
+            if let Some(object) = slide.get_mut(&object_key).and_then(Value::as_object_mut) {
+                let array = object
+                    .entry("series".to_string())
+                    .or_insert_with(|| json!([]));
+                if let Some(items) = array.as_array_mut() {
+                    items.push(parse_yaml_inline_value(item));
+                }
+            }
+            continue;
+        }
+
+        if line.starts_with("        ") {
+            let Some(object_key) = current_object.clone() else {
+                continue;
+            };
+            if let Some((key, value)) = trimmed.split_once(':') {
+                if let Some(object) = slide.get_mut(&object_key).and_then(Value::as_object_mut) {
+                    object.insert(key.trim().to_string(), parse_yaml_scalar(value.trim()));
+                }
+            }
+        }
+    }
+
+    if let Some(slide) = current_slide.take() {
+        slides.push(Value::Object(slide));
+    }
+    root.insert("slides".to_string(), Value::Array(slides));
+    Ok(Value::Object(root))
+}
+
+fn parse_yaml_inline_value(value: &str) -> Value {
+    if value.starts_with('{') || value.starts_with('[') {
+        parse_yaml_jsonish(value).unwrap_or_else(|| Value::String(unquote_yaml(value).to_string()))
+    } else {
+        parse_yaml_scalar(value)
+    }
+}
+
+fn parse_yaml_scalar(value: &str) -> Value {
+    let value = value.trim();
+    if value.is_empty() {
+        Value::Null
+    } else if value.starts_with('[') {
+        parse_yaml_jsonish(value).unwrap_or_else(|| Value::String(unquote_yaml(value).to_string()))
+    } else {
+        Value::String(unquote_yaml(value).to_string())
+    }
+}
+
+fn parse_yaml_jsonish(value: &str) -> Option<Value> {
+    serde_json::from_str(value).ok()
+}
+
+fn unquote_yaml(value: &str) -> &str {
+    value
+        .strip_prefix('"')
+        .and_then(|item| item.strip_suffix('"'))
+        .or_else(|| {
+            value
+                .strip_prefix('\'')
+                .and_then(|item| item.strip_suffix('\''))
+        })
+        .unwrap_or(value)
+}
+
+fn generate_outline_deck_source(outline: &Value, _template: &DeckTemplate) -> Result<String> {
+    let slides = reflow_outline_slides(outline.get("slides").and_then(Value::as_array));
+    let total_slides = slides.len() + 2;
+    let palette = outline
+        .get("palette")
+        .and_then(Value::as_str)
+        .unwrap_or("dark");
+    let palette_value = outline_palette(palette);
+    let mut code = String::new();
+    code.push_str(&format!(
+        r#"const fs = require("fs");
+const path = require("path");
+const {{ spawnSync }} = require("child_process");
+const pptxgen = require("pptxgenjs");
+const {{
+  imageSizingCrop,
+  warnIfSlideHasOverlaps,
+  warnIfSlideElementsOutOfBounds,
+  addStyledChart,
+  addGlassPanel,
+  getTypography,
+  getSmartTypography,
+}} = require("./pptxgenjs_helpers");
+
+const pptx = new pptxgen();
+pptx.layout = "LAYOUT_WIDE";
+pptx.title = {};
+pptx.lang = "zh-CN";
+pptx.theme = {{
+  headFontFace: "Arial",
+  bodyFontFace: "Arial",
+  lang: "zh-CN",
+}};
+
+const palette = {};
+const totalSlides = {};
+
+pptx.defineSlideMaster({{
+  title: "PPT_RUST_SEMANTIC",
+  background: {{ color: palette.stage }},
+  objects: [{{ placeholder: {{ options: {{ name: "officecli_title", type: "title" }} }} }}],
+}});
+
+function addTopLabel(slide, text) {{
+  slide.addText(text, {{ x: 0.9, y: 0.38, w: 2.0, h: 0.12, ...getTypography("overline", {{ color: palette.textMute, charSpace: 1.2 }}) }});
+}}
+
+function addBottomGlow(slide) {{
+  slide.addShape(pptx.ShapeType.rect, {{ x: 0.86, y: 6.86, w: 11.6, h: 0.018, line: {{ color: palette.glow, transparency: 100 }}, fill: {{ color: palette.glow, transparency: 24 }} }});
+}}
+
+function addSectionTitle(slide, title, subtitle, x, y, w) {{
+  slide.addText(title || "", {{ x, y, w: Math.min(w * 0.72, 5.0), h: 0.32, placeholder: "officecli_title", ...getSmartTypography("h2", title || "", w, 0.32, {{ color: palette.text }}) }});
+  if (subtitle) slide.addText(subtitle, {{ x, y: y + 0.42, w, h: 0.16, ...getSmartTypography("body2", subtitle, w, 0.16, {{ color: palette.textSoft, bold: true }}) }});
+}}
+
+function finalizeSlide(slide, opts = {{}}) {{
+  if (!opts.skipOverlap) warnIfSlideHasOverlaps(slide, pptx, {{ ignoreDecorativeShapes: true }});
+  warnIfSlideElementsOutOfBounds(slide, pptx);
+}}
+
+function fileExists(assetPath) {{
+  try {{ return !!assetPath && fs.existsSync(assetPath); }} catch (_) {{ return false; }}
+}}
+
+function addOptionalImage(slide, assetPath, sizingFactory, fallback = {{}}) {{
+  if (fileExists(assetPath)) {{
+    slide.addImage({{ path: assetPath, ...sizingFactory(assetPath) }});
+    return true;
+  }}
+  slide.addShape(pptx.ShapeType.rect, {{
+    x: fallback.x ?? 0, y: fallback.y ?? 0, w: fallback.w ?? 13.333, h: fallback.h ?? 7.5,
+    line: {{ color: fallback.fill || palette.panelSoft, transparency: 100 }},
+    fill: {{ color: fallback.fill || palette.panelSoft, transparency: fallback.transparency ?? 0 }},
+  }});
+  if (fallback.label) {{
+    slide.addText(fallback.label, {{ x: (fallback.x ?? 0) + 0.18, y: (fallback.y ?? 0) + 0.18, w: Math.max((fallback.w ?? 4) - 0.36, 1.2), h: 0.14, ...getTypography("caption", {{ color: palette.textMute }}) }});
+  }}
+  return false;
+}}
+
+function sanitizeGeneratedDeck(fileName) {{
+  const tool = process.env.PPT_PPTX_RUST_TOOL_BIN || "ppt";
+  const completed = spawnSync(tool, ["sanitize-pptx", fileName], {{ stdio: "inherit" }});
+  if (completed.status !== 0) throw new Error(`sanitize-pptx failed for ${{fileName}}`);
+}}
+
+"#,
+        js_string(outline_str(outline, "title", "Untitled Deck"))?,
+        serde_json::to_string_pretty(&palette_value)?,
+        total_slides
+    ));
+
+    code.push_str(&generate_cover_source(outline, total_slides)?);
+    for (idx, slide) in slides.iter().enumerate() {
+        code.push_str(&generate_content_slide_source(slide, idx, total_slides)?);
+    }
+    code.push_str(&generate_closing_source(outline, total_slides)?);
+    code.push_str(
+        r#"
+async function writeDeck() {
+  await pptx.writeFile({ fileName: "deck.pptx" });
+  sanitizeGeneratedDeck("deck.pptx");
+}
+
+writeDeck().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"#,
+    );
+    Ok(code)
+}
+
+fn outline_palette(name: &str) -> Value {
+    match name {
+        "light" => json!({
+            "stage": "FAFAFA", "panel": "FFFFFF", "panelSoft": "F0F0F0", "line": "E0E0E0",
+            "glow": "3B82F6", "text": "1A1A1A", "textSoft": "666666", "textMute": "999999",
+            "chip": "1A1A1A", "chipText": "FFFFFF"
+        }),
+        "academic" => json!({
+            "stage": "F5F3EF", "panel": "FFFFFF", "panelSoft": "EDE9E3", "line": "D4CFC7",
+            "glow": "2563EB", "text": "1F2937", "textSoft": "4B5563", "textMute": "9CA3AF",
+            "chip": "1F2937", "chipText": "FFFFFF"
+        }),
+        _ => json!({
+            "stage": "000000", "panel": "111111", "panelSoft": "171717", "line": "2A2A2A",
+            "glow": "7EA9FF", "text": "F2F2EE", "textSoft": "B9B9B2", "textMute": "888883",
+            "chip": "F4F4EF", "chipText": "111111"
+        }),
+    }
+}
+
+fn reflow_outline_slides(slides: Option<&Vec<Value>>) -> Vec<Value> {
+    let mut out = Vec::new();
+    for slide in slides.into_iter().flatten() {
+        let pattern = detect_outline_pattern(slide);
+        if pattern == "multi-card" && value_array_len(slide, "bullets") > 4 {
+            push_chunked_slide(&mut out, slide, "bullets", 4);
+        } else if pattern == "process-flow" && value_array_len(slide, "steps") > 5 {
+            push_chunked_slide(&mut out, slide, "steps", 4);
+        } else if pattern == "timeline" && value_array_len(slide, "timeline") > 5 {
+            push_chunked_slide(&mut out, slide, "timeline", 4);
+        } else if pattern == "image-text-split" && joined_array_chars(slide, "bullets") > 150 {
+            push_split_slide(&mut out, slide, "bullets");
+        } else {
+            out.push(slide.clone());
+        }
+    }
+    out
+}
+
+fn push_chunked_slide(out: &mut Vec<Value>, slide: &Value, key: &str, chunk_size: usize) {
+    let Some(items) = slide.get(key).and_then(Value::as_array) else {
+        out.push(slide.clone());
+        return;
+    };
+    let chunks: Vec<&[Value]> = items.chunks(chunk_size).collect();
+    for (idx, chunk) in chunks.iter().enumerate() {
+        let mut cloned = slide.as_object().cloned().unwrap_or_default();
+        cloned.insert(
+            "title".to_string(),
+            Value::String(format!(
+                "{} ({}/{})",
+                outline_str(slide, "title", "Untitled"),
+                idx + 1,
+                chunks.len()
+            )),
+        );
+        cloned.insert(key.to_string(), Value::Array(chunk.to_vec()));
+        out.push(Value::Object(cloned));
+    }
+}
+
+fn push_split_slide(out: &mut Vec<Value>, slide: &Value, key: &str) {
+    let Some(items) = slide.get(key).and_then(Value::as_array) else {
+        out.push(slide.clone());
+        return;
+    };
+    let mid = items.len().div_ceil(2);
+    for (idx, chunk) in [&items[..mid], &items[mid..]].iter().enumerate() {
+        let mut cloned = slide.as_object().cloned().unwrap_or_default();
+        cloned.insert(
+            "title".to_string(),
+            Value::String(format!(
+                "{} ({}/2)",
+                outline_str(slide, "title", "Untitled"),
+                idx + 1
+            )),
+        );
+        cloned.insert(key.to_string(), Value::Array(chunk.to_vec()));
+        out.push(Value::Object(cloned));
+    }
+}
+
+fn detect_outline_pattern(slide: &Value) -> &'static str {
+    if value_array_len(slide, "timeline") > 0 {
+        "timeline"
+    } else if value_array_len(slide, "steps") > 0 {
+        "process-flow"
+    } else if slide.get("comparison").is_some() {
+        "comparison"
+    } else if slide.get("chart").is_some() || value_array_len(slide, "metrics") >= 3 {
+        "data-panel"
+    } else if slide.get("image").is_some() && value_array_len(slide, "bullets") <= 2 {
+        "hero-image"
+    } else if slide.get("image").is_some() {
+        "image-text-split"
+    } else if value_array_len(slide, "bullets") >= 3 {
+        "multi-card"
+    } else {
+        "full-text"
+    }
+}
+
+fn generate_cover_source(outline: &Value, total_slides: usize) -> Result<String> {
+    let meta = [outline.get("presenter"), outline.get("date")]
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>()
+        .join(" / ");
+    let meta_value = json!({ "meta": meta });
+    Ok(format!(
+        r#"
+const cover = pptx.addSlide({{ masterName: "PPT_RUST_SEMANTIC" }});
+cover.background = {{ color: palette.stage }};
+addOptionalImage(cover, {}, (assetPath) => imageSizingCrop(assetPath, 0, 0, 13.333, 7.5), {{ x: 0, y: 0, w: 13.333, h: 7.5, fill: palette.panelSoft, transparency: 0, label: "COVER IMAGE OPTIONAL" }});
+cover.addShape(pptx.ShapeType.rect, {{ x: 0, y: 0, w: 13.333, h: 7.5, line: {{ color: palette.stage, transparency: 100 }}, fill: {{ color: palette.stage, transparency: 40 }} }});
+cover.addShape(pptx.ShapeType.rect, {{ x: 0, y: 0, w: 6.1, h: 7.5, line: {{ color: palette.stage, transparency: 100 }}, fill: {{ color: palette.stage, transparency: 22 }} }});
+addTopLabel(cover, "PRESENTATION");
+cover.addText({}, {{ x: 0.92, y: 1.76, w: 4.64, h: 1.06, placeholder: "officecli_title", ...getTypography("display", {{ color: palette.text, animate: {{ type: "fade", prop: "in", delay: 0.1 }} }}) }});
+{}
+{}
+cover.addText("01 / " + String(totalSlides).padStart(2, "0"), {{ x: 12.2, y: 7.03, w: 0.4, h: 0.12, ...getTypography("caption", {{ color: palette.textMute, align: "right" }}) }});
+addBottomGlow(cover);
+finalizeSlide(cover, {{ skipOverlap: true }});
+"#,
+        js_string(outline_str(outline, "coverImage", "./assets/cover.jpg"))?,
+        js_string(outline_str(outline, "title", "Title"))?,
+        optional_add_text("cover", outline, "subtitle", 0.96, 3.02, 4.48, 0.66, "body1")?,
+        optional_add_text("cover", &meta_value, "meta", 0.96, 4.48, 3.0, 0.14, "body2")?
+    )
+    .replace("totalSlides", &total_slides.to_string()))
+}
+
+fn generate_content_slide_source(
+    slide: &Value,
+    index: usize,
+    total_slides: usize,
+) -> Result<String> {
+    let pattern = detect_outline_pattern(slide);
+    let mut code = format!(
+        r#"
+const slide{index} = pptx.addSlide({{ masterName: "PPT_RUST_SEMANTIC" }});
+slide{index}.background = {{ color: palette.stage }};
+addTopLabel(slide{index}, "SECTION {section}");
+addSectionTitle(slide{index}, {title}, {subtitle}, 0.92, 0.96, 5.0);
+"#,
+        index = index,
+        section = format!("{:02}", index + 1),
+        title = js_string(outline_str(slide, "title", ""))?,
+        subtitle = js_string(outline_str(slide, "subtitle", ""))?
+    );
+    code.push_str(&match pattern {
+        "multi-card" => generate_multi_card_source(slide, index)?,
+        "data-panel" => generate_data_panel_source(slide, index)?,
+        "comparison" => generate_comparison_source(slide, index)?,
+        "image-text-split" => generate_image_text_split_source(slide, index)?,
+        "hero-image" => generate_hero_image_source(slide, index)?,
+        "timeline" => generate_list_cards_source(slide, index, "timeline", 4)?,
+        "process-flow" => generate_list_cards_source(slide, index, "steps", 4)?,
+        _ => generate_full_text_source(slide, index)?,
+    });
+    code.push_str(&format!(
+        r#"
+slide{index}.addText("{page} / {total}", {{ x: 12.2, y: 7.03, w: 0.4, h: 0.12, ...getTypography("caption", {{ color: palette.textMute, align: "right" }}) }});
+addBottomGlow(slide{index});
+finalizeSlide(slide{index});
+"#,
+        index = index,
+        page = format!("{:02}", index + 2),
+        total = format!("{:02}", total_slides)
+    ));
+    Ok(code)
+}
+
+fn generate_multi_card_source(slide: &Value, idx: usize) -> Result<String> {
+    generate_list_cards_source(slide, idx, "bullets", 4)
+}
+
+fn generate_list_cards_source(
+    slide: &Value,
+    idx: usize,
+    key: &str,
+    max_count: usize,
+) -> Result<String> {
+    let items = value_string_array(slide, key);
+    let card_count = items.len().min(max_count);
+    let card_w = if card_count <= 2 {
+        5.48
+    } else if card_count == 3 {
+        3.56
+    } else {
+        2.62
+    };
+    let mut code = String::new();
+    for (i, item) in items.iter().take(max_count).enumerate() {
+        let x = 0.94 + i as f64 * (card_w + 0.22);
+        code.push_str(&format!(
+            r#"addGlassPanel(slide{idx}, pptx, {x:.2}, 2.0, {card_w:.2}, 3.8, {{ fill: palette.panelSoft, transparency: 10 }});
+slide{idx}.addText("{num:02}", {{ x: {num_x:.2}, y: 2.28, w: 0.4, h: 0.2, ...getTypography("h3", {{ color: palette.text }}) }});
+slide{idx}.addText({text}, {{ x: {text_x:.2}, y: 2.72, w: {text_w:.2}, h: 2.8, ...getSmartTypography("body2", {text}, {text_w:.2}, 2.8, {{ color: palette.textSoft, valign: "top", breakLine: true }}) }});
+"#,
+            idx = idx,
+            x = x,
+            card_w = card_w,
+            num = i + 1,
+            num_x = x + 0.18,
+            text = js_string(item)?,
+            text_x = x + 0.18,
+            text_w = card_w - 0.36
+        ));
+    }
+    Ok(code)
+}
+
+fn generate_data_panel_source(slide: &Value, idx: usize) -> Result<String> {
+    let metrics = slide
+        .get("metrics")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let chip_count = metrics.len().min(5);
+    let chip_w = if chip_count > 0 {
+        (11.4 / chip_count as f64 - 0.2).min(2.2)
+    } else {
+        2.0
+    };
+    let mut code = String::new();
+    for (i, metric) in metrics.iter().take(5).enumerate() {
+        let x = 0.94 + i as f64 * (chip_w + 0.22);
+        let value = js_string(outline_str(metric, "value", ""))?;
+        let label = js_string(outline_str(metric, "label", ""))?;
+        code.push_str(&format!(
+            r#"addGlassPanel(slide{idx}, pptx, {x:.2}, 2.3, {chip_w:.2}, 0.94, {{ fill: palette.panelSoft, transparency: 15 }});
+slide{idx}.addText({value}, {{ x: {vx:.2}, y: 2.48, w: {vw:.2}, h: 0.18, ...getSmartTypography("metric", {value}, {vw:.2}, 0.18, {{ color: palette.text }}) }});
+slide{idx}.addText({label}, {{ x: {vx:.2}, y: 2.84, w: {vw:.2}, h: 0.12, ...getSmartTypography("caption", {label}, {vw:.2}, 0.12, {{ color: palette.textSoft }}) }});
+"#,
+            idx = idx, x = x, chip_w = chip_w, value = value, label = label, vx = x + 0.14, vw = chip_w - 0.28
+        ));
+    }
+    code.push_str(&format!("addGlassPanel(slide{idx}, pptx, 0.94, 3.56, 11.42, 2.24, {{ fill: palette.panelSoft, transparency: 8 }});\n"));
+    if let Some(chart) = slide.get("chart") {
+        code.push_str(&format!(
+            "addStyledChart(slide{idx}, pptx, {}, {{ series: {}, categories: {}, position: {{ x: 1.1, y: 3.7, w: 11.1, h: 1.96 }} }});\n",
+            js_string(outline_str(chart, "type", "bar"))?,
+            serde_json::to_string(chart.get("series").unwrap_or(&json!([])))?,
+            serde_json::to_string(chart.get("categories").unwrap_or(&json!([])))?
+        ));
+    }
+    Ok(code)
+}
+
+fn generate_comparison_source(slide: &Value, idx: usize) -> Result<String> {
+    let left = slide.pointer("/comparison/left").unwrap_or(&Value::Null);
+    let right = slide.pointer("/comparison/right").unwrap_or(&Value::Null);
+    let left_text = numbered_lines(value_string_array(left, "items"));
+    let right_text = numbered_lines(value_string_array(right, "items"));
+    Ok(format!(
+        r#"addGlassPanel(slide{idx}, pptx, 0.94, 1.9, 5.48, 4.4, {{ fill: palette.panelSoft, transparency: 10 }});
+addGlassPanel(slide{idx}, pptx, 6.72, 1.9, 5.48, 4.4, {{ fill: palette.panelSoft, transparency: 10 }});
+slide{idx}.addText({left_title}, {{ x: 1.18, y: 2.18, w: 1.1, h: 0.14, ...getSmartTypography("body1", {left_title}, 1.1, 0.14, {{ color: palette.text, bold: true }}) }});
+slide{idx}.addText({left_text}, {{ x: 1.18, y: 2.54, w: 4.82, h: 3.2, ...getSmartTypography("body2", {left_text}, 4.82, 3.2, {{ color: palette.textSoft, valign: "top", breakLine: true }}) }});
+slide{idx}.addText({right_title}, {{ x: 6.96, y: 2.18, w: 1.1, h: 0.14, ...getSmartTypography("body1", {right_title}, 1.1, 0.14, {{ color: palette.text, bold: true }}) }});
+slide{idx}.addText({right_text}, {{ x: 6.96, y: 2.54, w: 4.82, h: 3.2, ...getSmartTypography("body2", {right_text}, 4.82, 3.2, {{ color: palette.textSoft, valign: "top", breakLine: true }}) }});
+"#,
+        idx = idx,
+        left_title = js_string(outline_str(left, "title", "A"))?,
+        left_text = js_string(&left_text)?,
+        right_title = js_string(outline_str(right, "title", "B"))?,
+        right_text = js_string(&right_text)?
+    ))
+}
+
+fn generate_image_text_split_source(slide: &Value, idx: usize) -> Result<String> {
+    let text = numbered_lines(value_string_array(slide, "bullets"));
+    Ok(format!(
+        r#"addGlassPanel(slide{idx}, pptx, 0.94, 1.76, 5.14, 4.44, {{ fill: palette.panelSoft, transparency: 15 }});
+const slide{idx}HasImage = addOptionalImage(slide{idx}, {image}, (assetPath) => imageSizingCrop(assetPath, 1.0, 1.82, 5.02, 4.32), {{ x: 1.0, y: 1.82, w: 5.02, h: 4.32, fill: palette.panel, transparency: 0, label: "OPTIONAL IMAGE" }});
+if (slide{idx}HasImage) slide{idx}.addShape(pptx.ShapeType.roundRect, {{ x: 1.0, y: 1.82, w: 5.02, h: 4.32, rectRadius: 0.06, line: {{ color: palette.stage, transparency: 100 }}, fill: {{ color: palette.stage, transparency: 26 }} }});
+slide{idx}.addText({text}, {{ x: 6.56, y: 2.0, w: 5.58, h: 4.0, ...getSmartTypography("body1", {text}, 5.58, 4.0, {{ color: palette.textSoft, valign: "top", breakLine: true }}) }});
+"#,
+        idx = idx,
+        image = js_string(outline_str(slide, "image", "./assets/placeholder.jpg"))?,
+        text = js_string(&text)?
+    ))
+}
+
+fn generate_hero_image_source(slide: &Value, idx: usize) -> Result<String> {
+    Ok(format!(
+        r#"const slide{idx}HasHero = addOptionalImage(slide{idx}, {image}, (assetPath) => imageSizingCrop(assetPath, 0, 1.4, 13.333, 6.1), {{ x: 0, y: 1.4, w: 13.333, h: 6.1, fill: palette.panelSoft, transparency: 0, label: "OPTIONAL IMAGE" }});
+if (slide{idx}HasHero) slide{idx}.addShape(pptx.ShapeType.rect, {{ x: 0, y: 1.4, w: 13.333, h: 6.1, line: {{ color: palette.stage, transparency: 100 }}, fill: {{ color: palette.stage, transparency: 40 }} }});
+{}
+"#,
+        optional_add_text(
+            &format!("slide{idx}"),
+            slide,
+            "caption",
+            0.96,
+            5.8,
+            6.0,
+            0.36,
+            "body1"
+        )?,
+        idx = idx,
+        image = js_string(outline_str(slide, "image", "./assets/placeholder.jpg"))?
+    ))
+}
+
+fn generate_full_text_source(slide: &Value, idx: usize) -> Result<String> {
+    let text = numbered_lines(value_string_array(slide, "bullets"));
+    Ok(format!(
+        r#"addGlassPanel(slide{idx}, pptx, 0.94, 1.76, 11.42, 4.44, {{ fill: palette.panelSoft, transparency: 10 }});
+slide{idx}.addText({text}, {{ x: 1.18, y: 2.04, w: 10.9, h: 3.88, ...getSmartTypography("body1", {text}, 10.9, 3.88, {{ color: palette.textSoft, valign: "top", breakLine: true }}) }});
+"#,
+        idx = idx,
+        text = js_string(&text)?
+    ))
+}
+
+fn generate_closing_source(outline: &Value, total_slides: usize) -> Result<String> {
+    Ok(format!(
+        r#"
+const closing = pptx.addSlide({{ masterName: "PPT_RUST_SEMANTIC" }});
+closing.background = {{ color: palette.stage }};
+addOptionalImage(closing, {}, (assetPath) => imageSizingCrop(assetPath, 0, 0, 13.333, 7.5), {{ x: 0, y: 0, w: 13.333, h: 7.5, fill: palette.panelSoft, transparency: 0, label: "COVER IMAGE OPTIONAL" }});
+closing.addShape(pptx.ShapeType.rect, {{ x: 0, y: 0, w: 13.333, h: 7.5, line: {{ color: palette.stage, transparency: 100 }}, fill: {{ color: palette.stage, transparency: 52 }} }});
+addTopLabel(closing, "FINAL SLIDE");
+closing.addText("THANK YOU", {{ x: 4.18, y: 2.1, w: 4.98, h: 0.42, placeholder: "officecli_title", ...getTypography("display", {{ color: palette.text, align: "center" }}) }});
+closing.addText("{total:02} / {total:02}", {{ x: 12.2, y: 7.03, w: 0.4, h: 0.12, ...getTypography("caption", {{ color: palette.textMute, align: "right" }}) }});
+addBottomGlow(closing);
+finalizeSlide(closing, {{ skipOverlap: true }});
+"#,
+        js_string(outline_str(outline, "coverImage", "./assets/cover.jpg"))?,
+        total = total_slides
+    ))
+}
+
+fn optional_add_text(
+    target: &str,
+    value: &Value,
+    key: &str,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    typo: &str,
+) -> Result<String> {
+    let text = outline_str(value, key, "");
+    if text.is_empty() {
+        return Ok(String::new());
+    }
+    Ok(format!(
+        r#"{target}.addText({}, {{ x: {x}, y: {y}, w: {w}, h: {h}, ...getTypography("{typo}", {{ color: palette.textSoft }}) }});"#,
+        js_string(text)?
+    ))
+}
+
+fn value_array_len(value: &Value, key: &str) -> usize {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0)
+}
+
+fn joined_array_chars(value: &Value, key: &str) -> usize {
+    value_string_array(value, key).join("").chars().count()
+}
+
+fn value_string_array(value: &Value, key: &str) -> Vec<String> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| {
+                    item.as_str()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| item.to_string())
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn numbered_lines(items: Vec<String>) -> String {
+    items
+        .into_iter()
+        .enumerate()
+        .map(|(idx, item)| format!("{}. {}", idx + 1, item))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn outline_str<'a>(value: &'a Value, key: &str, default: &'a str) -> &'a str {
+    value.get(key).and_then(Value::as_str).unwrap_or(default)
+}
+
+fn js_string(value: &str) -> Result<String> {
+    Ok(serde_json::to_string(value)?)
+}
+
+fn resolve_skill_root() -> Result<PathBuf> {
+    if let Ok(path) = std::env::var("PPT_PPTX_SKILL_ROOT") {
+        let root = expand_path(&path);
+        if root.join("assets").exists() && root.join("scripts").exists() {
+            return Ok(root);
+        }
+    }
+
+    let current = std::env::current_exe().context("failed to locate current executable")?;
+    for ancestor in current.ancestors() {
+        let candidate = ancestor.join("skills").join("ppt-pptx");
+        if candidate.join("assets").exists() && candidate.join("scripts").exists() {
+            return Ok(candidate);
+        }
+        let candidate = ancestor.join("ppt-pptx");
+        if candidate.join("assets").exists() && candidate.join("scripts").exists() {
+            return Ok(candidate);
+        }
+    }
+
+    let cwd = std::env::current_dir().context("failed to read current directory")?;
+    for ancestor in cwd.ancestors() {
+        let candidate = ancestor.join("skills").join("ppt-pptx");
+        if candidate.join("assets").exists() && candidate.join("scripts").exists() {
+            return Ok(candidate);
+        }
+    }
+
+    bail!("cannot locate skills/ppt-pptx; set PPT_PPTX_SKILL_ROOT")
+}
+
+fn copy_file_checked(
+    src: &Path,
+    dest: &Path,
+    force: bool,
+    created: &mut Vec<String>,
+) -> Result<()> {
+    if dest.exists() && !force {
+        created.push(format!("kept:{}", dest.display()));
+        return Ok(());
+    }
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(src, dest)
+        .with_context(|| format!("failed to copy {} to {}", src.display(), dest.display()))?;
+    created.push(dest.display().to_string());
+    Ok(())
+}
+
+fn copy_dir_checked(src: &Path, dest: &Path, force: bool, created: &mut Vec<String>) -> Result<()> {
+    if dest.exists() {
+        if !force {
+            created.push(format!("kept:{}", dest.display()));
+            return Ok(());
+        }
+        fs::remove_dir_all(dest)
+            .with_context(|| format!("failed to replace {}", dest.display()))?;
+    }
+    copy_dir_recursive(src, dest)?;
+    created.push(dest.display().to_string());
+    Ok(())
+}
+
+fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
+    fs::create_dir_all(dest)?;
+    for entry in fs::read_dir(src).with_context(|| format!("failed to read {}", src.display()))? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let src_path = entry.path();
+        let dest_path = dest.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_recursive(&src_path, &dest_path)?;
+        } else if file_type.is_file() {
+            fs::copy(&src_path, &dest_path).with_context(|| {
+                format!(
+                    "failed to copy {} to {}",
+                    src_path.display(),
+                    dest_path.display()
+                )
+            })?;
+        }
     }
     Ok(())
 }
@@ -611,7 +1641,10 @@ fn qa_summary(deck_path: &str, rendered_dir: &str) -> Result<QaSummary> {
         render: QaRenderSummary {
             rendered_dir: rendered_dir_path.display().to_string(),
             png_count: rendered.len(),
-            paths: rendered.iter().map(|path| path.display().to_string()).collect(),
+            paths: rendered
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect(),
         },
         overflow_check: overflow,
         font_check,
@@ -648,7 +1681,9 @@ fn slide_overflow_summary(input: &Path) -> Result<QaOverflowSummary> {
         let index = slide.get("index").and_then(Value::as_u64).unwrap_or(0) as usize + 1;
         let mut overflow = false;
         if let Some(elements) = slide.get("elements").and_then(Value::as_array) {
-            overflow = elements.iter().any(|item| element_overflows(item, slide_w, slide_h));
+            overflow = elements
+                .iter()
+                .any(|item| element_overflows(item, slide_w, slide_h));
         }
         if overflow {
             failing.push(index);
@@ -665,7 +1700,11 @@ fn slide_overflow_summary(input: &Path) -> Result<QaOverflowSummary> {
         ok: false,
         stdout: format!(
             "ERROR: Slides with content overflowing original canvas (1-based indexing): {}",
-            failing.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ")
+            failing
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         ),
         stderr: String::new(),
     })
@@ -712,7 +1751,10 @@ fn detect_fonts_payload(input: &Path) -> Result<Value> {
             missing_by_slide.insert(slide_no.to_string(), slide_missing.into_iter().collect());
         }
         if !slide_substituted.is_empty() {
-            substituted_by_slide.insert(slide_no.to_string(), slide_substituted.into_iter().collect());
+            substituted_by_slide.insert(
+                slide_no.to_string(),
+                slide_substituted.into_iter().collect(),
+            );
         }
     }
 
@@ -748,7 +1790,8 @@ fn detect_officecli() -> Option<OfficeBinary> {
 }
 
 fn require_officecli() -> Result<OfficeBinary> {
-    detect_officecli().ok_or_else(|| anyhow!("officecli not found. Install it first, then rerun this command."))
+    detect_officecli()
+        .ok_or_else(|| anyhow!("officecli not found. Install it first, then rerun this command."))
 }
 
 fn run_office_json(binary: &Path, args: &[String]) -> Result<Value> {
@@ -775,10 +1818,23 @@ fn office_doctor_value(file: &str) -> Result<Value> {
 
 fn office_doctor_summary(file: &str) -> Result<OfficeDoctorSummary> {
     let office = require_officecli()?;
-    let outline_payload = run_office_json(&office.path, &["view".to_string(), file.to_string(), "outline".to_string()])?;
-    let issues_payload = run_office_json(&office.path, &["view".to_string(), file.to_string(), "issues".to_string()])?;
-    let validate_payload = run_office_json(&office.path, &["validate".to_string(), file.to_string()])?;
-    summarize_office_doctor(file, outline_payload, issues_payload, validate_payload, office.version)
+    let outline_payload = run_office_json(
+        &office.path,
+        &["view".to_string(), file.to_string(), "outline".to_string()],
+    )?;
+    let issues_payload = run_office_json(
+        &office.path,
+        &["view".to_string(), file.to_string(), "issues".to_string()],
+    )?;
+    let validate_payload =
+        run_office_json(&office.path, &["validate".to_string(), file.to_string()])?;
+    summarize_office_doctor(
+        file,
+        outline_payload,
+        issues_payload,
+        validate_payload,
+        office.version,
+    )
 }
 
 fn summarize_office_doctor(
@@ -788,8 +1844,14 @@ fn summarize_office_doctor(
     validate_payload: Value,
     version: Option<String>,
 ) -> Result<OfficeDoctorSummary> {
-    let outline_data = outline_payload.get("data").cloned().unwrap_or_else(|| json!({}));
-    let issues_data = issues_payload.get("data").cloned().unwrap_or_else(|| json!({}));
+    let outline_data = outline_payload
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let issues_data = issues_payload
+        .get("data")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     let issue_list = issues_data
         .get("Issues")
         .and_then(Value::as_array)
@@ -800,16 +1862,30 @@ fn summarize_office_doctor(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    let validation_ok = validate_message.to_lowercase().contains("0 validation error")
+    let validation_ok = validate_message
+        .to_lowercase()
+        .contains("0 validation error")
         || (validate_payload.get("success").and_then(Value::as_bool) == Some(true)
             && !validate_message.to_lowercase().contains("validation error"));
     let overflow_count = issue_list
         .iter()
-        .filter(|item| item.get("Message").and_then(Value::as_str).unwrap_or_default().to_lowercase().contains("overflow"))
+        .filter(|item| {
+            item.get("Message")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_lowercase()
+                .contains("overflow")
+        })
         .count();
     let title_count = issue_list
         .iter()
-        .filter(|item| item.get("Message").and_then(Value::as_str).unwrap_or_default().to_lowercase().contains("no title"))
+        .filter(|item| {
+            item.get("Message")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_lowercase()
+                .contains("no title")
+        })
         .count();
     Ok(OfficeDoctorSummary {
         officecli_version: version,
@@ -835,21 +1911,47 @@ fn summarize_office_doctor(
 }
 
 fn print_office_doctor_summary(summary: &OfficeDoctorSummary) {
-    println!("officecli: {}", summary.officecli_version.clone().unwrap_or_else(|| "unknown".to_string()));
+    println!(
+        "officecli: {}",
+        summary
+            .officecli_version
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string())
+    );
     println!("file: {}", summary.file);
     println!(
         "slides: {}",
-        summary.outline.get("total_slides").and_then(Value::as_u64).unwrap_or(0)
+        summary
+            .outline
+            .get("total_slides")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
     );
     println!(
         "issues: total={} overflow={} missing_title={}",
-        summary.issues.get("count").and_then(Value::as_u64).unwrap_or(0),
-        summary.issues.get("overflow_count").and_then(Value::as_u64).unwrap_or(0),
-        summary.issues.get("title_count").and_then(Value::as_u64).unwrap_or(0)
+        summary
+            .issues
+            .get("count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        summary
+            .issues
+            .get("overflow_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        summary
+            .issues
+            .get("title_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
     );
     println!(
         "validation_ok: {}",
-        summary.validation.get("ok").and_then(Value::as_bool).unwrap_or(false)
+        summary
+            .validation
+            .get("ok")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
     );
     if let Some(message) = summary.validation.get("message").and_then(Value::as_str) {
         if !message.is_empty() {
@@ -942,7 +2044,8 @@ fn create_montage_command(args: CreateMontageArgs) -> Result<()> {
             Ok(raster_path) => match image::open(&raster_path) {
                 Ok(img) => items.push((input.clone(), Some(img))),
                 Err(err) if args.fail_on_image_error => {
-                    return Err(err).with_context(|| format!("failed to open {}", raster_path.display()))
+                    return Err(err)
+                        .with_context(|| format!("failed to open {}", raster_path.display()))
                 }
                 Err(_) => items.push((input.clone(), None)),
             },
@@ -984,7 +2087,9 @@ fn slides_test_command(args: SlidesTestArgs) -> Result<()> {
         let index = slide.get("index").and_then(Value::as_u64).unwrap_or(0) as usize + 1;
         let mut overflow = false;
         if let Some(elements) = slide.get("elements").and_then(Value::as_array) {
-            overflow = elements.iter().any(|item| element_overflows(item, slide_w, slide_h));
+            overflow = elements
+                .iter()
+                .any(|item| element_overflows(item, slide_w, slide_h));
         }
         if overflow {
             failing.push(index);
@@ -1047,7 +2152,10 @@ fn detect_fonts_command(args: DetectFontsArgs) -> Result<()> {
             missing_by_slide.insert(slide_no.to_string(), slide_missing.into_iter().collect());
         }
         if !slide_substituted.is_empty() {
-            substituted_by_slide.insert(slide_no.to_string(), slide_substituted.into_iter().collect());
+            substituted_by_slide.insert(
+                slide_no.to_string(),
+                slide_substituted.into_iter().collect(),
+            );
         }
     }
 
@@ -1162,7 +2270,8 @@ fn default_render_dir(input: &Path) -> PathBuf {
 
 impl ZipBundle {
     fn from_path(path: &Path) -> Result<Self> {
-        let file = File::open(path).with_context(|| format!("failed to open {}", path.display()))?;
+        let file =
+            File::open(path).with_context(|| format!("failed to open {}", path.display()))?;
         let mut archive = ZipArchive::new(file).context("failed to read zip archive")?;
         let mut files = HashMap::new();
         for idx in 0..archive.len() {
@@ -1179,7 +2288,8 @@ impl ZipBundle {
             .files
             .get(&normalize_zip_path(path))
             .ok_or_else(|| anyhow!("missing zip entry {}", path))?;
-        Ok(String::from_utf8(data.clone()).with_context(|| format!("{} is not valid utf-8 xml", path))?)
+        Ok(String::from_utf8(data.clone())
+            .with_context(|| format!("{} is not valid utf-8 xml", path))?)
     }
 
     fn bytes(&self, path: &str) -> Option<&[u8]> {
@@ -1259,7 +2369,10 @@ fn parse_pdf_page_size(value: &str) -> Result<(f64, f64)> {
     }
     let inch = Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\s*in\b")?;
     if let Some(caps) = inch.captures(value) {
-        return Ok((caps[1].parse::<f64>()? * POINTS_PER_INCH, caps[2].parse::<f64>()? * POINTS_PER_INCH));
+        return Ok((
+            caps[1].parse::<f64>()? * POINTS_PER_INCH,
+            caps[2].parse::<f64>()? * POINTS_PER_INCH,
+        ));
     }
     let bare = Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)")?;
     if let Some(caps) = bare.captures(value) {
@@ -1448,9 +2561,11 @@ fn ensure_raster_image(path: &Path, out_dir: Option<&Path>) -> Result<PathBuf> {
         .and_then(OsStr::to_str)
         .map(|value| value.to_ascii_lowercase())
         .unwrap_or_default();
-    let out_dir = out_dir
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| path.parent().unwrap_or_else(|| Path::new(".")).to_path_buf());
+    let out_dir = out_dir.map(Path::to_path_buf).unwrap_or_else(|| {
+        path.parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf()
+    });
     fs::create_dir_all(&out_dir)?;
     let stem = path.file_stem().and_then(OsStr::to_str).unwrap_or("image");
     let out_path = out_dir.join(format!("{}.png", stem));
@@ -1472,14 +2587,25 @@ fn ensure_raster_image(path: &Path, out_dir: Option<&Path>) -> Result<PathBuf> {
             let mut buf = Vec::new();
             decoder.read_to_end(&mut buf)?;
             fs::write(&decompressed, buf)?;
-            run_command(Command::new("inkscape").arg(&decompressed).arg("-o").arg(&out_path))
-                .context("inkscape conversion failed")?;
+            run_command(
+                Command::new("inkscape")
+                    .arg(&decompressed)
+                    .arg("-o")
+                    .arg(&out_path),
+            )
+            .context("inkscape conversion failed")?;
             Ok(out_path)
         }
         "wdp" | "jxr" => {
             let tiff_path = out_dir.join(format!("{}.tiff", stem));
-            run_command(Command::new("JxrDecApp").arg("-i").arg(path).arg("-o").arg(&tiff_path))
-                .context("JxrDecApp failed")?;
+            run_command(
+                Command::new("JxrDecApp")
+                    .arg("-i")
+                    .arg(path)
+                    .arg("-o")
+                    .arg(&tiff_path),
+            )
+            .context("JxrDecApp failed")?;
             let binary = if which("magick") { "magick" } else { "convert" };
             run_command(Command::new(binary).arg(&tiff_path).arg(&out_path))
                 .context("imagemagick conversion failed")?;
@@ -1491,7 +2617,8 @@ fn ensure_raster_image(path: &Path, out_dir: Option<&Path>) -> Result<PathBuf> {
             } else {
                 bail!("heif-convert not found");
             };
-            run_command(Command::new(binary).arg(path).arg(&out_path)).context("heif-convert failed")?;
+            run_command(Command::new(binary).arg(path).arg(&out_path))
+                .context("heif-convert failed")?;
             Ok(out_path)
         }
         "pdf" | "eps" | "ps" => {
@@ -1544,13 +2671,20 @@ fn build_montage(
     if items.is_empty() {
         bail!("No valid images to render.");
     }
-    let label_height = if matches!(label_mode, LabelMode::None) { 0 } else { 20 };
+    let label_height = if matches!(label_mode, LabelMode::None) {
+        0
+    } else {
+        20
+    };
     let row_height = cell_height + label_height;
     let rows = (items.len() + num_col - 1) / num_col;
     let canvas_w = num_col as u32 * cell_width + (num_col as u32 + 1) * gap;
     let canvas_h = rows as u32 * row_height + (rows as u32 + 1) * gap;
     let mut canvas = RgbaImage::from_pixel(canvas_w, canvas_h, Rgba([242, 242, 242, 255]));
-    let placeholder = make_placeholder((cell_width as f32 * 0.6) as u32, (cell_height as f32 * 0.6) as u32);
+    let placeholder = make_placeholder(
+        (cell_width as f32 * 0.6) as u32,
+        (cell_height as f32 * 0.6) as u32,
+    );
 
     for (index, (path, image_opt)) in items.iter().enumerate() {
         let col = index % num_col;
@@ -1574,11 +2708,20 @@ fn build_montage(
         );
         let label = match label_mode {
             LabelMode::Number => Some((index + 1).to_string()),
-            LabelMode::Filename => path.file_name().and_then(OsStr::to_str).map(|s| s.to_string()),
+            LabelMode::Filename => path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .map(|s| s.to_string()),
             LabelMode::None => None,
         };
         if let Some(label) = label {
-            draw_text_bitmap(&mut canvas, x0 + 4, y0 + cell_height + 4, &label, Rgba([0, 0, 0, 255]));
+            draw_text_bitmap(
+                &mut canvas,
+                x0 + 4,
+                y0 + cell_height + 4,
+                &label,
+                Rgba([0, 0, 0, 255]),
+            );
         }
     }
     Ok(canvas)
@@ -1606,8 +2749,12 @@ fn draw_rect_outline(img: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32, color:
     if w == 0 || h == 0 {
         return;
     }
-    let x2 = x.saturating_add(w.saturating_sub(1)).min(img.width().saturating_sub(1));
-    let y2 = y.saturating_add(h.saturating_sub(1)).min(img.height().saturating_sub(1));
+    let x2 = x
+        .saturating_add(w.saturating_sub(1))
+        .min(img.width().saturating_sub(1));
+    let y2 = y
+        .saturating_add(h.saturating_sub(1))
+        .min(img.height().saturating_sub(1));
     for xx in x..=x2 {
         img.put_pixel(xx, y, color);
         img.put_pixel(xx, y2, color);
@@ -1700,7 +2847,14 @@ fn extract_pptx_structure(
             .find(|(_, target)| target.contains("notesSlides"))
             .and_then(|(_, target)| extract_notes(bundle, target).ok())
             .filter(|text| !text.trim().is_empty());
-        let elements = extract_slide_elements(bundle, &slide_doc, &slide_rels, idx, extract_images, image_dir.as_deref())?;
+        let elements = extract_slide_elements(
+            bundle,
+            &slide_doc,
+            &slide_rels,
+            idx,
+            extract_images,
+            image_dir.as_deref(),
+        )?;
         slides.push(json!({
             "index": idx,
             "layout": layout_name,
@@ -1727,15 +2881,27 @@ fn extract_pptx_structure(
 
 fn slide_rel_path(slide_path: &str) -> String {
     let path = Path::new(slide_path);
-    let file_name = path.file_name().and_then(OsStr::to_str).unwrap_or("slide1.xml");
+    let file_name = path
+        .file_name()
+        .and_then(OsStr::to_str)
+        .unwrap_or("slide1.xml");
     let parent = path.parent().unwrap_or_else(|| Path::new("ppt/slides"));
-    normalize_zip_path(&parent.join("_rels").join(format!("{}.rels", file_name)).display().to_string())
+    normalize_zip_path(
+        &parent
+            .join("_rels")
+            .join(format!("{}.rels", file_name))
+            .display()
+            .to_string(),
+    )
 }
 
 fn parse_relationships(xml: &str) -> Result<HashMap<String, String>> {
     let doc = Document::parse(xml)?;
     let mut rels = HashMap::new();
-    for node in doc.descendants().filter(|node| node.tag_name().name() == "Relationship") {
+    for node in doc
+        .descendants()
+        .filter(|node| node.tag_name().name() == "Relationship")
+    {
         if let (Some(id), Some(target)) = (attr_value(&node, "Id"), attr_value(&node, "Target")) {
             rels.insert(id.to_string(), target.to_string());
         }
@@ -1746,11 +2912,17 @@ fn parse_relationships(xml: &str) -> Result<HashMap<String, String>> {
 fn resolve_target(base: &str, target: &str) -> String {
     let base_path = Path::new(base);
     let joined = if target.starts_with("../") || target.starts_with("./") {
-        base_path.parent().unwrap_or_else(|| Path::new("")).join(target)
+        base_path
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .join(target)
     } else if target.starts_with('/') {
         PathBuf::from(target.trim_start_matches('/'))
     } else {
-        base_path.parent().unwrap_or_else(|| Path::new("")).join(target)
+        base_path
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .join(target)
     };
     normalize_path_like_zip(&joined)
 }
@@ -1783,8 +2955,15 @@ fn extract_layout_info(bundle: &ZipBundle, path: &str) -> Result<LayoutInfo> {
             name: node
                 .ancestors()
                 .find(|ancestor| ancestor.tag_name().name() == "sp")
-                .and_then(|shape| shape.children().find(|child| child.tag_name().name() == "nvSpPr"))
-                .and_then(|nv| nv.descendants().find(|child| child.tag_name().name() == "cNvPr"))
+                .and_then(|shape| {
+                    shape
+                        .children()
+                        .find(|child| child.tag_name().name() == "nvSpPr")
+                })
+                .and_then(|nv| {
+                    nv.descendants()
+                        .find(|child| child.tag_name().name() == "cNvPr")
+                })
                 .and_then(|nv| attr_value(&nv, "name").map(str::to_string))
                 .unwrap_or_default(),
         })
@@ -1873,15 +3052,29 @@ fn extract_element(
                 .find(|child| child.tag_name().name() == "blip")
                 .and_then(|child| rel_attr_value(&child, "embed").map(str::to_string));
             if let Some(embed_id) = embed_id {
-                let info = extract_image_info(bundle, slide_rels, &embed_id, slide_index, shape_index, extract_images, image_dir)?;
+                let info = extract_image_info(
+                    bundle,
+                    slide_rels,
+                    &embed_id,
+                    slide_index,
+                    shape_index,
+                    extract_images,
+                    image_dir,
+                )?;
                 element.image = Some(info);
             }
         }
         "graphicFrame" => {
-            if let Some(tbl) = node.descendants().find(|child| child.tag_name().name() == "tbl") {
+            if let Some(tbl) = node
+                .descendants()
+                .find(|child| child.tag_name().name() == "tbl")
+            {
                 element.element_type = "table".to_string();
                 element.table = Some(extract_table_info(&tbl));
-            } else if let Some(chart) = node.descendants().find(|child| child.tag_name().name() == "chart") {
+            } else if let Some(chart) = node
+                .descendants()
+                .find(|child| child.tag_name().name() == "chart")
+            {
                 element.element_type = "chart".to_string();
                 let rel_id = rel_attr_value(&chart, "id").unwrap_or("chart");
                 element.chart = Some(ChartInfo {
@@ -1895,7 +3088,10 @@ fn extract_element(
             let mut children = Vec::new();
             let mut child_index = 0;
             for child in node.children().filter(|child| child.is_element()) {
-                if !matches!(child.tag_name().name(), "sp" | "pic" | "graphicFrame" | "grpSp") {
+                if !matches!(
+                    child.tag_name().name(),
+                    "sp" | "pic" | "graphicFrame" | "grpSp"
+                ) {
                     continue;
                 }
                 child_index += 1;
@@ -1941,7 +3137,12 @@ fn extract_image_info(
         if let Some(dir) = image_dir {
             fs::create_dir_all(dir)?;
             let ext = media_path.rsplit('.').next().unwrap_or("bin");
-            let path = dir.join(format!("slide{}_shape{}.{}", slide_index + 1, shape_index, ext));
+            let path = dir.join(format!(
+                "slide{}_shape{}.{}",
+                slide_index + 1,
+                shape_index,
+                ext
+            ));
             fs::write(&path, bytes)?;
             Some(path.display().to_string())
         } else {
@@ -1983,13 +3184,25 @@ fn extract_position(node: &Node<'_, '_>) -> Position {
         .find(|child| matches!(child.tag_name().name(), "xfrm" | "off" | "ext"));
     let (x, y, w, h) = if let Some(xfrm) = xfrm {
         if xfrm.tag_name().name() == "xfrm" {
-            let off = xfrm.children().find(|child| child.tag_name().name() == "off");
-            let ext = xfrm.children().find(|child| child.tag_name().name() == "ext");
+            let off = xfrm
+                .children()
+                .find(|child| child.tag_name().name() == "off");
+            let ext = xfrm
+                .children()
+                .find(|child| child.tag_name().name() == "ext");
             (
-                off.and_then(|node| attr_f64(&node, "x")).unwrap_or_default() / EMU_PER_INCH,
-                off.and_then(|node| attr_f64(&node, "y")).unwrap_or_default() / EMU_PER_INCH,
-                ext.and_then(|node| attr_f64(&node, "cx")).unwrap_or_default() / EMU_PER_INCH,
-                ext.and_then(|node| attr_f64(&node, "cy")).unwrap_or_default() / EMU_PER_INCH,
+                off.and_then(|node| attr_f64(&node, "x"))
+                    .unwrap_or_default()
+                    / EMU_PER_INCH,
+                off.and_then(|node| attr_f64(&node, "y"))
+                    .unwrap_or_default()
+                    / EMU_PER_INCH,
+                ext.and_then(|node| attr_f64(&node, "cx"))
+                    .unwrap_or_default()
+                    / EMU_PER_INCH,
+                ext.and_then(|node| attr_f64(&node, "cy"))
+                    .unwrap_or_default()
+                    / EMU_PER_INCH,
             )
         } else {
             (0.0, 0.0, 0.0, 0.0)
@@ -2014,7 +3227,9 @@ fn extract_rotation(node: &Node<'_, '_>) -> Option<f64> {
 }
 
 fn extract_text_info(node: &Node<'_, '_>) -> Option<TextInfo> {
-    let text_node = node.descendants().find(|child| child.tag_name().name() == "txBody")?;
+    let text_node = node
+        .descendants()
+        .find(|child| child.tag_name().name() == "txBody")?;
     let paragraphs = text_node
         .children()
         .filter(|child| child.is_element() && child.tag_name().name() == "p")
@@ -2028,7 +3243,10 @@ fn extract_text_info(node: &Node<'_, '_>) -> Option<TextInfo> {
         .filter(|text| !text.is_empty())
         .collect::<Vec<_>>()
         .join("\n");
-    Some(TextInfo { full_text, paragraphs })
+    Some(TextInfo {
+        full_text,
+        paragraphs,
+    })
 }
 
 fn collect_text(node: &Node<'_, '_>) -> String {
@@ -2047,8 +3265,11 @@ fn attr_value<'a>(node: &'a Node<'a, 'a>, key: &str) -> Option<&'a str> {
 }
 
 fn rel_attr_value<'a>(node: &'a Node<'a, 'a>, local: &str) -> Option<&'a str> {
-    node.attribute(("http://schemas.openxmlformats.org/officeDocument/2006/relationships", local))
-        .or_else(|| node.attribute(local))
+    node.attribute((
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+        local,
+    ))
+    .or_else(|| node.attribute(local))
 }
 
 fn attr_f64(node: &Node<'_, '_>, key: &str) -> Option<f64> {
@@ -2061,10 +3282,22 @@ fn round4(value: f64) -> f64 {
 
 fn element_overflows(element: &Value, slide_w: f64, slide_h: f64) -> bool {
     let position = element.get("position");
-    let x = position.and_then(|pos| pos.get("x")).and_then(Value::as_f64).unwrap_or_default();
-    let y = position.and_then(|pos| pos.get("y")).and_then(Value::as_f64).unwrap_or_default();
-    let w = position.and_then(|pos| pos.get("w")).and_then(Value::as_f64).unwrap_or_default();
-    let h = position.and_then(|pos| pos.get("h")).and_then(Value::as_f64).unwrap_or_default();
+    let x = position
+        .and_then(|pos| pos.get("x"))
+        .and_then(Value::as_f64)
+        .unwrap_or_default();
+    let y = position
+        .and_then(|pos| pos.get("y"))
+        .and_then(Value::as_f64)
+        .unwrap_or_default();
+    let w = position
+        .and_then(|pos| pos.get("w"))
+        .and_then(Value::as_f64)
+        .unwrap_or_default();
+    let h = position
+        .and_then(|pos| pos.get("h"))
+        .and_then(Value::as_f64)
+        .unwrap_or_default();
     let over = x < -0.01 || y < -0.01 || x + w > slide_w + 0.01 || y + h > slide_h + 0.01;
     if over {
         return true;
@@ -2072,11 +3305,17 @@ fn element_overflows(element: &Value, slide_w: f64, slide_h: f64) -> bool {
     element
         .get("children")
         .and_then(Value::as_array)
-        .map(|children| children.iter().any(|child| element_overflows(child, slide_w, slide_h)))
+        .map(|children| {
+            children
+                .iter()
+                .any(|child| element_overflows(child, slide_w, slide_h))
+        })
         .unwrap_or(false)
 }
 
-fn extract_requested_fonts_by_slide(bundle: &ZipBundle) -> Result<BTreeMap<usize, BTreeSet<String>>> {
+fn extract_requested_fonts_by_slide(
+    bundle: &ZipBundle,
+) -> Result<BTreeMap<usize, BTreeSet<String>>> {
     let defaults = extract_theme_fonts(bundle)?;
     let mut by_slide = BTreeMap::new();
     let mut slide_names = bundle
@@ -2118,7 +3357,10 @@ fn extract_theme_fonts(bundle: &ZipBundle) -> Result<BTreeSet<String>> {
     let xml = bundle.text(&theme_name)?;
     let doc = Document::parse(&xml)?;
     let mut fonts = BTreeSet::new();
-    for node in doc.descendants().filter(|node| matches!(node.tag_name().name(), "latin" | "ea" | "cs")) {
+    for node in doc
+        .descendants()
+        .filter(|node| matches!(node.tag_name().name(), "latin" | "ea" | "cs"))
+    {
         if let Some(face) = attr_value(&node, "typeface") {
             if !face.trim().is_empty() {
                 fonts.insert(face.to_string());
@@ -2223,12 +3465,9 @@ fn extract_resolved_fonts_from_odp(input: &Path) -> Result<BTreeSet<String>> {
 }
 
 fn sanitize_presentation_xml(xml: &str) -> Result<String> {
-    let notes_master_re = Regex::new(
-        r#"(?s)<p:notesMasterIdLst(?:\s*/>|>.*?</p:notesMasterIdLst>)"#,
-    )?;
-    let sld_master_re = Regex::new(
-        r#"(?s)<p:sldMasterIdLst(?:\s*/>|>.*?</p:sldMasterIdLst>)"#,
-    )?;
+    let notes_master_re =
+        Regex::new(r#"(?s)<p:notesMasterIdLst(?:\s*/>|>.*?</p:notesMasterIdLst>)"#)?;
+    let sld_master_re = Regex::new(r#"(?s)<p:sldMasterIdLst(?:\s*/>|>.*?</p:sldMasterIdLst>)"#)?;
 
     let notes_master = match notes_master_re.find(xml) {
         Some(value) => value.as_str().to_string(),
@@ -2267,7 +3506,10 @@ mod tests {
 
     #[test]
     fn normalize_font_names() {
-        assert_eq!(normalize_font_family_name("Helvetica Neue (Body)"), "helvetica neue");
+        assert_eq!(
+            normalize_font_family_name("Helvetica Neue (Body)"),
+            "helvetica neue"
+        );
         assert_eq!(normalize_font_family_name("PingFang-SC"), "pingfang sc");
     }
 
@@ -2275,7 +3517,12 @@ mod tests {
     fn sanitize_presentation_xml_reorders_notes_master_after_slide_master() {
         let input = r#"<p:presentation><p:sldMasterIdLst/><p:sldIdLst/><p:notesMasterIdLst><p:notesMasterId r:id="rId4"/></p:notesMasterIdLst><p:sldSz cx="1" cy="2"/><p:notesSz cx="2" cy="1"/><p:defaultTextStyle/></p:presentation>"#;
         let output = sanitize_presentation_xml(input).unwrap();
-        assert!(output.find("<p:sldMasterIdLst/>").unwrap() < output.find("<p:notesMasterIdLst>").unwrap());
-        assert!(output.find("<p:notesMasterIdLst>").unwrap() < output.find("<p:sldIdLst/>").unwrap());
+        assert!(
+            output.find("<p:sldMasterIdLst/>").unwrap()
+                < output.find("<p:notesMasterIdLst>").unwrap()
+        );
+        assert!(
+            output.find("<p:notesMasterIdLst>").unwrap() < output.find("<p:sldIdLst/>").unwrap()
+        );
     }
 }

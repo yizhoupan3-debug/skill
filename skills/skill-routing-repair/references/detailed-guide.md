@@ -103,7 +103,11 @@ After repair:
 ```bash
 python3 scripts/check_skills.py --verify-codex-link
 python3 scripts/check_skills.py --include-system --verify-codex-link
-python3 scripts/sync_skills.py --apply
+cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
+  --skills-root skills \
+  --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
+  --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
+  --apply
 ```
 
 ## Output expectations
@@ -149,4 +153,3 @@ The script will:
 - identify frequently missed skills
 - detect skills missing from the trigger index
 - generate description improvement suggestions automatically
-

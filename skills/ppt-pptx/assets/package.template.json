@@ -5,15 +5,15 @@
   "type": "commonjs",
   "scripts": {
     "build": "node deck.js",
-    "render": "node scripts/pptx_tool.js render deck.pptx --output_dir rendered",
-    "check:overflow": "node scripts/pptx_tool.js slides-test deck.pptx",
-    "check:fonts": "node scripts/pptx_tool.js detect-fonts deck.pptx --json",
-    "check:officecli": "node scripts/pptx_tool.js office doctor deck.pptx --json",
-    "check:hybrid": "node scripts/pptx_tool.js qa deck.pptx --rendered-dir rendered --json",
-    "build:hybrid": "node scripts/pptx_tool.js build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json",
-    "intake:hybrid": "node scripts/pptx_tool.js intake deck.pptx --json",
-    "inspect:outline": "node scripts/pptx_tool.js office outline deck.pptx --json",
-    "watch:officecli": "node scripts/pptx_tool.js office watch deck.pptx --port 18080"
+    "render": "ppt render deck.pptx --output_dir rendered",
+    "check:overflow": "ppt slides-test deck.pptx",
+    "check:fonts": "ppt detect-fonts deck.pptx --json",
+    "check:officecli": "ppt office doctor deck.pptx --json",
+    "check:hybrid": "ppt qa deck.pptx --rendered-dir rendered --json",
+    "build:hybrid": "ppt build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json",
+    "intake:hybrid": "ppt intake deck.pptx --json",
+    "inspect:outline": "ppt office outline deck.pptx --json",
+    "watch:officecli": "ppt office watch deck.pptx --port 18080"
   },
   "dependencies": {
     "fontkit": "2.0.4",

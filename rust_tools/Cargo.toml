@@ -1,5 +1,11 @@
 [workspace]
-members = ["image_process_rs", "ooxml_parser_rs", "financial_data_rs", "pptx_tool_rs"]
+members = [
+  "image_gen_rs",
+  "image_process_rs",
+  "ooxml_parser_rs",
+  "financial_data_rs",
+  "pptx_tool_rs",
+]
 resolver = "2"
 
 [profile.release]

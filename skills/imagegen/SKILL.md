@@ -1,21 +1,23 @@
 ---
 name: "imagegen"
-description: "Generate or edit raster images through VibeProxy Local /v1/responses using the bundled CLI."
+description: "Generate or edit raster images through VibeProxy Local /v1/responses using the bundled Rust CLI."
 routing_layer: L1
 routing_owner: owner
 routing_gate: none
 session_start: n/a
 trigger_hints:
   - 生成图片
+  - 生图
+  - 出图
   - 编辑图片
+  - 画一张图
+  - 做封面图
   - image generation
+  - generate image
   - VibeProxy
   - Responses API
   - imagegen
 source: local
-runtime_requirements:
-  python:
-    - pillow
 metadata:
   version: "1.3.0"
   platforms: [codex]
@@ -27,15 +29,17 @@ metadata:
 
 # Image Generation Skill
 
-Generates or edits raster images for the current project through the bundled CLI:
+Generates or edits raster images for the current project through the bundled Rust CLI:
 
-- `scripts/image_gen.py generate`
-- `scripts/image_gen.py edit`
-- `scripts/image_gen.py generate-batch`
+- `cargo run --manifest-path rust_tools/image_gen_rs/Cargo.toml -- generate`
+- `cargo run --manifest-path rust_tools/image_gen_rs/Cargo.toml -- edit`
+- `cargo run --manifest-path rust_tools/image_gen_rs/Cargo.toml -- generate-batch`
+
+There is no Python execution path for this skill.
 
 ## Default execution path
 
-Use the bundled CLI as the default and canonical path for this skill library.
+Use the bundled Rust CLI as the default and canonical path for this skill library.
 
 - Endpoint: `http://127.0.0.1:8318/v1/responses`
 - Tool payload: `tools: [{"type": "image_generation"}]`
@@ -52,9 +56,9 @@ Reason:
 
 ## Rules
 
-- Use `scripts/image_gen.py` by default for all normal image generation and editing requests.
+- Use `rust_tools/image_gen_rs` by default for all normal image generation and editing requests.
 - Do not ask for OpenAI API credentials; this path does not use them.
-- Do not create one-off image generation runners when the bundled CLI already fits.
+- Do not create Python or one-off image generation runners when the bundled Rust CLI already fits.
 - Keep the existing command surface: `generate`, `edit`, `generate-batch`.
 - `edit` supports local images through `input_image` on the Responses API path.
 - `--mask` is currently unsupported on this direct path; do not imply otherwise.
@@ -72,7 +76,7 @@ CLI/runtime details live in:
 - `references/cli.md`
 - `references/image-api.md`
 - `references/codex-network.md`
-- `scripts/image_gen.py`
+- `rust_tools/image_gen_rs`
 
 ## When to use
 

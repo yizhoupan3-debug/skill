@@ -11,15 +11,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from framework_runtime.runtime_registry import framework_native_aliases
-from scripts.claude_statusline import render_statusline
-from scripts.sync_skills import write_generated_files
-
 ROUTER_RS_MANIFEST_PATH = PROJECT_ROOT / "scripts" / "router-rs" / "Cargo.toml"
 
 
 def _framework_native_aliases() -> dict[str, object]:
-    aliases = framework_native_aliases()
+    payload = _load_router_rs_json_output(
+        "--host-integration",
+        "export-runtime-registry",
+        "--repo-root",
+        str(PROJECT_ROOT),
+    )
+    aliases = payload.get("framework_native_aliases")
     assert isinstance(aliases, dict)
     return aliases
 
@@ -72,6 +74,17 @@ def sync_repo_host_entrypoints(repo_root: Path | None = None, *, apply: bool) ->
 
 def materialize_repo_host_entrypoints(repo_root: Path | None = None) -> dict[str, object]:
     return sync_repo_host_entrypoints(repo_root, apply=True)
+
+
+def render_statusline(repo_root: Path) -> str:
+    completed = subprocess.run(
+        _router_rs_command("--framework-statusline", "--repo-root", str(repo_root)),
+        cwd=PROJECT_ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return completed.stdout.strip()
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -385,6 +398,7 @@ def test_router_rs_exports_claude_hook_manifest() -> None:
     assert set(manifest["settings_hooks"]) == {
         "PreToolUse",
         "PostToolUse",
+        "PostToolUseFailure",
         "SessionEnd",
         "ConfigChange",
         "StopFailure",
@@ -517,6 +531,8 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert "Keep startup lean." in claude_entry
     assert "host-shell glue" in claude_entry
     assert "manual resume" in claude_entry
+    assert "GPT bridge rule" in claude_entry
+    assert "native Codex/OpenAI-compatible path" in claude_entry
     assert "Generated-first maintenance rule" in claude_entry
     assert "AGENT.md" in (tmp_path / "GEMINI.md").read_text(encoding="utf-8")
     settings = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
@@ -531,23 +547,23 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert settings == expected_settings
     assert settings["$schema"] == "https://json.schemastore.org/claude-code-settings.json"
     assert settings["allowedMcpServers"] == [
-        {"serverName": "browser-mcp"},
         {"serverName": "framework-mcp"},
-        {"serverName": "openaiDeveloperDocs"},
     ]
     assert "statusLine" not in settings
     assert codex_hooks == hook_projection["codex_hooks"]
     assert set(codex_hooks["hooks"]) == {
         "PreToolUse",
         "PermissionRequest",
+        "PostToolUse",
+        "SessionStart",
+        "UserPromptSubmit",
     }
     assert [entry["matcher"] for entry in codex_hooks["hooks"]["PreToolUse"]] == [
-        "Edit",
-        "MultiEdit",
-        "Write",
         "Bash",
     ]
     assert codex_hooks["hooks"]["PermissionRequest"][0]["matcher"] == "Bash"
+    assert codex_hooks["hooks"]["PostToolUse"][0]["matcher"] == "Bash"
+    assert "matcher" not in codex_hooks["hooks"]["UserPromptSubmit"][0]
     pre_tool_command = codex_hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
     permission_command = codex_hooks["hooks"]["PermissionRequest"][0]["hooks"][0]["command"]
     assert "framework_hook_bridge.py" not in pre_tool_command
@@ -560,6 +576,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert set(settings["hooks"]) == {
         "PreToolUse",
         "PostToolUse",
+        "PostToolUseFailure",
         "SessionEnd",
         "ConfigChange",
         "StopFailure",
@@ -589,7 +606,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     assert not any(item["if"] == "Bash(*.claude/*)" for item in bash_hooks)
     quality_hooks = settings["hooks"]["PreToolUse"][2]["hooks"]
     assert any(item["if"] == "Edit(/scripts/router-rs/src/**)" for item in quality_hooks)
-    assert any(item["if"] == "Write(/framework_runtime/src/**)" for item in quality_hooks)
+    assert any(item["if"] == "Write(/tools/browser-mcp/src/**)" for item in quality_hooks)
     assert any(item["if"] == "Edit(/scripts/install_skills.sh)" for item in quality_hooks)
     assert any(item["if"] == "Edit(/tests/**)" for item in quality_hooks)
     assert any(item["if"] == "Edit(/.claude/hooks/**)" for item in quality_hooks)
@@ -597,7 +614,7 @@ def test_materialize_repo_host_entrypoints_creates_shared_policy_and_host_proxie
     post_tool_hooks = settings["hooks"]["PostToolUse"][0]["hooks"]
     assert settings["hooks"]["PostToolUse"][0]["matcher"] == "Edit|MultiEdit|Write"
     assert any(item["if"] == "Edit(/scripts/router-rs/src/**)" for item in post_tool_hooks)
-    assert any(item["if"] == "Write(/framework_runtime/src/**)" for item in post_tool_hooks)
+    assert any(item["if"] == "Write(/tools/browser-mcp/src/**)" for item in post_tool_hooks)
     assert any(item["if"] == "Edit(/scripts/install_skills.sh)" for item in post_tool_hooks)
     assert any(item["if"] == "Edit(/tests/**)" for item in post_tool_hooks)
     assert any(item["if"] == "Edit(/.claude/hooks/**)" for item in post_tool_hooks)
@@ -1074,16 +1091,20 @@ def test_materialized_codex_hooks_match_codex_supported_event_surface(tmp_path: 
 
     hooks = json.loads((tmp_path / ".codex" / "hooks.json").read_text(encoding="utf-8"))
     assert hooks == _run_router_rs_claude_hook_projection()["codex_hooks"]
-    assert set(hooks["hooks"]) == {"PreToolUse", "PermissionRequest"}
-    assert "UserPromptSubmit" not in hooks["hooks"]
+    assert set(hooks["hooks"]) == {
+        "PreToolUse",
+        "PermissionRequest",
+        "PostToolUse",
+        "SessionStart",
+        "UserPromptSubmit",
+    }
     assert [entry["matcher"] for entry in hooks["hooks"]["PreToolUse"]] == [
-        "Edit",
-        "MultiEdit",
-        "Write",
         "Bash",
     ]
     assert all(entry["hooks"][0]["timeout"] == 8 for entry in hooks["hooks"]["PreToolUse"])
     assert hooks["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"] == 8
+    assert hooks["hooks"]["PostToolUse"][0]["hooks"][0]["timeout"] == 8
+    assert hooks["hooks"]["UserPromptSubmit"][0]["hooks"][0]["timeout"] == 8
 
 
 def test_materialized_codex_hooks_execute_via_router_rs_without_python_bridge(tmp_path: Path) -> None:
@@ -1243,7 +1264,7 @@ def test_codex_user_prompt_submit_compat_path_stays_silent(tmp_path: Path) -> No
     )
 
     assert result.returncode == 0
-    assert result.stdout == ""
+    assert "additionalContext" in result.stdout
     assert result.stderr == ""
 
 

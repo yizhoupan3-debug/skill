@@ -17,8 +17,7 @@ const RUNTIME_CHECKPOINT_CONTROL_PLANE_COMPILER_SCHEMA_VERSION: &str =
     "router-rs-runtime-checkpoint-control-plane-v1";
 const RUNTIME_CHECKPOINT_CONTROL_PLANE_COMPILER_AUTHORITY: &str =
     "rust-runtime-checkpoint-control-plane";
-const RUNTIME_CHECKPOINT_CONTROL_PLANE_SCHEMA_VERSION: &str =
-    "runtime-checkpoint-control-plane-v1";
+const RUNTIME_CHECKPOINT_CONTROL_PLANE_SCHEMA_VERSION: &str = "runtime-checkpoint-control-plane-v1";
 const DEFAULT_TRACE_SERVICE_AUTHORITY: &str = "rust-runtime-control-plane";
 const DEFAULT_TRACE_SERVICE_ROLE: &str = "trace-and-handoff";
 const DEFAULT_TRACE_SERVICE_PROJECTION: &str = "rust-native-projection";
@@ -85,7 +84,8 @@ fn stable_memory_key(path: &Path) -> Result<String, String> {
 }
 
 fn memory_storage_root() -> Result<PathBuf, String> {
-    let cwd = std::env::current_dir().map_err(|err| format!("resolve current dir failed: {err}"))?;
+    let cwd =
+        std::env::current_dir().map_err(|err| format!("resolve current dir failed: {err}"))?;
     let mut digest = Sha256::new();
     digest.update(cwd.display().to_string().as_bytes());
     let namespace = format!("{:x}", digest.finalize());
@@ -187,8 +187,10 @@ fn sqlite_read_text(path: &Path, db_path: &Path, storage_root: &Path) -> Result<
             "SELECT payload_text FROM {SQLITE_TABLE_NAME} WHERE payload_key = ?1 OR payload_key = ?2 LIMIT 1"
         ))
         .map_err(|err| format!("prepare sqlite read query failed: {err}"))?;
-    stmt.query_row(params![stable_key, legacy_key], |row| row.get::<_, String>(0))
-        .map_err(|err| format!("read sqlite payload failed for {}: {err}", path.display()))
+    stmt.query_row(params![stable_key, legacy_key], |row| {
+        row.get::<_, String>(0)
+    })
+    .map_err(|err| format!("read sqlite payload failed for {}: {err}", path.display()))
 }
 
 fn sqlite_write_text(
@@ -265,10 +267,7 @@ fn filesystem_write_text(path: &Path, payload_text: &str) -> Result<(), String> 
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("runtime-storage");
-    let tmp_path = path.with_file_name(format!(
-        ".{file_name}.tmp-{}-{nonce}",
-        std::process::id()
-    ));
+    let tmp_path = path.with_file_name(format!(".{file_name}.tmp-{}-{nonce}", std::process::id()));
     fs::write(&tmp_path, payload_text.as_bytes()).map_err(|err| {
         format!(
             "write runtime storage temp payload failed for {}: {err}",
@@ -345,7 +344,12 @@ pub(crate) fn storage_read_text(
             Err(format!("artifact does not exist: {}", path.display()))
         }
         Some(ResolvedStorageBackend::Memory) => fs::read_to_string(memory_artifact_path(path)?)
-            .map_err(|err| format!("read memory storage payload failed for {}: {err}", path.display())),
+            .map_err(|err| {
+                format!(
+                    "read memory storage payload failed for {}: {err}",
+                    path.display()
+                )
+            }),
         Some(ResolvedStorageBackend::Sqlite {
             db_path,
             storage_root,
@@ -400,8 +404,8 @@ pub(crate) fn resolve_storage_backend(paths: &[PathBuf]) -> Option<ResolvedStora
         }
     }
 
-    if let Some(db_path) = env_checkpoint_storage_db_path()
-        .filter(|path| path.is_absolute() && path.exists())
+    if let Some(db_path) =
+        env_checkpoint_storage_db_path().filter(|path| path.is_absolute() && path.exists())
     {
         for root in &roots {
             let backend = ResolvedStorageBackend::Sqlite {

@@ -159,9 +159,11 @@ Default to **incumbent-first** repair:
 
 ```bash
 cd /Users/joe/Documents/skill
-python3 scripts/check_skills.py --verify-codex-link
-python3 scripts/check_skills.py --include-system --verify-codex-link
-python3 scripts/sync_skills.py --apply
+cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
+  --skills-root skills \
+  --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
+  --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
+  --apply
 ```
 
 For local high-output runs, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) and prefer the corresponding `rtk ...` wrapper when raw output is not required.

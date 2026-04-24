@@ -25,6 +25,9 @@ framework policy instead of forking per-host routing or memory rules.
 
 - Prefer simplification before expansion: delete, merge, inline, or narrow an
   existing path before adding a new layer, branch, helper, or adapter.
+- For GPT-family models, prefer the native Codex/OpenAI-compatible path over a
+  Claude-host compatibility bridge unless the task is specifically testing
+  Claude Code behavior.
 - If two approaches both solve the task, prefer the one with fewer moving
   parts, fewer branching paths, and fewer files or surfaces to keep in sync.
 - Prefer removing obsolete compatibility, transition, or fallback logic over

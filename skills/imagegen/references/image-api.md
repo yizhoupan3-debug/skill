@@ -1,6 +1,6 @@
 # Responses image-generation quick reference
 
-This file documents the direct VibeProxy Local path used by `scripts/image_gen.py`.
+This file documents the direct VibeProxy Local path used by `rust_tools/image_gen_rs`.
 
 ## Endpoint
 

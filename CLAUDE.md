@@ -8,6 +8,10 @@ Treat `.claude/**` as host-shell glue, not repository truth.
 The recovery projection lives at `.codex/memory/CLAUDE_MEMORY.md` for `/refresh`
 or manual resume, not default startup injection.
 
+GPT bridge rule:
+
+- Claude Code may be pointed at a GPT model through an Anthropic-compatible bridge, but GPT-default work should prefer the native Codex/OpenAI-compatible path to avoid protocol translation and extra startup context.
+
 Generated-first maintenance rule:
 
 - Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then regenerate via `cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root "$PWD"`.

@@ -98,13 +98,13 @@ mode:
 
 For style-specific field order and normalization checks, read [references/style-policy.md](references/style-policy.md) when needed.
 
-## Bundled scripts
+## Bundled Rust CLI
 
-Prefer the bundled scripts before ad hoc manual checking when the input is already in `.bib`, LaTeX, Markdown, or plain-text manuscript form.
+Prefer the bundled Rust CLI before ad hoc manual checking when the input is already in `.bib`, LaTeX, Markdown, or plain-text manuscript form.
 
 ### 1. Reference audit + consistency check
 
-Use `scripts/citation_audit.py` for:
+Use `rust_tools/citation_tool_rs` `audit` for:
 - BibTeX de-duplication signals
 - missing required metadata fields
 - likely preprint detection
@@ -115,14 +115,14 @@ Use `scripts/citation_audit.py` for:
 Example:
 
 ```bash
-python3 /Users/joe/Documents/skill/skills/citation-management/scripts/citation_audit.py \
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/citation_tool_rs/Cargo.toml --bin citation -- audit \
   --bib refs.bib \
   --manuscript draft.tex
 ```
 
 ### 2. Claim-to-citation lint
 
-Use `scripts/claim_citation_lint.py` when the user mainly wants prose-side tightening:
+Use `rust_tools/citation_tool_rs` `claim-lint` when the user mainly wants prose-side tightening:
 - sentence-ending citation stacks
 - dense citation clusters
 - places where one sentence likely needs claim-level remapping
@@ -130,13 +130,13 @@ Use `scripts/claim_citation_lint.py` when the user mainly wants prose-side tight
 Example:
 
 ```bash
-python3 /Users/joe/Documents/skill/skills/citation-management/scripts/claim_citation_lint.py \
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/citation_tool_rs/Cargo.toml --bin citation -- claim-lint \
   --manuscript draft.tex
 ```
 
 ### 3. Base style rendering
 
-Use `scripts/render_reference_style.py` only **after** metadata is normalized. It provides a base formatter for:
+Use `rust_tools/citation_tool_rs` `render` only **after** metadata is normalized. It provides a base formatter for:
 - APA
 - IEEE
 - ACM
@@ -147,7 +147,7 @@ This is a **base conversion helper**, not a substitute for final venue-template 
 Example:
 
 ```bash
-python3 /Users/joe/Documents/skill/skills/citation-management/scripts/render_reference_style.py \
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/citation_tool_rs/Cargo.toml --bin citation -- render \
   --bib refs.bib \
   --style ieee
 ```

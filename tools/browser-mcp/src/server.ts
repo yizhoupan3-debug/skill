@@ -5,6 +5,8 @@ import * as z from 'zod';
 import { normalizeError } from './errors.js';
 import { BrowserRuntime } from './runtime.js';
 
+const toolOutputSchema = z.object({}).passthrough();
+
 // ---------------------------------------------------------------------------
 // Result builders
 // ---------------------------------------------------------------------------
@@ -15,9 +17,11 @@ import { BrowserRuntime } from './runtime.js';
  * @returns MCP call result.
  */
 function createSuccessResult(data: unknown): CallToolResult {
+  const structuredContent =
+    data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : { value: data };
   return {
     content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-    structuredContent: data as Record<string, unknown>,
+    structuredContent,
   };
 }
 
@@ -96,6 +100,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         url: z.string().url(),
         newTab: z.boolean().optional(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -115,6 +120,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         action: z.enum(['list', 'select']),
         tabId: z.string().optional(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -134,6 +140,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         target: z.enum(['tab', 'session']),
         tabId: z.string().optional(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -162,6 +169,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         maxElements: z.number().int().positive().max(100).optional(),
         textBudget: z.number().int().positive().max(4000).optional(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -184,6 +192,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         scopeRef: z.string().optional(),
         limit: z.number().int().positive().max(100).optional(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -204,6 +213,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         scopeRef: z.string().optional(),
         maxChars: z.number().int().positive().max(8000).optional(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -227,6 +237,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         resourceTypes: z.array(z.string()).optional(),
         limit: z.number().int().positive().max(100).optional(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -253,6 +264,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         scopeRef: z.string().optional(),
         fullPage: z.boolean().optional(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -278,6 +290,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         ref: z.string(),
         timeoutMs: z.number().int().positive().max(60000).optional(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -299,6 +312,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         value: z.string(),
         submit: z.boolean().optional(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -318,6 +332,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         tabId: z.string().optional(),
         key: z.string(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -348,6 +363,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         }),
         timeoutMs: z.number().int().positive().max(60000).optional(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -372,6 +388,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
       inputSchema: z.object({
         sessionPath: z.string().optional(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -392,6 +409,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
       inputSchema: z.object({
         sessionPath: z.string(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -418,6 +436,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         limit: z.number().int().positive().max(1000).optional(),
         heartbeat: z.boolean().optional(),
       }),
+      outputSchema: toolOutputSchema,
     },
     async (input) => {
       try {
@@ -436,6 +455,7 @@ export function createBrowserMcpServer(runtime = new BrowserRuntime()): McpServe
         'Return runtime health information: active sessions, tabs, network buffer size, ' +
         'screenshot count, and version. Useful for self-inspection and debugging.',
       inputSchema: z.object({}),
+      outputSchema: toolOutputSchema,
     },
     async () => {
       try {

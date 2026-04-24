@@ -8,13 +8,6 @@
         "../.."
       ],
       "cwd": "../.."
-    },
-    "browser-mcp": {
-      "command": "node",
-      "args": [
-        "./tools/browser-mcp/dist/index.js"
-      ],
-      "cwd": "./tools/browser-mcp"
     }
   }
 }
