@@ -182,7 +182,7 @@ slices as follows before expensive runs.
 | Paper drafting or revision | `paper-writing`, `paper-reviser` |
 | Paper review or logic review | `paper-reviewer`, `paper-logic` |
 | Citation cleanup | `citation-management` |
-| Data analysis or notebooks | `jupyter-notebook`, `python-pro` |
+| Data analysis or notebooks | `jupyter-notebook`, language-specific execution owner |
 
 ## Default execution co-routing
 

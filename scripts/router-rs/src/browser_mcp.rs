@@ -10,7 +10,6 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message, WebSocket};
-use url::Url;
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
 const SERVER_NAME: &str = "browser-mcp";
@@ -506,13 +505,9 @@ impl BrowserRuntime {
             }
         };
 
-        let cdp = self.cdp_mut(&session_id)?;
         let session_cdp_id = self.tab_session_id(&session_id, &tab_id)?;
-        cdp.call(
-            Some(&session_cdp_id),
-            "Page.navigate",
-            json!({"url": url}),
-        )?;
+        let cdp = self.cdp_mut(&session_id)?;
+        cdp.call(Some(&session_cdp_id), "Page.navigate", json!({"url": url}))?;
         self.wait_for_page_ready(&session_id, &tab_id, DEFAULT_WAIT_MS)?;
         self.refresh_snapshot(&session_id, &tab_id)?;
         if let Some(session) = self.sessions.get_mut(&session_id) {
@@ -759,7 +754,9 @@ impl BrowserRuntime {
                 "document.body ? (document.body.innerText || '').replace(/\\s+$/g, '').trim() : ''",
             )?
         };
-        Ok(json!({"text": truncate_text(&text, max_chars), "tab": self.tab_view(&session_id, &tab_id)?}))
+        Ok(
+            json!({"text": truncate_text(&text, max_chars), "tab": self.tab_view(&session_id, &tab_id)?}),
+        )
     }
 
     fn get_network(&mut self, input: &Value) -> Result<Value, Value> {
@@ -808,7 +805,10 @@ impl BrowserRuntime {
         };
         let image_id = format!("img_{}_{}", now_millis(), self.screenshot_counter + 1);
         self.screenshot_counter += 1;
-        let screenshot_dir = self.repo_root.join("output").join("browser-mcp-screenshots");
+        let screenshot_dir = self
+            .repo_root
+            .join("output")
+            .join("browser-mcp-screenshots");
         fs::create_dir_all(&screenshot_dir).map_err(|err| {
             browser_error(
                 "SCREENSHOT_FAILED",
@@ -1021,7 +1021,10 @@ impl BrowserRuntime {
                 self.wait_for_js_condition(
                     &session_id,
                     &tab_id,
-                    &format!("!!document.querySelector({})", json_string_literal(&selector)),
+                    &format!(
+                        "!!document.querySelector({})",
+                        json_string_literal(&selector)
+                    ),
                     timeout_ms,
                 )?;
             }
@@ -1038,7 +1041,10 @@ impl BrowserRuntime {
                 self.wait_for_js_condition(
                     &session_id,
                     &tab_id,
-                    &format!("!document.querySelector({})", json_string_literal(&selector)),
+                    &format!(
+                        "!document.querySelector({})",
+                        json_string_literal(&selector)
+                    ),
                     timeout_ms,
                 )?;
             }
@@ -1111,7 +1117,9 @@ impl BrowserRuntime {
                 true,
             )
         })?;
-        Ok(json!({"ok": true, "path": session_path.to_string_lossy(), "savedAt": current_local_timestamp()}))
+        Ok(
+            json!({"ok": true, "path": session_path.to_string_lossy(), "savedAt": current_local_timestamp()}),
+        )
     }
 
     fn restore_session(&mut self, input: &Value) -> Result<Value, Value> {
@@ -1119,7 +1127,10 @@ impl BrowserRuntime {
         let raw = fs::read_to_string(&session_path).map_err(|err| {
             browser_error(
                 "INVALID_INPUT",
-                &format!("Session snapshot not found: {} ({err})", session_path.display()),
+                &format!(
+                    "Session snapshot not found: {} ({err})",
+                    session_path.display()
+                ),
                 &["call browser_save_session first", "verify the path"],
                 true,
             )
@@ -1141,7 +1152,9 @@ impl BrowserRuntime {
             let cdp = self.cdp_mut(&session_id)?;
             cdp.call(None, "Storage.setCookies", json!({"cookies": cookies}))?;
         }
-        Ok(json!({"ok": true, "restoredFrom": session_path.to_string_lossy(), "sessionId": session_id}))
+        Ok(
+            json!({"ok": true, "restoredFrom": session_path.to_string_lossy(), "sessionId": session_id}),
+        )
     }
 
     fn get_attached_runtime_events(&mut self, input: &Value) -> Result<Value, Value> {
@@ -1204,13 +1217,17 @@ impl BrowserRuntime {
             }
         }
         let screenshot_count = fs::read_dir(
-            self.repo_root.join("output").join("browser-mcp-screenshots"),
+            self.repo_root
+                .join("output")
+                .join("browser-mcp-screenshots"),
         )
         .ok()
         .map(|entries| {
             entries
                 .filter_map(Result::ok)
-                .filter(|entry| entry.path().extension().and_then(|value| value.to_str()) == Some("png"))
+                .filter(|entry| {
+                    entry.path().extension().and_then(|value| value.to_str()) == Some("png")
+                })
                 .count()
         })
         .unwrap_or(0);
@@ -1267,7 +1284,7 @@ impl BrowserRuntime {
                 false,
             )
         })?;
-        let mut child = Command::new(&chrome_path)
+        let child = Command::new(&chrome_path)
             .arg(format!("--remote-debugging-port={port}"))
             .arg(format!("--user-data-dir={}", user_data_dir.display()))
             .arg("--headless=new")
@@ -1310,9 +1327,11 @@ impl BrowserRuntime {
     }
 
     fn create_tab(&mut self, session_id: &str) -> Result<String, Value> {
-        let target = self
-            .cdp_mut(session_id)?
-            .call(None, "Target.createTarget", json!({"url": "about:blank"}))?;
+        let target = self.cdp_mut(session_id)?.call(
+            None,
+            "Target.createTarget",
+            json!({"url": "about:blank"}),
+        )?;
         let target_id = target
             .get("targetId")
             .and_then(Value::as_str)
@@ -1602,7 +1621,10 @@ impl BrowserRuntime {
     }
 
     fn detect_loading_state(&mut self, session_id: &str, tab_id: &str) -> Result<String, Value> {
-        match self.evaluate_string(session_id, tab_id, "document.readyState")?.as_str() {
+        match self
+            .evaluate_string(session_id, tab_id, "document.readyState")?
+            .as_str()
+        {
             "loading" => Ok("loading".to_string()),
             "interactive" => Ok("domcontentloaded".to_string()),
             _ => Ok("idle".to_string()),
@@ -1622,7 +1644,10 @@ impl BrowserRuntime {
                 role: value_str(item.get("role")).to_string(),
                 name: value_str(item.get("name")).to_string(),
                 text: value_str(item.get("text")).to_string(),
-                visible: item.get("visible").and_then(Value::as_bool).unwrap_or(false),
+                visible: item
+                    .get("visible")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
                 enabled: item.get("enabled").and_then(Value::as_bool).unwrap_or(true),
                 tag: value_str(item.get("tag")).to_string(),
                 test_id: item
@@ -1647,10 +1672,13 @@ impl BrowserRuntime {
             .take(DEFAULT_MAX_ELEMENTS * 3)
             .map(|descriptor| {
                 let fingerprint = create_fingerprint(&descriptor, &mut fingerprint_counts);
-                let ref_id = previous_ref_map.get(&fingerprint).cloned().unwrap_or_else(|| {
-                    self.ref_counter += 1;
-                    format!("el_{}", self.ref_counter)
-                });
+                let ref_id = previous_ref_map
+                    .get(&fingerprint)
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        self.ref_counter += 1;
+                        format!("el_{}", self.ref_counter)
+                    });
                 InteractiveElement {
                     ref_id,
                     page_revision: 0,
@@ -1708,7 +1736,12 @@ impl BrowserRuntime {
         Ok(element.selector.clone())
     }
 
-    fn element_clip(&mut self, session_id: &str, tab_id: &str, ref_id: &str) -> Result<Value, Value> {
+    fn element_clip(
+        &mut self,
+        session_id: &str,
+        tab_id: &str,
+        ref_id: &str,
+    ) -> Result<Value, Value> {
         let selector = self.selector_for_ref(session_id, tab_id, ref_id)?;
         let payload = self.evaluate_json(
             session_id,
@@ -1824,11 +1857,10 @@ impl BrowserRuntime {
     }
 
     fn drain_cdp_events(&mut self, session_id: &str, timeout_ms: u64) -> Result<(), Value> {
-        let mut events = Vec::new();
-        {
+        let events = {
             let cdp = self.cdp_mut(session_id)?;
-            events = cdp.drain_events(Duration::from_millis(timeout_ms))?;
-        }
+            cdp.drain_events(Duration::from_millis(timeout_ms))?
+        };
         for event in events {
             self.handle_cdp_event(session_id, event);
         }
@@ -1913,41 +1945,40 @@ impl BrowserRuntime {
 }
 
 impl CdpClient {
-    fn http_json(&self, path: &str) -> Result<Value, Value> {
-        let output = Command::new("curl")
-            .arg("--silent")
-            .arg("--show-error")
-            .arg("--max-time")
-            .arg("3")
-            .arg(format!("http://127.0.0.1:{}{path}", self.port))
-            .output()
-            .map_err(|err| {
+    fn connect(port: u16) -> Result<Self, Value> {
+        let websocket_url = cdp_version_json(port)?
+            .get("webSocketDebuggerUrl")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| {
                 browser_error(
-                    "CDP_HTTP_FAILED",
-                    &format!("launch curl failed: {err}"),
-                    &["verify curl is available"],
-                    false,
+                    "CDP_CONNECT_FAILED",
+                    "Chrome did not expose a browser websocket URL.",
+                    &["retry browser_open"],
+                    true,
                 )
             })?;
-        if !output.status.success() {
-            return Err(browser_error(
-                "CDP_HTTP_FAILED",
-                &String::from_utf8_lossy(&output.stderr),
-                &["verify Chrome remote debugging is reachable"],
-                true,
-            ));
-        }
-        serde_json::from_slice(&output.stdout).map_err(|err| {
+        let (socket, _) = connect(websocket_url.as_str()).map_err(|err| {
             browser_error(
-                "CDP_HTTP_FAILED",
-                &format!("parse CDP HTTP response failed: {err}"),
-                &["retry the browser action"],
+                "CDP_CONNECT_FAILED",
+                &format!("connect Chrome CDP websocket failed: {err}"),
+                &["retry browser_open"],
                 true,
             )
+        })?;
+        Ok(Self {
+            port,
+            next_id: 0,
+            socket,
         })
     }
 
-    fn call(&mut self, session_id: Option<&str>, method: &str, params: Value) -> Result<Value, Value> {
+    fn call(
+        &mut self,
+        session_id: Option<&str>,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, Value> {
         self.next_id += 1;
         let id = self.next_id;
         let mut message = Map::new();
@@ -1955,15 +1986,24 @@ impl CdpClient {
         message.insert("method".to_string(), Value::String(method.to_string()));
         message.insert("params".to_string(), params);
         if let Some(session_id) = session_id {
-            message.insert("sessionId".to_string(), Value::String(session_id.to_string()));
+            message.insert(
+                "sessionId".to_string(),
+                Value::String(session_id.to_string()),
+            );
         }
-        let output = self.run_cdp_tool(&json!({"message": Value::Object(message)}), CDP_RECV_TIMEOUT)?;
-        let mut pending_events = output
-            .get("events")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        for event in pending_events.drain(..) {
+        self.socket
+            .send(Message::Text(Value::Object(message).to_string()))
+            .map_err(|err| {
+                browser_error(
+                    "CDP_CALL_FAILED",
+                    &format!("{method} send failed: {err}"),
+                    &["retry after refreshing browser state"],
+                    true,
+                )
+            })?;
+        self.set_read_timeout(CDP_RECV_TIMEOUT)?;
+        loop {
+            let event = self.read_message()?;
             if event.get("id").and_then(Value::as_u64) == Some(id) {
                 if let Some(error) = event.get("error") {
                     return Err(browser_error(
@@ -1976,156 +2016,96 @@ impl CdpClient {
                 return Ok(event.get("result").cloned().unwrap_or_else(|| json!({})));
             }
         }
-        Err(browser_error(
-            "CDP_CALL_FAILED",
-            &format!("{method} did not return a matching response."),
-            &["retry after refreshing browser state"],
-            true,
-        ))
     }
 
     fn drain_events(&mut self, timeout: Duration) -> Result<Vec<Value>, Value> {
-        let output = self.run_cdp_tool(&json!({"drain": true}), timeout)?;
-        Ok(output
-            .get("events")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default())
+        self.set_read_timeout(timeout)?;
+        let mut events = Vec::new();
+        loop {
+            match self.socket.read() {
+                Ok(Message::Text(text)) => {
+                    if let Ok(value) = serde_json::from_str::<Value>(&text) {
+                        events.push(value);
+                    }
+                }
+                Ok(Message::Binary(_)) | Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
+                Ok(Message::Close(_)) => break,
+                Ok(Message::Frame(_)) => {}
+                Err(tungstenite::Error::Io(err))
+                    if err.kind() == io::ErrorKind::WouldBlock
+                        || err.kind() == io::ErrorKind::TimedOut =>
+                {
+                    break;
+                }
+                Err(err) => {
+                    return Err(browser_error(
+                        "CDP_CALL_FAILED",
+                        &format!("read CDP event failed: {err}"),
+                        &["retry after refreshing browser state"],
+                        true,
+                    ))
+                }
+            }
+        }
+        Ok(events)
     }
 
-    fn run_cdp_tool(&self, payload: &Value, timeout: Duration) -> Result<Value, Value> {
-        let websocket_url = self
-            .http_json("/json/version")?
-            .get("webSocketDebuggerUrl")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .ok_or_else(|| {
-                browser_error(
-                    "CDP_CONNECT_FAILED",
-                    "Chrome did not expose a browser websocket URL.",
-                    &["retry browser_open"],
-                    true,
-                )
-            })?;
-        let script = cdp_tool_script();
-        let mut child = Command::new(&self.chrome_path)
-            .arg("--headless=new")
-            .arg("--disable-gpu")
-            .arg("--remote-allow-origins=*")
-            .arg(format!("--virtual-time-budget={}", timeout.as_millis().max(1000)))
-            .arg(format!(
-                "data:text/html,<script>{}</script>",
-                percent_encode_minimal(&script)
-            ))
-            .arg(format!("--cdp-url={websocket_url}"))
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|err| {
-                browser_error(
-                    "CDP_CONNECT_FAILED",
-                    &format!("launch CDP helper failed: {err}"),
-                    &["retry browser_open"],
-                    true,
-                )
-            })?;
-        if let Some(stdin) = child.stdin.as_mut() {
-            stdin.write_all(payload.to_string().as_bytes()).map_err(|err| {
-                browser_error(
-                    "CDP_CONNECT_FAILED",
-                    &format!("write CDP helper stdin failed: {err}"),
-                    &["retry browser_open"],
-                    true,
-                )
-            })?;
+    fn read_message(&mut self) -> Result<Value, Value> {
+        loop {
+            match self.socket.read() {
+                Ok(Message::Text(text)) => {
+                    return serde_json::from_str::<Value>(&text).map_err(|err| {
+                        browser_error(
+                            "CDP_CALL_FAILED",
+                            &format!("parse CDP message failed: {err}"),
+                            &["retry after refreshing browser state"],
+                            true,
+                        )
+                    });
+                }
+                Ok(Message::Binary(_)) | Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
+                Ok(Message::Close(_)) => {
+                    return Err(browser_error(
+                        "CDP_CALL_FAILED",
+                        "Chrome CDP websocket closed.",
+                        &["retry browser_open"],
+                        true,
+                    ))
+                }
+                Ok(Message::Frame(_)) => {}
+                Err(err) => {
+                    return Err(browser_error(
+                        "CDP_CALL_FAILED",
+                        &format!("read CDP response failed: {err}"),
+                        &["retry after refreshing browser state"],
+                        true,
+                    ))
+                }
+            }
         }
-        let output = child.wait_with_output().map_err(|err| {
-            browser_error(
-                "CDP_CONNECT_FAILED",
-                &format!("wait CDP helper failed: {err}"),
-                &["retry browser_open"],
-                true,
-            )
-        })?;
-        if !output.status.success() {
-            return Err(browser_error(
-                "CDP_CONNECT_FAILED",
-                "CDP helper exited with a non-zero status.",
-                &["retry browser_open"],
-                true,
-            ));
-        }
-        serde_json::from_slice(&output.stdout).map_err(|err| {
-            browser_error(
-                "CDP_CONNECT_FAILED",
-                &format!("parse CDP helper output failed: {err}"),
-                &["retry browser_open"],
-                true,
-            )
-        })
     }
-}
 
-fn cdp_tool_script() -> String {
-    r#"
-const params = new URL(location.href).searchParams;
-const url = params.get('--cdp-url') || params.get('cdp-url') || [...params.keys()].find(k=>k.startsWith('ws://')||k.startsWith('wss://')) || '';
-let input = '';
-const reader = new FileReader();
-reader.onload = async () => {
-  try {
-    input = reader.result || '{}';
-    const payload = JSON.parse(input || '{}');
-    const ws = new WebSocket(url);
-    const events = [];
-    const done = await new Promise((resolve) => {
-      const timer = setTimeout(() => resolve({events}), 4000);
-      ws.onmessage = (ev) => {
-        const msg = JSON.parse(ev.data);
-        events.push(msg);
-        if (payload.message && msg.id === payload.message.id) {
-          clearTimeout(timer);
-          resolve({events});
-          ws.close();
+    fn set_read_timeout(&mut self, timeout: Duration) -> Result<(), Value> {
+        match self.socket.get_mut() {
+            MaybeTlsStream::Plain(stream) => {
+                stream.set_read_timeout(Some(timeout)).map_err(|err| {
+                    browser_error(
+                        "CDP_CALL_FAILED",
+                        &format!("set CDP timeout failed: {err}"),
+                        &["retry browser_open"],
+                        true,
+                    )
+                })
+            }
+            _ => Ok(()),
         }
-      };
-      ws.onerror = () => {
-        clearTimeout(timer);
-        resolve({events, error: 'websocket error'});
-      };
-      ws.onopen = () => {
-        if (payload.message) {
-          ws.send(JSON.stringify(payload.message));
-        } else {
-          setTimeout(() => {
-            clearTimeout(timer);
-            resolve({events});
-            ws.close();
-          }, 250);
-        }
-      };
-    });
-    document.body.textContent = JSON.stringify(done);
-  } catch (error) {
-    document.body.textContent = JSON.stringify({error: String(error), events: []});
-  }
-};
-reader.readAsText(new Blob([]));
-"#
-    .to_string()
+    }
 }
 
 fn wait_for_cdp(port: u16) -> Result<(), Value> {
     let deadline = SystemTime::now() + Duration::from_secs(8);
     while SystemTime::now() < deadline {
-        let status = Command::new("curl")
-            .arg("--silent")
-            .arg("--max-time")
-            .arg("1")
-            .arg(format!("http://127.0.0.1:{port}/json/version"))
-            .status();
-        if status.ok().is_some_and(|status| status.success()) {
+        if cdp_version_json(port).is_ok() {
             return Ok(());
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -2136,6 +2116,24 @@ fn wait_for_cdp(port: u16) -> Result<(), Value> {
         &["retry browser_open"],
         false,
     ))
+}
+
+fn cdp_version_json(port: u16) -> Result<Value, Value> {
+    cdp_http_json(port, "/json/version")
+}
+
+fn cdp_http_json(port: u16, path: &str) -> Result<Value, Value> {
+    reqwest::blocking::get(format!("http://127.0.0.1:{port}{path}"))
+        .and_then(|response| response.error_for_status())
+        .and_then(|response| response.json::<Value>())
+        .map_err(|err| {
+            browser_error(
+                "CDP_HTTP_FAILED",
+                &format!("Chrome CDP HTTP request failed: {err}"),
+                &["verify Chrome remote debugging is reachable"],
+                true,
+            )
+        })
 }
 
 fn find_chrome_binary() -> Result<PathBuf, Value> {
@@ -2239,7 +2237,10 @@ fn create_fingerprint(
     if let Some(test_id) = descriptor.test_id.as_ref() {
         return format!("tid::{test_id}");
     }
-    let base = format!("{}::{}::{}", descriptor.role, descriptor.name, descriptor.tag);
+    let base = format!(
+        "{}::{}::{}",
+        descriptor.role, descriptor.name, descriptor.tag
+    );
     let count = counts.entry(base.clone()).or_insert(0);
     *count += 1;
     if *count == 1 {
@@ -2417,7 +2418,10 @@ fn optional_u64(payload: &Value, key: &str) -> Result<Option<u64>, Value> {
         }),
         Some(other) => Err(browser_error(
             "INVALID_INPUT",
-            &format!("Expected integer for '{key}', got {}", json_type_name(other)),
+            &format!(
+                "Expected integer for '{key}', got {}",
+                json_type_name(other)
+            ),
             &[&format!("pass '{key}' as an integer")],
             true,
         )),
@@ -2472,7 +2476,10 @@ fn truncate_text(text: &str, max_chars: usize) -> String {
     if text.chars().count() <= max_chars {
         return text.to_string();
     }
-    let mut output = text.chars().take(max_chars.saturating_sub(1)).collect::<String>();
+    let mut output = text
+        .chars()
+        .take(max_chars.saturating_sub(1))
+        .collect::<String>();
     output.push_str("...");
     output
 }
@@ -2512,18 +2519,6 @@ fn json_string_literal(value: &str) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
 }
 
-fn percent_encode_minimal(value: &str) -> String {
-    value
-        .bytes()
-        .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                (byte as char).to_string()
-            }
-            _ => format!("%{byte:02X}"),
-        })
-        .collect()
-}
-
 fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
     let mut output = Vec::new();
     let mut buffer = 0u32;
@@ -2555,7 +2550,8 @@ mod tests {
     use std::io::Cursor;
 
     fn temp_root(label: &str) -> PathBuf {
-        let path = std::env::temp_dir().join(format!("router-rs-browser-mcp-{label}-{}", now_millis()));
+        let path =
+            std::env::temp_dir().join(format!("router-rs-browser-mcp-{label}-{}", now_millis()));
         fs::create_dir_all(&path).expect("create temp root");
         path
     }
@@ -2566,8 +2562,14 @@ mod tests {
         let mut runtime = BrowserRuntime::new(repo_root.clone());
         let input = Cursor::new(
             [
-                serde_json::to_string(&json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})).unwrap(),
-                serde_json::to_string(&json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})).unwrap(),
+                serde_json::to_string(
+                    &json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}),
+                )
+                .unwrap(),
+                serde_json::to_string(
+                    &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}),
+                )
+                .unwrap(),
             ]
             .join("\n"),
         );

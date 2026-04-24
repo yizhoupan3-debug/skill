@@ -117,8 +117,11 @@ Example:
 ```bash
 cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/citation_tool_rs/Cargo.toml --bin citation -- audit \
   --bib refs.bib \
-  --manuscript draft.tex
+  --manuscript draft.tex \
+  --fail-on blocking
 ```
+
+Use `--fail-on blocking` when broken bibliography links or incomplete required metadata should fail the run. Use `--fail-on warnings` for stricter CI-style checks that also fail on preprints, missing DOI, uncited references, or dense citation clusters.
 
 ### 2. Claim-to-citation lint
 
@@ -131,8 +134,11 @@ Example:
 
 ```bash
 cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/citation_tool_rs/Cargo.toml --bin citation -- claim-lint \
-  --manuscript draft.tex
+  --manuscript draft.tex \
+  --fail-on-findings
 ```
+
+Use `--fail-on-findings` when dense or sentence-ending citation clusters should block handoff instead of only being reported.
 
 ### 3. Base style rendering
 

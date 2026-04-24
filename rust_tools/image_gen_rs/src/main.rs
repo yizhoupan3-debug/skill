@@ -335,6 +335,11 @@ fn validate_shared(args: &SharedArgs) -> Result<()> {
             bail!("background must be one of transparent, opaque, or auto");
         }
     }
+    if let Some(compression) = args.output_compression {
+        if compression > 100 {
+            bail!("output-compression must be between 0 and 100");
+        }
+    }
     Ok(())
 }
 
@@ -449,14 +454,12 @@ fn build_output_paths(
 ) -> Result<Vec<PathBuf>> {
     let ext = format!(".{output_format}");
     if let Some(out_dir) = out_dir {
-        fs::create_dir_all(out_dir)?;
         return Ok((1..=count)
             .map(|idx| out_dir.join(format!("image_{idx}{ext}")))
             .collect());
     }
     let mut out_path = out.to_path_buf();
     if out_path.exists() && out_path.is_dir() {
-        fs::create_dir_all(&out_path)?;
         return Ok((1..=count)
             .map(|idx| out_path.join(format!("image_{idx}{ext}")))
             .collect());
@@ -757,7 +760,7 @@ fn decode_write_and_downscale(
         if let Some(parent) = out_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let raw = BASE64.decode(image_b64)?;
+        let raw = decode_image_result(image_b64)?;
         fs::write(out_path, &raw)?;
         println!("Wrote {}", out_path.display());
 
@@ -778,6 +781,17 @@ fn decode_write_and_downscale(
         }
     }
     Ok(())
+}
+
+fn decode_image_result(value: &str) -> Result<Vec<u8>> {
+    let encoded = value
+        .split_once(',')
+        .filter(|(prefix, _)| prefix.starts_with("data:image/") && prefix.contains(";base64"))
+        .map(|(_, payload)| payload)
+        .unwrap_or(value);
+    BASE64
+        .decode(encoded)
+        .context("failed to decode image_generation_call result")
 }
 
 fn derive_downscale_path(path: &Path, suffix: &str) -> PathBuf {
@@ -970,14 +984,18 @@ fn job_output_paths(
     n: usize,
     explicit_out: Option<&str>,
 ) -> Result<Vec<PathBuf>> {
-    fs::create_dir_all(out_dir)?;
     let ext = format!(".{output_format}");
     let base = if let Some(explicit) = explicit_out {
         let mut path = PathBuf::from(explicit);
         if path.extension().is_none() {
             path.set_extension(output_format);
         }
-        out_dir.join(path.file_name().unwrap_or_default())
+        let file_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| anyhow!("job out must include a file name"))?;
+        out_dir.join(file_name)
     } else {
         out_dir.join(format!("{idx:03}-{}{}", slugify(prompt), ext))
     };
@@ -1013,7 +1031,12 @@ fn slugify(value: &str) -> String {
             break;
         }
     }
-    slug.trim_matches('-').to_string()
+    let slug = slug.trim_matches('-');
+    if slug.is_empty() {
+        "image".to_string()
+    } else {
+        slug.to_string()
+    }
 }
 
 fn print_json(value: &Value) -> Result<()> {
