@@ -68,6 +68,7 @@ cargo run --manifest-path "$IMAGE_GEN_MANIFEST" -- generate-batch \
 - Quality: `auto`
 - Output format: `png`
 - Default output path: `output/imagegen/output.png`
+- `--dry-run` is preview-only and does not create output directories.
 
 ## Guardrails
 
@@ -116,9 +117,11 @@ cargo run --manifest-path "$IMAGE_GEN_MANIFEST" -- generate-batch \
 
 ## Notes
 
-- `--n` is preserved for compatibility; the script realizes multiple variants by sending repeated single-image Responses calls.
+- `--n` is preserved for compatibility; the CLI realizes multiple variants by sending repeated single-image Responses calls.
+- `--out-dir` is available on `generate`, `edit`, and `generate-batch`; batch output names use prompt-derived slugs and fall back to `image` for non-ASCII prompts.
 - `edit` accepts repeated `--image` flags and sends them as ordered `input_image` items.
 - `input-fidelity` is edit-only.
+- `--output-compression` must be between `0` and `100`.
 - Downscaling is handled by Rust and requires no Python/Pillow dependency.
 
 ## See also

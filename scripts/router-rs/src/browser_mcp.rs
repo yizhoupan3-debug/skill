@@ -388,7 +388,7 @@ struct SessionRecord {
     viewport: ViewportSize,
     current_tab_id: Option<String>,
     tabs: HashMap<String, TabRecord>,
-    browser_pid: u32,
+    _browser_pid: u32,
     user_data_dir: PathBuf,
     cdp: CdpClient,
 }
@@ -438,7 +438,7 @@ struct ElementDescriptor {
     enabled: bool,
     tag: String,
     test_id: Option<String>,
-    ordinal: usize,
+    _ordinal: usize,
     selector: String,
 }
 
@@ -452,7 +452,7 @@ struct PageSnapshot {
     interactive_elements: Vec<InteractiveElement>,
     text_content: String,
     text_lines: Vec<String>,
-    created_at: u128,
+    _created_at: u128,
 }
 
 #[derive(Clone, Debug)]
@@ -470,7 +470,7 @@ struct NetworkEvent {
 }
 
 struct CdpClient {
-    port: u16,
+    _port: u16,
     next_id: u64,
     socket: WebSocket<MaybeTlsStream<TcpStream>>,
 }
@@ -1616,7 +1616,7 @@ impl BrowserRuntime {
             interactive_elements,
             text_lines: to_text_lines(&text_content),
             text_content,
-            created_at: now_millis(),
+            _created_at: now_millis(),
         })
     }
 
@@ -1967,7 +1967,7 @@ impl CdpClient {
             )
         })?;
         Ok(Self {
-            port,
+            _port: port,
             next_id: 0,
             socket,
         })

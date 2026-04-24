@@ -1883,6 +1883,21 @@ fn build_framework_server_block(repo_root: &Path) -> String {
     )
 }
 
+fn build_browser_server_block(repo_root: &Path) -> String {
+    let binary_path = repo_root
+        .join("scripts")
+        .join("router-rs")
+        .join("target")
+        .join("release")
+        .join("router-rs");
+    format!(
+        "[mcp_servers.browser-mcp]\ncommand = \"{}\"\nargs = [\"--browser-mcp-stdio\", \"--repo-root\", \"{}\"]\ncwd = \"{}\"",
+        binary_path.to_string_lossy(),
+        repo_root.to_string_lossy(),
+        repo_root.to_string_lossy(),
+    )
+}
+
 fn ensure_codex_hooks_feature(config_path: &Path) -> Result<bool, String> {
     let content = read_text_if_exists(config_path)?.unwrap_or_default();
     let feature_line = "codex_hooks = true";
