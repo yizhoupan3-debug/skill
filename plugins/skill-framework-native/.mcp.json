@@ -1,8 +1,9 @@
 {
   "mcpServers": {
     "framework-mcp": {
-      "command": "./scripts/router-rs/target/release/router-rs",
+      "command": "./scripts/router-rs/run_router_rs.sh",
       "args": [
+        "./scripts/router-rs/Cargo.toml",
         "--framework-mcp-stdio",
         "--repo-root",
         "../.."

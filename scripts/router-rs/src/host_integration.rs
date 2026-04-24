@@ -718,20 +718,28 @@ fn router_rs_crate_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../router-rs")
 }
 
-fn router_rs_binary_candidates() -> Vec<PathBuf> {
-    let crate_root = router_rs_crate_root();
-    vec![
-        crate_root.join("target/release/router-rs"),
-        crate_root.join("target/debug/router-rs"),
-    ]
+fn router_rs_self_launcher_candidates(repo_root: &Path) -> Vec<PathBuf> {
+    let repo_launcher = router_rs_launcher_command(repo_root);
+    let crate_launcher = router_rs_crate_root().join("run_router_rs.sh");
+    if repo_launcher == crate_launcher {
+        vec![repo_launcher]
+    } else {
+        vec![repo_launcher, crate_launcher]
+    }
 }
 
 fn run_router_rs_json(repo_root: &Path, args: &[String]) -> Result<Value, String> {
-    for candidate in router_rs_binary_candidates() {
+    let mut last_error = None;
+    for candidate in router_rs_self_launcher_candidates(repo_root) {
         if !candidate.is_file() {
             continue;
         }
+        let manifest_path = candidate
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("Cargo.toml");
         let output = Command::new(&candidate)
+            .arg(&manifest_path)
             .args(args)
             .arg("--repo-root")
             .arg(repo_root)
@@ -741,32 +749,18 @@ fn run_router_rs_json(repo_root: &Path, args: &[String]) -> Result<Value, String
             let stdout = String::from_utf8(output.stdout).map_err(|err| err.to_string())?;
             return serde_json::from_str(stdout.trim()).map_err(|err| err.to_string());
         }
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if !stderr.is_empty() {
+            last_error = Some(stderr);
+        }
     }
 
-    let crate_root = router_rs_crate_root();
-    let manifest_path = crate_root.join("Cargo.toml");
-    let output = Command::new("cargo")
-        .arg("run")
-        .arg("--manifest-path")
-        .arg(&manifest_path)
-        .arg("--release")
-        .arg("--")
-        .args(args)
-        .arg("--repo-root")
-        .arg(repo_root)
-        .output()
-        .map_err(|err| err.to_string())?;
-    if output.status.success() {
-        let stdout = String::from_utf8(output.stdout).map_err(|err| err.to_string())?;
-        return serde_json::from_str(stdout.trim()).map_err(|err| err.to_string());
-    }
-
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    Err(if stderr.is_empty() {
-        "missing required router-rs binary and cargo fallback failed".to_string()
-    } else {
-        stderr
-    })
+    Err(last_error.unwrap_or_else(|| {
+        format!(
+            "missing required router-rs launcher: {}",
+            router_rs_launcher_command(repo_root).to_string_lossy()
+        )
+    }))
 }
 
 fn load_claude_refresh_command_text(repo_root: &Path) -> Result<String, String> {
@@ -2294,33 +2288,35 @@ fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
 }
 
 fn build_framework_server_block(repo_root: &Path) -> String {
-    let binary_path = repo_root
-        .join("scripts")
-        .join("router-rs")
-        .join("target")
-        .join("release")
-        .join("router-rs");
     format!(
-        "[mcp_servers.framework-mcp]\ncommand = \"{}\"\nargs = [\"--framework-mcp-stdio\", \"--repo-root\", \"{}\"]\ncwd = \"{}\"",
-        binary_path.to_string_lossy(),
+        "[mcp_servers.framework-mcp]\ncommand = \"{}\"\nargs = [\"{}\", \"--framework-mcp-stdio\", \"--repo-root\", \"{}\"]\ncwd = \"{}\"",
+        router_rs_launcher_command(repo_root).to_string_lossy(),
+        router_rs_launcher_arg(repo_root),
         repo_root.to_string_lossy(),
         repo_root.to_string_lossy(),
     )
 }
 
 fn build_browser_server_block(repo_root: &Path) -> String {
-    let binary_path = repo_root
-        .join("scripts")
-        .join("router-rs")
-        .join("target")
-        .join("release")
-        .join("router-rs");
     format!(
-        "[mcp_servers.browser-mcp]\ncommand = \"{}\"\nargs = [\"--browser-mcp-stdio\", \"--repo-root\", \"{}\"]\ncwd = \"{}\"",
-        binary_path.to_string_lossy(),
+        "[mcp_servers.browser-mcp]\ncommand = \"{}\"\nargs = [\"{}\", \"--browser-mcp-stdio\", \"--repo-root\", \"{}\"]\ncwd = \"{}\"",
+        router_rs_launcher_command(repo_root).to_string_lossy(),
+        router_rs_launcher_arg(repo_root),
         repo_root.to_string_lossy(),
         repo_root.to_string_lossy(),
     )
+}
+
+fn router_rs_launcher_command(repo_root: &Path) -> PathBuf {
+    repo_root.join("scripts/router-rs/run_router_rs.sh")
+}
+
+fn router_rs_launcher_arg(repo_root: &Path) -> String {
+    repo_root
+        .join("scripts/router-rs")
+        .join("Cargo.toml")
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn ensure_codex_hooks_feature(config_path: &Path) -> Result<bool, String> {
@@ -2697,8 +2693,8 @@ fn managed_home_claude_mcp_server(repo_root: &Path, server_name: &str) -> Result
     match server_name {
         "framework-mcp" => Ok(json!({
             "type": "stdio",
-            "command": repo_root.join("scripts").join("router-rs").join("target").join("release").join("router-rs").to_string_lossy(),
-            "args": ["--framework-mcp-stdio", "--repo-root", repo_root_value],
+            "command": router_rs_launcher_command(repo_root).to_string_lossy(),
+            "args": [router_rs_launcher_arg(repo_root), "--framework-mcp-stdio", "--repo-root", repo_root_value],
             "cwd": repo_root_value,
             "env": {},
         })),
@@ -2713,8 +2709,8 @@ fn build_personal_plugin_mcp_payload(repo_root: &Path) -> Value {
     json!({
         "mcpServers": {
             "framework-mcp": {
-                "command": repo_root.join("scripts").join("router-rs").join("target").join("release").join("router-rs").to_string_lossy(),
-                "args": ["--framework-mcp-stdio", "--repo-root", repo_root_value],
+                "command": router_rs_launcher_command(repo_root).to_string_lossy(),
+                "args": [router_rs_launcher_arg(repo_root), "--framework-mcp-stdio", "--repo-root", repo_root_value],
                 "cwd": repo_root_value,
             },
         }

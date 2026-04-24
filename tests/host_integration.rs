@@ -81,10 +81,17 @@ fn install_native_integration_is_idempotent() {
     let claude_args = claude_mcp_payload["mcpServers"]["framework-mcp"]["args"]
         .as_array()
         .unwrap();
-    assert_eq!(claude_args[0], "--framework-mcp-stdio");
-    assert_eq!(claude_args[1], "--repo-root");
     assert_path_eq(
-        claude_args[2].as_str().unwrap(),
+        claude_args[0].as_str().unwrap(),
+        &repo_root
+            .join("scripts/router-rs/Cargo.toml")
+            .display()
+            .to_string(),
+    );
+    assert_eq!(claude_args[1], "--framework-mcp-stdio");
+    assert_eq!(claude_args[2], "--repo-root");
+    assert_path_eq(
+        claude_args[3].as_str().unwrap(),
         &repo_root.canonicalize().unwrap().display().to_string(),
     );
     assert_eq!(
@@ -199,9 +206,15 @@ fn install_native_integration_can_opt_into_rust_browser_mcp() {
     assert!(content.contains(&format!(
         "command = \"{}\"",
         repo_root
-            .join("scripts/router-rs/target/release/router-rs")
+            .join("scripts/router-rs/run_router_rs.sh")
             .display()
     )));
+    assert!(content.contains(
+        &repo_root
+            .join("scripts/router-rs/Cargo.toml")
+            .display()
+            .to_string()
+    ));
     assert!(content.contains("--browser-mcp-stdio"));
     assert!(!content.contains("tools/browser-mcp/dist/index.js"));
     assert!(!content.contains("command = \"node\""));

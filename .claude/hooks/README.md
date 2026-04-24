@@ -4,7 +4,7 @@ Claude Code project hooks live here.
 
 Generated-first maintenance:
 
-- Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then regenerate via `cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root "$PWD"`.
+- Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then regenerate via `./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --sync-host-entrypoints-json --repo-root "$PWD"`.
 - Host entrypoint sync runs directly through `router-rs`; do not put a Python wrapper back in front of it.
 - Treat `.claude/settings.json` and this README as materialized outputs.
 - Long-term entrypoint map: `../../docs/claude_entrypoint_maintenance.md`.
@@ -66,22 +66,22 @@ Project hook principles:
 
 Validation commands:
 
-- `cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root "$PWD"`
+- `./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --sync-host-entrypoints-json --repo-root "$PWD"`
   Expected: regenerate `AGENT.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/settings.json`, `.codex/hooks.json`, and matching worktree projections directly from Rust.
 - `printf '{"tool_name":"MultiEdit","tool_input":{"file_path":".claude/settings.json"}}
-' | CLAUDE_PROJECT_DIR="$PWD" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use --repo-root "$PWD"`
+' | CLAUDE_PROJECT_DIR="$PWD" ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-host-hook-command pre-tool-use --repo-root "$PWD"`
   Expected: stdout returns a JSON `permissionDecision: deny` payload.
 - `printf '{"tool_name":"Bash","tool_input":{"command":"cp tmp .claude/settings.json"}}
-' | CLAUDE_PROJECT_DIR="$PWD" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use --repo-root "$PWD"`
+' | CLAUDE_PROJECT_DIR="$PWD" ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-host-hook-command pre-tool-use --repo-root "$PWD"`
   Expected: stdout returns a JSON `permissionDecision: deny` payload for the targeted write.
 - `printf '{"tool_name":"Bash","tool_input":{"command":"printf x > .claude/settings.json"}}
-' | CLAUDE_PROJECT_DIR="$PWD" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command pre-tool-use --repo-root "$PWD"`
+' | CLAUDE_PROJECT_DIR="$PWD" ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-host-hook-command pre-tool-use --repo-root "$PWD"`
   Expected: stdout returns a JSON `permissionDecision: deny` payload for shell redirection into a protected generated file.
 - `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}
-' | CLAUDE_PROJECT_DIR="$PWD" ./scripts/router-rs/target/debug/router-rs --claude-host-hook-command config-change --repo-root "$PWD"`
+' | CLAUDE_PROJECT_DIR="$PWD" ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-host-hook-command config-change --repo-root "$PWD"`
   Expected: audit-only stderr guidance about regenerating generated Claude host files; exit 0.
 - `printf '{"hook_event_name":"ConfigChange","source":"project_settings","file_path":".claude/settings.json"}
-' | ./scripts/router-rs/target/debug/router-rs --claude-hook-audit-command config-change --repo-root "$PWD"`
+' | ./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-hook-audit-command config-change --repo-root "$PWD"`
   Expected: JSON on stdout plus audit-only stderr guidance; exit 0.
 - In Claude Code, run `/hooks`
   Expected: the project shows only `PreToolUse` and `ConfigChange` from `.claude/settings.json`.

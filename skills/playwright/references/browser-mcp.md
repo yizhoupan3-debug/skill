@@ -17,15 +17,15 @@ Keep the existing Playwright CLI workflow as the fallback path when:
 Local setup in this repo:
 
 ```bash
-cargo build --manifest-path /Users/joe/Documents/skill/scripts/router-rs/Cargo.toml --release
+/Users/joe/Documents/skill/tools/browser-mcp/scripts/start_browser_mcp.sh
 ```
 
 Add or verify this MCP server block in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.browser-mcp]
-command = "/Users/joe/Documents/skill/scripts/router-rs/target/release/router-rs"
-args = ["--browser-mcp-stdio", "--repo-root", "/Users/joe/Documents/skill"]
+command = "/Users/joe/Documents/skill/scripts/router-rs/run_router_rs.sh"
+args = ["/Users/joe/Documents/skill/scripts/router-rs/Cargo.toml", "--browser-mcp-stdio", "--repo-root", "/Users/joe/Documents/skill"]
 cwd = "/Users/joe/Documents/skill"
 ```
 

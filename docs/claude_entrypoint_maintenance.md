@@ -21,7 +21,7 @@ several sources of truth. Treat them as a small projection graph:
   then run:
 
 ```sh
-cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root "$PWD"
+./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --sync-host-entrypoints-json --repo-root "$PWD"
 ```
 
 - Put personal shortcuts, notifications, and local approvals in
