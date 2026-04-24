@@ -58,31 +58,4 @@ npx wrangler pages deployment tail --project-name=my-project
 
 ## Resources
 
-- [Pages Docs](https://developers.cloudflare.com/pages/)
-- [Functions API](https://developers.cloudflare.com/pages/functions/api-reference/)
-- [Framework Guides](https://developers.cloudflare.com/pages/framework-guides/)
-- [Discord #functions](https://discord.com/channels/595317990191398933/910978223968518144)
-
-## Reading Order
-
-**New to Pages?** Start here:
-1. README.md (you are here) - Overview & quick start
-2. [configuration.md](./configuration.md) - Project setup, wrangler.jsonc, bindings
-3. [api.md](./api.md) - Functions API, routing, context
-4. [patterns.md](./patterns.md) - Common implementations
-5. [gotchas.md](./gotchas.md) - Troubleshooting & pitfalls
-
-**Quick reference?** Jump to relevant file above.
-
-## In This Reference
-
-- [configuration.md](./configuration.md) - wrangler.jsonc, build, env vars, Smart Placement
-- [api.md](./api.md) - Functions API, bindings, context, advanced mode
-- [patterns.md](./patterns.md) - Full-stack patterns, framework integration
-- [gotchas.md](./gotchas.md) - Build issues, limits, debugging, framework warnings
-
-## See Also
-
-- [pages-functions](../pages-functions/) - File-based routing, middleware
-- [d1](../d1/) - SQL database for Pages Functions
-- [kv](../kv/) - Key-value storage for caching/state
+Use official Cloudflare Pages docs for current framework guides, limits, and function APIs.

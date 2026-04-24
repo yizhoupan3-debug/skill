@@ -9,7 +9,7 @@ description: |
   call `playwright` only when live browser interaction is required.
 metadata:
   version: "1.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - web-scraping
     - data-extraction

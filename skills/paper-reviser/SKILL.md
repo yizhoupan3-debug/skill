@@ -66,8 +66,7 @@ The execution model is:
 - The user wants one front door for the paper task -> use `$paper-workbench`
 - The user is still asking "能不能投" or wants the first review pass -> use `$paper-reviewer`
 - The user wants only local wording polish with fixed scientific scope -> use `$paper-writing`
-- The user wants only science-level critique -> use `$paper-logic`
-- The task is only figure or table presentation polish -> use `$paper-visuals`
+- The user wants only science-level critique without edits -> use `$paper-reviewer` logic mode
 
 ## User-facing modes
 
@@ -115,9 +114,12 @@ disk:
 
 ## Internal routing notes
 
-- Use `$paper-logic` when a revision depends on claim-vs-evidence repair
+- Use `logic repair` mode when a revision depends on claim-vs-evidence repair
 - Use `$citation-management` for citation support changes
 - Use `$paper-writing` for local prose rewriting after the claim boundary is fixed
+
+For revision dimension modes, use
+[`references/revision-modes.md`](references/revision-modes.md).
 - Use `$paper-visuals`, `$visual-review`, and `$pdf` for final figure, table, or layout changes
 - When multiple local cleanup surfaces are independent, run them as bounded sidecar lanes and merge locally before closing the gate
 

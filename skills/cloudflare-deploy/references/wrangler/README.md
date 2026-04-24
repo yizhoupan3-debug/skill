@@ -22,15 +22,9 @@ npm install -g wrangler
 
 Run commands: `npx wrangler <command>` (or `pnpm`/`yarn wrangler`)
 
-## Reading Order
+## Use Official Docs For Details
 
-| If you want to... | Start here |
-|-------------------|------------|
-| Create/deploy Worker quickly | Essential Commands below → [patterns.md](./patterns.md) §New Worker |
-| Configure bindings (KV, D1, R2) | [configuration.md](./configuration.md) §Bindings |
-| Write integration tests | [api.md](./api.md) §startWorker |
-| Debug production issues | [gotchas.md](./gotchas.md) + Essential Commands §Monitoring |
-| Set up multi-environment workflow | [configuration.md](./configuration.md) §Environments |
+This is a quick command card only. Use official Wrangler docs for current flags, config schema, APIs, and troubleshooting.
 
 ## Essential Commands
 
@@ -101,41 +95,6 @@ wrangler tail --env production    # Tail specific env
 wrangler tail --status error      # Filter by status
 ```
 
-## In This Reference
+## Local Scope
 
-- [auth.md](./auth.md) - Authentication setup (`wrangler login`, API tokens)
-- [configuration.md](./configuration.md) - wrangler.jsonc setup, environments, bindings
-- [api.md](./api.md) - Programmatic API (`startWorker`, `getPlatformProxy`, events)
-- [patterns.md](./patterns.md) - Common workflows and development patterns
-- [gotchas.md](./gotchas.md) - Common pitfalls, limits, and troubleshooting
-
-## Quick Decision Tree
-
-```
-Need to test your Worker?
-├─ Testing full Worker with bindings → api.md §startWorker
-├─ Testing individual functions → api.md §getPlatformProxy
-└─ Testing with Vitest → patterns.md §Testing with Vitest
-
-Need to configure something?
-├─ Bindings (KV, D1, R2, etc.) → configuration.md §Bindings
-├─ Multiple environments → configuration.md §Environments
-├─ Static files → configuration.md §Workers Assets
-└─ Routing → configuration.md §Routing
-
-Development not working?
-├─ Local differs from production → Use `wrangler dev --remote`
-├─ Bindings not available → gotchas.md §Binding Not Available
-└─ Auth issues → auth.md
-
-Authentication issues?
-├─ "Not logged in" / "Unauthorized" → auth.md
-├─ First time deploying → `wrangler login` (one-time OAuth)
-└─ CI/CD setup → auth.md §API Token
-```
-
-## See Also
-
-- [workers](../workers/) - Workers runtime API reference
-- [miniflare](../miniflare/) - Local testing with Miniflare
-- [workerd](../workerd/) - Runtime that powers `wrangler dev`
+This is a quick card only. Use official Cloudflare docs for current setup, API details, limits, pricing, and troubleshooting.

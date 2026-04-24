@@ -18,6 +18,10 @@ trigger_hints:
   - gsd
   - get shit done
   - 推进到底
+  - $autopilot
+  - autopilot
+  - 一路执行到底
+  - 持续跑到收敛
   - 直接干完
 framework_roles:
   - orchestrator
@@ -76,7 +80,7 @@ bridge_behavior: mobile_complete_once
 - 高负载、跨文件、长运行、多阶段集成、多验证面并存
 - 需要显式维护 `.supervisor_state.json`、task registry 和 continuity artifacts
 - 并行 lane 存在共享状态冲突风险，需要由单一控制器收口 focus projection 写入
-- 用户明确要求 `gsd` / `get shit done` / “推进到底” / “别停”
+- 用户明确要求 `gsd` / `get shit done` / `$autopilot` / `autopilot` / “推进到底” / “一路执行到底” / “别停”
 
 ## Do not use
 
@@ -88,6 +92,7 @@ bridge_behavior: mobile_complete_once
 ## GSD posture
 
 - `gsd` 不是独立运行时，而是这个 controller 的强执行姿态。
+- `$autopilot` 是这个 controller 的 alias mode，不是独立 owner。
 - 默认自动继续清晰、低风险、可逆的本地 edit/test/verify 链路，不做无意义权限交还。
 - 不盲猜，不做大，不放大 diff；改动必须能追溯到当前目标。
 - 主线程只报告决策、证据和 blocker，不复述大量过程。
@@ -128,10 +133,11 @@ bridge_behavior: mobile_complete_once
 
 - 未知根因优先：reroute to `$systematic-debugging`
 - 方案仍模糊：reroute to `$idea-to-plan`
-- checklist 边界还不稳定：reroute to `$checklist-normalizer`
+- checklist 边界还不稳定：reroute to `$checklist-planner`
 - 进入强验收：add `$execution-audit`
 - 能并行且边界清晰：先过 `$subagent-delegation`
 
 ## References
 
 - [references/runtime-playbook.md](references/runtime-playbook.md)
+- [references/autopilot-mode.md](references/autopilot-mode.md)

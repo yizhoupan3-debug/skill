@@ -7,7 +7,7 @@ description: |
   or the user wants a ranked performance review or optimization plan.
 metadata:
   version: "2.1.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - web-performance
     - core-web-vitals

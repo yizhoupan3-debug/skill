@@ -118,7 +118,7 @@ If blocked:
 
 ## Upstream sources
 
-- `checklist-writting` / `implementation_plan.md`
+- `checklist-planner` / `implementation_plan.md`
 - `code-review`
 - `architect-review`
 - `accessibility-auditor`

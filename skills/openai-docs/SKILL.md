@@ -20,7 +20,7 @@ trigger_hints:
   - 官方文档
 metadata:
   version: "1.0.0"
-  platforms: [codex, claude-code]
+  platforms: [codex]
   tags:
     - openai
     - documentation
@@ -41,7 +41,7 @@ artifact_outputs:
 # OpenAI Docs
 
 This visible shared skill mirrors the OpenAI-docs docs-first workflow so both
-Codex and Claude can use the same skill entry and the same MCP-backed source.
+Codex uses this skill entry and the same MCP-backed source.
 
 ## When to use
 
@@ -52,8 +52,8 @@ Codex and Claude can use the same skill entry and the same MCP-backed source.
 
 ## Do not use
 
-- The main question is about Anthropic / Claude APIs or Claude Code
-  configuration -> use `$claude-api`
+- The main question is about a non-OpenAI provider or non-Codex host
+  configuration -> use `$information-retrieval`
 - The task is broad external research rather than OpenAI docs lookup
   -> use `$information-retrieval`
 
@@ -77,10 +77,8 @@ task depends on current OpenAI product or API documentation.
 
 ## If the MCP server is missing
 
-1. For Codex, install `openaiDeveloperDocs` at `https://developers.openai.com/mcp`.
-2. For Claude, ensure `openaiDeveloperDocs` is present in `~/.claude.json`
-   and allowed by the project Claude settings.
-3. Retry the doc lookup after installation.
+1. Install `openaiDeveloperDocs` for Codex from `https://developers.openai.com/mcp`.
+2. Retry the doc lookup after installation.
 
 ## Output contract
 

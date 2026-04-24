@@ -10,7 +10,7 @@ description: |
   mentions failing PR checks or CI failures.
 metadata:
   version: "2.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - github
     - ci

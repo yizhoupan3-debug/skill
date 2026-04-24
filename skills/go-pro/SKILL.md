@@ -9,7 +9,7 @@ description: |
   "Go 项目", "goroutine", "并发", "Go 微服务", "错误处理策略".
 metadata:
   version: "1.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - go
     - goroutines

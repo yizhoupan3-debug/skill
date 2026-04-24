@@ -8,7 +8,7 @@ description: |
   phrases like 'Chrome 插件', '浏览器扩展', 'content script'.
 metadata:
   version: "1.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - chrome-extension
     - manifest-v3

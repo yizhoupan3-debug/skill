@@ -1,8 +1,8 @@
 # browser-mcp
 
-A lean MCP browser server optimized for agent use. The steady-state stdio server
-is now the Rust implementation in `router-rs`; the TypeScript package remains a
-legacy/development surface.
+A lean MCP browser server optimized for agent use. The stdio server is the Rust
+implementation in `router-rs`; the launcher no longer falls back to the legacy
+TypeScript runtime.
 
 ## Rust-first Highlights
 
@@ -48,9 +48,6 @@ legacy/development surface.
 # Flags: --headless true|false
 #        --runtime-attach-artifact-path /abs/path/runtime-attach-descriptor.json|.../ATTACHED_RUNTIME_EVENT_HANDOFF.json|.../TRACE_RESUME_MANIFEST.json|.../runtime_event_transports/session__job.json
 #        --runtime-attach-descriptor-path /abs/path/runtime-attach-descriptor.json
-#        --runtime-binding-artifact-path /abs/path/runtime_event_transports/session__job.json
-#        --runtime-handoff-path /abs/path/ATTACHED_RUNTIME_EVENT_HANDOFF.json
-#        --runtime-resume-manifest-path /abs/path/TRACE_RESUME_MANIFEST.json
 ```
 
 ## Smoke test
@@ -81,15 +78,14 @@ consume it directly for self-inspection:
 BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH=/abs/path/runtime-attach-descriptor.json ./tools/browser-mcp/scripts/start_browser_mcp.sh
 ```
 
-`--runtime-attach-artifact-path` is the preferred Rust-first entrypoint. The
-older `--runtime-binding-artifact-path` and `--runtime-handoff-path` flags are
-still accepted as compatibility aliases, and `TRACE_RESUME_MANIFEST.json` can
-also flow through the same canonical attach-artifact flag when recovery is the
-only persisted entrypoint you have. When an explicit attach descriptor already
-contains enough artifact hints, browser-mcp now canonicalizes it through the
-same Rust attach bridge first, so provenance and resolution fields stay aligned
-with the artifact-based entrypoints. Once an entrypoint has been canonicalized
-through that bridge, browser-mcp now also prefers the Rust-resolved replay
+`--runtime-attach-artifact-path` is the canonical Rust-first entrypoint for
+persisted attach artifacts, including `TRACE_RESUME_MANIFEST.json`,
+`ATTACHED_RUNTIME_EVENT_HANDOFF.json`, and
+`runtime_event_transports/session__job.json`. When an explicit attach descriptor
+already contains enough artifact hints, browser-mcp canonicalizes it through
+the same Rust attach bridge first, so provenance and resolution fields stay
+aligned with the artifact-based entrypoint. Once an entrypoint has been
+canonicalized through that bridge, browser-mcp prefers the Rust-resolved replay
 payload directly instead of re-deriving the trace path locally.
 
 Then `browser_diagnostics` includes an `attachedRuntime` block with descriptor
@@ -102,6 +98,6 @@ through that same attach descriptor; replay results now include a lighter
 `replayContext` mirror so consumers can read attach provenance without
 re-parsing the full diagnostics block.
 
-The legacy `start_browser_mcp.sh` launcher now delegates to the Rust launcher and
-does not require `dist/index.js`; steady-state MCP config can call the same
-Rust-owned launcher directly.
+The legacy `start_browser_mcp.sh` launcher delegates directly to the Rust
+launcher and does not require `dist/index.js`, `node`, or `npm`; MCP config can
+call the same Rust-owned launcher directly.

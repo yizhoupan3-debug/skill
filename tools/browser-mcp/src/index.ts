@@ -18,9 +18,6 @@ const { values: args } = parseArgs({
     'capture-body': { type: 'boolean', default: false },
     'runtime-attach-artifact-path': { type: 'string' },
     'runtime-attach-descriptor-path': { type: 'string' },
-    'runtime-binding-artifact-path': { type: 'string' },
-    'runtime-handoff-path': { type: 'string' },
-    'runtime-resume-manifest-path': { type: 'string' },
   },
   strict: false,
 });
@@ -38,24 +35,9 @@ const runtimeAttachDescriptorPath =
   typeof args['runtime-attach-descriptor-path'] === 'string'
     ? String(args['runtime-attach-descriptor-path'])
     : process.env.BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH ?? null;
-const runtimeBindingArtifactPath =
-  typeof args['runtime-binding-artifact-path'] === 'string'
-    ? String(args['runtime-binding-artifact-path'])
-    : process.env.BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH ?? null;
-const runtimeHandoffPath =
-  typeof args['runtime-handoff-path'] === 'string'
-    ? String(args['runtime-handoff-path'])
-    : process.env.BROWSER_MCP_RUNTIME_HANDOFF_PATH ?? null;
-const runtimeResumeManifestPath =
-  typeof args['runtime-resume-manifest-path'] === 'string'
-    ? String(args['runtime-resume-manifest-path'])
-    : process.env.BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH ?? null;
 const runtimeAttachSource =
   runtimeAttachDescriptorPath ??
   runtimeAttachArtifactPath ??
-  runtimeBindingArtifactPath ??
-  runtimeHandoffPath ??
-  runtimeResumeManifestPath ??
   'off';
 
 // ---------------------------------------------------------------------------
@@ -72,9 +54,6 @@ async function main(): Promise<void> {
     captureBody,
     runtimeAttachArtifactPath,
     runtimeAttachDescriptorPath,
-    runtimeBindingArtifactPath,
-    runtimeHandoffPath,
-    runtimeResumeManifestPath,
   });
 
   const server = createBrowserMcpServer(runtime);

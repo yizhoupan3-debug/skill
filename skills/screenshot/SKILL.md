@@ -81,5 +81,5 @@ Use `--json` when another tool or host process needs stable machine-readable out
 
 - Analyzing or reviewing an existing screenshot → use `$visual-review`
 - Browser automation to capture web page content → use `$playwright`
-- Generating or editing images with AI → use `$imagegen`
+- Generating or editing images with AI → use `$image-generated`
 - Web page screenshots needing navigation/login/interaction → use `$playwright`

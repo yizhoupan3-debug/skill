@@ -61,17 +61,17 @@ L2  build-tooling, plan-to-code, api-integration-debugging,
     css-pro, shell-cli, data-wrangling, dependency-migration,
     checklist-normalizer, checklist-fixer, env-config-management, code-review,
     architect-review, sustech-mailer, github-investigator
-L3  academic-search, accessibility-auditor, api-design, api-load-tester,
+L3  accessibility-auditor, api-design, api-load-tester,
     brainstorm-research, cloudflare-deploy, doc, docker,
     design-agent, experiment-reproducibility, frontend-code-quality, frontend-design,
-    github-actions-authoring, graphviz-expert, i18n-l10n, imagegen,
+    github-actions-authoring, graphviz-expert, i18n-l10n, image-generated,
     infographic, jupyter-notebook, linux-server-ops, mcp-builder,
     mermaid-expert, monorepo-tooling, native-app-debugging, npm-package-authoring, pdf,
     performance-expert, playwright, release-engineering, screenshot,
-    security-threat-model, skill-developer, skill-installer-antigravity,
+    security-threat-model,
     spreadsheets, sustech-mailer, visual-review, xlsx
 L4  nextjs, node-backend, auth-implementation, chatgpt-apps, react, vue, svelte,
-    ppt-markdown, ppt-beamer, ppt-html-export, ppt-pptx,
+    ppt-beamer, ppt-pptx, source-slide-formats,
     paper-logic, paper-notation-audit, paper-reviewer, paper-reviser,
     paper-visuals, paper-writing, paper-length-tuner, assignment-compliance,
     latex-compile-acceleration, security-audit, webhook-security,
@@ -109,10 +109,9 @@ Overlays  coding-standards, tdd-workflow, error-handling-patterns, code-review,
 - `design-agent` vs `frontend-design` → 先定参考源 / verified tokens / borrow-adapt map vs 直接做视觉改版
 - `design-agent` vs `motion-design` → 先拆品牌与动效来源 vs 直接做动效实现
 - `visual-review` vs `pdf` / `doc` / `spreadsheets` → 看证据 vs 改 artifact
-- `spreadsheets` vs `xlsx` → 通用 Excel / workbook artifact gate vs 显式 `openpyxl` / `pandas` / LibreOffice 兼容 lane
-- `slides` vs `ppt-pptx` → 通用 PPT / 现有 deck artifact gate vs 显式 `deck.js` / PptxGenJS 源码工作流
-- `slides` vs `ppt-html-export` → 通用演示文稿入口 vs 显式 HTML slides + browser-matched PDF
-- `slides` vs `ppt-markdown` → 通用演示文稿入口 vs 显式 Slidev / Marp / Markdown source
+- `spreadsheets` vs `xlsx` → 通用 spreadsheet artifact gate vs Excel workbook-native gate
+- `slides` vs `ppt-pptx` → 通用 PPT / 现有 deck artifact gate vs 显式 `deck.plan.json` / Rust PPTX 源码工作流
+- `slides` vs `source-slide-formats` → 通用演示文稿入口 vs 显式 Markdown / Slidev / Marp / HTML source slides
 - `build-tooling` vs `typescript-pro` / `python-pro` / `javascript-pro` → 构建链 vs 语言语义
 - `latex-compile-acceleration` vs `ppt-beamer` → 编译优化 vs Beamer 内容/版式
 - `information-retrieval` vs `skill-scout` → 通用调研 vs skill 生态专项对标

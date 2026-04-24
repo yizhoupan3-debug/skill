@@ -15,7 +15,7 @@
     - 联动 `brainstorm-research` 进行 360 度视角扩展。
 2.  **Feasibility & Novelty Sieve (可行性与新颖性双筛)**
     - **Repo-Aware Audit**：实时扫描当前代码库的架构约束。
-    - **Scientific Novelty Gate**：联动 `$academic-search` 进行全网文献初筛，并调用 `$literature-synthesis` (Mode B) 确定核心创新点。
+    - **Scientific Novelty Gate**：联动 `$literature-synthesis` 进行全网文献初筛与核心创新点校准。
 3.  **Recursive Decomposition & Architectural Gate (递归分解与架构门禁)**
     - 将验证通过的 Idea 分解为 Atomic Workstreams。
     - **Stage 3.1: Architecture & Security Sieve**：联动 `$system-architect` 验证 Workstream 是否符合仓库目前的模块解耦标准。调用 `$security-audit` 检查是否有高风险的 Eval 或网络请求模式。
@@ -33,8 +33,8 @@
 
 ## 3. 技能协同矩阵 (Planning Synergy Matrix - 120+ Core)
 
-- **战略发散层 (L3)**：`$brainstorm-research`, `$academic-search`.
-- **可视化与交付层 (L4)**：`$scientific-figure-plotting`, `$imagegen`, `$ppt-markdown`.
+- **战略发散层 (L3)**：`$brainstorm-research`, `$literature-synthesis`.
+- **可视化与交付层 (L4)**：`$scientific-figure-plotting`, `$image-generated`, `$source-slide-formats`.
 - **核心内核 (L0)**：`$execution-controller-coding` (递归调用入口)。
 
 ## 4. 关键机制：Optimization & Governance

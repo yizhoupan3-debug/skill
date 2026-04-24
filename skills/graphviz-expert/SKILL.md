@@ -57,7 +57,7 @@ precise, publication-quality graph visualizations.
   use `$mermaid-expert`
 - The user wants Mermaid-specific features (sequence diagrams, gantt, journey) →
   use `$mermaid-expert`
-- The task is about AI image generation → use `$imagegen`
+- The task is about AI image generation → use `$image-generated`
 - The task is about scientific charts/plots → use `$scientific-figure-plotting`
 
 ## Reference

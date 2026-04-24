@@ -13,7 +13,7 @@ trigger_hints:
   - clipboard 失效
 metadata:
   version: "1.1.0"
-  platforms: [codex, antigravity]
+  platforms: [codex]
   tags:
     - native
     - desktop

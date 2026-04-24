@@ -69,5 +69,4 @@ Non-zero exit code means not authenticated.
 
 ## See Also
 
-- [terraform/README.md](../terraform/README.md) - Terraform provider auth
-- [pulumi/README.md](../pulumi/README.md) - Pulumi provider auth
+Use official Cloudflare Terraform and Pulumi docs for IaC-specific authentication.

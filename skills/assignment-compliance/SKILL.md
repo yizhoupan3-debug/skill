@@ -21,7 +21,7 @@ trigger_hints:
   - compliance
 metadata:
   version: "4.0.0"
-  platforms: [antigravity, codex]
+  platforms: [codex]
   tags: [assignment, homework, project, rubric, compliance, checklist, grading, requirements, submission]
 risk: safe
 source: local

@@ -43,7 +43,7 @@ const TRACE_METADATA_SCHEMA_VERSION: &str = "trace-metadata-v2";
 const CONTINUITY_JOURNAL_SCHEMA_VERSION: &str = "continuity-journal-v1";
 const SUPERVISOR_STATE_SCHEMA_VERSION: &str = "supervisor-state-v2";
 const TASK_REGISTRY_SCHEMA_VERSION: &str = "task-registry-v1";
-const MEMORY_STATE_FILENAME: &str = "state.json";
+const CONTINUITY_STATE_FILENAME: &str = "CONTINUITY_STATE.json";
 const STABLE_MEMORY_FILENAMES: &[&str] = &[
     "MEMORY.md",
     "preferences.md",
@@ -284,7 +284,7 @@ pub fn build_framework_runtime_snapshot_envelope(
                 "next_actions": snapshot.current_root.join(NEXT_ACTIONS_FILENAME).display().to_string(),
                 "evidence_index": snapshot.current_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
                 "trace_metadata": snapshot.current_root.join(TRACE_METADATA_FILENAME).display().to_string(),
-                "bridge_mirror_root": snapshot.mirror_root.display().to_string(),
+                "current_pointer_root": snapshot.mirror_root.display().to_string(),
                 "supervisor_state": repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
             },
         }
@@ -430,8 +430,18 @@ pub fn build_framework_memory_recall_envelope(
             "task_id": bootstrap_task_id,
             "source_task": if query_matches_active_task && !task.is_empty() { Value::String(task) } else { Value::Null },
             "mode": mode,
-            "focused_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
+            "active_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
         },
+    });
+    let diagnostics = json!({
+        "retrieval": compact_memory_retrieval_diagnostics(&retrieval),
+        "continuity": {
+            "state": effective_continuity.get("state").cloned().unwrap_or(Value::Null),
+            "can_resume": effective_continuity.get("can_resume").cloned().unwrap_or(Value::Bool(false)),
+            "active_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
+            "registered_task_count": registered_tasks.as_array().map(Vec::len).unwrap_or(0),
+        },
+        "source_artifacts": describe_continuity_layout(repo_root, &snapshot.artifact_base),
     });
     Ok(json!({
         "schema_version": FRAMEWORK_MEMORY_RECALL_SCHEMA_VERSION,
@@ -449,44 +459,10 @@ pub fn build_framework_memory_recall_envelope(
                 "has_sqlite": !sqlite_path.is_empty(),
                 "has_memory_md": memory_root.join("MEMORY.md").is_file(),
             },
-            "retrieval": retrieval,
-            "continuity": effective_continuity,
-            "active_task": active_task.clone(),
-            "focused_task": active_task,
-            "registered_tasks": registered_tasks.clone(),
-            "continuity_decision": {
-                "query": query,
-                "query_matches_active_task": query_matches_active_task,
-                "ignored_root_continuity": effective_continuity.get("state").and_then(Value::as_str) == Some("query-mismatch"),
-                "task_id": bootstrap_task_id,
-                "source_task": if query_matches_active_task && !value_text(continuity.get("task")).is_empty() {
-                    continuity.get("task").cloned().unwrap_or(Value::Null)
-                } else {
-                    Value::Null
-                },
-                "mode": mode,
-                "focused_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
-            },
-            "source_artifacts": describe_continuity_layout(repo_root, &snapshot.artifact_base),
+            "diagnostics": diagnostics,
             "prompt_payload": prompt_payload,
         }
     }))
-}
-
-pub fn build_framework_recap_projection(
-    repo_root: &Path,
-    max_lines: usize,
-) -> Result<String, String> {
-    let snapshot = load_framework_runtime_view(repo_root, None, None);
-    let continuity = classify_runtime_continuity(&snapshot);
-    let stable_documents = read_stable_memory_documents(repo_root);
-    Ok(render_framework_recap_projection(
-        repo_root,
-        &snapshot,
-        &continuity,
-        &stable_documents,
-        max_lines,
-    ))
 }
 
 pub fn build_framework_refresh_payload(
@@ -775,7 +751,7 @@ fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) ->
     {
         return entrypoint.to_string();
     }
-    for fallback_host in ["codex-cli", "claude-code"] {
+    for fallback_host in ["codex-cli"] {
         if let Some(entrypoint) = host_entrypoints
             .and_then(|entrypoints| entrypoints.get(fallback_host))
             .and_then(Value::as_str)
@@ -891,9 +867,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "resume_when": [
                     "continuity state is active and recovery anchors are present"
                 ],
-                "refresh_when": [
-                    "continuity state is stale"
-                ],
+                "refresh_when": [],
                 "repair_when": [
                     "continuity state is inconsistent"
                 ],
@@ -905,7 +879,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                     "verification status is not yet passed or completed"
                 ]
             },
-            "host_entrypoints": {"codex-cli": "$autopilot", "claude-code": "/autopilot"},
+            "host_entrypoints": {"codex-cli": "$autopilot"},
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
                 "explicit_entrypoints": ["/autopilot", "$autopilot"],
@@ -945,7 +919,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "test-engineering",
                 "execution-audit"
             ],
-            "host_entrypoints": {"codex-cli": "$deepinterview", "claude-code": "/deepinterview"},
+            "host_entrypoints": {"codex-cli": "$deepinterview"},
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
                 "explicit_entrypoints": ["/deepinterview", "$deepinterview"],
@@ -1063,7 +1037,7 @@ fn fallback_framework_alias_record(alias_name: &str) -> Option<Value> {
                 "integration_requires_local_judgment": true,
                 "verification_evidence_required_before_cleanup": true
             },
-            "host_entrypoints": {"codex-cli": "$team", "claude-code": "/team"},
+            "host_entrypoints": {"codex-cli": "$team"},
             "interaction_invariants": {
                 "requires_explicit_entrypoint": true,
                 "explicit_entrypoints": ["/team", "$team"],
@@ -2133,7 +2107,7 @@ fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
             "evidence_index": snapshot.current_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
             "trace_metadata": snapshot.current_root.join(TRACE_METADATA_FILENAME).display().to_string(),
             "task_root": snapshot.task_root.display().to_string(),
-            "bridge_mirror_root": snapshot.mirror_root.display().to_string(),
+            "current_pointer_root": snapshot.mirror_root.display().to_string(),
             "supervisor_state": snapshot.repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
         }
     })
@@ -2243,81 +2217,6 @@ fn workspace_name_from_root(repo_root: &Path) -> String {
         .and_then(|name| name.to_str())
         .unwrap_or("workspace")
         .to_string()
-}
-
-fn render_framework_recap_projection(
-    _repo_root: &Path,
-    _snapshot: &FrameworkRuntimeView,
-    continuity: &Value,
-    stable_documents: &[(String, String)],
-    max_lines: usize,
-) -> String {
-    let memory_md = stable_document_text(stable_documents, "MEMORY.md");
-    let preferences_md = stable_document_text(stable_documents, "preferences.md");
-    let decisions_md = stable_document_text(stable_documents, "decisions.md");
-    let lessons_md = stable_document_text(stable_documents, "lessons.md");
-    let runbooks_md = stable_document_text(stable_documents, "runbooks.md");
-    let stable_patterns = extract_bullets(
-        &extract_markdown_section(&memory_md, &["Active Patterns", "项目约定", "稳定事实"]),
-        max_lines,
-    );
-    let preference_lines = {
-        let section = extract_markdown_section(&preferences_md, &["处理偏好", "Preferences"]);
-        let source = if section.is_empty() {
-            preferences_md.as_str()
-        } else {
-            section.as_str()
-        };
-        extract_bullets(source, max_lines)
-    };
-    let fallback_decisions_md = extract_markdown_section(&memory_md, &["稳定决策", "Decisions"]);
-    let decisions_source = if decisions_md.is_empty() {
-        fallback_decisions_md.as_str()
-    } else {
-        decisions_md.as_str()
-    };
-    let stable_decisions = extract_bullets(decisions_source, max_lines);
-    let fallback_lessons_md = extract_markdown_section(&memory_md, &["Lessons", "经验教训"]);
-    let lessons_source = if lessons_md.is_empty() {
-        fallback_lessons_md.as_str()
-    } else {
-        lessons_md.as_str()
-    };
-    let _lessons = extract_bullets(lessons_source, max_lines);
-    let _runbooks = extract_bullets(
-        if runbooks_md.is_empty() {
-            ""
-        } else {
-            runbooks_md.as_str()
-        },
-        max_lines,
-    );
-    let startup_rules = vec![
-        "默认用中文；先给答案；默认只回一小段。".to_string(),
-        "`.claude/**` 只是宿主胶水；先信 live runtime artifacts。".to_string(),
-        "目标明确时直接执行可验证的小步，不先写长计划。".to_string(),
-    ];
-    let reminders = stable_line_items(vec![
-        preference_lines.first().cloned().unwrap_or_default(),
-        stable_patterns.first().cloned().unwrap_or_default(),
-        stable_decisions.first().cloned().unwrap_or_default(),
-    ])
-    .into_iter()
-    .take(max_lines)
-    .collect::<Vec<_>>();
-    let anchor_lines = vec![
-        "runtime: `artifacts/current/SESSION_SUMMARY.md` / `artifacts/current/NEXT_ACTIONS.json` / `artifacts/current/TRACE_METADATA.json` / `.supervisor_state.json`".to_string(),
-        "active task: `artifacts/current/active_task.json`".to_string(),
-        "memory: `./.codex/memory/`".to_string(),
-    ];
-    let (state_title, state_items) = render_current_state_section(continuity);
-    let sections = [
-        markdown_block("Startup Rules", &startup_rules),
-        markdown_block(&state_title, &state_items),
-        markdown_block("Stable Reminders", &reminders),
-        markdown_block("Recovery Anchors", &anchor_lines),
-    ];
-    format!("# Claude Startup Projection\n{}\n", sections.join("\n"))
 }
 
 fn render_framework_refresh_prompt(
@@ -2572,83 +2471,6 @@ fn render_framework_refresh_prompt(
     lines.join("\n") + "\n"
 }
 
-fn render_current_state_section(continuity: &Value) -> (String, Vec<String>) {
-    let state = value_text(continuity.get("state"));
-    if state == "active" {
-        if let Some(current) = continuity
-            .get("current_execution")
-            .and_then(Value::as_object)
-        {
-            return (
-                "Task Snapshot".to_string(),
-                stable_line_items(vec![
-                    format!(
-                        "current: {} / {} / {}",
-                        nonempty_or(current.get("task"), "未记录"),
-                        nonempty_or(current.get("phase"), "未记录"),
-                        nonempty_or(current.get("status"), "in_progress")
-                    ),
-                    format_optional_joined("route", current.get("route")),
-                    format_optional_joined("next", current.get("next_actions")),
-                    format_optional_joined("blockers", current.get("blockers")),
-                ]),
-            );
-        }
-    }
-    if state == "completed" {
-        return (
-            "Task Snapshot".to_string(),
-            stable_line_items(vec![
-                "recent task: wrapped up".to_string(),
-                "next: start a new standalone task if related work needs to continue".to_string(),
-            ]),
-        );
-    }
-    let reasons_key = match state.as_str() {
-        "stale" => "stale_reasons",
-        "inconsistent" => "inconsistency_reasons",
-        _ => "recovery_hints",
-    };
-    let reasons = continuity
-        .get(reasons_key)
-        .or_else(|| continuity.get("recovery_hints"));
-    (
-        "Task Snapshot".to_string(),
-        stable_line_items(vec![
-            format!(
-                "continuity: {}",
-                if state.is_empty() {
-                    "missing"
-                } else {
-                    state.as_str()
-                }
-            ),
-            if continuity.get("task").is_some() || continuity.get("phase").is_some() {
-                format!(
-                    "last_known: {} / {}",
-                    nonempty_or(continuity.get("task"), "未记录"),
-                    nonempty_or(continuity.get("phase"), "未记录")
-                )
-            } else {
-                String::new()
-            },
-            format_optional_joined("warning", reasons),
-            format_optional_joined("recovery", continuity.get("recovery_hints")),
-        ]),
-    )
-}
-
-fn markdown_block(title: &str, items: &[String]) -> String {
-    let rendered = if items.is_empty() {
-        vec!["暂无".to_string()]
-    } else {
-        items.to_vec()
-    };
-    let mut lines = vec![format!("## {title}")];
-    lines.extend(rendered.into_iter().map(|item| format!("- {item}")));
-    lines.join("\n")
-}
-
 fn read_stable_memory_documents_from_root(memory_root: &Path) -> Vec<(String, String)> {
     STABLE_MEMORY_FILENAMES
         .iter()
@@ -2663,17 +2485,6 @@ fn read_stable_memory_documents_from_root(memory_root: &Path) -> Vec<(String, St
         .collect()
 }
 
-fn read_stable_memory_documents(repo_root: &Path) -> Vec<(String, String)> {
-    read_stable_memory_documents_from_root(&repo_root.join(".codex").join("memory"))
-}
-
-fn stable_document_text(stable_documents: &[(String, String)], file_name: &str) -> String {
-    stable_documents
-        .iter()
-        .find_map(|(name, text)| (name == file_name).then(|| text.clone()))
-        .unwrap_or_default()
-}
-
 fn render_framework_memory_context(
     repo_root: &Path,
     snapshot: &FrameworkRuntimeView,
@@ -2684,7 +2495,6 @@ fn render_framework_memory_context(
 ) -> Result<Value, String> {
     fs::create_dir_all(memory_root)
         .map_err(|err| format!("create framework memory root failed: {err}"))?;
-    refresh_memory_state_if_needed(snapshot, memory_root)?;
     let stable_documents = read_stable_memory_documents_from_root(memory_root);
     let mut sections = collect_stable_memory_sections(&stable_documents, query, max_items);
     let mut freshness = json!({
@@ -2694,8 +2504,7 @@ fn render_framework_memory_context(
     });
     let mut active_task_included = false;
     if matches!(mode, "active" | "history" | "debug") {
-        let (active_section, active_freshness) =
-            build_active_task_memory_section(snapshot, memory_root, query);
+        let (active_section, active_freshness) = build_active_task_memory_section(snapshot, query);
         freshness = active_freshness;
         if let Some(section) = active_section {
             active_task_included = true;
@@ -2715,10 +2524,10 @@ fn render_framework_memory_context(
                 max_items,
             ));
         }
-        let state = read_json_if_exists(&memory_root.join(MEMORY_STATE_FILENAME));
+        let state = refresh_continuity_debug_cache(snapshot)?;
         if !state.is_null() && state != Value::Object(Map::new()) {
             if let Ok(text) = serde_json::to_string_pretty(&state) {
-                sections.push(("state.json".to_string(), text));
+                sections.push(("runtime/CONTINUITY_STATE.json".to_string(), text));
             }
         }
     }
@@ -2829,12 +2638,10 @@ fn compact_memory_document_without_query(text: &str, max_segments: usize) -> Str
 
 fn build_active_task_memory_section(
     snapshot: &FrameworkRuntimeView,
-    memory_root: &Path,
     query: &str,
 ) -> (Option<(String, String)>, Value) {
     let continuity = classify_runtime_continuity(snapshot);
-    let state = read_json_if_exists(&memory_root.join(MEMORY_STATE_FILENAME));
-    let mut freshness = evaluate_memory_freshness(snapshot, &state);
+    let mut freshness = evaluate_memory_freshness(snapshot);
     let current = continuity
         .get("current_execution")
         .and_then(Value::as_object)
@@ -3004,75 +2811,6 @@ fn collect_sqlite_sections(
             lines.join("\n").trim().to_string(),
         ));
     }
-    let session_notes = list_sqlite_rows(
-        &conn,
-        "SELECT session_key, position, note_type, updated_at, note FROM session_notes WHERE workspace = ? ORDER BY updated_at DESC, session_key DESC, position ASC LIMIT ?",
-        workspace,
-        max_items,
-    );
-    if !session_notes.is_empty() {
-        let mut lines = vec!["# sqlite:session_notes".to_string()];
-        for note in session_notes {
-            lines.push(format!(
-                "### {}#{}",
-                note.get("session_key").cloned().unwrap_or_default(),
-                note.get("position").cloned().unwrap_or_default()
-            ));
-            lines.push(format!(
-                "- note_type: {}",
-                note.get("note_type").cloned().unwrap_or_default()
-            ));
-            lines.push(format!(
-                "- updated_at: {}",
-                note.get("updated_at").cloned().unwrap_or_default()
-            ));
-            lines.push(format!(
-                "- note: {}",
-                note.get("note").cloned().unwrap_or_default()
-            ));
-            lines.push(String::new());
-        }
-        sections.push((
-            "sqlite/session_notes.md".to_string(),
-            lines.join("\n").trim().to_string(),
-        ));
-    }
-    let evidence_rows = list_sqlite_rows(
-        &conn,
-        "SELECT kind, path, content FROM evidence_records WHERE workspace = ? ORDER BY updated_at DESC LIMIT ?",
-        workspace,
-        max_items,
-    );
-    if !evidence_rows.is_empty() {
-        let mut lines = vec!["# sqlite:evidence_records".to_string()];
-        for row in evidence_rows {
-            lines.push(format!(
-                "### {}",
-                row.get("path")
-                    .cloned()
-                    .filter(|value| !value.is_empty())
-                    .or_else(|| row.get("kind").cloned())
-                    .unwrap_or_else(|| "evidence".to_string())
-            ));
-            lines.push(format!(
-                "- kind: {}",
-                row.get("kind").cloned().unwrap_or_default()
-            ));
-            lines.push(format!(
-                "- path: {}",
-                row.get("path").cloned().unwrap_or_default()
-            ));
-            lines.push(format!(
-                "- content: {}",
-                row.get("content").cloned().unwrap_or_default()
-            ));
-            lines.push(String::new());
-        }
-        sections.push((
-            "sqlite/evidence_records.md".to_string(),
-            lines.join("\n").trim().to_string(),
-        ));
-    }
     sections
 }
 
@@ -3164,12 +2902,10 @@ fn list_sqlite_rows(
     rows.filter_map(Result::ok).collect()
 }
 
-fn refresh_memory_state_if_needed(
-    snapshot: &FrameworkRuntimeView,
-    memory_root: &Path,
-) -> Result<Value, String> {
+fn refresh_continuity_debug_cache(snapshot: &FrameworkRuntimeView) -> Result<Value, String> {
     let continuity = classify_runtime_continuity(snapshot);
-    let state = read_json_if_exists(&memory_root.join(MEMORY_STATE_FILENAME));
+    let state_path = snapshot.current_root.join(CONTINUITY_STATE_FILENAME);
+    let state = read_json_if_exists(&state_path);
     let continuity_state = continuity
         .get("state")
         .and_then(Value::as_str)
@@ -3177,17 +2913,17 @@ fn refresh_memory_state_if_needed(
     if !matches!(continuity_state, "active" | "completed") {
         return Ok(state);
     }
-    let payload = build_memory_state(snapshot);
+    let payload = build_continuity_state(snapshot);
     if state != payload {
         let text = serde_json::to_string_pretty(&payload)
-            .map_err(|err| format!("serialize memory state failed: {err}"))?;
-        write_text_if_changed(&memory_root.join(MEMORY_STATE_FILENAME), &(text + "\n"))?;
+            .map_err(|err| format!("serialize continuity state failed: {err}"))?;
+        write_text_if_changed(&state_path, &(text + "\n"))?;
         return Ok(payload);
     }
     Ok(state)
 }
 
-fn build_memory_state(snapshot: &FrameworkRuntimeView) -> Value {
+fn build_continuity_state(snapshot: &FrameworkRuntimeView) -> Value {
     let continuity = classify_runtime_continuity(snapshot);
     let source_updated_at = continuity
         .get("continuity")
@@ -3197,7 +2933,7 @@ fn build_memory_state(snapshot: &FrameworkRuntimeView) -> Value {
         .unwrap_or(&snapshot.collected_at)
         .to_string();
     json!({
-        "schema_version": "memory-state-v1",
+        "schema_version": "continuity-state-v1",
         "source_task_id": snapshot.active_task_id.clone(),
         "source_task": continuity.get("task").cloned().unwrap_or(Value::Null),
         "source_phase": continuity.get("phase").cloned().unwrap_or(Value::Null),
@@ -3205,12 +2941,12 @@ fn build_memory_state(snapshot: &FrameworkRuntimeView) -> Value {
         "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
         "artifact_root": snapshot.current_root.display().to_string(),
         "source_updated_at": source_updated_at,
-        "content_hash": build_memory_source_hash(snapshot),
-        "last_consolidated_at": current_local_timestamp(),
+        "content_hash": build_continuity_source_hash(snapshot),
+        "last_refreshed_at": current_local_timestamp(),
     })
 }
 
-fn evaluate_memory_freshness(snapshot: &FrameworkRuntimeView, state: &Value) -> Value {
+fn evaluate_memory_freshness(snapshot: &FrameworkRuntimeView) -> Value {
     let continuity = classify_runtime_continuity(snapshot);
     let current = continuity
         .get("current_execution")
@@ -3225,45 +2961,16 @@ fn evaluate_memory_freshness(snapshot: &FrameworkRuntimeView, state: &Value) -> 
             "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
         });
     }
-    if state.is_null() || state == &Value::Object(Map::new()) {
-        return json!({
-            "state": "missing",
-            "active_task_allowed": false,
-            "reasons": ["memory/state.json is missing"],
-            "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
-        });
-    }
-    let mut reasons = Vec::new();
-    let state_task_id = value_text(state.get("source_task_id"));
-    let snapshot_task_id = snapshot.active_task_id.clone().unwrap_or_default();
-    if safe_slug(&state_task_id) != safe_slug(&snapshot_task_id) {
-        reasons.push("memory/state.json points at a different task id".to_string());
-    }
-    let expected_hash = build_memory_source_hash(snapshot);
-    if value_text(state.get("content_hash")) != expected_hash {
-        reasons.push("runtime source hash is newer than memory/state.json".to_string());
-    }
-    let state_updated_at = parse_iso_timestamp(state.get("source_updated_at"));
-    let continuity_updated_at = continuity
-        .get("continuity")
-        .and_then(Value::as_object)
-        .and_then(|inner| parse_iso_timestamp(inner.get("last_updated_at")));
-    if let Some(continuity_updated_at) = continuity_updated_at {
-        if state_updated_at.is_none() || state_updated_at < Some(continuity_updated_at) {
-            reasons.push("continuity timestamp is newer than memory/state.json".to_string());
-        }
-    }
     json!({
-        "state": if reasons.is_empty() { "fresh" } else { "stale" },
-        "active_task_allowed": reasons.is_empty(),
-        "reasons": reasons,
+        "state": "fresh",
+        "active_task_allowed": true,
+        "reasons": [],
         "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
         "source_task_id": snapshot.active_task_id.clone().unwrap_or_default(),
-        "state_task_id": state.get("source_task_id").cloned().unwrap_or(Value::Null),
     })
 }
 
-fn build_memory_source_hash(snapshot: &FrameworkRuntimeView) -> String {
+fn build_continuity_source_hash(snapshot: &FrameworkRuntimeView) -> String {
     let payload = json!({
         "active_task_id": snapshot.active_task_id.clone(),
         "session_summary_text": snapshot.session_summary_text,
@@ -3334,14 +3041,15 @@ fn default_memory_md(repo_root: &Path) -> String {
     [
         "# 项目长期记忆",
         "",
-        "_本文件沉淀跨会话稳定的项目事实、决策与约定。当前任务态以 continuity artifacts 为准；历史/debug 归档到 `memory/archive/`。_",
+        "长期层只放索引和稳定摘要；活任务状态看 `artifacts/current/<task_id>/`、`artifacts/current/active_task.json` 和 `.supervisor_state.json`。",
         "",
-        "## 项目身份",
+        "## 索引",
         "",
-        &format!("- **仓库**: `{}`", repo_root.display()),
-        "- **闭环事实源**: `artifacts/current/<task_id>/` + `artifacts/current/active_task.json` + `.supervisor_state.json`",
-        "- **默认召回策略**: 稳定层优先，仅在 query 明确命中 active task 且 freshness gate 通过时追加当前任务态",
-        "- **Artifact 分层**: `artifacts/bootstrap/` / `artifacts/ops/memory_automation/` / `artifacts/evidence/` / `artifacts/scratch/`",
+        &format!("- 仓库：`{}`。", repo_root.display()),
+        "- 偏好：`preferences.md`。",
+        "- 稳定决策：`decisions.md`。",
+        "- 操作入口：`runbooks.md`。",
+        "- 经验教训：`lessons.md`。",
         "",
     ]
     .join("\n")
@@ -3356,9 +3064,9 @@ fn default_runbooks() -> String {
         "",
         "- 统一维护入口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace>",
         "- 需要迁移旧 artifact 布局时显式执行：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --host-integration run-memory-automation --repo-root <repo_root> --workspace <workspace> --apply-artifact-migrations",
-        "- 合并稳定记忆：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4",
+        "- 合并稳定记忆：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --codex-hook-command session-end --repo-root <repo_root> --framework-max-lines 4",
         "- 召回上下文：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --framework-memory-recall-json --repo-root <repo_root> --framework-memory-mode stable|active|history|debug --query <关键词> --limit <N>",
-        "- 生命周期收口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --claude-hook-command session-end --repo-root <repo_root> --claude-hook-max-lines 4",
+        "- 生命周期收口：./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --codex-hook-command session-end --repo-root <repo_root> --framework-max-lines 4",
         "- 诊断快照与存储审计查看 `artifacts/ops/memory_automation/<run_id>/`，不再从 MEMORY_AUTO 或 sessions 读取。",
         "",
     ]
@@ -3368,7 +3076,7 @@ fn default_runbooks() -> String {
 
 fn ensure_framework_memory_seeded(
     repo_root: &Path,
-    snapshot: &FrameworkRuntimeView,
+    _snapshot: &FrameworkRuntimeView,
     memory_root: &Path,
     artifact_root_override: Option<&Path>,
 ) -> Result<(Vec<String>, String), String> {
@@ -3401,12 +3109,6 @@ fn ensure_framework_memory_seeded(
             changed_files.push(path.display().to_string());
         }
     }
-    let state_path = memory_root.join(MEMORY_STATE_FILENAME);
-    let state_text = serde_json::to_string_pretty(&build_memory_state(snapshot))
-        .map_err(|err| format!("serialize memory state failed: {err}"))?;
-    if write_text_if_changed(&state_path, &(state_text + "\n"))? {
-        changed_files.push(state_path.display().to_string());
-    }
     Ok((
         changed_files,
         "memory_workspace was empty; bridge ran one-shot consolidation".to_string(),
@@ -3429,24 +3131,14 @@ fn describe_project_local_memory_layout(memory_root: &Path) -> Value {
 fn describe_continuity_layout(repo_root: &Path, artifact_base: &Path) -> Value {
     let current_root = artifact_base.join(CURRENT_ARTIFACT_DIR);
     json!({
-        "task_scoped_current": {
+        "current_control": {
             "template": current_root.join("<task_id>").display().to_string(),
             "active_task_pointer": current_root.join(ACTIVE_TASK_POINTER_NAME).display().to_string(),
             "focus_task_pointer": current_root.join(FOCUS_TASK_POINTER_NAME).display().to_string(),
             "task_registry": current_root.join(TASK_REGISTRY_NAME).display().to_string(),
         },
-        "root_task_mirror": {
+        "root_anchor": {
             "supervisor_state": repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
-            "session_summary": repo_root.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-            "next_actions": repo_root.join(NEXT_ACTIONS_FILENAME).display().to_string(),
-            "evidence_index": repo_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
-            "trace_metadata": repo_root.join(TRACE_METADATA_FILENAME).display().to_string(),
-        },
-        "bridge_mirror": {
-            "session_summary": current_root.join(SESSION_SUMMARY_FILENAME).display().to_string(),
-            "next_actions": current_root.join(NEXT_ACTIONS_FILENAME).display().to_string(),
-            "evidence_index": current_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
-            "trace_metadata": current_root.join(TRACE_METADATA_FILENAME).display().to_string(),
         },
         "artifact_lanes": {
             "bootstrap": artifact_base.join("bootstrap").join("<task_id>").display().to_string(),
@@ -3454,7 +3146,7 @@ fn describe_continuity_layout(repo_root: &Path, artifact_base: &Path) -> Value {
             "evidence": artifact_base.join("evidence").join("<task_id>").display().to_string(),
             "scratch": artifact_base.join("scratch").join("<run_id>").display().to_string(),
         },
-        "sync_responsibility": "Supervisor writes task-scoped continuity under artifacts/current/<task_id>/ and keeps root plus artifacts/current compatibility mirrors aligned to the focus task. artifacts/current/ should contain only the active-task pointer, focus-task pointer, task registry, four mirror files, and task-scoped continuity directories; bootstrap, ops, evidence, and scratch belong elsewhere.",
+        "sync_responsibility": "Supervisor writes recovery artifacts only under artifacts/current/<task_id>/. The artifacts/current root keeps pointers and the task registry; repo root keeps only .supervisor_state.json as the host-neutral anchor.",
     })
 }
 
@@ -3494,6 +3186,9 @@ fn compact_memory_retrieval_for_prompt(retrieval: &Value) -> Value {
         "mode": retrieval.get("mode").cloned().unwrap_or(Value::Null),
         "memory_root": retrieval.get("memory_root").cloned().unwrap_or(Value::Null),
         "active_task_included": retrieval.get("active_task_included").cloned().unwrap_or(Value::Bool(false)),
+        "freshness": retrieval.get("freshness").cloned().unwrap_or_else(|| json!({})),
+        "continuity_state": retrieval.get("continuity_state").cloned().unwrap_or(Value::Null),
+        "active_task_id": retrieval.get("active_task_id").cloned().unwrap_or(Value::Null),
         "items": retrieval
             .get("items")
             .and_then(Value::as_array)
@@ -3502,6 +3197,21 @@ fn compact_memory_retrieval_for_prompt(retrieval: &Value) -> Value {
             .into_iter()
             .take(8)
             .collect::<Vec<_>>(),
+    })
+}
+
+fn compact_memory_retrieval_diagnostics(retrieval: &Value) -> Value {
+    json!({
+        "mode": retrieval.get("mode").cloned().unwrap_or(Value::Null),
+        "topic": retrieval.get("topic").cloned().unwrap_or(Value::Null),
+        "item_count": retrieval
+            .get("items")
+            .and_then(Value::as_array)
+            .map(|items| items.len())
+            .unwrap_or(0),
+        "active_task_included": retrieval.get("active_task_included").cloned().unwrap_or(Value::Bool(false)),
+        "freshness": retrieval.get("freshness").cloned().unwrap_or_else(|| json!({})),
+        "active_task_id": retrieval.get("active_task_id").cloned().unwrap_or(Value::Null),
     })
 }
 
@@ -4262,37 +3972,6 @@ fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
     write_text_if_changed(path, &serialized)
 }
 
-fn extract_markdown_section(text: &str, headings: &[&str]) -> String {
-    let mut capture = false;
-    let mut lines = Vec::new();
-    for line in text.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with('#') {
-            let title = trimmed.trim_start_matches('#').trim();
-            if capture {
-                break;
-            }
-            if headings.contains(&title) {
-                capture = true;
-                continue;
-            }
-        }
-        if capture {
-            lines.push(line.to_string());
-        }
-    }
-    lines.join("\n").trim().to_string()
-}
-
-fn extract_bullets(text: &str, max_lines: usize) -> Vec<String> {
-    stable_line_items(
-        text.lines()
-            .filter_map(|line| coerce_bullet_line(line.trim()))
-            .take(max_lines)
-            .collect(),
-    )
-}
-
 fn coerce_bullet_line(line: &str) -> Option<String> {
     if let Some(value) = line.strip_prefix("- ").or_else(|| line.strip_prefix("* ")) {
         let resolved = value.trim();
@@ -4311,24 +3990,6 @@ fn coerce_bullet_line(line: &str) -> Option<String> {
         break;
     }
     None
-}
-
-fn format_optional_joined(label: &str, value: Option<&Value>) -> String {
-    let values = value_string_list(value);
-    if values.is_empty() {
-        String::new()
-    } else {
-        format!("{label}: {}", join_lines(&values))
-    }
-}
-
-fn nonempty_or(value: Option<&Value>, fallback: &str) -> String {
-    let resolved = value_text(value);
-    if resolved.is_empty() {
-        fallback.to_string()
-    } else {
-        resolved
-    }
 }
 
 fn join_lines(values: &[String]) -> String {
@@ -5161,62 +4822,19 @@ fn write_focused_repo_mirrors(
     mirror_root: &Path,
     updated_at: &str,
 ) -> Result<(), String> {
-    let root_summary = repo_root.join(SESSION_SUMMARY_FILENAME);
-    let root_next_actions = repo_root.join(NEXT_ACTIONS_FILENAME);
-    let root_evidence = repo_root.join(EVIDENCE_INDEX_FILENAME);
-    let root_trace = repo_root.join(TRACE_METADATA_FILENAME);
-    let mirror_summary = mirror_root.join(SESSION_SUMMARY_FILENAME);
-    let mirror_next_actions = mirror_root.join(NEXT_ACTIONS_FILENAME);
-    let mirror_evidence = mirror_root.join(EVIDENCE_INDEX_FILENAME);
-    let mirror_trace = mirror_root.join(TRACE_METADATA_FILENAME);
-    let root_journal = repo_root.join(CONTINUITY_JOURNAL_FILENAME);
-    let mirror_journal = mirror_root.join(CONTINUITY_JOURNAL_FILENAME);
     let active_pointer = mirror_root.join(ACTIVE_TASK_POINTER_NAME);
-    let summary_text = render_session_summary(&plan.task, &plan.phase, &plan.status, &plan.summary);
-    let next_actions_payload = plan.next_actions_payload.clone();
-    let evidence_payload = plan.evidence_payload.clone();
-    let trace_metadata_payload = plan.trace_metadata_payload.clone();
-    let journal_payload = plan.journal_payload.clone();
-    write_session_artifact_set(
-        ArtifactPaths {
-            summary: &root_summary,
-            next_actions: &root_next_actions,
-            evidence: &root_evidence,
-            trace_metadata: Some(&root_trace),
-            journal: Some(&root_journal),
-        },
-        ArtifactPayloads {
-            summary_text: &summary_text,
-            next_actions: &next_actions_payload,
-            evidence: &evidence_payload,
-            trace_metadata: &trace_metadata_payload,
-            journal: Some(&journal_payload),
-        },
-        &mut plan.changed_paths,
-    )?;
-    write_session_artifact_set(
-        ArtifactPaths {
-            summary: &mirror_summary,
-            next_actions: &mirror_next_actions,
-            evidence: &mirror_evidence,
-            trace_metadata: Some(&mirror_trace),
-            journal: Some(&mirror_journal),
-        },
-        ArtifactPayloads {
-            summary_text: &summary_text,
-            next_actions: &next_actions_payload,
-            evidence: &evidence_payload,
-            trace_metadata: &trace_metadata_payload,
-            journal: Some(&journal_payload),
-        },
-        &mut plan.changed_paths,
-    )?;
     if write_json_if_changed(
         &active_pointer,
         &json!({
             "task_id": plan.task_id,
             "task": plan.task,
             "updated_at": updated_at,
+            "task_root": plan.summary_path.parent().map(|path| path.display().to_string()).unwrap_or_default(),
+            "session_summary": plan.summary_path.display().to_string(),
+            "next_actions": plan.next_actions_path.display().to_string(),
+            "evidence_index": plan.evidence_path.display().to_string(),
+            "trace_metadata": plan.trace_metadata_path.display().to_string(),
+            "continuity_journal": plan.journal_path.display().to_string(),
         }),
     )? {
         plan.changed_paths

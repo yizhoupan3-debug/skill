@@ -1,6 +1,10 @@
 ---
 name: skill-creator
-description: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Codex's capabilities with specialized knowledge, workflows, or tool integrations.
+description: |
+  Create or update one Codex skill package after the boundary is known. Use for
+  concrete skill authoring, trigger wording, frontmatter cleanup, resource
+  packaging, or revising an existing `SKILL.md`. Framework policy and multi-skill
+  routing decisions belong to `$skill-framework-developer`.
 routing_layer: L0
 routing_owner: owner
 routing_gate: none
@@ -12,6 +16,10 @@ trigger_hints:
   - update skill
   - skill package
   - codex skill
+  - skill authoring
+  - trigger wording
+  - frontmatter cleanup
+  - skill debugging
 metadata:
   short-description: Create or update a skill
 ---

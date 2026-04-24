@@ -3,7 +3,7 @@ name: python-pro
 description: Deliver production-grade Python 3.12+ code with clean async boundaries, strict typing, and modern tooling.
 metadata:
   version: "2.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - python
     - fastapi

@@ -9,7 +9,7 @@ truth lives in `router-rs` and related Rust tools.
 It is the contract source of truth for:
 
 - routing and route diagnostics
-- profile / adapter / artifact compilation
+- profile / Codex artifact compilation
 - execution response shape
 - runtime control-plane descriptors
 - framework runtime snapshot / memory / artifact continuity
@@ -20,7 +20,7 @@ It is the contract source of truth for:
 Rust owns the default runtime and contract path.
 
 - `router-rs --route-json`, `--route-policy-json`, `--route-report-json` own route decisions.
-- `router-rs --profile-json` and `--profile-artifacts-json` own profile, adapter, parity, capability discovery, compatibility inventory, and shared contract artifacts.
+- `router-rs --profile-json` and `--profile-artifacts-json` own the Codex-only profile and `codex_adapter` artifact.
 - `router-rs --execute-json` owns the live/dry-run execution response contract.
 - `router-rs --framework-runtime-snapshot-json`, `--framework-contract-summary-json`, `--framework-memory-recall-json`, `--framework-session-artifact-write-json`, `--framework-memory-policy-json`, and `--framework-prompt-compression-json` own framework runtime read/write/policy surfaces.
 - `router-rs --sync-host-entrypoints-json` owns repo host-entrypoint materialization.
@@ -44,7 +44,7 @@ Retired surfaces stay retired:
 - Live execution and dry-run preview stay Rust-only by default.
 - Compatibility live fallback request surface has been removed; historical fallback metadata may appear only as retired legacy evidence.
 - Runtime control plane publishes Rust-owned authority for `router`, `state`, `trace`, `memory`, and `background`.
-- `framework_runtime/` Python package is retired; framework snapshot, contract summary, memory recall, session artifact writing, prompt/memory policy, and framework MCP use `router-rs` surfaces.
+- `framework_runtime/` Python package is retired; framework snapshot, contract summary, memory recall, session artifact writing, and prompt/memory policy use direct `router-rs` surfaces.
 - Memory policy extraction reports source/fact counts and can persist to both `memory.sqlite3` and the stable `decisions.md` journal without introducing a Python writer.
 - Host entrypoint sync and native integration are Rust-owned through `router-rs`.
 - Runtime traces expose resumable `seq` / `cursor` metadata, transport binding artifacts, handoff descriptors, and process-external attach resolution.
@@ -67,7 +67,7 @@ Retired surfaces stay retired:
 - `rust_execute_fallback_to_python`
 - `rust_python_artifact_parity_report.json`
 - default emission of fallback host artifacts
-- OMC / `oh-my-claudecode` as live runtime, prompt, plugin, or state dependency
+- non-Codex host overlays as live runtime, prompt, plugin, or state dependency
 
 ### 下一 safe slice
 
@@ -81,20 +81,16 @@ Retired surfaces stay retired:
 
 - Contract changes must be explicit and versioned.
 - Rust may replace implementations, not silently redefine semantics.
-- Host-private fields stay in host projection or compatibility lanes; they must not enter framework truth.
+- Codex host-private fields stay in `codex_adapter.host_adapter_payload`; they must not enter framework truth.
 - Compatibility inventory is not a regression baseline.
 - Generated host entrypoints are projections, not hand-authored truth.
 - Any new Python runtime, routing, artifact, hook, or host-integration implementation is a regression unless explicitly approved as a host-private edge script.
 
-## Host / Adapter Invariants
+## Codex Profile Invariants
 
-- `cli_common_adapter` is the canonical CLI-family shared contract.
-- `codex_common_adapter` is only a Codex compatibility naming view.
-- `codex_desktop_adapter` is the canonical desktop identity.
-- `codex_cli_adapter`, `claude_code_adapter`, and `gemini_cli_adapter` are thin host projections.
-- `codex_desktop_host_adapter` is a retired compatibility alias and can appear only through explicit continuity opt-in.
-- `aionrs_companion_adapter`, `aionui_host_adapter`, and `generic_host_adapter` are retired inventory rows, not default peer adapters.
-- `codexcli` is a headless execution entrypoint, never framework truth.
+- `codex_adapter` is the only default profile artifact key. The key is kept for compatibility and no longer represents a multi-host adapter layer.
+- Codex host-private fields stay in `codex_adapter.host_adapter_payload`.
+- CLI/Desktop split, parity snapshots, non-Codex projections, and generic fallback adapters are not default runtime surfaces.
 
 ## Route Contract
 

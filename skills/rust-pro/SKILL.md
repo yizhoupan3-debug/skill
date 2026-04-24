@@ -9,7 +9,7 @@ description: |
   like "Rust 项目", "所有权", "生命周期", "async Tokio".
 metadata:
   version: "1.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - rust
     - ownership

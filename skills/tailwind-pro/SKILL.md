@@ -5,7 +5,7 @@ description: |
   Use when the user asks about Tailwind configuration, custom themes, plugin authoring, design tokens, dark mode, responsive utilities, Tailwind 配置 / Tailwind 主题 / Tailwind 插件, or Tailwind v3 (`tailwind.config.js`) / v4 (`@theme`).
 metadata:
   version: "1.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - tailwind
     - design-system

@@ -7,7 +7,7 @@ description: |
   debug 401/403/429/5xx、trace request-response mismatches、调 curl/fetch/axios、看接口文档写调用。
 metadata:
   version: "1.1.0"
-  platforms: [codex, antigravity]
+  platforms: [codex]
   tags:
     - api
     - rest

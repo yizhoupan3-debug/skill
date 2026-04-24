@@ -21,7 +21,7 @@ trigger_hints:
   - 产品风格映射
 metadata:
   version: "0.1.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - design-routing
     - design-reference

@@ -7,7 +7,7 @@ description: |
   bug needs deeper investigation than generic systematic debugging.
 metadata:
   version: "1.2.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - frontend
     - debugging

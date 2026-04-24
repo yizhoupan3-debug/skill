@@ -1,4 +1,0 @@
-interface:
-  display_name: "PPT HTML Export"
-  short_description: "Build PPT-style HTML decks and export PDF"
-  default_prompt: "Use $ppt-html-export to turn this outline into an HTML presentation with local images and a matching PDF export."

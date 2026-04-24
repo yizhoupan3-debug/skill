@@ -38,7 +38,7 @@ framework_contracts:
   cognitive_escalation: true
 metadata:
   version: "2.5.0"
-  platforms: [codex, antigravity]
+  platforms: [codex]
   tags: [anti-laziness, quality-enforcement, empirical-verification, gsd, get-shit-done]
 ---
 

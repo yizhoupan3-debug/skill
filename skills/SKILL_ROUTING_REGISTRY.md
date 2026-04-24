@@ -28,8 +28,7 @@
 | `checklist-writting` | Active | P1 | L1 | owner | none | project | ✓ 100.0 | Write a versioned execution-ready checklist once the strategy is fixed. |
 | `chrome-extension-dev` | Active | P2 | L4 | owner | none | project | ✓ 97.0 | Produce Chrome extensions for Manifest V3: Service Workers, minimal permissions, |
 | `citation-management` | Active | P2 | L1 | owner | none | project | ✓ 98.3 | Verify, normalize, de-duplicate, complete, and format academic citations and ref |
-| `claude-api` | Active | P1 | L1 | gate | source | project | ✓ 100.0 | Use official Claude docs first for Claude API and Claude Code |
-| `cloudflare-deploy` | Active | P2 | L3 | owner | none | project | ✓ 98.7 | Deploy, publish, migrate, and operate applications on Cloudflare using Workers,  |
+| `cloudflare-deploy` | Active | P2 | L3 | owner | none | project | ✓ 98.7 | Deploy, publish, migrate, and operate apps on Cloudflare Workers, Pages, Wrangle |
 | `code-acceleration` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Speed up code with measured rewrites, batching, caching, and parallel execution |
 | `code-review` | Active | P2 | L2 | overlay | none | project | ✓ 94.7 | Review code with structured findings and optional quality scoring. Use when the  |
 | `coding-standards` | Active | P2 | L1 | overlay | none | project | ✓ 97.7 | Enforce cross-stack coding standards: naming, readability, error handling, immut |
@@ -66,10 +65,10 @@
 | `gitx` | Active | P1 | L2 | owner | none | project | ✓ 100.0 | Run the safe Git review-fix-tidy-commit-merge-push workflow end to end. |
 | `go-pro` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Deliver safe concurrent Go code with managed goroutine lifecycles, composable in |
 | `graphviz-expert` | Active | P2 | L3 | owner | none | project | ✓ 92.8 | Create Graphviz/DOT diagrams for precise, orthogonal, publication-quality flowch |
-| `humanizer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | General prose polish and style naturalization for existing drafts or supplied no |
+| `humanizer` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Polish existing prose so it sounds natural, specific, and human while preserving |
 | `i18n-l10n` | Active | P2 | L3 | overlay | none | project | ✓ 96.8 | Internationalization and localization overlay for web/mobile projects. Use for m |
 | `idea-to-plan` | Active | P0 | L-1 | @strategic-orchestrator | delegation | project | ✓ 100.0 | Turn ambiguous ideas into evidence-backed plans with branch routing and compress |
-| `imagegen` | Active | P2 | L1 | owner | none | project | ✓ 98.7 | Generate or edit raster images through VibeProxy Local /v1/responses using the b |
+| `image-generated` | Active | P2 | L1 | owner | none | project | ✓ 98.7 | Generate or edit raster images through VibeProxy Local /v1/responses using the b |
 | `infographic` | Active | P2 | L3 | owner | none | project | ✓ 95.1 | Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge car |
 | `information-retrieval` | Active | P2 | L1 | owner | none | project | ✓ 97.2 | Run multi-round research before acting or recommending |
 | `iterative-optimizer` | Active | P1 | L0 | overlay | none | project | ⚠ 66.4 | N-round optimization loops with built-in laziness immunity |
@@ -77,7 +76,7 @@
 | `jupyter-notebook` | Active | P2 | L3 | owner | none | project | ✓ 98.2 | Create, scaffold, refactor, and normalize Jupyter notebooks (`.ipynb`) for exper |
 | `latex-compile-acceleration` | Active | P1 | L4 | owner | none | project | ✓ 96.1 | Speed up LaTeX compile and preview workflows |
 | `linux-server-ops` | Active | P2 | L3 | owner | none | project | ✓ 97.7 | Get services running and staying healthy on a Linux host — systemd units, revers |
-| `literature-synthesis` | Active | P2 | L4 | owner | none | project | ✓ 95.6 | Systematically screen, cluster, compare, and synthesize academic literature into |
+| `literature-synthesis` | Active | P2 | L4 | owner | none | project | ✓ 95.6 | Screen, cluster, compare, and synthesize academic literature into a topic review |
 | `mac-memory-management` | Active | P2 | L4 | owner | none | project | ✓ 100.0 | Optimize Apple Silicon ML runtimes for memory pressure, throughput, and MPS stab |
 | `math-derivation` | Active | P2 | L4 | owner | none | project | ✓ 99.2 | Execute rigorous mathematical derivations and proofs |
 | `mcp-builder` | Active | P2 | L3 | owner | none | project | ✓ 94.3 | Design, build, review, and improve MCP servers and agent-facing tool interfaces. |
@@ -97,15 +96,13 @@
 | `paper-reviser` | Active | P2 | L2 | owner | none | project | ✓ 97.3 | Specialist revision lane behind `$paper-workbench`. Use when the route is alread |
 | `paper-visuals` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Audit and improve paper figures, tables, captions, legends, axes, notes, and res |
 | `paper-workbench` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Unified front door for paper work. Use when the user has a manuscript-level task |
-| `paper-writing` | Active | P2 | L2 | owner | none | project | ✓ 95.7 | Write, restructure, or polish a bounded academic-paper text unit after the claim |
+| `paper-writing` | Active | P2 | L2 | owner | none | project | ✓ 95.7 | Write, restructure, or polish bounded academic-paper prose after the claim/evide |
 | `pdf` | Active | P1 | L3 | gate | artifact | project | ✓ 94.8 | Read, create, edit, repair, and review PDFs when rendering and page layout matte |
 | `performance-expert` | Active | P2 | L3 | owner | none | project | ✓ 94.2 | Audit and improve web performance with emphasis on Core Web Vitals, asset weight |
 | `plan-to-code` | Active | P1 | L2 | owner | none | project | ✓ 95.8 | Implement a concrete plan or spec into integrated code |
 | `playwright` | Active | P2 | L3 | gate | evidence | project | ✓ 98.7 | Use a real browser when live evidence or page interaction is required |
 | `ppt-beamer` | Active | P2 | L4 | owner | none | project | ✓ 95.3 | Create, revise, and compile presentation decks with LaTeX Beamer when you want e |
-| `ppt-html-export` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Use after the `$slides` gate when the user explicitly wants HTML slides plus a b |
-| `ppt-markdown` | Active | P2 | L4 | owner | none | project | ✓ 95.2 | Build slide decks from Markdown using Slidev or Marp. Use for explicit Markdown  |
-| `ppt-pptx` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Create Rust-authored outline/source plans plus editable `deck.pptx` decks throug |
+| `ppt-pptx` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Build source-first editable `.pptx` decks from `deck.plan.json` through the Rust |
 | `slides` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Route presentation-artifact work before choosing a slide-authoring lane. Use thi |
 | `spreadsheets` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Route workbook-native spreadsheet artifact work before choosing a narrower imple |
 | `prompt-engineer` | Active | P2 | L1 | owner | none | project | ✓ 95.8 | Transform vague instructions into structured prompts with explicit role, constra |
@@ -124,14 +121,11 @@
 | `sentry` | Active | P2 | L0 | gate | source | project | ✓ 95.7 | Inspect Sentry issues, events, releases, environments, and recent production exc |
 | `seo-web` | Active | P2 | L4 | owner | none | project | ✓ 94.1 | Audit and optimize technical SEO for web apps: meta tags, structured data (JSON- |
 | `shell-cli` | Active | P2 | L2 | owner | none | project | ✓ 98.4 | Produce safe, portable shell commands, pipelines, and scripts that handle quotin |
-| `skill-developer` | Active | P2 | L3 | owner | none | project | ✓ 96.2 | Create, improve, debug, and audit Antigravity skills and `SKILL.md` files. Use w |
 | `skill-framework-developer` | Active | P1 | L0 | owner | none | project | ✓ 97.5 | Design and tune Codex skill routing/framework behavior |
-| `skill-installer-antigravity` | Active | P2 | L3 | owner | none | project | ✓ 96.2 | Install Antigravity skills into the shared workspace skill library from local fo |
-| `skill-library-maintenance` | Active | P2 | L1 | overlay | none | project | ✓ 100.0 | Maintain skill-library operational health through validation, sync checks, drift |
 | `skill-routing-repair` | Active | P1 | L0 | owner | none | project | ✓ 97.0 | Patch routing misses with the smallest safe skill fix |
 | `skill-scout` | Active | P2 | L1 | owner | none | project | ✓ 98.0 | Research external skill ecosystems and produce gap-analysis proposals for the lo |
 | `skill-writer` | Active | P1 | L0 | owner | none | project | ✓ 95.5 | Shape one skill's wording, boundary, and token budget |
-| `slides-source-first` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Build or revise slide workflows where source-of-truth authoring and artifact con |
+| `source-slide-formats` | Active | P2 | L4 | owner | none | project | ✓ 100.0 | Build presentation sources in Markdown, Slidev, Marp, or HTML/CSS and export the |
 | `sql-pro` | Active | P2 | L4 | owner | none | project | ✓ 97.7 | Write, optimize, debug, and review SQL for PostgreSQL, MySQL, SQLite, and analyt |
 | `statistical-analysis` | Active | P2 | L4 | owner | none | project | ✓ 95.8 | Guide research statistics for test choice, effect sizes, uncertainty reporting,  |
 | `subagent-delegation` | Active | P1 | L0 | gate | delegation | project | ✓ 94.5 | Decide whether a complex task should stay local, use bounded subagents, or prese |
@@ -151,5 +145,5 @@
 | `web-scraping` | Active | P2 | L4 | owner | none | project | ✓ 99.2 | Plan and implement web scraping and structured data extraction workflows. Use wh |
 | `webhook-security` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Secure webhook receivers and callback endpoints for Stripe, GitHub, Slack, Clerk |
 | `writing-skills` | Active | P2 | L0 | overlay | none | project | ✓ 95.2 | Standardize and strengthen multiple `SKILL.md` files and shared skill-writing do |
-| `xlsx` | Active | P2 | L3 | owner | none | project | ✓ 98.3 | Read, create, edit, repair, render, and review Excel `.xlsx` workbooks when form |
+| `xlsx` | Active | P1 | L3 | gate | artifact | project | ✓ 98.3 | Gate `.xlsx` workbook work when formulas, formatting, workbook structure, or pri |
 | `youtube-summarizer` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Extract transcripts from YouTube videos and turn them into summaries, notes, key |

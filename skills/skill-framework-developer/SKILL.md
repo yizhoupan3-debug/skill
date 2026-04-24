@@ -1,10 +1,11 @@
 ---
 name: skill-framework-developer
 description: |
-  Skill 框架治理：路由、边界、owner/gate/overlay、维护规范与减少 token 消耗。
+  Skill 框架治理：路由、边界、owner/gate/overlay、维护规范、sync health、
+  registry drift cleanup 与减少 token 消耗。
   Use when the request is about framework policy, routing-system review, skill-boundary audit,
-  overlap repair strategy, skill-library self-optimization, or feedback that a
-  domain skill is "不好用" and should be continuously improved.
+  overlap repair strategy, skill-library maintenance/self-optimization, validation,
+  sync checks, registry drift cleanup, or feedback that a domain skill is "不好用".
 routing_layer: L0
 routing_owner: owner
 routing_gate: none
@@ -23,6 +24,14 @@ trigger_hints:
   - 边界重叠
   - 减少 token 消耗
   - framework 自优化
+  - skill 维护
+  - sync health checks
+  - registry drift cleanup
+  - skill library maintenance
+  - 写一个 skill
+  - 批量规范 skill
+  - 路由没触发
+  - validate skills
   - owner gate overlay
   - skill 不好用
   - skill不好用
@@ -72,9 +81,10 @@ bridge_behavior: mobile_complete_once
 
 # skill-framework-developer
 
-This skill owns **shared skill-framework design**: owner/gate/overlay policy,
-boundary cleanup, trigger-surface tuning, session-start routing, and high-level
-library self-optimization.
+This skill owns **shared skill-framework design and maintenance**:
+owner/gate/overlay policy, boundary cleanup, trigger tuning, session-start
+routing, validation, sync health, registry drift cleanup, and library
+self-optimization.
 
 Check this skill early at **conversation start / first turn / 每轮对话开始** when
 the request is about framework structure rather than one isolated file edit.
@@ -82,13 +92,14 @@ the request is about framework structure rather than one isolated file edit.
 ## When to use
 
 - The user wants to redesign the Codex skill framework or route selection policy
+- The user wants routine skill-library validation, sync checks, or drift cleanup
 - The task is **框架自优化 / 路由诊断 / 触发精准度优化 / 减少 token 消耗**
 - The user asks how to handle **新增 skill / 新加入 skill / 维护规范 / 维护流程**
 - The task is about **边界重叠 / 修改旧 skill / 顺手修旧 skill / 旧 skill 该不该拆**
 - The user wants to decide owner vs gate vs overlay, or when to split vs extend an incumbent skill
 - A skill is over-broad, misfiring, or weak at first-turn routing
 - The user says a domain skill is not useful, too generic, or needs continuous optimization
-- The problem is framework-level overlap between `skill-writer`, `skill-creator`, `skill-installer`, and `skill-routing-repair`
+- The task is one of the framework maintenance modes: single-skill wording, batch normalization, route-miss repair, or external skill ecosystem scouting
 - Best for requests like:
   - "优化整个 skill 框架"
   - "科研相关 skill 太不好用了，持续优化，允许外部调研"
@@ -99,11 +110,8 @@ the request is about framework structure rather than one isolated file edit.
 
 ## Do not use
 
-- The main job is a **post-task smallest-patch repair** after a miss → use [`$skill-routing-repair`](/Users/joe/Documents/skill/skills/skill-routing-repair/SKILL.md)
-- The task is **concrete skill file authoring** rather than framework policy → use [`$skill-creator`](/Users/joe/Documents/skill/skills/.system/skill-creator/SKILL.md)
+- The task is **concrete single skill package creation/update** after the boundary is known → use [`$skill-creator`](/Users/joe/Documents/skill/skills/.system/skill-creator/SKILL.md)
 - The task is **new skill intake / install / relink / re-index** → use [`$skill-installer`](/Users/joe/Documents/skill/skills/.system/skill-installer/SKILL.md)
-- The task is mainly **single-skill writing guidance** for description quality / token budget / packaging → use [`$skill-writer`](/Users/joe/Documents/skill/skills/skill-writer/SKILL.md)
-- The task is Antigravity-only behavior or indexing → use `$skill-developer`
 
 ## Primary operating principle
 
@@ -136,15 +144,17 @@ If runtime policy does **not** permit spawning:
 - keep the same inspection plan as a local-supervisor queue
 - avoid narrating every wording change in the main thread
 
-## Boundary map
+## Mode map
 
 Use this owner split:
 
 - **`skill-framework-developer`** → framework policy, routing rules, overlap decisions, split strategy
-- **`skill-routing-repair`** → post-task smallest safe repair after a concrete miss
+- **`single-skill wording pass`** → description quality, trigger hints, token budget, and boundary language for one skill
+- **`batch wording normalization`** → consistent shape across many skill files
+- **`miss repair`** → smallest safe route repair after a concrete miss, plus regression case
+- **`external scout`** → external skill ecosystem benchmarking when the output is local framework guidance
 - **`skill-creator`** → create/update/split a specific Codex skill package
 - **`skill-installer`** → import, normalize, link, and re-index a new skill
-- **`skill-writer`** → wording, description budget, progressive disclosure, packaging advice
 
 Default to **incumbent-first** repair:
 
@@ -155,7 +165,7 @@ Default to **incumbent-first** repair:
 ## Framework workflow
 
 1. Extract **object / action / constraints / deliverable**.
-2. Decide whether the problem is **policy**, **authoring**, **installation**, or **post-task repair**.
+2. Decide whether the problem is **policy**, **authoring**, **installation**, `single-skill wording pass`, `batch wording normalization`, `miss repair`, or `external scout`.
 3. Decide owner vs gate vs overlay.
 4. Tighten the discovery surface first:
    - `description`
@@ -163,7 +173,7 @@ Default to **incumbent-first** repair:
    - `## Do not use`
    - opening-turn note
 5. Remove duplicated framework prose; keep one canonical source when possible.
-6. Validate and sync.
+6. Validate, sync, and remove registry drift.
 
 ## Validation
 
@@ -177,6 +187,10 @@ cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
 ```
 
 For local high-output runs, follow [`RTK.md`](/Users/joe/Documents/skill/RTK.md) and prefer the corresponding `rtk ...` wrapper when raw output is not required.
+
+## References
+
+- [references/skill-maintenance-modes.md](references/skill-maintenance-modes.md)
 
 ## Quality bar
 

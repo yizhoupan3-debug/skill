@@ -3,10 +3,10 @@ name: nextjs
 description: |
   Deliver Next.js 14/15 applications with correct App Router, Server Component,
   and caching boundaries.
-  Use for Next.js development, SSR/SSG strategy, streaming, and Server Actions.
+  Use for Next.js development, SSR/SSG strategy, streaming, Server Actions, hydration, waterfalls, and Vercel-aligned React best practices.
 metadata:
   version: "2.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - nextjs
     - app-router
@@ -26,6 +26,8 @@ trigger_hints:
   - server components
   - ssr
   - caching
+  - hydration
+  - Vercel
 ---
 
 # nextjs
@@ -58,11 +60,10 @@ This skill does not own:
 - pure React component design without Next.js → `$react`
 - general web performance outside Next.js → `$performance-expert`
 - backend API design without Next.js context → `$node-backend`
-- React rendering mechanics, waterfall reduction, or hydration discipline → `$vercel-react-best-practices`
+- broader React rendering mechanics without Next.js context → `$react`
 
 If the task shifts to adjacent skill territory, route to:
 - `$react` for pure React patterns
-- `$vercel-react-best-practices` for rendering/data-flow audits, waterfalls, and hydration
 - `$performance-expert` for broader web perf
 - **Dual-Dimension Audit (Pre: RSC/Caching, Post: Streaming/Hydration Results)** → `$execution-audit` [Overlay]
 
@@ -198,6 +199,10 @@ Recommended structure:
 - Use `next-safe-action` for type-safe Server Actions with consistent `ActionResponse` types.
 - Delegate deep performance and Core Web Vitals profiling to `$performance-expert`.
 - **Superior Quality Audit**: For production-critical routes, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+
+## References
+
+- [references/vercel-best-practices.md](references/vercel-best-practices.md)
 
 ## Trigger examples
 

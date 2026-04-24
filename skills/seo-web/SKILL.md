@@ -9,7 +9,7 @@ description: |
   '搜索引擎优化', 'OG 标签', '搜索排名'.
 metadata:
   version: "1.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - seo
     - meta-tags

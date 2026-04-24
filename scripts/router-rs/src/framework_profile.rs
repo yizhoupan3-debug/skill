@@ -4,10 +4,8 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::execution_contract::build_execution_kernel_live_response_serialization_contract;
-
 const REQUIRED_CORE_CAPABILITIES: [&str; 4] = ["runtime", "memory", "artifact", "orchestration"];
-const COMMON_PARITY_FIELDS: [&str; 12] = [
+const RUNTIME_SURFACE_FIELDS: [&str; 12] = [
     "artifact_contract",
     "memory_mounts",
     "mcp_servers",
@@ -21,26 +19,7 @@ const COMMON_PARITY_FIELDS: [&str; 12] = [
     "delegation_contract",
     "supervisor_state_contract",
 ];
-const CODEX_COMMON_HOST_CAPABILITIES: [&str; 9] = [
-    "artifact_contract",
-    "memory_mounts",
-    "mcp_servers",
-    "tool_policy",
-    "approval_policy",
-    "loadout_policy",
-    "framework_surface_policy",
-    "workspace_bootstrap",
-    "session_contract",
-];
-const CODEX_DESKTOP_HOST_CAPABILITIES: [&str; 6] = [
-    "local_runtime",
-    "artifact_contract",
-    "memory_mounts",
-    "mcp_servers",
-    "automation_bridge",
-    "orchestration_control",
-];
-const CODEX_CLI_HOST_CAPABILITIES: [&str; 13] = [
+const CODEX_HOST_CAPABILITIES: [&str; 13] = [
     "artifact_contract",
     "memory_mounts",
     "mcp_servers",
@@ -55,76 +34,22 @@ const CODEX_CLI_HOST_CAPABILITIES: [&str; 13] = [
     "host_tmux_worker_management",
     "framework_alias_entrypoints",
 ];
-const CLAUDE_CODE_HOST_CAPABILITIES: [&str; 21] = [
-    "artifact_contract",
-    "memory_mounts",
-    "mcp_servers",
-    "workspace_bootstrap",
-    "batch_execution",
-    "ci_runner",
-    "non_interactive_entrypoint",
-    "context_file",
-    "settings_json",
-    "settings_scope_hierarchy",
-    "subagent_registry",
-    "managed_policy",
-    "hook_registry",
-    "hook_policy",
-    "hook_browser",
-    "checkpoint_restore",
-    "external_session_supervisor",
-    "rate_limit_auto_resume",
-    "host_resume_entrypoint",
-    "host_tmux_worker_management",
-    "framework_alias_entrypoints",
-];
-const GEMINI_CLI_HOST_CAPABILITIES: [&str; 9] = [
-    "artifact_contract",
-    "memory_mounts",
-    "mcp_servers",
-    "workspace_bootstrap",
-    "batch_execution",
-    "ci_runner",
-    "non_interactive_entrypoint",
-    "context_file",
-    "settings_json",
-];
-const CLI_FAMILY_HOST_CAPABILITIES: [&str; 9] = [
-    "artifact_contract",
-    "memory_mounts",
-    "mcp_servers",
-    "tool_policy",
-    "approval_policy",
-    "loadout_policy",
-    "framework_surface_policy",
-    "workspace_bootstrap",
-    "session_contract",
-];
-const HOST_ADAPTER_PAYLOAD_KEY: &str = "host_adapter_payload";
+const CODEX_HOST_PAYLOAD_KEY: &str = "host_adapter_payload";
 const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
     "adapter_id",
     "adapter_alias_of",
     "automation_bridge_required",
     "canonical_adapter_id",
     "checkpointing_supported",
-    "claude_directory_features",
     "config_root_env_var",
     "context_files",
     "controller_is_cli",
     "entrypoint_kind",
     "host_cli",
     "host_id",
-    "hook_control_settings",
-    "hook_definition_sources",
-    "hook_environment_markers",
-    "hook_event_names",
-    "hook_execution_features",
-    "hook_handler_types",
-    "hook_inspection_commands",
     "managed_mcp_paths",
     "managed_settings_paths",
     "mcp_config_paths",
-    "plugin_hook_manifest_paths",
     "settings_paths",
     "settings_scope_order",
     "settings_scopes",
@@ -137,50 +62,15 @@ const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
     "thread_binding",
     "transport",
 ];
-const CLI_COMMON_ADAPTER_ID: &str = "cli_common_adapter";
-const CODEX_COMMON_ADAPTER_ID: &str = "codex_common_adapter";
-const CODEX_CLI_ADAPTER_ID: &str = "codex_cli_adapter";
-const CLAUDE_CODE_ADAPTER_ID: &str = "claude_code_adapter";
-const GEMINI_CLI_ADAPTER_ID: &str = "gemini_cli_adapter";
-const CODEX_DESKTOP_ADAPTER_ID: &str = "codex_desktop_adapter";
-const DEFAULT_HOST_PEER_SET: &[&str] = &[
-    CODEX_DESKTOP_ADAPTER_ID,
-    CODEX_CLI_ADAPTER_ID,
-    CLAUDE_CODE_ADAPTER_ID,
-    GEMINI_CLI_ADAPTER_ID,
-];
-const CLI_FAMILY_TARGETS: [&str; 3] = [
-    CODEX_CLI_ADAPTER_ID,
-    CLAUDE_CODE_ADAPTER_ID,
-    GEMINI_CLI_ADAPTER_ID,
-];
-const CLI_FAMILY_PARITY_ARTIFACT_ID: &str = "cli_family_parity_snapshot";
+const CODEX_ADAPTER_ID: &str = "codex_adapter";
 const EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID: &str = "execution_controller_contract";
 const DELEGATION_CONTRACT_ARTIFACT_ID: &str = "delegation_contract";
 const SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID: &str = "supervisor_state_contract";
-const EXECUTION_KERNEL_LIVE_FALLBACK_RETIREMENT_ARTIFACT_ID: &str =
-    "execution_kernel_live_fallback_retirement_status";
-const EXECUTION_KERNEL_LIVE_RESPONSE_SERIALIZATION_ARTIFACT_ID: &str =
-    "execution_kernel_live_response_serialization_contract";
 
-#[derive(Clone, Copy)]
-struct AdapterDescriptor<'a> {
-    adapter_id: &'a str,
-    host_id: &'a str,
-    transport: &'a str,
-    host_capabilities: &'a [&'a str],
-}
-
-struct AdapterBuildContext<'a> {
+struct CodexProfileBuildContext<'a> {
     normalized_memory_mounts: &'a [Value],
     normalized_mcp_servers: &'a [Value],
     workspace_bootstrap: &'a Map<String, Value>,
-}
-
-struct CliFamilyAdapterInputs<'a> {
-    shared_contract: &'a Map<String, Value>,
-    controller_boundary: &'a Map<String, Value>,
-    host_adapter_payload: &'a Map<String, Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -249,20 +139,7 @@ pub struct ProfileBundle {
     pub workspace_bootstrap: Map<String, Value>,
     pub host_capability_requirements: Map<String, Value>,
     pub metadata: Map<String, Value>,
-    pub cli_common_adapter: Value,
-    pub codex_common_adapter: Value,
-    pub codex_desktop_adapter: Value,
-    pub codex_cli_adapter: Value,
-    pub claude_code_adapter: Value,
-    pub gemini_cli_adapter: Value,
-    pub cli_family_capability_discovery: Value,
-    pub cli_family_parity_snapshot: Value,
-    pub codex_dual_entry_parity_snapshot: Value,
-    pub execution_controller_contract: Value,
-    pub delegation_contract: Value,
-    pub supervisor_state_contract: Value,
-    pub execution_kernel_live_fallback_retirement_status: Value,
-    pub execution_kernel_live_response_serialization_contract: Value,
+    pub codex_adapter: Value,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -292,114 +169,13 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         &normalized_mcp_servers,
         &workspace_bootstrap,
     );
-    let controller_boundary = build_cli_common_controller_boundary();
-    let parity_contract = build_codex_parity_contract();
-    let adapter_context = AdapterBuildContext {
-        normalized_memory_mounts: &normalized_memory_mounts,
-        normalized_mcp_servers: &normalized_mcp_servers,
-        workspace_bootstrap: &workspace_bootstrap,
-    };
-    let cli_common_adapter = build_cli_common_adapter(
+    let codex_adapter = build_codex_adapter(
         profile,
         &normalized_memory_mounts,
         &normalized_mcp_servers,
         &workspace_bootstrap,
         &shared_contract,
-        &controller_boundary,
-        &parity_contract,
     );
-    let codex_common_adapter = build_codex_common_adapter(
-        profile,
-        &normalized_memory_mounts,
-        &normalized_mcp_servers,
-        &workspace_bootstrap,
-        &shared_contract,
-        &controller_boundary,
-        &parity_contract,
-    );
-    let codex_cli_adapter = build_codex_cli_adapter(
-        profile,
-        &normalized_memory_mounts,
-        &normalized_mcp_servers,
-        &workspace_bootstrap,
-        &shared_contract,
-        &controller_boundary,
-    );
-    let claude_code_adapter = build_cli_family_host_adapter(
-        profile,
-        AdapterDescriptor {
-            adapter_id: CLAUDE_CODE_ADAPTER_ID,
-            host_id: "claude-code",
-            transport: "headless-exec",
-            host_capabilities: &CLAUDE_CODE_HOST_CAPABILITIES,
-        },
-        &adapter_context,
-        CliFamilyAdapterInputs {
-            shared_contract: &shared_contract,
-            controller_boundary: &controller_boundary,
-            host_adapter_payload: &build_claude_host_adapter_payload(),
-        },
-    );
-    let gemini_cli_adapter = build_cli_family_host_adapter(
-        profile,
-        AdapterDescriptor {
-            adapter_id: GEMINI_CLI_ADAPTER_ID,
-            host_id: "gemini-cli",
-            transport: "headless-exec",
-            host_capabilities: &GEMINI_CLI_HOST_CAPABILITIES,
-        },
-        &adapter_context,
-        CliFamilyAdapterInputs {
-            shared_contract: &shared_contract,
-            controller_boundary: &controller_boundary,
-            host_adapter_payload: &build_gemini_host_adapter_payload(),
-        },
-    );
-    let cli_family_parity_snapshot = build_cli_family_parity_snapshot(
-        &controller_boundary,
-        &codex_cli_adapter,
-        &claude_code_adapter,
-        &gemini_cli_adapter,
-    )?;
-    let cli_family_capability_discovery = build_cli_family_capability_discovery(
-        profile,
-        &controller_boundary,
-        &codex_cli_adapter,
-        &claude_code_adapter,
-        &gemini_cli_adapter,
-    )?;
-    let codex_desktop_adapter = build_codex_desktop_adapter(
-        profile,
-        &normalized_memory_mounts,
-        &normalized_mcp_servers,
-        &workspace_bootstrap,
-        &shared_contract,
-        &controller_boundary,
-    );
-    let codex_dual_entry_parity_snapshot = build_codex_dual_entry_parity_snapshot(
-        &controller_boundary,
-        &codex_desktop_adapter,
-        &codex_cli_adapter,
-    )?;
-    let mut control_plane_contracts = build_control_plane_contract_descriptors();
-    let execution_controller_contract = control_plane_contracts
-        .remove(EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID)
-        .ok_or_else(|| "missing execution controller contract descriptor".to_string())?;
-    let delegation_contract = control_plane_contracts
-        .remove(DELEGATION_CONTRACT_ARTIFACT_ID)
-        .ok_or_else(|| "missing delegation contract descriptor".to_string())?;
-    let supervisor_state_contract = control_plane_contracts
-        .remove(SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID)
-        .ok_or_else(|| "missing supervisor state contract descriptor".to_string())?;
-    let execution_kernel_live_fallback_retirement_status = control_plane_contracts
-        .remove(EXECUTION_KERNEL_LIVE_FALLBACK_RETIREMENT_ARTIFACT_ID)
-        .ok_or_else(|| "missing execution-kernel fallback retirement descriptor".to_string())?;
-    let execution_kernel_live_response_serialization_contract = control_plane_contracts
-        .remove(EXECUTION_KERNEL_LIVE_RESPONSE_SERIALIZATION_ARTIFACT_ID)
-        .ok_or_else(|| {
-            "missing execution-kernel live response serialization descriptor".to_string()
-        })?;
-
     Ok(ProfileBundle {
         profile_id: profile.profile_id.clone(),
         display_name: profile.display_name.clone(),
@@ -424,82 +200,16 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         workspace_bootstrap: workspace_bootstrap.clone(),
         host_capability_requirements: profile.host_capability_requirements.clone(),
         metadata: profile.metadata.clone(),
-        cli_common_adapter: Value::Object(cli_common_adapter),
-        codex_common_adapter: Value::Object(codex_common_adapter),
-        codex_desktop_adapter: Value::Object(codex_desktop_adapter),
-        codex_cli_adapter: Value::Object(codex_cli_adapter),
-        claude_code_adapter: Value::Object(claude_code_adapter),
-        gemini_cli_adapter: Value::Object(gemini_cli_adapter),
-        cli_family_capability_discovery: Value::Object(cli_family_capability_discovery),
-        cli_family_parity_snapshot: Value::Object(cli_family_parity_snapshot),
-        codex_dual_entry_parity_snapshot: Value::Object(codex_dual_entry_parity_snapshot),
-        execution_controller_contract,
-        delegation_contract,
-        supervisor_state_contract,
-        execution_kernel_live_fallback_retirement_status,
-        execution_kernel_live_response_serialization_contract,
+        codex_adapter: Value::Object(codex_adapter),
     })
 }
 
 pub fn build_codex_artifact_bundle(
     profile: &FrameworkProfileContract,
-    include_compatibility_inventory: bool,
 ) -> Result<Map<String, Value>, String> {
-    if include_compatibility_inventory {
-        return Err(
-            "compatibility inventory artifacts are retired; use canonical Rust outputs."
-                .to_string(),
-        );
-    }
     let bundle = build_profile_bundle(profile)?;
     let mut artifacts = Map::new();
-    artifacts.insert("cli_common_adapter".to_string(), bundle.cli_common_adapter);
-    artifacts.insert(
-        "codex_common_adapter".to_string(),
-        bundle.codex_common_adapter,
-    );
-    artifacts.insert(
-        "codex_desktop_adapter".to_string(),
-        bundle.codex_desktop_adapter,
-    );
-    artifacts.insert("codex_cli_adapter".to_string(), bundle.codex_cli_adapter);
-    artifacts.insert(
-        "claude_code_adapter".to_string(),
-        bundle.claude_code_adapter,
-    );
-    artifacts.insert("gemini_cli_adapter".to_string(), bundle.gemini_cli_adapter);
-    artifacts.insert(
-        "cli_family_capability_discovery".to_string(),
-        bundle.cli_family_capability_discovery,
-    );
-    artifacts.insert(
-        "cli_family_parity_snapshot".to_string(),
-        bundle.cli_family_parity_snapshot,
-    );
-    artifacts.insert(
-        "codex_dual_entry_parity_snapshot".to_string(),
-        bundle.codex_dual_entry_parity_snapshot,
-    );
-    artifacts.insert(
-        EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID.to_string(),
-        bundle.execution_controller_contract,
-    );
-    artifacts.insert(
-        DELEGATION_CONTRACT_ARTIFACT_ID.to_string(),
-        bundle.delegation_contract,
-    );
-    artifacts.insert(
-        SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID.to_string(),
-        bundle.supervisor_state_contract,
-    );
-    artifacts.insert(
-        EXECUTION_KERNEL_LIVE_FALLBACK_RETIREMENT_ARTIFACT_ID.to_string(),
-        bundle.execution_kernel_live_fallback_retirement_status,
-    );
-    artifacts.insert(
-        EXECUTION_KERNEL_LIVE_RESPONSE_SERIALIZATION_ARTIFACT_ID.to_string(),
-        bundle.execution_kernel_live_response_serialization_contract,
-    );
+    artifacts.insert("codex_adapter".to_string(), bundle.codex_adapter);
     Ok(artifacts)
 }
 
@@ -513,8 +223,8 @@ fn validate_framework_profile(profile: &FrameworkProfileContract) -> Result<(), 
     if profile.framework_profile_version.trim().is_empty() {
         return Err("framework profile missing framework_profile_version".to_string());
     }
-    if profile.host_family == "aionrs" {
-        return Err("framework core must not be pinned to retired host family".to_string());
+    if profile.host_family.trim() != "codex" {
+        return Err("framework core must be pinned to Codex".to_string());
     }
 
     let capability_set = profile
@@ -541,7 +251,7 @@ fn validate_framework_profile(profile: &FrameworkProfileContract) -> Result<(), 
         .collect::<Vec<_>>();
     if !host_specific_metadata.is_empty() {
         return Err(format!(
-            "framework profile metadata must stay host-neutral; move host-specific keys into adapter projections: {}",
+            "framework profile metadata must stay Codex-core-only; move Codex host-private keys into codex_adapter.host_adapter_payload: {}",
             host_specific_metadata.join(", ")
         ));
     }
@@ -747,57 +457,11 @@ fn build_codex_shared_contract(
     shared_contract
 }
 
-fn build_cli_common_controller_boundary() -> Map<String, Value> {
-    let mut boundary = Map::new();
-    boundary.insert(
-        "framework_truth".to_string(),
-        Value::String("framework_core".to_string()),
-    );
-    boundary.insert(
-        "shared_adapter".to_string(),
-        Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-    );
-    boundary.insert(
-        "cli_family_entrypoints".to_string(),
-        string_array(&CLI_FAMILY_TARGETS),
-    );
-    boundary.insert(
-        "host_entrypoints".to_string(),
-        string_array(DEFAULT_HOST_PEER_SET),
-    );
-    boundary.insert("single_source_of_truth".to_string(), Value::Bool(true));
-    boundary.insert("codexcli_is_controller".to_string(), Value::Bool(false));
-    boundary
-}
-
-fn build_codex_parity_contract() -> Map<String, Value> {
-    let mut contract = Map::new();
-    contract.insert(
-        "shared_fields".to_string(),
-        string_array(&COMMON_PARITY_FIELDS),
-    );
-    contract.insert(
-        "desktop_adapter".to_string(),
-        Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-    );
-    contract.insert(
-        "cli_adapters".to_string(),
-        string_array(&CLI_FAMILY_TARGETS),
-    );
-    contract.insert(
-        "cli_common_adapter".to_string(),
-        Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-    );
-    contract
-}
-
-fn build_codex_adapter_base(
+fn build_codex_profile_output_base(
     profile: &FrameworkProfileContract,
-    descriptor: AdapterDescriptor<'_>,
-    context: &AdapterBuildContext<'_>,
+    context: &CodexProfileBuildContext<'_>,
 ) -> Map<String, Value> {
-    let resolved_host_capability_requirements =
-        resolve_host_capability_requirements(profile, descriptor.host_id, descriptor.adapter_id);
+    let resolved_host_capability_requirements = resolve_codex_capability_requirements(profile);
     let mut capabilities = Map::new();
     capabilities.insert(
         "core".to_string(),
@@ -821,23 +485,17 @@ fn build_codex_adapter_base(
                 .collect(),
         ),
     );
-    capabilities.insert(
-        "host".to_string(),
-        string_array(descriptor.host_capabilities),
-    );
+    capabilities.insert("host".to_string(), string_array(&CODEX_HOST_CAPABILITIES));
 
     let mut metadata = Map::new();
     metadata.insert(
         "adapter_id".to_string(),
-        Value::String(descriptor.adapter_id.to_string()),
+        Value::String(CODEX_ADAPTER_ID.to_string()),
     );
-    metadata.insert(
-        "host_id".to_string(),
-        Value::String(descriptor.host_id.to_string()),
-    );
+    metadata.insert("host_id".to_string(), Value::String("codex".to_string()));
     metadata.insert(
         "transport".to_string(),
-        Value::String(descriptor.transport.to_string()),
+        Value::String("native-codex".to_string()),
     );
     metadata.insert("deep_adaptation_not_fork".to_string(), Value::Bool(false));
     metadata.insert(
@@ -917,64 +575,9 @@ fn build_codex_adapter_base(
     payload
 }
 
-fn build_cli_common_adapter(
-    profile: &FrameworkProfileContract,
-    normalized_memory_mounts: &[Value],
-    normalized_mcp_servers: &[Value],
-    workspace_bootstrap: &Map<String, Value>,
-    shared_contract: &Map<String, Value>,
-    controller_boundary: &Map<String, Value>,
-    parity_contract: &Map<String, Value>,
-) -> Map<String, Value> {
-    let mut payload = build_codex_adapter_base(
-        profile,
-        AdapterDescriptor {
-            adapter_id: CLI_COMMON_ADAPTER_ID,
-            host_id: "cli-family-shared",
-            transport: "host-neutral-contract",
-            host_capabilities: &CLI_FAMILY_HOST_CAPABILITIES,
-        },
-        &AdapterBuildContext {
-            normalized_memory_mounts,
-            normalized_mcp_servers,
-            workspace_bootstrap,
-        },
-    );
-    payload.insert(
-        "shared_contract".to_string(),
-        Value::Object(shared_contract.clone()),
-    );
-    payload.insert(
-        "bridge_contract".to_string(),
-        shared_contract_workspace_bridges(shared_contract),
-    );
-    payload.insert(
-        "source_contract".to_string(),
-        Value::Object(build_source_contract(
-            CLI_COMMON_ADAPTER_ID,
-            "shared_contract",
-            None,
-            Some("bridge_contract"),
-            None,
-            None,
-            None,
-            None,
-        )),
-    );
-    payload.insert(
-        "controller_boundary".to_string(),
-        Value::Object(controller_boundary.clone()),
-    );
-    payload.insert(
-        "parity_contract".to_string(),
-        Value::Object(parity_contract.clone()),
-    );
-    payload
-}
-
 fn build_runtime_surface(shared_contract: &Map<String, Value>) -> Map<String, Value> {
     let mut runtime_surface = Map::new();
-    for field in COMMON_PARITY_FIELDS {
+    for field in RUNTIME_SURFACE_FIELDS {
         if let Some(value) = shared_contract.get(field) {
             runtime_surface.insert(field.to_string(), value.clone());
         }
@@ -982,286 +585,9 @@ fn build_runtime_surface(shared_contract: &Map<String, Value>) -> Map<String, Va
     runtime_surface
 }
 
-fn shared_contract_workspace_bridges(shared_contract: &Map<String, Value>) -> Value {
-    shared_contract
-        .get("workspace_bootstrap")
-        .and_then(Value::as_object)
-        .and_then(|bootstrap| bootstrap.get("bridges"))
-        .cloned()
-        .unwrap_or_else(|| Value::Object(Map::new()))
-}
-
-#[allow(clippy::too_many_arguments)]
-fn build_source_contract(
-    canonical_adapter_id: &str,
-    shared_contract_field: &str,
-    runtime_surface_field: Option<&str>,
-    bridge_contract_field: Option<&str>,
-    entrypoint_surface_field: Option<&str>,
-    execution_surface_field: Option<&str>,
-    adapter_alias_of: Option<&str>,
-    alias_mode: Option<&str>,
-) -> Map<String, Value> {
-    let mut contract_source_fields = Map::new();
-    contract_source_fields.insert(
-        "shared_contract".to_string(),
-        Value::String(shared_contract_field.to_string()),
-    );
-    if let Some(field) = runtime_surface_field {
-        contract_source_fields.insert(
-            "runtime_surface".to_string(),
-            Value::String(field.to_string()),
-        );
-    }
-    if let Some(field) = bridge_contract_field {
-        contract_source_fields.insert(
-            "bridge_contract".to_string(),
-            Value::String(field.to_string()),
-        );
-    }
-    if let Some(field) = entrypoint_surface_field {
-        contract_source_fields.insert(
-            "entrypoint_surface".to_string(),
-            Value::String(field.to_string()),
-        );
-    }
-    if let Some(field) = execution_surface_field {
-        contract_source_fields.insert(
-            "execution_surface".to_string(),
-            Value::String(field.to_string()),
-        );
-    }
-
-    let mut payload = Map::new();
-    payload.insert(
-        "framework_truth".to_string(),
-        Value::String("framework_core".to_string()),
-    );
-    payload.insert(
-        "state_source".to_string(),
-        Value::String("framework_profile".to_string()),
-    );
-    payload.insert("single_source_of_truth".to_string(), Value::Bool(true));
-    payload.insert(
-        "shared_adapter".to_string(),
-        Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-    );
-    payload.insert(
-        "canonical_adapter_id".to_string(),
-        Value::String(canonical_adapter_id.to_string()),
-    );
-    payload.insert(
-        "contract_source_fields".to_string(),
-        Value::Object(contract_source_fields),
-    );
-    if bridge_contract_field.is_some() {
-        payload.insert(
-            "bridge_contract_source".to_string(),
-            Value::String(format!(
-                "{shared_contract_field}.workspace_bootstrap.bridges"
-            )),
-        );
-    }
-    if let Some(alias_of) = adapter_alias_of {
-        payload.insert(
-            "adapter_alias_of".to_string(),
-            Value::String(alias_of.to_string()),
-        );
-    }
-    if let Some(mode) = alias_mode {
-        payload.insert("alias_mode".to_string(), Value::String(mode.to_string()));
-    }
-    payload
-}
-
-fn build_codex_common_adapter(
-    profile: &FrameworkProfileContract,
-    normalized_memory_mounts: &[Value],
-    normalized_mcp_servers: &[Value],
-    workspace_bootstrap: &Map<String, Value>,
-    shared_contract: &Map<String, Value>,
-    controller_boundary: &Map<String, Value>,
-    parity_contract: &Map<String, Value>,
-) -> Map<String, Value> {
-    let mut payload = build_codex_adapter_base(
-        profile,
-        AdapterDescriptor {
-            adapter_id: "codex_common_adapter",
-            host_id: "codex-shared",
-            transport: "host-neutral-contract",
-            host_capabilities: &CODEX_COMMON_HOST_CAPABILITIES,
-        },
-        &AdapterBuildContext {
-            normalized_memory_mounts,
-            normalized_mcp_servers,
-            workspace_bootstrap,
-        },
-    );
-    payload.insert(
-        "shared_contract".to_string(),
-        Value::Object(shared_contract.clone()),
-    );
-    payload.insert(
-        "bridge_contract".to_string(),
-        shared_contract_workspace_bridges(shared_contract),
-    );
-    payload.insert(
-        "source_contract".to_string(),
-        Value::Object(build_source_contract(
-            CLI_COMMON_ADAPTER_ID,
-            "shared_contract",
-            None,
-            Some("bridge_contract"),
-            None,
-            None,
-            Some(CLI_COMMON_ADAPTER_ID),
-            Some("mirror-only"),
-        )),
-    );
-    payload.insert(
-        "controller_boundary".to_string(),
-        Value::Object(controller_boundary.clone()),
-    );
-    payload.insert(
-        "parity_contract".to_string(),
-        Value::Object(parity_contract.clone()),
-    );
-    if let Some(metadata) = payload.get_mut("metadata").and_then(Value::as_object_mut) {
-        metadata.insert(
-            "adapter_alias_of".to_string(),
-            Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-        );
-        metadata.insert(
-            "canonical_adapter_id".to_string(),
-            Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-        );
-    }
-    if let Some(parity_contract) = payload
-        .get_mut("parity_contract")
-        .and_then(Value::as_object_mut)
-    {
-        parity_contract.insert(
-            "compatibility_aliases".to_string(),
-            Value::Array(vec![Value::String(CODEX_COMMON_ADAPTER_ID.to_string())]),
-        );
-    }
-    payload
-}
-
-fn build_cli_family_host_adapter(
-    profile: &FrameworkProfileContract,
-    descriptor: AdapterDescriptor<'_>,
-    context: &AdapterBuildContext<'_>,
-    inputs: CliFamilyAdapterInputs<'_>,
-) -> Map<String, Value> {
-    let mut payload = build_codex_adapter_base(profile, descriptor, context);
-    payload.insert(
-        "common_contract".to_string(),
-        Value::Object(inputs.shared_contract.clone()),
-    );
-    payload.insert(
-        "controller_boundary".to_string(),
-        Value::Object(inputs.controller_boundary.clone()),
-    );
-    payload.insert(
-        "runtime_surface".to_string(),
-        Value::Object(build_runtime_surface(inputs.shared_contract)),
-    );
-    payload.insert(
-        "bridge_contract".to_string(),
-        shared_contract_workspace_bridges(inputs.shared_contract),
-    );
-    payload.insert(
-        "execution_surface".to_string(),
-        value_object([
-            ("entrypoint_kind", Value::String("headless".to_string())),
-            ("non_interactive", Value::Bool(true)),
-            (
-                "supports_batch",
-                Value::Bool(descriptor.host_capabilities.contains(&"batch_execution")),
-            ),
-            (
-                "supports_cron",
-                Value::Bool(descriptor.host_capabilities.contains(&"cron_execution")),
-            ),
-            (
-                "supports_ci",
-                Value::Bool(descriptor.host_capabilities.contains(&"ci_runner")),
-            ),
-            (
-                "framework_truth",
-                Value::String("framework_core".to_string()),
-            ),
-            ("controller_is_cli", Value::Bool(false)),
-            (
-                "shared_adapter",
-                Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-            ),
-            ("host_cli", Value::String(descriptor.host_id.to_string())),
-        ]),
-    );
-    payload.insert(
-        "source_contract".to_string(),
-        Value::Object(build_source_contract(
-            descriptor.adapter_id,
-            "common_contract",
-            Some("runtime_surface"),
-            Some("bridge_contract"),
-            None,
-            Some("execution_surface"),
-            None,
-            None,
-        )),
-    );
-    let host_adapter_payload =
-        complete_cli_host_adapter_payload(descriptor.host_id, inputs.host_adapter_payload.clone());
-    payload.insert(
-        HOST_ADAPTER_PAYLOAD_KEY.to_string(),
-        Value::Object(host_adapter_payload),
-    );
-    payload.insert(
-        "fallback_semantics".to_string(),
-        value_object([
-            (
-                "preserves_core_capabilities",
-                string_array(&REQUIRED_CORE_CAPABILITIES),
-            ),
-            ("degrade_to", Value::Null),
-            (
-                "shared_adapter",
-                Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-            ),
-            (
-                "desktop_peer",
-                Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-            ),
-        ]),
-    );
-    if let Some(fallback_semantics) = payload
-        .get_mut("fallback_semantics")
-        .and_then(Value::as_object_mut)
-    {
-        fallback_semantics.insert(
-            "cli_family_peers".to_string(),
-            Value::Array(
-                CLI_FAMILY_TARGETS
-                    .iter()
-                    .copied()
-                    .filter(|adapter_id| *adapter_id != descriptor.adapter_id)
-                    .map(|adapter_id| Value::String(adapter_id.to_string()))
-                    .collect(),
-            ),
-        );
-    }
-    payload
-}
-
-fn complete_cli_host_adapter_payload(
-    host_cli: &str,
-    projection: Map<String, Value>,
-) -> Map<String, Value> {
+fn complete_codex_host_payload(codex_host_fields: Map<String, Value>) -> Map<String, Value> {
     let mut completed = Map::new();
-    completed.insert("host_cli".to_string(), Value::String(host_cli.to_string()));
+    completed.insert("host_cli".to_string(), Value::String("codex".to_string()));
     completed.insert("context_files".to_string(), Value::Array(vec![]));
     completed.insert("settings_paths".to_string(), Value::Array(vec![]));
     completed.insert("mcp_config_paths".to_string(), Value::Array(vec![]));
@@ -1269,20 +595,6 @@ fn complete_cli_host_adapter_payload(
     completed.insert("settings_scope_order".to_string(), Value::Array(vec![]));
     completed.insert("settings_scopes".to_string(), Value::Array(vec![]));
     completed.insert("subagent_paths".to_string(), Value::Array(vec![]));
-    completed.insert(
-        "claude_directory_features".to_string(),
-        Value::Array(vec![]),
-    );
-    completed.insert("hook_event_names".to_string(), Value::Array(vec![]));
-    completed.insert("hook_handler_types".to_string(), Value::Array(vec![]));
-    completed.insert("hook_control_settings".to_string(), Value::Array(vec![]));
-    completed.insert("hook_definition_sources".to_string(), Value::Array(vec![]));
-    completed.insert("hook_inspection_commands".to_string(), Value::Array(vec![]));
-    completed.insert(
-        "plugin_hook_manifest_paths".to_string(),
-        Value::Array(vec![]),
-    );
-    completed.insert("hook_environment_markers".to_string(), Value::Array(vec![]));
     completed.insert("managed_settings_paths".to_string(), Value::Array(vec![]));
     completed.insert("managed_mcp_paths".to_string(), Value::Array(vec![]));
     completed.insert("structured_output_modes".to_string(), Value::Array(vec![]));
@@ -1293,17 +605,10 @@ fn complete_cli_host_adapter_payload(
         "framework_alias_entrypoints".to_string(),
         Value::Object(Map::new()),
     );
-    for (key, value) in projection {
+    for (key, value) in codex_host_fields {
         completed.insert(key, value);
     }
     completed
-}
-
-fn adapter_host_payload(adapter: &Map<String, Value>) -> Result<&Map<String, Value>, String> {
-    adapter
-        .get(HOST_ADAPTER_PAYLOAD_KEY)
-        .and_then(Value::as_object)
-        .ok_or_else(|| format!("cli adapter missing {HOST_ADAPTER_PAYLOAD_KEY}"))
 }
 
 fn build_host_alias_entrypoints(host_key: &str) -> Value {
@@ -1335,36 +640,36 @@ fn build_host_alias_entrypoints(host_key: &str) -> Value {
     Value::Object(entrypoints)
 }
 
-fn build_codex_host_adapter_payload() -> Map<String, Value> {
-    let mut projection = Map::new();
-    projection.insert(
+fn build_codex_host_payload() -> Map<String, Value> {
+    let mut payload = Map::new();
+    payload.insert(
         "context_files".to_string(),
         Value::Array(vec![Value::String("AGENTS.md".to_string())]),
     );
-    projection.insert(
+    payload.insert(
         "settings_paths".to_string(),
         Value::Array(vec![
             Value::String("~/.codex/config.toml".to_string()),
             Value::String(".codex/config.toml".to_string()),
         ]),
     );
-    projection.insert(
+    payload.insert(
         "mcp_config_paths".to_string(),
         Value::Array(vec![Value::String(".codex/config.toml".to_string())]),
     );
-    projection.insert(
+    payload.insert(
         "session_supervisor_driver".to_string(),
         Value::String("codex_driver".to_string()),
     );
-    projection.insert(
+    payload.insert(
         "resume_command_examples".to_string(),
         json!(["codex resume --last", "codex resume <session_id>"]),
     );
-    projection.insert(
+    payload.insert(
         "framework_alias_entrypoints".to_string(),
         build_host_alias_entrypoints("codex-cli"),
     );
-    projection.insert(
+    payload.insert(
         "gpt_model_path_contract".to_string(),
         json!({
             "path_kind": "native-openai-compatible",
@@ -1377,300 +682,19 @@ fn build_codex_host_adapter_payload() -> Map<String, Value> {
             ]
         }),
     );
-    projection
+    payload
 }
 
-fn build_claude_host_adapter_payload() -> Map<String, Value> {
-    let mut projection = Map::new();
-    projection.insert(
-        "context_files".to_string(),
-        Value::Array(vec![
-            Value::String("CLAUDE.md".to_string()),
-            Value::String("CLAUDE.local.md".to_string()),
-        ]),
-    );
-    projection.insert(
-        "settings_paths".to_string(),
-        Value::Array(vec![
-            Value::String("~/.claude/settings.json".to_string()),
-            Value::String(".claude/settings.json".to_string()),
-            Value::String(".claude/settings.local.json".to_string()),
-        ]),
-    );
-    projection.insert(
-        "mcp_config_paths".to_string(),
-        Value::Array(vec![Value::String("~/.claude.json".to_string())]),
-    );
-    projection.insert(
-        "config_root_env_var".to_string(),
-        Value::String("CLAUDE_CONFIG_DIR".to_string()),
-    );
-    projection.insert(
-        "settings_scope_order".to_string(),
-        json!(["managed", "command_line", "local", "project", "user"]),
-    );
-    projection.insert(
-        "settings_scopes".to_string(),
-        json!([
-            {
-                "scope": "managed",
-                "locations": [
-                    "server-managed",
-                    "managed-settings.json",
-                    "managed-settings.d/*.json",
-                    "managed-mcp.json"
-                ],
-                "shared_with_team": true
-            },
-            {
-                "scope": "user",
-                "locations": [
-                    "~/.claude/settings.json",
-                    "~/.claude/CLAUDE.md",
-                    "~/.claude/agents/"
-                ],
-                "shared_with_team": false
-            },
-            {
-                "scope": "project",
-                "locations": [
-                    ".claude/settings.json",
-                    "CLAUDE.md",
-                    ".claude/agents/"
-                ],
-                "shared_with_team": true
-            },
-            {
-                "scope": "local",
-                "locations": [
-                    ".claude/settings.local.json",
-                    "CLAUDE.local.md"
-                ],
-                "shared_with_team": false
-            }
-        ]),
-    );
-    projection.insert(
-        "subagent_paths".to_string(),
-        json!(["~/.claude/agents/", ".claude/agents/"]),
-    );
-    projection.insert(
-        "claude_directory_features".to_string(),
-        json!([
-            ".claude/settings.json",
-            ".claude/settings.local.json",
-            ".claude/hooks/",
-            ".claude/agents/",
-            ".claude/commands/",
-            ".claude/rules/",
-            ".claude/output-styles/"
-        ]),
-    );
-    projection.insert(
-        "hook_event_names".to_string(),
-        json!([
-            "PreToolUse",
-            "PostToolUse",
-            "PostToolUseFailure",
-            "PostToolBatch",
-            "Notification",
-            "Stop",
-            "SubagentStart",
-            "SubagentStop",
-            "PreCompact",
-            "PostCompact",
-            "SessionStart",
-            "SessionEnd",
-            "UserPromptSubmit",
-            "UserPromptExpansion",
-            "StopFailure",
-            "PermissionRequest",
-            "PermissionDenied",
-            "InstructionsLoaded",
-            "ConfigChange",
-            "CwdChanged",
-            "FileChanged",
-            "TaskCreated",
-            "TaskCompleted",
-            "WorktreeCreate",
-            "WorktreeRemove",
-            "TeammateIdle",
-            "Elicitation",
-            "ElicitationResult"
-        ]),
-    );
-    projection.insert(
-        "hook_handler_types".to_string(),
-        json!(["command", "prompt", "agent", "http", "mcp_tool"]),
-    );
-    projection.insert(
-        "hook_control_settings".to_string(),
-        json!([
-            "disableAllHooks",
-            "allowManagedHooksOnly",
-            "allowedHttpHookUrls",
-            "httpHookAllowedEnvVars"
-        ]),
-    );
-    projection.insert(
-        "hook_execution_features".to_string(),
-        json!(["async", "asyncRewake", "timeout", "matcher", "if"]),
-    );
-    projection.insert(
-        "hook_definition_sources".to_string(),
-        json!([
-            {
-                "source": "managed_settings",
-                "locations": [
-                    "/Library/Application Support/ClaudeCode/managed-settings.json",
-                    "/etc/claude-code/managed-settings.json",
-                    "C:/Program Files/ClaudeCode/managed-settings.json"
-                ]
-            },
-            {
-                "source": "user_settings",
-                "locations": ["~/.claude/settings.json"]
-            },
-            {
-                "source": "project_settings",
-                "locations": [".claude/settings.json"]
-            },
-            {
-                "source": "local_settings",
-                "locations": [".claude/settings.local.json"]
-            },
-            {
-                "source": "plugin_manifest",
-                "locations": ["hooks/hooks.json"]
-            },
-            {
-                "source": "agent_frontmatter",
-                "locations": ["~/.claude/agents/*.md", ".claude/agents/*.md"]
-            },
-            {
-                "source": "skill_frontmatter",
-                "locations": [".claude/skills/*.md"]
-            },
-            {
-                "source": "session",
-                "locations": ["/hooks"]
-            },
-            {
-                "source": "built_in",
-                "locations": ["/hooks"]
-            },
-            {
-                "source": "sdk",
-                "locations": ["sdk_message_stream"]
-            }
-        ]),
-    );
-    projection.insert("hook_inspection_commands".to_string(), json!(["/hooks"]));
-    projection.insert(
-        "plugin_hook_manifest_paths".to_string(),
-        json!(["hooks/hooks.json"]),
-    );
-    projection.insert(
-        "hook_environment_markers".to_string(),
-        json!([
-            "CLAUDE_ENV_FILE",
-            "CLAUDE_PROJECT_DIR",
-            "CLAUDE_PLUGIN_ROOT",
-            "CLAUDE_PLUGIN_DATA",
-            "CLAUDE_CODE_REMOTE"
-        ]),
-    );
-    projection.insert(
-        "managed_settings_paths".to_string(),
-        json!([
-            "/Library/Application Support/ClaudeCode/managed-settings.json",
-            "/etc/claude-code/managed-settings.json",
-            "C:/Program Files/ClaudeCode/managed-settings.json"
-        ]),
-    );
-    projection.insert(
-        "managed_mcp_paths".to_string(),
-        json!([
-            "/Library/Application Support/ClaudeCode/managed-mcp.json",
-            "/etc/claude-code/managed-mcp.json",
-            "C:/Program Files/ClaudeCode/managed-mcp.json"
-        ]),
-    );
-    projection.insert("checkpointing_supported".to_string(), Value::Bool(true));
-    projection.insert(
-        "session_supervisor_driver".to_string(),
-        Value::String("claude_driver".to_string()),
-    );
-    projection.insert(
-        "resume_command_examples".to_string(),
-        json!(["claude --continue", "claude --resume <session_id>"]),
-    );
-    projection.insert(
-        "framework_alias_entrypoints".to_string(),
-        build_host_alias_entrypoints("claude-code"),
-    );
-    projection.insert(
-        "gpt_model_path_contract".to_string(),
-        json!({
-            "path_kind": "anthropic-compatible-bridge",
-            "preferred_for_gpt_family": false,
-            "adapter_loss_profile": "translation-and-startup-context-overhead",
-            "avoidable_loss_sources": [
-                "Anthropic-to-OpenAI message mapping",
-                "Claude model alias environment overrides",
-                "Claude startup/context injection before GPT execution"
-            ],
-            "reduce_loss_by": [
-                "use Codex/OpenAI-compatible endpoint for GPT-default work",
-                "keep CLAUDE.md lean when Claude host behavior is required"
-            ]
-        }),
-    );
-    projection
-}
-
-fn build_gemini_host_adapter_payload() -> Map<String, Value> {
-    let mut projection = Map::new();
-    projection.insert(
-        "context_files".to_string(),
-        Value::Array(vec![Value::String("GEMINI.md".to_string())]),
-    );
-    projection.insert(
-        "settings_paths".to_string(),
-        Value::Array(vec![Value::String("~/.gemini/settings.json".to_string())]),
-    );
-    projection.insert(
-        "mcp_config_paths".to_string(),
-        Value::Array(vec![Value::String("~/.gemini/settings.json".to_string())]),
-    );
-    projection.insert(
-        "structured_output_modes".to_string(),
-        Value::Array(vec![
-            Value::String("json".to_string()),
-            Value::String("stream-json".to_string()),
-        ]),
-    );
-    projection.insert("checkpointing_supported".to_string(), Value::Bool(true));
-    projection
-}
-
-fn build_codex_desktop_adapter(
+fn build_codex_adapter(
     profile: &FrameworkProfileContract,
     normalized_memory_mounts: &[Value],
     normalized_mcp_servers: &[Value],
     workspace_bootstrap: &Map<String, Value>,
     shared_contract: &Map<String, Value>,
-    controller_boundary: &Map<String, Value>,
 ) -> Map<String, Value> {
-    let mut payload = build_codex_adapter_base(
+    let mut payload = build_codex_profile_output_base(
         profile,
-        AdapterDescriptor {
-            adapter_id: CODEX_DESKTOP_ADAPTER_ID,
-            host_id: "codex-desktop",
-            transport: "local-bridge",
-            host_capabilities: &CODEX_DESKTOP_HOST_CAPABILITIES,
-        },
-        &AdapterBuildContext {
+        &CodexProfileBuildContext {
             normalized_memory_mounts,
             normalized_mcp_servers,
             workspace_bootstrap,
@@ -1681,531 +705,35 @@ fn build_codex_desktop_adapter(
         Value::Object(shared_contract.clone()),
     );
     payload.insert(
-        "controller_boundary".to_string(),
-        Value::Object(controller_boundary.clone()),
-    );
-    payload.insert(
         "runtime_surface".to_string(),
         Value::Object(build_runtime_surface(shared_contract)),
     );
     payload.insert(
-        "bridge_contract".to_string(),
-        shared_contract_workspace_bridges(shared_contract),
-    );
-    payload.insert(
-        "entrypoint_contract".to_string(),
+        "execution_surface".to_string(),
         value_object([
-            ("entrypoint_kind", Value::String("interactive".to_string())),
-            (
-                "thread_binding",
-                Value::String("desktop-thread".to_string()),
-            ),
-            ("automation_bridge_required", Value::Bool(true)),
+            ("entrypoint_kind", Value::String("codex".to_string())),
+            ("non_interactive", Value::Bool(true)),
+            ("supports_batch", Value::Bool(true)),
+            ("supports_cron", Value::Bool(true)),
+            ("supports_ci", Value::Bool(true)),
             (
                 "framework_truth",
                 Value::String("framework_core".to_string()),
             ),
-            (
-                "shared_adapter",
-                Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-            ),
+            ("controller_is_cli", Value::Bool(false)),
+            ("host_cli", Value::String("codex".to_string())),
         ]),
     );
     payload.insert(
-        "fallback_semantics".to_string(),
-        value_object([
-            (
-                "preserves_core_capabilities",
-                string_array(&REQUIRED_CORE_CAPABILITIES),
-            ),
-            ("degrade_to", Value::Null),
-            (
-                "shared_adapter",
-                Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-            ),
-            ("cli_peer", Value::String("codex_cli_adapter".to_string())),
-        ]),
-    );
-    payload.insert(
-        "source_contract".to_string(),
-        Value::Object(build_source_contract(
-            CODEX_DESKTOP_ADAPTER_ID,
-            "common_contract",
-            Some("runtime_surface"),
-            Some("bridge_contract"),
-            Some("entrypoint_contract"),
-            None,
-            None,
-            None,
-        )),
+        CODEX_HOST_PAYLOAD_KEY.to_string(),
+        Value::Object(complete_codex_host_payload(build_codex_host_payload())),
     );
     payload
 }
 
-fn build_codex_cli_adapter(
-    profile: &FrameworkProfileContract,
-    normalized_memory_mounts: &[Value],
-    normalized_mcp_servers: &[Value],
-    workspace_bootstrap: &Map<String, Value>,
-    shared_contract: &Map<String, Value>,
-    controller_boundary: &Map<String, Value>,
-) -> Map<String, Value> {
-    let mut payload = build_cli_family_host_adapter(
-        profile,
-        AdapterDescriptor {
-            adapter_id: "codex_cli_adapter",
-            host_id: "codex-cli",
-            transport: "headless-exec",
-            host_capabilities: &CODEX_CLI_HOST_CAPABILITIES,
-        },
-        &AdapterBuildContext {
-            normalized_memory_mounts,
-            normalized_mcp_servers,
-            workspace_bootstrap,
-        },
-        CliFamilyAdapterInputs {
-            shared_contract,
-            controller_boundary,
-            host_adapter_payload: &build_codex_host_adapter_payload(),
-        },
-    );
-    payload.insert(
-        "fallback_semantics".to_string(),
-        value_object([
-            (
-                "preserves_core_capabilities",
-                string_array(&REQUIRED_CORE_CAPABILITIES),
-            ),
-            ("degrade_to", Value::Null),
-            (
-                "shared_adapter",
-                Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-            ),
-            (
-                "desktop_peer",
-                Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-            ),
-            (
-                "cli_family_peers",
-                Value::Array(vec![
-                    Value::String(CLAUDE_CODE_ADAPTER_ID.to_string()),
-                    Value::String(GEMINI_CLI_ADAPTER_ID.to_string()),
-                ]),
-            ),
-        ]),
-    );
-    payload
-}
-
-fn build_codex_dual_entry_parity_snapshot(
-    controller_boundary: &Map<String, Value>,
-    desktop_adapter: &Map<String, Value>,
-    cli_adapter: &Map<String, Value>,
-) -> Result<Map<String, Value>, String> {
-    let desktop_runtime_surface = desktop_adapter
-        .get("runtime_surface")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "codex desktop adapter missing runtime_surface".to_string())?;
-    let cli_runtime_surface = cli_adapter
-        .get("runtime_surface")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "codex cli adapter missing runtime_surface".to_string())?;
-
-    let mut parity_checks = Map::new();
-    let mut all_checks_pass = true;
-    for field in COMMON_PARITY_FIELDS {
-        let passed = desktop_runtime_surface.get(field) == cli_runtime_surface.get(field);
-        parity_checks.insert(field.to_string(), Value::Bool(passed));
-        all_checks_pass &= passed;
-    }
-
-    let mut snapshot = Map::new();
-    snapshot.insert(
-        "framework_truth".to_string(),
-        Value::String("framework_core".to_string()),
-    );
-    snapshot.insert(
-        "shared_adapter".to_string(),
-        Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-    );
-    snapshot.insert(
-        "shared_adapter_aliases".to_string(),
-        Value::Array(vec![Value::String("codex_common_adapter".to_string())]),
-    );
-    snapshot.insert(
-        "compatibility_view_of".to_string(),
-        Value::String(CLI_FAMILY_PARITY_ARTIFACT_ID.to_string()),
-    );
-    snapshot.insert(
-        "codexcli_is_framework_controller".to_string(),
-        Value::Bool(false),
-    );
-    snapshot.insert(
-        "shared_contract_fields".to_string(),
-        string_array(&COMMON_PARITY_FIELDS),
-    );
-    snapshot.insert("parity_checks".to_string(), Value::Object(parity_checks));
-    snapshot.insert(
-        "all_shared_contract_checks_pass".to_string(),
-        Value::Bool(all_checks_pass),
-    );
-    snapshot.insert(
-        "desktop".to_string(),
-        value_object([
-            (
-                "adapter_id",
-                Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-            ),
-            (
-                "entrypoint_kind",
-                desktop_adapter["entrypoint_contract"]["entrypoint_kind"].clone(),
-            ),
-            (
-                "shared_adapter",
-                desktop_adapter["entrypoint_contract"]["shared_adapter"].clone(),
-            ),
-        ]),
-    );
-    snapshot.insert(
-        "cli".to_string(),
-        value_object([
-            ("adapter_id", Value::String("codex_cli_adapter".to_string())),
-            (
-                "entrypoint_kind",
-                cli_adapter["execution_surface"]["entrypoint_kind"].clone(),
-            ),
-            (
-                "shared_adapter",
-                Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-            ),
-        ]),
-    );
-    snapshot.insert(
-        "controller_boundary".to_string(),
-        Value::Object(controller_boundary.clone()),
-    );
-    Ok(snapshot)
-}
-
-fn build_cli_family_parity_snapshot(
-    controller_boundary: &Map<String, Value>,
-    codex_cli_adapter: &Map<String, Value>,
-    claude_code_adapter: &Map<String, Value>,
-    gemini_cli_adapter: &Map<String, Value>,
-) -> Result<Map<String, Value>, String> {
-    let codex_runtime_surface = codex_cli_adapter
-        .get("runtime_surface")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "codex cli adapter missing runtime_surface".to_string())?;
-    let claude_runtime_surface = claude_code_adapter
-        .get("runtime_surface")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "claude code adapter missing runtime_surface".to_string())?;
-    let gemini_runtime_surface = gemini_cli_adapter
-        .get("runtime_surface")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "gemini cli adapter missing runtime_surface".to_string())?;
-
-    let mut parity_checks = Map::new();
-    let mut all_checks_pass = true;
-    for field in COMMON_PARITY_FIELDS {
-        let codex_value = codex_runtime_surface.get(field);
-        let passed = codex_value == claude_runtime_surface.get(field)
-            && codex_value == gemini_runtime_surface.get(field);
-        parity_checks.insert(field.to_string(), Value::Bool(passed));
-        all_checks_pass &= passed;
-    }
-
-    let mut snapshot = Map::new();
-    snapshot.insert(
-        "framework_truth".to_string(),
-        Value::String("framework_core".to_string()),
-    );
-    snapshot.insert(
-        "shared_adapter".to_string(),
-        Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-    );
-    snapshot.insert(
-        "shared_contract_fields".to_string(),
-        string_array(&COMMON_PARITY_FIELDS),
-    );
-    snapshot.insert("parity_checks".to_string(), Value::Object(parity_checks));
-    snapshot.insert(
-        "all_shared_contract_checks_pass".to_string(),
-        Value::Bool(all_checks_pass),
-    );
-    snapshot.insert(
-        "cli_hosts".to_string(),
-        value_object([
-            (
-                "codex_cli_adapter",
-                build_cli_family_snapshot_entry(codex_cli_adapter)?,
-            ),
-            (
-                "claude_code_adapter",
-                build_cli_family_snapshot_entry(claude_code_adapter)?,
-            ),
-            (
-                "gemini_cli_adapter",
-                build_cli_family_snapshot_entry(gemini_cli_adapter)?,
-            ),
-        ]),
-    );
-    snapshot.insert(
-        "controller_boundary".to_string(),
-        Value::Object(controller_boundary.clone()),
-    );
-    Ok(snapshot)
-}
-
-fn build_cli_family_capability_discovery(
-    profile: &FrameworkProfileContract,
-    controller_boundary: &Map<String, Value>,
-    codex_cli_adapter: &Map<String, Value>,
-    claude_code_adapter: &Map<String, Value>,
-    gemini_cli_adapter: &Map<String, Value>,
-) -> Result<Map<String, Value>, String> {
-    let codex_entry = build_cli_family_capability_discovery_entry(
-        profile,
-        AdapterDescriptor {
-            adapter_id: CODEX_CLI_ADAPTER_ID,
-            host_id: "codex-cli",
-            transport: "headless-exec",
-            host_capabilities: &CODEX_CLI_HOST_CAPABILITIES,
-        },
-        codex_cli_adapter,
-    )?;
-    let claude_entry = build_cli_family_capability_discovery_entry(
-        profile,
-        AdapterDescriptor {
-            adapter_id: CLAUDE_CODE_ADAPTER_ID,
-            host_id: "claude-code",
-            transport: "headless-exec",
-            host_capabilities: &CLAUDE_CODE_HOST_CAPABILITIES,
-        },
-        claude_code_adapter,
-    )?;
-    let gemini_entry = build_cli_family_capability_discovery_entry(
-        profile,
-        AdapterDescriptor {
-            adapter_id: GEMINI_CLI_ADAPTER_ID,
-            host_id: "gemini-cli",
-            transport: "headless-exec",
-            host_capabilities: &GEMINI_CLI_HOST_CAPABILITIES,
-        },
-        gemini_cli_adapter,
-    )?;
-    let mut payload = Map::new();
-    payload.insert(
-        "framework_truth".to_string(),
-        Value::String("framework_core".to_string()),
-    );
-    payload.insert(
-        "shared_adapter".to_string(),
-        Value::String(CLI_COMMON_ADAPTER_ID.to_string()),
-    );
-    payload.insert(
-        "discovery_contract".to_string(),
-        Value::String("cli_family_host_capability_contract_v1".to_string()),
-    );
-    payload.insert(
-        "required_core_capabilities".to_string(),
-        string_array(&REQUIRED_CORE_CAPABILITIES),
-    );
-    payload.insert(
-        "required_shared_contract_fields".to_string(),
-        string_array(&COMMON_PARITY_FIELDS),
-    );
-    payload.insert(
-        "cli_hosts".to_string(),
-        value_object([
-            (CODEX_CLI_ADAPTER_ID, Value::Object(codex_entry.clone())),
-            (CLAUDE_CODE_ADAPTER_ID, Value::Object(claude_entry.clone())),
-            (GEMINI_CLI_ADAPTER_ID, Value::Object(gemini_entry.clone())),
-        ]),
-    );
-    let all_cli_hosts_compatible =
-        [&codex_entry, &claude_entry, &gemini_entry]
-            .iter()
-            .all(|entry| {
-                entry
-                    .get("compatibility_passes")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false)
-            });
-    payload.insert(
-        "all_cli_hosts_compatible".to_string(),
-        Value::Bool(all_cli_hosts_compatible),
-    );
-    payload.insert(
-        "controller_boundary".to_string(),
-        Value::Object(controller_boundary.clone()),
-    );
-    Ok(payload)
-}
-
-fn build_cli_family_capability_discovery_entry(
-    profile: &FrameworkProfileContract,
-    descriptor: AdapterDescriptor<'_>,
-    adapter: &Map<String, Value>,
-) -> Result<Map<String, Value>, String> {
-    let execution_surface = adapter
-        .get("execution_surface")
-        .and_then(Value::as_object)
-        .ok_or_else(|| format!("{} missing execution_surface", descriptor.adapter_id))?;
-    let host_adapter_payload = adapter_host_payload(adapter).map_err(|_| {
-        format!(
-            "{} missing {}",
-            descriptor.adapter_id, HOST_ADAPTER_PAYLOAD_KEY
-        )
-    })?;
-    let resolved_host_requirements =
-        resolve_host_capability_requirements(profile, descriptor.host_id, descriptor.adapter_id);
-    let required_host_capabilities = resolved_host_requirements
-        .get("required_host_capabilities")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let available_host_capabilities: Vec<Value> = descriptor
-        .host_capabilities
-        .iter()
-        .map(|value| Value::String((*value).to_string()))
-        .collect();
-    let available_set: HashSet<&str> = descriptor.host_capabilities.iter().copied().collect();
-    let missing_host_capabilities: Vec<Value> = required_host_capabilities
-        .iter()
-        .filter_map(Value::as_str)
-        .filter(|capability| !available_set.contains(*capability))
-        .map(|capability| Value::String(capability.to_string()))
-        .collect();
-    let supervisor_capabilities = json!({
-        "external_session_supervisor": available_set.contains("external_session_supervisor"),
-        "rate_limit_auto_resume": available_set.contains("rate_limit_auto_resume"),
-        "host_resume_entrypoint": available_set.contains("host_resume_entrypoint"),
-        "host_tmux_worker_management": available_set.contains("host_tmux_worker_management"),
-    });
-
-    let mut payload = Map::new();
-    payload.insert(
-        "adapter_id".to_string(),
-        Value::String(descriptor.adapter_id.to_string()),
-    );
-    payload.insert(
-        "host_id".to_string(),
-        Value::String(descriptor.host_id.to_string()),
-    );
-    payload.insert(
-        "transport".to_string(),
-        Value::String(descriptor.transport.to_string()),
-    );
-    payload.insert(
-        "entrypoint_kind".to_string(),
-        execution_surface
-            .get("entrypoint_kind")
-            .cloned()
-            .unwrap_or_else(|| Value::String(String::new())),
-    );
-    payload.insert(
-        "shared_adapter".to_string(),
-        execution_surface
-            .get("shared_adapter")
-            .cloned()
-            .unwrap_or_else(|| Value::String(String::new())),
-    );
-    payload.insert(
-        "framework_truth".to_string(),
-        execution_surface
-            .get("framework_truth")
-            .cloned()
-            .unwrap_or_else(|| Value::String(String::new())),
-    );
-    payload.insert(
-        "available_host_capabilities".to_string(),
-        Value::Array(available_host_capabilities),
-    );
-    payload.insert(
-        "resolved_host_requirements".to_string(),
-        Value::Object(resolved_host_requirements.clone()),
-    );
-    payload.insert(
-        "required_host_capabilities".to_string(),
-        Value::Array(required_host_capabilities),
-    );
-    payload.insert(
-        "missing_host_capabilities".to_string(),
-        Value::Array(missing_host_capabilities.clone()),
-    );
-    payload.insert(
-        "supports_batch".to_string(),
-        execution_surface
-            .get("supports_batch")
-            .cloned()
-            .unwrap_or(Value::Bool(false)),
-    );
-    payload.insert(
-        "supports_cron".to_string(),
-        execution_surface
-            .get("supports_cron")
-            .cloned()
-            .unwrap_or(Value::Bool(false)),
-    );
-    payload.insert(
-        "supports_ci".to_string(),
-        execution_surface
-            .get("supports_ci")
-            .cloned()
-            .unwrap_or(Value::Bool(false)),
-    );
-    for field in [
-        "context_files",
-        "settings_paths",
-        "mcp_config_paths",
-        "config_root_env_var",
-        "settings_scope_order",
-        "subagent_paths",
-        "hook_event_names",
-        "hook_control_settings",
-        "hook_inspection_commands",
-        "hook_environment_markers",
-        "checkpointing_supported",
-        "session_supervisor_driver",
-        "resume_command_examples",
-        "framework_alias_entrypoints",
-        "gpt_model_path_contract",
-    ] {
-        payload.insert(
-            field.to_string(),
-            host_adapter_payload
-                .get(field)
-                .cloned()
-                .unwrap_or_else(|| match field {
-                    "config_root_env_var" => Value::Null,
-                    "checkpointing_supported" => Value::Bool(false),
-                    "session_supervisor_driver" => Value::Null,
-                    "framework_alias_entrypoints" => Value::Object(Map::new()),
-                    "gpt_model_path_contract" => Value::Null,
-                    _ => Value::Array(vec![]),
-                }),
-        );
-    }
-    payload.insert(
-        "supervisor_capabilities".to_string(),
-        supervisor_capabilities,
-    );
-    payload.insert(
-        "compatibility_passes".to_string(),
-        Value::Bool(missing_host_capabilities.is_empty()),
-    );
-    Ok(payload)
-}
-
-fn resolve_host_capability_requirements(
-    profile: &FrameworkProfileContract,
-    host_id: &str,
-    adapter_id: &str,
-) -> Map<String, Value> {
+fn resolve_codex_capability_requirements(profile: &FrameworkProfileContract) -> Map<String, Value> {
     let mut merged = Map::new();
-    for key in ["default", host_id, adapter_id] {
+    for key in ["default", "codex", CODEX_ADAPTER_ID] {
         if let Some(Value::Object(requirements)) = profile.host_capability_requirements.get(key) {
             merge_json_maps(&mut merged, requirements);
         }
@@ -2238,140 +766,6 @@ fn merge_json_maps(target: &mut Map<String, Value>, override_map: &Map<String, V
             target.insert(key.clone(), value.clone());
         }
     }
-}
-
-fn build_cli_family_snapshot_entry(adapter: &Map<String, Value>) -> Result<Value, String> {
-    let metadata = adapter
-        .get("metadata")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "cli adapter missing metadata".to_string())?;
-    let execution_surface = adapter
-        .get("execution_surface")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "cli adapter missing execution_surface".to_string())?;
-    let host_adapter_payload = adapter_host_payload(adapter)?;
-
-    Ok(value_object([
-        (
-            "adapter_id",
-            metadata
-                .get("adapter_id")
-                .cloned()
-                .unwrap_or_else(|| Value::String(String::new())),
-        ),
-        (
-            "host_id",
-            metadata
-                .get("host_id")
-                .cloned()
-                .unwrap_or_else(|| Value::String(String::new())),
-        ),
-        (
-            "entrypoint_kind",
-            execution_surface
-                .get("entrypoint_kind")
-                .cloned()
-                .unwrap_or_else(|| Value::String(String::new())),
-        ),
-        (
-            "shared_adapter",
-            execution_surface
-                .get("shared_adapter")
-                .cloned()
-                .unwrap_or_else(|| Value::String(String::new())),
-        ),
-        (
-            "context_files",
-            host_adapter_payload
-                .get("context_files")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![])),
-        ),
-        (
-            "config_root_env_var",
-            host_adapter_payload
-                .get("config_root_env_var")
-                .cloned()
-                .unwrap_or(Value::Null),
-        ),
-        (
-            "settings_paths",
-            host_adapter_payload
-                .get("settings_paths")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![])),
-        ),
-        (
-            "mcp_config_paths",
-            host_adapter_payload
-                .get("mcp_config_paths")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![])),
-        ),
-        (
-            "settings_scope_order",
-            host_adapter_payload
-                .get("settings_scope_order")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![])),
-        ),
-        (
-            "subagent_paths",
-            host_adapter_payload
-                .get("subagent_paths")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![])),
-        ),
-        (
-            "hook_event_names",
-            host_adapter_payload
-                .get("hook_event_names")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![])),
-        ),
-        (
-            "hook_control_settings",
-            host_adapter_payload
-                .get("hook_control_settings")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![])),
-        ),
-        (
-            "hook_execution_features",
-            host_adapter_payload
-                .get("hook_execution_features")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![])),
-        ),
-        (
-            "hook_inspection_commands",
-            host_adapter_payload
-                .get("hook_inspection_commands")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![])),
-        ),
-        (
-            "plugin_hook_manifest_paths",
-            host_adapter_payload
-                .get("plugin_hook_manifest_paths")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![])),
-        ),
-        (
-            "hook_environment_markers",
-            host_adapter_payload
-                .get("hook_environment_markers")
-                .cloned()
-                .unwrap_or_else(|| Value::Array(vec![])),
-        ),
-        (
-            "checkpointing_supported",
-            host_adapter_payload
-                .get("checkpointing_supported")
-                .cloned()
-                .unwrap_or(Value::Bool(false)),
-        ),
-    ]))
 }
 
 fn build_execution_controller_contract() -> Map<String, Value> {
@@ -2418,7 +812,7 @@ fn build_execution_controller_contract() -> Map<String, Value> {
 
     let mut boundaries = Map::new();
     boundaries.insert(
-        "host_adapters_remain_thin_projections".to_string(),
+        "codex_adapter_remains_compatibility_key".to_string(),
         Value::Bool(true),
     );
     boundaries.insert(
@@ -2793,382 +1187,6 @@ fn build_supervisor_state_contract() -> Map<String, Value> {
     payload
 }
 
-fn build_execution_kernel_live_fallback_retirement_status() -> Map<String, Value> {
-    let mut live_primary = Map::new();
-    live_primary.insert(
-        "contract_mode".to_string(),
-        Value::String("rust-live-primary".to_string()),
-    );
-    live_primary.insert(
-        "adapter_kind".to_string(),
-        Value::String("router-rs".to_string()),
-    );
-    live_primary.insert(
-        "authority".to_string(),
-        Value::String("rust-execution-cli".to_string()),
-    );
-    live_primary.insert("family".to_string(), Value::String("rust-cli".to_string()));
-    live_primary.insert("impl".to_string(), Value::String("router-rs".to_string()));
-
-    let mut compatibility_fallback = Map::new();
-    compatibility_fallback.insert("runtime_path_available".to_string(), Value::Bool(false));
-    compatibility_fallback.insert(
-        "retired_mode".to_string(),
-        Value::String("retired".to_string()),
-    );
-    compatibility_fallback.insert(
-        "request_behavior".to_string(),
-        Value::String("surface-removed".to_string()),
-    );
-    compatibility_fallback.insert(
-        "former_adapter_kind".to_string(),
-        Value::String("python-agno".to_string()),
-    );
-    compatibility_fallback.insert(
-        "former_authority".to_string(),
-        Value::String("python-agno-kernel-adapter".to_string()),
-    );
-    compatibility_fallback.insert(
-        "former_family".to_string(),
-        Value::String("python".to_string()),
-    );
-    compatibility_fallback.insert("former_impl".to_string(), Value::String("agno".to_string()));
-    compatibility_fallback.insert(
-        "purpose_before_retirement".to_string(),
-        Value::String("compatibility-only-escape-hatch".to_string()),
-    );
-
-    let mut control_surfaces = Map::new();
-    control_surfaces.insert(
-        "former_settings_field".to_string(),
-        Value::String("rust_execute_fallback_to_python".to_string()),
-    );
-    control_surfaces.insert(
-        "former_env_var".to_string(),
-        Value::String("CODEX_AGNO_RUST_EXECUTE_FALLBACK_TO_PYTHON".to_string()),
-    );
-    control_surfaces.insert(
-        "enabled_by_default_before_removal".to_string(),
-        Value::Bool(false),
-    );
-    control_surfaces.insert("accepted_after_retirement".to_string(), Value::Bool(false));
-    control_surfaces.insert(
-        "request_behavior".to_string(),
-        Value::String("surface-removed".to_string()),
-    );
-    control_surfaces.insert(
-        "steady_state_mode".to_string(),
-        Value::String("removed".to_string()),
-    );
-    control_surfaces.insert(
-        "surface_role".to_string(),
-        Value::String("removed-retired-request-surface".to_string()),
-    );
-    control_surfaces.insert(
-        "removal_status".to_string(),
-        Value::String("completed".to_string()),
-    );
-
-    let mut retirement_exit_contract = Map::new();
-    retirement_exit_contract.insert(
-        "surface_status".to_string(),
-        Value::String("removed".to_string()),
-    );
-    retirement_exit_contract.insert(
-        "current_decision".to_string(),
-        Value::String("completed".to_string()),
-    );
-    retirement_exit_contract.insert(
-        "removal_owner".to_string(),
-        Value::String("runtime-integrator".to_string()),
-    );
-    retirement_exit_contract.insert("remove_when".to_string(), Value::Array(vec![]));
-    let mut retirement_exit_observation_sources = Map::new();
-    retirement_exit_observation_sources.insert(
-        "local_runtime_health".to_string(),
-        Value::Array(vec![
-            Value::String("runtime_control_plane.services.execution.kernel_contract".to_string()),
-            Value::String(
-                "ExecutionEnvironmentService.health().kernel_live_backend_impl".to_string(),
-            ),
-        ]),
-    );
-    retirement_exit_observation_sources.insert(
-        "local_contract_artifacts".to_string(),
-        Value::Array(vec![
-            Value::String(
-                "execution_kernel_live_fallback_retirement_status.control_surfaces"
-                    .to_string(),
-            ),
-            Value::String(
-                "execution_kernel_live_fallback_retirement_status.current_contract_truth.live_fallback_request_behavior".to_string(),
-            ),
-        ]),
-    );
-    retirement_exit_observation_sources.insert(
-        "external_confirmation".to_string(),
-        Value::Array(vec![Value::String(
-            "host or integration owner evidence that no downstream caller still probes the retired request surface".to_string(),
-        )]),
-    );
-    retirement_exit_contract.insert(
-        "observation_sources".to_string(),
-        Value::Object(retirement_exit_observation_sources),
-    );
-    retirement_exit_contract.insert(
-        "stop_rule".to_string(),
-        Value::String(
-            "request surface already removed from runtime settings and steady-state artifacts"
-                .to_string(),
-        ),
-    );
-
-    let public_runtime_contract_fields = Value::Array(vec![
-        Value::String("execution_kernel".to_string()),
-        Value::String("execution_kernel_authority".to_string()),
-        Value::String("execution_kernel_contract_mode".to_string()),
-        Value::String("execution_kernel_in_process_replacement_complete".to_string()),
-        Value::String("execution_kernel_delegate".to_string()),
-        Value::String("execution_kernel_delegate_authority".to_string()),
-        Value::String("execution_kernel_live_primary".to_string()),
-        Value::String("execution_kernel_live_primary_authority".to_string()),
-    ]);
-    let public_runtime_response_metadata_fields = Value::Array(vec![
-        Value::String("execution_kernel_delegate_family".to_string()),
-        Value::String("execution_kernel_delegate_impl".to_string()),
-    ]);
-
-    let mut current_contract_truth = Map::new();
-    current_contract_truth.insert(
-        "execution_kernel_contract_mode".to_string(),
-        Value::String("rust-live-primary".to_string()),
-    );
-    current_contract_truth.insert(
-        "execution_kernel_in_process_replacement_complete".to_string(),
-        Value::Bool(true),
-    );
-    current_contract_truth.insert(
-        "dry_run_delegate_kind".to_string(),
-        Value::String("router-rs".to_string()),
-    );
-    current_contract_truth.insert(
-        "dry_run_delegate_authority".to_string(),
-        Value::String("rust-execution-cli".to_string()),
-    );
-    current_contract_truth.insert(
-        "live_primary_kind".to_string(),
-        Value::String("router-rs".to_string()),
-    );
-    current_contract_truth.insert(
-        "live_primary_authority".to_string(),
-        Value::String("rust-execution-cli".to_string()),
-    );
-    current_contract_truth.insert(
-        "live_fallback_runtime_path_available".to_string(),
-        Value::Bool(false),
-    );
-    current_contract_truth.insert(
-        "live_fallback_mode".to_string(),
-        Value::String("retired".to_string()),
-    );
-    current_contract_truth.insert(
-        "live_fallback_request_behavior".to_string(),
-        Value::String("surface-removed".to_string()),
-    );
-    current_contract_truth.insert(
-        "live_fallback_request_surface".to_string(),
-        Value::String("removed".to_string()),
-    );
-    current_contract_truth.insert(
-        "live_prompt_preview_passthrough_disabled".to_string(),
-        Value::Bool(true),
-    );
-
-    let mut current_response_metadata_truth = Map::new();
-    current_response_metadata_truth.insert(
-        "live_delegate_family".to_string(),
-        Value::String("rust-cli".to_string()),
-    );
-    current_response_metadata_truth.insert(
-        "live_delegate_impl".to_string(),
-        Value::String("router-rs".to_string()),
-    );
-    current_response_metadata_truth.insert(
-        "dry_run_delegate_family".to_string(),
-        Value::String("rust-cli".to_string()),
-    );
-    current_response_metadata_truth.insert(
-        "dry_run_delegate_impl".to_string(),
-        Value::String("router-rs".to_string()),
-    );
-
-    let remaining_native_owned_surfaces = Value::Array(vec![]);
-
-    let mut retirement_readiness = Map::new();
-    retirement_readiness.insert("ready".to_string(), Value::Bool(true));
-    retirement_readiness.insert("status".to_string(), Value::String("retired".to_string()));
-    retirement_readiness.insert("contract_lane_complete".to_string(), Value::Bool(true));
-    retirement_readiness.insert(
-        "runtime_control_flow_change_required".to_string(),
-        Value::Bool(false),
-    );
-    retirement_readiness.insert("blockers".to_string(), Value::Array(vec![]));
-    retirement_readiness.insert(
-        "next_safe_slice".to_string(),
-        Value::String("rustification_closed".to_string()),
-    );
-
-    let mut guardrails = Map::new();
-    guardrails.insert(
-        "thin_projection_boundary_preserved".to_string(),
-        Value::Bool(true),
-    );
-    guardrails.insert(
-        "cli_hosts_may_not_become_framework_truth".to_string(),
-        Value::Bool(true),
-    );
-    guardrails.insert(
-        "claude_host_runtime_semantics_remain_host_owned".to_string(),
-        Value::Bool(true),
-    );
-
-    let mut retirement_gates = Map::new();
-    retirement_gates.insert(
-        "public_runtime_contract_externalized".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "live_primary_contract_externalized".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "compatibility_fallback_contract_externalized".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "rust_only_disabled_mode_externalized".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "response_metadata_surface_externalized".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "delegate_family_impl_metadata_externalized".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "dry_run_delegate_still_python_owned".to_string(),
-        Value::Bool(false),
-    );
-    retirement_gates.insert(
-        "compatibility_fallback_runtime_path_removed".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "explicit_compatibility_requests_rejected".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "dry_run_prompt_preview_still_native_owned".to_string(),
-        Value::Bool(false),
-    );
-    retirement_gates.insert(
-        "dry_run_prompt_preview_still_python_owned".to_string(),
-        Value::Bool(false),
-    );
-    retirement_gates.insert(
-        "compatibility_fallback_agent_factory_still_native_owned".to_string(),
-        Value::Bool(false),
-    );
-    retirement_gates.insert(
-        "compatibility_live_response_serialization_still_native_owned".to_string(),
-        Value::Bool(false),
-    );
-    retirement_gates.insert(
-        "compatibility_live_response_serialization_still_python_owned".to_string(),
-        Value::Bool(false),
-    );
-    retirement_gates.insert(
-        "compatibility_fallback_reason_metadata_still_native_owned".to_string(),
-        Value::Bool(false),
-    );
-    retirement_gates.insert(
-        "default_runtime_native_fallback_retired".to_string(),
-        Value::Bool(true),
-    );
-    retirement_gates.insert(
-        "in_process_replacement_complete".to_string(),
-        Value::Bool(true),
-    );
-
-    let mut payload = Map::new();
-    payload.insert(
-        "framework_truth".to_string(),
-        Value::String("framework_core".to_string()),
-    );
-    payload.insert(
-        "status_contract".to_string(),
-        Value::String("execution_kernel_live_fallback_retirement_status_v1".to_string()),
-    );
-    payload.insert(
-        "affected_host_adapter_payloads".to_string(),
-        Value::Array(vec![
-            Value::String(CODEX_DESKTOP_ADAPTER_ID.to_string()),
-            Value::String(CODEX_CLI_ADAPTER_ID.to_string()),
-            Value::String(CLAUDE_CODE_ADAPTER_ID.to_string()),
-            Value::String(GEMINI_CLI_ADAPTER_ID.to_string()),
-        ]),
-    );
-    payload.insert("live_primary".to_string(), Value::Object(live_primary));
-    payload.insert(
-        "compatibility_fallback".to_string(),
-        Value::Object(compatibility_fallback),
-    );
-    payload.insert(
-        "control_surfaces".to_string(),
-        Value::Object(control_surfaces),
-    );
-    payload.insert(
-        "retirement_exit_contract".to_string(),
-        Value::Object(retirement_exit_contract),
-    );
-    payload.insert(
-        "public_runtime_contract_fields".to_string(),
-        public_runtime_contract_fields,
-    );
-    payload.insert(
-        "public_runtime_response_metadata_fields".to_string(),
-        public_runtime_response_metadata_fields,
-    );
-    payload.insert(
-        "current_contract_truth".to_string(),
-        Value::Object(current_contract_truth),
-    );
-    payload.insert(
-        "current_response_metadata_truth".to_string(),
-        Value::Object(current_response_metadata_truth),
-    );
-    payload.insert(
-        "remaining_native_owned_surfaces".to_string(),
-        remaining_native_owned_surfaces,
-    );
-    payload.insert(
-        "remaining_python_owned_surfaces".to_string(),
-        Value::Array(vec![]),
-    );
-    payload.insert(
-        "retirement_readiness".to_string(),
-        Value::Object(retirement_readiness),
-    );
-    payload.insert("guardrails".to_string(), Value::Object(guardrails));
-    payload.insert(
-        "retirement_gates".to_string(),
-        Value::Object(retirement_gates),
-    );
-    payload
-}
-
 pub fn build_control_plane_contract_descriptors() -> Map<String, Value> {
     let mut payload = Map::new();
     payload.insert(
@@ -3182,14 +1200,6 @@ pub fn build_control_plane_contract_descriptors() -> Map<String, Value> {
     payload.insert(
         SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID.to_string(),
         Value::Object(build_supervisor_state_contract()),
-    );
-    payload.insert(
-        EXECUTION_KERNEL_LIVE_FALLBACK_RETIREMENT_ARTIFACT_ID.to_string(),
-        Value::Object(build_execution_kernel_live_fallback_retirement_status()),
-    );
-    payload.insert(
-        EXECUTION_KERNEL_LIVE_RESPONSE_SERIALIZATION_ARTIFACT_ID.to_string(),
-        Value::Object(build_execution_kernel_live_response_serialization_contract()),
     );
     payload
 }
@@ -3238,7 +1248,7 @@ fn default_runtime_family() -> String {
 }
 
 fn default_host_family() -> String {
-    "generic".to_string()
+    "codex".to_string()
 }
 
 fn default_core_capabilities() -> Vec<String> {
@@ -3267,7 +1277,7 @@ mod tests {
             "display_name": "Fusion Default",
             "framework_profile_version": "0.1.0",
             "runtime_family": "portable",
-            "host_family": "generic",
+            "host_family": "codex",
             "core_capabilities": ["runtime", "memory", "artifact", "orchestration"],
             "rules_bundle": {"rules": [{"id": "outer-owned"}]},
             "skill_bundle": {"skills": ["router", "memory-bridge"]},
@@ -3276,7 +1286,7 @@ mod tests {
             "approval_policy": {"mode": "manual"},
             "loadout_policy": {"default": "portable"},
             "framework_surface_policy": {
-                "kernel": {"canonical_axes": ["routing", "memory", "continuity", "host_adapter_payload"]},
+                "kernel": {"canonical_axes": ["routing", "memory", "continuity", "codex_host_payload"]},
                 "default_surface": {"default_loadouts": ["default_surface_loadout"]}
             },
             "artifact_contract": {"layout": "stable-v1"},
@@ -3292,189 +1302,40 @@ mod tests {
         let bundle = build_profile_bundle(&sample_profile()).expect("bundle should build");
         assert_eq!(bundle.profile_id, "fusion-default");
         assert_eq!(bundle.capabilities.core.len(), 4);
+        assert_eq!(bundle.host_family, "codex");
         assert_eq!(
-            bundle.cli_common_adapter["controller_boundary"]["shared_adapter"],
-            Value::String("cli_common_adapter".to_string())
+            bundle.codex_adapter["metadata"]["adapter_id"],
+            Value::String("codex_adapter".to_string())
         );
         assert_eq!(
-            bundle.codex_common_adapter["metadata"]["adapter_alias_of"],
-            Value::String("cli_common_adapter".to_string())
+            bundle.codex_adapter["execution_surface"]["entrypoint_kind"],
+            Value::String("codex".to_string())
         );
         assert_eq!(
-            bundle.codex_common_adapter["parity_contract"]["cli_adapters"],
-            json!([
-                "codex_cli_adapter",
-                "claude_code_adapter",
-                "gemini_cli_adapter"
-            ])
+            bundle.codex_adapter["execution_surface"]["controller_is_cli"],
+            Value::Bool(false)
         );
-        assert!(bundle.codex_common_adapter["parity_contract"]
-            .as_object()
-            .expect("parity contract object")
-            .get("legacy_codex_common_adapter")
+        assert_eq!(
+            bundle.codex_adapter["host_adapter_payload"]["host_cli"],
+            Value::String("codex".to_string())
+        );
+        let serialized = serde_json::to_value(&bundle).expect("bundle should serialize");
+        assert!(serialized.get("cli_common_adapter").is_none());
+        assert!(serialized.get("codex_cli_adapter").is_none());
+        assert!(serialized.get("codex_desktop_adapter").is_none());
+        assert!(serialized.get("codex_common_adapter").is_none());
+        assert!(serialized.get("cli_family_capability_discovery").is_none());
+        assert!(serialized.get("cli_family_parity_snapshot").is_none());
+        assert!(serialized.get("codex_dual_entry_parity_snapshot").is_none());
+        assert!(serialized.get("execution_controller_contract").is_none());
+        assert!(serialized.get("delegation_contract").is_none());
+        assert!(serialized.get("supervisor_state_contract").is_none());
+        assert!(serialized
+            .get("execution_kernel_live_fallback_retirement_status")
             .is_none());
-        assert!(bundle.claude_code_adapter.get("host_projection").is_none());
-        assert_eq!(
-            bundle.claude_code_adapter["host_adapter_payload"]["context_files"],
-            json!(["CLAUDE.md", "CLAUDE.local.md"])
-        );
-        assert!(bundle.gemini_cli_adapter.get("host_projection").is_none());
-        assert_eq!(
-            bundle.gemini_cli_adapter["host_adapter_payload"]["structured_output_modes"],
-            json!(["json", "stream-json"])
-        );
-        assert_eq!(
-            bundle.cli_common_adapter["controller_boundary"]["codexcli_is_controller"],
-            Value::Bool(false)
-        );
-        assert_eq!(
-            bundle.codex_cli_adapter["execution_surface"]["shared_adapter"],
-            Value::String("cli_common_adapter".to_string())
-        );
-        assert_eq!(
-            bundle.codex_desktop_adapter["entrypoint_contract"]["entrypoint_kind"],
-            Value::String("interactive".to_string())
-        );
-        assert_eq!(
-            bundle.codex_cli_adapter["execution_surface"]["entrypoint_kind"],
-            Value::String("headless".to_string())
-        );
-        assert_eq!(
-            bundle.codex_cli_adapter["execution_surface"]["controller_is_cli"],
-            Value::Bool(false)
-        );
-        assert_eq!(
-            bundle.codex_cli_adapter["common_contract"],
-            bundle.codex_desktop_adapter["common_contract"]
-        );
-        assert_eq!(
-            bundle.codex_dual_entry_parity_snapshot["desktop"]["adapter_id"],
-            Value::String("codex_desktop_adapter".to_string())
-        );
-        assert_eq!(
-            bundle.cli_family_parity_snapshot["shared_adapter"],
-            Value::String("cli_common_adapter".to_string())
-        );
-        assert_eq!(
-            bundle.cli_family_capability_discovery["discovery_contract"],
-            Value::String("cli_family_host_capability_contract_v1".to_string())
-        );
-        assert_eq!(
-            bundle.cli_family_capability_discovery["controller_boundary"]["host_entrypoints"],
-            json!([
-                "codex_desktop_adapter",
-                "codex_cli_adapter",
-                "claude_code_adapter",
-                "gemini_cli_adapter"
-            ])
-        );
-        assert_eq!(
-            bundle.cli_family_capability_discovery["controller_boundary"]["cli_family_entrypoints"],
-            json!([
-                "codex_cli_adapter",
-                "claude_code_adapter",
-                "gemini_cli_adapter"
-            ])
-        );
-        assert_eq!(
-            bundle.cli_family_capability_discovery["cli_hosts"]["codex_cli_adapter"]
-                ["supports_cron"],
-            Value::Bool(true)
-        );
-        assert_eq!(
-            bundle.cli_family_capability_discovery["cli_hosts"]["claude_code_adapter"]["transport"],
-            Value::String("headless-exec".to_string())
-        );
-        assert_eq!(
-            bundle.cli_family_parity_snapshot["cli_hosts"]["gemini_cli_adapter"]["context_files"],
-            json!(["GEMINI.md"])
-        );
-        assert_eq!(
-            bundle.codex_dual_entry_parity_snapshot["shared_adapter"],
-            Value::String("cli_common_adapter".to_string())
-        );
-        assert_eq!(
-            bundle.codex_dual_entry_parity_snapshot["all_shared_contract_checks_pass"],
-            Value::Bool(true)
-        );
-        assert_eq!(
-            bundle.codex_dual_entry_parity_snapshot["parity_checks"]["artifact_contract"],
-            Value::Bool(true)
-        );
-        assert_eq!(
-            bundle.execution_controller_contract["status_contract"],
-            Value::String("execution_controller_contract_v1".to_string())
-        );
-        assert_eq!(
-            bundle.execution_controller_contract["controller"]["primary_owner"],
-            Value::String("execution-controller-coding".to_string())
-        );
-        assert_eq!(
-            bundle.delegation_contract["gate"]["gate_skill"],
-            Value::String("subagent-delegation".to_string())
-        );
-        assert_eq!(
-            bundle.supervisor_state_contract["state_artifact_path"],
-            Value::String(".supervisor_state.json".to_string())
-        );
-        assert_eq!(
-            bundle.supervisor_state_contract["schema_expectations"]["delegation_fields"],
-            json!([
-                "delegation_plan_created",
-                "spawn_attempted",
-                "spawn_block_reason",
-                "fallback_mode",
-                "delegated_sidecars"
-            ])
-        );
-        assert_eq!(
-            bundle.execution_kernel_live_fallback_retirement_status["status_contract"],
-            Value::String("execution_kernel_live_fallback_retirement_status_v1".to_string())
-        );
-        assert_eq!(
-            bundle.execution_kernel_live_fallback_retirement_status["retirement_readiness"]
-                ["ready"],
-            Value::Bool(true)
-        );
-        assert_eq!(
-            bundle.execution_kernel_live_fallback_retirement_status["retirement_gates"]
-                ["dry_run_delegate_still_python_owned"],
-            Value::Bool(false)
-        );
-        assert_eq!(
-            bundle.execution_kernel_live_fallback_retirement_status
-                ["remaining_native_owned_surfaces"],
-            json!([])
-        );
-        assert_eq!(
-            bundle.execution_kernel_live_fallback_retirement_status
-                ["current_response_metadata_truth"]["dry_run_delegate_impl"],
-            Value::String("router-rs".to_string())
-        );
-        assert_eq!(
-            bundle.execution_kernel_live_response_serialization_contract["status_contract"],
-            Value::String("execution_kernel_live_response_serialization_contract_v1".to_string())
-        );
-        assert_eq!(
-            bundle.execution_kernel_live_response_serialization_contract
-                ["runtime_response_metadata_fields"]["shared"],
-            json!(["trace_event_count", "trace_output_path"])
-        );
-    }
-
-    #[test]
-    fn adapter_host_payload_requires_canonical_key() {
-        let adapter = Map::from_iter([(
-            "host_projection".to_string(),
-            value_object([(
-                "context_files",
-                Value::Array(vec![Value::String("CLAUDE.md".to_string())]),
-            )]),
-        )]);
-
-        let err = adapter_host_payload(&adapter).expect_err("legacy-only host payload should fail");
-
-        assert!(err.contains(HOST_ADAPTER_PAYLOAD_KEY));
+        assert!(serialized
+            .get("execution_kernel_live_response_serialization_contract")
+            .is_none());
     }
 
     #[test]
@@ -3518,58 +1379,25 @@ mod tests {
             expected_bootstrap
         );
         assert_eq!(
-            bundle.cli_common_adapter["shared_contract"]["workspace_bootstrap"],
+            bundle.codex_adapter["common_contract"]["workspace_bootstrap"],
             expected_bootstrap
         );
         assert_eq!(
-            bundle.cli_common_adapter["bridge_contract"],
-            expected_bootstrap["bridges"]
-        );
-        assert_eq!(
-            bundle.codex_desktop_adapter["common_contract"]["workspace_bootstrap"],
+            bundle.codex_adapter["runtime_surface"]["workspace_bootstrap"],
             expected_bootstrap
         );
-        assert_eq!(
-            bundle.codex_desktop_adapter["bridge_contract"],
-            expected_bootstrap["bridges"]
-        );
-        assert_eq!(
-            bundle.codex_desktop_adapter["source_contract"]["bridge_contract_source"],
-            Value::String("common_contract.workspace_bootstrap.bridges".to_string())
-        );
-        assert_eq!(
-            bundle.codex_cli_adapter["common_contract"]["workspace_bootstrap"],
-            expected_bootstrap
-        );
-        assert_eq!(
-            bundle.codex_cli_adapter["runtime_surface"]["workspace_bootstrap"],
-            expected_bootstrap
-        );
-        assert_eq!(
-            bundle.codex_cli_adapter["bridge_contract"],
-            expected_bootstrap["bridges"]
-        );
-        assert_eq!(
-            bundle.codex_cli_adapter["source_contract"]["contract_source_fields"]
-                ["execution_surface"],
-            Value::String("execution_surface".to_string())
-        );
+        assert!(bundle.codex_adapter.get("bridge_contract").is_none());
+        assert!(bundle.codex_adapter.get("source_contract").is_none());
     }
 
     #[test]
-    fn profile_bundle_resolves_host_capability_requirements_per_adapter() {
+    fn profile_bundle_resolves_codex_capability_requirements() {
         let mut profile = sample_profile();
         profile.host_capability_requirements = serde_json::from_value(json!({
             "default": {
                 "required_host_capabilities": ["artifact_contract"]
             },
-            "codex-desktop": {
-                "required_host_capabilities": ["automation_bridge"]
-            },
-            "codex_desktop_adapter": {
-                "required_host_capabilities": ["local_runtime"]
-            },
-            "codex-cli": {
+            "codex": {
                 "required_host_capabilities": ["batch_execution"]
             }
         }))
@@ -3583,35 +1411,13 @@ mod tests {
                 "default": {
                     "required_host_capabilities": ["artifact_contract"]
                 },
-                "codex-desktop": {
-                    "required_host_capabilities": ["automation_bridge"]
-                },
-                "codex_desktop_adapter": {
-                    "required_host_capabilities": ["local_runtime"]
-                },
-                "codex-cli": {
+                "codex": {
                     "required_host_capabilities": ["batch_execution"]
                 }
             })
         );
         assert_eq!(
-            bundle.cli_common_adapter["host_capability_requirements"],
-            json!({
-                "required_host_capabilities": ["artifact_contract"]
-            })
-        );
-        assert_eq!(
-            bundle.codex_desktop_adapter["host_capability_requirements"],
-            json!({
-                "required_host_capabilities": [
-                    "artifact_contract",
-                    "automation_bridge",
-                    "local_runtime"
-                ]
-            })
-        );
-        assert_eq!(
-            bundle.codex_cli_adapter["host_capability_requirements"],
+            bundle.codex_adapter["host_capability_requirements"],
             json!({
                 "required_host_capabilities": [
                     "artifact_contract",
@@ -3633,32 +1439,15 @@ mod tests {
     }
 
     #[test]
-    fn codex_dual_entry_snapshot_preserves_framework_core_truth() {
+    fn codex_adapter_preserves_framework_core_truth() {
         let bundle = build_profile_bundle(&sample_profile()).expect("bundle should build");
         assert_eq!(
-            bundle.codex_common_adapter["shared_contract"]["artifact_contract"],
-            json!({"layout": "stable-v1"})
-        );
-        assert_eq!(
-            bundle.cli_common_adapter["shared_contract"]["framework_surface_policy"]
-                ["default_surface"]["default_loadouts"],
+            bundle.codex_adapter["common_contract"]["framework_surface_policy"]["default_surface"]
+                ["default_loadouts"],
             json!(["default_surface_loadout"])
         );
         assert_eq!(
-            bundle.codex_dual_entry_parity_snapshot["controller_boundary"]
-                ["single_source_of_truth"],
-            Value::Bool(true)
-        );
-        assert_eq!(
-            bundle.codex_dual_entry_parity_snapshot["desktop"]["shared_adapter"],
-            Value::String("cli_common_adapter".to_string())
-        );
-        assert_eq!(
-            bundle.codex_dual_entry_parity_snapshot["cli"]["shared_adapter"],
-            Value::String("cli_common_adapter".to_string())
-        );
-        assert_eq!(
-            bundle.codex_dual_entry_parity_snapshot["codexcli_is_framework_controller"],
+            bundle.codex_adapter["execution_surface"]["controller_is_cli"],
             Value::Bool(false)
         );
     }
@@ -3679,267 +1468,51 @@ mod tests {
             descriptors[SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID],
             Value::Object(build_supervisor_state_contract())
         );
-        assert_eq!(
-            descriptors[EXECUTION_KERNEL_LIVE_FALLBACK_RETIREMENT_ARTIFACT_ID],
-            Value::Object(build_execution_kernel_live_fallback_retirement_status())
-        );
-        assert_eq!(
-            descriptors[EXECUTION_KERNEL_LIVE_RESPONSE_SERIALIZATION_ARTIFACT_ID],
-            Value::Object(build_execution_kernel_live_response_serialization_contract())
-        );
+        assert_eq!(descriptors.len(), 3);
     }
 
     #[test]
     fn codex_artifact_bundle_exposes_first_class_outputs() {
         let artifacts =
-            build_codex_artifact_bundle(&sample_profile(), false).expect("artifacts should build");
-        assert_eq!(artifacts.len(), 14);
+            build_codex_artifact_bundle(&sample_profile()).expect("artifacts should build");
+        assert_eq!(artifacts.len(), 1);
         assert_eq!(
-            artifacts["cli_common_adapter"]["controller_boundary"]["shared_adapter"],
-            Value::String("cli_common_adapter".to_string())
-        );
-        assert_eq!(
-            artifacts["codex_common_adapter"]["metadata"]["adapter_alias_of"],
-            Value::String("cli_common_adapter".to_string())
-        );
-        assert!(artifacts["claude_code_adapter"]
-            .get("host_projection")
-            .is_none());
-        assert_eq!(
-            artifacts["claude_code_adapter"]["host_adapter_payload"]["context_files"],
-            json!(["CLAUDE.md", "CLAUDE.local.md"])
-        );
-        assert!(artifacts["gemini_cli_adapter"]
-            .get("host_projection")
-            .is_none());
-        assert_eq!(
-            artifacts["gemini_cli_adapter"]["host_adapter_payload"]["structured_output_modes"],
-            json!(["json", "stream-json"])
-        );
-        assert_eq!(
-            artifacts["cli_family_capability_discovery"]["all_cli_hosts_compatible"],
-            Value::Bool(true)
-        );
-        assert_eq!(
-            artifacts["cli_family_capability_discovery"]["controller_boundary"]["host_entrypoints"],
-            json!([
-                "codex_desktop_adapter",
-                "codex_cli_adapter",
-                "claude_code_adapter",
-                "gemini_cli_adapter"
-            ])
-        );
-        assert_eq!(
-            artifacts["cli_family_capability_discovery"]["cli_hosts"]["codex_cli_adapter"]
-                ["supports_cron"],
-            Value::Bool(true)
-        );
-        assert_eq!(
-            artifacts["cli_family_capability_discovery"]["cli_hosts"]["claude_code_adapter"]
-                ["transport"],
-            Value::String("headless-exec".to_string())
-        );
-        assert_eq!(
-            artifacts["codex_cli_adapter"]["host_adapter_payload"]["gpt_model_path_contract"]
+            artifacts["codex_adapter"]["host_adapter_payload"]["gpt_model_path_contract"]
                 ["preferred_for_gpt_family"],
             Value::Bool(true)
         );
         assert_eq!(
-            artifacts["claude_code_adapter"]["host_adapter_payload"]["gpt_model_path_contract"]
-                ["preferred_for_gpt_family"],
+            artifacts["codex_adapter"]["execution_surface"]["controller_is_cli"],
             Value::Bool(false)
-        );
-        assert_eq!(
-            artifacts["cli_family_capability_discovery"]["cli_hosts"]["claude_code_adapter"]
-                ["gpt_model_path_contract"]["path_kind"],
-            Value::String("anthropic-compatible-bridge".to_string())
-        );
-        assert_eq!(
-            artifacts["codex_common_adapter"]["controller_boundary"]["framework_truth"],
-            Value::String("framework_core".to_string())
-        );
-        assert_eq!(
-            artifacts["codex_desktop_adapter"]["entrypoint_contract"]["entrypoint_kind"],
-            Value::String("interactive".to_string())
         );
         assert!(!artifacts.contains_key("codex_desktop_host_adapter"));
-        assert_eq!(
-            artifacts["codex_cli_adapter"]["execution_surface"]["controller_is_cli"],
-            Value::Bool(false)
-        );
-        assert_eq!(
-            artifacts["cli_family_parity_snapshot"]["all_shared_contract_checks_pass"],
-            Value::Bool(true)
-        );
-        assert_eq!(
-            artifacts["codex_dual_entry_parity_snapshot"]["all_shared_contract_checks_pass"],
-            Value::Bool(true)
-        );
-        assert_eq!(
-            artifacts["execution_controller_contract"]["controller"]["primary_owner"],
-            Value::String("execution-controller-coding".to_string())
-        );
-        assert_eq!(
-            artifacts["delegation_contract"]["gate"]["gate_skill"],
-            Value::String("subagent-delegation".to_string())
-        );
-        assert_eq!(
-            artifacts["supervisor_state_contract"]["state_artifact_path"],
-            Value::String(".supervisor_state.json".to_string())
-        );
-        assert_eq!(
-            artifacts["supervisor_state_contract"]["schema_expectations"]["verification_fields"],
-            json!(["verification_status", "last_verification_summary"])
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_fallback_retirement_status"]["live_primary"]
-                ["contract_mode"],
-            Value::String("rust-live-primary".to_string())
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_fallback_retirement_status"]["retirement_readiness"]
-                ["runtime_control_flow_change_required"],
-            Value::Bool(false)
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_fallback_retirement_status"]["current_contract_truth"]
-                ["dry_run_delegate_kind"],
-            Value::String("router-rs".to_string())
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_fallback_retirement_status"]["current_contract_truth"]
-                ["live_prompt_preview_passthrough_disabled"],
-            Value::Bool(true)
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_fallback_retirement_status"]
-                ["current_response_metadata_truth"]["live_delegate_family"],
-            Value::String("rust-cli".to_string())
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_fallback_retirement_status"]
-                ["current_response_metadata_truth"]["dry_run_delegate_impl"],
-            Value::String("router-rs".to_string())
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_response_serialization_contract"]["status_contract"],
-            Value::String("execution_kernel_live_response_serialization_contract_v1".to_string())
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_response_serialization_contract"]
-                ["runtime_response_metadata_fields"]["live_primary"],
-            json!([
-                "run_id",
-                "status",
-                "execution_mode",
-                "route_engine",
-                "diagnostic_route_mode",
-                "execution_kernel_model_id_source"
-            ])
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_response_serialization_contract"]
-                ["current_response_shape_truth"]["dry_run"]["model_id_present"],
-            Value::Bool(false)
-        );
     }
 
     #[test]
     fn codex_artifact_bundle_ignores_removed_legacy_alias_opt_in() {
         let artifacts =
-            build_codex_artifact_bundle(&sample_profile(), false).expect("artifacts should build");
-        assert_eq!(
-            artifacts["cli_common_adapter"]["controller_boundary"]["cli_family_entrypoints"],
-            json!([
-                "codex_cli_adapter",
-                "claude_code_adapter",
-                "gemini_cli_adapter"
-            ])
-        );
-        assert_eq!(
-            artifacts["codex_common_adapter"]["controller_boundary"]["framework_truth"],
-            Value::String("framework_core".to_string())
-        );
-        assert_eq!(
-            artifacts["codex_desktop_adapter"]["entrypoint_contract"]["entrypoint_kind"],
-            Value::String("interactive".to_string())
-        );
-        assert_eq!(
-            artifacts["codex_cli_adapter"]["execution_surface"]["entrypoint_kind"],
-            Value::String("headless".to_string())
-        );
-        assert!(artifacts["claude_code_adapter"]
-            .get("host_projection")
-            .is_none());
-        assert_eq!(
-            artifacts["claude_code_adapter"]["host_adapter_payload"]["settings_paths"],
-            json!([
-                "~/.claude/settings.json",
-                ".claude/settings.json",
-                ".claude/settings.local.json"
-            ])
-        );
-        assert_eq!(
-            artifacts["cli_family_capability_discovery"]["all_cli_hosts_compatible"],
-            Value::Bool(true)
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_fallback_retirement_status"]["compatibility_fallback"]
-                ["retired_mode"],
-            Value::String("retired".to_string())
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_fallback_retirement_status"]
-                ["public_runtime_contract_fields"],
-            json!([
-                "execution_kernel",
-                "execution_kernel_authority",
-                "execution_kernel_contract_mode",
-                "execution_kernel_in_process_replacement_complete",
-                "execution_kernel_delegate",
-                "execution_kernel_delegate_authority",
-                "execution_kernel_live_primary",
-                "execution_kernel_live_primary_authority"
-            ])
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_fallback_retirement_status"]
-                ["public_runtime_response_metadata_fields"],
-            json!([
-                "execution_kernel_delegate_family",
-                "execution_kernel_delegate_impl"
-            ])
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_fallback_retirement_status"]["retirement_gates"]
-                ["compatibility_fallback_reason_metadata_still_native_owned"],
-            Value::Bool(false)
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_fallback_retirement_status"]["retirement_gates"]
-                ["response_metadata_surface_externalized"],
-            Value::Bool(true)
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_response_serialization_contract"]["retirement_gates"]
-                ["compatibility_live_response_serialization_still_native_owned"],
-            Value::Bool(false)
-        );
-        assert_eq!(
-            artifacts["execution_kernel_live_response_serialization_contract"]
-                ["current_contract_truth"]["live_primary_model_id_source"],
-            Value::String("aggregator-response.model".to_string())
-        );
+            build_codex_artifact_bundle(&sample_profile()).expect("artifacts should build");
+        assert_eq!(artifacts.len(), 1);
+        assert!(artifacts.contains_key("codex_adapter"));
+        assert!(!artifacts.contains_key("cli_common_adapter"));
+        assert!(!artifacts.contains_key("codex_cli_adapter"));
+        assert!(!artifacts.contains_key("codex_desktop_adapter"));
+        assert!(!artifacts.contains_key("codex_common_adapter"));
+        assert!(!artifacts.contains_key("cli_family_capability_discovery"));
+        assert!(!artifacts.contains_key("cli_family_parity_snapshot"));
+        assert!(!artifacts.contains_key("codex_dual_entry_parity_snapshot"));
+        assert!(!artifacts.contains_key("execution_kernel_live_fallback_retirement_status"));
+        assert!(!artifacts.contains_key("execution_kernel_live_response_serialization_contract"));
         assert!(!artifacts.contains_key("codex_desktop_host_adapter"));
         assert!(!artifacts.contains_key("codex_desktop_alias_retirement_status"));
     }
 
     #[test]
-    fn validation_rejects_aionrs_pinned_host_family() {
+    fn validation_rejects_non_codex_host_family() {
         let mut profile = sample_profile();
-        profile.host_family = "aionrs".to_string();
+        profile.host_family = "legacy-host".to_string();
         let error = build_profile_bundle(&profile).expect_err("should reject pinned host family");
-        assert!(error.contains("must not be pinned to retired host family"));
+        assert!(error.contains("must be pinned to Codex"));
     }
 
     #[test]
@@ -3947,10 +1520,10 @@ mod tests {
         let mut profile = sample_profile();
         profile
             .metadata
-            .insert("hook_event_names".to_string(), json!(["PreToolUse"]));
+            .insert("settings_paths".to_string(), json!([".codex/config.toml"]));
         let error = build_profile_bundle(&profile)
             .expect_err("should reject host-specific metadata in framework truth");
-        assert!(error.contains("host-neutral"));
-        assert!(error.contains("hook_event_names"));
+        assert!(error.contains("Codex-core-only"));
+        assert!(error.contains("settings_paths"));
     }
 }

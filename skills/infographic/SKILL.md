@@ -22,7 +22,7 @@ trigger_hints:
   - data visualization
 metadata:
   version: "1.0.0"
-  platforms: [codex, antigravity]
+  platforms: [codex]
   tags:
     - infographic
     - html
@@ -55,23 +55,23 @@ an HTML file rendered in-browser and optionally exported to PNG/PDF via screensh
 
 ## Do not use
 
-- The user wants AI-generated raster images (photos, illustrations) → use `$imagegen`
-- The task is a multi-page HTML slide presentation → use `$ppt-html-export`
+- The user wants AI-generated raster images (photos, illustrations) → use `$image-generated`
+- The task is a multi-page HTML slide presentation → use `$source-slide-formats`
 - The task is a Mermaid flow/sequence diagram → use `$mermaid-expert`
 - The task is a Graphviz/DOT precise-layout diagram → use `$graphviz-expert`
 - The task is a code-driven scientific plot (matplotlib, seaborn) → use `$scientific-figure-plotting`
 - The task is existing figure/table review → use `$paper-visuals`
 
-## Boundary with `imagegen`
+## Boundary with `image-generated`
 
 | Scenario | Route |
 |----------|-------|
 | "做个信息图" (structured, text-rich, data-driven) | `infographic` (HTML) |
-| "生成一张 infographic 风格的图片" (AI-rendered raster) | `imagegen` (slug: `infographic-diagram`) |
-| "做个封面图" | `imagegen` (cover workflow) |
+| "生成一张 infographic 风格的图片" (AI-rendered raster) | `image-generated` (slug: `infographic-diagram`) |
+| "做个封面图" | `image-generated` (cover workflow) |
 | "把数据做成可视化长图" | `infographic` (HTML) |
 
-Rule of thumb: if the output should be **editable, text-selectable, and structured** → `infographic`. If the output should be an **AI-rendered raster image** → `imagegen`.
+Rule of thumb: if the output should be **editable, text-selectable, and structured** → `infographic`. If the output should be an **AI-rendered raster image** → `image-generated`.
 
 ## Workflow
 

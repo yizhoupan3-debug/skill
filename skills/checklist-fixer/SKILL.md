@@ -21,7 +21,7 @@ trigger_hints:
 short_description: Execute fix lists and implementation plans with mandatory per-item verification and anti-laziness enforcement.
 metadata:
   version: "2.1.0"
-  platforms: [codex, antigravity]
+  platforms: [codex]
   tags:
     - batch-fix
     - checklist
@@ -78,7 +78,7 @@ Before this skill takes ownership, respect earlier gates:
 2. Problem list comes from PR review comments → `$gh-address-comments`
 3. Problem list comes from CI failures → `$gh-fix-ci`
 4. Task is structural refactoring without a fix list → `$refactoring`
-5. User wants a plan only, not execution → `$checklist-writting`
+5. User wants a plan only, not execution → `$checklist-planner`
 6. Task is complex enough for delegation → coordinate with `$subagent-delegation`
 
 ## When to use
@@ -99,7 +99,7 @@ Before this skill takes ownership, respect earlier gates:
 - List comes from GitHub PR comments → `$gh-address-comments`
 - List comes from failing CI checks → `$gh-fix-ci`
 - Purely structural refactoring without a fix list → `$refactoring`
-- User only wants a plan/assessment, not execution → `$checklist-writting` or `$architect-review`
+- User only wants a plan/assessment, not execution → `$checklist-planner` or `$architect-review`
 
 ## Primary operating principle
 
@@ -134,7 +134,7 @@ If runtime policy does **not** permit spawning:
 - keep the same checklist split in local-supervisor mode
 - execute items or side-slices sequentially
 - keep raw per-item detail in artifacts, notes, or state instead of the main thread
-- flush `SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`, and `.supervisor_state.json` only from the integrating controller step
+- flush task-scoped `artifacts/current/<task_id>/SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`, and root `.supervisor_state.json` only from the integrating controller step
 
 ## Task ownership and boundaries
 
@@ -153,7 +153,7 @@ This skill does not own:
 - root-cause investigation for unclear bugs
 - feature implementation from specs
 - CI/PR-specific feedback workflows
-- restructuring a messy checklist before execution when serial/parallel boundaries, goals, constraints, or acceptance are still unclear → `$checklist-normalizer`
+- restructuring a messy checklist before execution when serial/parallel boundaries, goals, constraints, or acceptance are still unclear → `$checklist-planner`
 
 ## Finding-driven framework role
 

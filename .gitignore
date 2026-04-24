@@ -64,3 +64,6 @@ main-*.js
 my_ccs.css
 opencode.jsonc
 .codex/*
+!.codex/skills/
+!.codex/skills/*/
+!.codex/skills/*/SKILL.md

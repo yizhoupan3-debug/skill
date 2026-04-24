@@ -9,7 +9,7 @@ description: |
   structural decisions rather than local code-style feedback.
 metadata:
   version: "2.1.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - architecture
     - system-design

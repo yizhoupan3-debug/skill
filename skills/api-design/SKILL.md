@@ -7,7 +7,7 @@ description: |
   or OpenAPI/Swagger specification work.
 metadata:
   version: "1.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - api
     - rest

@@ -88,6 +88,11 @@ In that case:
 - The user only wants plain-text summarization of text they already pasted into chat
 - The file is not actually a PDF
 
+## Shared artifact protocol
+
+Follow the shared artifact rules in
+[`primary-runtime/references/artifact-protocol.md`](../primary-runtime/references/artifact-protocol.md).
+
 ## Reference
 
 For detailed workflow, examples, and implementation guidance, see [references/detailed-guide.md](./references/detailed-guide.md).

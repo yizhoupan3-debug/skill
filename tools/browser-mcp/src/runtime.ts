@@ -620,9 +620,6 @@ export class BrowserRuntime {
       runtimeAttachDescriptorPath: options?.runtimeAttachDescriptorPath ?? null,
       runtimeAttachArtifactPath: options?.runtimeAttachArtifactPath ?? null,
       runtimeAttachDescriptor: options?.runtimeAttachDescriptor ?? null,
-      runtimeBindingArtifactPath: options?.runtimeBindingArtifactPath ?? null,
-      runtimeHandoffPath: options?.runtimeHandoffPath ?? null,
-      runtimeResumeManifestPath: options?.runtimeResumeManifestPath ?? null,
     };
   }
 
@@ -1264,12 +1261,6 @@ export class BrowserRuntime {
         return this.readRuntimeAttachDescriptorFile(configuredSource.path!);
       case 'attach_artifact_path':
         return this.buildRuntimeAttachDescriptorFromArtifactPath(configuredSource.path!);
-      case 'binding_artifact_path':
-        return this.buildRuntimeAttachDescriptorFromBindingArtifact(configuredSource.path!);
-      case 'handoff_path':
-        return this.buildRuntimeAttachDescriptorFromHandoff(configuredSource.path!);
-      case 'resume_manifest_path':
-        return this.buildRuntimeAttachDescriptorFromResumeManifest(configuredSource.path!);
       default:
         throw new Error('runtime attach descriptor is not configured');
     }
@@ -1288,9 +1279,7 @@ export class BrowserRuntime {
         true,
         [
           'start browser-mcp with --runtime-attach-descriptor-path',
-          'or --runtime-binding-artifact-path',
-          'or --runtime-handoff-path',
-          'or --runtime-resume-manifest-path',
+          'or --runtime-attach-artifact-path',
           'or set BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH',
         ],
       );
@@ -1445,24 +1434,6 @@ export class BrowserRuntime {
         path: this.options.runtimeAttachArtifactPath,
       };
     }
-    if (this.options.runtimeBindingArtifactPath !== null) {
-      return {
-        source: 'binding_artifact_path',
-        path: this.options.runtimeBindingArtifactPath,
-      };
-    }
-    if (this.options.runtimeHandoffPath !== null) {
-      return {
-        source: 'handoff_path',
-        path: this.options.runtimeHandoffPath,
-      };
-    }
-    if (this.options.runtimeResumeManifestPath !== null) {
-      return {
-        source: 'resume_manifest_path',
-        path: this.options.runtimeResumeManifestPath,
-      };
-    }
     return {
       source: null,
       path: null,
@@ -1615,33 +1586,6 @@ export class BrowserRuntime {
     ) {
       throw new Error('runtime attach descriptor must advertise attach_capabilities.live_remote_stream=false');
     }
-  }
-
-  private async buildRuntimeAttachDescriptorFromBindingArtifact(
-    bindingArtifactPath: string,
-  ): Promise<LoadedRuntimeAttachDescriptor> {
-    const resolvedBindingArtifactPath = await this.normalizeRuntimeAttachLocator(bindingArtifactPath);
-    return this.hydrateRuntimeAttachDescriptorViaRust({
-      binding_artifact_path: resolvedBindingArtifactPath,
-    });
-  }
-
-  private async buildRuntimeAttachDescriptorFromHandoff(
-    handoffPath: string,
-  ): Promise<LoadedRuntimeAttachDescriptor> {
-    const resolvedHandoffPath = await this.normalizeRuntimeAttachLocator(handoffPath);
-    return this.hydrateRuntimeAttachDescriptorViaRust({
-      handoff_path: resolvedHandoffPath,
-    });
-  }
-
-  private async buildRuntimeAttachDescriptorFromResumeManifest(
-    resumeManifestPath: string,
-  ): Promise<LoadedRuntimeAttachDescriptor> {
-    const resolvedResumeManifestPath = await this.normalizeRuntimeAttachLocator(resumeManifestPath);
-    return this.hydrateRuntimeAttachDescriptorViaRust({
-      resume_manifest_path: resolvedResumeManifestPath,
-    });
   }
 
   private descriptorLeaf(

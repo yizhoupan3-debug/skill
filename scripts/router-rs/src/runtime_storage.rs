@@ -92,7 +92,7 @@ pub(crate) fn runtime_backend_capabilities_payload(backend_family: &str) -> Resu
 }
 
 pub(crate) fn runtime_backend_family_catalog_payload() -> Value {
-    let families = ["filesystem", "sqlite", "memory"]
+    let families = ["filesystem", "sqlite"]
         .into_iter()
         .filter_map(|family| runtime_backend_capabilities_payload(family).ok())
         .collect::<Vec<_>>();
@@ -104,6 +104,7 @@ pub(crate) fn runtime_backend_family_catalog_payload() -> Value {
         "default_backend_family": "filesystem",
         "strongest_local_backend_family": "sqlite",
         "families": families,
+        "test_only_backend_families": ["memory"],
         "selection_rule": "store and checkpointer must resolve to one normalized backend_family before persistence operations",
     })
 }

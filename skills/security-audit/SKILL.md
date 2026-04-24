@@ -1,7 +1,7 @@
 ---
 name: security-audit
 description: |
-  Audit implementation-level security defects in auth, injection, SSRF, CSRF, secrets, sessions, and hardening gaps.
+  Audit implementation-level security defects in auth, injection, SSRF, CSRF, secrets, sessions, webhook receivers, and hardening gaps.
   Use when reviewing backend or frontend code for exploitable issues, or when the user asks to 代码安全审计, 检查鉴权/授权漏洞, 查注入风险, 检查 SSRF, 检查敏感信息泄露, review auth implementation security, or audit input validation and file upload security. Do not use for system-level threat modeling.
 routing_layer: L4
 routing_owner: overlay
@@ -16,6 +16,9 @@ trigger_hints:
   - review auth implementation security
   - audit input validation
   - file upload security
+  - webhook security
+  - signature verification
+  - replay protection
   - security
   - auth
 metadata:
@@ -64,6 +67,7 @@ Distinction from `security-threat-model`:
 - The user wants a code security audit
 - The task involves checking auth/authz implementation
 - The task involves input validation, injection, file handling, redirect, or SSRF risks
+- The task involves reviewing webhook signature verification, replay protection, idempotency, or raw-body handling
 - The user wants application hardening
 - The user wants dependency or secret exposure review
 - Best for requests like:
@@ -96,6 +100,10 @@ If the task shifts to adjacent skill territory, route to:
 - `$security-threat-model` for architecture-level attack paths
 - `$architect-review` for non-security structural decisions
 - `$coding-standards` for style and convention review
+
+## References
+
+- [references/webhook-security.md](references/webhook-security.md)
 
 ## Required workflow
 

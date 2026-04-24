@@ -25,7 +25,7 @@ trigger_hints:
   - 线性代数证明
 metadata:
   version: "2.0.0"
-  platforms: [codex, antigravity]
+  platforms: [codex]
   tags:
     - mathematics
     - proof
