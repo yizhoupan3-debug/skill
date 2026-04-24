@@ -12,4 +12,8 @@ exec cargo run --manifest-path "$DIR/rust_tools/anthropic_openai_bridge_rs/Cargo
   --stream-include-usage "${AOB_STREAM_INCLUDE_USAGE:-true}" \
   --stream-obfuscation "${AOB_STREAM_OBFUSCATION:-false}" \
   --max-tokens-field "${AOB_MAX_TOKENS_FIELD:-auto}" \
-  --stream-heartbeat-secs "${AOB_STREAM_HEARTBEAT_SECS:-5}"
+  --stream-heartbeat-secs "${AOB_STREAM_HEARTBEAT_SECS:-5}" \
+  --max-request-bytes "${AOB_MAX_REQUEST_BYTES:-67108864}" \
+  --upstream-connect-timeout-secs "${AOB_UPSTREAM_CONNECT_TIMEOUT_SECS:-10}" \
+  --upstream-pool-max-idle-per-host "${AOB_UPSTREAM_POOL_MAX_IDLE_PER_HOST:-128}" \
+  --stream-channel-depth "${AOB_STREAM_CHANNEL_DEPTH:-64}"
