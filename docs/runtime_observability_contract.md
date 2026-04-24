@@ -27,8 +27,8 @@ It is the contract source of truth for:
 
 The runtime observability producer and exporter are Rust contract-owned.
 
-- Python remains a thin projection for bridge delivery and persistence
-  plumbing; it does not own the canonical observability vocabulary.
+- Host-side bridges remain thin projections for delivery and persistence
+  plumbing; they do not own the canonical observability vocabulary.
 - The ownership boundary is expressed with
   `ownership_lane = "rust-contract-lane"`,
   `producer_owner = "rust-control-plane"`, and
@@ -151,12 +151,12 @@ Metric invariants:
 
 ## Concrete Exporter Path
 
-The runtime now exposes a concrete exporter and metric-record helper surface at
-`framework_runtime.observability`.
+The runtime now exposes concrete exporter and metric-record helper surfaces
+through `router-rs` observability commands.
 
 - Public helper calls must delegate to `router-rs`; if the repo-local Rust lane
   is unavailable or returns drifted payloads, helpers fail closed instead of
-  rebuilding observability payloads in Python.
+  rebuilding observability payloads in a host projection.
 - `build_runtime_observability_exporter_descriptor()` freezes the Rust-owned
   exporter lane and ties it to the JSONL sink plus replay/handoff schema
   versions used by the trace lane.

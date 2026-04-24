@@ -43,12 +43,15 @@ metadata:
 - The user wants claim-to-citation precision improved so references support the exact sentence instead of being dumped in batches.
 
 ## Do not use
+- The user wants one front door for a research-project task rather than reference hygiene only -> use `$research-workbench`
 - The main task is literature review, topic clustering, novelty checking, or related-work synthesis; use `$literature-synthesis` first.
-- The main task is rewriting paper prose or reviewer response text; use `$paper-writing` or `paper-reviser` first.
+- The main task is manuscript-level review or reviewer-comment execution; use `$paper-workbench` first.
+- The main task is rewriting paper prose or reviewer response text; use `$paper-writing` or `$paper-reviser` first.
 - The user only wants a generic bibliography explanation with no real citation-management work.
 
 ## Cross-references
 
+- `$research-workbench` may route here when the active blocker is citation truth or reference hygiene
 - `$paper-reviewer` uses this skill as the primary owner for `G5 Reference Support & Venue Calibration`
 - `$paper-reviser` uses this skill when a gate decision changes citation support, appendix routing, or venue-facing reference calibration
 - `$paper-writing` may co-invoke for results sections that need claim-to-citation precision

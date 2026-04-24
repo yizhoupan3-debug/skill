@@ -52,6 +52,10 @@ If the task requires live navigation, login, form filling, browser-side state,
 UI reproduction, or extraction from an interactive page, check this skill
 before static HTML inspection or abstract frontend advice.
 
+Do not use this gate for generic research about browser automation tools,
+technology selection, ecosystem comparison, or `调研最新生态`; those belong to
+`$information-retrieval` unless the user asks to open or operate a live page.
+
 In that case:
 
 1. this skill owns the real-browser execution path

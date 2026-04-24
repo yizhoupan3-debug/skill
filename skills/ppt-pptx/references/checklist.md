@@ -9,8 +9,11 @@
 
 ### Visual System
 - Build around a declared visual system before adding dense content.
+- When source materials exist, produce or reuse a `DESIGN.md` / visual contract
+  before styling the deck.
 - Use 2–3 reusable layout families, not one-off slide designs.
 - Make cover and closing slides feel designed and related.
+- No visual drift, AI-slop, or anti-pattern relapse after rendered review.
 - Avoid stock-theme styling, accidental SmartArt aesthetics, default chart palettes.
 - The cover must use a softened/blurred background image + dark protection layer.
 - Make images feel embedded (framed panels, caption bands, overlays) not pasted.
@@ -18,6 +21,11 @@
 - On dark slides, readability is a hard constraint — no low-contrast gray-on-black.
 
 ### Text Quality
+- Generated titles, bullets, captions, and speaker notes use direct claims
+  instead of meta narration.
+- No filler phrases such as "本页展示", "核心观点如下", "具有重要意义", "赋能",
+  or "显著提升" unless backed by concrete evidence.
+- Bullet openings and sentence lengths vary naturally; avoid same-shape lists.
 - No Chinese orphan lines (1–2 chars alone on a line). Proactively rewrite to fix.
 - Keep mixed-language tokens intact (English terms, years, percentages, citations).
 - Keep headings visually balanced; no tiny trailing second lines.
@@ -33,7 +41,7 @@
 - Do not fix density by driving text to tiny unreadable sizes.
 
 ### QA
-- Include `warnIfSlideHasOverlaps()` and `warnIfSlideElementsOutOfBounds()`.
+- Run `ppt slides-test` or `ppt qa` before delivery.
 - Fix overlap, out-of-bounds, font substitution, ugly fallback before delivery.
 - Do not skip rendered-slide QA just because the source file "looks right."
 
@@ -55,6 +63,8 @@
 - [ ] Fonts render as intended, no silent substitution
 - [ ] Overlap and out-of-bounds checks were run
 - [ ] Rendered slides reviewed through `$visual-review`
+- [ ] Design audit verdict is `match` or only acceptable `minor drift` when a
+  `DESIGN.md` / visual contract exists
 - [ ] Cover, section, and closing slides feel like one deck
 - [ ] No major slide is mostly decorative empty space
 - [ ] Charts/tables look presentation-grade, not default office output

@@ -2,8 +2,9 @@
 
 ## Purpose
 
-This document freezes the first-pass compaction contract for the runtime
-Workstream F in `aionrs_fusion_docs/codex_dual_entry_next_phase_checklist.md`.
+This document freezes the compaction contract for the Rust-owned runtime
+storage and trace lanes. Older checklist documents may mention this as
+Workstream F, but this file is now the direct contract source of truth.
 
 It is the contract source of truth for:
 
@@ -217,8 +218,28 @@ Required invariants:
 
 - the runtime trace recorder now exposes an explicit compaction lane instead of
   a design-only placeholder.
+- runtime persistence backend families now have a Rust-owned capability catalog
+  shared by checkpoint storage and durable background state.
+- runtime storage read/write responses now include the normalized backend
+  capability projection plus a payload SHA-256 digest, so recovery callers can
+  compare payload identity without depending on backend-specific storage shape.
+- `verify_text` is the narrow recovery check operation for persisted payloads:
+  callers can pass an expected digest and get a fail-closed `verified` result
+  without hydrating large payloads into the response body.
+- the current concrete backend families are:
+  - filesystem: atomic replace plus local replay transport, but no compaction
+    or snapshot-delta support
+  - SQLite: atomic replace, consistent append, WAL-backed durability,
+    compaction, and snapshot-delta support
+  - memory: regression-only state with no durable compaction semantics
 - compaction is only allowed when the active backend advertises both
   `supports_compaction` and `supports_snapshot_delta`.
+- store and checkpointer must normalize to one `backend_family` before durable
+  operations; mixed filesystem/SQLite projections must be surfaced as a
+  control-plane mismatch rather than silently accepted.
+- backend-family parity now has an explicit `aligned` / `compaction_eligible`
+  contract result, so compaction cannot start when store, checkpointer, trace,
+  and state resolve to different persistence families.
 - on a supported backend, compaction must:
   - write one stable snapshot for the old generation
   - write explicit artifact refs for state and continuity artifacts

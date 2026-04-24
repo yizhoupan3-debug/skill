@@ -57,6 +57,7 @@ This skill owns **code-generated scientific figure quality** for paper charts an
 
 ## Do not use
 
+- The user wants one front door for a research-project task rather than figure work only -> use `$research-workbench`
 - The user wants Mermaid or text diagrams → use `$mermaid-expert`
 - The user only wants review or repair of an existing paper figure/table artifact without a code-plotting workflow → use `$paper-visuals`
 - The user wants whole-paper review or revision rather than plotting-system work → use `$paper-reviewer` or `$paper-reviser`
@@ -186,13 +187,12 @@ If overlap risk remains after code changes, export and verify with `$visual-revi
 CJK fonts are missing some Unicode chars (U+2212 minus, U+00B2/B3 superscripts, etc.). Two solutions:
 
 ```python
-# Option A: sanitize individual strings
-from publication_rcparams import sanitize_cjk_text
-ax.set_xlabel(sanitize_cjk_text("范围 −3 to 3"))  # → "范围 -3 to 3"
+# Option A: use ASCII equivalents in labels
+ax.set_xlabel("范围 -3 to 3")
 
-# Option B: auto-fix all text in figure before saving
-from publication_rcparams import patch_figure_cjk
-patch_figure_cjk(fig)  # walks all Text objects, returns count of fixes
+# Option B: patch labels before saving when a project provides a local helper
+for text in fig.findobj(match=lambda obj: hasattr(obj, "get_text")):
+    text.set_text(text.get_text().replace("−", "-"))
 fig.savefig("out.png")
 ```
 
@@ -245,10 +245,12 @@ For CJK font detection, macOS Chinese font troubleshooting, and manual
 overrides, see [`references/cjk-font-guide.md`](references/cjk-font-guide.md).
 
 To preview all available matplotlib + SciencePlots styles side by side, run
-`scripts/preview_styles.py` (generates comparison images to `tmp/style_previews/`).
+the local style-preview helper if present; otherwise create a small one-off
+preview script inside the user's project scratch area.
 
 To test CJK font rendering on this machine, run
-`scripts/test_cjk_fonts.py` (generates test images to `/tmp/cjk_font_test/`).
+the local CJK font test helper if present; otherwise render a minimal
+matplotlib smoke figure to `/tmp/cjk_font_test/`.
 
 ## Trigger examples
 

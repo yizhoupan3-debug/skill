@@ -797,7 +797,9 @@ describe('BrowserRuntime', () => {
     const { tempRoot, commandPath } = await createFakeRouterRsCommand(150);
     const previousCommand = process.env.BROWSER_MCP_ROUTER_RS_COMMAND;
     const previousPoolSize = process.env.CODEX_ROUTER_STDIO_POOL_SIZE;
+    const previousRouterPoolSize = process.env.ROUTER_RS_STDIO_POOL_SIZE;
     process.env.BROWSER_MCP_ROUTER_RS_COMMAND = commandPath;
+    delete process.env.ROUTER_RS_STDIO_POOL_SIZE;
     resetRouterRsProcessStateForTests();
 
     async function measureReplayElapsed(poolSize: string): Promise<number> {
@@ -857,6 +859,66 @@ describe('BrowserRuntime', () => {
         delete process.env.CODEX_ROUTER_STDIO_POOL_SIZE;
       } else {
         process.env.CODEX_ROUTER_STDIO_POOL_SIZE = previousPoolSize;
+      }
+      if (previousRouterPoolSize === undefined) {
+        delete process.env.ROUTER_RS_STDIO_POOL_SIZE;
+      } else {
+        process.env.ROUTER_RS_STDIO_POOL_SIZE = previousRouterPoolSize;
+      }
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  }, 15000);
+
+  it('prefers the unified router stdio pool size env and clamps runaway values', async () => {
+    const { tempRoot, commandPath } = await createFakeRouterRsCommand(10);
+    const previousCommand = process.env.BROWSER_MCP_ROUTER_RS_COMMAND;
+    const previousPoolSize = process.env.CODEX_ROUTER_STDIO_POOL_SIZE;
+    const previousRouterPoolSize = process.env.ROUTER_RS_STDIO_POOL_SIZE;
+    process.env.BROWSER_MCP_ROUTER_RS_COMMAND = commandPath;
+    process.env.CODEX_ROUTER_STDIO_POOL_SIZE = '2';
+    process.env.ROUTER_RS_STDIO_POOL_SIZE = '99';
+    resetRouterRsProcessStateForTests();
+
+    const attachedRuntime = new BrowserRuntime({
+      headless: true,
+      runtimeAttachDescriptor: {
+        schema_version: 'runtime-event-attach-descriptor-v1',
+        attach_mode: 'process_external_artifact_replay',
+        artifact_backend_family: 'filesystem',
+        attach_capabilities: {
+          artifact_replay: true,
+          live_remote_stream: false,
+          cleanup_preserves_replay: true,
+        },
+        recommended_entrypoint: 'describe_runtime_event_handoff',
+        resolved_artifacts: {
+          trace_stream_path: path.join(tempRoot, 'TRACE_EVENTS.jsonl'),
+        },
+      },
+      screenshotDir: path.join(tempRoot, 'screenshots-clamped-pool'),
+    });
+
+    try {
+      await attachedRuntime.getAttachedRuntimeEvents({ limit: 1 });
+      const diagnostics = await attachedRuntime.getDiagnostics();
+      expect(diagnostics.routerRsStdioPool?.size).toBe(16);
+    } finally {
+      await attachedRuntime.shutdown();
+      resetRouterRsProcessStateForTests();
+      if (previousCommand === undefined) {
+        delete process.env.BROWSER_MCP_ROUTER_RS_COMMAND;
+      } else {
+        process.env.BROWSER_MCP_ROUTER_RS_COMMAND = previousCommand;
+      }
+      if (previousPoolSize === undefined) {
+        delete process.env.CODEX_ROUTER_STDIO_POOL_SIZE;
+      } else {
+        process.env.CODEX_ROUTER_STDIO_POOL_SIZE = previousPoolSize;
+      }
+      if (previousRouterPoolSize === undefined) {
+        delete process.env.ROUTER_RS_STDIO_POOL_SIZE;
+      } else {
+        process.env.ROUTER_RS_STDIO_POOL_SIZE = previousRouterPoolSize;
       }
       await rm(tempRoot, { recursive: true, force: true });
     }

@@ -20,11 +20,10 @@
    这一步会统一刷新 `SKILL_ROUTING_RUNTIME.json`、`SKILL_ROUTING_INDEX.md` 等生成路由产物；不要手改这些生成文件。
 4. 运行验证：
    ```bash
-   python3 scripts/check_skills.py --verify-sync
-   python3 scripts/check_skills.py --include-system --verify-sync
+   cargo test --manifest-path scripts/skill-compiler-rs/Cargo.toml
+   cargo test --test policy_contracts
    ```
    本地人工执行这些高输出命令时，可按 [`RTK.md`](/Users/joe/Documents/skill/RTK.md) 改用 `rtk ...` 包装形式。
-   如果你在排查历史兼容安装，可再额外执行 `--verify-codex-link` 做 legacy link 审计。
 5. 提交后 CI 自动验证（`.github/workflows/skill-ci.yml`）
 
 ## 改 Skill 必查

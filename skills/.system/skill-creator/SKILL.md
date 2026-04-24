@@ -78,7 +78,7 @@ skill-name/
 ├── agents/ (recommended)
 │   └── openai.yaml - UI metadata for skill lists and chips
 └── Bundled Resources (optional)
-    ├── scripts/          - Executable code (Python/Bash/etc.)
+    ├── scripts/          - Executable code (Rust, shell, Node, etc.)
     ├── references/       - Documentation intended to be loaded into context as needed
     └── assets/           - Files used in output (templates, icons, fonts, etc.)
 ```
@@ -95,7 +95,7 @@ Every SKILL.md consists of:
 - UI-facing metadata for skill lists and chips
 - Read references/openai_yaml.md before generating values and follow its descriptions and constraints
 - Create: human-facing `display_name`, `short_description`, and `default_prompt` by reading the skill
-- Generate deterministically by passing the values as `--interface key=value` to `scripts/generate_openai_yaml.py` or `scripts/init_skill.py`
+- Generate deterministically by writing `agents/openai.yaml` directly from the field definitions in `references/openai_yaml.md`
 - On updates: validate `agents/openai.yaml` still matches SKILL.md; regenerate if stale
 - Only include other optional interface fields (icons, brand color) if explicitly provided
 - See references/openai_yaml.md for field definitions and examples
@@ -104,10 +104,10 @@ Every SKILL.md consists of:
 
 ##### Scripts (`scripts/`)
 
-Executable code (Python/Bash/etc.) for tasks that require deterministic reliability or are repeatedly rewritten.
+Executable code (Rust, shell, Node, etc.) for tasks that require deterministic reliability or are repeatedly rewritten.
 
 - **When to include**: When the same code is being rewritten repeatedly or deterministic reliability is needed
-- **Example**: `scripts/rotate_pdf.py` for PDF rotation tasks
+- **Example**: `rust_tools/rotate_pdf_rs` for PDF rotation tasks
 - **Benefits**: Token efficient, deterministic, may be executed without loading into context
 - **Note**: Scripts may still need to be read by Codex for patching or environment-specific adjustments
 
@@ -237,9 +237,9 @@ Skill creation involves these steps:
 
 1. Understand the skill with concrete examples
 2. Plan reusable skill contents (scripts, references, assets)
-3. Initialize the skill (run init_skill.py)
+3. Initialize the skill directory
 4. Edit the skill (implement resources and write SKILL.md)
-5. Validate the skill (run quick_validate.py)
+5. Validate the skill with Rust policy tests
 6. Iterate based on real usage and forward-test complex skills.
 
 Follow these steps in order, skipping only if there is a clear reason why they are not applicable.
@@ -280,7 +280,7 @@ To turn concrete examples into an effective skill, analyze each example by:
 Example: When building a `pdf-editor` skill to handle queries like "Help me rotate this PDF," the analysis shows:
 
 1. Rotating a PDF requires re-writing the same code each time
-2. A `scripts/rotate_pdf.py` script would be helpful to store in the skill
+2. A Rust PDF rotation helper would be helpful to store in the skill
 
 Example: When designing a `frontend-webapp-builder` skill for queries like "Build me a todo app" or "Build me a dashboard to track my steps," the analysis shows:
 
@@ -300,38 +300,49 @@ At this point, it is time to actually create the skill.
 
 Skip this step only if the skill being developed already exists. In this case, continue to the next step.
 
-Before running `init_skill.py`, ask where the user wants the skill created. If they do not specify a location, default to `$CODEX_HOME/skills`; when `CODEX_HOME` is unset, fall back to `~/.codex/skills` so the skill is auto-discovered.
+Before creating files, ask where the user wants the skill created. If they do not specify a location, default to `$CODEX_HOME/skills`; when `CODEX_HOME` is unset, fall back to `~/.codex/skills` so the skill is auto-discovered.
 
-When creating a new skill from scratch, always run the `init_skill.py` script. The script conveniently generates a new template skill directory that automatically includes everything a skill requires, making the skill creation process much more efficient and reliable.
+When creating a new skill from scratch, make the required directory shape directly and keep the result minimal.
 
 Usage:
 
 ```bash
-scripts/init_skill.py <skill-name> --path <output-directory> [--resources scripts,references,assets] [--examples]
+SKILL_NAME="<skill-name>"
+OUTPUT_DIR="${CODEX_HOME:-$HOME/.codex}/skills"
+mkdir -p "$OUTPUT_DIR/$SKILL_NAME"
+$EDITOR "$OUTPUT_DIR/$SKILL_NAME/SKILL.md"
 ```
 
-Examples:
+Add optional resource directories only when they are actually needed:
 
 ```bash
-scripts/init_skill.py my-skill --path "${CODEX_HOME:-$HOME/.codex}/skills"
-scripts/init_skill.py my-skill --path "${CODEX_HOME:-$HOME/.codex}/skills" --resources scripts,references
-scripts/init_skill.py my-skill --path ~/work/skills --resources scripts --examples
+mkdir -p "$OUTPUT_DIR/$SKILL_NAME/references"
+mkdir -p "$OUTPUT_DIR/$SKILL_NAME/assets"
+mkdir -p "$OUTPUT_DIR/$SKILL_NAME/agents"
 ```
 
-The script:
+Create `SKILL.md` with this minimal shape:
 
-- Creates the skill directory at the specified path
-- Generates a SKILL.md template with proper frontmatter and TODO placeholders
-- Creates `agents/openai.yaml` using agent-generated `display_name`, `short_description`, and `default_prompt` passed via `--interface key=value`
-- Optionally creates resource directories based on `--resources`
-- Optionally adds example files when `--examples` is set
+```markdown
+---
+name: my-skill
+description: |
+  What the skill does. Use when Codex needs to ...
+---
 
-After initialization, customize the SKILL.md and add resources as needed. If you used `--examples`, replace or delete placeholder files.
+# my-skill
 
-Generate `display_name`, `short_description`, and `default_prompt` by reading the skill, then pass them as `--interface key=value` to `init_skill.py` or regenerate with:
+Core instructions here.
+```
 
-```bash
-scripts/generate_openai_yaml.py <path/to/skill-folder> --interface key=value
+After initialization, customize the SKILL.md and add resources as needed. Delete placeholder files that are not needed for the skill.
+
+Generate `display_name`, `short_description`, and `default_prompt` by reading the skill, then write:
+
+```yaml
+display_name: My Skill
+short_description: Short UI-facing summary
+default_prompt: Use this skill to ...
 ```
 
 Only include other optional interface fields when the user explicitly provides them. For full field descriptions and examples, see references/openai_yaml.md.
@@ -375,10 +386,10 @@ Write instructions for using the skill and its bundled resources.
 Once development of the skill is complete, validate the skill folder to catch basic issues early:
 
 ```bash
-scripts/quick_validate.py <path/to/skill-folder>
+cargo test --test policy_contracts
 ```
 
-The validation script checks YAML frontmatter format, required fields, and naming rules. If validation fails, fix the reported issues and run the command again.
+The Rust policy tests check repository contracts and catch retired-runtime regressions. If validation fails, fix the reported issues and run the command again.
 
 ### Step 6: Iterate
 

@@ -19,39 +19,38 @@ trigger_hints:
 
 ## Quick Start
 
-1. Run the scaffold script:
+1. Create the plugin folder and required manifest:
 
 ```bash
-  # Plugin names are normalized to lower-case hyphen-case and must be <= 64 chars.
-  # The generated folder and plugin.json name are always the same.
-# Run from repo root (or replace .agents/... with the absolute path to this SKILL).
-# By default creates in <repo_root>/plugins/<plugin-name>.
-python3 .agents/skills/plugin-creator/scripts/create_basic_plugin.py <plugin-name>
+PLUGIN_NAME="<plugin-name>"
+PLUGIN_DIR="plugins/$PLUGIN_NAME"
+mkdir -p "$PLUGIN_DIR/.codex-plugin"
+$EDITOR "$PLUGIN_DIR/.codex-plugin/plugin.json"
 ```
 
-2. Open `<plugin-path>/.codex-plugin/plugin.json` and replace `[TODO: ...]` placeholders.
+Plugin names are normalized to lower-case hyphen-case and must be <= 64 chars. The generated folder and plugin.json `name` are always the same.
 
-3. Generate or update the repo marketplace entry when the plugin should appear in Codex UI ordering:
+2. Fill `<plugin-path>/.codex-plugin/plugin.json` from the canonical sample in `references/plugin-json-spec.md`, then replace `[TODO: ...]` placeholders.
+
+3. Add or update the repo marketplace entry when the plugin should appear in Codex UI ordering:
 
 ```bash
 # marketplace.json always lives at <repo-root>/.agents/plugins/marketplace.json
-python3 .agents/skills/plugin-creator/scripts/create_basic_plugin.py my-plugin --with-marketplace
+$EDITOR .agents/plugins/marketplace.json
 ```
 
-For a home-local plugin, treat `<home>` as the root and use:
+For a home-local plugin, treat `<home>` as the root and edit:
 
 ```bash
-python3 .agents/skills/plugin-creator/scripts/create_basic_plugin.py my-plugin \
-  --path ~/plugins \
-  --marketplace-path ~/.agents/plugins/marketplace.json \
-  --with-marketplace
+~/.agents/plugins/marketplace.json
 ```
 
 4. Generate/adjust optional companion folders as needed:
 
 ```bash
-python3 .agents/skills/plugin-creator/scripts/create_basic_plugin.py my-plugin --path <parent-plugin-directory> \
-  --with-skills --with-hooks --with-scripts --with-assets --with-mcp --with-apps --with-marketplace
+mkdir -p "<parent-plugin-directory>/<plugin-name>"/{skills,hooks,scripts,assets}
+touch "<parent-plugin-directory>/<plugin-name>/.mcp.json"
+touch "<parent-plugin-directory>/<plugin-name>/.app.json"
 ```
 
 `<parent-plugin-directory>` is the directory where the plugin folder `<plugin-name>` will be created (for example `~/code/plugins`).
@@ -168,5 +167,5 @@ For the exact canonical sample JSON for both plugin manifests and marketplace en
 After editing `SKILL.md`, run:
 
 ```bash
-python3 <path-to-skill-creator>/scripts/quick_validate.py .agents/skills/plugin-creator
+cargo test --test policy_contracts
 ```

@@ -325,6 +325,12 @@ export interface DiagnosticsResult {
   networkEventBufferSize: number;
   screenshotCount: number;
   runtimeVersion: string;
+  routerRsStdioPool: {
+    size: number;
+    inFlight: number;
+    nextClientIndex: number;
+    pendingPerClient: number[];
+  } | null;
   attachedRuntime: AttachedRuntimeDiagnostics;
 }
 

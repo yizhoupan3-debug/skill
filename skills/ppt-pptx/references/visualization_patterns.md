@@ -12,11 +12,12 @@ Use this reference when choosing how to visualize data, processes, or relationsh
 
 **Layout guide**:
 - 4-8 events per slide max
-- Use `addDarkPanel()` for event cards along a horizontal glow line
+- Use dark editable panels for event cards along a horizontal glow line
 - Date/year labels at top; event description below
 - Color-code phases with palette accent
 
-**Helpers**: `addMetricChip()` for date labels, `addDarkPanel()` for event cards
+**Rust path**: encode events in the `timeline` array; Rust splits oversized
+timelines and renders editable labels, panels, and notes.
 
 ---
 
@@ -28,11 +29,12 @@ Use this reference when choosing how to visualize data, processes, or relationsh
 
 **Layout guide**:
 - 3-6 steps per slide
-- Use arrow shapes between nodes or a Mermaid flowchart
+- Use editable arrow shapes between nodes
 - Each node: icon/number + short label + 1-line description
-- Keep spacing even with `distributeSlideElements()`
+- Keep spacing even and leave footer-safe space
 
-**Helpers**: `addMermaidDiagram()` for auto flowcharts, `addDarkPanel()` for manual nodes
+**Rust path**: model the steps in `deck.plan.json`, then let `ppt outline --build`
+choose a flow layout or rebuild the page as editable shapes.
 
 ---
 
@@ -48,7 +50,8 @@ Use this reference when choosing how to visualize data, processes, or relationsh
 - Matching bullet count and visual weight on both sides
 - Use contrasting accent colors for each side
 
-**Helpers**: `addDarkPanel()` for each side, `addImageCard()` for visual evidence
+**Rust path**: encode `comparison.left` and `comparison.right`; keep both sides
+structurally parallel so the Rust builder can preserve editable text.
 
 ---
 
@@ -59,12 +62,13 @@ Use this reference when choosing how to visualize data, processes, or relationsh
 **Structure**: metric chips across top + one wide evidence surface below.
 
 **Layout guide**:
-- 3-5 metric chips in a row (use `addMetricChip()`)
+- 3-5 metric chips in a row
 - One wide panel below with chart or detailed breakdown
-- Use `addStyledChart()` for the main chart
+- Use a simple native chart or editable evidence panel for the main chart
 - Title + one-sentence insight above the chart
 
-**Helpers**: `addMetricChip()`, `addStyledChart()`, `addDarkPanel()`
+**Rust path**: encode `metrics` plus `chart`; avoid raster-only charts when
+collaborators need to edit the deck.
 
 ---
 
@@ -80,7 +84,8 @@ Use this reference when choosing how to visualize data, processes, or relationsh
 - Bottom level: widest + most muted
 - Label each level with a one-word category + short description
 
-**Helpers**: `addDarkPanel()` with varying widths, manual coordinate calculation
+**Rust path**: encode tiers as ordered bullets or a custom source-plan section;
+keep each tier as editable text and shapes.
 
 ---
 
@@ -91,12 +96,13 @@ Use this reference when choosing how to visualize data, processes, or relationsh
 **Structure**: equal quadrants or structured grid cells.
 
 **Layout guide**:
-- For 2×2: four equal `addDarkPanel()` with axis labels
+- For 2x2: four equal editable panels with axis labels
 - For tables: native PowerPoint table (restyle from defaults)
 - Highlight the decision-relevant cell with accent color
 - Keep text minimal; move detail to backup slides
 
-**Helpers**: `slide.addTable()` with custom styles
+**Rust path**: use table-like source data when editability matters; otherwise
+summarize into four short editable panels.
 
 ---
 
@@ -107,12 +113,13 @@ Use this reference when choosing how to visualize data, processes, or relationsh
 **Structure**: dominant image (60%) + text panel (40%), or image band + overlay text.
 
 **Layout guide**:
-- Image side: `addImageCard()` with overlay protection
+- Image side: framed image or placeholder panel with overlay protection
 - Text side: title + 2-3 bullet insights + optional source note
 - Image should be intentionally cropped to focal point
 - Text must be readable without squinting
 
-**Helpers**: `addImageCard()`, `imageSizingCrop()`, `addDarkPanel()`
+**Rust path**: keep local image paths in the source plan and use `ppt qa` after
+rendering to catch crop, contrast, or bounds issues.
 
 ---
 
@@ -123,12 +130,13 @@ Use this reference when choosing how to visualize data, processes, or relationsh
 **Structure**: dark evidence surface with embedded cards, images, and stats.
 
 **Layout guide**:
-- One wide `addDarkPanel()` as background surface
+- One wide editable dark panel as background surface
 - 2-3 embedded elements: image card + stat chips + text conclusion
 - Layered composition, not a flat grid
 - Use Section title + English subtitle at top
 
-**Helpers**: `addDarkPanel()`, `addImageCard()`, `addMetricChip()`
+**Rust path**: keep the board structured in `deck.plan.json`; render evidence
+and audit the resulting PNGs before delivery.
 
 ---
 

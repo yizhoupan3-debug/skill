@@ -1,5 +1,5 @@
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::{TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use futures::stream::{FuturesUnordered, StreamExt};
 use reqwest::Client;
@@ -22,6 +22,8 @@ enum Commands {
     Ohlcv(OhlcvArgs),
     /// Fetch OHLCV data and export it in a backtest-friendly schema.
     Export(ExportArgs),
+    /// Fetch lightweight U.S. valuation/capital metrics from Yahoo chart metadata.
+    Capital(CapitalArgs),
     /// Validate Rust-owned data probes concurrently.
     Validate,
 }
@@ -77,10 +79,26 @@ struct ExportArgs {
     metadata_output: Option<String>,
 }
 
+#[derive(Args, Clone)]
+struct CapitalArgs {
+    #[arg(long, value_enum)]
+    market: CapitalMarket,
+    #[arg(long)]
+    symbol: String,
+    #[arg(long, value_enum, default_value = "json")]
+    format: OutputFormat,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 enum Market {
     Crypto,
     Us,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+enum CapitalMarket {
+    Us,
+    Cn,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -123,7 +141,7 @@ impl HttpClient {
             .user_agent("financial-data-fetching-rs/1.0")
             .build()
             .context("failed to build reqwest client")?;
-        Ok(Self { client, retries: 2 })
+        Ok(Self { client, retries: 5 })
     }
 
     async fn get_json(
@@ -172,7 +190,7 @@ impl HttpClient {
             }
 
             if attempt < self.retries {
-                sleep(Duration::from_millis(250 * (attempt as u64 + 1))).await;
+                sleep(Duration::from_millis(500 * (attempt as u64 + 1))).await;
             }
         }
 
@@ -195,6 +213,14 @@ struct OhlcvRecord {
     source: String,
 }
 
+impl OhlcvRecord {
+    fn timestamp_utc(&self) -> Option<DateTime<Utc>> {
+        DateTime::parse_from_rfc3339(&self.timestamp)
+            .ok()
+            .map(|value| value.with_timezone(&Utc))
+    }
+}
+
 #[derive(Debug, Clone)]
 struct FetchResult {
     dataset: String,
@@ -207,6 +233,46 @@ struct FetchResult {
     fetched_at_utc: String,
     records: Vec<OhlcvRecord>,
     notes: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct GenericResult {
+    dataset: String,
+    source: String,
+    market: String,
+    symbol: String,
+    interval: Option<String>,
+    timezone: Option<String>,
+    adjusted: Option<bool>,
+    fetched_at_utc: String,
+    records: Vec<Value>,
+    notes: Vec<String>,
+}
+
+impl GenericResult {
+    fn metadata(&self) -> Value {
+        json!({
+            "dataset": self.dataset,
+            "source": self.source,
+            "market": self.market,
+            "symbol": self.symbol,
+            "interval": self.interval,
+            "timezone": self.timezone,
+            "adjusted": self.adjusted,
+            "fetched_at_utc": self.fetched_at_utc,
+            "row_count": self.records.len(),
+            "columns": self.columns(),
+            "notes": self.notes,
+        })
+    }
+
+    fn columns(&self) -> Vec<String> {
+        self.records
+            .first()
+            .and_then(Value::as_object)
+            .map(|record| record.keys().cloned().collect())
+            .unwrap_or_default()
+    }
 }
 
 impl FetchResult {
@@ -263,6 +329,10 @@ async fn main() -> Result<()> {
             args.ohlcv.validate()?;
             let result = fetch_ohlcv(&http, &args.ohlcv).await?;
             export_backtest(&result, &args)?;
+        }
+        Commands::Capital(args) => {
+            let result = fetch_capital_metrics(&http, &args).await?;
+            emit_generic_result(&result, args.format)?;
         }
         Commands::Validate => {
             let payload = run_validate(&http).await?;
@@ -688,6 +758,153 @@ async fn fetch_stooq_ohlcv(http: &HttpClient, symbol: &str) -> Result<FetchResul
     })
 }
 
+async fn fetch_capital_metrics(http: &HttpClient, args: &CapitalArgs) -> Result<GenericResult> {
+    match args.market {
+        CapitalMarket::Us => fetch_us_capital_metrics(http, &args.symbol).await,
+        CapitalMarket::Cn => fetch_cn_capital_metrics(http, &args.symbol).await,
+    }
+}
+
+async fn fetch_us_capital_metrics(http: &HttpClient, symbol: &str) -> Result<GenericResult> {
+    let payload = http
+        .get_json(
+            &format!("https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"),
+            &[
+                ("interval", "1d".to_string()),
+                ("range", "5d".to_string()),
+                ("includePrePost", "false".to_string()),
+                ("events", "div,splits".to_string()),
+            ],
+            &[],
+        )
+        .await?;
+
+    let result = payload
+        .get("chart")
+        .and_then(|chart| chart.get("result"))
+        .and_then(Value::as_array)
+        .and_then(|results| results.first())
+        .context("unexpected Yahoo Finance payload shape")?;
+    let meta = result.get("meta").context("Yahoo payload missing meta")?;
+
+    let record = json!({
+        "symbol": symbol,
+        "currency": meta.get("currency").cloned().unwrap_or(Value::Null),
+        "exchange": meta.get("exchangeName").cloned().unwrap_or(Value::Null),
+        "instrument_type": meta.get("instrumentType").cloned().unwrap_or(Value::Null),
+        "regular_market_price": meta.get("regularMarketPrice").cloned().unwrap_or(Value::Null),
+        "chart_previous_close": meta.get("chartPreviousClose").cloned().unwrap_or(Value::Null),
+        "previous_close": meta.get("previousClose").cloned().unwrap_or(Value::Null),
+        "fifty_two_week_high": meta.get("fiftyTwoWeekHigh").cloned().unwrap_or(Value::Null),
+        "fifty_two_week_low": meta.get("fiftyTwoWeekLow").cloned().unwrap_or(Value::Null),
+        "regular_market_volume": meta.get("regularMarketVolume").cloned().unwrap_or(Value::Null),
+        "first_trade_date": meta
+            .get("firstTradeDate")
+            .and_then(Value::as_i64)
+            .map(epoch_seconds_to_iso)
+            .transpose()?,
+    });
+
+    Ok(GenericResult {
+        dataset: "capital_metrics".to_string(),
+        source: "yahoo:chart-meta".to_string(),
+        market: "us".to_string(),
+        symbol: symbol.to_string(),
+        interval: None,
+        timezone: meta
+            .get("exchangeTimezoneName")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        adjusted: None,
+        fetched_at_utc: now_utc(),
+        records: vec![record],
+        notes: vec![
+            "Rust-native Yahoo chart metadata".to_string(),
+            "valuation snapshot is lighter than yfinance Ticker.info".to_string(),
+        ],
+    })
+}
+
+async fn fetch_cn_capital_metrics(http: &HttpClient, symbol: &str) -> Result<GenericResult> {
+    let code = normalize_cn_stock_code(symbol);
+    let mut matched: Option<Value> = None;
+    for page in 1..=60 {
+        let payload = http
+            .get_json(
+                "https://push2.eastmoney.com/api/qt/clist/get",
+                &[
+                    ("pn", page.to_string()),
+                    ("pz", "100".to_string()),
+                    ("po", "1".to_string()),
+                    ("np", "1".to_string()),
+                    ("ut", "bd1d9ddb04089700cf9c27f6f7426281".to_string()),
+                    ("fltt", "2".to_string()),
+                    ("invt", "2".to_string()),
+                    ("fid", "f3".to_string()),
+                    ("fs", "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23".to_string()),
+                    (
+                        "fields",
+                        "f12,f14,f2,f3,f5,f6,f7,f15,f16,f17,f18,f8,f9,f23,f20,f21,f10".to_string(),
+                    ),
+                ],
+                &[],
+            )
+            .await?;
+
+        let rows = payload
+            .get("data")
+            .and_then(|data| data.get("diff"))
+            .and_then(Value::as_array)
+            .context("Eastmoney payload missing stock rows")?;
+        if let Some(row) = rows
+            .iter()
+            .find(|item| item.get("f12").and_then(Value::as_str) == Some(code.as_str()))
+        {
+            matched = Some(row.clone());
+            break;
+        }
+        if rows.len() < 100 {
+            break;
+        }
+    }
+    let row = matched
+        .as_ref()
+        .with_context(|| format!("symbol {code} not found in Eastmoney A-share spot data"))?;
+
+    let record = json!({
+        "symbol": code,
+        "name": row.get("f14").cloned().unwrap_or(Value::Null),
+        "price": row.get("f2").cloned().unwrap_or(Value::Null),
+        "change_pct": row.get("f3").cloned().unwrap_or(Value::Null),
+        "volume": row.get("f5").cloned().unwrap_or(Value::Null),
+        "turnover": row.get("f6").cloned().unwrap_or(Value::Null),
+        "amplitude": row.get("f7").cloned().unwrap_or(Value::Null),
+        "high": row.get("f15").cloned().unwrap_or(Value::Null),
+        "low": row.get("f16").cloned().unwrap_or(Value::Null),
+        "open": row.get("f17").cloned().unwrap_or(Value::Null),
+        "prev_close": row.get("f18").cloned().unwrap_or(Value::Null),
+        "turnover_rate": row.get("f8").cloned().unwrap_or(Value::Null),
+        "pe_ratio": row.get("f9").cloned().unwrap_or(Value::Null),
+        "pb_ratio": row.get("f23").cloned().unwrap_or(Value::Null),
+        "total_market_cap": row.get("f20").cloned().unwrap_or(Value::Null),
+        "circulating_market_cap": row.get("f21").cloned().unwrap_or(Value::Null),
+        "volume_ratio": row.get("f10").cloned().unwrap_or(Value::Null),
+    });
+
+    Ok(GenericResult {
+        dataset: "capital_metrics".to_string(),
+        source: "eastmoney:qt-clist".to_string(),
+        market: "cn".to_string(),
+        symbol: code,
+        interval: None,
+        timezone: Some("Asia/Shanghai".to_string()),
+        adjusted: None,
+        fetched_at_utc: now_utc(),
+        records: vec![record],
+        notes: vec!["Rust-native Eastmoney A-share spot snapshot".to_string()],
+    })
+}
+
 fn emit_result(result: &FetchResult, format: OutputFormat) -> Result<()> {
     match format {
         OutputFormat::Json => {
@@ -703,6 +920,27 @@ fn emit_result(result: &FetchResult, format: OutputFormat) -> Result<()> {
         }
         OutputFormat::Csv => {
             let csv = records_to_csv(&result.records)?;
+            print!("{csv}");
+        }
+    }
+    Ok(())
+}
+
+fn emit_generic_result(result: &GenericResult, format: OutputFormat) -> Result<()> {
+    match format {
+        OutputFormat::Json => {
+            let payload = json!({
+                "metadata": result.metadata(),
+                "records": result.records,
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&payload)
+                    .context("failed to serialize generic result payload")?
+            );
+        }
+        OutputFormat::Csv => {
+            let csv = generic_records_to_csv(&result.records)?;
             print!("{csv}");
         }
     }
@@ -798,6 +1036,24 @@ async fn run_validate(http: &HttpClient) -> Result<Value> {
             .await
         }));
     }
+    {
+        let http = http.clone();
+        tasks.push(tokio::spawn(async move {
+            run_generic_probe("us.capital.AAPL".to_string(), async move {
+                fetch_us_capital_metrics(&http, "AAPL").await
+            })
+            .await
+        }));
+    }
+    {
+        let http = http.clone();
+        tasks.push(tokio::spawn(async move {
+            run_generic_probe("cn.capital.600519".to_string(), async move {
+                fetch_cn_capital_metrics(&http, "600519").await
+            })
+            .await
+        }));
+    }
 
     let mut results = Vec::new();
     while let Some(result) = tasks.next().await {
@@ -839,9 +1095,49 @@ where
     }
 }
 
+async fn run_generic_probe<F>(name: String, future: F) -> ProbeResult
+where
+    F: std::future::Future<Output = Result<GenericResult>>,
+{
+    match future.await {
+        Ok(result) => ProbeResult {
+            name,
+            ok: true,
+            details: summarize_generic_probe(&result),
+            error: None,
+        },
+        Err(error) => ProbeResult {
+            name,
+            ok: false,
+            details: json!({}),
+            error: Some(format!("{error:#}")),
+        },
+    }
+}
+
+fn summarize_generic_probe(result: &GenericResult) -> Value {
+    json!({
+        "dataset": result.dataset,
+        "source": result.source,
+        "market": result.market,
+        "symbol": result.symbol,
+        "interval": result.interval,
+        "timezone": result.timezone,
+        "adjusted": result.adjusted,
+        "fetched_at_utc": result.fetched_at_utc,
+        "row_count": result.records.len(),
+        "columns": result.columns(),
+        "notes": result.notes,
+        "preview": result.records.first(),
+    })
+}
+
 fn summarize_probe(result: &FetchResult) -> Value {
     let first = result.records.first();
     let last = result.records.last();
+    let stale_hours = last
+        .and_then(OhlcvRecord::timestamp_utc)
+        .map(|timestamp| (Utc::now() - timestamp).num_hours());
     json!({
         "dataset": result.dataset,
         "source": result.source,
@@ -857,6 +1153,9 @@ fn summarize_probe(result: &FetchResult) -> Value {
         "first_timestamp": first.map(|record| record.timestamp.clone()),
         "last_timestamp": last.map(|record| record.timestamp.clone()),
         "monotonic_increasing": is_monotonic(&result.records),
+        "duplicate_timestamps": duplicate_timestamp_count(&result.records),
+        "null_adj_close_count": null_adj_close_count(&result.records),
+        "stale_hours": stale_hours,
         "last_close": last.map(|record| record.close),
         "last_volume": last.map(|record| record.volume),
     })
@@ -871,6 +1170,17 @@ fn finalize_result(mut result: FetchResult) -> Result<FetchResult> {
         .dedup_by(|left, right| left.timestamp == right.timestamp);
     if result.records.is_empty() {
         bail!("no OHLCV rows returned for {}", result.symbol);
+    }
+    if result.records.iter().any(|record| {
+        !record.open.is_finite()
+            || !record.high.is_finite()
+            || !record.low.is_finite()
+            || !record.close.is_finite()
+            || !record.volume.is_finite()
+            || record.volume < 0.0
+            || record.low > record.high
+    }) {
+        bail!("invalid OHLCV values returned for {}", result.symbol);
     }
     Ok(result)
 }
@@ -938,6 +1248,33 @@ fn records_to_csv(records: &[OhlcvRecord]) -> Result<String> {
     String::from_utf8(writer.into_inner()?).context("failed to encode CSV output as UTF-8")
 }
 
+fn generic_records_to_csv(records: &[Value]) -> Result<String> {
+    let Some(first) = records.first().and_then(Value::as_object) else {
+        return Ok(String::new());
+    };
+    let columns: Vec<String> = first.keys().cloned().collect();
+    let mut writer = csv::Writer::from_writer(Vec::new());
+    writer.write_record(columns.iter())?;
+    for record in records {
+        let object = record
+            .as_object()
+            .context("generic CSV export expects object records")?;
+        let row = columns
+            .iter()
+            .map(|column| object.get(column).map(csv_value).unwrap_or_default());
+        writer.write_record(row)?;
+    }
+    String::from_utf8(writer.into_inner()?).context("failed to encode generic CSV as UTF-8")
+}
+
+fn csv_value(value: &Value) -> String {
+    match value {
+        Value::Null => String::new(),
+        Value::String(text) => text.clone(),
+        other => other.to_string(),
+    }
+}
+
 fn backtest_csv(result: &FetchResult, schema: BacktestSchema) -> Result<String> {
     let mut writer = csv::Writer::from_writer(Vec::new());
     let include_adj_close = result.has_adj_close();
@@ -982,14 +1319,7 @@ fn backtest_csv(result: &FetchResult, schema: BacktestSchema) -> Result<String> 
             }
         }
         BacktestSchema::Vectorbt => {
-            let mut header = vec![
-                "timestamp",
-                "Open",
-                "High",
-                "Low",
-                "Close",
-                "Volume",
-            ];
+            let mut header = vec!["timestamp", "Open", "High", "Low", "Close", "Volume"];
             if include_adj_close {
                 header.push("Adj Close");
             }
@@ -1107,6 +1437,23 @@ fn is_monotonic(records: &[OhlcvRecord]) -> bool {
         .all(|window| window[0].timestamp <= window[1].timestamp)
 }
 
+fn duplicate_timestamp_count(records: &[OhlcvRecord]) -> usize {
+    records
+        .windows(2)
+        .filter(|window| window[0].timestamp == window[1].timestamp)
+        .count()
+}
+
+fn null_adj_close_count(records: &[OhlcvRecord]) -> usize {
+    if !records.iter().any(|record| record.adj_close.is_some()) {
+        return 0;
+    }
+    records
+        .iter()
+        .filter(|record| record.adj_close.is_none())
+        .count()
+}
+
 fn yahoo_interval(interval: &str) -> Result<&str> {
     match interval {
         "1m" | "2m" | "5m" | "15m" | "30m" | "60m" | "90m" | "1d" | "5d" | "1wk" | "1mo"
@@ -1155,6 +1502,17 @@ fn kraken_pair(symbol: &str) -> Result<String> {
         other => other,
     };
     Ok(format!("{base}{quote}"))
+}
+
+fn normalize_cn_stock_code(symbol: &str) -> String {
+    let value = symbol.trim();
+    if value.len() > 2 {
+        let prefix = &value[..2].to_ascii_lowercase();
+        if prefix == "sh" || prefix == "sz" {
+            return value[2..].to_string();
+        }
+    }
+    value.to_string()
 }
 
 fn epoch_seconds_to_iso(seconds: i64) -> Result<String> {

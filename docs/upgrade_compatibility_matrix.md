@@ -8,7 +8,7 @@ lives in parity snapshots and first-class shared contract artifacts.
 | Adapter | Lifecycle | Host | Transport | Requires aionrs | Core runtime | Memory | Artifact | Orchestration | Notes |
 |---|---|---|---|---:|---:|---:|---:|---:|---|
 | `codex_common_adapter` | compatibility view | Codex shared contract | `host-neutral-contract` | No | Yes | Yes | Yes | Yes | Codex naming compatibility view over shared contract projection; does not replace `cli_common_adapter` as the canonical shared contract |
-| `generic_host_adapter` | retired fallback baseline | generic | `inproc` | No | Yes | Yes | Yes | Yes | Retired fallback surface; not emitted by Python artifact generation |
+| `generic_host_adapter` | retired fallback baseline | generic | `inproc` | No | Yes | Yes | Yes | Yes | Retired fallback surface; not emitted by default artifact generation |
 | `codex_desktop_adapter` | canonical desktop | Codex Desktop | `local-bridge` | No | Yes | Yes | Yes | Yes | Primary interactive desktop entrypoint and the desktop parity identity |
 | `codex_desktop_host_adapter` | temporary alias | Codex Desktop | `local-bridge` | No | Yes | Yes | Yes | Yes | Compatibility bridge only; mirrors `codex_desktop_adapter`, stays opt-in for continuity lanes, is omitted from default artifact emission, and remains a retirement candidate |
 | `codex_cli_adapter` | canonical headless | codexcli | `headless-exec` | No | Yes | Yes | Yes | Yes | Formal headless entrypoint for batch / cron / CI without becoming framework truth |
@@ -38,7 +38,7 @@ following are true:
 2. `codex_dual_entry_parity_snapshot` remains green without alias-specific
    semantics.
 3. Rust artifact emission can drop the alias without reintroducing `aionrs` /
-   `AionUI` mainline assumptions; Python must not keep a second emitter alive.
+   `AionUI` mainline assumptions; no second emitter may stay alive.
 4. Any last-mile translation shim is edge-local compatibility code, not a new
    framework controller or contract truth source.
 
@@ -55,18 +55,17 @@ following are true:
 - legacy Codex Desktop alias surface: contract-scoped compatibility debt only; not a first-class Desktop output target.
 - `build_codex_dual_entry_parity_snapshot(...)`: Desktop / CLI shared-contract parity is emitted as the first-class dual-entry artifact.
 - `build_cli_family_parity_snapshot(...)`: CLI-family shared-contract parity is emitted as the canonical CLI regression artifact.
-- `codex_desktop_alias_inventory.json`: retired; no longer emitted by Python artifact generation.
+- `codex_desktop_alias_inventory.json`: retired; no longer emitted by default artifact generation.
 - `codex_desktop_alias_retirement_status.json`: alias retirement gates are externalized as a contract only on the explicit continuity lane.
-- `upgrade_compatibility_matrix`: compiled by Rust `--profile-artifacts-json`; Python no longer owns the matrix truth.
-- `emit_framework_contract_artifacts(...)`: calls Rust and writes Rust-owned bridge/contract artifacts. It no longer emits fallback host artifacts, no longer emits alias inventory, and no longer writes a Python/Rust parity report.
-- default Python artifact emission is Rust-first: `codex_desktop_host_adapter` no longer has a direct Python-emitted artifact, and alias retirement status stays behind explicit Rust continuity opt-in.
+- `upgrade_compatibility_matrix`: compiled by Rust `--profile-artifacts-json`; no separate matrix truth remains.
+- contract/artifact emission calls Rust and writes Rust-owned bridge/contract artifacts. It no longer emits fallback host artifacts, no longer emits alias inventory, and no longer writes a Python/Rust parity report.
+- default artifact emission is Rust-first: `codex_desktop_host_adapter` no longer has a direct emitted artifact, and alias retirement status stays behind explicit Rust continuity opt-in.
 - default Rust `--profile-artifacts-json` is now parity-first too: `codex_desktop_alias_retirement_status`
   stays behind explicit continuity opt-in together with the legacy alias artifact.
 - default regression authority is parity-first: this matrix stays secondary
   inventory / smoke evidence and does not replace parity snapshots.
-- default package export is parity-first: Python no longer exposes
-  `compile_codex_desktop_host_adapter(...)`; the remaining compatibility surface stays limited to
+- default package export is parity-first: the remaining compatibility surface stays limited to
   explicit inventory / retirement helpers.
-- the old retired-package compatibility shim is gone; internal artifact emitters now call the
-  canonical runtime modules directly instead of bouncing through an extra escape hatch.
+- the old retired-package compatibility shim is gone; artifact emitters now call the
+  canonical runtime modules directly instead of bouncing through an extra retired shim.
 - `router-rs --profile-json`: Rust lane validates and compiles the framework profile without touching `aionrs` or `AionUI`.

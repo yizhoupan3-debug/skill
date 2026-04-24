@@ -1,7 +1,12 @@
-FROM python:3.9-slim
+FROM rust:1.85-slim-bookworm AS builder
 WORKDIR /app
-COPY server.py .
-COPY static static/
-RUN pip install flask mysql-connector-python requests
+COPY Cargo.toml .
+COPY src src
+COPY dashboard/static dashboard/static
+RUN cargo build --release --bin codex-dashboard
+
+FROM debian:bookworm-slim
+WORKDIR /app
+COPY --from=builder /app/target/release/codex-dashboard /usr/local/bin/codex-dashboard
 EXPOSE 5000
-CMD ["python", "server.py"]
+CMD ["codex-dashboard"]

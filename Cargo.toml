@@ -1,0 +1,13 @@
+[package]
+name = "skill-rust-test-harness"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[dev-dependencies]
+regex = "1.11"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tempfile = "3.15"

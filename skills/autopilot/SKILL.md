@@ -1,8 +1,8 @@
 ---
 name: autopilot
 description: |
-  Official OMC autopilot workflow, localized onto this repo's native execution lane and Rust supervisor.
-  It keeps the original end-to-end execution pipeline while replacing .omc state with local continuity artifacts and rust-session-supervisor.
+  Repo-native autopilot workflow for end-to-end execution on this repo's Rust supervisor.
+  It owns the execution pipeline through local continuity artifacts, task evidence, and rust-session-supervisor.
 routing_layer: L1
 routing_owner: owner
 routing_gate: delegation
@@ -45,17 +45,17 @@ approval_required_tools:
 
 # autopilot
 
-`autopilot` 继承 OMC `v4.13.2` 的端到端执行流，但在本仓直接落到 Rust supervisor、continuity artifacts 和验证闭环，不再依赖 `.omc`。
+`autopilot` 是本仓自有的端到端执行流，直接落到 Rust supervisor、continuity artifacts 和验证闭环，不依赖外部 Claude 插件或旧状态目录。
 
 显式入口：
 - Codex：`$autopilot`
 - Claude：`/autopilot`
 
-## Upstream Baseline
+## Native Workflow
 
-- 官方来源：`oh-my-claudecode` `v4.13.2`
-- 对应技能：`skills/autopilot/SKILL.md`
+- 本仓来源：`skills/autopilot/SKILL.md` + `configs/framework/RUNTIME_REGISTRY.json`
 - 主流程：Expansion -> Planning -> Execution -> QA -> Validation -> Cleanup
+- 外部依赖：无外部 Claude 插件、无旧插件状态目录、无插件运行态
 
 ## When to use
 
@@ -92,7 +92,7 @@ approval_required_tools:
 
 ## Local runtime
 
-- 不再写 `.omc` 状态。
+- 不再写旧插件状态。
 - 运行态由 Rust `session-supervisor`、background state、resume 承接。
 - 任务真相写到 `artifacts/current/<task_id>/...`、`SESSION_SUMMARY.md`、`NEXT_ACTIONS.json`、`EVIDENCE_INDEX.json`、`TRACE_METADATA.json`、`.supervisor_state.json`。
 
@@ -112,7 +112,7 @@ approval_required_tools:
 
 ## Constraints
 
-- 这是官方能力的本地化，不是自创新协议。
+- 这是本仓自有执行协议，不是外部插件兼容壳。
 - 用本仓 skill、artifact contract、host entrypoint 解释行为。
 - 不把宿主私有行为写成 framework 真相。
-- 用户看到的是原生 `autopilot`，不是外部兼容层。
+- 用户看到的是本仓原生 `autopilot`，不是外部兼容层。

@@ -57,14 +57,10 @@ enum DeckTemplate {
     Corporate,
 }
 
-impl DeckTemplate {
-    fn asset_file(&self) -> &'static str {
-        match self {
-            Self::Dark => "deck.template.js",
-            Self::Light => "template_light.js",
-            Self::Corporate => "template_corporate.js",
-        }
-    }
+#[derive(ValueEnum, Clone, Debug, PartialEq, Eq)]
+enum QualityMode {
+    Standard,
+    Strict,
 }
 
 #[derive(Args)]
@@ -75,8 +71,6 @@ struct InitArgs {
     template: DeckTemplate,
     #[arg(long, default_value_t = false)]
     force: bool,
-    #[arg(long, default_value_t = false)]
-    skip_npm_install: bool,
     #[arg(long, default_value_t = false)]
     json: bool,
 }
@@ -90,7 +84,7 @@ struct NewArgs {
 #[derive(Args)]
 struct OutlineArgs {
     input: String,
-    #[arg(short, long, default_value = "deck.js")]
+    #[arg(short, long, default_value = "deck.plan.json")]
     output: String,
     #[arg(long, value_enum, default_value_t = DeckTemplate::Dark)]
     template: DeckTemplate,
@@ -100,6 +94,8 @@ struct OutlineArgs {
     build: bool,
     #[arg(long, default_value_t = false)]
     qa: bool,
+    #[arg(long, value_enum, default_value_t = QualityMode::Standard)]
+    quality: QualityMode,
     #[arg(long, default_value = "rendered")]
     rendered_dir: String,
     #[arg(long, default_value_t = false)]
@@ -184,6 +180,8 @@ struct SlidesTestArgs {
     height: u32,
     #[arg(long, visible_alias = "pad_px", default_value_t = DEFAULT_PAD_PX)]
     pad_px: u32,
+    #[arg(long, default_value_t = false)]
+    fail_on_overflow: bool,
 }
 
 #[derive(Args)]
@@ -224,7 +222,7 @@ struct IntakeArgs {
 struct BuildQaArgs {
     #[arg(long, default_value = ".")]
     workdir: String,
-    #[arg(long, default_value = "deck.js")]
+    #[arg(long, default_value = "deck.plan.json")]
     entry: String,
     #[arg(long, default_value = "deck.pptx")]
     deck: String,
@@ -325,7 +323,7 @@ struct InitSummary {
     workdir: String,
     template: String,
     files: Vec<String>,
-    npm_install: String,
+    rust_only: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -490,7 +488,7 @@ fn main() -> Result<()> {
 
 fn init_command(args: InitArgs) -> Result<()> {
     let workdir = expand_path(&args.workdir);
-    let summary = init_workspace(&workdir, &args.template, args.force, !args.skip_npm_install)?;
+    let summary = init_workspace(&workdir, &args.template, args.force)?;
     emit_value(
         serde_json::to_value(summary)?,
         if args.json {
@@ -509,7 +507,7 @@ fn outline_command(args: OutlineArgs) -> Result<()> {
         .to_path_buf();
 
     if args.bootstrap {
-        init_workspace(&workdir, &args.template, false, false)?;
+        init_workspace(&workdir, &args.template, false)?;
     }
 
     let output = expand_path(&args.output);
@@ -525,34 +523,23 @@ fn outline_command(args: OutlineArgs) -> Result<()> {
         .with_context(|| format!("failed to write {}", output.display()))?;
 
     let mut qa_payload = None;
-    if args.build || args.qa {
-        let tool_bin = std::env::current_exe()
-            .context("failed to locate current executable")?
-            .display()
-            .to_string();
-        let entry = output
-            .file_name()
-            .and_then(OsStr::to_str)
-            .ok_or_else(|| anyhow!("invalid deck source path {}", output.display()))?;
-        let status = Command::new("node")
-            .arg(entry)
-            .current_dir(&workdir)
-            .env("PPT_PPTX_RUST_TOOL_BIN", tool_bin)
-            .status()
-            .with_context(|| format!("failed to run node {}", output.display()))?;
-        if !status.success() {
-            bail!(
-                "node {} failed with status {:?}",
-                output.display(),
-                status.code()
-            );
-        }
+    let strict_quality = args.quality == QualityMode::Strict;
+    if args.build || args.qa || strict_quality {
+        let deck = workdir.join("deck.pptx");
+        write_outline_deck_pptx(&outline, &deck, &args.template)?;
+        sanitize_pptx_command(SanitizePptxArgs {
+            input_path: deck.display().to_string(),
+            output: None,
+        })?;
     }
-    if args.qa {
+    if args.qa || strict_quality {
         qa_payload = Some(serde_json::to_value(qa_summary(
             &workdir.join("deck.pptx").display().to_string(),
             &workdir.join(&args.rendered_dir).display().to_string(),
         )?)?);
+        if strict_quality {
+            strict_quality_gate(qa_payload.as_ref().unwrap())?;
+        }
     }
 
     emit_value(
@@ -560,7 +547,7 @@ fn outline_command(args: OutlineArgs) -> Result<()> {
             input: input.display().to_string(),
             output: output.display().to_string(),
             bootstrapped: args.bootstrap,
-            built: args.build || args.qa,
+            built: args.build || args.qa || strict_quality,
             qa: qa_payload,
         })?,
         if args.json {
@@ -603,15 +590,19 @@ fn intake_command(args: IntakeArgs) -> Result<()> {
 
 fn build_qa_command(args: BuildQaArgs) -> Result<()> {
     let workdir = expand_path(&args.workdir);
-    let status = Command::new("node")
-        .arg(&args.entry)
-        .current_dir(&workdir)
-        .status()
-        .with_context(|| format!("failed to run node {}", args.entry))?;
-    if !status.success() {
-        bail!("node {} failed with status {:?}", args.entry, status.code());
-    }
+    let entry = expand_path(&args.entry);
+    let entry = if entry.is_absolute() {
+        entry
+    } else {
+        workdir.join(entry)
+    };
+    let outline = read_outline(&entry)?;
     let deck = workdir.join(&args.deck);
+    write_outline_deck_pptx(&outline, &deck, &DeckTemplate::Dark)?;
+    sanitize_pptx_command(SanitizePptxArgs {
+        input_path: deck.display().to_string(),
+        output: None,
+    })?;
     let rendered = workdir.join(&args.rendered_dir);
     let payload = qa_summary(&deck.display().to_string(), &rendered.display().to_string())?;
     emit_value(
@@ -798,76 +789,109 @@ fn render_command(args: RenderArgs) -> Result<()> {
     Ok(())
 }
 
-fn init_workspace(
-    workdir: &Path,
-    template: &DeckTemplate,
-    force: bool,
-    run_install: bool,
-) -> Result<InitSummary> {
-    let skill_root = resolve_skill_root()?;
-    let assets_root = skill_root.join("assets");
-    let scripts_root = skill_root.join("scripts");
+fn init_workspace(workdir: &Path, template: &DeckTemplate, force: bool) -> Result<InitSummary> {
     let mut created = Vec::new();
 
     fs::create_dir_all(workdir)?;
     fs::create_dir_all(workdir.join("assets"))?;
     fs::create_dir_all(workdir.join("rendered"))?;
-    fs::create_dir_all(workdir.join("scripts"))?;
 
-    copy_file_checked(
-        &assets_root.join(template.asset_file()),
-        &workdir.join("deck.js"),
-        force,
-        &mut created,
-    )?;
-    copy_file_checked(
-        &assets_root.join("package.template.json"),
-        &workdir.join("package.json"),
-        force,
-        &mut created,
-    )?;
-    copy_file_checked(
-        &scripts_root.join("outline_to_deck.js"),
-        &workdir.join("scripts").join("outline_to_deck.js"),
-        force,
-        &mut created,
-    )?;
-    copy_dir_checked(
-        &assets_root.join("pptxgenjs_helpers"),
-        &workdir.join("pptxgenjs_helpers"),
-        force,
-        &mut created,
-    )?;
-
-    let npm_install = if run_install {
-        let status = Command::new("npm")
-            .arg("install")
-            .current_dir(workdir)
-            .status()
-            .context("failed to run npm install")?;
-        if !status.success() {
-            bail!("npm install failed with status {:?}", status.code());
-        }
-        "ran".to_string()
+    let starter_outline = workdir.join("outline.json");
+    if !starter_outline.exists() || force {
+        fs::write(
+            &starter_outline,
+            serde_json::to_string_pretty(&starter_outline_value(template))?,
+        )
+        .with_context(|| format!("failed to write {}", starter_outline.display()))?;
+        created.push(starter_outline.display().to_string());
     } else {
-        "skipped".to_string()
-    };
+        created.push(format!("kept:{}", starter_outline.display()));
+    }
+
+    let plan = workdir.join("deck.plan.json");
+    if !plan.exists() || force {
+        fs::write(
+            &plan,
+            generate_outline_deck_source(&starter_outline_value(template), template)?,
+        )
+        .with_context(|| format!("failed to write {}", plan.display()))?;
+        created.push(plan.display().to_string());
+    } else {
+        created.push(format!("kept:{}", plan.display()));
+    }
+
+    let sources = workdir.join("sources.md");
+    if !sources.exists() || force {
+        fs::write(&sources, starter_sources_markdown(template))
+            .with_context(|| format!("failed to write {}", sources.display()))?;
+        created.push(sources.display().to_string());
+    } else {
+        created.push(format!("kept:{}", sources.display()));
+    }
 
     Ok(InitSummary {
         workdir: workdir.display().to_string(),
         template: format!("{:?}", template).to_ascii_lowercase(),
         files: created,
-        npm_install,
+        rust_only: true,
     })
+}
+
+fn starter_sources_markdown(template: &DeckTemplate) -> String {
+    format!(
+        "# Sources\n\n- Deck source plan: `deck.plan.json`\n- Editable output: `deck.pptx`\n- Runtime: Rust `ppt` CLI\n- Template: `{}`\n\nAdd source URLs, local asset paths, and review notes here before final delivery.\n",
+        format!("{:?}", template).to_ascii_lowercase()
+    )
 }
 
 fn read_outline(input: &Path) -> Result<Value> {
     let raw = fs::read_to_string(input)
         .with_context(|| format!("failed to read outline {}", input.display()))?;
     if has_extension(input, "json") {
-        return serde_json::from_str(&raw).context("failed to parse JSON outline");
+        let value: Value = serde_json::from_str(&raw).context("failed to parse JSON outline")?;
+        return Ok(unwrap_outline_plan(value));
     }
     parse_outline_yaml_subset(&raw)
+}
+
+fn unwrap_outline_plan(value: Value) -> Value {
+    value
+        .get("outline")
+        .filter(|_| {
+            value
+                .get("format")
+                .and_then(Value::as_str)
+                .is_some_and(|format| format == "ppt-rust-outline-plan")
+        })
+        .cloned()
+        .unwrap_or(value)
+}
+
+fn starter_outline_value(template: &DeckTemplate) -> Value {
+    let palette = match template {
+        DeckTemplate::Light => "light",
+        DeckTemplate::Corporate => "academic",
+        DeckTemplate::Dark => "dark",
+    };
+    json!({
+        "title": "Rust Authored Deck",
+        "subtitle": "Editable PPTX generated without Node",
+        "presenter": "Presenter",
+        "date": "2026",
+        "palette": palette,
+        "slides": [
+            {
+                "title": "One Rust path",
+                "subtitle": "Outline, PPTX writing, QA and inspection stay in the ppt CLI",
+                "bullets": [
+                    "Write outline JSON or YAML",
+                    "Run ppt outline outline.json --build",
+                    "Review rendered PNGs and QA output"
+                ]
+            }
+        ],
+        "closingText": "Thank you"
+    })
 }
 
 fn parse_outline_yaml_subset(raw: &str) -> Result<Value> {
@@ -1098,137 +1122,90 @@ fn unquote_yaml(value: &str) -> &str {
 }
 
 fn generate_outline_deck_source(outline: &Value, _template: &DeckTemplate) -> Result<String> {
-    let slides = reflow_outline_slides(outline.get("slides").and_then(Value::as_array));
-    let total_slides = slides.len() + 2;
-    let palette = outline
-        .get("palette")
-        .and_then(Value::as_str)
-        .unwrap_or("dark");
-    let palette_value = outline_palette(palette);
-    let mut code = String::new();
-    code.push_str(&format!(
-        r#"const fs = require("fs");
-const path = require("path");
-const {{ spawnSync }} = require("child_process");
-const pptxgen = require("pptxgenjs");
-const {{
-  imageSizingCrop,
-  warnIfSlideHasOverlaps,
-  warnIfSlideElementsOutOfBounds,
-  addStyledChart,
-  addGlassPanel,
-  getTypography,
-  getSmartTypography,
-}} = require("./pptxgenjs_helpers");
-
-const pptx = new pptxgen();
-pptx.layout = "LAYOUT_WIDE";
-pptx.title = {};
-pptx.lang = "zh-CN";
-pptx.theme = {{
-  headFontFace: "Arial",
-  bodyFontFace: "Arial",
-  lang: "zh-CN",
-}};
-
-const palette = {};
-const totalSlides = {};
-
-pptx.defineSlideMaster({{
-  title: "PPT_RUST_SEMANTIC",
-  background: {{ color: palette.stage }},
-  objects: [{{ placeholder: {{ options: {{ name: "officecli_title", type: "title" }} }} }}],
-}});
-
-function addTopLabel(slide, text) {{
-  slide.addText(text, {{ x: 0.9, y: 0.38, w: 2.0, h: 0.12, ...getTypography("overline", {{ color: palette.textMute, charSpace: 1.2 }}) }});
-}}
-
-function addBottomGlow(slide) {{
-  slide.addShape(pptx.ShapeType.rect, {{ x: 0.86, y: 6.86, w: 11.6, h: 0.018, line: {{ color: palette.glow, transparency: 100 }}, fill: {{ color: palette.glow, transparency: 24 }} }});
-}}
-
-function addSectionTitle(slide, title, subtitle, x, y, w) {{
-  slide.addText(title || "", {{ x, y, w: Math.min(w * 0.72, 5.0), h: 0.32, placeholder: "officecli_title", ...getSmartTypography("h2", title || "", w, 0.32, {{ color: palette.text }}) }});
-  if (subtitle) slide.addText(subtitle, {{ x, y: y + 0.42, w, h: 0.16, ...getSmartTypography("body2", subtitle, w, 0.16, {{ color: palette.textSoft, bold: true }}) }});
-}}
-
-function finalizeSlide(slide, opts = {{}}) {{
-  if (!opts.skipOverlap) warnIfSlideHasOverlaps(slide, pptx, {{ ignoreDecorativeShapes: true }});
-  warnIfSlideElementsOutOfBounds(slide, pptx);
-}}
-
-function fileExists(assetPath) {{
-  try {{ return !!assetPath && fs.existsSync(assetPath); }} catch (_) {{ return false; }}
-}}
-
-function addOptionalImage(slide, assetPath, sizingFactory, fallback = {{}}) {{
-  if (fileExists(assetPath)) {{
-    slide.addImage({{ path: assetPath, ...sizingFactory(assetPath) }});
-    return true;
-  }}
-  slide.addShape(pptx.ShapeType.rect, {{
-    x: fallback.x ?? 0, y: fallback.y ?? 0, w: fallback.w ?? 13.333, h: fallback.h ?? 7.5,
-    line: {{ color: fallback.fill || palette.panelSoft, transparency: 100 }},
-    fill: {{ color: fallback.fill || palette.panelSoft, transparency: fallback.transparency ?? 0 }},
-  }});
-  if (fallback.label) {{
-    slide.addText(fallback.label, {{ x: (fallback.x ?? 0) + 0.18, y: (fallback.y ?? 0) + 0.18, w: Math.max((fallback.w ?? 4) - 0.36, 1.2), h: 0.14, ...getTypography("caption", {{ color: palette.textMute }}) }});
-  }}
-  return false;
-}}
-
-function sanitizeGeneratedDeck(fileName) {{
-  const tool = process.env.PPT_PPTX_RUST_TOOL_BIN || "ppt";
-  const completed = spawnSync(tool, ["sanitize-pptx", fileName], {{ stdio: "inherit" }});
-  if (completed.status !== 0) throw new Error(`sanitize-pptx failed for ${{fileName}}`);
-}}
-
-"#,
-        js_string(outline_str(outline, "title", "Untitled Deck"))?,
-        serde_json::to_string_pretty(&palette_value)?,
-        total_slides
-    ));
-
-    code.push_str(&generate_cover_source(outline, total_slides)?);
-    for (idx, slide) in slides.iter().enumerate() {
-        code.push_str(&generate_content_slide_source(slide, idx, total_slides)?);
-    }
-    code.push_str(&generate_closing_source(outline, total_slides)?);
-    code.push_str(
-        r#"
-async function writeDeck() {
-  await pptx.writeFile({ fileName: "deck.pptx" });
-  sanitizeGeneratedDeck("deck.pptx");
+    let outline = naturalize_outline_value(outline);
+    serde_json::to_string_pretty(&json!({
+        "format": "ppt-rust-outline-plan",
+        "design_brief": {
+            "source": "DESIGN.md visual contract, then rendered slide audit",
+            "copy": "direct claims, varied rhythm, no meta narration or generic AI filler",
+            "layout": "one visual lead, readable type, no equal-weight card farm",
+            "audit": "render evidence, visual review, design-output-auditor drift check"
+        },
+        "outline": outline
+    }))
+    .context("failed to serialize Rust outline plan")
 }
 
-writeDeck().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
-"#,
-    );
-    Ok(code)
+fn naturalize_outline_value(value: &Value) -> Value {
+    match value {
+        Value::String(text) => Value::String(naturalize_copy_text(text)),
+        Value::Array(items) => Value::Array(items.iter().map(naturalize_outline_value).collect()),
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, value)| (key.clone(), naturalize_outline_value(value)))
+                .collect(),
+        ),
+        _ => value.clone(),
+    }
 }
 
-fn outline_palette(name: &str) -> Value {
-    match name {
-        "light" => json!({
-            "stage": "FAFAFA", "panel": "FFFFFF", "panelSoft": "F0F0F0", "line": "E0E0E0",
-            "glow": "3B82F6", "text": "1A1A1A", "textSoft": "666666", "textMute": "999999",
-            "chip": "1A1A1A", "chipText": "FFFFFF"
-        }),
-        "academic" => json!({
-            "stage": "F5F3EF", "panel": "FFFFFF", "panelSoft": "EDE9E3", "line": "D4CFC7",
-            "glow": "2563EB", "text": "1F2937", "textSoft": "4B5563", "textMute": "9CA3AF",
-            "chip": "1F2937", "chipText": "FFFFFF"
-        }),
-        _ => json!({
-            "stage": "000000", "panel": "111111", "panelSoft": "171717", "line": "2A2A2A",
-            "glow": "7EA9FF", "text": "F2F2EE", "textSoft": "B9B9B2", "textMute": "888883",
-            "chip": "F4F4EF", "chipText": "111111"
-        }),
+fn naturalize_copy_text(input: &str) -> String {
+    let mut text = clean_copy_spacing(input);
+    let replacements = [
+        ("核心观点如下：", ""),
+        ("核心观点如下:", ""),
+        ("请重点关注", "重点看"),
+        ("保持叙事连贯性", "让转场自然"),
+        ("结合实际选取最优方案", "回到现场约束再取舍"),
+        ("具有重要意义", "会影响具体决策"),
+        ("多维度", "几个角度"),
+        ("赋能", "支持"),
+        ("打造", "做"),
+        ("显著提升", "提高"),
+        ("持续优化", "继续改"),
+        ("综上所述，", ""),
+        ("综上所述,", ""),
+        ("值得关注的是，", ""),
+        ("值得关注的是,", ""),
+        ("This slide presents ", ""),
+        ("This slide shows ", ""),
+        ("This slide introduces ", ""),
+        ("It is important to note that ", ""),
+    ];
+    for (from, to) in replacements {
+        text = text.replace(from, to);
     }
+
+    for prefix in [
+        "本页主要展示了",
+        "本页主要展示",
+        "本页重点展示了",
+        "本页重点展示",
+        "本页展示了",
+        "本页展示",
+        "本页呈现了",
+        "本页呈现",
+        "本页介绍了",
+        "本页介绍",
+        "本页说明了",
+        "本页说明",
+        "本页从多个维度展开分析，",
+        "本页从多个维度展开分析,",
+    ] {
+        if let Some(rest) = text.strip_prefix(prefix) {
+            text = rest.to_string();
+            break;
+        }
+    }
+
+    clean_copy_spacing(&text)
+}
+
+fn clean_copy_spacing(input: &str) -> String {
+    let collapsed = input.split_whitespace().collect::<Vec<_>>().join(" ");
+    collapsed
+        .trim_matches(|ch: char| ch.is_whitespace() || matches!(ch, '：' | ':' | '，' | ',' | '。'))
+        .to_string()
 }
 
 fn reflow_outline_slides(slides: Option<&Vec<Value>>) -> Vec<Value> {
@@ -1313,258 +1290,176 @@ fn detect_outline_pattern(slide: &Value) -> &'static str {
     }
 }
 
-fn generate_cover_source(outline: &Value, total_slides: usize) -> Result<String> {
-    let meta = [outline.get("presenter"), outline.get("date")]
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect::<Vec<_>>()
-        .join(" / ");
-    let meta_value = json!({ "meta": meta });
-    Ok(format!(
-        r#"
-const cover = pptx.addSlide({{ masterName: "PPT_RUST_SEMANTIC" }});
-cover.background = {{ color: palette.stage }};
-addOptionalImage(cover, {}, (assetPath) => imageSizingCrop(assetPath, 0, 0, 13.333, 7.5), {{ x: 0, y: 0, w: 13.333, h: 7.5, fill: palette.panelSoft, transparency: 0, label: "COVER IMAGE OPTIONAL" }});
-cover.addShape(pptx.ShapeType.rect, {{ x: 0, y: 0, w: 13.333, h: 7.5, line: {{ color: palette.stage, transparency: 100 }}, fill: {{ color: palette.stage, transparency: 40 }} }});
-cover.addShape(pptx.ShapeType.rect, {{ x: 0, y: 0, w: 6.1, h: 7.5, line: {{ color: palette.stage, transparency: 100 }}, fill: {{ color: palette.stage, transparency: 22 }} }});
-addTopLabel(cover, "PRESENTATION");
-cover.addText({}, {{ x: 0.92, y: 1.76, w: 4.64, h: 1.06, placeholder: "officecli_title", ...getTypography("display", {{ color: palette.text, animate: {{ type: "fade", prop: "in", delay: 0.1 }} }}) }});
-{}
-{}
-cover.addText("01 / " + String(totalSlides).padStart(2, "0"), {{ x: 12.2, y: 7.03, w: 0.4, h: 0.12, ...getTypography("caption", {{ color: palette.textMute, align: "right" }}) }});
-addBottomGlow(cover);
-finalizeSlide(cover, {{ skipOverlap: true }});
-"#,
-        js_string(outline_str(outline, "coverImage", "./assets/cover.jpg"))?,
-        js_string(outline_str(outline, "title", "Title"))?,
-        optional_add_text("cover", outline, "subtitle", 0.96, 3.02, 4.48, 0.66, "body1")?,
-        optional_add_text("cover", &meta_value, "meta", 0.96, 4.48, 3.0, 0.14, "body2")?
-    )
-    .replace("totalSlides", &total_slides.to_string()))
+#[derive(Clone, Debug)]
+struct PptxSlideSpec {
+    title: String,
+    subtitle: String,
+    label: String,
+    body: Vec<String>,
+    notes: String,
+    layout: &'static str,
 }
 
-fn generate_content_slide_source(
-    slide: &Value,
-    index: usize,
-    total_slides: usize,
-) -> Result<String> {
-    let pattern = detect_outline_pattern(slide);
-    let mut code = format!(
-        r#"
-const slide{index} = pptx.addSlide({{ masterName: "PPT_RUST_SEMANTIC" }});
-slide{index}.background = {{ color: palette.stage }};
-addTopLabel(slide{index}, "SECTION {section}");
-addSectionTitle(slide{index}, {title}, {subtitle}, 0.92, 0.96, 5.0);
-"#,
-        index = index,
-        section = format!("{:02}", index + 1),
-        title = js_string(outline_str(slide, "title", ""))?,
-        subtitle = js_string(outline_str(slide, "subtitle", ""))?
-    );
-    code.push_str(&match pattern {
-        "multi-card" => generate_multi_card_source(slide, index)?,
-        "data-panel" => generate_data_panel_source(slide, index)?,
-        "comparison" => generate_comparison_source(slide, index)?,
-        "image-text-split" => generate_image_text_split_source(slide, index)?,
-        "hero-image" => generate_hero_image_source(slide, index)?,
-        "timeline" => generate_list_cards_source(slide, index, "timeline", 4)?,
-        "process-flow" => generate_list_cards_source(slide, index, "steps", 4)?,
-        _ => generate_full_text_source(slide, index)?,
-    });
-    code.push_str(&format!(
-        r#"
-slide{index}.addText("{page} / {total}", {{ x: 12.2, y: 7.03, w: 0.4, h: 0.12, ...getTypography("caption", {{ color: palette.textMute, align: "right" }}) }});
-addBottomGlow(slide{index});
-finalizeSlide(slide{index});
-"#,
-        index = index,
-        page = format!("{:02}", index + 2),
-        total = format!("{:02}", total_slides)
+fn write_outline_deck_pptx(outline: &Value, output: &Path, template: &DeckTemplate) -> Result<()> {
+    let outline = naturalize_outline_value(outline);
+    let slides = build_pptx_slide_specs(&outline);
+    let palette = ppt_palette(outline.get("palette").and_then(Value::as_str).unwrap_or(
+        match template {
+            DeckTemplate::Light => "light",
+            DeckTemplate::Corporate => "academic",
+            DeckTemplate::Dark => "dark",
+        },
     ));
-    Ok(code)
+    write_pptx_package(
+        output,
+        &slides,
+        &palette,
+        outline_str(&outline, "title", "Deck"),
+    )
 }
 
-fn generate_multi_card_source(slide: &Value, idx: usize) -> Result<String> {
-    generate_list_cards_source(slide, idx, "bullets", 4)
-}
+fn build_pptx_slide_specs(outline: &Value) -> Vec<PptxSlideSpec> {
+    let content_slides = reflow_outline_slides(outline.get("slides").and_then(Value::as_array));
+    let mut slides = Vec::new();
+    slides.push(PptxSlideSpec {
+        title: outline_str(outline, "title", "Untitled Deck").to_string(),
+        subtitle: outline_str(outline, "subtitle", "").to_string(),
+        label: "OPENING".to_string(),
+        body: [
+            outline_str(outline, "presenter", ""),
+            outline_str(outline, "date", ""),
+        ]
+        .into_iter()
+        .filter(|item| !item.is_empty())
+        .map(str::to_string)
+        .collect(),
+        notes: "Cover slide generated by the Rust ppt CLI.".to_string(),
+        layout: "cover",
+    });
 
-fn generate_list_cards_source(
-    slide: &Value,
-    idx: usize,
-    key: &str,
-    max_count: usize,
-) -> Result<String> {
-    let items = value_string_array(slide, key);
-    let card_count = items.len().min(max_count);
-    let card_w = if card_count <= 2 {
-        5.48
-    } else if card_count == 3 {
-        3.56
-    } else {
-        2.62
-    };
-    let mut code = String::new();
-    for (i, item) in items.iter().take(max_count).enumerate() {
-        let x = 0.94 + i as f64 * (card_w + 0.22);
-        code.push_str(&format!(
-            r#"addGlassPanel(slide{idx}, pptx, {x:.2}, 2.0, {card_w:.2}, 3.8, {{ fill: palette.panelSoft, transparency: 10 }});
-slide{idx}.addText("{num:02}", {{ x: {num_x:.2}, y: 2.28, w: 0.4, h: 0.2, ...getTypography("h3", {{ color: palette.text }}) }});
-slide{idx}.addText({text}, {{ x: {text_x:.2}, y: 2.72, w: {text_w:.2}, h: 2.8, ...getSmartTypography("body2", {text}, {text_w:.2}, 2.8, {{ color: palette.textSoft, valign: "top", breakLine: true }}) }});
-"#,
-            idx = idx,
-            x = x,
-            card_w = card_w,
-            num = i + 1,
-            num_x = x + 0.18,
-            text = js_string(item)?,
-            text_x = x + 0.18,
-            text_w = card_w - 0.36
-        ));
+    for (idx, slide) in content_slides.iter().enumerate() {
+        let mut body = value_string_array(slide, "bullets");
+        if body.is_empty() {
+            body = value_string_array(slide, "steps");
+        }
+        if body.is_empty() {
+            body = value_string_array(slide, "timeline");
+        }
+        if body.is_empty() {
+            body = comparison_body(slide);
+        }
+        if body.is_empty() {
+            body = metrics_body(slide);
+        }
+        if body.is_empty() {
+            body.push(outline_str(slide, "body", "").to_string());
+        }
+        body.retain(|item| !item.trim().is_empty());
+        slides.push(PptxSlideSpec {
+            title: outline_str(slide, "title", "").to_string(),
+            subtitle: outline_str(slide, "subtitle", "").to_string(),
+            label: format!("SECTION {:02}", idx + 1),
+            notes: format!(
+                "Slide {}: {}",
+                idx + 2,
+                outline_str(slide, "title", "Untitled")
+            ),
+            body,
+            layout: detect_outline_pattern(slide),
+        });
     }
-    Ok(code)
+
+    slides.push(PptxSlideSpec {
+        title: outline_str(outline, "closingText", "Thank you").to_string(),
+        subtitle: String::new(),
+        label: "FINAL SLIDE".to_string(),
+        body: Vec::new(),
+        notes: "Closing slide generated by the Rust ppt CLI.".to_string(),
+        layout: "closing",
+    });
+    slides
 }
 
-fn generate_data_panel_source(slide: &Value, idx: usize) -> Result<String> {
-    let metrics = slide
+fn comparison_body(slide: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    for side in ["left", "right"] {
+        let value = slide
+            .get("comparison")
+            .and_then(|comparison| comparison.get(side))
+            .unwrap_or(&Value::Null);
+        let title = outline_str(value, "title", side);
+        let items = value_string_array(value, "items").join("; ");
+        if !items.is_empty() {
+            out.push(format!("{title}: {items}"));
+        }
+    }
+    out
+}
+
+fn metrics_body(slide: &Value) -> Vec<String> {
+    slide
         .get("metrics")
         .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let chip_count = metrics.len().min(5);
-    let chip_w = if chip_count > 0 {
-        (11.4 / chip_count as f64 - 0.2).min(2.2)
-    } else {
-        2.0
-    };
-    let mut code = String::new();
-    for (i, metric) in metrics.iter().take(5).enumerate() {
-        let x = 0.94 + i as f64 * (chip_w + 0.22);
-        let value = js_string(outline_str(metric, "value", ""))?;
-        let label = js_string(outline_str(metric, "label", ""))?;
-        code.push_str(&format!(
-            r#"addGlassPanel(slide{idx}, pptx, {x:.2}, 2.3, {chip_w:.2}, 0.94, {{ fill: palette.panelSoft, transparency: 15 }});
-slide{idx}.addText({value}, {{ x: {vx:.2}, y: 2.48, w: {vw:.2}, h: 0.18, ...getSmartTypography("metric", {value}, {vw:.2}, 0.18, {{ color: palette.text }}) }});
-slide{idx}.addText({label}, {{ x: {vx:.2}, y: 2.84, w: {vw:.2}, h: 0.12, ...getSmartTypography("caption", {label}, {vw:.2}, 0.12, {{ color: palette.textSoft }}) }});
-"#,
-            idx = idx, x = x, chip_w = chip_w, value = value, label = label, vx = x + 0.14, vw = chip_w - 0.28
-        ));
+        .into_iter()
+        .flatten()
+        .map(|metric| {
+            format!(
+                "{} {}",
+                outline_str(metric, "value", ""),
+                outline_str(metric, "label", "")
+            )
+            .trim()
+            .to_string()
+        })
+        .filter(|item| !item.is_empty())
+        .collect()
+}
+
+#[derive(Clone, Debug)]
+struct PptPalette {
+    stage: &'static str,
+    panel: &'static str,
+    panel_soft: &'static str,
+    line: &'static str,
+    glow: &'static str,
+    text: &'static str,
+    text_soft: &'static str,
+    text_mute: &'static str,
+}
+
+fn ppt_palette(name: &str) -> PptPalette {
+    match name {
+        "light" => PptPalette {
+            stage: "FAFAFA",
+            panel: "FFFFFF",
+            panel_soft: "F0F0F0",
+            line: "E0E0E0",
+            glow: "3B82F6",
+            text: "1A1A1A",
+            text_soft: "555555",
+            text_mute: "777777",
+        },
+        "academic" => PptPalette {
+            stage: "F5F3EF",
+            panel: "FFFFFF",
+            panel_soft: "EDE9E3",
+            line: "D4CFC7",
+            glow: "2563EB",
+            text: "1F2937",
+            text_soft: "4B5563",
+            text_mute: "6B7280",
+        },
+        _ => PptPalette {
+            stage: "000000",
+            panel: "111111",
+            panel_soft: "171717",
+            line: "2A2A2A",
+            glow: "7EA9FF",
+            text: "F2F2EE",
+            text_soft: "B9B9B2",
+            text_mute: "888883",
+        },
     }
-    code.push_str(&format!("addGlassPanel(slide{idx}, pptx, 0.94, 3.56, 11.42, 2.24, {{ fill: palette.panelSoft, transparency: 8 }});\n"));
-    if let Some(chart) = slide.get("chart") {
-        code.push_str(&format!(
-            "addStyledChart(slide{idx}, pptx, {}, {{ series: {}, categories: {}, position: {{ x: 1.1, y: 3.7, w: 11.1, h: 1.96 }} }});\n",
-            js_string(outline_str(chart, "type", "bar"))?,
-            serde_json::to_string(chart.get("series").unwrap_or(&json!([])))?,
-            serde_json::to_string(chart.get("categories").unwrap_or(&json!([])))?
-        ));
-    }
-    Ok(code)
-}
-
-fn generate_comparison_source(slide: &Value, idx: usize) -> Result<String> {
-    let left = slide.pointer("/comparison/left").unwrap_or(&Value::Null);
-    let right = slide.pointer("/comparison/right").unwrap_or(&Value::Null);
-    let left_text = numbered_lines(value_string_array(left, "items"));
-    let right_text = numbered_lines(value_string_array(right, "items"));
-    Ok(format!(
-        r#"addGlassPanel(slide{idx}, pptx, 0.94, 1.9, 5.48, 4.4, {{ fill: palette.panelSoft, transparency: 10 }});
-addGlassPanel(slide{idx}, pptx, 6.72, 1.9, 5.48, 4.4, {{ fill: palette.panelSoft, transparency: 10 }});
-slide{idx}.addText({left_title}, {{ x: 1.18, y: 2.18, w: 1.1, h: 0.14, ...getSmartTypography("body1", {left_title}, 1.1, 0.14, {{ color: palette.text, bold: true }}) }});
-slide{idx}.addText({left_text}, {{ x: 1.18, y: 2.54, w: 4.82, h: 3.2, ...getSmartTypography("body2", {left_text}, 4.82, 3.2, {{ color: palette.textSoft, valign: "top", breakLine: true }}) }});
-slide{idx}.addText({right_title}, {{ x: 6.96, y: 2.18, w: 1.1, h: 0.14, ...getSmartTypography("body1", {right_title}, 1.1, 0.14, {{ color: palette.text, bold: true }}) }});
-slide{idx}.addText({right_text}, {{ x: 6.96, y: 2.54, w: 4.82, h: 3.2, ...getSmartTypography("body2", {right_text}, 4.82, 3.2, {{ color: palette.textSoft, valign: "top", breakLine: true }}) }});
-"#,
-        idx = idx,
-        left_title = js_string(outline_str(left, "title", "A"))?,
-        left_text = js_string(&left_text)?,
-        right_title = js_string(outline_str(right, "title", "B"))?,
-        right_text = js_string(&right_text)?
-    ))
-}
-
-fn generate_image_text_split_source(slide: &Value, idx: usize) -> Result<String> {
-    let text = numbered_lines(value_string_array(slide, "bullets"));
-    Ok(format!(
-        r#"addGlassPanel(slide{idx}, pptx, 0.94, 1.76, 5.14, 4.44, {{ fill: palette.panelSoft, transparency: 15 }});
-const slide{idx}HasImage = addOptionalImage(slide{idx}, {image}, (assetPath) => imageSizingCrop(assetPath, 1.0, 1.82, 5.02, 4.32), {{ x: 1.0, y: 1.82, w: 5.02, h: 4.32, fill: palette.panel, transparency: 0, label: "OPTIONAL IMAGE" }});
-if (slide{idx}HasImage) slide{idx}.addShape(pptx.ShapeType.roundRect, {{ x: 1.0, y: 1.82, w: 5.02, h: 4.32, rectRadius: 0.06, line: {{ color: palette.stage, transparency: 100 }}, fill: {{ color: palette.stage, transparency: 26 }} }});
-slide{idx}.addText({text}, {{ x: 6.56, y: 2.0, w: 5.58, h: 4.0, ...getSmartTypography("body1", {text}, 5.58, 4.0, {{ color: palette.textSoft, valign: "top", breakLine: true }}) }});
-"#,
-        idx = idx,
-        image = js_string(outline_str(slide, "image", "./assets/placeholder.jpg"))?,
-        text = js_string(&text)?
-    ))
-}
-
-fn generate_hero_image_source(slide: &Value, idx: usize) -> Result<String> {
-    Ok(format!(
-        r#"const slide{idx}HasHero = addOptionalImage(slide{idx}, {image}, (assetPath) => imageSizingCrop(assetPath, 0, 1.4, 13.333, 6.1), {{ x: 0, y: 1.4, w: 13.333, h: 6.1, fill: palette.panelSoft, transparency: 0, label: "OPTIONAL IMAGE" }});
-if (slide{idx}HasHero) slide{idx}.addShape(pptx.ShapeType.rect, {{ x: 0, y: 1.4, w: 13.333, h: 6.1, line: {{ color: palette.stage, transparency: 100 }}, fill: {{ color: palette.stage, transparency: 40 }} }});
-{}
-"#,
-        optional_add_text(
-            &format!("slide{idx}"),
-            slide,
-            "caption",
-            0.96,
-            5.8,
-            6.0,
-            0.36,
-            "body1"
-        )?,
-        idx = idx,
-        image = js_string(outline_str(slide, "image", "./assets/placeholder.jpg"))?
-    ))
-}
-
-fn generate_full_text_source(slide: &Value, idx: usize) -> Result<String> {
-    let text = numbered_lines(value_string_array(slide, "bullets"));
-    Ok(format!(
-        r#"addGlassPanel(slide{idx}, pptx, 0.94, 1.76, 11.42, 4.44, {{ fill: palette.panelSoft, transparency: 10 }});
-slide{idx}.addText({text}, {{ x: 1.18, y: 2.04, w: 10.9, h: 3.88, ...getSmartTypography("body1", {text}, 10.9, 3.88, {{ color: palette.textSoft, valign: "top", breakLine: true }}) }});
-"#,
-        idx = idx,
-        text = js_string(&text)?
-    ))
-}
-
-fn generate_closing_source(outline: &Value, total_slides: usize) -> Result<String> {
-    Ok(format!(
-        r#"
-const closing = pptx.addSlide({{ masterName: "PPT_RUST_SEMANTIC" }});
-closing.background = {{ color: palette.stage }};
-addOptionalImage(closing, {}, (assetPath) => imageSizingCrop(assetPath, 0, 0, 13.333, 7.5), {{ x: 0, y: 0, w: 13.333, h: 7.5, fill: palette.panelSoft, transparency: 0, label: "COVER IMAGE OPTIONAL" }});
-closing.addShape(pptx.ShapeType.rect, {{ x: 0, y: 0, w: 13.333, h: 7.5, line: {{ color: palette.stage, transparency: 100 }}, fill: {{ color: palette.stage, transparency: 52 }} }});
-addTopLabel(closing, "FINAL SLIDE");
-closing.addText("THANK YOU", {{ x: 4.18, y: 2.1, w: 4.98, h: 0.42, placeholder: "officecli_title", ...getTypography("display", {{ color: palette.text, align: "center" }}) }});
-closing.addText("{total:02} / {total:02}", {{ x: 12.2, y: 7.03, w: 0.4, h: 0.12, ...getTypography("caption", {{ color: palette.textMute, align: "right" }}) }});
-addBottomGlow(closing);
-finalizeSlide(closing, {{ skipOverlap: true }});
-"#,
-        js_string(outline_str(outline, "coverImage", "./assets/cover.jpg"))?,
-        total = total_slides
-    ))
-}
-
-fn optional_add_text(
-    target: &str,
-    value: &Value,
-    key: &str,
-    x: f64,
-    y: f64,
-    w: f64,
-    h: f64,
-    typo: &str,
-) -> Result<String> {
-    let text = outline_str(value, key, "");
-    if text.is_empty() {
-        return Ok(String::new());
-    }
-    Ok(format!(
-        r#"{target}.addText({}, {{ x: {x}, y: {y}, w: {w}, h: {h}, ...getTypography("{typo}", {{ color: palette.textSoft }}) }});"#,
-        js_string(text)?
-    ))
 }
 
 fn value_array_len(value: &Value, key: &str) -> usize {
@@ -1596,107 +1491,412 @@ fn value_string_array(value: &Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn numbered_lines(items: Vec<String>) -> String {
-    items
-        .into_iter()
-        .enumerate()
-        .map(|(idx, item)| format!("{}. {}", idx + 1, item))
+fn write_pptx_package(
+    output: &Path,
+    slides: &[PptxSlideSpec],
+    palette: &PptPalette,
+    title: &str,
+) -> Result<()> {
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let file =
+        File::create(output).with_context(|| format!("failed to create {}", output.display()))?;
+    let mut zip = ZipWriter::new(file);
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let mut write = |path: &str, content: String| -> Result<()> {
+        zip.start_file(path, options)?;
+        zip.write_all(content.as_bytes())?;
+        Ok(())
+    };
+
+    write("[Content_Types].xml", content_types_xml(slides.len()))?;
+    write("_rels/.rels", root_rels_xml())?;
+    write("docProps/app.xml", app_xml(slides.len()))?;
+    write("docProps/core.xml", core_xml(title))?;
+    write("ppt/presentation.xml", presentation_xml(slides.len()))?;
+    write(
+        "ppt/_rels/presentation.xml.rels",
+        presentation_rels_xml(slides.len()),
+    )?;
+    write("ppt/theme/theme1.xml", theme_xml(palette))?;
+    write(
+        "ppt/slideMasters/slideMaster1.xml",
+        slide_master_xml(palette),
+    )?;
+    write(
+        "ppt/slideMasters/_rels/slideMaster1.xml.rels",
+        slide_master_rels_xml(),
+    )?;
+    write("ppt/slideLayouts/slideLayout1.xml", slide_layout_xml())?;
+    write(
+        "ppt/slideLayouts/_rels/slideLayout1.xml.rels",
+        slide_layout_rels_xml(),
+    )?;
+    write("ppt/notesMasters/notesMaster1.xml", notes_master_xml())?;
+    write(
+        "ppt/notesMasters/_rels/notesMaster1.xml.rels",
+        notes_master_rels_xml(),
+    )?;
+
+    for (idx, slide) in slides.iter().enumerate() {
+        let slide_no = idx + 1;
+        write(
+            &format!("ppt/slides/slide{slide_no}.xml"),
+            slide_xml(slide, slide_no, slides.len(), palette)?,
+        )?;
+        write(
+            &format!("ppt/slides/_rels/slide{slide_no}.xml.rels"),
+            slide_rels_xml(slide_no),
+        )?;
+        write(
+            &format!("ppt/notesSlides/notesSlide{slide_no}.xml"),
+            notes_slide_xml(slide, slide_no),
+        )?;
+        write(
+            &format!("ppt/notesSlides/_rels/notesSlide{slide_no}.xml.rels"),
+            notes_slide_rels_xml(slide_no),
+        )?;
+    }
+
+    zip.finish()?;
+    Ok(())
+}
+
+fn content_types_xml(slide_count: usize) -> String {
+    let mut overrides = String::new();
+    for idx in 1..=slide_count {
+        overrides.push_str(&format!(r#"<Override PartName="/ppt/slides/slide{idx}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/notesSlides/notesSlide{idx}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>"#));
+    }
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"/>{overrides}</Types>"#
+    )
+}
+
+fn root_rels_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>"#.to_string()
+}
+
+fn app_xml(slide_count: usize) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>ppt Rust CLI</Application><PresentationFormat>Widescreen</PresentationFormat><Slides>{slide_count}</Slides><Notes>{slide_count}</Notes></Properties>"#
+    )
+}
+
+fn core_xml(title: &str) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>{}</dc:title><dc:creator>ppt Rust CLI</dc:creator><cp:lastModifiedBy>ppt Rust CLI</cp:lastModifiedBy></cp:coreProperties>"#,
+        xml_escape(title)
+    )
+}
+
+fn presentation_xml(slide_count: usize) -> String {
+    let slide_ids = (1..=slide_count)
+        .map(|idx| format!(r#"<p:sldId id="{}" r:id="rId{}"/>"#, 255 + idx, idx + 1))
         .collect::<Vec<_>>()
-        .join("\n")
+        .join("");
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:notesMasterIdLst><p:notesMasterId r:id="rId{}"/></p:notesMasterIdLst><p:sldIdLst>{slide_ids}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000" type="wide"/><p:notesSz cx="6858000" cy="9144000"/><p:defaultTextStyle/></p:presentation>"#,
+        slide_count + 2
+    )
+}
+
+fn presentation_rels_xml(slide_count: usize) -> String {
+    let mut rels = String::from(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>"#,
+    );
+    for idx in 1..=slide_count {
+        rels.push_str(&format!(r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide{idx}.xml"/>"#, idx + 1));
+    }
+    rels.push_str(&format!(r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="notesMasters/notesMaster1.xml"/><Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/></Relationships>"#, slide_count + 2, slide_count + 3));
+    rels
+}
+
+fn slide_rels_xml(slide_no: usize) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide{slide_no}.xml"/></Relationships>"#
+    )
+}
+
+fn slide_master_rels_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>"#.to_string()
+}
+
+fn slide_layout_rels_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>"#.to_string()
+}
+
+fn notes_master_rels_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>"#.to_string()
+}
+
+fn notes_slide_rels_xml(slide_no: usize) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="../notesMasters/notesMaster1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="../slides/slide{slide_no}.xml"/></Relationships>"#
+    )
+}
+
+fn theme_xml(palette: &PptPalette) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="ppt Rust Theme"><a:themeElements><a:clrScheme name="RustDeck"><a:dk1><a:srgbClr val="{}"/></a:dk1><a:lt1><a:srgbClr val="{}"/></a:lt1><a:dk2><a:srgbClr val="{}"/></a:dk2><a:lt2><a:srgbClr val="{}"/></a:lt2><a:accent1><a:srgbClr val="{}"/></a:accent1><a:accent2><a:srgbClr val="{}"/></a:accent2><a:accent3><a:srgbClr val="{}"/></a:accent3><a:accent4><a:srgbClr val="{}"/></a:accent4><a:accent5><a:srgbClr val="{}"/></a:accent5><a:accent6><a:srgbClr val="{}"/></a:accent6><a:hlink><a:srgbClr val="{}"/></a:hlink><a:folHlink><a:srgbClr val="{}"/></a:folHlink></a:clrScheme><a:fontScheme name="RustDeckFonts"><a:majorFont><a:latin typeface="Arial"/><a:ea typeface="Arial"/><a:cs typeface="Arial"/></a:majorFont><a:minorFont><a:latin typeface="Arial"/><a:ea typeface="Arial"/><a:cs typeface="Arial"/></a:minorFont></a:fontScheme><a:fmtScheme name="RustDeckFormat"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:gradFill rotWithShape="1"/><a:gradFill rotWithShape="1"/></a:fillStyleLst><a:lnStyleLst><a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="25400" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="38100" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle/><a:effectStyle/><a:effectStyle/></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>"#,
+        palette.stage,
+        palette.text,
+        palette.panel,
+        palette.panel_soft,
+        palette.glow,
+        palette.line,
+        palette.text_soft,
+        palette.text_mute,
+        palette.glow,
+        palette.panel_soft,
+        palette.glow,
+        palette.glow
+    )
+}
+
+fn slide_master_xml(palette: &PptPalette) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="{}"/></a:solidFill></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMap accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" bg1="lt1" bg2="lt2" folHlink="folHlink" hlink="hlink" tx1="dk1" tx2="dk2"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>"#,
+        palette.stage
+    )
+}
+
+fn slide_layout_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1"><p:cSld name="Rust Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>"#.to_string()
+}
+
+fn notes_master_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:notesMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMap accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" bg1="lt1" bg2="lt2" folHlink="folHlink" hlink="hlink" tx1="dk1" tx2="dk2"/><p:notesStyle/></p:notesMaster>"#.to_string()
+}
+
+fn slide_xml(
+    slide: &PptxSlideSpec,
+    slide_no: usize,
+    total: usize,
+    palette: &PptPalette,
+) -> Result<String> {
+    let bg = rect_shape(
+        2,
+        "Background",
+        0.0,
+        0.0,
+        13.333,
+        7.5,
+        palette.stage,
+        None,
+        0,
+    );
+    let rail = rect_shape(
+        3,
+        "Glow Rail",
+        0.86,
+        6.86,
+        11.6,
+        0.018,
+        palette.glow,
+        None,
+        25000,
+    );
+    let panel = if slide.layout == "cover" || slide.layout == "closing" {
+        rect_shape(
+            4,
+            "Hero Panel",
+            0.72,
+            0.72,
+            5.8,
+            6.0,
+            palette.panel,
+            Some(palette.line),
+            16000,
+        )
+    } else {
+        rect_shape(
+            4,
+            "Content Panel",
+            0.86,
+            1.62,
+            11.6,
+            4.82,
+            palette.panel_soft,
+            Some(palette.line),
+            10000,
+        )
+    };
+    let mut shapes = vec![bg, rail, panel];
+    shapes.push(text_shape(
+        10,
+        "Slide Label",
+        &slide.label,
+        0.9,
+        0.38,
+        2.7,
+        0.22,
+        9,
+        palette.text_mute,
+        false,
+        false,
+    ));
+    let title_box = if slide.layout == "cover" {
+        (0.96, 2.02, 4.9, 1.1, 31)
+    } else if slide.layout == "closing" {
+        (3.2, 2.48, 6.9, 0.9, 34)
+    } else {
+        (0.92, 0.92, 6.3, 0.6, 24)
+    };
+    shapes.push(text_shape(
+        11,
+        "Title",
+        &slide.title,
+        title_box.0,
+        title_box.1,
+        title_box.2,
+        title_box.3,
+        title_box.4,
+        palette.text,
+        true,
+        true,
+    ));
+    if !slide.subtitle.is_empty() {
+        shapes.push(text_shape(
+            12,
+            "Subtitle",
+            &slide.subtitle,
+            0.96,
+            if slide.layout == "cover" { 3.2 } else { 1.28 },
+            6.7,
+            0.38,
+            13,
+            palette.text_soft,
+            false,
+            false,
+        ));
+    }
+    for (idx, item) in slide.body.iter().take(6).enumerate() {
+        let y = if slide.layout == "cover" { 4.35 } else { 2.0 } + idx as f64 * 0.58;
+        let text = if slide.layout == "cover" {
+            item.clone()
+        } else {
+            format!("{}. {}", idx + 1, item)
+        };
+        shapes.push(text_shape(
+            20 + idx as u32,
+            "Body",
+            &text,
+            1.18,
+            y,
+            10.9,
+            0.42,
+            15,
+            palette.text_soft,
+            false,
+            false,
+        ));
+    }
+    shapes.push(text_shape(
+        40,
+        "Page",
+        &format!("{slide_no:02} / {total:02}"),
+        11.82,
+        7.0,
+        0.8,
+        0.22,
+        9,
+        palette.text_mute,
+        false,
+        false,
+    ));
+    Ok(format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld name="{}"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>{}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"#,
+        xml_escape(&slide.title),
+        shapes.join("")
+    ))
+}
+
+fn notes_slide_xml(slide: &PptxSlideSpec, slide_no: usize) -> String {
+    let notes = if slide.notes.is_empty() {
+        format!("Slide {slide_no}: {}", slide.title)
+    } else {
+        slide.notes.clone()
+    };
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>{}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>"#,
+        text_shape(2, "Notes", &notes, 0.7, 5.0, 5.5, 2.0, 12, "222222", false, false)
+    )
+}
+
+fn rect_shape(
+    id: u32,
+    name: &str,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    fill: &str,
+    line: Option<&str>,
+    transparency: u32,
+) -> String {
+    let alpha = 100000 - transparency.min(100000);
+    let line_xml = line
+        .map(|color| {
+            format!(r#"<a:ln><a:solidFill><a:srgbClr val="{color}"/></a:solidFill></a:ln>"#)
+        })
+        .unwrap_or_else(|| "<a:ln><a:noFill/></a:ln>".to_string());
+    format!(
+        r#"<p:sp><p:nvSpPr><p:cNvPr id="{id}" name="{name}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="{}" y="{}"/><a:ext cx="{}" cy="{}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="{fill}"><a:alpha val="{alpha}"/></a:srgbClr></a:solidFill>{line_xml}</p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody></p:sp>"#,
+        inch_emu(x),
+        inch_emu(y),
+        inch_emu(w),
+        inch_emu(h)
+    )
+}
+
+fn text_shape(
+    id: u32,
+    name: &str,
+    text: &str,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    size_pt: u32,
+    color: &str,
+    bold: bool,
+    title_placeholder: bool,
+) -> String {
+    let bold_attr = if bold { r#" b="1""# } else { "" };
+    let placeholder = if title_placeholder {
+        r#"<p:nvPr><p:ph type="title"/></p:nvPr>"#
+    } else {
+        "<p:nvPr/>"
+    };
+    format!(
+        r#"<p:sp><p:nvSpPr><p:cNvPr id="{id}" name="{name}"/><p:cNvSpPr txBox="1"/>{placeholder}</p:nvSpPr><p:spPr><a:xfrm><a:off x="{}" y="{}"/><a:ext cx="{}" cy="{}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr wrap="square" anchor="t"/><a:lstStyle/><a:p><a:r><a:rPr lang="zh-CN" sz="{}"{}><a:solidFill><a:srgbClr val="{color}"/></a:solidFill><a:latin typeface="Arial"/><a:ea typeface="Arial"/><a:cs typeface="Arial"/></a:rPr><a:t>{}</a:t></a:r><a:endParaRPr lang="zh-CN" sz="{}"/></a:p></p:txBody></p:sp>"#,
+        inch_emu(x),
+        inch_emu(y),
+        inch_emu(w),
+        inch_emu(h),
+        size_pt * 100,
+        bold_attr,
+        xml_escape(text),
+        size_pt * 100
+    )
+}
+
+fn inch_emu(value: f64) -> i64 {
+    (value * EMU_PER_INCH).round() as i64
+}
+
+fn xml_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }
 
 fn outline_str<'a>(value: &'a Value, key: &str, default: &'a str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or(default)
-}
-
-fn js_string(value: &str) -> Result<String> {
-    Ok(serde_json::to_string(value)?)
-}
-
-fn resolve_skill_root() -> Result<PathBuf> {
-    if let Ok(path) = std::env::var("PPT_PPTX_SKILL_ROOT") {
-        let root = expand_path(&path);
-        if root.join("assets").exists() && root.join("scripts").exists() {
-            return Ok(root);
-        }
-    }
-
-    let current = std::env::current_exe().context("failed to locate current executable")?;
-    for ancestor in current.ancestors() {
-        let candidate = ancestor.join("skills").join("ppt-pptx");
-        if candidate.join("assets").exists() && candidate.join("scripts").exists() {
-            return Ok(candidate);
-        }
-        let candidate = ancestor.join("ppt-pptx");
-        if candidate.join("assets").exists() && candidate.join("scripts").exists() {
-            return Ok(candidate);
-        }
-    }
-
-    let cwd = std::env::current_dir().context("failed to read current directory")?;
-    for ancestor in cwd.ancestors() {
-        let candidate = ancestor.join("skills").join("ppt-pptx");
-        if candidate.join("assets").exists() && candidate.join("scripts").exists() {
-            return Ok(candidate);
-        }
-    }
-
-    bail!("cannot locate skills/ppt-pptx; set PPT_PPTX_SKILL_ROOT")
-}
-
-fn copy_file_checked(
-    src: &Path,
-    dest: &Path,
-    force: bool,
-    created: &mut Vec<String>,
-) -> Result<()> {
-    if dest.exists() && !force {
-        created.push(format!("kept:{}", dest.display()));
-        return Ok(());
-    }
-    if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::copy(src, dest)
-        .with_context(|| format!("failed to copy {} to {}", src.display(), dest.display()))?;
-    created.push(dest.display().to_string());
-    Ok(())
-}
-
-fn copy_dir_checked(src: &Path, dest: &Path, force: bool, created: &mut Vec<String>) -> Result<()> {
-    if dest.exists() {
-        if !force {
-            created.push(format!("kept:{}", dest.display()));
-            return Ok(());
-        }
-        fs::remove_dir_all(dest)
-            .with_context(|| format!("failed to replace {}", dest.display()))?;
-    }
-    copy_dir_recursive(src, dest)?;
-    created.push(dest.display().to_string());
-    Ok(())
-}
-
-fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
-    fs::create_dir_all(dest)?;
-    for entry in fs::read_dir(src).with_context(|| format!("failed to read {}", src.display()))? {
-        let entry = entry?;
-        let file_type = entry.file_type()?;
-        let src_path = entry.path();
-        let dest_path = dest.join(entry.file_name());
-        if file_type.is_dir() {
-            copy_dir_recursive(&src_path, &dest_path)?;
-        } else if file_type.is_file() {
-            fs::copy(&src_path, &dest_path).with_context(|| {
-                format!(
-                    "failed to copy {} to {}",
-                    src_path.display(),
-                    dest_path.display()
-                )
-            })?;
-        }
-    }
-    Ok(())
 }
 
 fn qa_summary(deck_path: &str, rendered_dir: &str) -> Result<QaSummary> {
@@ -1705,7 +1905,7 @@ fn qa_summary(deck_path: &str, rendered_dir: &str) -> Result<QaSummary> {
     let rendered = render_paths(&deck, &rendered_dir_path, 1600, 900)?;
     let overflow = slide_overflow_summary(&deck)?;
     let font_check = detect_fonts_payload(&deck)?;
-    let officecli = office_doctor_value(&deck.display().to_string())?;
+    let officecli = office_doctor_value_or_skipped(&deck.display().to_string())?;
     Ok(QaSummary {
         deck: deck.display().to_string(),
         render: QaRenderSummary {
@@ -1720,6 +1920,40 @@ fn qa_summary(deck_path: &str, rendered_dir: &str) -> Result<QaSummary> {
         font_check,
         officecli,
     })
+}
+
+fn strict_quality_gate(payload: &Value) -> Result<()> {
+    if payload
+        .pointer("/overflow_check/ok")
+        .and_then(Value::as_bool)
+        == Some(false)
+    {
+        bail!("strict quality failed: slide overflow detected");
+    }
+    if payload.pointer("/font_check/ok").and_then(Value::as_bool) == Some(false) {
+        bail!("strict quality failed: font check reported issues");
+    }
+    if payload.pointer("/officecli/status").and_then(Value::as_str) == Some("skipped") {
+        eprintln!(
+            "warning: strict quality skipped officecli doctor because officecli is unavailable"
+        );
+    }
+    if payload
+        .pointer("/officecli/validation/ok")
+        .and_then(Value::as_bool)
+        == Some(false)
+    {
+        bail!("strict quality failed: officecli validation failed");
+    }
+    if payload
+        .pointer("/officecli/issues/count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        > 0
+    {
+        bail!("strict quality failed: officecli reported deck issues");
+    }
+    Ok(())
 }
 
 fn render_paths(input: &Path, output_dir: &Path, width: u32, height: u32) -> Result<Vec<PathBuf>> {
@@ -1884,6 +2118,17 @@ fn run_office_json(binary: &Path, args: &[String]) -> Result<Value> {
 
 fn office_doctor_value(file: &str) -> Result<Value> {
     Ok(serde_json::to_value(office_doctor_summary(file)?)?)
+}
+
+fn office_doctor_value_or_skipped(file: &str) -> Result<Value> {
+    if detect_officecli().is_none() {
+        return Ok(json!({
+            "status": "skipped",
+            "reason": "officecli not found",
+            "file": file,
+        }));
+    }
+    office_doctor_value(file)
 }
 
 fn office_doctor_summary(file: &str) -> Result<OfficeDoctorSummary> {
@@ -2177,6 +2422,9 @@ fn slides_test_command(args: SlidesTestArgs) -> Result<()> {
         print!("{}", slide_no);
     }
     println!();
+    if args.fail_on_overflow {
+        bail!("slides-test failed: content overflow detected");
+    }
     Ok(())
 }
 
@@ -3594,5 +3842,40 @@ mod tests {
         assert!(
             output.find("<p:notesMasterIdLst>").unwrap() < output.find("<p:sldIdLst/>").unwrap()
         );
+    }
+
+    #[test]
+    fn outline_source_embeds_design_brief() {
+        let outline = json!({
+            "title": "测试汇报",
+            "slides": [
+                {"title": "本页展示增长路径", "bullets": ["赋能业务", "具有重要意义"]}
+            ]
+        });
+        let source = generate_outline_deck_source(&outline, &DeckTemplate::Dark).unwrap();
+        assert!(source.contains("ppt-rust-outline-plan"));
+        assert!(source.contains("direct claims, varied rhythm, no meta narration"));
+        assert!(source.contains("design-output-auditor drift check"));
+        assert!(!source.contains("本页展示增长路径"));
+        assert!(source.contains("增长路径"));
+        assert!(source.contains("支持业务"));
+        assert!(source.contains("会影响具体决策"));
+    }
+
+    #[test]
+    fn strict_quality_gate_accepts_missing_officecli_but_rejects_overflow() {
+        let skipped_office = json!({
+            "overflow_check": {"ok": true},
+            "font_check": {"ok": true},
+            "officecli": {"status": "skipped"}
+        });
+        strict_quality_gate(&skipped_office).unwrap();
+
+        let overflow = json!({
+            "overflow_check": {"ok": false},
+            "font_check": {"ok": true},
+            "officecli": {"status": "skipped"}
+        });
+        assert!(strict_quality_gate(&overflow).is_err());
     }
 }

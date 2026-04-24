@@ -17,5 +17,6 @@ Generated-first maintenance rule:
 - Update `scripts/router-rs/` first for Claude hook rules and host-entrypoint projections, then regenerate via `cargo run --manifest-path ./scripts/router-rs/Cargo.toml --release -- --sync-host-entrypoints-json --repo-root "$PWD"`.
 - Host entrypoint sync runs directly through `router-rs`; do not reintroduce a Python wrapper in front of it.
 - Treat those files as materialized outputs, not hand-authored truth.
-- `.claude/agents/*.md` stays manually maintained unless a file says otherwise.
+- Long-term Claude entrypoint maintenance map: `docs/claude_entrypoint_maintenance.md`.
+- Project `.claude/agents/*.md` subagents are retired here; keep reusable behavior in `skills/` and shared policy in `AGENT.md`.
 - Event-level lifecycle decisions live in `.claude/hooks/README.md`.

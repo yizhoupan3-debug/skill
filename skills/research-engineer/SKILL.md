@@ -47,6 +47,7 @@ This skill owns rigorous research-grade technical judgment when correctness and 
 
 ## Do not use
 
+- The user wants one front door for a research-project task and has not yet committed to a critique-first lane → use `$research-workbench`
 - The task is reviewing a paper's scientific logic, novelty, or claims-vs-evidence **in the context of manuscript submission** → use `$paper-logic`
 - The user wants early-stage brainstorming → use `$brainstorm-research`
 - The task is broad AI/ML engineering implementation → use `$ai-research`

@@ -16,10 +16,72 @@ This is the operating rubric for the gate-chain version of `paper-reviewer`.
 
 - Review by abstract dimension, not by manuscript section.
 - Lock the target contract before any scientific judgment.
+- If the target contract is missing, infer a provisional bar and continue; do
+  not stall the review on a missing venue unless the user asked for exact
+  submission compliance.
+- External research is allowed and expected when it improves novelty,
+  baseline, citation, or venue calibration.
 - Use the strictest honest standard at every gate.
 - Freeze earlier gate conclusions once they pass.
 - Later gates improve quality but do not silently renegotiate evidence, claims,
   or routing decisions made upstream.
+
+## Fast interactive review path
+
+Use this path unless the user explicitly asks for filesystem-backed gate
+artifacts or a multi-turn review protocol.
+
+1. **Verdict first**: `可投 / 大修后再投 / 不建议投 / 需要补关键证据`.
+2. **Claim map**: main claim, contribution bullets, decisive evidence, expected
+   reviewer attack.
+3. **External calibration**: closest prior work, must-have baselines, venue or
+   article-type norm, citation currency.
+4. **Kill case**: the shortest honest rejection argument.
+5. **Fix routing**: new evidence, claim narrowing, appendix move, citation
+   repair, visual/layout repair, or prose cleanup.
+
+Default user-facing output should be compact:
+
+```text
+结论：...
+最危险的 3 个问题：...
+外部调研校准：...
+下一步：...
+```
+
+Only expose gate ids, artifact folders, frozen-input language, or per-gate file
+names when the user requested protocol artifacts, long-running review, or
+repeatable disk state.
+
+## External research discipline
+
+Allowed by default:
+
+- search target venue / journal reviewer and author instructions
+- search recent closest prior work and baselines
+- verify references through DOI, publisher, proceedings, PubMed/PMC, arXiv, or
+  scholarly indexes
+- inspect public PDFs, abstracts, code repositories, dataset cards, and artifact
+  checklists relevant to review risk
+
+Confidentiality limit:
+
+- do not upload an unpublished full manuscript, private data, or confidential
+  review material to public AI tools, plagiarism detectors, or third-party
+  services without explicit user approval
+- search from title, abstract, keywords, claim snippets, citation strings, and
+  public metadata when possible
+
+Research bar:
+
+- prefer official venue / publisher pages and primary paper records
+- use Semantic Scholar, OpenAlex, Crossref, Google Scholar, Connected Papers,
+  or Litmaps for discovery and expansion, not as the final authority when a
+  primary source exists
+- label conclusions as provisional when the search is shallow, the field is
+  fast-moving, or paywalled metadata prevents confirmation
+- cite only sources that materially change the review decision; do not dump a
+  bibliography for decoration
 
 ## Shared persistence contract
 

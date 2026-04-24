@@ -178,13 +178,13 @@ fdp -Tsvg large_graph.dot -o large_graph.svg
 
 ### Bundled CLI
 
-Use `scripts/render_dot.py` for batch rendering with engine/format/DPI options:
+Use Graphviz commands directly for batch rendering with engine/format/DPI options:
 
 ```bash
-python3 scripts/render_dot.py input.dot                    # PNG 300dpi
-python3 scripts/render_dot.py input.dot -f svg             # SVG
-python3 scripts/render_dot.py input.dot -e neato --dpi 600 # neato, 600dpi
-python3 scripts/render_dot.py *.dot -f pdf                 # batch PDF
+dot -Tpng -Gdpi=300 input.dot -o input.png
+dot -Tsvg input.dot -o input.svg
+neato -Tpng -Gdpi=600 input.dot -o input.png
+for f in *.dot; do dot -Tpdf "$f" -o "${f%.dot}.pdf"; done
 ```
 
 ## Python API

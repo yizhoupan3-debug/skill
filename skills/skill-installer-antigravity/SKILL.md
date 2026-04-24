@@ -60,8 +60,12 @@ into the shared library without creating a second live source of truth.
 
 ```bash
 cd /Users/joe/Documents/skill
-python3 scripts/check_skills.py --verify-codex-link
-python3 scripts/check_skills.py --include-system --verify-codex-link
+cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
+  --skills-root skills \
+  --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
+  --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
+  --apply
+python3 -m pytest tests/test_rust_release_entrypoints.py -q
 ```
 
 ## Completion criteria

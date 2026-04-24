@@ -40,7 +40,7 @@ Create clean, reproducible Jupyter notebooks for two primary modes:
 - Experiments and exploratory analysis
 - Tutorials and teaching-oriented walkthroughs
 
-Prefer the bundled templates and the helper script for consistent structure and fewer JSON mistakes.
+Prefer the bundled templates for consistent structure and fewer JSON mistakes.
 
 ## When to use
 - Create a new `.ipynb` notebook from scratch.
@@ -57,7 +57,6 @@ Prefer the bundled templates and the helper script for consistent structure and 
 
 ```bash
 export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-export JUPYTER_NOTEBOOK_CLI="$CODEX_HOME/skills/jupyter-notebook/scripts/new_notebook.py"
 ```
 
 User-scoped skills install under `$CODEX_HOME/skills` (default: `~/.codex/skills`).
@@ -68,34 +67,18 @@ Identify the notebook kind: `experiment` or `tutorial`.
 Capture the objective, audience, and what "done" looks like.
 
 2. Scaffold from the template.
-Use the helper script to avoid hand-authoring raw notebook JSON.
+Copy a bundled template to avoid hand-authoring raw notebook JSON from scratch.
 
 ```bash
-uv run --python 3.12 python "$JUPYTER_NOTEBOOK_CLI" \
-  --kind experiment \
-  --title "Compare prompt variants" \
-  --out output/jupyter-notebook/compare-prompt-variants.ipynb
+mkdir -p output/jupyter-notebook
+cp "$CODEX_HOME/skills/jupyter-notebook/assets/experiment-template.ipynb" \
+  output/jupyter-notebook/compare-prompt-variants.ipynb
 ```
 
 ```bash
-python3 "$JUPYTER_NOTEBOOK_CLI" \
-  --kind experiment \
-  --title "Compare prompt variants" \
-  --out output/jupyter-notebook/compare-prompt-variants.ipynb
-```
-
-```bash
-uv run --python 3.12 python "$JUPYTER_NOTEBOOK_CLI" \
-  --kind tutorial \
-  --title "Intro to embeddings" \
-  --out output/jupyter-notebook/intro-to-embeddings.ipynb
-```
-
-```bash
-python3 "$JUPYTER_NOTEBOOK_CLI" \
-  --kind tutorial \
-  --title "Intro to embeddings" \
-  --out output/jupyter-notebook/intro-to-embeddings.ipynb
+mkdir -p output/jupyter-notebook
+cp "$CODEX_HOME/skills/jupyter-notebook/assets/tutorial-template.ipynb" \
+  output/jupyter-notebook/intro-to-embeddings.ipynb
 ```
 
 3. Fill the notebook with small, runnable steps.
@@ -118,12 +101,9 @@ Run the notebook top-to-bottom when the environment allows.
 - **Superior Quality Audit**: For production notebooks or shared experiments, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
 - Use the final pass checklist in `references/quality-checklist.md`.
 
-## Templates and helper script
+## Templates
 - Templates live in `assets/experiment-template.ipynb` and `assets/tutorial-template.ipynb`.
-- The helper script loads a template, updates the title cell, and writes a notebook.
-
-Script path:
-- `$JUPYTER_NOTEBOOK_CLI` (installed default: `$CODEX_HOME/skills/jupyter-notebook/scripts/new_notebook.py`)
+- After copying a template, update the title and cells using the JSON structure described in `references/notebook-structure.md`.
 
 ## Temp and output conventions
 - Use `tmp/jupyter-notebook/` for intermediate files; delete when done.
@@ -131,16 +111,11 @@ Script path:
 - Use stable, descriptive filenames (for example, `ablation-temperature.ipynb`).
 
 ## Dependencies (install only when needed)
-Prefer `uv` for dependency management.
-The scaffold helper itself is stdlib-only, so plain `python3` is a valid fallback when `uv` is unavailable.
-
-Optional Python packages for local notebook execution:
+Prefer `uv` for dependency management. Optional packages for local notebook execution:
 
 ```bash
 uv pip install jupyterlab ipykernel
 ```
-
-The bundled scaffold script uses only the Python standard library and does not require extra dependencies.
 
 ## Environment
 No required environment variables.

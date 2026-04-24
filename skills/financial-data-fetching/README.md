@@ -3,12 +3,9 @@
 A dedicated Codex skill for **real financial market data fetching, validation, normalization, and backtest-data export**.
 
 Use this skill when the main task is to:
-- fetch real crypto / U.S. stock / China index data
-- fetch financial statements (income, balance sheet, cashflow) or key metrics (ROE, EPS, margins)
-- fetch shareholder structure (major holders, institutional holders, top-10 circulating)
-- fetch capital / valuation metrics (market cap, PE, PB, dividend yield, beta)
-- verify whether a market-data API actually works here
-- build or reuse a market-data loader
+- fetch real crypto or U.S. stock OHLCV data
+- fetch U.S. or China capital / valuation snapshots
+- verify whether the Rust-owned market-data probes work here
 - export backtest-ready data for `generic`, `vectorbt`, or `backtrader`
 
 This skill owns **data acquisition, validation, normalization, and export only**. It must **not** own any task that decides strategy, alpha, execution, or risk. If the task includes any of those decisions, start with [`algo-trading`](../algo-trading/SKILL.md) and use this skill only as a supporting data tool.
@@ -18,29 +15,22 @@ This skill owns **data acquisition, validation, normalization, and export only**
 ## What this skill supports
 
 ### Markets
-- Crypto (OHLCV only)
-- U.S. equities / ETFs
-- China A-shares / CSI indices (沪深300, 中证500)
+- Crypto OHLCV through Rust HTTP clients for Binance, Kraken, and Coinbase
+- U.S. equities / ETFs OHLCV through the Rust Yahoo chart path
+- U.S. and China capital / valuation snapshots
 
 ### Data types
 - OHLCV time series
-- Index constituents
-- Index weights
-- **Financial statements** (income / balance sheet / cashflow)
-- **Key financial metrics** (ROE, ROA, margins, EPS, debt ratios)
-- **Shareholder structure** (major holders, institutional, top-10 circulating)
-- **Capital / valuation metrics** (market cap, PE, PB, dividend yield, beta, etc.)
+- Capital / valuation metrics
 - Backtest export files
-
-### Runtime split
-- Rust core: crypto / U.S. OHLCV fetching, retries/timeouts, probe concurrency, backtest export
-- Python layer: fundamentals, holders, capital metrics, China index / A-share data
 
 ### Current source status
 - Crypto: Rust native HTTP clients for `binance`, `kraken`, `coinbase`
-- U.S. stocks: Rust native Yahoo chart fetcher for OHLCV; Python `yfinance` still owns fundamentals / holders / capital
-- U.S. `Stooq`: keep as optional fallback only; in this workspace it currently returns an apikey gate instead of public CSV
-- China: `AKShare` (OHLCV + index data + fundamentals + holders + capital)
+- U.S. stocks: Rust native Yahoo chart fetcher for OHLCV and lightweight capital snapshots
+- U.S. `Stooq`: optional Rust daily OHLCV fallback when public CSV access works
+- China: Rust Eastmoney path for capital snapshots
+
+Statements, detailed fundamentals, holders, CSI constituents, and CSI weights are retired from active local execution until Rust-owned equivalents exist.
 
 ---
 
@@ -48,129 +38,52 @@ This skill owns **data acquisition, validation, normalization, and export only**
 
 - Skill doc: `/Users/joe/Documents/skill/skills/financial-data-fetching/SKILL.md`
 - README: `/Users/joe/Documents/skill/skills/financial-data-fetching/README.md`
-- Rust core: `/Users/joe/Documents/skill/rust_tools/financial_data_rs/`
-- Python package: `/Users/joe/Documents/skill/skills/financial-data-fetching/financial_data/`
-- CLI: `/Users/joe/Documents/skill/skills/financial-data-fetching/scripts/financial_data_cli.py`
-- Probe script: `/Users/joe/Documents/skill/skills/financial-data-fetching/scripts/validate_financial_data_sources.py`
-- Example script: `/Users/joe/Documents/skill/skills/financial-data-fetching/examples/python_quickstart.py`
+- Rust CLI: `/Users/joe/Documents/skill/rust_tools/financial_data_rs/`
 
 ---
 
 ## Quick start
 
-### 1. Validate the data sources first
+### 1. Validate the Rust-owned sources first
 
 ```bash
-python /Users/joe/Documents/skill/skills/financial-data-fetching/scripts/validate_financial_data_sources.py
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_rs/Cargo.toml -- validate
 ```
 
 Only call a source **verified here** if its probe returns `ok: true`.
 
-### 2. Use the CLI
+### 2. Use the Rust CLI
 
 #### OHLCV
 
 ```bash
 # U.S. stocks
-python .../scripts/financial_data_cli.py ohlcv --market us --symbol AAPL --interval 1h --period 5d --source yfinance
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+  ohlcv --market us --symbol AAPL --interval 1h --period 5d --source yahoo
 
 # Crypto
-python .../scripts/financial_data_cli.py ohlcv --market crypto --exchange binance --symbol BTC/USDT --interval 1h --limit 100
-
-# China index
-python .../scripts/financial_data_cli.py ohlcv --market cn-index --symbol 000300
-```
-
-#### Fundamentals
-
-```bash
-# Key metrics (ROE, margins, EPS, etc.)
-python .../scripts/financial_data_cli.py fundamentals --market us --symbol AAPL --report key_metrics
-
-# Income statement
-python .../scripts/financial_data_cli.py fundamentals --market us --symbol AAPL --report income --freq quarterly
-
-# China A-share key indicators
-python .../scripts/financial_data_cli.py fundamentals --market cn --symbol 600519 --report key_metrics
-
-# China balance sheet
-python .../scripts/financial_data_cli.py fundamentals --market cn --symbol 600519 --report balance
-```
-
-#### Holders
-
-```bash
-# U.S. major holders
-python .../scripts/financial_data_cli.py holders --market us --symbol AAPL --type major
-
-# U.S. institutional holders
-python .../scripts/financial_data_cli.py holders --market us --symbol AAPL --type institutional
-
-# China top-10 circulating shareholders
-python .../scripts/financial_data_cli.py holders --market cn --symbol 600519 --type top10
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+  ohlcv --market crypto --exchange binance --symbol BTC/USDT --interval 1h --limit 100
 ```
 
 #### Capital / Valuation Metrics
 
 ```bash
 # U.S. stock capital metrics
-python .../scripts/financial_data_cli.py capital --market us --symbol AAPL
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+  capital --market us --symbol AAPL
 
 # China A-share capital metrics
-python .../scripts/financial_data_cli.py capital --market cn --symbol 600519
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+  capital --market cn --symbol 600519
 ```
 
-#### Constituents & Weights
+#### Backtest Export
 
 ```bash
-python .../scripts/financial_data_cli.py constituents --index 000905
-python .../scripts/financial_data_cli.py weights --index 000300
-```
-
----
-
-## Python usage
-
-```python
-from pathlib import Path
-import sys
-
-ROOT = Path('/Users/joe/Documents/skill/skills/financial-data-fetching')
-sys.path.insert(0, str(ROOT))
-
-from financial_data import MarketDataClient
-
-client = MarketDataClient()
-
-# ── OHLCV ───────────────────────────────────────────────
-result = client.fetch_ohlcv(market='us', symbol='AAPL', interval='1h', period='5d', source='yfinance')
-print(result.metadata())
-
-# ── Fundamentals ────────────────────────────────────────
-# Key metrics (ROE, margins, EPS)
-metrics = client.fetch_fundamentals(market='us', symbol='AAPL', report='key_metrics')
-print(metrics.data)
-
-# Income statement
-income = client.fetch_fundamentals(market='us', symbol='AAPL', report='income', freq='yearly')
-print(income.data.head())
-
-# China A-share financial indicators
-cn_metrics = client.fetch_fundamentals(market='cn', symbol='600519', report='key_metrics')
-print(cn_metrics.data)
-
-# ── Holders ─────────────────────────────────────────────
-# U.S. institutional holders
-holders = client.fetch_holders(market='us', symbol='AAPL', holder_type='institutional')
-print(holders.data)
-
-# China top-10 circulating shareholders
-cn_holders = client.fetch_holders(market='cn', symbol='600519', holder_type='top10')
-print(cn_holders.data)
-
-# ── Capital Metrics ─────────────────────────────────────
-capital = client.fetch_capital_metrics(market='us', symbol='AAPL')
-print(capital.data)
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/financial_data_rs/Cargo.toml -- \
+  export --market us --symbol AAPL --interval 1d --period 1y \
+  --schema vectorbt --file-format csv --output output/financial-data/aapl.csv
 ```
 
 ---
@@ -188,21 +101,6 @@ datetime index named `datetime`, columns: `open`, `high`, `low`, `close`, `volum
 
 ---
 
-## Source selection guidance
-
-### Crypto
-Prefer `CCXT` for unified exchange access.
-
-- Prefer the Rust Yahoo chart path for OHLCV.
-- Prefer `yfinance` for fundamentals, holders, and capital metrics.
-- Prefer `Stooq` only when daily public OHLCV fallback is enough.
-- Treat both as **research-grade**, not exchange-direct execution-grade feeds.
-
-### China A-shares / indices
-Use `AKShare` for all data types: OHLCV, index data, fundamentals, holders, and capital metrics.
-
----
-
 ## Data quality checklist
 
 Before using any fetched dataset in research or backtests, verify:
@@ -211,20 +109,14 @@ Before using any fetched dataset in research or backtests, verify:
 - missing bars / suspicious gaps
 - adjusted vs unadjusted status
 - stale or incomplete latest bars
-- CSI constituent counts match expectations
-- CSI weights sum to approximately 100
-- financial statement periods are consecutive and non-duplicate
-- holder data contains expected fields
+- source, symbol/code, timezone, and schema are recorded
 
 ---
 
 ## Troubleshooting
 
-### Parquet export fails
-Install one of: `pyarrow`, `fastparquet`
-
-### A source works yesterday but fails today
-Re-run the probe script. Do not assume a previously working public endpoint is still healthy.
+### A source worked yesterday but fails today
+Re-run `validate`. Do not assume a previously working public endpoint is still healthy.
 
 ### Need strategy help rather than data help
 Use: `/Users/joe/Documents/skill/skills/algo-trading/SKILL.md`

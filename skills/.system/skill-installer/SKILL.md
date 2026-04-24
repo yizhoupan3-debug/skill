@@ -44,12 +44,10 @@ After installing a skill, tell the user: "Restart Codex to pick up new skills."
 
 All of these scripts use network, so when running in the sandbox, request escalation when running them.
 
-- `scripts/list-skills.py` (prints skills list with installed annotations)
-- `scripts/list-skills.py --format json`
-- Example (experimental list): `scripts/list-skills.py --path skills/.experimental`
-- `scripts/install-skill-from-github.py --repo <owner>/<repo> --path <path/to/skill> [<path/to/skill> ...]`
-- `scripts/install-skill-from-github.py --url https://github.com/<owner>/<repo>/tree/<ref>/<path>`
-- Example (experimental skill): `scripts/install-skill-from-github.py --repo openai/skills --path skills/.experimental/<skill-name>`
+- List available skills by inspecting `skills/*/SKILL.md` in the target repository.
+- List installed local skills with `find "$CODEX_HOME/skills" -maxdepth 2 -name SKILL.md`.
+- Install from GitHub with `gh repo clone`, `git sparse-checkout`, or a temporary clone followed by `cp -R <skill-dir> "$CODEX_HOME/skills/"`.
+- Example experimental path: `skills/.experimental/<skill-name>`.
 
 ## Behavior and Options
 

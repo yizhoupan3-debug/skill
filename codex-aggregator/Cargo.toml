@@ -1,0 +1,26 @@
+[package]
+name = "codex_aggregator"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "codex-dashboard"
+path = "src/bin/dashboard.rs"
+
+[[bin]]
+name = "codex-health-monitor"
+path = "src/bin/health_monitor.rs"
+
+[[bin]]
+name = "codex-extract-tokens"
+path = "src/bin/extract_tokens.rs"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.6", features = ["derive"] }
+mysql = { version = "28.0", default-features = false, features = ["minimal-rust"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tiny_http = "0.12"
+urlencoding = "2.1"

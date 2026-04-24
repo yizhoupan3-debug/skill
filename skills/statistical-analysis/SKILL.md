@@ -50,6 +50,7 @@ This skill owns **statistical method selection, execution, and interpretation** 
 
 ## Do not use
 
+- The user wants one front door for a research-project task rather than statistics only -> use `$research-workbench`
 - The task is ML model training or evaluation → use `$ai-research` or `$mac-memory-management` when Mac memory/runtime constraints dominate
 - The task is data wrangling or cleaning → use `$data-wrangling`
 - The task is plotting without statistical analysis → use `$scientific-figure-plotting`
@@ -58,6 +59,7 @@ This skill owns **statistical method selection, execution, and interpretation** 
 
 ## Cross-references
 
+- `$research-workbench` uses this skill as the statistics / uncertainty lane
 - `$paper-logic` routes deep statistical method questions (effect size, power analysis, significance testing) to this skill
 - `$paper-reviewer` Tier-1 statistical rigor checks may route here for detailed analysis
 
@@ -132,6 +134,10 @@ Use `统计分析报告`:
 - test results (statistic, p-value, effect size, CI)
 - interpretation in context
 - limitations and assumptions
+
+For research-project orchestration, return the statistical blocker and hand the
+workflow back to `$research-workbench` after the test choice, assumption check,
+or interpretation is settled.
 
 ## Hard Constraints
 

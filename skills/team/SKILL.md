@@ -1,8 +1,8 @@
 ---
 name: team
 description: |
-  Official OMC team workflow, localized onto this repo's Rust-first supervisor and delegation lane.
-  It keeps the original team orchestration intent while replacing .omc team state with local continuity artifacts, tmux-backed worker management, and Rust-owned resume.
+  Repo-native team workflow for Rust-first supervisor-led delegation and worker lifecycle management.
+  It owns team orchestration through local continuity artifacts, tmux-backed worker management, and Rust-owned resume.
 routing_layer: L1
 routing_owner: owner
 routing_gate: delegation
@@ -48,17 +48,17 @@ approval_required_tools:
 
 # team
 
-`team` 继承 OMC `v4.13.2` 的团队编排意图，但在本仓直接落到 Rust supervisor、continuity artifacts 和宿主原生 worker 管理，不再依赖 `.omc` 团队状态。
+`team` 是本仓自有的团队编排流程，直接落到 Rust supervisor、continuity artifacts 和宿主原生 worker 管理，不依赖外部 Claude 插件或旧团队状态目录。
 
 显式入口：
 - Codex：`$team`
 - Claude：`/team`
 
-## Upstream Baseline
+## Native Workflow
 
-- 官方来源：`oh-my-claudecode` `v4.13.2`
-- 对应能力：`team`
+- 本仓来源：`skills/team/SKILL.md` + `configs/framework/RUNTIME_REGISTRY.json`
 - 主流程：scoping -> delegation -> execution -> integration -> qa -> cleanup
+- 外部依赖：无外部 Claude 插件、无旧插件状态目录、无插件运行态
 
 ## When to use
 
@@ -90,7 +90,7 @@ approval_required_tools:
 
 ## Local runtime
 
-- 不再写 `.omc/state/team*.json`。
+- 不再写旧团队状态目录。
 - worker 生命周期由 Rust `session-supervisor`、宿主 worker 管理、resume 机制承接。
 - continuity 真相仍写到 `artifacts/current/<task_id>/...`、`SESSION_SUMMARY.md`、`NEXT_ACTIONS.json`、`EVIDENCE_INDEX.json`、`TRACE_METADATA.json`、`.supervisor_state.json`。
 - shared continuity 只允许 supervisor 主线程持有；worker 只返回 lane-local 输出或 delta。
@@ -106,7 +106,7 @@ approval_required_tools:
 
 ## Constraints
 
-- 这是官方能力的本地化，不是继续依赖 `.omc` 团队状态。
+- 这是本仓自有编排协议，不是外部插件兼容壳。
 - 用本仓 skill、artifact contract、host worker 管理、Rust supervisor 来解释行为。
 - 不把 Claude / Codex 的私有 team 行为写成 framework 真相。
-- 用户看到的是原生 `team`，不是外部兼容层。
+- 用户看到的是本仓原生 `team`，不是外部兼容层。

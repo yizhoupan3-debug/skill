@@ -1,47 +1,26 @@
 # PPTX Install
 
-Use this reference when setting up a fresh `.pptx` deck workspace or when the template fails because dependencies are missing.
+Use this reference when setting up a fresh `.pptx` deck workspace or when the Rust `ppt` CLI cannot render or inspect a deck.
 
-## Official Base Install
+## Rust CLI
 
-Per the official PptxGenJS installation docs, the Node install is:
-
-```bash
-npm install pptxgenjs
-```
-
-Official references:
-
-- [PptxGenJS installation docs](https://gitbrent.github.io/PptxGenJS/docs/installation/)
-- [PptxGenJS npm package](https://www.npmjs.com/package/pptxgenjs)
-
-## Practical Install For This Skill
-
-This skill's template and helper bundle use more than `pptxgenjs` alone. For the current helper set, install:
+The ppt-pptx runtime path is the Rust `ppt` binary from this repository:
 
 ```bash
-npm install pptxgenjs skia-canvas linebreak fontkit prismjs mathjax-full js-yaml
+cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/pptx_tool_rs/Cargo.toml --bin ppt -- --help
 ```
 
-Smoke-tested locally on March 18, 2026 with:
-
-- `pptxgenjs@4.0.1`
-- `skia-canvas@3.0.8`
-- `linebreak@1.1.0`
-- `fontkit@2.0.4`
-- `prismjs@1.30.0`
-- `mathjax-full@3.2.1`
-- `js-yaml@4.1.1`
+For faster repeated use, build the Rust tools and put the resulting binary on `PATH` as `ppt`.
 
 ## System Tools For QA
 
-Some QA scripts rely on system binaries:
+Rendered QA relies on system binaries:
 
 - `soffice` / LibreOffice for PPTX to PDF conversion used by rendering workflows
 - Poppler tools for PDF size and raster support used by Rust render paths
 - `fc-list` for font inspection
 
-If these are missing, deck generation can still work, but rendered QA may not.
+If these are missing, source-plan generation can still work, but rendered QA may not.
 
 Recommended macOS install commands:
 
@@ -53,8 +32,6 @@ brew install poppler
 ## Optional OfficeCLI Install
 
 For deeper `.pptx` inspection, HTML preview, path-based querying, and structured issue / schema checks, this skill can also use local `officecli`.
-
-On this machine, `officecli --version` resolved successfully and reported `1.0.53`.
 
 Quick check:
 
@@ -75,23 +52,20 @@ What it adds to `ppt-pptx`:
 
 ```bash
 ppt init .
+ppt outline outline.yaml --output deck.plan.json --bootstrap --build
 ```
 
-Optional smoke test from the skill root:
+The expected workspace outputs are:
 
-```bash
-node scripts/smoke_test.js
-```
-
-Then copy into the workspace:
-
-- `assets/deck.template.js` as `deck.js`
-- `assets/pptxgenjs_helpers/`
-- optional OfficeCLI-backed inspection helpers: call via `ppt office ...` when needed
+- `deck.plan.json`
+- `deck.pptx`
+- `assets/`
+- `rendered/`
+- `sources.md`
 
 Optional images:
 
-- The deck can now build without bundled sample images.
+- The deck can build without bundled sample images.
 - If files such as `./assets/cover.jpg` or `./assets/placeholder.jpg` are missing, the templates fall back to neutral placeholder panels instead of crashing.
 - Add real local images later when visual polish matters.
 
@@ -102,45 +76,26 @@ Cross-platform font default:
 
 ## Failure Patterns
 
-### `Cannot find module 'pptxgenjs'`
+### `ppt` is not found
 
-- install `pptxgenjs`
-- confirm you are running `node deck.js` from the workspace that contains `node_modules`
+- build the Rust tool or invoke it through `cargo run --manifest-path ... --bin ppt --`
+- confirm the built binary directory is on `PATH` when using package scripts
 
-### `Cannot find module 'skia-canvas'` or `linebreak` or `fontkit`
-
-- install the helper dependencies above
-- this skill's helper bundle imports measurement utilities eagerly, so partial installs are not enough
-
-### `mathjax-full is not installed`
-
-- install `mathjax-full`
-- or avoid helper calls that require LaTeX rendering
-
-### `js-yaml is required for YAML input`
-
-- install `js-yaml`
-- or use JSON input with `outline_to_deck.js`
-
-### render scripts fail even though `deck.pptx` builds
+### Render commands fail even though `deck.pptx` builds
 
 - check for missing `soffice` / LibreOffice and Poppler
 - deck generation and deck rendering are separate dependency layers
+
+### Font checks report substitutions
+
+- confirm `fc-list` is available
+- keep authored defaults to `Arial` and `Courier New` unless the project requires a specific installed font
 
 ### OfficeCLI-backed diagnostics are missing
 
 - check `officecli --version`
 - if unavailable, the deck can still build and render; only the deeper OfficeCLI audit / watch path is unavailable
 - `ppt office probe --json` is the quickest local check
-
-## Smoke-Test Result
-
-Verified locally on this machine on March 18, 2026:
-
-- `brew install --cask libreoffice` succeeded
-- `soffice --version` reports `LibreOffice 26.2.1.2`
-- the template generated a real `.pptx`
-- `ppt render` successfully rendered that `.pptx` into slide PNGs
 
 Useful OfficeCLI audit commands after generation:
 
@@ -153,7 +108,7 @@ ppt office watch deck.pptx --port 18080
 Recommended mixed-lane commands:
 
 ```bash
-ppt build-qa --workdir . --entry deck.js --deck deck.pptx --rendered-dir rendered --json
+ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --json
 ppt qa deck.pptx --rendered-dir rendered --json
 ppt intake old_deck.pptx --json
 ```

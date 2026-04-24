@@ -1,7 +1,9 @@
 use anyhow::{anyhow, bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
 use regex::Regex;
+use serde::Serialize;
 use serde_json::{json, Value};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
@@ -34,6 +36,24 @@ const PENDING_LOG_MARKERS: &[&str] = &[
     "still in progress",
     "log will be available when it is complete",
 ];
+const MISSING_SECRET_MARKERS: &[&str] = &[
+    "secret",
+    "permission denied",
+    "unauthorized",
+    "forbidden",
+    "bad credentials",
+];
+const LINT_MARKERS: &[&str] = &["eslint", "ruff", "clippy", "lint"];
+const TYPECHECK_MARKERS: &[&str] = &["typecheck", "tsc", "mypy", "pyright", "type error"];
+const TEST_MARKERS: &[&str] = &["test", "pytest", "vitest", "jest", "cargo test"];
+const BUILD_MARKERS: &[&str] = &[
+    "build",
+    "compile",
+    "compilation",
+    "cargo build",
+    "npm run build",
+];
+const FLAKE_MARKERS: &[&str] = &["timed out", "timeout", "rate limit", "connection reset"];
 
 const REVIEW_THREADS_QUERY: &str = r#"query(
   $owner: String!,
@@ -97,6 +117,8 @@ enum Commands {
     InspectPrChecks(InspectPrChecksArgs),
     /// Fetch PR conversation comments, reviews, and review threads.
     FetchComments(FetchCommentsArgs),
+    /// Verify this source gate is fully Rust-owned.
+    Doctor(DoctorArgs),
 }
 
 #[derive(Args)]
@@ -121,12 +143,35 @@ struct FetchCommentsArgs {
     pr: Option<String>,
     #[arg(long)]
     json: bool,
+    #[arg(long)]
+    open_only: bool,
+}
+
+#[derive(Args)]
+struct DoctorArgs {
+    #[arg(long, default_value = ".")]
+    repo: PathBuf,
+    #[arg(long)]
+    json: bool,
 }
 
 struct GhResult {
     code: i32,
     stdout: String,
     stderr: String,
+}
+
+#[derive(Debug, Serialize)]
+struct DoctorReport {
+    status: &'static str,
+    checks: Vec<DoctorCheck>,
+}
+
+#[derive(Debug, Serialize)]
+struct DoctorCheck {
+    name: &'static str,
+    ok: bool,
+    detail: String,
 }
 
 fn main() {
@@ -140,6 +185,7 @@ fn run_cli() -> Result<()> {
     match Cli::parse().command {
         Commands::InspectPrChecks(args) => inspect_pr_checks(args),
         Commands::FetchComments(args) => fetch_comments(args),
+        Commands::Doctor(args) => doctor(args),
     }
 }
 
@@ -183,14 +229,31 @@ fn fetch_comments(args: FetchCommentsArgs) -> Result<()> {
     let repo_root = find_git_root(&args.repo)?;
     ensure_gh_authenticated(&repo_root)?;
     let (owner, repo, number) = resolve_pr_ref(args.pr.as_deref(), &repo_root)?;
-    let result = fetch_all_comments(&owner, &repo, number, &repo_root)?;
+    let mut result = fetch_all_comments(&owner, &repo, number, &repo_root)?;
+    if args.open_only {
+        filter_open_review_threads(&mut result);
+    }
 
     if args.json {
         println!("{}", serde_json::to_string_pretty(&result)?);
     } else {
-        println!("{}", serde_json::to_string_pretty(&result)?);
+        render_comment_summary(&result);
     }
     Ok(())
+}
+
+fn doctor(args: DoctorArgs) -> Result<()> {
+    let report = build_doctor_report(&args.repo);
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        render_doctor_report(&report);
+    }
+    if report.checks.iter().all(|check| check.ok) {
+        Ok(())
+    } else {
+        std::process::exit(1);
+    }
 }
 
 fn find_git_root(start: &Path) -> Result<PathBuf> {
@@ -199,6 +262,179 @@ fn find_git_root(start: &Path) -> Result<PathBuf> {
         bail!("Error: not inside a Git repository.");
     }
     Ok(PathBuf::from(result.stdout.trim()))
+}
+
+fn build_doctor_report(start: &Path) -> DoctorReport {
+    let repo_root = find_git_root(start).unwrap_or_else(|_| start.to_path_buf());
+    let checks = vec![
+        check_skill_scripts_retired(&repo_root),
+        check_docs_are_rust_only(&repo_root),
+        check_routing_surfaces_are_rust_only(&repo_root),
+        check_workspace_member(&repo_root),
+        check_cli_source_owns_commands(&repo_root),
+    ];
+    let status = if checks.iter().all(|check| check.ok) {
+        "ok"
+    } else {
+        "failed"
+    };
+    DoctorReport { status, checks }
+}
+
+fn check_skill_scripts_retired(repo_root: &Path) -> DoctorCheck {
+    let offenders = [
+        repo_root.join("skills/gh-fix-ci"),
+        repo_root.join("skills/gh-address-comments"),
+    ]
+    .iter()
+    .flat_map(|skill| {
+        let mut paths = Vec::new();
+        if skill.join("scripts").exists() {
+            paths.push(repo_relative(repo_root, &skill.join("scripts")));
+        }
+        for file in collect_files_with_extension(skill, "py") {
+            paths.push(repo_relative(repo_root, &file));
+        }
+        paths
+    })
+    .collect::<Vec<_>>();
+
+    DoctorCheck {
+        name: "retired-python-helper-files",
+        ok: offenders.is_empty(),
+        detail: if offenders.is_empty() {
+            "no Python helper files or scripts directories under gh source-gate skills".to_string()
+        } else {
+            offenders.join(", ")
+        },
+    }
+}
+
+fn check_docs_are_rust_only(repo_root: &Path) -> DoctorCheck {
+    let docs = markdown_text_under(&[
+        repo_root.join("skills/gh-fix-ci"),
+        repo_root.join("skills/gh-address-comments"),
+    ]);
+    let required = [
+        "gh_source_gate_rs",
+        "gh-source-gate",
+        "inspect-pr-checks",
+        "fetch-comments",
+        "--open-only",
+    ];
+    let forbidden = ["inspect_pr_checks.py", "fetch_comments.py"];
+    let mut issues = Vec::new();
+    for marker in required {
+        if !docs.contains(marker) {
+            issues.push(format!("missing {marker}"));
+        }
+    }
+    for marker in forbidden {
+        if docs.contains(marker) {
+            issues.push(format!("retired marker present {marker}"));
+        }
+    }
+    if docs.to_ascii_lowercase().contains("python") {
+        issues.push("python marker present".to_string());
+    }
+
+    DoctorCheck {
+        name: "skill-docs-rust-only",
+        ok: issues.is_empty(),
+        detail: if issues.is_empty() {
+            "skill docs route to gh-source-gate Rust CLI only".to_string()
+        } else {
+            issues.join(", ")
+        },
+    }
+}
+
+fn check_routing_surfaces_are_rust_only(repo_root: &Path) -> DoctorCheck {
+    let surfaces = [
+        "skills/SKILL_MANIFEST.json",
+        "skills/SKILL_ROUTING_RUNTIME.json",
+        "skills/SKILL_ROUTING_REGISTRY.md",
+        "skills/SKILL_ROUTING_INDEX.md",
+        "skills/SKILL_APPROVAL_POLICY.json",
+    ];
+    let joined = surfaces
+        .iter()
+        .filter_map(|path| fs::read_to_string(repo_root.join(path)).ok())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut issues = Vec::new();
+    for marker in ["inspect_pr_checks.py", "fetch_comments.py"] {
+        if joined.contains(marker) {
+            issues.push(format!("retired marker present {marker}"));
+        }
+    }
+    if !joined.contains("gh-source-gate") {
+        issues.push("missing gh-source-gate".to_string());
+    }
+
+    DoctorCheck {
+        name: "generated-routing-rust-only",
+        ok: issues.is_empty(),
+        detail: if issues.is_empty() {
+            "generated routing surfaces reference Rust CLI and not retired helpers".to_string()
+        } else {
+            issues.join(", ")
+        },
+    }
+}
+
+fn check_workspace_member(repo_root: &Path) -> DoctorCheck {
+    let manifest = fs::read_to_string(repo_root.join("rust_tools/Cargo.toml")).unwrap_or_default();
+    let crate_manifest = repo_root.join("rust_tools/gh_source_gate_rs/Cargo.toml");
+    let mut issues = Vec::new();
+    if !manifest.contains(r#""gh_source_gate_rs""#) {
+        issues.push("missing rust_tools workspace member".to_string());
+    }
+    if !crate_manifest.exists() {
+        issues.push("missing gh_source_gate_rs Cargo.toml".to_string());
+    }
+
+    DoctorCheck {
+        name: "workspace-member",
+        ok: issues.is_empty(),
+        detail: if issues.is_empty() {
+            "gh_source_gate_rs is in the Rust workspace".to_string()
+        } else {
+            issues.join(", ")
+        },
+    }
+}
+
+fn check_cli_source_owns_commands(repo_root: &Path) -> DoctorCheck {
+    let source = fs::read_to_string(repo_root.join("rust_tools/gh_source_gate_rs/src/main.rs"))
+        .unwrap_or_default();
+    let required = [
+        "InspectPrChecks(InspectPrChecksArgs)",
+        "FetchComments(FetchCommentsArgs)",
+        "Doctor(DoctorArgs)",
+        "fn inspect_pr_checks(",
+        "fn fetch_comments(",
+        "fn doctor(",
+        "REVIEW_THREADS_QUERY",
+        "fn classify_failure(",
+        "fn filter_open_review_threads(",
+        "\"summary\"",
+    ];
+    let issues = required
+        .iter()
+        .filter(|marker| !source.contains(**marker))
+        .map(|marker| format!("missing {marker}"))
+        .collect::<Vec<_>>();
+
+    DoctorCheck {
+        name: "rust-cli-command-ownership",
+        ok: issues.is_empty(),
+        detail: if issues.is_empty() {
+            "Rust CLI owns checks, comments, doctor, classification, and summary paths".to_string()
+        } else {
+            issues.join(", ")
+        },
+    }
 }
 
 fn ensure_gh_authenticated(repo_root: &Path) -> Result<()> {
@@ -403,10 +639,18 @@ fn analyze_check(
         return Ok(base);
     }
 
+    let snippet = extract_failure_snippet(&log_text, max_lines, context);
+    let tail = tail_lines(&log_text, max_lines);
     base["status"] = json!("ok");
     base["run"] = metadata.unwrap_or_else(|| json!({}));
-    base["logSnippet"] = json!(extract_failure_snippet(&log_text, max_lines, context));
-    base["logTail"] = json!(tail_lines(&log_text, max_lines));
+    base["failureType"] = json!(classify_failure(
+        &value_text(check.get("name")).unwrap_or_default(),
+        &snippet,
+        &tail
+    ));
+    base["failureMarkerLine"] = json!(failure_marker_line(&log_text));
+    base["logSnippet"] = json!(snippet);
+    base["logTail"] = json!(tail);
     Ok(base)
 }
 
@@ -560,12 +804,94 @@ fn fetch_all_comments(owner: &str, repo: &str, number: i64, repo_root: &Path) ->
         }
     }
 
+    let summary = comments_summary(&conversation_comments, &reviews, &review_threads);
     Ok(json!({
         "pull_request": pr_meta.unwrap_or_else(|| json!({})),
+        "summary": summary,
         "conversation_comments": conversation_comments,
         "reviews": reviews,
         "review_threads": review_threads,
     }))
+}
+
+fn comments_summary(
+    conversation_comments: &[Value],
+    reviews: &[Value],
+    review_threads: &[Value],
+) -> Value {
+    let unresolved_thread_count = review_threads
+        .iter()
+        .filter(|thread| {
+            !thread
+                .get("isResolved")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        })
+        .count();
+    let outdated_thread_count = review_threads
+        .iter()
+        .filter(|thread| {
+            thread
+                .get("isOutdated")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        })
+        .count();
+    let actionable_thread_count = review_threads
+        .iter()
+        .filter(|thread| {
+            !thread
+                .get("isResolved")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+                && !thread
+                    .get("isOutdated")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+        })
+        .count();
+
+    json!({
+        "conversation_comment_count": conversation_comments.len(),
+        "review_count": reviews.len(),
+        "review_thread_count": review_threads.len(),
+        "unresolved_thread_count": unresolved_thread_count,
+        "outdated_thread_count": outdated_thread_count,
+        "actionable_thread_count": actionable_thread_count,
+    })
+}
+
+fn filter_open_review_threads(payload: &mut Value) {
+    if let Some(threads) = payload
+        .get_mut("review_threads")
+        .and_then(Value::as_array_mut)
+    {
+        threads.retain(|thread| {
+            !thread
+                .get("isResolved")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+                && !thread
+                    .get("isOutdated")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+        });
+    }
+
+    let empty = Vec::new();
+    let conversation_comments = payload
+        .get("conversation_comments")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty);
+    let reviews = payload
+        .get("reviews")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty);
+    let threads = payload
+        .get("review_threads")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty);
+    payload["summary"] = comments_summary(conversation_comments, reviews, threads);
 }
 
 fn gh_api_graphql(
@@ -732,6 +1058,33 @@ fn is_failing(check: &Value) -> bool {
     FAILURE_BUCKETS.contains(&bucket.as_str())
 }
 
+fn classify_failure(check_name: &str, snippet: &str, tail: &str) -> &'static str {
+    let haystack = format!("{check_name}\n{snippet}\n{tail}").to_ascii_lowercase();
+    if contains_any(&haystack, MISSING_SECRET_MARKERS) {
+        return "missing-secret-or-env";
+    }
+    if contains_any(&haystack, LINT_MARKERS) {
+        return "lint";
+    }
+    if contains_any(&haystack, TYPECHECK_MARKERS) {
+        return "typecheck";
+    }
+    if contains_any(&haystack, TEST_MARKERS) {
+        return "unit-test";
+    }
+    if contains_any(&haystack, BUILD_MARKERS) {
+        return "build";
+    }
+    if contains_any(&haystack, FLAKE_MARKERS) {
+        return "infra-or-flake";
+    }
+    "unknown"
+}
+
+fn contains_any(haystack: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| haystack.contains(needle))
+}
+
 fn normalized(value: Option<&Value>) -> String {
     value_text(value)
         .unwrap_or_default()
@@ -837,6 +1190,12 @@ fn find_failure_index(lines: &[&str]) -> Option<usize> {
     })
 }
 
+fn failure_marker_line(log_text: &str) -> Option<String> {
+    let lines: Vec<&str> = log_text.lines().collect();
+    let idx = find_failure_index(&lines)?;
+    Some(lines[idx].to_string())
+}
+
 fn tail_lines(text: &str, max_lines: usize) -> String {
     if max_lines == 0 {
         return String::new();
@@ -867,6 +1226,11 @@ fn render_check_results(pr: &str, results: &[Value]) {
             "Status: {}",
             value_text(result.get("status")).unwrap_or_else(|| "unknown".to_string())
         );
+        if let Some(failure_type) =
+            value_text(result.get("failureType")).filter(|kind| !kind.is_empty())
+        {
+            println!("Type: {failure_type}");
+        }
 
         if let Some(run_meta) = result
             .get("run")
@@ -920,6 +1284,93 @@ fn render_check_results(pr: &str, results: &[Value]) {
     println!("{}", "-".repeat(60));
 }
 
+fn render_comment_summary(payload: &Value) {
+    let pr = payload.get("pull_request").unwrap_or(&Value::Null);
+    let summary = payload.get("summary").unwrap_or(&Value::Null);
+    let number = value_text(pr.get("number")).unwrap_or_else(|| "?".to_string());
+    let title = value_text(pr.get("title")).unwrap_or_default();
+    let url = value_text(pr.get("url")).unwrap_or_default();
+
+    println!("PR #{number}: {title}");
+    if !url.is_empty() {
+        println!("URL: {url}");
+    }
+    println!(
+        "Comments: conversation={}, reviews={}, threads={}, unresolved={}, actionable={}",
+        summary
+            .get("conversation_comment_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        summary
+            .get("review_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        summary
+            .get("review_thread_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        summary
+            .get("unresolved_thread_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        summary
+            .get("actionable_thread_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+    );
+
+    if let Some(threads) = payload.get("review_threads").and_then(Value::as_array) {
+        for (idx, thread) in threads.iter().enumerate() {
+            let resolved = thread
+                .get("isResolved")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let outdated = thread
+                .get("isOutdated")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let status = if resolved {
+                "resolved"
+            } else if outdated {
+                "outdated"
+            } else {
+                "open"
+            };
+            let path = value_text(thread.get("path")).unwrap_or_default();
+            let line = value_text(thread.get("line")).unwrap_or_default();
+            println!("{}. [{status}] {path}:{line}", idx + 1);
+            if let Some(body) = first_thread_comment_body(thread) {
+                println!("   {}", one_line(&body, 180));
+            }
+        }
+    }
+}
+
+fn render_doctor_report(report: &DoctorReport) {
+    println!("gh-source-gate doctor: {}", report.status);
+    for check in &report.checks {
+        let status = if check.ok { "ok" } else { "fail" };
+        println!("- [{status}] {}: {}", check.name, check.detail);
+    }
+}
+
+fn first_thread_comment_body(thread: &Value) -> Option<String> {
+    thread
+        .pointer("/comments/nodes")
+        .and_then(Value::as_array)
+        .and_then(|nodes| nodes.first())
+        .and_then(|comment| value_text(comment.get("body")))
+}
+
+fn one_line(value: &str, max_len: usize) -> String {
+    let compact = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if compact.chars().count() <= max_len {
+        compact
+    } else {
+        format!("{}...", compact.chars().take(max_len).collect::<String>())
+    }
+}
+
 fn indent_block(text: &str, prefix: &str) -> String {
     text.lines()
         .map(|line| format!("{prefix}{line}"))
@@ -937,6 +1388,51 @@ fn joined_message(result: &GhResult) -> String {
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn collect_files_with_extension(root: &Path, extension: &str) -> Vec<PathBuf> {
+    let mut results = Vec::new();
+    collect_files(root, &mut |path| {
+        if path.extension().and_then(|ext| ext.to_str()) == Some(extension) {
+            results.push(path.to_path_buf());
+        }
+    });
+    results
+}
+
+fn markdown_text_under(roots: &[PathBuf]) -> String {
+    let mut chunks = Vec::new();
+    for root in roots {
+        collect_files(root, &mut |path| {
+            if path.extension().and_then(|ext| ext.to_str()) == Some("md") {
+                if let Ok(text) = fs::read_to_string(path) {
+                    chunks.push(text);
+                }
+            }
+        });
+    }
+    chunks.join("\n")
+}
+
+fn collect_files(root: &Path, visitor: &mut dyn FnMut(&Path)) {
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files(&path, visitor);
+        } else if path.is_file() {
+            visitor(&path);
+        }
+    }
+}
+
+fn repo_relative(repo_root: &Path, path: &Path) -> String {
+    path.strip_prefix(repo_root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .to_string()
 }
 
 #[cfg(test)]
@@ -973,8 +1469,116 @@ mod tests {
     }
 
     #[test]
+    fn classifies_common_failure_types() {
+        assert_eq!(classify_failure("lint", "cargo clippy failed", ""), "lint");
+        assert_eq!(classify_failure("build", "compilation error", ""), "build");
+        assert_eq!(classify_failure("tests", "pytest failed", ""), "unit-test");
+        assert_eq!(
+            classify_failure("deploy", "Error: bad credentials", ""),
+            "missing-secret-or-env"
+        );
+    }
+
+    #[test]
+    fn summarizes_and_filters_review_threads() {
+        let conversation = vec![json!({"id": "c1"})];
+        let reviews = vec![json!({"id": "r1"})];
+        let threads = vec![
+            json!({"id": "t1", "isResolved": false, "isOutdated": false}),
+            json!({"id": "t2", "isResolved": true, "isOutdated": false}),
+            json!({"id": "t3", "isResolved": false, "isOutdated": true}),
+        ];
+        let summary = comments_summary(&conversation, &reviews, &threads);
+        assert_eq!(summary["actionable_thread_count"], 1);
+        assert_eq!(summary["unresolved_thread_count"], 2);
+
+        let mut payload = json!({
+            "conversation_comments": conversation,
+            "reviews": reviews,
+            "review_threads": threads,
+        });
+        filter_open_review_threads(&mut payload);
+        assert_eq!(payload["review_threads"].as_array().unwrap().len(), 1);
+        assert_eq!(payload["summary"]["review_thread_count"], 1);
+    }
+
+    #[test]
     fn parses_available_fields_from_gh_error() {
         let fields = parse_available_fields("bad\nAvailable fields:\n  name\n  bucket\n");
         assert_eq!(fields, vec!["name", "bucket"]);
+    }
+
+    #[test]
+    fn doctor_detects_fully_rust_owned_fixture() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path();
+        write_file(
+            &root.join("rust_tools/Cargo.toml"),
+            r#"[workspace]
+members = ["gh_source_gate_rs"]
+"#,
+        );
+        write_file(&root.join("rust_tools/gh_source_gate_rs/Cargo.toml"), "");
+        write_file(
+            &root.join("rust_tools/gh_source_gate_rs/src/main.rs"),
+            r#"
+enum Commands {
+    InspectPrChecks(InspectPrChecksArgs),
+    FetchComments(FetchCommentsArgs),
+    Doctor(DoctorArgs),
+}
+fn inspect_pr_checks() {}
+fn fetch_comments() {}
+fn doctor() {}
+fn classify_failure() {}
+fn filter_open_review_threads() {}
+const REVIEW_THREADS_QUERY: &str = "";
+const SUMMARY_MARKER: &str = "summary";
+"#,
+        );
+        write_file(
+            &root.join("skills/gh-fix-ci/SKILL.md"),
+            "gh_source_gate_rs gh-source-gate inspect-pr-checks fetch-comments --open-only",
+        );
+        write_file(
+            &root.join("skills/gh-address-comments/SKILL.md"),
+            "gh_source_gate_rs gh-source-gate inspect-pr-checks fetch-comments --open-only",
+        );
+        for path in [
+            "skills/SKILL_MANIFEST.json",
+            "skills/SKILL_ROUTING_RUNTIME.json",
+            "skills/SKILL_ROUTING_REGISTRY.md",
+            "skills/SKILL_ROUTING_INDEX.md",
+            "skills/SKILL_APPROVAL_POLICY.json",
+        ] {
+            write_file(&root.join(path), "gh-source-gate");
+        }
+
+        let report = build_doctor_report(root);
+        assert_eq!(report.status, "ok");
+        assert!(report.checks.iter().all(|check| check.ok));
+    }
+
+    #[test]
+    fn doctor_rejects_retired_python_helpers() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path();
+        write_file(
+            &root.join("skills/gh-fix-ci/scripts/inspect_pr_checks.py"),
+            "print('old helper')",
+        );
+        let report = build_doctor_report(root);
+        assert_eq!(report.status, "failed");
+        assert!(report
+            .checks
+            .iter()
+            .any(|check| check.name == "retired-python-helper-files" && !check.ok));
+    }
+
+    fn write_file(path: &Path, content: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create parent");
+        }
+        fs::write(path, content).expect("write file");
     }
 }

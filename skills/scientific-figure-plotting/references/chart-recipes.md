@@ -9,9 +9,14 @@ All recipes use colorblind-safe palettes and publication-grade defaults.
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Apply publication defaults (from assets/)
-from publication_rcparams import apply_publication_style
-apply_publication_style()  # or: apply_publication_style(style='ieee')
+plt.rcParams.update({
+    "font.family": "sans-serif",
+    "font.size": 8,
+    "axes.linewidth": 0.8,
+    "axes.unicode_minus": False,
+    "figure.dpi": 150,
+    "savefig.dpi": 300,
+})
 ```
 
 ---

@@ -41,6 +41,7 @@ If the task shifts to adjacent skill territory, route to:
   - `gh pr view --json number,url,title`
 - Use the bundled helper first:
   - `cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/gh_source_gate_rs/Cargo.toml --bin gh-source-gate -- fetch-comments --repo . --json`
+  - add `--open-only` when you only need unresolved, non-outdated review threads
 
 ### 2. Fetch and classify feedback
 
@@ -48,6 +49,7 @@ If the task shifts to adjacent skill territory, route to:
   - review threads
   - review submission bodies
   - top-level PR conversation comments
+  - a summary with total, unresolved, outdated, and actionable thread counts
 - Turn raw feedback into numbered items with:
   - file/path context if available
   - short summary

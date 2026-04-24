@@ -9,19 +9,19 @@
 - `thin projection` = host 只消费 shared framework truth，不接管宿主原生 runtime truth
 - `Rust-owned contract truth` = shared contract / workspace bootstrap /
   host adapter / artifact / parity / discovery / compatibility inventory 都由
-  `router-rs` 编译；Python 只做调用与 schema 校验
+  `router-rs` 编译；旧 Python projection 已退场
 
 - `framework_profile` / framework core = 单真源
 - `cli_common_adapter` = canonical CLI-family shared contract
 - `codex_common_adapter` = Codex 兼容视图，不再是命名中心
 - `codex_desktop_adapter` = 交互式 desktop 正式入口
-- `codex_desktop_host_adapter` = desktop 兼容别名（仅 compatibility escape hatch）
+- `codex_desktop_host_adapter` = retired desktop 兼容别名（仅显式 continuity lane）
 - `codex_cli_adapter` / `claude_code_adapter` / `gemini_cli_adapter` = 三个薄 CLI 宿主投影
 - `cli_family_parity_snapshot` = canonical CLI regression baseline
 - `codex_dual_entry_parity_snapshot` = Codex desktop/headless compatibility view
 
 `aionrs` / `AionUI` 相关 adapter 是 retired compatibility debt，不再由
-Python artifact emitter 产出，也不再作为 fallback host lane 发布。需要兼容
+artifact emitter 产出，也不再作为 fallback host lane 发布。需要兼容
 清单时，只能通过 Rust `--profile-artifacts-json --include-compatibility-inventory`
 输出 `upgrade_compatibility_matrix`。默认 artifact emission 不写
 `codex_desktop_alias_inventory.json`，不写 Python/Rust parity report；legacy alias
@@ -36,7 +36,7 @@ retirement status 只在显式 Rust continuity opt-in 中输出。
 - role: retired legacy companion / former fallback bridge
 - boundary: **outer-framework-owned**
 - invariant: 只做伴随式接入，不修改 aionrs 内核语义
-- invariant: 不属于 default host peer set；Python artifact emitter 不再产出
+- invariant: 不属于 default host peer set；artifact emitter 不再产出
   该 adapter
 - protocol hints:
   `deep_adaptation_not_fork = true`, `legacy_surface = true`,
@@ -48,7 +48,7 @@ retirement status 只在显式 Rust continuity opt-in 中输出。
 - transport: `bridge-contract`
 - role: retired legacy compatibility shell
 - invariant: UI 只消费外层 contract，不反向成为框架真源
-- invariant: 不属于 default host peer set；Python artifact emitter 不再产出
+- invariant: 不属于 default host peer set；artifact emitter 不再产出
   该 adapter
 - runtime event lane: `host_runtime_contract.event_transport`
 - protocol hints:
@@ -81,11 +81,11 @@ retirement status 只在显式 Rust continuity opt-in 中输出。
   并作为 desktop identity 的唯一正式名字
 - protocol hints: `works_without_aionrs = true`
 
-### 4. `codex_desktop_host_adapter` (Compatibility Escape Hatch)
+### 4. Retired: `codex_desktop_host_adapter`
 
 - host: `codex-desktop`
 - transport: `local-bridge`
-- role: 临时兼容别名；仅供 continuity / compatibility 调用，payload 语义对齐 `codex_desktop_adapter`
+- role: retired 兼容别名；仅供显式 continuity / compatibility 调用，payload 语义对齐 `codex_desktop_adapter`
 - invariant: `canonical_adapter_id = codex_desktop_adapter`
 - invariant: `retirement_mode = compatibility_only`
 - invariant: `accepts_new_semantics = false`
@@ -145,11 +145,11 @@ retirement status 只在显式 Rust continuity opt-in 中输出。
 
 - host: `generic`
 - transport: `inproc`
-- role: retired minimal fallback host; Python artifact emitter no longer writes it
+- role: retired minimal fallback host; artifact emitter no longer writes it
 
 ## `codex_desktop_host_adapter` Retirement Contract
 
-`codex_desktop_host_adapter` 只允许承担迁移桥角色，不再承载新的设计中心语义。
+`codex_desktop_host_adapter` 已退出默认路径，只允许承担历史兼容桥角色，不再承载新的设计中心语义。
 
 - 当 alias 存在时，它必须镜像 `codex_desktop_adapter` 的 contract 语义；
   允许存在的差异只限于 `metadata.adapter_id`、兼容注解、或显式 legacy
@@ -161,9 +161,9 @@ retirement status 只在显式 Rust continuity opt-in 中输出。
 - 默认 runtime helper surface 也必须保持 canonical-only：`get_host_adapter`
   和 `list_host_adapters` 只返回正式 adapter；compatibility consumer 如需
   legacy surface，必须显式 opt-in Rust compatibility inventory。fallback host
-  artifact lane 已退出 Python emitter。
-- alias 的退场前提是：下游调用方迁移完成、双入口 parity 仍保持绿色、且
-  连续性工件能说明剩余兼容风险与回滚点。
+  artifact lane 已退出默认 emitter。
+- alias 的最终物理退场前提是：下游调用方迁移完成、双入口 parity 仍保持绿色、且
+  连续性工件能说明剩余兼容风险与回滚点；在此之前它只能显式 opt-in。
 - alias 退场不意味着回退到 `aionrs` / `AionUI` 主线，也不允许借机把
   `codexcli` 抬升为控制器。
 
@@ -176,7 +176,7 @@ retirement status 只在显式 Rust continuity opt-in 中输出。
   `codex_desktop_host_adapter` 都只能通过显式 legacy opt-in 被发现：
   - `codex_desktop_host_adapter` 进入 `compatibility_lane`
   - `aionrs_companion_adapter`、`aionui_host_adapter` 只作为 compatibility
-    inventory rows，不再作为 Python fallback artifacts 写出
+    inventory rows，不再作为 fallback artifacts 写出
 - legacy surface 必须带 `legacy_boundary` contract，至少声明：
   - `adapter_lifecycle = legacy-compatibility`
   - `default_host_peer_set_member = false`
@@ -251,12 +251,11 @@ retirement status 只在显式 Rust continuity opt-in 中输出。
 - `router-rs --profile-artifacts-json --framework-profile <path>` 编译 adapter
   artifacts、shared contract、capability discovery、parity snapshot、control-plane
   contracts、compatibility inventory。
-- `emit_framework_contract_artifacts(...)` 默认直接调用 `router-rs`，写出
-  `default/` 与 `rust/` 两套同源产物；Python 不再先生成一套 artifact 再和
-  Rust 做 parity。
-- `framework_runtime.host_adapters.compile_*_adapter(...)` 是 Rust artifact 的
-  Python 投影，不再承载 adapter 真源。
-- `framework_runtime.host_adapter_compatibility.*` 不再用于 artifact emission；
+- 旧 `emit_framework_contract_artifacts(...)` Python 入口已不再是当前实现面；
+  contract/artifact 输出由 `router-rs` 直接生成和校验。
+- 旧 `framework_runtime.host_adapters.compile_*_adapter(...)` Python 投影已退场；
+  adapter truth 留在 Rust profile/artifact compiler。
+- 旧 `framework_runtime.host_adapter_compatibility.*` 不再用于 artifact emission；
   fallback host artifacts (`aionrs_companion_adapter`、`aionui_host_adapter`、
   `generic_host_adapter`) 已退出。
 - `rust_python_artifact_parity_report.json` 已退出；Rust 输出就是默认 contract
@@ -333,8 +332,12 @@ repo 内真实存在：
 - `GEMINI.md` for Gemini CLI
 
 这些文件都应是对共享 `AGENT.md` 的薄代理。宿主私有目录如 `.claude/hooks/`、
-`.claude/agents/`、`.claude/settings.json`、`.gemini/settings.json` 允许存在，
-但它们只承载 host-private surface，不得分叉 shared routing / memory truth。
+`.claude/settings.json`、`.gemini/settings.json` 允许存在，但它们只承载
+host-private surface，不得分叉 shared routing / memory truth；本仓库当前不保留
+项目级 `.claude/agents/` 投影。
+Claude 入口维护边界见 `docs/claude_entrypoint_maintenance.md`：全局规则改
+`AGENT.md`，生成投影改 `scripts/router-rs/src/claude_hooks.rs` 后同步，
+机器本地偏好只放 `~/.claude/settings.json` 或 `.claude/settings.local.json`。
 - repo entrypoint projection 还要区分两类输出约束：
   machine continuity contract 继续以 `SESSION_SUMMARY.md`、`NEXT_ACTIONS.json`、
   `TRACE_METADATA.json`、`.supervisor_state.json` 为恢复真源；human closeout

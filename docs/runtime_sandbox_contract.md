@@ -12,7 +12,8 @@ The sandbox contract covers:
 - asynchronous cleanup semantics
 - failure isolation and recoverability boundaries
 
-The contract is derived from `aionrs_fusion_docs/codex_dual_entry_next_phase_checklist.md` and is the source of truth for sandbox lifecycle and policy drift checks.
+Older checklist documents used this as a future runtime workstream. This file
+is now the direct source of truth for sandbox lifecycle and policy drift checks.
 
 ## Lifecycle States
 
@@ -222,9 +223,9 @@ Any future implementation, schema, or runtime change that alters one of the mach
 
 ## Current Minimal Implementation Status
 
-R8 now lands a contract-backed minimal implementation in the Python host without re-promoting Python to default authority:
+The current Rust-owned runtime exposes the contract-backed minimal sandbox control surface without re-promoting any Python host authority:
 
-- `ExecutionEnvironmentService` routes every kernel request through an explicit sandbox lifecycle manager instead of ad-hoc inline handling
+- sandbox control requests route through an explicit lifecycle manager instead of ad-hoc inline handling
 - lifecycle transitions are validated against the frozen state graph before the kernel delegate runs
 - capability policy is request-scoped, deny-by-default, and rejects high-risk execution unless the sandbox profile is dedicated
 - budgets are attached to every execution request; admission validates all four dimensions, while runtime enforcement checks wall-clock, output size, and host-visible CPU or memory probes
@@ -236,4 +237,4 @@ The current minimal implementation is intentionally scoped:
 
 - it provides deterministic lifecycle, policy, budget, and cleanup behavior for the execution seam
 - it does not yet claim a remote sandbox backend or a full out-of-process resource governor
-- future work may move this host into Rust, but that migration must preserve the frozen contract above instead of weakening it
+- future work may replace the minimal local surface with a stronger out-of-process sandbox backend, but that migration must preserve the frozen contract above instead of weakening it

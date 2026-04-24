@@ -45,7 +45,8 @@ planning.
 
 ## Do not use
 
-- Academic paper search → use `$academic-search`
+- Research-project orchestration / 科研项目下一步判断 → use `$research-workbench`
+- Academic paper search → use `$literature-synthesis`
 - Literature review / novelty check → use `$literature-synthesis`
 - Structured page extraction / crawling → use `$web-scraping`
 - OpenAI official product guidance → use `$openai-docs`

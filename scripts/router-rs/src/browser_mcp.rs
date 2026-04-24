@@ -1,5 +1,10 @@
 use crate::resolve_repo_root_arg;
+use crate::{
+    attach_runtime_event_transport, inspect_trace_stream, replay_trace_stream,
+    TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
+};
 use chrono::{Local, SecondsFormat};
+use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, VecDeque};
 use std::fs;
@@ -21,6 +26,20 @@ const DEFAULT_NETWORK_LIMIT: usize = 50;
 const MAX_NETWORK_EVENTS: usize = 200;
 const SNAPSHOT_HISTORY_LIMIT: usize = 8;
 const CDP_RECV_TIMEOUT: Duration = Duration::from_secs(6);
+const RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION: &str = "runtime-event-attach-descriptor-v1";
+const RUNTIME_ATTACH_MODE: &str = "process_external_artifact_replay";
+const RUNTIME_ATTACH_SOURCE_TRANSPORT_METHOD: &str = "describe_runtime_event_transport";
+const RUNTIME_ATTACH_SOURCE_HANDOFF_METHOD: &str = "describe_runtime_event_handoff";
+const RUNTIME_ATTACH_METHOD: &str = "attach_runtime_event_transport";
+const RUNTIME_ATTACH_SUBSCRIBE_METHOD: &str = "subscribe_attached_runtime_events";
+const RUNTIME_ATTACH_CLEANUP_METHOD: &str = "cleanup_attached_runtime_event_transport";
+const RUNTIME_ATTACH_RESUME_MODE: &str = "after_event_id";
+const RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION: &str = "runtime-event-transport-v1";
+const RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION: &str = "runtime-event-handoff-v1";
+const TRACE_RESUME_MANIFEST_SCHEMA_VERSION: &str = "runtime-resume-manifest-v1";
+const ROUTER_RS_TRACE_STREAM_REPLAY_SCHEMA_VERSION: &str = "router-rs-trace-stream-replay-v1";
+const ROUTER_RS_TRACE_STREAM_INSPECT_SCHEMA_VERSION: &str = "router-rs-trace-stream-inspect-v1";
+const ROUTER_RS_TRACE_IO_AUTHORITY: &str = "rust-runtime-trace-io";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BrowserMcpTransportMode {
@@ -28,12 +47,25 @@ enum BrowserMcpTransportMode {
     NewlineDelimited,
 }
 
-pub fn run_browser_mcp_stdio_loop(repo_root: Option<&Path>) -> Result<(), String> {
+pub fn run_browser_mcp_stdio_loop(
+    repo_root: Option<&Path>,
+    attach_config: BrowserAttachConfig,
+) -> Result<(), String> {
     let repo_root = resolve_repo_root_arg(repo_root)?;
     let stdin = io::stdin();
     let stdout = io::stdout();
-    let mut runtime = BrowserRuntime::new(repo_root);
+    let mut runtime = BrowserRuntime::with_attach_config(repo_root, attach_config);
     run_browser_mcp_stdio(stdin.lock(), stdout.lock(), &mut runtime)
+}
+
+pub fn resolve_browser_mcp_attach_artifact(
+    repo_root: &Path,
+    search_root: Option<&Path>,
+) -> Option<String> {
+    let roots = search_root
+        .map(|root| vec![root.to_path_buf()])
+        .unwrap_or_else(|| default_attach_discovery_roots(repo_root));
+    select_attach_artifact_candidate(roots)
 }
 
 pub fn run_browser_mcp_stdio<R: BufRead, W: Write>(
@@ -373,6 +405,7 @@ fn tool_definition(
 
 pub struct BrowserRuntime {
     repo_root: PathBuf,
+    attach_config: BrowserAttachConfig,
     sessions: HashMap<String, SessionRecord>,
     browser_processes: HashMap<String, Child>,
     session_counter: usize,
@@ -380,6 +413,58 @@ pub struct BrowserRuntime {
     ref_counter: usize,
     request_counter: usize,
     screenshot_counter: usize,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct BrowserAttachConfig {
+    runtime_attach_descriptor_path: Option<String>,
+    runtime_attach_artifact_path: Option<String>,
+    runtime_binding_artifact_path: Option<String>,
+    runtime_handoff_path: Option<String>,
+    runtime_resume_manifest_path: Option<String>,
+    headless: bool,
+}
+
+impl BrowserAttachConfig {
+    pub fn from_cli_and_env(
+        runtime_attach_descriptor_path: Option<String>,
+        runtime_attach_artifact_path: Option<String>,
+        runtime_binding_artifact_path: Option<String>,
+        runtime_handoff_path: Option<String>,
+        runtime_resume_manifest_path: Option<String>,
+        headless: Option<String>,
+    ) -> Self {
+        Self {
+            runtime_attach_descriptor_path: runtime_attach_descriptor_path
+                .or_else(|| env_non_empty("BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH")),
+            runtime_attach_artifact_path: runtime_attach_artifact_path
+                .or_else(|| env_non_empty("BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH")),
+            runtime_binding_artifact_path: runtime_binding_artifact_path
+                .or_else(|| env_non_empty("BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH")),
+            runtime_handoff_path: runtime_handoff_path
+                .or_else(|| env_non_empty("BROWSER_MCP_RUNTIME_HANDOFF_PATH")),
+            runtime_resume_manifest_path: runtime_resume_manifest_path
+                .or_else(|| env_non_empty("BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH")),
+            headless: resolve_headless_option(headless),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ConfiguredAttachSource {
+    source: Option<&'static str>,
+    path: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct LoadedRuntimeAttachDescriptor {
+    descriptor: Value,
+    input_artifact_kind: Option<&'static str>,
+}
+
+struct ResolvedAttachedRuntimeDescriptorContext {
+    trace_stream_path: String,
+    diagnostics_base: Value,
 }
 
 struct SessionRecord {
@@ -469,6 +554,19 @@ struct NetworkEvent {
     duration_ms: Option<u64>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AttachArtifactCandidate {
+    path: String,
+    rank: AttachArtifactCandidateRank,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct AttachArtifactCandidateRank {
+    updated_at_ms: i64,
+    recency_ms: i64,
+    source_priority: i32,
+}
+
 struct CdpClient {
     _port: u16,
     next_id: u64,
@@ -476,9 +574,15 @@ struct CdpClient {
 }
 
 impl BrowserRuntime {
+    #[cfg(test)]
     fn new(repo_root: PathBuf) -> Self {
+        Self::with_attach_config(repo_root, BrowserAttachConfig::default())
+    }
+
+    fn with_attach_config(repo_root: PathBuf, attach_config: BrowserAttachConfig) -> Self {
         Self {
             repo_root,
+            attach_config,
             sessions: HashMap::new(),
             browser_processes: HashMap::new(),
             session_counter: 0,
@@ -1159,51 +1263,90 @@ impl BrowserRuntime {
 
     fn get_attached_runtime_events(&mut self, input: &Value) -> Result<Value, Value> {
         let limit = optional_usize(input, "limit", 100)?;
+        if limit == 0 {
+            return Err(browser_error(
+                "INVALID_INPUT",
+                "limit must be a positive integer.",
+                &["provide a positive integer limit"],
+                true,
+            ));
+        }
+        let resolved = self.resolve_attached_runtime_descriptor_context()?;
+        let after_event_id = optional_string(input, "afterEventId");
+        let replay = replay_trace_stream(TraceStreamReplayRequestPayload {
+            path: Some(resolved.trace_stream_path.clone()),
+            event_stream_text: None,
+            compaction_manifest_path: None,
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
+            session_id: None,
+            job_id: None,
+            stream_scope_fields: None,
+            after_event_id: after_event_id.clone(),
+            limit: Some(limit),
+        })
+        .map_err(|err| {
+            if err.contains("Unknown event id for stream resume") {
+                browser_error(
+                    "ATTACHED_RUNTIME_CURSOR_NOT_FOUND",
+                    &format!(
+                        "No attached runtime event was found for afterEventId={}.",
+                        after_event_id.clone().unwrap_or_default()
+                    ),
+                    &[
+                        "call browser_get_attached_runtime_events without afterEventId",
+                        "inspect browser_diagnostics",
+                    ],
+                    true,
+                )
+            } else {
+                browser_error(
+                    "ATTACHED_RUNTIME_TRACE_UNAVAILABLE",
+                    &err,
+                    &[
+                        "inspect browser_diagnostics",
+                        "refresh the attach descriptor or trace artifacts",
+                    ],
+                    true,
+                )
+            }
+        })?;
+        if replay.schema_version != ROUTER_RS_TRACE_STREAM_REPLAY_SCHEMA_VERSION
+            || replay.authority != ROUTER_RS_TRACE_IO_AUTHORITY
+        {
+            return Err(browser_error(
+                "ATTACHED_RUNTIME_TRACE_UNAVAILABLE",
+                "router-rs trace replay returned an unexpected schema.",
+                &[
+                    "inspect browser_diagnostics",
+                    "refresh the attach descriptor or trace artifacts",
+                ],
+                true,
+            ));
+        }
+        let last_event = replay.events.last();
+        let next_cursor = last_event.map(|event| {
+            json!({
+                "eventId": event.get("event_id").and_then(Value::as_str),
+                "eventIndex": replay.next_cursor.as_ref().map(|cursor| cursor.event_index).unwrap_or_else(|| replay.window_start_index + replay.events.len().saturating_sub(1)),
+            })
+        });
+        let mut attached_runtime = resolved.diagnostics_base.clone();
+        attached_runtime["eventCount"] = json!(replay.event_count);
+        attached_runtime["latestEventId"] = opt_string_value(replay.latest_event_id);
+        attached_runtime["latestEventKind"] = opt_string_value(replay.latest_event_kind);
+        attached_runtime["latestEventTimestamp"] = opt_string_value(replay.latest_event_timestamp);
         Ok(json!({
             "ok": true,
-            "attachedRuntime": {
-                "status": "not_configured",
-                "descriptorSource": null,
-                "descriptorPath": null,
-                "inputArtifactKind": null,
-                "schemaVersion": null,
-                "attachMode": null,
-                "artifactBackendFamily": null,
-                "recommendedEntrypoint": null,
-                "sourceTransportMethod": null,
-                "sourceHandoffMethod": null,
-                "traceStreamPath": null,
-                "bindingArtifactSource": null,
-                "handoffSource": null,
-                "resumeManifestSource": null,
-                "traceStreamSource": null,
-                "replaySupported": false,
-                "eventCount": 0,
-                "latestEventId": null,
-                "latestEventKind": null,
-                "latestEventTimestamp": null,
-                "warning": "Rust browser MCP does not need the legacy Node attach bridge for live browser control.",
-            },
-            "replayContext": {
-                "descriptorSource": null,
-                "descriptorPath": null,
-                "inputArtifactKind": null,
-                "attachMode": null,
-                "artifactBackendFamily": null,
-                "recommendedEntrypoint": null,
-                "sourceTransportMethod": null,
-                "sourceHandoffMethod": null,
-                "traceStreamPath": null,
-                "bindingArtifactSource": null,
-                "handoffSource": null,
-                "resumeManifestSource": null,
-                "traceStreamSource": null,
-            },
-            "events": [],
-            "afterEventId": optional_string(input, "afterEventId"),
-            "hasMore": false,
-            "nextCursor": null,
-            "heartbeat": if optional_bool(input, "heartbeat").unwrap_or(false) && limit > 0 { json!({"status": "idle"}) } else { Value::Null },
+            "attachedRuntime": attached_runtime,
+            "replayContext": attached_runtime_replay_context(&resolved.diagnostics_base),
+            "events": replay.events,
+            "afterEventId": after_event_id,
+            "hasMore": replay.has_more,
+            "nextCursor": next_cursor,
+            "heartbeat": if optional_bool(input, "heartbeat").unwrap_or(false) && replay.events.is_empty() { json!({"status": "idle"}) } else { Value::Null },
         }))
     }
 
@@ -1237,30 +1380,456 @@ impl BrowserRuntime {
             "networkEventBufferSize": network_events,
             "screenshotCount": screenshot_count,
             "runtimeVersion": SERVER_VERSION,
-            "attachedRuntime": {
-                "status": "not_configured",
-                "descriptorSource": null,
-                "descriptorPath": null,
-                "inputArtifactKind": null,
-                "schemaVersion": null,
-                "attachMode": null,
-                "artifactBackendFamily": null,
-                "recommendedEntrypoint": null,
-                "sourceTransportMethod": null,
-                "sourceHandoffMethod": null,
-                "traceStreamPath": null,
-                "bindingArtifactSource": null,
-                "handoffSource": null,
-                "resumeManifestSource": null,
-                "traceStreamSource": null,
-                "replaySupported": false,
-                "eventCount": 0,
-                "latestEventId": null,
-                "latestEventKind": null,
-                "latestEventTimestamp": null,
-                "warning": null,
-            },
+            "attachedRuntime": self.attached_runtime_diagnostics(),
         }))
+    }
+
+    fn attached_runtime_diagnostics(&self) -> Value {
+        let configured_source = self.configured_runtime_attach_source();
+        let base = base_attached_runtime_diagnostics(&configured_source);
+        if configured_source.source.is_none() {
+            return base;
+        }
+        match self.resolve_attached_runtime_descriptor_context() {
+            Ok(resolved) => match inspect_trace_stream(TraceStreamInspectRequestPayload {
+                path: Some(resolved.trace_stream_path),
+                event_stream_text: None,
+                compaction_manifest_path: None,
+                compaction_manifest_text: None,
+                compaction_state_text: None,
+                compaction_artifact_index_text: None,
+                compaction_delta_text: None,
+                session_id: None,
+                job_id: None,
+                stream_scope_fields: None,
+            }) {
+                Ok(summary) => {
+                    if summary.schema_version != ROUTER_RS_TRACE_STREAM_INSPECT_SCHEMA_VERSION
+                        || summary.authority != ROUTER_RS_TRACE_IO_AUTHORITY
+                    {
+                        let mut diagnostics = resolved.diagnostics_base;
+                        diagnostics["status"] = Value::String("trace_unavailable".to_string());
+                        diagnostics["warning"] = Value::String(
+                            "router-rs trace inspect returned an unexpected schema.".to_string(),
+                        );
+                        return diagnostics;
+                    }
+                    let mut diagnostics = resolved.diagnostics_base;
+                    diagnostics["eventCount"] = json!(summary.event_count);
+                    diagnostics["latestEventId"] = opt_string_value(summary.latest_event_id);
+                    diagnostics["latestEventKind"] = opt_string_value(summary.latest_event_kind);
+                    diagnostics["latestEventTimestamp"] =
+                        opt_string_value(summary.latest_event_timestamp);
+                    diagnostics
+                }
+                Err(err) => {
+                    let mut diagnostics = resolved.diagnostics_base;
+                    diagnostics["status"] = Value::String("trace_unavailable".to_string());
+                    diagnostics["warning"] = Value::String(err);
+                    diagnostics
+                }
+            },
+            Err(error) => self.attached_runtime_error_diagnostics(&configured_source, base, error),
+        }
+    }
+
+    fn attached_runtime_error_diagnostics(
+        &self,
+        configured_source: &ConfiguredAttachSource,
+        base: Value,
+        error: Value,
+    ) -> Value {
+        let code = error.get("code").and_then(Value::as_str).unwrap_or("");
+        let mut diagnostics = self
+            .load_runtime_attach_descriptor()
+            .ok()
+            .map(|loaded| {
+                self.project_attached_runtime_diagnostics(
+                    configured_source,
+                    &loaded.descriptor,
+                    loaded.input_artifact_kind,
+                    descriptor_resolved_artifact(&loaded.descriptor, "trace_stream_path"),
+                )
+            })
+            .unwrap_or(base);
+        diagnostics["status"] = Value::String(
+            match code {
+                "ATTACHED_RUNTIME_UNSUPPORTED_BACKEND" => "unsupported_backend",
+                "ATTACHED_RUNTIME_TRACE_UNAVAILABLE" => "trace_unavailable",
+                _ => "invalid_descriptor",
+            }
+            .to_string(),
+        );
+        diagnostics["warning"] = error.get("message").cloned().unwrap_or_else(|| {
+            Value::String("failed to load runtime attach descriptor".to_string())
+        });
+        diagnostics
+    }
+
+    fn configured_runtime_attach_source(&self) -> ConfiguredAttachSource {
+        if let Some(path) = self
+            .attach_config
+            .runtime_attach_descriptor_path
+            .as_ref()
+            .filter(|path| !path.trim().is_empty())
+        {
+            return ConfiguredAttachSource {
+                source: Some("descriptor_path"),
+                path: Some(path.clone()),
+            };
+        }
+        if let Some(path) = self
+            .attach_config
+            .runtime_attach_artifact_path
+            .as_ref()
+            .filter(|path| !path.trim().is_empty())
+        {
+            return ConfiguredAttachSource {
+                source: Some("attach_artifact_path"),
+                path: Some(path.clone()),
+            };
+        }
+        if let Some(path) = self
+            .attach_config
+            .runtime_binding_artifact_path
+            .as_ref()
+            .filter(|path| !path.trim().is_empty())
+        {
+            return ConfiguredAttachSource {
+                source: Some("binding_artifact_path"),
+                path: Some(path.clone()),
+            };
+        }
+        if let Some(path) = self
+            .attach_config
+            .runtime_handoff_path
+            .as_ref()
+            .filter(|path| !path.trim().is_empty())
+        {
+            return ConfiguredAttachSource {
+                source: Some("handoff_path"),
+                path: Some(path.clone()),
+            };
+        }
+        if let Some(path) = self
+            .attach_config
+            .runtime_resume_manifest_path
+            .as_ref()
+            .filter(|path| !path.trim().is_empty())
+        {
+            return ConfiguredAttachSource {
+                source: Some("resume_manifest_path"),
+                path: Some(path.clone()),
+            };
+        }
+        if let Some(path) = self.auto_discover_runtime_attach_artifact() {
+            return ConfiguredAttachSource {
+                source: Some("attach_artifact_path"),
+                path: Some(path),
+            };
+        }
+        ConfiguredAttachSource {
+            source: None,
+            path: None,
+        }
+    }
+
+    fn resolve_attached_runtime_descriptor_context(
+        &self,
+    ) -> Result<ResolvedAttachedRuntimeDescriptorContext, Value> {
+        let configured_source = self.configured_runtime_attach_source();
+        if configured_source.source.is_none() {
+            return Err(browser_error(
+                "ATTACHED_RUNTIME_NOT_CONFIGURED",
+                "No runtime attach descriptor is configured for browser-mcp.",
+                &[
+                    "start browser-mcp with --runtime-attach-descriptor-path",
+                    "or --runtime-attach-artifact-path",
+                    "or set BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH",
+                ],
+                true,
+            ));
+        }
+
+        let loaded = self.load_runtime_attach_descriptor().map_err(|err| {
+            browser_error(
+                "ATTACHED_RUNTIME_INVALID_DESCRIPTOR",
+                &err,
+                &[
+                    "refresh the descriptor from describe_runtime_event_handoff",
+                    "inspect browser_diagnostics",
+                ],
+                true,
+            )
+        })?;
+        let descriptor = loaded.descriptor;
+        let replay_supported =
+            descriptor_bool(&descriptor, &["attach_capabilities", "artifact_replay"]) == Some(true);
+        let trace_stream_path = descriptor_resolved_artifact(&descriptor, "trace_stream_path");
+        let diagnostics_base = self.project_attached_runtime_diagnostics(
+            &configured_source,
+            &descriptor,
+            loaded.input_artifact_kind,
+            trace_stream_path.clone(),
+        );
+
+        if descriptor_string(&descriptor, &["schema_version"]).as_deref()
+            != Some(RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION)
+            || descriptor_string(&descriptor, &["attach_mode"]).as_deref()
+                != Some(RUNTIME_ATTACH_MODE)
+            || !replay_supported
+        {
+            return Err(browser_error(
+                "ATTACHED_RUNTIME_INVALID_DESCRIPTOR",
+                "runtime attach descriptor must be artifact-replay capable and match the Rust-first schema.",
+                &[
+                    "refresh the descriptor from describe_runtime_event_handoff",
+                    "inspect browser_diagnostics",
+                ],
+                true,
+            ));
+        }
+
+        let backend_family = descriptor_string(&descriptor, &["artifact_backend_family"])
+            .unwrap_or_else(|| "filesystem".to_string());
+        if backend_family != "filesystem" && backend_family != "sqlite" {
+            return Err(browser_error(
+                "ATTACHED_RUNTIME_UNSUPPORTED_BACKEND",
+                &format!(
+                    "browser-mcp attach consumer currently supports filesystem/sqlite replay only (got {backend_family})"
+                ),
+                &[
+                    "use a filesystem- or sqlite-backed attach descriptor for browser-mcp replay",
+                    "inspect browser_diagnostics",
+                ],
+                true,
+            ));
+        }
+
+        let Some(trace_stream_path) = trace_stream_path else {
+            return Err(browser_error(
+                "ATTACHED_RUNTIME_TRACE_UNAVAILABLE",
+                "runtime attach descriptor must carry a canonical resolved_artifacts.trace_stream_path.",
+                &["refresh the descriptor from describe_runtime_event_handoff"],
+                true,
+            ));
+        };
+
+        Ok(ResolvedAttachedRuntimeDescriptorContext {
+            trace_stream_path,
+            diagnostics_base,
+        })
+    }
+
+    fn load_runtime_attach_descriptor(&self) -> Result<LoadedRuntimeAttachDescriptor, String> {
+        let configured_source = self.configured_runtime_attach_source();
+        match configured_source.source {
+            Some("descriptor_path") => {
+                self.read_runtime_attach_descriptor_file(configured_source.path.as_deref())
+            }
+            Some("attach_artifact_path") => self
+                .build_runtime_attach_descriptor_from_artifact_path(
+                    configured_source.path.as_deref(),
+                ),
+            Some("binding_artifact_path") => self.hydrate_runtime_attach_descriptor_via_rust(
+                None,
+                configured_source.path.as_deref(),
+                None,
+                None,
+            ),
+            Some("handoff_path") => self.hydrate_runtime_attach_descriptor_via_rust(
+                None,
+                None,
+                configured_source.path.as_deref(),
+                None,
+            ),
+            Some("resume_manifest_path") => self.hydrate_runtime_attach_descriptor_via_rust(
+                None,
+                None,
+                None,
+                configured_source.path.as_deref(),
+            ),
+            _ => Err("runtime attach descriptor is not configured".to_string()),
+        }
+    }
+
+    fn read_runtime_attach_descriptor_file(
+        &self,
+        descriptor_path: Option<&str>,
+    ) -> Result<LoadedRuntimeAttachDescriptor, String> {
+        let descriptor_path = descriptor_path
+            .ok_or_else(|| "runtime attach descriptor path is missing".to_string())?;
+        let raw = fs::read_to_string(descriptor_path)
+            .map_err(|err| format!("read runtime attach descriptor failed: {err}"))?;
+        let parsed = serde_json::from_str::<Value>(&raw)
+            .map_err(|err| format!("parse runtime attach descriptor failed: {err}"))?;
+        if !parsed.is_object() {
+            return Err("runtime attach descriptor must decode to a JSON object".to_string());
+        }
+        self.canonicalize_attach_descriptor_if_possible(parsed)
+    }
+
+    fn build_runtime_attach_descriptor_from_artifact_path(
+        &self,
+        artifact_path: Option<&str>,
+    ) -> Result<LoadedRuntimeAttachDescriptor, String> {
+        let artifact_path =
+            artifact_path.ok_or_else(|| "runtime attach artifact path is missing".to_string())?;
+        let resolved_path = normalize_runtime_locator_for_existing_file(artifact_path);
+        if let Ok(raw) = fs::read_to_string(&resolved_path) {
+            let parsed = serde_json::from_str::<Value>(&raw)
+                .map_err(|err| format!("parse runtime attach artifact failed: {err}"))?;
+            if !parsed.is_object() {
+                return Err("runtime attach artifact returned an unknown schema".to_string());
+            }
+            let schema = descriptor_string(&parsed, &["schema_version"]);
+            if matches!(
+                schema.as_deref(),
+                Some(RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION)
+                    | Some(RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION)
+                    | Some(TRACE_RESUME_MANIFEST_SCHEMA_VERSION)
+            ) {
+                if let Ok(loaded) =
+                    self.try_hydrate_runtime_attach_descriptor_from_artifact_path(&resolved_path)
+                {
+                    return Ok(loaded);
+                }
+            }
+            if schema.as_deref() == Some(RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION) {
+                return self.canonicalize_attach_descriptor_if_possible(parsed);
+            }
+            if let Ok(loaded) =
+                self.try_hydrate_runtime_attach_descriptor_from_artifact_path(&resolved_path)
+            {
+                return Ok(loaded);
+            }
+            return Err("runtime attach artifact returned an unknown schema".to_string());
+        }
+        self.try_hydrate_runtime_attach_descriptor_from_artifact_path(artifact_path)
+    }
+
+    fn try_hydrate_runtime_attach_descriptor_from_artifact_path(
+        &self,
+        artifact_path: &str,
+    ) -> Result<LoadedRuntimeAttachDescriptor, String> {
+        self.hydrate_runtime_attach_descriptor_via_rust(None, Some(artifact_path), None, None)
+            .or_else(|_| {
+                self.hydrate_runtime_attach_descriptor_via_rust(
+                    None,
+                    None,
+                    Some(artifact_path),
+                    None,
+                )
+            })
+            .or_else(|_| {
+                self.hydrate_runtime_attach_descriptor_via_rust(
+                    None,
+                    None,
+                    None,
+                    Some(artifact_path),
+                )
+            })
+    }
+
+    fn canonicalize_attach_descriptor_if_possible(
+        &self,
+        descriptor: Value,
+    ) -> Result<LoadedRuntimeAttachDescriptor, String> {
+        match self.hydrate_runtime_attach_descriptor_via_rust(
+            Some(descriptor.clone()),
+            None,
+            None,
+            None,
+        ) {
+            Ok(hydrated) => {
+                assert_attach_descriptor_matches_canonical(&descriptor, &hydrated.descriptor)?;
+                assert_attach_descriptor_contract(&hydrated.descriptor)?;
+                Ok(hydrated)
+            }
+            Err(err) => {
+                if attach_descriptor_needs_rust_hydration(&descriptor) {
+                    return Err(err);
+                }
+                assert_attach_descriptor_contract(&descriptor)?;
+                Ok(LoadedRuntimeAttachDescriptor {
+                    descriptor,
+                    input_artifact_kind: Some("attach_descriptor"),
+                })
+            }
+        }
+    }
+
+    fn hydrate_runtime_attach_descriptor_via_rust(
+        &self,
+        attach_descriptor: Option<Value>,
+        binding_artifact_path: Option<&str>,
+        handoff_path: Option<&str>,
+        resume_manifest_path: Option<&str>,
+    ) -> Result<LoadedRuntimeAttachDescriptor, String> {
+        let attached = attach_runtime_event_transport(json!({
+            "attach_descriptor": attach_descriptor,
+            "binding_artifact_path": binding_artifact_path,
+            "handoff_path": handoff_path,
+            "resume_manifest_path": resume_manifest_path,
+        }))?;
+        let descriptor = attached
+            .get("attach_descriptor")
+            .cloned()
+            .filter(Value::is_object)
+            .ok_or_else(|| {
+                "runtime attach transport payload is missing attach_descriptor".to_string()
+            })?;
+        let input_artifact_kind = if attach_descriptor.is_some() {
+            Some("attach_descriptor")
+        } else if binding_artifact_path.is_some() {
+            Some("binding_artifact")
+        } else if handoff_path.is_some() {
+            Some("handoff")
+        } else if resume_manifest_path.is_some() {
+            Some("resume_manifest")
+        } else {
+            None
+        };
+        Ok(LoadedRuntimeAttachDescriptor {
+            descriptor,
+            input_artifact_kind,
+        })
+    }
+
+    fn project_attached_runtime_diagnostics(
+        &self,
+        configured_source: &ConfiguredAttachSource,
+        descriptor: &Value,
+        input_artifact_kind: Option<&str>,
+        trace_stream_path: Option<String>,
+    ) -> Value {
+        json!({
+            "status": "ready",
+            "descriptorSource": configured_source.source,
+            "descriptorPath": configured_source.path,
+            "inputArtifactKind": input_artifact_kind,
+            "schemaVersion": descriptor_string(descriptor, &["schema_version"]),
+            "attachMode": descriptor_string(descriptor, &["attach_mode"]),
+            "artifactBackendFamily": descriptor_string(descriptor, &["artifact_backend_family"]),
+            "recommendedEntrypoint": descriptor_string(descriptor, &["recommended_entrypoint"]),
+            "sourceTransportMethod": descriptor_string(descriptor, &["source_transport_method"]),
+            "sourceHandoffMethod": descriptor_string(descriptor, &["source_handoff_method"]),
+            "traceStreamPath": trace_stream_path,
+            "bindingArtifactSource": descriptor_string(descriptor, &["resolution", "binding_artifact_path"]),
+            "handoffSource": descriptor_string(descriptor, &["resolution", "handoff_path"]),
+            "resumeManifestSource": descriptor_string(descriptor, &["resolution", "resume_manifest_path"]),
+            "traceStreamSource": descriptor_string(descriptor, &["resolution", "trace_stream_path"]),
+            "replaySupported": descriptor_bool(descriptor, &["attach_capabilities", "artifact_replay"]).unwrap_or(false),
+            "eventCount": 0,
+            "latestEventId": null,
+            "latestEventKind": null,
+            "latestEventTimestamp": null,
+            "warning": null,
+        })
+    }
+
+    fn auto_discover_runtime_attach_artifact(&self) -> Option<String> {
+        resolve_browser_mcp_attach_artifact(&self.repo_root, None)
     }
 
     fn get_or_create_session(&mut self) -> Result<String, Value> {
@@ -1284,10 +1853,14 @@ impl BrowserRuntime {
                 false,
             )
         })?;
-        let child = Command::new(&chrome_path)
+        let mut command = Command::new(&chrome_path);
+        command
             .arg(format!("--remote-debugging-port={port}"))
-            .arg(format!("--user-data-dir={}", user_data_dir.display()))
-            .arg("--headless=new")
+            .arg(format!("--user-data-dir={}", user_data_dir.display()));
+        if self.attach_config.headless {
+            command.arg("--headless=new");
+        }
+        let child = command
             .arg("--disable-gpu")
             .arg("--no-first-run")
             .arg("--no-default-browser-check")
@@ -2327,6 +2900,524 @@ fn network_event_value(event: NetworkEvent) -> Value {
     })
 }
 
+fn env_non_empty(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn resolve_headless_option(cli_value: Option<String>) -> bool {
+    cli_value
+        .or_else(|| env_non_empty("BROWSER_MCP_HEADLESS"))
+        .map(|value| value != "false")
+        .unwrap_or(true)
+}
+
+fn opt_string_value(value: Option<String>) -> Value {
+    value.map(Value::String).unwrap_or(Value::Null)
+}
+
+fn base_attached_runtime_diagnostics(configured_source: &ConfiguredAttachSource) -> Value {
+    json!({
+        "status": "not_configured",
+        "descriptorSource": configured_source.source,
+        "descriptorPath": configured_source.path,
+        "inputArtifactKind": null,
+        "schemaVersion": null,
+        "attachMode": null,
+        "artifactBackendFamily": null,
+        "recommendedEntrypoint": null,
+        "sourceTransportMethod": null,
+        "sourceHandoffMethod": null,
+        "traceStreamPath": null,
+        "bindingArtifactSource": null,
+        "handoffSource": null,
+        "resumeManifestSource": null,
+        "traceStreamSource": null,
+        "replaySupported": false,
+        "eventCount": 0,
+        "latestEventId": null,
+        "latestEventKind": null,
+        "latestEventTimestamp": null,
+        "warning": null,
+    })
+}
+
+fn attached_runtime_replay_context(diagnostics: &Value) -> Value {
+    json!({
+        "descriptorSource": diagnostics.get("descriptorSource").cloned().unwrap_or(Value::Null),
+        "descriptorPath": diagnostics.get("descriptorPath").cloned().unwrap_or(Value::Null),
+        "inputArtifactKind": diagnostics.get("inputArtifactKind").cloned().unwrap_or(Value::Null),
+        "attachMode": diagnostics.get("attachMode").cloned().unwrap_or(Value::Null),
+        "artifactBackendFamily": diagnostics.get("artifactBackendFamily").cloned().unwrap_or(Value::Null),
+        "recommendedEntrypoint": diagnostics.get("recommendedEntrypoint").cloned().unwrap_or(Value::Null),
+        "sourceTransportMethod": diagnostics.get("sourceTransportMethod").cloned().unwrap_or(Value::Null),
+        "sourceHandoffMethod": diagnostics.get("sourceHandoffMethod").cloned().unwrap_or(Value::Null),
+        "traceStreamPath": diagnostics.get("traceStreamPath").cloned().unwrap_or(Value::Null),
+        "bindingArtifactSource": diagnostics.get("bindingArtifactSource").cloned().unwrap_or(Value::Null),
+        "handoffSource": diagnostics.get("handoffSource").cloned().unwrap_or(Value::Null),
+        "resumeManifestSource": diagnostics.get("resumeManifestSource").cloned().unwrap_or(Value::Null),
+        "traceStreamSource": diagnostics.get("traceStreamSource").cloned().unwrap_or(Value::Null),
+    })
+}
+
+fn descriptor_leaf<'a>(descriptor: &'a Value, path_parts: &[&str]) -> Option<&'a Value> {
+    let mut current = descriptor;
+    for part in path_parts {
+        current = current.get(*part)?;
+    }
+    Some(current)
+}
+
+fn descriptor_string(descriptor: &Value, path_parts: &[&str]) -> Option<String> {
+    descriptor_leaf(descriptor, path_parts)
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn descriptor_bool(descriptor: &Value, path_parts: &[&str]) -> Option<bool> {
+    descriptor_leaf(descriptor, path_parts).and_then(Value::as_bool)
+}
+
+fn descriptor_resolved_artifact(descriptor: &Value, field: &str) -> Option<String> {
+    descriptor_string(descriptor, &["resolved_artifacts", field])
+        .or_else(|| descriptor_string(descriptor, &[field]))
+}
+
+fn normalize_runtime_locator_for_existing_file(locator: &str) -> String {
+    let path = PathBuf::from(locator);
+    if path.exists() {
+        return path.to_string_lossy().into_owned();
+    }
+    std::env::current_dir()
+        .map(|cwd| cwd.join(&path))
+        .ok()
+        .filter(|candidate| candidate.exists())
+        .map(|candidate| candidate.to_string_lossy().into_owned())
+        .unwrap_or_else(|| locator.to_string())
+}
+
+fn normalized_descriptor_value(value: Option<&Value>, path_like: bool) -> Option<String> {
+    let value = value?;
+    if path_like {
+        return value.as_str().filter(|item| !item.is_empty()).map(|item| {
+            let path = PathBuf::from(item);
+            if path.is_absolute() {
+                path
+            } else {
+                std::env::current_dir()
+                    .map(|cwd| cwd.join(path))
+                    .unwrap_or_else(|_| PathBuf::from(item))
+            }
+            .to_string_lossy()
+            .into_owned()
+        });
+    }
+    Some(match value {
+        Value::String(item) => item.clone(),
+        Value::Bool(item) => item.to_string(),
+        Value::Number(item) => item.to_string(),
+        Value::Null => "null".to_string(),
+        other => other.to_string(),
+    })
+}
+
+fn assert_attach_descriptor_leaf_matches_canonical(
+    original: &Value,
+    canonical: &Value,
+    path_parts: &[&str],
+    path_like: bool,
+) -> Result<(), String> {
+    let Some(requested) = descriptor_leaf(original, path_parts) else {
+        return Ok(());
+    };
+    if requested.is_null() {
+        return Ok(());
+    }
+    let resolved = descriptor_leaf(canonical, path_parts).ok_or_else(|| {
+        format!(
+            "runtime attach descriptor must already carry canonical {}",
+            path_parts.join(".")
+        )
+    })?;
+    if normalized_descriptor_value(Some(requested), path_like)
+        != normalized_descriptor_value(Some(resolved), path_like)
+    {
+        return Err(format!(
+            "runtime attach descriptor must already match canonical {}",
+            path_parts.join(".")
+        ));
+    }
+    Ok(())
+}
+
+fn assert_attach_descriptor_matches_canonical(
+    original: &Value,
+    canonical: &Value,
+) -> Result<(), String> {
+    for field in [
+        ["requested_artifacts", "binding_artifact_path"],
+        ["requested_artifacts", "handoff_path"],
+        ["requested_artifacts", "resume_manifest_path"],
+        ["resolved_artifacts", "binding_artifact_path"],
+        ["resolved_artifacts", "handoff_path"],
+        ["resolved_artifacts", "resume_manifest_path"],
+        ["resolved_artifacts", "trace_stream_path"],
+    ] {
+        assert_attach_descriptor_leaf_matches_canonical(original, canonical, &field, true)?;
+    }
+    for field in [
+        &["attach_mode"][..],
+        &["artifact_backend_family"][..],
+        &["source_transport_method"][..],
+        &["source_handoff_method"][..],
+        &["attach_method"][..],
+        &["subscribe_method"][..],
+        &["cleanup_method"][..],
+        &["resume_mode"][..],
+        &["cleanup_semantics"][..],
+        &["recommended_entrypoint"][..],
+        &["attach_capabilities", "artifact_replay"][..],
+        &["attach_capabilities", "live_remote_stream"][..],
+        &["attach_capabilities", "cleanup_preserves_replay"][..],
+        &["resolution", "binding_artifact_path"][..],
+        &["resolution", "handoff_path"][..],
+        &["resolution", "resume_manifest_path"][..],
+        &["resolution", "trace_stream_path"][..],
+    ] {
+        assert_attach_descriptor_leaf_matches_canonical(original, canonical, field, false)?;
+    }
+    Ok(())
+}
+
+fn assert_attach_descriptor_contract(descriptor: &Value) -> Result<(), String> {
+    for (field, expected) in [
+        ("attach_mode", RUNTIME_ATTACH_MODE),
+        (
+            "source_transport_method",
+            RUNTIME_ATTACH_SOURCE_TRANSPORT_METHOD,
+        ),
+        (
+            "source_handoff_method",
+            RUNTIME_ATTACH_SOURCE_HANDOFF_METHOD,
+        ),
+        ("attach_method", RUNTIME_ATTACH_METHOD),
+        ("subscribe_method", RUNTIME_ATTACH_SUBSCRIBE_METHOD),
+        ("cleanup_method", RUNTIME_ATTACH_CLEANUP_METHOD),
+        ("resume_mode", RUNTIME_ATTACH_RESUME_MODE),
+    ] {
+        if let Some(value) = descriptor_string(descriptor, &[field]) {
+            if value != expected {
+                return Err(format!(
+                    "runtime attach descriptor must use {field}={expected}"
+                ));
+            }
+        }
+    }
+    if let Some(value) = descriptor_bool(descriptor, &["attach_capabilities", "artifact_replay"]) {
+        if !value {
+            return Err(
+                "runtime attach descriptor must advertise attach_capabilities.artifact_replay=true"
+                    .to_string(),
+            );
+        }
+    }
+    if let Some(value) = descriptor_bool(
+        descriptor,
+        &["attach_capabilities", "cleanup_preserves_replay"],
+    ) {
+        if !value {
+            return Err(
+                "runtime attach descriptor must advertise attach_capabilities.cleanup_preserves_replay=true"
+                    .to_string(),
+            );
+        }
+    }
+    if let Some(value) = descriptor_bool(descriptor, &["attach_capabilities", "live_remote_stream"])
+    {
+        if value {
+            return Err(
+                "runtime attach descriptor must advertise attach_capabilities.live_remote_stream=false"
+                    .to_string(),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn attach_descriptor_needs_rust_hydration(descriptor: &Value) -> bool {
+    [
+        ["requested_artifacts", "binding_artifact_path"],
+        ["requested_artifacts", "handoff_path"],
+        ["requested_artifacts", "resume_manifest_path"],
+        ["resolved_artifacts", "binding_artifact_path"],
+        ["resolved_artifacts", "handoff_path"],
+        ["resolved_artifacts", "resume_manifest_path"],
+    ]
+    .iter()
+    .any(|path_parts| {
+        descriptor_string(descriptor, path_parts)
+            .map(|value| !value.is_empty())
+            .unwrap_or(false)
+    })
+}
+
+fn collect_attach_artifact_candidates(root: &Path, candidates: &mut Vec<AttachArtifactCandidate>) {
+    if !root.exists() {
+        return;
+    }
+    collect_filesystem_attach_candidates(root, candidates);
+    collect_sqlite_attach_candidates(root, candidates);
+}
+
+fn default_attach_discovery_roots(repo_root: &Path) -> Vec<PathBuf> {
+    vec![
+        repo_root
+            .join("framework_runtime")
+            .join("artifacts")
+            .join("scratch"),
+        repo_root.join("artifacts").join("scratch"),
+        repo_root.join("artifacts").join("current"),
+        repo_root.to_path_buf(),
+    ]
+}
+
+fn select_attach_artifact_candidate(roots: Vec<PathBuf>) -> Option<String> {
+    let mut candidates = Vec::new();
+    for root in roots {
+        collect_attach_artifact_candidates(&root, &mut candidates);
+    }
+    candidates.sort_by(|left, right| {
+        right
+            .rank
+            .cmp(&left.rank)
+            .then_with(|| right.path.cmp(&left.path))
+    });
+    candidates
+        .into_iter()
+        .next()
+        .map(|candidate| candidate.path)
+}
+
+fn collect_filesystem_attach_candidates(
+    root: &Path,
+    candidates: &mut Vec<AttachArtifactCandidate>,
+) {
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_dir() {
+            collect_filesystem_attach_candidates(&path, candidates);
+            continue;
+        }
+        if !file_type.is_file() {
+            continue;
+        }
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        let in_transport_dir = path
+            .parent()
+            .and_then(|parent| parent.file_name())
+            .and_then(|name| name.to_str())
+            == Some("runtime_event_transports");
+        if file_name != "TRACE_RESUME_MANIFEST.json" && !in_transport_dir {
+            continue;
+        }
+        let Ok(raw) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(payload) = serde_json::from_str::<Value>(&raw) else {
+            continue;
+        };
+        let recency_ms = path
+            .metadata()
+            .ok()
+            .and_then(|metadata| metadata.modified().ok())
+            .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+            .map(|duration| duration.as_millis() as i64)
+            .unwrap_or(0);
+        if file_name == "TRACE_RESUME_MANIFEST.json" {
+            if let Some(candidate) =
+                manifest_attach_candidate(&payload, path.to_string_lossy().into_owned(), recency_ms)
+            {
+                candidates.push(candidate);
+            }
+        } else if let Some(candidate) =
+            binding_attach_candidate(&payload, path.to_string_lossy().into_owned(), recency_ms)
+        {
+            candidates.push(candidate);
+        }
+    }
+}
+
+fn collect_sqlite_attach_candidates(root: &Path, candidates: &mut Vec<AttachArtifactCandidate>) {
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_dir() {
+            collect_sqlite_attach_candidates(&path, candidates);
+            continue;
+        }
+        if !file_type.is_file()
+            || path.file_name().and_then(|name| name.to_str())
+                != Some("runtime_checkpoint_store.sqlite3")
+        {
+            continue;
+        }
+        let recency_ms = path
+            .metadata()
+            .ok()
+            .and_then(|metadata| metadata.modified().ok())
+            .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+            .map(|duration| duration.as_millis() as i64)
+            .unwrap_or(0);
+        append_sqlite_attach_candidates(&path, recency_ms, candidates);
+    }
+}
+
+fn append_sqlite_attach_candidates(
+    db_path: &Path,
+    recency_ms: i64,
+    candidates: &mut Vec<AttachArtifactCandidate>,
+) {
+    let Ok(conn) = Connection::open(db_path) else {
+        return;
+    };
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT rowid, payload_key, payload_text FROM runtime_storage_payloads \
+         WHERE payload_key LIKE '%TRACE_RESUME_MANIFEST.json' \
+            OR payload_key LIKE '%runtime_event_transports/%.json'",
+    ) else {
+        return;
+    };
+    let Ok(rows) = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
+    }) else {
+        return;
+    };
+    for row in rows.filter_map(Result::ok) {
+        let (row_id, payload_key, payload_text) = row;
+        let Ok(payload) = serde_json::from_str::<Value>(&payload_text) else {
+            continue;
+        };
+        let row_recency = recency_ms.saturating_add(row_id);
+        let attach_path = sqlite_payload_locator(db_path, &payload_key);
+        if payload_key.ends_with("TRACE_RESUME_MANIFEST.json") {
+            if let Some(candidate) = manifest_attach_candidate(&payload, attach_path, row_recency) {
+                candidates.push(candidate);
+            }
+        } else if let Some(candidate) = binding_attach_candidate(
+            &sqlite_rooted_binding_payload(db_path, payload),
+            attach_path,
+            row_recency,
+        ) {
+            candidates.push(candidate);
+        }
+    }
+}
+
+fn sqlite_payload_locator(db_path: &Path, payload_key: &str) -> String {
+    let path = PathBuf::from(payload_key);
+    if path.is_absolute() {
+        return path.to_string_lossy().into_owned();
+    }
+    db_path
+        .parent()
+        .map(|parent| parent.join(&path))
+        .unwrap_or(path)
+        .to_string_lossy()
+        .into_owned()
+}
+
+fn sqlite_rooted_binding_payload(db_path: &Path, mut payload: Value) -> Value {
+    let Some(binding_path) = descriptor_string(&payload, &["binding_artifact_path"]) else {
+        return payload;
+    };
+    if PathBuf::from(&binding_path).is_absolute() {
+        return payload;
+    }
+    if let Some(map) = payload.as_object_mut() {
+        map.insert(
+            "binding_artifact_path".to_string(),
+            Value::String(sqlite_payload_locator(db_path, &binding_path)),
+        );
+    }
+    payload
+}
+
+fn manifest_attach_candidate(
+    payload: &Value,
+    attach_path: String,
+    recency_ms: i64,
+) -> Option<AttachArtifactCandidate> {
+    if descriptor_string(payload, &["schema_version"]).as_deref()
+        != Some(TRACE_RESUME_MANIFEST_SCHEMA_VERSION)
+    {
+        return None;
+    }
+    descriptor_string(payload, &["event_transport_path"])?;
+    Some(AttachArtifactCandidate {
+        path: attach_path,
+        rank: AttachArtifactCandidateRank {
+            updated_at_ms: descriptor_string(payload, &["updated_at"])
+                .as_deref()
+                .and_then(parse_rfc3339_millis)
+                .unwrap_or(0),
+            recency_ms,
+            source_priority: 1,
+        },
+    })
+}
+
+fn binding_attach_candidate(
+    payload: &Value,
+    fallback_attach_path: String,
+    recency_ms: i64,
+) -> Option<AttachArtifactCandidate> {
+    if descriptor_string(payload, &["schema_version"]).as_deref()
+        != Some(RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION)
+    {
+        return None;
+    }
+    if descriptor_string(payload, &["binding_backend_family"]).as_deref() == Some("filesystem") {
+        return None;
+    }
+    let path = descriptor_string(payload, &["binding_artifact_path"])
+        .filter(|path| !path.is_empty())
+        .unwrap_or(fallback_attach_path);
+    Some(AttachArtifactCandidate {
+        path,
+        rank: AttachArtifactCandidateRank {
+            updated_at_ms: 0,
+            recency_ms,
+            source_priority: 0,
+        },
+    })
+}
+
+fn parse_rfc3339_millis(value: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .ok()
+        .map(|datetime| datetime.timestamp_millis())
+}
+
 fn compact_summary(summary: &Value, text_budget: usize) -> Value {
     json!({
         "mainGoalArea": truncate_text(value_str(summary.get("mainGoalArea")), text_budget),
@@ -2550,8 +3641,11 @@ mod tests {
     use std::io::Cursor;
 
     fn temp_root(label: &str) -> PathBuf {
-        let path =
-            std::env::temp_dir().join(format!("router-rs-browser-mcp-{label}-{}", now_millis()));
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("router-rs-browser-mcp-{label}-{unique}"));
         fs::create_dir_all(&path).expect("create temp root");
         path
     }
@@ -2625,6 +3719,128 @@ mod tests {
             response["result"]["structuredContent"]["error"]["code"],
             "INVALID_INPUT"
         );
+        fs::remove_dir_all(repo_root).expect("cleanup");
+    }
+
+    #[test]
+    fn browser_mcp_rust_replays_attached_runtime_events_from_resume_manifest() {
+        let repo_root = temp_root("attach-replay");
+        let data_root = repo_root.join("runtime-data");
+        let binding_path = data_root
+            .join("runtime_event_transports")
+            .join("session-1__job-1.json");
+        let resume_path = data_root.join("TRACE_RESUME_MANIFEST.json");
+        let trace_path = data_root.join("TRACE_EVENTS.jsonl");
+        fs::create_dir_all(binding_path.parent().expect("binding parent"))
+            .expect("create attach fixture dir");
+        fs::write(
+            &binding_path,
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "runtime-event-transport-v1",
+                "stream_id": "stream::job-1",
+                "session_id": "session-1",
+                "job_id": "job-1",
+                "binding_backend_family": "filesystem",
+                "resume_mode": "after_event_id",
+                "cleanup_preserves_replay": true
+            }))
+            .expect("serialize binding"),
+        )
+        .expect("write binding");
+        fs::write(
+            &resume_path,
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "runtime-resume-manifest-v1",
+                "session_id": "session-1",
+                "job_id": "job-1",
+                "event_transport_path": binding_path.display().to_string(),
+                "trace_stream_path": trace_path.display().to_string(),
+                "updated_at": "2026-04-23T00:00:01+00:00"
+            }))
+            .expect("serialize resume"),
+        )
+        .expect("write resume");
+        fs::write(
+            &trace_path,
+            concat!(
+                "{\"event_id\":\"evt-1\",\"kind\":\"job.started\",\"ts\":\"2026-04-23T00:00:00.000Z\"}\n",
+                "{\"event_id\":\"evt-2\",\"kind\":\"job.completed\",\"ts\":\"2026-04-23T00:00:01.000Z\"}\n"
+            ),
+        )
+        .expect("write trace");
+
+        let mut runtime = BrowserRuntime::with_attach_config(
+            repo_root.clone(),
+            BrowserAttachConfig {
+                runtime_resume_manifest_path: Some(resume_path.display().to_string()),
+                ..BrowserAttachConfig::default()
+            },
+        );
+        let diagnostics = runtime.diagnostics(&json!({})).expect("diagnostics");
+        assert_eq!(diagnostics["attachedRuntime"]["status"], "ready");
+        assert_eq!(
+            diagnostics["attachedRuntime"]["inputArtifactKind"],
+            Value::String("resume_manifest".to_string())
+        );
+        assert_eq!(diagnostics["attachedRuntime"]["eventCount"], json!(2));
+
+        let replay = runtime
+            .get_attached_runtime_events(&json!({"afterEventId": "evt-1", "limit": 5}))
+            .expect("replay");
+        assert_eq!(replay["events"].as_array().expect("events").len(), 1);
+        assert_eq!(replay["events"][0]["event_id"], "evt-2");
+        assert_eq!(
+            replay["replayContext"]["resumeManifestSource"],
+            Value::String("explicit_request".to_string())
+        );
+
+        fs::remove_dir_all(repo_root).expect("cleanup");
+    }
+
+    #[test]
+    fn browser_mcp_auto_discovers_newest_attach_manifest() {
+        let repo_root = temp_root("attach-discovery");
+        let older = repo_root
+            .join("framework_runtime")
+            .join("artifacts")
+            .join("scratch")
+            .join("older")
+            .join("TRACE_RESUME_MANIFEST.json");
+        let newer = repo_root
+            .join("framework_runtime")
+            .join("artifacts")
+            .join("scratch")
+            .join("newer")
+            .join("TRACE_RESUME_MANIFEST.json");
+        fs::create_dir_all(older.parent().expect("older parent")).expect("create older parent");
+        fs::create_dir_all(newer.parent().expect("newer parent")).expect("create newer parent");
+        fs::write(
+            &older,
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "runtime-resume-manifest-v1",
+                "event_transport_path": "/tmp/older.json",
+                "updated_at": "2026-04-23T00:00:00+00:00"
+            }))
+            .expect("serialize older"),
+        )
+        .expect("write older");
+        fs::write(
+            &newer,
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "runtime-resume-manifest-v1",
+                "event_transport_path": "/tmp/newer.json",
+                "updated_at": "2026-04-23T00:05:00+00:00"
+            }))
+            .expect("serialize newer"),
+        )
+        .expect("write newer");
+
+        let runtime = BrowserRuntime::new(repo_root.clone());
+        assert_eq!(
+            runtime.auto_discover_runtime_attach_artifact(),
+            Some(newer.to_string_lossy().into_owned())
+        );
+
         fs::remove_dir_all(repo_root).expect("cleanup");
     }
 }

@@ -63,6 +63,8 @@ struct Cli {
     max_request_bytes: usize,
     #[arg(long, env = "AOB_UPSTREAM_CONNECT_TIMEOUT_SECS", default_value_t = 10)]
     upstream_connect_timeout_secs: u64,
+    #[arg(long, env = "AOB_UPSTREAM_REQUEST_TIMEOUT_SECS", default_value_t = 300)]
+    upstream_request_timeout_secs: u64,
     #[arg(
         long,
         env = "AOB_UPSTREAM_POOL_MAX_IDLE_PER_HOST",
@@ -88,6 +90,7 @@ struct AppState {
     stream_heartbeat_secs: u64,
     max_request_bytes: usize,
     stream_channel_depth: usize,
+    upstream_request_timeout_secs: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -167,6 +170,7 @@ async fn main() -> Result<(), String> {
         stream_heartbeat_secs: cli.stream_heartbeat_secs,
         max_request_bytes,
         stream_channel_depth,
+        upstream_request_timeout_secs: cli.upstream_request_timeout_secs,
     });
     let app = Router::new()
         .route("/health", get(health))
@@ -197,6 +201,7 @@ async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         "max_tokens_field": resolve_max_tokens_field(&state.max_tokens_field, &state.model),
         "max_request_bytes": state.max_request_bytes,
         "stream_channel_depth": state.stream_channel_depth,
+        "upstream_request_timeout_secs": state.upstream_request_timeout_secs,
         "sampling_parameters": if supports_sampling_parameters(&state.model) { "forwarded" } else { "dropped_for_reasoning_model" },
         "stream_heartbeat_secs": state.stream_heartbeat_secs,
         "loss_reduction": {
@@ -253,11 +258,16 @@ async fn handle_messages(
 ) -> Result<Response, String> {
     let openai_body = build_openai_request(&state, &request, request.stream)?;
     let upstream = format!("{}/chat/completions", state.upstream_base);
-    let response = state
+    let mut upstream_request = state
         .client
         .post(upstream)
         .bearer_auth(resolve_upstream_key(&state, &headers))
-        .json(&openai_body)
+        .json(&openai_body);
+    if !request.stream && state.upstream_request_timeout_secs > 0 {
+        upstream_request =
+            upstream_request.timeout(Duration::from_secs(state.upstream_request_timeout_secs));
+    }
+    let response = upstream_request
         .send()
         .await
         .map_err(|err| format!("upstream request failed: {err}"))?;
@@ -453,6 +463,12 @@ fn build_openai_messages(
 }
 
 fn append_user_message(messages: &mut Vec<Value>, content: &Value) {
+    if let Some(text) = user_content_as_plain_text(content) {
+        if !text.trim().is_empty() {
+            messages.push(json!({"role": "user", "content": text}));
+        }
+        return;
+    }
     let blocks = content_blocks(content);
     let mut user_parts = Vec::new();
     for block in blocks {
@@ -487,6 +503,34 @@ fn append_user_message(messages: &mut Vec<Value>, content: &Value) {
     }
     if !user_parts.is_empty() {
         messages.push(json!({"role": "user", "content": user_parts}));
+    }
+}
+
+fn user_content_as_plain_text(content: &Value) -> Option<String> {
+    match content {
+        Value::String(text) => Some(text.clone()),
+        Value::Array(blocks) => {
+            let mut parts = Vec::new();
+            for block in blocks {
+                match block.get("type").and_then(Value::as_str) {
+                    Some("tool_result") | Some("image") => return None,
+                    Some("thinking") | Some("redacted_thinking") => {}
+                    _ => {
+                        let text = content_value_to_text(block);
+                        if !text.trim().is_empty() {
+                            parts.push(text);
+                        }
+                    }
+                }
+            }
+            Some(parts.join("\n"))
+        }
+        Value::Object(map) => match map.get("type").and_then(Value::as_str) {
+            Some("tool_result") | Some("image") => None,
+            Some("thinking") | Some("redacted_thinking") => Some(String::new()),
+            _ => Some(content_value_to_text(content)),
+        },
+        _ => Some(content_value_to_text(content)),
     }
 }
 
@@ -637,14 +681,27 @@ fn anthropic_image_source_to_url(source: &Value) -> Option<String> {
 }
 
 fn anthropic_tool_to_openai(tool: &Value) -> Value {
-    json!({
-        "type": "function",
-        "function": {
-            "name": tool.get("name").cloned().unwrap_or(Value::String("unknown_tool".to_string())),
-            "description": tool.get("description").cloned().unwrap_or(Value::String(String::new())),
-            "parameters": tool.get("input_schema").cloned().unwrap_or_else(|| json!({"type": "object"})),
-        }
-    })
+    let mut function = Map::new();
+    function.insert(
+        "name".to_string(),
+        tool.get("name")
+            .cloned()
+            .unwrap_or(Value::String("unknown_tool".to_string())),
+    );
+    if let Some(description) = tool.get("description").filter(|value| match value {
+        Value::String(text) => !text.trim().is_empty(),
+        Value::Null => false,
+        _ => true,
+    }) {
+        function.insert("description".to_string(), description.clone());
+    }
+    function.insert(
+        "parameters".to_string(),
+        tool.get("input_schema")
+            .cloned()
+            .unwrap_or_else(|| json!({"type": "object"})),
+    );
+    json!({"type": "function", "function": Value::Object(function)})
 }
 
 fn anthropic_tool_choice_to_openai(choice: &Value) -> Option<Value> {
@@ -1441,6 +1498,7 @@ mod tests {
             stream_heartbeat_secs: 5,
             max_request_bytes: 64 * 1024 * 1024,
             stream_channel_depth: 64,
+            upstream_request_timeout_secs: 300,
         }
     }
 
@@ -1485,6 +1543,10 @@ mod tests {
         );
         assert_eq!(mapped["model"], "gpt-5.5");
         assert_eq!(mapped["max_completion_tokens"], 128);
+        assert_eq!(
+            mapped["messages"][1],
+            json!({"role":"user","content":"read it"})
+        );
         assert_eq!(mapped["messages"][2]["content"], Value::Null);
         assert_eq!(
             mapped["messages"][2]["tool_calls"][0]["function"]["name"],
@@ -1499,6 +1561,45 @@ mod tests {
             "string"
         );
         assert_eq!(mapped["stream"], false);
+    }
+
+    #[test]
+    fn plain_user_text_maps_to_string_to_reduce_payload_tokens() {
+        let request = AnthropicRequest {
+            model: None,
+            max_tokens: None,
+            system: None,
+            tools: None,
+            tool_choice: None,
+            temperature: None,
+            top_p: None,
+            stop_sequences: None,
+            stream: false,
+            messages: vec![AnthropicMessage {
+                role: "user".to_string(),
+                content: json!([
+                    {"type":"thinking","thinking":"not forwarded"},
+                    {"type":"text","text":"hello"},
+                    {"type":"text","text":"world"}
+                ]),
+            }],
+        };
+        let mapped = build_openai_request(&state(), &request, false).expect("mapped");
+        assert_eq!(
+            mapped["messages"][0],
+            json!({"role": "user", "content": "hello\nworld"})
+        );
+    }
+
+    #[test]
+    fn tool_schema_omits_empty_description() {
+        let tool = anthropic_tool_to_openai(&json!({
+            "name": "read_file",
+            "description": "",
+            "input_schema": {"type": "object"}
+        }));
+        assert!(tool["function"].get("description").is_none());
+        assert_eq!(tool["function"]["parameters"]["type"], "object");
     }
 
     #[test]

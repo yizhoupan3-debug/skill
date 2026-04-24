@@ -5,7 +5,6 @@
 | `plugin-creator` | Active | P1 | L0 | owner | none | system | ✓ 100.0 | Scaffold a local Codex plugin and optional marketplace entry |
 | `skill-creator` | Active | P1 | L0 | owner | none | system | ✓ 96.4 | Design or revise one Codex skill package |
 | `skill-installer` | Active | P1 | L0 | owner | none | system | ✓ 97.0 | Install curated or remote Codex skills |
-| `academic-search` | Active | P2 | L3 | owner | none | project | ✓ 98.3 | Execute structured academic literature searches using Semantic Scholar, arXiv, G |
 | `accessibility-auditor` | Active | P2 | L3 | owner | none | project | ✓ 92.1 | Find and fix user-blocking accessibility issues with concrete WCAG 2.1/2.2-groun |
 | `agent-memory` | Active | P2 | L4 | owner | none | project | ✓ 92.1 | Design persistent agent memory across sessions |
 | `agent-swarm-orchestration` | Active | P2 | L4 | owner | none | project | ✓ 91.5 | Design and debug multi-agent systems with planners, routers, workers, reviewers, |
@@ -18,7 +17,7 @@
 | `architect-review` | Active | P2 | L2 | owner | none | project | ✓ 94.0 | Review software architecture, system design, and major structural code changes w |
 | `assignment-compliance` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Check whether a homework or course-project submission satisfies the stated requi |
 | `auth-implementation` | Active | P2 | L4 | owner | none | project | ✓ 97.3 | Produce server-enforced auth flows with clean separation between authentication, |
-| `autopilot` | Active | P2 | L1 | owner | delegation | project | ✓ 100.0 | Official OMC autopilot workflow, localized onto this repo's native execution lan |
+| `autopilot` | Active | P2 | L1 | owner | delegation | project | ✓ 100.0 | Repo-native autopilot workflow for end-to-end execution on this repo's Rust supe |
 | `autoresearch` | Active | P2 | L4 | owner | none | project | ✓ 96.1 | Orchestrate autonomous research through a recoverable loop of hypothesis, experi |
 | `backend-runtime-debugging` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Diagnose backend runtime failures: crashes, tracebacks, OOM, deadlocks, hanging  |
 | `brainstorm-research` | Active | P2 | L3 | owner | none | project | ✓ 95.8 | Expand early research ideas into multiple comparable directions and preserve the |
@@ -38,7 +37,7 @@
 | `css-pro` | Active | P2 | L2 | owner | none | project | ✓ 97.7 | Architect maintainable CSS layout, responsive, animation, and vibrant design-tok |
 | `data-wrangling` | Active | P2 | L2 | owner | none | project | ✓ 96.2 | Clean, transform, validate, and pipeline structured or semi-structured data acro |
 | `datastore-cache-queue` | Active | P2 | L2 | owner | none | project | ✓ 97.3 | Diagnose and fix correctness issues across stores, caches, queues, and ORM-backe |
-| `deepinterview` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Official OMC deep-interview workflow, localized onto this repo's evidence-first  |
+| `deepinterview` | Active | P2 | L1 | owner | none | project | ✓ 100.0 | Repo-native deepinterview workflow for evidence-first clarification and converge |
 | `dependency-migration` | Active | P2 | L2 | owner | none | project | ✓ 97.2 | Manage, audit, upgrade, and migrate project dependencies across npm, pip, Cargo, |
 | `design-agent` | Active | P2 | L3 | gate | none | project | ✓ 100.0 | Route named-product design references and brand-plus-motion source grounding bef |
 | `design-md` | Active | P1 | L3 | owner | none | project | ✓ 100.0 | Analyze real UI assets and synthesize a reusable semantic design system into `DE |
@@ -55,7 +54,7 @@
 | `execution-controller-app` | Active | P0 | L0 | @app-controller | delegation | project | ✓ 100.0 | Master orchestrator for production-grade app optimization, refactor, and full-st |
 | `execution-controller-coding` | Active | P0 | L0 | @kernel-controller | delegation | project | ✓ 100.0 | Orchestrate complex execution with clear scope, state, delegation, and verificat |
 | `experiment-reproducibility` | Active | P2 | L3 | owner | none | project | ✓ 96.2 | Ensure and manage research experiment reproducibility: environment capture, rand |
-| `financial-data-fetching` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Fetch, validate, normalize, and export real financial market data: OHLCV, financ |
+| `financial-data-fetching` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Fetch, validate, normalize, and export real financial market data: OHLCV, OHLCV, |
 | `frontend-code-quality` | Active | P2 | L3 | overlay | none | project | ✓ 95.8 | Enforce frontend code-quality rules such as ≤150-line files, early returns, and  |
 | `frontend-debugging` | Active | P2 | L1 | owner | none | project | ✓ 95.8 | Diagnose frontend runtime bugs with a five-layer model (component → state → rend |
 | `frontend-design` | Active | P2 | L3 | owner | none | project | ✓ 95.2 | Guide distinctive, high-end UI design: aesthetic direction, typography, color, m |
@@ -98,7 +97,7 @@
 | `paper-reviser` | Active | P2 | L2 | owner | none | project | ✓ 97.3 | Specialist revision lane behind `$paper-workbench`. Use when the route is alread |
 | `paper-visuals` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Audit and improve paper figures, tables, captions, legends, axes, notes, and res |
 | `paper-workbench` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Unified front door for paper work. Use when the user has a manuscript-level task |
-| `paper-writing` | Active | P2 | L2 | owner | none | project | ✓ 95.7 | Polish local paper text after the claim and evidence boundary is already fixed.  |
+| `paper-writing` | Active | P2 | L2 | owner | none | project | ✓ 95.7 | Write, restructure, or polish a bounded academic-paper text unit after the claim |
 | `pdf` | Active | P1 | L3 | gate | artifact | project | ✓ 94.8 | Read, create, edit, repair, and review PDFs when rendering and page layout matte |
 | `performance-expert` | Active | P2 | L3 | owner | none | project | ✓ 94.2 | Audit and improve web performance with emphasis on Core Web Vitals, asset weight |
 | `plan-to-code` | Active | P1 | L2 | owner | none | project | ✓ 95.8 | Implement a concrete plan or spec into integrated code |
@@ -106,7 +105,7 @@
 | `ppt-beamer` | Active | P2 | L4 | owner | none | project | ✓ 95.3 | Create, revise, and compile presentation decks with LaTeX Beamer when you want e |
 | `ppt-html-export` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Use after the `$slides` gate when the user explicitly wants HTML slides plus a b |
 | `ppt-markdown` | Active | P2 | L4 | owner | none | project | ✓ 95.2 | Build slide decks from Markdown using Slidev or Marp. Use for explicit Markdown  |
-| `ppt-pptx` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Create source-first `deck.js` plus editable `.pptx` decks with PptxGenJS, theme- |
+| `ppt-pptx` | Active | P2 | L4 | owner | none | project | ✓ 95.7 | Create Rust-authored outline/source plans plus editable `deck.pptx` decks throug |
 | `slides` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Route presentation-artifact work before choosing a slide-authoring lane. Use thi |
 | `spreadsheets` | Active | P1 | L3 | gate | artifact | project | ✓ 100.0 | Route workbook-native spreadsheet artifact work before choosing a narrower imple |
 | `prompt-engineer` | Active | P2 | L1 | owner | none | project | ✓ 95.8 | Transform vague instructions into structured prompts with explicit role, constra |
@@ -116,6 +115,7 @@
 | `refresh` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | 使用 Rust refresh 命令生成并复制下一轮执行提示 |
 | `release-engineering` | Active | P2 | L3 | owner | none | project | ✓ 97.3 | Build release pipelines from commit to published artifact. Use for versioning st |
 | `research-engineer` | Active | P2 | L4 | owner | none | project | ✓ 96.6 | Provide rigorous technical critique, algorithm analysis, formal reasoning, compl |
+| `research-workbench` | Active | P2 | L2 | owner | none | project | ✓ 100.0 | Unified front door for non-manuscript research-project work. Use when the user h |
 | `rust-pro` | Active | P2 | L4 | owner | none | project | ✓ 96.7 | Deliver ownership-correct Rust code that compiles without unnecessary clones, ma |
 | `scientific-figure-plotting` | Active | P2 | L4 | owner | none | project | ✓ 97.7 | Create, refactor, and review code-generated scientific figures for papers using  |
 | `screenshot` | Active | P2 | L3 | owner | none | project | ✓ 95.6 | Capture desktop or system screenshots including full screen, a specific app wind |
@@ -141,7 +141,7 @@
 | `tailwind-pro` | Active | P2 | L4 | owner | none | project | ✓ 94.8 | Produce Tailwind CSS configurations with design tokens, plugin hooks, and framew |
 | `tao-ci` | Active | P2 | L3 | owner | none | project | ✓ 100.0 | Draft professor-specific summer research outreach emails from workbook data |
 | `tdd-workflow` | Active | P2 | L1 | overlay | none | project | ✓ 92.8 | Run a Test-Driven Development workflow centered on the RED-GREEN-REFACTOR loop w |
-| `team` | Active | P2 | L1 | owner | delegation | project | ✓ 100.0 | Official OMC team workflow, localized onto this repo's Rust-first supervisor and |
+| `team` | Active | P2 | L1 | owner | delegation | project | ✓ 100.0 | Repo-native team workflow for Rust-first supervisor-led delegation and worker li |
 | `test-engineering` | Active | P2 | L1 | owner | none | project | ✓ 97.3 | Choose the right test layer, write maintainable tests, and stabilize flaky behav |
 | `typescript-pro` | Active | P1 | L4 | owner | none | project | ✓ 96.3 | Deliver type-safe TypeScript 5.x+ code. Enforces strict mode, encodes domain con |
 | `vercel-react-best-practices` | Active | P2 | L4 | overlay | none | project | ✓ 96.8 | Apply Vercel-style React/Next.js best practices for App Router, Server Component |

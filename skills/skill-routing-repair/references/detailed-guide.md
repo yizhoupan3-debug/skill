@@ -101,8 +101,6 @@ Only create a **new gate** when routing truly depends on source, artifact, evide
 After repair:
 
 ```bash
-python3 scripts/check_skills.py --verify-codex-link
-python3 scripts/check_skills.py --include-system --verify-codex-link
 cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
   --skills-root skills \
   --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
@@ -145,11 +143,12 @@ After completing step 1 of the repair workflow (capture the miss), append a row:
 Periodically (or when miss count grows), run the analysis script:
 
 ```bash
-python3 scripts/analyze_routing.py          # text summary
-python3 scripts/analyze_routing.py --json   # machine-readable
+cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
+  --skills-root skills \
+  --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
+  --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
+  --json
 ```
 
-The script will:
-- identify frequently missed skills
-- detect skills missing from the trigger index
+The compiler output gives a machine-readable routing snapshot for drift checks.
 - generate description improvement suggestions automatically

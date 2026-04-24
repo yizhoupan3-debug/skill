@@ -12,9 +12,17 @@ _What is the best evidence-backed claim right now?_
 
 _Keep this tied to actual runs._
 
+## Reuse Notes
+
+_Capture portable findings and where they apply, not chronological narration._
+
 ## What The Evidence Rules Out
 
 _Record useful negative results here._
+
+## Alternative Explanations To Clear
+
+_What else could explain the current pattern?_
 
 ## Remaining Risks
 

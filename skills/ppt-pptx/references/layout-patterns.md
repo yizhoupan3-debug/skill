@@ -8,51 +8,71 @@ Use this reference when selecting or auto-assigning slide layouts based on conte
 **Trigger**: first slide or `type: "cover"` in outline.
 **Structure**: blurred full-slide background + dark overlay + title stack (title, subtitle, metadata) on left, optional focus image on right.
 **Slot needs**: title (required), subtitle, presenter, date, coverImage.
+**Design intent**: create one memorable entry point, with title as the clear hero.
+**Quality gate**: focal image, protection layer, and title hierarchy are obvious; no busy image under unprotected text.
 
 ### `hero-image`
 **Trigger**: `hasImage: true && bulletCount <= 2`.
 **Structure**: dominant image (70%) + short text overlay or side panel (30%).
 **Slot needs**: image (required), title, caption.
+**Design intent**: let the image carry the emotional or evidentiary load.
+**Quality gate**: crop has a focal point; caption is attached to the image, not floating as decoration.
 
 ### `image-text-split`
 **Trigger**: `hasImage: true && textLength > 100`.
 **Structure**: left image panel (5.5 in) + right text panel (6.5 in), or mirrored.
 **Slot needs**: image, title, bullets or body text.
+**Design intent**: pair one visual anchor with a short explanation path.
+**Quality gate**: image and text have unequal but intentional weight; body copy remains readable.
 
 ### `multi-card`
 **Trigger**: `bulletCount >= 3 && bulletCount <= 6 && !hasImage`.
 **Structure**: 2-4 dark panels arranged in grid, each with a number/icon + title + description.
 **Slot needs**: title, items array [{title, description, value?}].
+**Design intent**: break a concept into a few comparable parts without flattening hierarchy.
+**Quality gate**: avoid equal-weight card farms; one card, number, or takeaway should lead the eye.
 
 ### `data-panel`
 **Trigger**: `dataPoints >= 3`.
 **Structure**: metric chip row at top + wide evidence panel below with chart or table.
 **Slot needs**: title, metrics [{value, label}], chart or table data.
+**Design intent**: make the comparison clear before showing detail.
+**Quality gate**: chart/table is restyled; no default Office palette, clutter, or unreadable axis labels.
 
 ### `comparison`
 **Trigger**: `hasComparison: true` or exactly 2 top-level groups.
 **Structure**: two side-by-side panels with matching internal structure.
 **Slot needs**: title, left {title, items}, right {title, items}, optional images.
+**Design intent**: make one tradeoff visible at a glance.
+**Quality gate**: both sides align, but the conclusion or preferred option is visually signaled.
 
 ### `timeline`
 **Trigger**: `hasTimeline: true` or items with date/year fields.
 **Structure**: horizontal timeline bar with event cards above/below.
 **Slot needs**: title, events [{date, title, description}].
+**Design intent**: show change over time, not just a decorated list.
+**Quality gate**: dates are legible, event density is controlled, and the visual rhythm follows chronology.
 
 ### `process-flow`
 **Trigger**: `hasSteps: true` or sequential numbered items.
 **Structure**: connected nodes left-to-right with arrows.
 **Slot needs**: title, steps [{title, description}].
+**Design intent**: describe action order and handoffs.
+**Quality gate**: each step starts with an action; arrows clarify sequence rather than adding decoration.
 
 ### `full-text`
 **Trigger**: `textLength > 300 && !hasImage && dataPoints == 0`.
 **Structure**: section title + 2-3 dark text panels with structured content.
 **Slot needs**: title, body text or structured bullets.
+**Design intent**: preserve a dense argument while still creating scan points.
+**Quality gate**: copy is pruned before font size is reduced; no wall-of-text panel.
 
 ### `closing`
 **Trigger**: last slide or `type: "closing"` in outline.
 **Structure**: blurred background (same as cover) + thank you / Q&A text + optional contact info.
 **Slot needs**: closingText, optional contact.
+**Design intent**: echo the cover and leave one final thought.
+**Quality gate**: closing feels intentional, not a leftover title slide or unrelated template.
 
 ## Auto-Selection Algorithm
 

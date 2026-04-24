@@ -12,6 +12,10 @@
 
 _What should become newly true if this project works?_
 
+## Mechanism Sketch
+
+_Why might the contribution work, in causal terms?_
+
 ## Decision This Research Supports
 
 _What downstream decision depends on this work?_

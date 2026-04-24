@@ -15,16 +15,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Run evolution audit
         run: |
-          python3 scripts/score_skills.py --all --json > /tmp/scores.json
-          python3 scripts/evolution_engine.py health --scores /tmp/scores.json
-          python3 scripts/evolution_engine.py audit --json > /tmp/audit.json
-          python3 scripts/sync_skills.py --apply
+          : > /tmp/evolution_journal.jsonl
+          cargo run --manifest-path scripts/evolution-rs/Cargo.toml -- manifest \
+            --journal /tmp/evolution_journal.jsonl \
+            --manifest skills/SKILL_MANIFEST.json \
+            > skills/SKILL_HEALTH_MANIFEST.json
+          cargo run --manifest-path scripts/evolution-rs/Cargo.toml -- audit \
+            --journal /tmp/evolution_journal.jsonl \
+            --manifest skills/SKILL_MANIFEST.json \
+            --json > /tmp/audit.json
+          cargo run --manifest-path scripts/skill-compiler-rs/Cargo.toml -- \
+            --skills-root skills \
+            --source-manifest skills/SKILL_SOURCE_MANIFEST.json \
+            --health-manifest skills/SKILL_HEALTH_MANIFEST.json \
+            --apply
 
       - name: Commit manifest changes
         run: |
@@ -57,56 +65,40 @@ jobs:
             git push
           fi
 
-      - name: Generate report & create issue if needed
+      - name: Generate report and create issue if needed
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          python3 -c "
-          import json, subprocess, sys
+          avg_health="$(jq -r '.summary.avg_health // 0' skills/SKILL_HEALTH_MANIFEST.json)"
+          critical_count="$(jq -r '.critical_outliers | length' skills/SKILL_HEALTH_MANIFEST.json)"
+          reroutes="$(jq -r '.reroute_count // 0' /tmp/audit.json)"
 
-          audit = json.load(open('/tmp/audit.json'))
-          health = json.load(open('skills/SKILL_HEALTH_MANIFEST.json'))
+          if [ "$critical_count" = "0" ] && [ "$reroutes" = "0" ]; then
+            echo "All clear: no issues to report."
+            exit 0
+          fi
 
-          poor = health.get('critical_outliers', [])
-          reroutes = audit.get('reroute_count', 0)
-          avg_health = health.get('summary', {}).get('avg_health', 0)
+          {
+            echo "## Weekly Skill Evolution Audit"
+            echo
+            echo "- Average Health: ${avg_health}/100"
+            echo "- Critical Outliers: ${critical_count}"
+            echo "- Routing Reroutes (last 30d): ${reroutes}"
+            echo
+            echo "### Skills needing evolution"
+            jq -r '
+              .critical_outliers[]? as $name
+              | "- `\($name)`: \(.skills[$name].dynamic_score // "?")/100 (Static: \(.skills[$name].static_score // "?"))"
+            ' skills/SKILL_HEALTH_MANIFEST.json
+            echo
+            echo "### Suggested repairs"
+            jq -r '.repair_suggestions[]?.suggestion | "- " + .' /tmp/audit.json
+            echo
+            echo "### Potential new skills"
+            jq -r '.new_skill_candidates[]? | "- **\(.suggested_name)**: \(.phrase) (\(.count)x) - \(.reason)"' /tmp/audit.json
+          } > /tmp/evolution-issue.md
 
-          if not poor and reroutes == 0 and avg_health > 90:
-              print('All clear — no issues to report.')
-              sys.exit(0)
-
-          body = '## Weekly Skill Evolution Audit\n\n'
-          body += f'- Average Health: {avg_health}/100\n'
-          body += f'- Critical Outliers: {len(poor)}\n'
-          body += f'- Routing Reroutes (last 30d): {reroutes}\n\n'
-
-          if poor:
-              body += '### Skills needing evolution\n\n'
-              for s in poor:
-                  detail = health['skills'][s]
-                  body += f'- \`{s}\`: {detail[\"dynamic_score\"]}/100 (Static: {detail.get(\"static_score\", \"?\")})\n'
-
-          if audit.get('repair_suggestions'):
-              body += '\n### 🛠️ Suggested repairs\n\n'
-              for s in audit['repair_suggestions']:
-                  body += f'- {s[\"suggestion\"]}\n'
-
-          if audit.get('new_skill_candidates'):
-              body += '\n### 🌊 待批阅工作流 (Potential New Skills)\n\n'
-              body += '以下工作流在过去一段时间内高频出现且未被现有技能精准覆盖，请批阅是否凝结为新 Skill：\n\n'
-              for c in audit['new_skill_candidates']:
-                  body += f'- **{c[\"suggested_name\"]}** (模式: `\"{c[\"phrase\"]}\"`, 出现 {c[\"count\"]} 次)\n'
-                  body += f'  - 原因: {c[\"reason\"]}\n'
-                  body += f'  - 示例任务: \n'
-                  for task in c['example_tasks']:
-                      body += f'    - {task}\n'
-              body += '\n> [!TIP]\n'
-              body += '> 如需凝结，请使用 `$skill-developer` 并参考本期审计报告进行标准化生成。\n'
-
-          subprocess.run([
-              'gh', 'issue', 'create',
-              '--title', f'[Auto] Skill evolution: {len(poor)} outliers, {reroutes} reroutes',
-              '--body', body,
-              '--label', 'skill-maintenance',
-          ], check=False)
-          "
+          gh issue create \
+            --title "[Auto] Skill evolution: ${critical_count} outliers, ${reroutes} reroutes" \
+            --body-file /tmp/evolution-issue.md \
+            --label skill-maintenance

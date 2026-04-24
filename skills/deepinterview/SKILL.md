@@ -1,8 +1,8 @@
 ---
 name: deepinterview
 description: |
-  Official OMC deep-interview workflow, localized onto this repo's evidence-first clarification lane.
-  It keeps the original Socratic ambiguity-gated interview model while replacing .omc persistence with local continuity artifacts and Rust-backed resume.
+  Repo-native deepinterview workflow for evidence-first clarification and convergence review.
+  It owns the ambiguity-gated interview loop through local continuity artifacts and Rust-backed resume.
 routing_layer: L1
 routing_owner: owner
 routing_gate: none
@@ -46,17 +46,17 @@ approval_required_tools: []
 
 # deepinterview
 
-`deepinterview` 继承 OMC `v4.13.2` 的 `deep-interview` 流程：单轮单问、持续量化模糊度、达标后再交给执行；本仓把 `.omc` 状态和 slash pipeline 换成证据、continuity 与 Rust supervisor。
+`deepinterview` 是本仓自有的深度澄清流程：单轮单问、持续量化模糊度、达标后再交给执行；状态和 handoff 都走证据、continuity 与 Rust supervisor。
 
 显式入口：
 - Codex：`$deepinterview`
 - Claude：`/deepinterview`
 
-## Upstream Baseline
+## Native Workflow
 
-- 官方来源：`oh-my-claudecode` `v4.13.2`
-- 对应技能：`skills/deep-interview/SKILL.md`
+- 本仓来源：`skills/deepinterview/SKILL.md` + `configs/framework/RUNTIME_REGISTRY.json`
 - 主流程：one-question-at-a-time -> target weakest dimension -> score ambiguity each round -> handoff only below threshold
+- 外部依赖：无外部 Claude 插件、无旧插件状态目录、无插件运行态
 
 ## When to use
 
@@ -94,7 +94,7 @@ approval_required_tools: []
 
 ## Local runtime
 
-- 不再写 `.omc/state/deep-interview*.json` 或 `.omc/specs/deep-interview-*.md`。
+- 不再写旧插件状态或旧插件 spec。
 - 访谈进度和澄清结果写到 `artifacts/current/<task_id>/bootstrap/`、`SESSION_SUMMARY.md`、`NEXT_ACTIONS.json`、`EVIDENCE_INDEX.json`、`TRACE_METADATA.json`、`.supervisor_state.json`。
 - 达标后的 handoff 交给本仓 `autopilot` 和 Rust supervisor。
 
@@ -110,7 +110,7 @@ approval_required_tools: []
 
 ## Constraints
 
-- 这是官方能力的本地化，不是自创新协议。
+- 这是本仓自有澄清协议，不是外部插件兼容壳。
 - 用本仓 review skill 和验证证据解释结论。
 - 不在 Claude 和 Codex 上分叉 `deepinterview` 的意义。
-- 用户看到的是原生 `deepinterview`，不是外部兼容层。
+- 用户看到的是本仓原生 `deepinterview`，不是外部兼容层。

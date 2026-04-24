@@ -48,6 +48,7 @@ This skill is a valid **opening-turn owner** for early-stage research ideation.
 
 ## Do not use
 
+- The user wants one front door for a research-project task -> use `$research-workbench`
 - The user already has a focused topic and wants a deep novelty check or systematic literature review → use `$literature-synthesis`
 - The user has existing papers and wants to find research gaps from that literature → use `$literature-synthesis` Mode E (Research-Gap Memo)
 - Mature corpus → use `$literature-synthesis`
@@ -90,9 +91,10 @@ If runtime policy does **not** permit spawning:
 
 ## Cross-references
 
+- `$research-workbench` uses this skill as the early-stage direction lane
 - `$autoresearch` bootstrap phase may invoke this skill for initial direction generation
 - `$literature-synthesis` Mode E (Research-Gap Memo) provides evidence-grounded gaps; this skill provides divergent expansion from thin input
-- `$academic-search` can be invoked during the novelty gate for quick verification searches
+- `$literature-synthesis` can be invoked during the novelty gate for quick verification searches
 
 ## Boundary: `brainstorm-research` vs `autoresearch`
 
