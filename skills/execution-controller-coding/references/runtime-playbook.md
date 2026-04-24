@@ -17,17 +17,17 @@ Use this reference only after `execution-controller-coding` has already been sel
    - reserve shared continuity artifacts for the active supervisor / integrator
    - define lane-local output or delta artifact paths before execution starts
 5. Integrate slice-by-slice and checkpoint after each major merge.
-6. Flush `SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, and `TRACE_METADATA.json` before sign-off.
+6. Flush task-scoped `artifacts/current/<task_id>/SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, and `TRACE_METADATA.json` before sign-off.
 
 ## Single-writer continuity rule
 
-Treat these as shared global continuity artifacts:
+Treat these as supervisor-owned continuity artifacts:
 
 - `.supervisor_state.json`
-- `SESSION_SUMMARY.md`
-- `NEXT_ACTIONS.json`
-- `EVIDENCE_INDEX.json`
-- `TRACE_METADATA.json`
+- `artifacts/current/<task_id>/SESSION_SUMMARY.md`
+- `artifacts/current/<task_id>/NEXT_ACTIONS.json`
+- `artifacts/current/<task_id>/EVIDENCE_INDEX.json`
+- `artifacts/current/<task_id>/TRACE_METADATA.json`
 
 Only the active supervisor / integrator may write them.
 
@@ -41,7 +41,7 @@ At integration time:
 
 1. review the lane-local outputs
 2. merge accepted deltas into the supervisor state
-3. flush the global continuity artifacts once
+3. flush task-scoped continuity artifacts once
 
 ## State Minimum
 

@@ -2,13 +2,10 @@
 
 Expert guidance for building stateful applications with Cloudflare Durable Objects.
 
-## Reading Order
+## Use Official Docs For Details
 
 1. **First time?** Read this overview + Quick Start
-2. **Setting up?** See [Configuration](./configuration.md)
-3. **Building features?** Use decision trees below → [Patterns](./patterns.md)
-4. **Debugging issues?** Check [Gotchas](./gotchas.md)
-5. **Deep dive?** [API](./api.md) and [DO Storage](../do-storage/README.md)
+2. For setup, patterns, debugging, APIs, storage, migrations, and limits, use official Cloudflare docs.
 
 ## Overview
 
@@ -60,7 +57,7 @@ Workers use bindings to get stubs, then call RPC methods directly (recommended) 
 └─ Legacy compatibility → fetch()
 ```
 
-See [Patterns: RPC vs fetch()](./patterns.md) for examples.
+Use official Cloudflare docs for current examples.
 
 ### ID Generation
 - `idFromName()`: Deterministic, named coordination (rate limiting, locks)
@@ -81,7 +78,7 @@ See [Patterns: RPC vs fetch()](./patterns.md) for examples.
 - **Synchronous KV API**: Simple key-value on SQLite objects
 - **Asynchronous KV API**: Legacy/advanced use cases
 
-See [DO Storage](../do-storage/README.md) for deep dive.
+Use official Cloudflare docs for current examples.
 
 ### Special Features
 - **Alarms**: Schedule future execution per-DO (1 per DO - use queue pattern for multiple)
@@ -121,19 +118,19 @@ export default {
 
 ```
 ├─ Coordinate requests (rate limit, lock, session)
-│   → idFromName(identifier) → [Patterns: Rate Limiting/Locks](./patterns.md)
+│   → idFromName(identifier) → official Cloudflare docs
 │
 ├─ High throughput (>1K req/s)
-│   → Sharding with newUniqueId() or hash → [Patterns: Sharding](./patterns.md)
+│   → Sharding with newUniqueId() or hash → official Cloudflare docs
 │
 ├─ Real-time updates (WebSocket, chat, collab)
-│   → WebSocket hibernation + room pattern → [Patterns: Real-time](./patterns.md)
+│   → WebSocket hibernation + room pattern → official Cloudflare docs
 │
 ├─ Background work (cleanup, notifications, scheduled tasks)
-│   → Alarms + queue pattern (1 alarm/DO) → [Patterns: Multiple Events](./patterns.md)
+│   → Alarms + queue pattern (1 alarm/DO) → official Cloudflare docs
 │
 └─ User sessions with expiration
-    → Session pattern + alarm cleanup → [Patterns: Session Management](./patterns.md)
+    → Session pattern + alarm cleanup → official Cloudflare docs
 ```
 
 ### Which access pattern?
@@ -145,7 +142,7 @@ export default {
 └─ Legacy compat → fetch()
 ```
 
-See [Patterns: RPC vs fetch()](./patterns.md) for examples.
+Use official Cloudflare docs for current examples.
 
 ### Which storage?
 
@@ -155,7 +152,7 @@ See [Patterns: RPC vs fetch()](./patterns.md) for examples.
 └─ Legacy KV-only DO → ctx.storage (async API)
 ```
 
-See [DO Storage](../do-storage/README.md) for complete guide.
+Use official Cloudflare docs for current examples.
 
 ## Essential Commands
 
@@ -167,19 +164,4 @@ npx wrangler deploy           # Deploy + auto-apply migrations
 
 ## Resources
 
-**Docs**: https://developers.cloudflare.com/durable-objects/  
-**API Reference**: https://developers.cloudflare.com/durable-objects/api/  
-**Examples**: https://developers.cloudflare.com/durable-objects/examples/
-
-## In This Reference
-
-- **[Configuration](./configuration.md)** - wrangler.jsonc setup, migrations, bindings, environments
-- **[API](./api.md)** - Class structure, ctx methods, alarms, WebSocket hibernation
-- **[Patterns](./patterns.md)** - Sharding, rate limiting, locks, real-time, sessions
-- **[Gotchas](./gotchas.md)** - Limits, hibernation caveats, common errors
-
-## See Also
-
-- **[DO Storage](../do-storage/README.md)** - SQLite, KV, transactions (detailed storage guide)
-- **[Workers](../workers/README.md)** - Core Workers runtime features
-- **[WebSockets](../websockets/README.md)** - WebSocket APIs and patterns
+Use official Cloudflare Durable Objects docs for current APIs, storage behavior, limits, migrations, and examples.

@@ -924,38 +924,6 @@ describe('BrowserRuntime', () => {
     }
   }, 15000);
 
-  it('hydrates replay from a transport binding artifact path', async () => {
-    const { tempRoot, traceStreamPath, bindingArtifactPath } = await createAttachedRuntimeFixture();
-    const attachedRuntime = new BrowserRuntime({
-      headless: true,
-      runtimeBindingArtifactPath: bindingArtifactPath,
-      screenshotDir: path.join(tempRoot, 'screenshots'),
-    });
-
-    try {
-      const diagnostics = await attachedRuntime.getDiagnostics();
-      expect(diagnostics.attachedRuntime.status).toBe('ready');
-      expect(diagnostics.attachedRuntime.descriptorSource).toBe('binding_artifact_path');
-      expect(diagnostics.attachedRuntime.inputArtifactKind).toBe('binding_artifact');
-      expect(diagnostics.attachedRuntime.sourceTransportMethod).toBe('describe_runtime_event_transport');
-      expect(diagnostics.attachedRuntime.sourceHandoffMethod).toBe('describe_runtime_event_handoff');
-      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
-      expect(diagnostics.attachedRuntime.bindingArtifactSource).toBe('explicit_request');
-      expect(diagnostics.attachedRuntime.traceStreamSource).toBe('resume_manifest');
-
-      const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
-      expect(replay.replayContext.descriptorSource).toBe('binding_artifact_path');
-      expect(replay.replayContext.inputArtifactKind).toBe('binding_artifact');
-      expect(replay.replayContext.bindingArtifactSource).toBe('explicit_request');
-      expect(replay.replayContext.traceStreamSource).toBe('resume_manifest');
-      expect(replay.events).toHaveLength(2);
-      expect(replay.events[1]!.event_id).toBe('evt-2');
-    } finally {
-      await attachedRuntime.shutdown();
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  }, 15000);
-
   it('hydrates replay from an attach artifact path that points at a transport binding artifact', async () => {
     const { tempRoot, traceStreamPath, bindingArtifactPath } = await createAttachedRuntimeFixture();
     const attachedRuntime = new BrowserRuntime({
@@ -988,67 +956,11 @@ describe('BrowserRuntime', () => {
     }
   }, 15000);
 
-  it('hydrates replay from a handoff artifact path', async () => {
-    const { tempRoot, traceStreamPath, handoffPath } = await createAttachedRuntimeFixture();
-    const attachedRuntime = new BrowserRuntime({
-      headless: true,
-      runtimeHandoffPath: handoffPath,
-      screenshotDir: path.join(tempRoot, 'screenshots'),
-    });
-
-    try {
-      const diagnostics = await attachedRuntime.getDiagnostics();
-      expect(diagnostics.attachedRuntime.status).toBe('ready');
-      expect(diagnostics.attachedRuntime.descriptorSource).toBe('handoff_path');
-      expect(diagnostics.attachedRuntime.inputArtifactKind).toBe('handoff');
-      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
-      expect(diagnostics.attachedRuntime.handoffSource).toBe('explicit_request');
-
-      const replay = await attachedRuntime.getAttachedRuntimeEvents({ afterEventId: 'evt-1', limit: 5 });
-      expect(replay.replayContext.descriptorSource).toBe('handoff_path');
-      expect(replay.replayContext.inputArtifactKind).toBe('handoff');
-      expect(replay.replayContext.handoffSource).toBe('explicit_request');
-      expect(replay.events).toHaveLength(1);
-      expect(replay.events[0]!.event_id).toBe('evt-2');
-    } finally {
-      await attachedRuntime.shutdown();
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  }, 15000);
-
-  it('hydrates replay from a resume manifest path', async () => {
-    const { tempRoot, traceStreamPath, resumeManifestPath } = await createAttachedRuntimeFixture();
-    const attachedRuntime = new BrowserRuntime({
-      headless: true,
-      runtimeResumeManifestPath: resumeManifestPath,
-      screenshotDir: path.join(tempRoot, 'screenshots'),
-    });
-
-    try {
-      const diagnostics = await attachedRuntime.getDiagnostics();
-      expect(diagnostics.attachedRuntime.status).toBe('ready');
-      expect(diagnostics.attachedRuntime.descriptorSource).toBe('resume_manifest_path');
-      expect(diagnostics.attachedRuntime.inputArtifactKind).toBe('resume_manifest');
-      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
-      expect(diagnostics.attachedRuntime.resumeManifestSource).toBe('explicit_request');
-
-      const replay = await attachedRuntime.getAttachedRuntimeEvents({ afterEventId: 'evt-1', limit: 5 });
-      expect(replay.replayContext.descriptorSource).toBe('resume_manifest_path');
-      expect(replay.replayContext.inputArtifactKind).toBe('resume_manifest');
-      expect(replay.replayContext.resumeManifestSource).toBe('explicit_request');
-      expect(replay.events).toHaveLength(1);
-      expect(replay.events[0]!.event_id).toBe('evt-2');
-    } finally {
-      await attachedRuntime.shutdown();
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  }, 15000);
-
   it('keeps replay and resume semantics consistent after handoff cleanup falls back to the resume manifest', async () => {
     const { tempRoot, traceStreamPath, handoffPath, resumeManifestPath } = await createAttachedRuntimeFixture();
     const attachedRuntime = new BrowserRuntime({
       headless: true,
-      runtimeHandoffPath: handoffPath,
+      runtimeAttachArtifactPath: handoffPath,
       screenshotDir: path.join(tempRoot, 'screenshots'),
     });
 
@@ -1110,7 +1022,7 @@ describe('BrowserRuntime', () => {
         limit: 5,
       });
       expect(resumed.afterEventId).toBe('evt-1');
-      expect(resumed.replayContext.descriptorSource).toBe('handoff_path');
+      expect(resumed.replayContext.descriptorSource).toBe('attach_artifact_path');
       expect(resumed.replayContext.inputArtifactKind).toBe('handoff');
       expect(resumed.replayContext.resumeManifestSource).toBe('handoff_manifest');
       expect(resumed.replayContext.traceStreamSource).toBe('resume_manifest');
@@ -1344,43 +1256,18 @@ describe('BrowserRuntime', () => {
     }
   }, 15000);
 
-  it('hydrates replay from a sqlite binding artifact path', async () => {
+  it('hydrates a canonical descriptor from a sqlite binding artifact through the canonical attach artifact path', async () => {
     const { tempRoot, bindingArtifactPath, traceStreamPath } = await createAttachedRuntimeSqliteFixture();
     const attachedRuntime = new BrowserRuntime({
       headless: true,
-      runtimeBindingArtifactPath: bindingArtifactPath,
+      runtimeAttachArtifactPath: bindingArtifactPath,
       screenshotDir: path.join(tempRoot, 'screenshots'),
     });
 
     try {
       const diagnostics = await attachedRuntime.getDiagnostics();
       expect(diagnostics.attachedRuntime.status).toBe('ready');
-      expect(diagnostics.attachedRuntime.descriptorSource).toBe('binding_artifact_path');
-      expect(diagnostics.attachedRuntime.inputArtifactKind).toBe('binding_artifact');
-      expect(diagnostics.attachedRuntime.artifactBackendFamily).toBe('sqlite');
-      expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);
-
-      const replay = await attachedRuntime.getAttachedRuntimeEvents({ limit: 5 });
-      expect(replay.events).toHaveLength(2);
-      expect(replay.events[1]!.event_id).toBe('evt-sqlite-2');
-    } finally {
-      await attachedRuntime.shutdown();
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  }, 15000);
-
-  it('hydrates a canonical descriptor from a sqlite binding artifact path', async () => {
-    const { tempRoot, bindingArtifactPath, traceStreamPath } = await createAttachedRuntimeSqliteFixture();
-    const attachedRuntime = new BrowserRuntime({
-      headless: true,
-      runtimeBindingArtifactPath: bindingArtifactPath,
-      screenshotDir: path.join(tempRoot, 'screenshots'),
-    });
-
-    try {
-      const diagnostics = await attachedRuntime.getDiagnostics();
-      expect(diagnostics.attachedRuntime.status).toBe('ready');
-      expect(diagnostics.attachedRuntime.descriptorSource).toBe('binding_artifact_path');
+      expect(diagnostics.attachedRuntime.descriptorSource).toBe('attach_artifact_path');
       expect(diagnostics.attachedRuntime.inputArtifactKind).toBe('binding_artifact');
       expect(diagnostics.attachedRuntime.artifactBackendFamily).toBe('sqlite');
       expect(diagnostics.attachedRuntime.traceStreamPath).toBe(traceStreamPath);

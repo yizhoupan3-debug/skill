@@ -8,7 +8,7 @@ description: |
   database-side fixes that need SQL-specific engineering judgment.
 metadata:
   version: "2.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - sql
     - postgresql

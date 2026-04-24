@@ -1,6 +1,0 @@
-interface:
-  display_name: "Image Gen"
-  short_description: "Generate and edit images through VibeProxy Local /v1/responses"
-  icon_small: "./assets/imagegen-small.svg"
-  icon_large: "./assets/imagegen.png"
-  default_prompt: "Generate or edit the raster assets for this task through the bundled Rust imagegen CLI that calls VibeProxy Local /v1/responses. First confirm that the task really needs a raster image; if the repo already has SVG/vector/code-native assets and the user wants to extend or match those, do not use this skill. When local input images are provided, label each image by role and use edit mode only when the user actually wants an existing image modified. For multi-asset requests, use repeated generate calls or generate-batch as appropriate. Report the final prompt, output path, and that the request used the direct VibeProxy Responses path."

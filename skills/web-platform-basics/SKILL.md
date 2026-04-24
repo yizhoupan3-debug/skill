@@ -8,7 +8,7 @@ description: |
   Components, or platform-level diagnosis before framework-specific solutions.
 metadata:
   version: "1.0.1"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - html
     - css

@@ -82,8 +82,8 @@ source: local
 This skill is the one front door for paper work.
 
 It exists so the user does not need to decide first whether the job is
-`$paper-reviewer`, `$paper-reviser`, `$paper-logic`, `$paper-writing`, or
-`$paper-visuals`.
+`$paper-reviewer`, `$paper-reviser`, `$paper-writing`, or a review/revision
+dimension mode.
 
 ## Use this when
 
@@ -100,9 +100,8 @@ It exists so the user does not need to decide first whether the job is
 
 - The user wants to advance a non-manuscript research project, topic, or experiment plan -> use `$research-workbench`
 - The user explicitly wants only one narrow lane and names it clearly:
-  - science defensibility only -> use `$paper-logic`
   - local text polish only -> use `$paper-writing`
-  - figure/table presentation only -> use `$paper-visuals`
+  - literature corpus / related work only -> use `$literature-synthesis`
   - notation consistency only -> use `$paper-notation-audit`
 
 ## Default front-door behavior
@@ -143,15 +142,16 @@ separate "known blocker" from "uncertainty that needs lookup".
 ## Internal lane map
 
 - strict submission judgment -> `$paper-reviewer`
-- claim / novelty / evidence pressure test -> `$paper-logic`
+- claim / novelty / evidence pressure test -> `logic mode` under `$paper-reviewer` or `$paper-reviser`
 - target-journal ref corpus and story-norm extraction -> `$literature-synthesis`, then `$paper-writing`
 - external calibration during review -> keep the main owner here or in
   `$paper-reviewer`; use `$literature-synthesis` only when the lookup becomes a
   full corpus / novelty sweep
 - findings-driven manuscript changes -> `$paper-reviser`
 - local prose rewrite after scope is frozen -> `$paper-writing`
-- figures / tables / captions / rendered presentation -> `$paper-visuals`
-- notation / abbreviations / formula references -> `$paper-notation-audit`
+- figures / tables / captions / rendered presentation -> `figure-table mode`
+- notation / abbreviations / formula references -> `notation sweep`
+- page/word budget -> `length budget mode`
 
 Use [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md) when the work needs
 filesystem-backed whole-paper state, frozen gate decisions, or bounded parallel
@@ -160,6 +160,9 @@ lanes.
 For target-journal ref-first writing, use
 [`references/ref-first-writing-workflow.md`](references/ref-first-writing-workflow.md)
 as the compact workflow contract.
+
+For the compact lane map, use
+[`references/paper-lanes.md`](references/paper-lanes.md).
 
 ## What this skill should deliver
 

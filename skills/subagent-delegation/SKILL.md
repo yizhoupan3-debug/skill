@@ -19,6 +19,9 @@ trigger_hints:
   - sidecar
   - 并行 sidecar
   - delegation
+  - $team
+  - team orchestration
+  - 多 agent 执行
   - local-supervisor
 framework_roles:
   - gate
@@ -79,6 +82,7 @@ This skill owns the **runtime multi-agent routing decision** inside the current 
 - Repository or conversation rules allow or may allow proactive delegation
 - The task is complex, multi-phase, or has real parallel sidecars
 - The user says to decide automatically when to stay local, use bounded subagents, or enter team mode
+- The user explicitly invokes `$team` / "多 agent 执行" and the first job is to decide whether full team orchestration is justified
 - Search, audit, implementation, and verification can run in bounded parallel slices
 - The main thread should stay short while execution detail is sunk into sidecar outputs or local-supervisor queues
 
@@ -88,7 +92,7 @@ This skill owns the **runtime multi-agent routing decision** inside the current 
 - The immediate blocker is faster to do locally
 - Multiple workers would need overlapping write scopes
 - Multiple workers would need to co-edit shared continuity artifacts such as `SESSION_SUMMARY.md`, `NEXT_ACTIONS.json`, `EVIDENCE_INDEX.json`, `TRACE_METADATA.json`, or `.supervisor_state.json`
-- The task already has a checklist / phase plan, but the main need is still to normalize serial/parallel lanes, scope, acceptance, or update rules before any sidecar split → use `$checklist-normalizer`
+- The task already has a checklist / phase plan, but the main need is still to normalize serial/parallel lanes, scope, acceptance, or update rules before any sidecar split → use `$checklist-planner`
 - The request is about multi-agent product architecture rather than runtime execution routing
 
 ## Primary operating principle
@@ -185,6 +189,7 @@ State:
 
 - [references/delegation-recipes.md](references/delegation-recipes.md)
 - [references/runtime-playbook.md](references/runtime-playbook.md)
+- [references/team-mode.md](references/team-mode.md)
 
 ## Trigger examples
 - "强制进行子代理派发深度审计 / 检查派发逻辑与集成完整性。"

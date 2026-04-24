@@ -110,6 +110,11 @@ cargo run --manifest-path /Users/joe/Documents/skill/rust_tools/ooxml_parser_rs/
 - The task is plain text editing with no Word/document structure concerns
 - The user pasted text directly and only wants rewriting
 
+## Shared artifact protocol
+
+Follow the shared artifact rules in
+[`primary-runtime/references/artifact-protocol.md`](../primary-runtime/references/artifact-protocol.md).
+
 ## Integrity checklist
 
 - Confirm the heading outline did not drift.

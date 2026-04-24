@@ -1,6 +1,6 @@
 mod common;
 
-use common::{host_integration_json, project_root, read_json, read_text, write_text};
+use common::{host_integration_json, project_root, read_text, write_json, write_text};
 use serde_json::json;
 use tempfile::tempdir;
 
@@ -9,7 +9,9 @@ fn install_native_integration_is_idempotent() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(repo_root.join(".codex")).unwrap();
-    std::fs::create_dir_all(repo_root.join("skills")).unwrap();
+    write_stub_skill(&repo_root, "autopilot");
+    write_stub_skill(&repo_root, "deepinterview");
+    write_stub_skill(&repo_root, "gitx");
     let plugin_root = repo_root.join("plugins/skill-framework-native/.codex-plugin");
     std::fs::create_dir_all(&plugin_root).unwrap();
     write_text(
@@ -19,13 +21,6 @@ fn install_native_integration_is_idempotent() {
 
     let home_config_path = tmp.path().join("home/.codex/config.toml");
     let home_codex_skills_path = tmp.path().join("home/.codex/skills");
-    let home_claude_skills_path = tmp.path().join("home/.claude/skills");
-    let home_claude_refresh_path = tmp.path().join("home/.claude/commands/refresh.md");
-    let home_claude_mcp_config_path = tmp.path().join("home/.claude.json");
-    let home_plugin_root = tmp
-        .path()
-        .join("home/.codex/plugins/skill-framework-native");
-    let home_marketplace_path = tmp.path().join("home/.agents/plugins/marketplace.json");
     let bootstrap_output_dir = tmp.path().join("bootstrap");
 
     let args = vec![
@@ -34,89 +29,33 @@ fn install_native_integration_is_idempotent() {
         repo_root.display().to_string(),
         "--home-config-path".to_string(),
         home_config_path.display().to_string(),
-        "--home-plugin-root".to_string(),
-        home_plugin_root.display().to_string(),
-        "--home-marketplace-path".to_string(),
-        home_marketplace_path.display().to_string(),
         "--home-codex-skills-path".to_string(),
         home_codex_skills_path.display().to_string(),
-        "--home-claude-skills-path".to_string(),
-        home_claude_skills_path.display().to_string(),
-        "--home-claude-refresh-path".to_string(),
-        home_claude_refresh_path.display().to_string(),
-        "--home-claude-mcp-config-path".to_string(),
-        home_claude_mcp_config_path.display().to_string(),
         "--bootstrap-output-dir".to_string(),
         bootstrap_output_dir.display().to_string(),
-        "--skip-home-claude-skills-link".to_string(),
-        "--skip-home-claude-refresh".to_string(),
     ];
     let refs = string_refs(&args);
     let first = host_integration_json(&refs);
     let second = host_integration_json(&refs);
 
     let content = read_text(&home_config_path);
-    let claude_mcp_payload = read_json(&home_claude_mcp_config_path);
-    let plugin_mcp_payload = read_json(&home_plugin_root.join(".mcp.json"));
-    let marketplace = read_json(&home_marketplace_path);
-
     assert_eq!(first["success"], true);
     assert_eq!(second["success"], true);
     assert_eq!(content.matches("[features]").count(), 1);
     assert_eq!(content.matches("codex_hooks = true").count(), 1);
     assert_eq!(content.matches("[mcp_servers.browser-mcp]").count(), 0);
-    assert_eq!(content.matches("[mcp_servers.framework-mcp]").count(), 1);
+    assert_eq!(content.matches("[mcp_servers.framework-mcp]").count(), 0);
     assert_eq!(
         content.matches("[mcp_servers.openaiDeveloperDocs]").count(),
         0
     );
     assert_eq!(content.matches("[tui]").count(), 1);
-    assert!(home_codex_skills_path.is_symlink());
-    assert_eq!(
-        home_codex_skills_path.canonicalize().unwrap(),
-        repo_root.join("skills").canonicalize().unwrap()
-    );
-    assert!(!home_claude_skills_path.exists());
-    assert!(!home_claude_refresh_path.exists());
-    let claude_args = claude_mcp_payload["mcpServers"]["framework-mcp"]["args"]
-        .as_array()
-        .unwrap();
-    assert_path_eq(
-        claude_args[0].as_str().unwrap(),
-        &repo_root
-            .join("scripts/router-rs/Cargo.toml")
-            .display()
-            .to_string(),
-    );
-    assert_eq!(claude_args[1], "--framework-mcp-stdio");
-    assert_eq!(claude_args[2], "--repo-root");
-    assert_path_eq(
-        claude_args[3].as_str().unwrap(),
-        &repo_root.canonicalize().unwrap().display().to_string(),
-    );
-    assert_eq!(
-        claude_mcp_payload["mcpServers"].as_object().unwrap().len(),
-        1
-    );
-    assert_path_eq(
-        plugin_mcp_payload["mcpServers"]["framework-mcp"]["cwd"]
-            .as_str()
-            .unwrap(),
-        &repo_root.canonicalize().unwrap().display().to_string(),
-    );
-    assert_eq!(
-        plugin_mcp_payload["mcpServers"].as_object().unwrap().len(),
-        1
-    );
-    assert_eq!(
-        marketplace["plugins"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter(|plugin| plugin["name"] == "skill-framework-native")
-            .count(),
-        1
-    );
+    assert!(home_codex_skills_path.is_dir());
+    assert!(!std::fs::symlink_metadata(&home_codex_skills_path)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert!(home_codex_skills_path.join("gitx/SKILL.md").is_file());
     assert_eq!(first["default_bootstrap"]["status"], "materialized");
     assert!(["already-present", "repaired-stale"]
         .contains(&second["default_bootstrap"]["status"].as_str().unwrap()));
@@ -149,84 +88,62 @@ fn ensure_default_bootstrap_is_idempotent() {
 }
 
 #[test]
-fn install_native_integration_can_opt_into_rust_browser_mcp() {
+fn current_artifact_clutter_plan_moves_legacy_current_mirrors() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
-    std::fs::create_dir_all(repo_root.join(".codex")).unwrap();
-    std::fs::create_dir_all(repo_root.join("skills")).unwrap();
-    let plugin_root = repo_root.join("plugins/skill-framework-native/.codex-plugin");
-    std::fs::create_dir_all(&plugin_root).unwrap();
+    let current_root = repo_root.join("artifacts/current");
+    let task_root = current_root.join("task-1");
+    std::fs::create_dir_all(&task_root).unwrap();
     write_text(
-        &plugin_root.join("plugin.json"),
-        "{\"name\":\"skill-framework-native\"}\n",
+        &current_root.join("SESSION_SUMMARY.md"),
+        "stale root mirror\n",
+    );
+    write_json(
+        &current_root.join("NEXT_ACTIONS.json"),
+        &json!({"next_actions":["stale"]}),
+    );
+    write_text(&task_root.join("SESSION_SUMMARY.md"), "task scoped\n");
+    write_json(
+        &task_root.join("CONTINUITY_JOURNAL.json"),
+        &json!({"ok": true}),
     );
 
-    let home_config_path = tmp.path().join("home/.codex/config.toml");
-    let args = vec![
-        "install-native-integration".to_string(),
-        "--repo-root".to_string(),
-        repo_root.display().to_string(),
-        "--home-config-path".to_string(),
-        home_config_path.display().to_string(),
-        "--home-plugin-root".to_string(),
-        tmp.path()
-            .join("home/.codex/plugins/skill-framework-native")
-            .display()
-            .to_string(),
-        "--home-marketplace-path".to_string(),
-        tmp.path()
-            .join("home/.agents/plugins/marketplace.json")
-            .display()
-            .to_string(),
-        "--home-codex-skills-path".to_string(),
-        tmp.path().join("home/.codex/skills").display().to_string(),
-        "--home-claude-skills-path".to_string(),
-        tmp.path().join("home/.claude/skills").display().to_string(),
-        "--home-claude-refresh-path".to_string(),
-        tmp.path()
-            .join("home/.claude/commands/refresh.md")
-            .display()
-            .to_string(),
-        "--home-claude-mcp-config-path".to_string(),
-        tmp.path().join("home/.claude.json").display().to_string(),
-        "--with-browser-mcp".to_string(),
-        "--skip-personal-plugin".to_string(),
-        "--skip-personal-marketplace".to_string(),
-        "--skip-home-codex-skills-link".to_string(),
-        "--skip-home-claude-skills-link".to_string(),
-        "--skip-home-claude-refresh".to_string(),
-        "--skip-home-claude-mcp-sync".to_string(),
-        "--skip-default-bootstrap".to_string(),
-    ];
-    let refs = string_refs(&args);
-    let result = host_integration_json(&refs);
-    let content = read_text(&home_config_path);
-    assert_eq!(result["browser_mcp_changed"], true);
-    assert!(content.contains("[mcp_servers.browser-mcp]"));
-    assert!(content.contains(&format!(
-        "command = \"{}\"",
-        repo_root
-            .join("scripts/router-rs/run_router_rs.sh")
-            .display()
-    )));
-    assert!(content.contains(
-        &repo_root
-            .join("scripts/router-rs/Cargo.toml")
-            .display()
-            .to_string()
-    ));
-    assert!(content.contains("--browser-mcp-stdio"));
-    assert!(!content.contains("tools/browser-mcp/dist/index.js"));
-    assert!(!content.contains("command = \"node\""));
+    let result = host_integration_json(&[
+        "plan-current-artifact-clutter",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+        "--active-task-id",
+        "task-1",
+    ]);
+    let plans = result["plans"].as_array().unwrap();
+    let sources = plans
+        .iter()
+        .map(|plan| plan["source"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+
+    assert!(sources
+        .iter()
+        .any(|path| path.ends_with("artifacts/current/SESSION_SUMMARY.md")));
+    assert!(sources
+        .iter()
+        .any(|path| path.ends_with("artifacts/current/NEXT_ACTIONS.json")));
+    assert!(!sources
+        .iter()
+        .any(|path| path.ends_with("artifacts/current/task-1/SESSION_SUMMARY.md")));
+    assert!(!sources
+        .iter()
+        .any(|path| path.ends_with("artifacts/current/task-1/CONTINUITY_JOURNAL.json")));
 }
 
 #[test]
-fn install_skills_rust_entrypoint_links_supported_tools() {
+fn install_skills_rust_entrypoint_links_codex_only() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     let home = tmp.path().join("home");
     std::fs::create_dir_all(repo_root.join(".codex")).unwrap();
-    std::fs::create_dir_all(repo_root.join("skills/demo")).unwrap();
+    write_stub_skill(&repo_root, "autopilot");
+    write_stub_skill(&repo_root, "deepinterview");
+    write_stub_skill(&repo_root, "gitx");
     let plugin_root = repo_root.join("plugins/skill-framework-native/.codex-plugin");
     std::fs::create_dir_all(&plugin_root).unwrap();
     write_text(
@@ -256,29 +173,24 @@ fn install_skills_rust_entrypoint_links_supported_tools() {
     ]);
     assert_eq!(first["success"], true);
     assert_eq!(first["results"]["codex"]["status"], "installed");
-    assert_eq!(first["results"]["agents"]["status"], "linked");
-    assert_eq!(first["results"]["gemini"]["status"], "linked");
-    assert_eq!(
-        home.join(".agents/skills").canonicalize().unwrap(),
-        repo_root.join("skills").canonicalize().unwrap()
-    );
-    assert_eq!(
-        home.join(".gemini/skills").canonicalize().unwrap(),
-        repo_root.join("skills").canonicalize().unwrap()
-    );
+    assert!(first["results"].get("agents").is_none());
+    let codex_skills = home.join(".codex/skills");
+    assert!(codex_skills.is_dir());
+    assert!(!std::fs::symlink_metadata(&codex_skills)
+        .unwrap()
+        .file_type()
+        .is_symlink());
     assert_eq!(
         second["results"]["codex"]["status"],
         "native-integration-incomplete"
     );
-    assert_eq!(second["results"]["agents"]["ready"], true);
-    assert_eq!(second["results"]["gemini"]["ready"], true);
 }
 
 #[test]
 fn validation_subcommands_cover_install_skills_contract() {
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
-    std::fs::create_dir_all(repo_root.join("skills")).unwrap();
+    std::fs::create_dir_all(repo_root.join(".codex/skills")).unwrap();
     let bootstrap_path = tmp.path().join("framework_default_bootstrap.json");
     host_integration_json(&[
         "ensure-default-bootstrap",
@@ -287,11 +199,6 @@ fn validation_subcommands_cover_install_skills_contract() {
         "--output-dir",
         tmp.path().to_str().unwrap(),
     ]);
-    let marketplace_path = tmp.path().join("marketplace.json");
-    write_text(
-        &marketplace_path,
-        &serde_json::to_string(&json!({"plugins": [{"name": "skill-framework-native"}]})).unwrap(),
-    );
     let bootstrap_ok = host_integration_json(&[
         "validate-default-bootstrap",
         "--bootstrap-path",
@@ -299,24 +206,16 @@ fn validation_subcommands_cover_install_skills_contract() {
         "--repo-root",
         repo_root.to_str().unwrap(),
     ]);
-    let marketplace_ok = host_integration_json(&[
-        "validate-marketplace-plugin",
-        "--marketplace-path",
-        marketplace_path.to_str().unwrap(),
-        "--plugin-name",
-        "skill-framework-native",
-    ]);
     let source_path = host_integration_json(&[
         "resolve-skill-bridge-source",
         "--repo-root",
         repo_root.to_str().unwrap(),
     ]);
     assert!(bootstrap_ok["ok"].as_bool().is_some());
-    assert_eq!(marketplace_ok["ok"], true);
     assert_path_eq(
         source_path["path"].as_str().unwrap(),
         &repo_root
-            .join("skills")
+            .join(".codex/skills")
             .canonicalize()
             .unwrap()
             .display()
@@ -336,10 +235,7 @@ fn runtime_registry_missing_file_uses_default_registry() {
     std::fs::create_dir_all(&repo_root).unwrap();
     let payload = runtime_registry(&repo_root);
     assert_eq!(payload["schema_version"], "framework-runtime-registry-v1");
-    assert_eq!(
-        payload["shared_project_mcp_servers"],
-        json!(["framework-mcp"])
-    );
+    assert_eq!(payload["codex_host"]["adapter_id"], "codex_adapter");
 }
 
 #[test]
@@ -351,19 +247,15 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
         &registry_path,
         &serde_json::to_string_pretty(&json!({
             "schema_version": "framework-runtime-registry-v1",
-            "default_host_peer_set": ["repo-host"],
-            "shared_project_mcp_servers": [],
+            "codex_host": {"adapter_id": "repo-codex"},
             "workspace_bootstrap_defaults": {"skill_bridge": {"source_rel": "repo-skills"}},
             "framework_native_aliases": {"autopilot": {"canonical_owner": "repo-owner"}},
-            "omc_retirement_contract": {"runtime_authority": "repo-rust"},
-            "plugins": [{"plugin_name": "repo-plugin", "source_rel": "repo-plugin"}],
-            "host_adapters": []
+            "retired_surfaces": []
         }))
         .unwrap(),
     );
     let payload = runtime_registry(&repo_root);
-    assert_eq!(payload["plugins"][0]["plugin_name"], "repo-plugin");
-    assert_eq!(payload["shared_project_mcp_servers"], json!([]));
+    assert_eq!(payload["codex_host"]["adapter_id"], "repo-codex");
     assert_eq!(
         payload["framework_native_aliases"]["autopilot"]["canonical_owner"],
         "repo-owner"
@@ -387,10 +279,10 @@ fn runtime_registry_exposes_framework_native_aliases_and_omc_retirement_contract
         "never"
     );
     assert_eq!(
-        aliases["deepinterview"]["host_entrypoints"]["claude-code"],
-        "/deepinterview"
+        aliases["deepinterview"]["host_entrypoints"]["codex-cli"],
+        "$deepinterview"
     );
-    assert_eq!(aliases["team"]["host_entrypoints"]["claude-code"], "/team");
+    assert_eq!(aliases["team"]["host_entrypoints"]["codex-cli"], "$team");
     assert_eq!(aliases["team"]["route_mode"], "team-orchestration");
     let retirement = &aliases["autopilot"];
     assert_eq!(retirement["external_runtime_dependency"], false);
@@ -403,48 +295,20 @@ fn runtime_registry_exposes_framework_native_aliases_and_omc_retirement_contract
 }
 
 #[test]
-fn runtime_registry_exposes_shared_project_mcp_servers() {
-    assert_eq!(
-        runtime_registry(&project_root())["shared_project_mcp_servers"],
-        json!(["framework-mcp"])
-    );
-}
-
-#[test]
-fn runtime_registry_host_records_expose_supervisor_capabilities() {
+fn runtime_registry_codex_host_exposes_supervisor_capabilities() {
     let payload = runtime_registry(&project_root());
-    let records = payload["host_adapters"].as_array().unwrap();
-    let codex = records
-        .iter()
-        .find(|row| row["adapter_id"] == "codex_cli_adapter")
-        .unwrap();
-    let claude = records
-        .iter()
-        .find(|row| row["adapter_id"] == "claude_code_adapter")
-        .unwrap();
-    for (record, expected_driver) in [(codex, "codex_driver"), (claude, "claude_driver")] {
-        let capabilities = record["host_capabilities"].as_array().unwrap();
-        for capability in [
-            "external_session_supervisor",
-            "rate_limit_auto_resume",
-            "host_resume_entrypoint",
-            "host_tmux_worker_management",
-        ] {
-            assert!(capabilities.contains(&json!(capability)));
-        }
-        assert_eq!(
-            record["protocol_hints"]["session_supervisor_driver"],
-            expected_driver
-        );
+    let codex = &payload["codex_host"];
+    assert_eq!(codex["adapter_id"], "codex_adapter");
+    let capabilities = codex["capabilities"].as_array().unwrap();
+    for capability in [
+        "external_session_supervisor",
+        "rate_limit_auto_resume",
+        "host_resume_entrypoint",
+        "host_tmux_worker_management",
+    ] {
+        assert!(capabilities.contains(&json!(capability)));
     }
-    assert_eq!(
-        codex["protocol_hints"]["framework_alias_entrypoints"]["autopilot"],
-        "$autopilot"
-    );
-    assert_eq!(
-        claude["protocol_hints"]["framework_alias_entrypoints"]["deepinterview"],
-        "/deepinterview"
-    );
+    assert_eq!(codex["session_supervisor_driver"], "codex_driver");
 }
 
 fn runtime_registry(repo_root: &std::path::Path) -> serde_json::Value {
@@ -472,4 +336,9 @@ fn normalize_macos_private_var(path: &str) -> String {
     } else {
         path.to_string()
     }
+}
+
+fn write_stub_skill(repo_root: &std::path::Path, skill: &str) {
+    let path = repo_root.join(".codex/skills").join(skill).join("SKILL.md");
+    write_text(&path, &format!("---\nname: {skill}\n---\n\n# {skill}\n"));
 }

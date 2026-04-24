@@ -70,26 +70,6 @@ async queue(batch: MessageBatch, env: Env) {
 }
 ```
 
-## Reading Order
+## Use Official Docs For Details
 
-**First-time users:** README → configuration.md → api.md → patterns.md  
-**Specific tasks:**
-- Setup: configuration.md
-- Client uploads: patterns.md (presigned URLs)
-- Public static site: patterns.md (public access + custom domain)
-- Processing uploads: README (event notifications) + queues reference
-- Debugging: gotchas.md
-
-## In This Reference
-
-- [configuration.md](./configuration.md) - Bindings, S3 SDK, CORS, lifecycles, token scopes
-- [api.md](./api.md) - Workers API, multipart, conditional requests, presigned URLs
-- [patterns.md](./patterns.md) - Streaming, caching, client uploads, public buckets
-- [gotchas.md](./gotchas.md) - List truncation, etag format, stream length, S3 SDK region
-
-## See Also
-
-- [workers](../workers/) - Worker runtime and fetch handlers
-- [kv](../kv/) - Metadata storage for R2 objects
-- [d1](../d1/) - Store R2 URLs in relational database
-- [queues](../queues/) - Process R2 uploads asynchronously
+This is a quick card only. Use official Cloudflare docs for current setup, API details, limits, pricing, and troubleshooting.

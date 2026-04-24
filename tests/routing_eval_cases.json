@@ -103,22 +103,22 @@
       "first_turn": true
     },
     {
-      "id": "checklist-writting-post-strategy-case",
+      "id": "checklist-planner-post-strategy-case",
       "category": "should-trigger",
       "task": "路线已经定了，不用再论证，直接写 execution-ready checklist，拆成里程碑和串行步骤。",
-      "focus_skill": "checklist-writting",
-      "expected_owner": "checklist-writting",
+      "focus_skill": "checklist-planner",
+      "expected_owner": "checklist-planner",
       "expected_overlay": "anti-laziness",
       "first_turn": true
     },
     {
-      "id": "checklist-normalizer-serial-parallel-case",
+      "id": "checklist-planner-serial-parallel-case",
       "category": "should-trigger",
       "task": "把这份 checklist 规范一下，串行的写在一点，并行的拆开，补齐验收和约束。",
-      "focus_skill": "checklist-normalizer",
-      "expected_owner": "checklist-normalizer",
+      "focus_skill": "checklist-planner",
+      "expected_owner": "checklist-planner",
       "expected_overlay": null,
-      "forbidden_owners": ["idea-to-plan", "checklist-writting"],
+      "forbidden_owners": ["idea-to-plan", "checklist-fixer"],
       "first_turn": true
     },
     {
@@ -128,35 +128,35 @@
       "focus_skill": "checklist-fixer",
       "expected_owner": "checklist-fixer",
       "expected_overlay": null,
-      "forbidden_owners": ["checklist-writting"],
+      "forbidden_owners": ["checklist-planner"],
       "first_turn": true
     },
     {
-      "id": "skill-routing-repair-direct-owner-case",
+      "id": "skill-framework-developer-miss-repair-case",
       "category": "should-trigger",
       "task": "这次为什么没触发，顺手修一下 skill，以后别再选错。",
-      "focus_skill": "skill-routing-repair",
-      "expected_owner": "skill-routing-repair",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
       "expected_overlay": "anti-laziness",
       "forbidden_owners": ["env-config-management", "typescript-pro", "systematic-debugging"],
       "first_turn": true
     },
     {
-      "id": "skill-routing-repair-beats-debug-gate-case",
+      "id": "skill-framework-developer-miss-repair-beats-debug-gate-case",
       "category": "gate-vs-owner-conflict",
       "task": "这个 skill 的路由没触发，帮我修复这次 miss。",
-      "focus_skill": "skill-routing-repair",
-      "expected_owner": "skill-routing-repair",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
       "expected_overlay": "anti-laziness",
       "forbidden_owners": ["systematic-debugging"],
       "first_turn": true
     },
     {
-      "id": "imagegen-colloquial-chinese-case",
+      "id": "image-generated-colloquial-chinese-case",
       "category": "should-trigger",
       "task": "现在帮我生图：一只蓝色小猫图标，白底，无文字。",
-      "focus_skill": "imagegen",
-      "expected_owner": "imagegen",
+      "focus_skill": "image-generated",
+      "expected_owner": "image-generated",
       "expected_overlay": "anti-laziness",
       "forbidden_owners": ["idea-to-plan", "infographic", "visual-review"],
       "first_turn": true
@@ -490,7 +490,7 @@
       "first_turn": true
     },
     {
-      "id": "literature-synthesis-academic-search-case",
+      "id": "literature-synthesis-search-case",
       "category": "wrong-owner-near-miss",
       "task": "帮我搜 arXiv 和 Semantic Scholar，梳理近三年这个方向的核心论文。",
       "focus_skill": "literature-synthesis",

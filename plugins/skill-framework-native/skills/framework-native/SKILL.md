@@ -1,14 +1,13 @@
 ---
 name: framework-native
-description: Use the bundled framework MCP and runtime artifacts when the task is about this repository's skill framework, routing, memory, or Codex-native integration surface.
+description: Use router-rs and runtime artifacts when the task is about this repository's skill framework, routing, memory, or Codex-native integration surface.
 ---
 
-When the task is about `/Users/joe/Documents/skill`, prefer the bundled MCP surface before broad repo scraping.
+When the task is about `/Users/joe/Documents/skill`, prefer the local Rust framework surfaces before broad repo scraping.
 
 Workflow:
-1. Call `framework_runtime_snapshot` to see the active supervisor and artifact state.
-2. Call `framework_skill_search` when the user asks about routing, owner boundaries, triggers, or framework owners.
-3. Call `framework_memory_recall` or read `framework://memory/project` when cross-session memory matters.
-4. Call `framework_bootstrap_refresh` before heavy framework planning so the bootstrap bundle stays current.
+1. Run `scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml --framework-runtime-snapshot-json --repo-root /Users/joe/Documents/skill` to see the active supervisor and artifact state.
+2. Run `scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml --route-json --repo-root /Users/joe/Documents/skill --query "<query>"` when routing, owner boundaries, triggers, or framework owners matter.
+3. Run `scripts/router-rs/run_router_rs.sh scripts/router-rs/Cargo.toml --framework-memory-recall-json --repo-root /Users/joe/Documents/skill --query "<query>"` when cross-session memory matters.
 
 Do not use this skill for unrelated repositories or generic MCP work outside this workspace.

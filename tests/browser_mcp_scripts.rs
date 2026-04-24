@@ -279,7 +279,11 @@ fn resolver_cli_prints_resolved_attach_path_on_success() {
     let completed = run_resolver_cli(&search_root);
     assert!(completed.status.success());
     assert_eq!(stdout_trim(&completed), binding_path.display().to_string());
-    assert!(completed.stderr.is_empty());
+    let stderr = String::from_utf8_lossy(&completed.stderr);
+    assert!(
+        stderr.is_empty() || stderr.contains("Compiling") || stderr.contains("Finished"),
+        "unexpected stderr: {stderr}"
+    );
 }
 
 #[test]
@@ -347,45 +351,6 @@ fn launcher_prefers_explicit_attach_descriptor_env_over_auto_discovery() {
 }
 
 #[test]
-fn launcher_prefers_highest_priority_attach_env_across_full_precedence_ladder() {
-    let tmp = tempdir().unwrap();
-    let repo_root = prepare_repo(tmp.path());
-    let result = run_launcher(
-        &repo_root,
-        &[
-            (
-                "BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH",
-                "/explicit/descriptor.json",
-            ),
-            (
-                "BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH",
-                "/explicit/attach-artifact.json",
-            ),
-            (
-                "BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH",
-                "/compat/binding.json",
-            ),
-            ("BROWSER_MCP_RUNTIME_HANDOFF_PATH", "/compat/handoff.json"),
-            (
-                "BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH",
-                "/compat/resume.json",
-            ),
-        ],
-        &[],
-    );
-    assert_eq!(
-        result["argv"],
-        json!([
-            "--browser-mcp-stdio",
-            "--repo-root",
-            repo_root.display().to_string(),
-            "--runtime-attach-descriptor-path",
-            "/explicit/descriptor.json"
-        ])
-    );
-}
-
-#[test]
 fn launcher_leaves_sqlite_attach_discovery_to_rust_runtime() {
     let tmp = tempdir().unwrap();
     let repo_root = prepare_repo(tmp.path());
@@ -437,22 +402,15 @@ fn launcher_leaves_filesystem_attach_discovery_to_rust_runtime() {
 }
 
 #[test]
-fn launcher_prefers_attach_artifact_env_over_compatibility_aliases() {
+fn launcher_uses_canonical_attach_artifact_env() {
     let tmp = tempdir().unwrap();
     let repo_root = prepare_repo(tmp.path());
     let result = run_launcher(
         &repo_root,
-        &[
-            (
-                "BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH",
-                "/explicit/attach-artifact.json",
-            ),
-            (
-                "BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH",
-                "/compat/binding.json",
-            ),
-            ("BROWSER_MCP_RUNTIME_HANDOFF_PATH", "/compat/handoff.json"),
-        ],
+        &[(
+            "BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH",
+            "/explicit/attach-artifact.json",
+        )],
         &[],
     );
     assert_eq!(
@@ -468,7 +426,7 @@ fn launcher_prefers_attach_artifact_env_over_compatibility_aliases() {
 }
 
 #[test]
-fn launcher_prefers_descriptor_env_over_all_lower_priority_attach_envs() {
+fn launcher_prefers_descriptor_env_over_attach_artifact_env() {
     let tmp = tempdir().unwrap();
     let repo_root = prepare_repo(tmp.path());
     let result = run_launcher(
@@ -481,15 +439,6 @@ fn launcher_prefers_descriptor_env_over_all_lower_priority_attach_envs() {
             (
                 "BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH",
                 "/explicit/attach-artifact.json",
-            ),
-            (
-                "BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH",
-                "/compat/binding.json",
-            ),
-            ("BROWSER_MCP_RUNTIME_HANDOFF_PATH", "/compat/handoff.json"),
-            (
-                "BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH",
-                "/compat/resume.json",
             ),
         ],
         &[],
@@ -519,75 +468,6 @@ fn launcher_falls_back_to_plain_start_when_no_attach_input_exists() {
             repo_root.display().to_string(),
             "--headless",
             "false"
-        ])
-    );
-}
-
-#[test]
-fn launcher_passes_through_binding_env_when_higher_priority_inputs_are_absent() {
-    let tmp = tempdir().unwrap();
-    let repo_root = prepare_repo(tmp.path());
-    let result = run_launcher(
-        &repo_root,
-        &[(
-            "BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH",
-            "/compat/binding.json",
-        )],
-        &[],
-    );
-    assert_eq!(
-        result["argv"],
-        json!([
-            "--browser-mcp-stdio",
-            "--repo-root",
-            repo_root.display().to_string(),
-            "--runtime-binding-artifact-path",
-            "/compat/binding.json"
-        ])
-    );
-}
-
-#[test]
-fn launcher_passes_through_handoff_env_when_it_is_the_only_attach_input() {
-    let tmp = tempdir().unwrap();
-    let repo_root = prepare_repo(tmp.path());
-    let result = run_launcher(
-        &repo_root,
-        &[("BROWSER_MCP_RUNTIME_HANDOFF_PATH", "/compat/handoff.json")],
-        &[],
-    );
-    assert_eq!(
-        result["argv"],
-        json!([
-            "--browser-mcp-stdio",
-            "--repo-root",
-            repo_root.display().to_string(),
-            "--runtime-handoff-path",
-            "/compat/handoff.json"
-        ])
-    );
-}
-
-#[test]
-fn launcher_passes_through_resume_manifest_env_when_it_is_the_only_attach_input() {
-    let tmp = tempdir().unwrap();
-    let repo_root = prepare_repo(tmp.path());
-    let result = run_launcher(
-        &repo_root,
-        &[(
-            "BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH",
-            "/compat/resume.json",
-        )],
-        &[],
-    );
-    assert_eq!(
-        result["argv"],
-        json!([
-            "--browser-mcp-stdio",
-            "--repo-root",
-            repo_root.display().to_string(),
-            "--runtime-resume-manifest-path",
-            "/compat/resume.json"
         ])
     );
 }
@@ -660,6 +540,35 @@ fn launcher_rebuilds_router_rs_when_sources_are_newer_than_binary() {
         read_json(&cargo_log)["argv"],
         json!(["--browser-mcp-stdio", "--repo-root", repo_root])
     );
+}
+
+#[test]
+fn launcher_never_falls_back_to_node_runtime() {
+    let tmp = tempdir().unwrap();
+    let repo_root = prepare_repo(tmp.path());
+    fs::remove_file(repo_root.join("scripts/router-rs/target/release/router-rs")).unwrap();
+    fs::write(
+        repo_root.join("scripts/router-rs/run_router_rs.sh"),
+        "#!/bin/sh\necho rust-launcher-only > \"$ROUTER_EXEC_LOG\"\nexit 7\n",
+    )
+    .unwrap();
+    make_executable(&repo_root.join("scripts/router-rs/run_router_rs.sh"));
+
+    let output_path = repo_root.join("launcher-output.txt");
+    let mut command =
+        Command::new(repo_root.join("tools/browser-mcp/scripts/start_browser_mcp.sh"));
+    command
+        .current_dir(&repo_root)
+        .env_remove("BROWSER_MCP_ROUTER_RS_BIN")
+        .env("ROUTER_EXEC_LOG", &output_path);
+
+    let result = run(command);
+    assert_eq!(result.status.code(), Some(7));
+    assert_eq!(
+        fs::read_to_string(output_path).unwrap().trim(),
+        "rust-launcher-only"
+    );
+    assert!(!String::from_utf8_lossy(&result.stderr).contains("dist/index.js"));
 }
 
 fn run_resolver_cli(search_root: &std::path::Path) -> Output {

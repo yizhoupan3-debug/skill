@@ -109,25 +109,6 @@ wrangler d1 time-travel restore <db-name> --timestamp="2024-01-15T14:30:00Z"  # 
 wrangler dev --persist-to=./.wrangler/state
 ```
 
-## Reading Order
+## Use Official Docs For Details
 
-**Start here**: Quick Start above → configuration.md (setup) → api.md (queries)
-
-**Common tasks**:
-- First time setup: configuration.md → Run migrations
-- Adding queries: api.md → Prepared statements
-- Pagination/caching: patterns.md
-- Production optimization: Read Replication + Sessions API (this file)
-- Debugging: gotchas.md
-
-## In This Reference
-
-- [configuration.md](./configuration.md) - wrangler.jsonc setup, migrations, TypeScript types, ORMs, local dev
-- [api.md](./api.md) - Query methods (.all/.first/.run/.raw), batch, sessions, read replicas, error handling
-- [patterns.md](./patterns.md) - Pagination, bulk operations, caching, multi-tenant, sessions, analytics
-- [gotchas.md](./gotchas.md) - SQL injection, limits by plan tier, performance, common errors
-
-## See Also
-
-- [workers](../workers/) - Worker runtime and fetch handler patterns
-- [hyperdrive](../hyperdrive/) - Connection pooling for external databases
+This is a quick card only. Use official Cloudflare docs for current setup, API details, limits, pricing, and troubleshooting.

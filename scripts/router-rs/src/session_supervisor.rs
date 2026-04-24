@@ -490,7 +490,6 @@ pub fn classify_rate_limit_block(
 ) -> Result<BlockClassification, String> {
     let lowered = host.trim().to_ascii_lowercase();
     let mut matched = match lowered.as_str() {
-        "claude" | "claude-code" => detect_rate_limit(evidence_text, claude_rate_limit_patterns()),
         "codex" | "codex-cli" => detect_rate_limit(evidence_text, codex_rate_limit_patterns()),
         other => {
             return Err(format!(
@@ -537,44 +536,11 @@ fn build_driver_command(
     resume_target: Option<String>,
     resume_mode: &str,
     resume_only: bool,
-    native_tmux_requested: bool,
-    worktree_name: Option<String>,
+    _native_tmux_requested: bool,
+    _worktree_name: Option<String>,
 ) -> Result<DriverCommandSpec, String> {
     let lowered = host.trim().to_ascii_lowercase();
     match lowered.as_str() {
-        "claude" | "claude-code" => {
-            let mut args = Vec::new();
-            if native_tmux_requested && !resume_only {
-                args.push("--tmux=classic".to_string());
-            }
-            if let Some(name) = worktree_name.filter(|_| !resume_only) {
-                args.push("--worktree".to_string());
-                args.push(name);
-            }
-            if resume_only {
-                if let Some(target) = resume_target.or_else(|| Some("".to_string())) {
-                    if target.is_empty() || resume_mode == "continue" {
-                        args.push("--continue".to_string());
-                    } else {
-                        args.push("--resume".to_string());
-                        args.push(target);
-                    }
-                } else {
-                    args.push("--continue".to_string());
-                }
-            } else if let Some(prompt) = prompt {
-                args.push(prompt);
-            }
-            Ok(DriverCommandSpec {
-                driver_id: "claude_driver".to_string(),
-                binary: "claude".to_string(),
-                shell_command: shell_join("claude", &args),
-                args,
-                supports_resume: true,
-                supports_native_tmux: true,
-                supports_external_tmux: true,
-            })
-        }
         "codex" | "codex-cli" => {
             let mut args = vec!["-C".to_string(), cwd.to_string()];
             if resume_only {
@@ -607,7 +573,6 @@ fn build_driver_command(
 
 fn driver_id_for_host(host: &str) -> &'static str {
     match host.trim().to_ascii_lowercase().as_str() {
-        "claude" | "claude-code" => "claude_driver",
         "codex" | "codex-cli" => "codex_driver",
         _ => "unknown_driver",
     }
@@ -615,7 +580,6 @@ fn driver_id_for_host(host: &str) -> &'static str {
 
 fn default_resume_mode(host: &str) -> &'static str {
     match host.trim().to_ascii_lowercase().as_str() {
-        "claude" | "claude-code" => "continue",
         _ => "last",
     }
 }
@@ -869,20 +833,6 @@ fn parse_duration_caps(caps: &regex::Captures<'_>) -> Option<i64> {
     Some(amount * multiplier)
 }
 
-fn claude_rate_limit_patterns() -> &'static [Regex] {
-    static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
-    PATTERNS
-        .get_or_init(|| {
-            vec![
-                Regex::new("(?i)rate limit").expect("valid regex"),
-                Regex::new("(?i)try again in").expect("valid regex"),
-                Regex::new("(?i)usage limit").expect("valid regex"),
-                Regex::new("(?i)overloaded").expect("valid regex"),
-            ]
-        })
-        .as_slice()
-}
-
 fn codex_rate_limit_patterns() -> &'static [Regex] {
     static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
     PATTERNS
@@ -932,56 +882,6 @@ mod tests {
             "resume".to_string()
         ]));
         assert!(command.args.contains(&"--last".to_string()));
-    }
-
-    #[test]
-    fn claude_resume_command_prefers_continue_without_explicit_target() {
-        let command = build_driver_command(
-            "claude",
-            "/tmp/project",
-            None,
-            None,
-            "continue",
-            true,
-            false,
-            None,
-        )
-        .expect("build claude resume command");
-        assert_eq!(command.driver_id, "claude_driver");
-        assert_eq!(command.binary, "claude");
-        assert_eq!(command.args, vec!["--continue".to_string()]);
-    }
-
-    #[test]
-    fn classify_claude_rate_limit_extracts_backoff() {
-        let result = classify_rate_limit_block(
-            "claude",
-            "Claude hit a rate limit. Please try again in 12 minutes.",
-        )
-        .expect("classify claude rate limit");
-        assert_eq!(result.host, "claude");
-        assert_eq!(result.blocked_reason, "rate_limit");
-        assert_eq!(result.status, "blocked_rate_limit");
-        assert_eq!(result.backoff_seconds, 720);
-    }
-
-    #[test]
-    fn claude_resume_command_skips_tmux_and_worktree_flags() {
-        let command = build_driver_command(
-            "claude",
-            "/tmp/project",
-            None,
-            Some("session-123".to_string()),
-            "resume",
-            true,
-            true,
-            Some("feature-lane".to_string()),
-        )
-        .expect("build claude resume command");
-        assert_eq!(
-            command.args,
-            vec!["--resume".to_string(), "session-123".to_string()]
-        );
     }
 
     #[test]

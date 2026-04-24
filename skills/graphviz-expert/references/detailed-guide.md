@@ -14,7 +14,7 @@ This skill owns:
 This skill does not own:
 - Mermaid diagrams (→ `$mermaid-expert`)
 - Data-driven charts (→ `$scientific-figure-plotting`)
-- AI-generated images (→ `$imagegen`)
+- AI-generated images (→ `$image-generated`)
 
 ## Dependencies
 

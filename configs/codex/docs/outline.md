@@ -1172,7 +1172,7 @@ fi
     { "id": "cpa-5-sg-b",   "weight": 17 },
     { "id": "cpa-6-tw",     "weight": 11 }
   ],
-  "fallback": ["iflow-free", "kiro-free"]
+  "fallback": ["openai-mini"]
 }
 ```
 
@@ -1914,4 +1914,3 @@ outline.md §139 明确指出：
 
 > **最终收敛判定**: 修正50共 21 项 ✅ + 修正56新增 6 项 ✅ = 共 27 项全部 ✅
 > 新一轮深度审查未发现更多根本性不一致 → **Duo-Doc 正式收敛，移交 `$plan-to-code` 执行层。**
-

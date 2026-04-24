@@ -1,7 +1,5 @@
-# Codex Entry Proxy
+# Codex Agent Policy
 
-This file exists because Codex discovers `AGENTS.md`.
-
-- Shared framework policy source of truth: [AGENT.md](AGENT.md)
-
-Do not fork routing, memory, or artifact policy in this file.
+- 先查 `skills/SKILL_ROUTING_RUNTIME.json`。
+- 命中后只读对应的 `skills/<name>/SKILL.md`。
+- 不要预读整个 `skills/` skill 库。

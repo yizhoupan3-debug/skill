@@ -87,7 +87,7 @@
       95.0
     ],
     [
-      "checklist-writting",
+      "checklist-planner",
       "L1",
       "owner",
       "none",
@@ -102,7 +102,7 @@
       95.5
     ],
     [
-      "checklist-normalizer",
+      "checklist-planner",
       "L2",
       "owner",
       "none",
@@ -132,7 +132,7 @@
       95.5
     ],
     [
-      "skill-routing-repair",
+      "skill-framework-developer",
       "L0",
       "owner",
       "none",
@@ -147,7 +147,7 @@
       95.5
     ],
     [
-      "iterative-optimizer",
+      "execution-audit",
       "L0",
       "overlay",
       "none",
@@ -456,10 +456,10 @@
     },
     {
       "name": "overlay-selection",
-      "query": "按方案实现这个需求，直接做代码，使用 plan-to-code 主导，并附加 iterative-optimizer",
+      "query": "按方案实现这个需求，直接做代码，使用 plan-to-code 主导，并附加强验收 audit",
       "expected": {
         "selected_skill": "plan-to-code",
-        "overlay_skill": "iterative-optimizer",
+        "overlay_skill": "execution-audit",
         "layer": "L2"
       }
     },
@@ -467,16 +467,16 @@
       "name": "review-checklist-routing",
       "query": "review checklist 看这轮是否结束",
       "expected": {
-        "selected_skill": "checklist-writting",
+        "selected_skill": "checklist-planner",
         "overlay_skill": "anti-laziness",
         "layer": "L1"
       }
     },
     {
-      "name": "checklist-normalizer-routing",
+      "name": "checklist-planner-normalizer-routing",
       "query": "把这份 checklist 规范一下，串行的写在一点，并行的拆开",
       "expected": {
-        "selected_skill": "checklist-normalizer",
+        "selected_skill": "checklist-planner",
         "overlay_skill": null,
         "layer": "L2"
       }
@@ -491,19 +491,19 @@
       }
     },
     {
-      "name": "skill-routing-repair-direct-owner",
+      "name": "skill-framework-developer-miss-repair",
       "query": "这次为什么没触发，顺手修一下 skill，以后别再选错",
       "expected": {
-        "selected_skill": "skill-routing-repair",
+        "selected_skill": "skill-framework-developer",
         "overlay_skill": "anti-laziness",
         "layer": "L0"
       }
     },
     {
-      "name": "skill-routing-repair-beats-debug-gate",
+      "name": "skill-framework-developer-miss-repair-beats-debug-gate",
       "query": "这个 skill 的路由没触发，帮我修复这次 miss",
       "expected": {
-        "selected_skill": "skill-routing-repair",
+        "selected_skill": "skill-framework-developer",
         "overlay_skill": "anti-laziness",
         "layer": "L0"
       }

@@ -33,22 +33,22 @@ fn financial_data_rejects_adjusted_stooq() {
 }
 
 #[test]
-fn imagegen_rust_cli_is_workspace_member() {
+fn image_generated_rust_cli_is_workspace_member() {
     let manifest = read_text(&project_root().join("rust_tools/Cargo.toml"));
     assert!(manifest.contains(r#""image_gen_rs""#));
 }
 
 #[test]
-fn imagegen_skill_docs_point_to_rust_cli_only() {
-    let docs = collect_text_under(&project_root().join("skills/imagegen"), "md");
+fn image_generated_skill_docs_point_to_rust_cli_only() {
+    let docs = collect_text_under(&project_root().join("skills/image-generated"), "md");
     assert!(docs.contains("rust_tools/image_gen_rs"));
     assert!(!docs.contains("scripts/image_gen.py"));
     assert!(!docs.contains("python \"$IMAGE_GEN\""));
 }
 
 #[test]
-fn imagegen_generate_dry_run_uses_responses_tool() {
-    let result = run_imagegen_ok(&[
+fn image_generated_generate_dry_run_uses_responses_tool() {
+    let result = run_image_generated_ok(&[
         "generate",
         "--prompt",
         "red square",
@@ -71,7 +71,7 @@ fn imagegen_generate_dry_run_uses_responses_tool() {
 }
 
 #[test]
-fn imagegen_batch_dry_run_has_single_out_dir_flag() {
+fn image_generated_batch_dry_run_has_single_out_dir_flag() {
     let tmp = tempdir().unwrap();
     let prompts = tmp.path().join("prompts.jsonl");
     std::fs::write(
@@ -79,7 +79,7 @@ fn imagegen_batch_dry_run_has_single_out_dir_flag() {
         "{\"prompt\":\"red square\",\"out\":\"red.png\"}\nblue circle\n",
     )
     .unwrap();
-    let result = run_imagegen_ok(&[
+    let result = run_image_generated_ok(&[
         "generate-batch",
         "--input",
         prompts.to_str().unwrap(),
@@ -100,10 +100,10 @@ fn imagegen_batch_dry_run_has_single_out_dir_flag() {
 }
 
 #[test]
-fn imagegen_dry_run_does_not_create_output_dirs() {
+fn image_generated_dry_run_does_not_create_output_dirs() {
     let tmp = tempdir().unwrap();
     let out_dir = tmp.path().join("preview-only");
-    run_imagegen_ok(&[
+    run_image_generated_ok(&[
         "generate",
         "--prompt",
         "preview",
@@ -115,8 +115,8 @@ fn imagegen_dry_run_does_not_create_output_dirs() {
 }
 
 #[test]
-fn imagegen_rejects_invalid_output_compression() {
-    let result = run_imagegen_error(&[
+fn image_generated_rejects_invalid_output_compression() {
+    let result = run_image_generated_error(&[
         "generate",
         "--prompt",
         "red square",
@@ -130,11 +130,11 @@ fn imagegen_rejects_invalid_output_compression() {
 }
 
 #[test]
-fn imagegen_batch_slugs_non_ascii_prompts() {
+fn image_generated_batch_slugs_non_ascii_prompts() {
     let tmp = tempdir().unwrap();
     let prompts = tmp.path().join("prompts.jsonl");
     std::fs::write(&prompts, "一只猫\n").unwrap();
-    let result = run_imagegen_ok(&[
+    let result = run_image_generated_ok(&[
         "generate-batch",
         "--input",
         prompts.to_str().unwrap(),
@@ -156,7 +156,7 @@ fn run_financial_data_error(args: &[&str]) -> Output {
     ))
 }
 
-fn run_imagegen_ok(args: &[&str]) -> Output {
+fn run_image_generated_ok(args: &[&str]) -> Output {
     let output = run(cargo_manifest_command(
         &project_root().join("rust_tools/image_gen_rs/Cargo.toml"),
         args,
@@ -165,7 +165,7 @@ fn run_imagegen_ok(args: &[&str]) -> Output {
     output
 }
 
-fn run_imagegen_error(args: &[&str]) -> Output {
+fn run_image_generated_error(args: &[&str]) -> Output {
     run(cargo_manifest_command(
         &project_root().join("rust_tools/image_gen_rs/Cargo.toml"),
         args,

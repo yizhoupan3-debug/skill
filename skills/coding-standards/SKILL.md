@@ -5,10 +5,10 @@ description: |
   immutability, and type safety for backend and full-stack code (Python, Go,
   Node.js, Rust, SQL). Use when reviewing code quality drift, preventing
   recurring defects, and cutting needless abstraction or scope drift.
-  For frontend-specific patterns, use $frontend-code-quality instead.
+  Frontend component quality can be handled as a reference mode when no framework-specific owner is needed.
 metadata:
   version: "4.2.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - coding-standards
     - readability
@@ -58,7 +58,7 @@ detection, and practical simplification.
 
 ## Do not use
 
-- The task is **frontend-specific** code quality (React/Vue/Svelte patterns, component structure, RORO, handle-prefix) → use `$frontend-code-quality`
+- The task is framework-specific frontend semantics → use `$react`, `$nextjs`, `$vue`, or `$svelte`
 - The user wants quantitative code scoring with a 0-100 score → use `$code-review`
 - The user wants architecture-level review → use `$architect-review`
 - The user wants security-focused audit → use `$security-audit`
@@ -76,7 +76,7 @@ This skill owns:
 - Process-level quality patterns such as fail-fast config, guard clauses, and Rule of Three
 
 This skill does not own:
-- Frontend-specific patterns → `$frontend-code-quality`
+- Framework-specific frontend semantics → `$react`, `$nextjs`, `$vue`, or `$svelte`
 - Error handling architecture design → `$error-handling-patterns`
 - Quantitative scoring → `$code-review`
 - Security auditing → `$security-audit`
@@ -132,4 +132,7 @@ When doing a process-level review, also check:
 - Do not turn a local fix into adjacent refactoring unless the dependency is real and explained
 - Prefer small, compounding improvements over big rewrites
 
-See [detailed examples and patterns](references/DETAIL.md) for complete code samples.
+## References
+
+- [references/DETAIL.md](references/DETAIL.md)
+- [references/frontend-quality.md](references/frontend-quality.md)

@@ -6,20 +6,12 @@ use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 
 #[test]
-fn project_claude_agents_stay_retired() {
-    assert!(
-        !project_root().join(".claude/agents").exists(),
-        "Project Claude subagents are retired; keep reusable behavior in skills/."
-    );
-}
-
-#[test]
-fn plugin_manifest_exposes_skills_and_mcp_bundle() {
+fn plugin_manifest_exposes_skills_without_mcp_bundle() {
     let plugin_root = project_root().join("plugins/skill-framework-native");
     let manifest = read_json(&plugin_root.join(".codex-plugin/plugin.json"));
     assert_eq!(manifest["name"], "skill-framework-native");
     assert_eq!(manifest["skills"], "./skills/");
-    assert_eq!(manifest["mcpServers"], "./.mcp.json");
+    assert!(manifest.get("mcpServers").is_none());
     assert_eq!(
         manifest["interface"]["displayName"],
         "Skill Framework Native"
@@ -27,38 +19,15 @@ fn plugin_manifest_exposes_skills_and_mcp_bundle() {
 }
 
 #[test]
-fn plugin_mcp_bundle_points_back_to_repo_root() {
-    let payload = read_json(&project_root().join("plugins/skill-framework-native/.mcp.json"));
-    let framework = &payload["mcpServers"]["framework-mcp"];
-    assert_eq!(framework["command"], "./scripts/router-rs/run_router_rs.sh");
-    assert_eq!(
-        framework["args"],
-        serde_json::json!([
-            "./scripts/router-rs/Cargo.toml",
-            "--framework-mcp-stdio",
-            "--repo-root",
-            "../.."
-        ])
-    );
-    assert_eq!(framework["cwd"], "../..");
-    assert_eq!(payload["mcpServers"].as_object().unwrap().len(), 1);
+fn plugin_mcp_bundle_is_removed() {
+    assert!(!project_root()
+        .join("plugins/skill-framework-native/.mcp.json")
+        .exists());
 }
 
 #[test]
-fn marketplace_registers_local_plugin_when_fixture_exists() {
-    let marketplace_path = project_root().join(".agents/plugins/marketplace.json");
-    if !marketplace_path.is_file() {
-        return;
-    }
-    let marketplace = read_json(&marketplace_path);
-    assert_eq!(
-        marketplace["interface"]["displayName"],
-        "Skill Local Marketplace"
-    );
-    let plugin = &marketplace["plugins"][0];
-    assert_eq!(plugin["name"], "skill-framework-native");
-    assert_eq!(plugin["source"]["path"], "./plugins/skill-framework-native");
-    assert_eq!(plugin["policy"]["installation"], "AVAILABLE");
+fn agents_marketplace_surface_stays_removed() {
+    assert!(!project_root().join(".agents").exists());
 }
 
 #[test]
@@ -79,21 +48,29 @@ fn gitx_skill_exposes_codex_shortcut_and_closeout_flow() {
 }
 
 #[test]
-fn refresh_skill_stays_available_for_codex_global_entry() {
-    let skill_path = project_root().join("skills/refresh/SKILL.md");
-    let content = read_text(&skill_path);
-    assert!(skill_path.is_file());
-    for marker in [
-        "name: refresh",
-        "$refresh",
-        r#"PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}""#,
-        r#""$PROJECT_DIR"/scripts/router-rs/run_router_rs.sh "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR""#,
-        "下一轮执行 prompt 已准备好，并且已经复制到剪贴板。",
-        "--framework-refresh-verbose",
-    ] {
-        assert!(content.contains(marker), "missing marker: {marker}");
+fn refresh_skill_is_not_projected_as_codex_entrypoint() {
+    assert!(!project_root().join(".codex/skills/refresh").exists());
+    let controller = read_text(&project_root().join("skills/execution-controller-coding/SKILL.md"));
+    assert!(controller.contains("$autopilot"));
+}
+
+#[test]
+fn codex_skill_projection_is_stub_only() {
+    for skill in ["gitx", "autopilot", "deepinterview"] {
+        let path = project_root().join(format!(".codex/skills/{skill}/SKILL.md"));
+        let content = read_text(&path);
+        assert!(path.is_file(), "missing stub for {skill}");
+        assert!(content.contains("Small Codex entry stub."));
+        if skill == "autopilot" {
+            assert!(content.contains("skills/execution-controller-coding/SKILL.md"));
+        } else {
+            assert!(content.contains(&format!("skills/{skill}/SKILL.md")));
+        }
+        assert!(
+            (20..=40).contains(&content.lines().count()),
+            "{skill} stub should stay tiny"
+        );
     }
-    assert!(!content.contains("manual next-turn execution prompt"));
 }
 
 #[test]
@@ -150,7 +127,7 @@ fn latex_compile_acceleration_reference_has_operational_playbook() {
 
 #[test]
 fn doc_and_xlsx_skills_have_no_python_scripts() {
-    for skill in ["skills/doc", "skills/xlsx"] {
+    for skill in ["skills/doc", "skills/primary-runtime/spreadsheets"] {
         assert!(
             collect_files_with_extension(&project_root().join(skill), "py").is_empty(),
             "{skill} still contains Python scripts"
@@ -162,7 +139,7 @@ fn doc_and_xlsx_skills_have_no_python_scripts() {
 fn doc_and_xlsx_skill_docs_point_to_rust_tooling() {
     let docs = markdown_text_under(&[
         project_root().join("skills/doc"),
-        project_root().join("skills/xlsx"),
+        project_root().join("skills/primary-runtime/spreadsheets"),
     ]);
     for forbidden in [
         "openpyxl",
@@ -192,7 +169,7 @@ fn doc_and_xlsx_skill_docs_point_to_rust_tooling() {
 fn doc_and_xlsx_agent_prompts_are_rust_first() {
     let prompts = [
         project_root().join("skills/doc/agents/openai.yaml"),
-        project_root().join("skills/xlsx/agents/openai.yaml"),
+        project_root().join("skills/primary-runtime/spreadsheets/agents/openai.yaml"),
     ]
     .iter()
     .map(|path| read_text(path))
@@ -358,7 +335,7 @@ fn autoresearch_uses_rust_only_controller() {
 
 #[test]
 fn installed_project_hooks_use_router_rs_only() {
-    for surface in [".claude/settings.json", ".codex/hooks.json"] {
+    for surface in [".codex/hooks.json"] {
         let payload = read_json(&project_root().join(surface));
         let mut commands = Vec::new();
         for entries in payload["hooks"].as_object().unwrap().values() {
@@ -379,14 +356,13 @@ fn installed_project_hooks_use_router_rs_only() {
 }
 
 #[test]
-fn repo_local_codex_framework_mcp_uses_rust_only_entrypoint() {
+fn repo_local_codex_omits_framework_mcp_entrypoint() {
     let source = read_text(&project_root().join(".codex/config.toml"));
     assert!(!source.contains("python3"));
     assert!(!source.contains("scripts.framework_mcp"));
-    assert!(source
-        .contains(r#"command = "/Users/joe/Documents/skill/scripts/router-rs/run_router_rs.sh""#));
     assert!(!source.contains(r#"command = "cargo""#));
-    assert!(source.contains("--framework-mcp-stdio"));
+    assert!(!source.contains("[mcp_servers.framework-mcp]"));
+    assert!(!source.contains("--framework-mcp-stdio"));
 }
 
 #[test]
@@ -405,7 +381,7 @@ fn install_skills_uses_rust_only_entrypoints() {
 #[test]
 fn sync_skills_uses_router_rs_directly() {
     assert!(!project_root().join("scripts/sync_skills.py").exists());
-    let source = read_text(&project_root().join("scripts/router-rs/src/claude_hooks.rs"));
+    let source = read_text(&project_root().join("scripts/router-rs/src/codex_hooks.rs"));
     assert!(source.contains("sync_host_entrypoints"));
 }
 

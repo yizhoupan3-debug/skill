@@ -338,6 +338,11 @@ Produce `audit_report.md` when the user explicitly asks for an audit artifact or
 - Do not dump full evidence into the main thread when artifacts or state can hold it.
 - If the auditor itself is being changed, perform a self-check against [references/superior-quality-bar.md](references/superior-quality-bar.md).
 
+## References
+
+- [references/superior-quality-bar.md](references/superior-quality-bar.md)
+- [references/iteration-loop.md](references/iteration-loop.md)
+
 ## Trigger examples
 
 - “强制进行审计自检 / 检查核心逻辑完整性与结果可信度。”

@@ -7,7 +7,7 @@ description: |
   Trigger: 后端报错、traceback、进程崩溃、内存泄漏、任务卡死、死锁、OOM、数据静默损坏、Go panic。
 metadata:
   version: "1.1.0"
-  platforms: [codex, antigravity]
+  platforms: [codex]
   tags:
     - backend
     - debugging

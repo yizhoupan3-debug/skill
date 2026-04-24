@@ -17,9 +17,12 @@ trigger_hints:
   - benchmarking
   - option comparison
   - investigation
+  - github repo analysis
+  - issue PR timeline
+  - repo对标
 metadata:
   version: "1.3.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - information-retrieval
     - research
@@ -51,7 +54,6 @@ planning.
 - Structured page extraction / crawling → use `$web-scraping`
 - OpenAI official product guidance → use `$openai-docs`
 - Root-cause debugging of a failure → use `$systematic-debugging`
-- Repository, issue, PR, timeline, or code-history deep dives are central → use `$github-investigator`
 - A simple stable fact answerable directly without research
 
 ## Primary operating principle
@@ -98,7 +100,7 @@ If runtime policy does **not** permit spawning:
 3. Run **deep dives** on the highest-value dimensions:
    - search in ascending cost
    - fetch only the sources that matter
-   - benchmark GitHub repositories explicitly when implementation patterns matter
+   - use GitHub deep-dive mode when repository structure, issues, PRs, commits, or timelines are central
 4. Verify before recommending:
    - cross-check important claims with at least two sources when feasible
    - record conflicts, unknowns, or stale evidence explicitly
@@ -143,11 +145,12 @@ Prefer in this order when applicable:
 - Do not fabricate missing evidence.
 - Do not deep-read everything; narrow first, then read.
 - Do not treat one unverified blog post as source of truth.
-- If repository structure, issues, PRs, commits, or timeline reconstruction become central, reroute to `$github-investigator`.
-- If research reveals local skill-library gaps, hand off to `$skill-scout`.
+- If repository structure, issues, PRs, commits, or timeline reconstruction become central, stay here and use GitHub deep-dive mode.
+- If research reveals local skill-library gaps, hand off to `$skill-framework-developer` external scout mode.
 
 ## References
 
 - [references/deep-research-playbook.md](references/deep-research-playbook.md)
 - [references/source-scoring.md](references/source-scoring.md)
 - [references/git-research-hygiene.md](references/git-research-hygiene.md)
+- [references/github-mode.md](references/github-mode.md)

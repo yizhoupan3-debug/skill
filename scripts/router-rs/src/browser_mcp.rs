@@ -1,4 +1,4 @@
-use crate::resolve_repo_root_arg;
+use crate::framework_runtime::resolve_repo_root_arg;
 use crate::{
     attach_runtime_event_transport, inspect_trace_stream, replay_trace_stream,
     TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
@@ -419,9 +419,6 @@ pub struct BrowserRuntime {
 pub struct BrowserAttachConfig {
     runtime_attach_descriptor_path: Option<String>,
     runtime_attach_artifact_path: Option<String>,
-    runtime_binding_artifact_path: Option<String>,
-    runtime_handoff_path: Option<String>,
-    runtime_resume_manifest_path: Option<String>,
     headless: bool,
 }
 
@@ -429,9 +426,6 @@ impl BrowserAttachConfig {
     pub fn from_cli_and_env(
         runtime_attach_descriptor_path: Option<String>,
         runtime_attach_artifact_path: Option<String>,
-        runtime_binding_artifact_path: Option<String>,
-        runtime_handoff_path: Option<String>,
-        runtime_resume_manifest_path: Option<String>,
         headless: Option<String>,
     ) -> Self {
         Self {
@@ -439,12 +433,6 @@ impl BrowserAttachConfig {
                 .or_else(|| env_non_empty("BROWSER_MCP_RUNTIME_ATTACH_DESCRIPTOR_PATH")),
             runtime_attach_artifact_path: runtime_attach_artifact_path
                 .or_else(|| env_non_empty("BROWSER_MCP_RUNTIME_ATTACH_ARTIFACT_PATH")),
-            runtime_binding_artifact_path: runtime_binding_artifact_path
-                .or_else(|| env_non_empty("BROWSER_MCP_RUNTIME_BINDING_ARTIFACT_PATH")),
-            runtime_handoff_path: runtime_handoff_path
-                .or_else(|| env_non_empty("BROWSER_MCP_RUNTIME_HANDOFF_PATH")),
-            runtime_resume_manifest_path: runtime_resume_manifest_path
-                .or_else(|| env_non_empty("BROWSER_MCP_RUNTIME_RESUME_MANIFEST_PATH")),
             headless: resolve_headless_option(headless),
         }
     }
@@ -1489,39 +1477,6 @@ impl BrowserRuntime {
                 path: Some(path.clone()),
             };
         }
-        if let Some(path) = self
-            .attach_config
-            .runtime_binding_artifact_path
-            .as_ref()
-            .filter(|path| !path.trim().is_empty())
-        {
-            return ConfiguredAttachSource {
-                source: Some("binding_artifact_path"),
-                path: Some(path.clone()),
-            };
-        }
-        if let Some(path) = self
-            .attach_config
-            .runtime_handoff_path
-            .as_ref()
-            .filter(|path| !path.trim().is_empty())
-        {
-            return ConfiguredAttachSource {
-                source: Some("handoff_path"),
-                path: Some(path.clone()),
-            };
-        }
-        if let Some(path) = self
-            .attach_config
-            .runtime_resume_manifest_path
-            .as_ref()
-            .filter(|path| !path.trim().is_empty())
-        {
-            return ConfiguredAttachSource {
-                source: Some("resume_manifest_path"),
-                path: Some(path.clone()),
-            };
-        }
         if let Some(path) = self.auto_discover_runtime_attach_artifact() {
             return ConfiguredAttachSource {
                 source: Some("attach_artifact_path"),
@@ -1631,24 +1586,6 @@ impl BrowserRuntime {
                 .build_runtime_attach_descriptor_from_artifact_path(
                     configured_source.path.as_deref(),
                 ),
-            Some("binding_artifact_path") => self.hydrate_runtime_attach_descriptor_via_rust(
-                None,
-                configured_source.path.as_deref(),
-                None,
-                None,
-            ),
-            Some("handoff_path") => self.hydrate_runtime_attach_descriptor_via_rust(
-                None,
-                None,
-                configured_source.path.as_deref(),
-                None,
-            ),
-            Some("resume_manifest_path") => self.hydrate_runtime_attach_descriptor_via_rust(
-                None,
-                None,
-                None,
-                configured_source.path.as_deref(),
-            ),
             _ => Err("runtime attach descriptor is not configured".to_string()),
         }
     }
@@ -3772,7 +3709,7 @@ mod tests {
         let mut runtime = BrowserRuntime::with_attach_config(
             repo_root.clone(),
             BrowserAttachConfig {
-                runtime_resume_manifest_path: Some(resume_path.display().to_string()),
+                runtime_attach_artifact_path: Some(resume_path.display().to_string()),
                 ..BrowserAttachConfig::default()
             },
         );

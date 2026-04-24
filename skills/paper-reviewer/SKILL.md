@@ -95,8 +95,7 @@ Default posture:
 - The user wants the front door for a paper task -> use `$paper-workbench`
 - The user wants the paper changed now -> use `$paper-reviser`
 - The user wants only local wording polish -> use `$paper-writing`
-- The user wants only science-level defensibility or claim-vs-evidence analysis -> use `$paper-logic`
-- The user wants only figure or table presentation polish -> use `$paper-visuals`
+- The user wants only local wording polish -> use `$paper-writing`
 
 ## User-facing modes
 
@@ -106,6 +105,9 @@ Use one of only two external modes:
 - `单维度审`: only when the user explicitly names one dimension such as claim, math, references, figures, tables, language, or layout
 
 Do not expose internal gate jargon unless the user explicitly asks for it.
+
+For single-dimension checks, use
+[`references/review-dimensions.md`](references/review-dimensions.md).
 
 ## What this skill should deliver
 

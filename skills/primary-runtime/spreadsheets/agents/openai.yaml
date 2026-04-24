@@ -1,7 +1,7 @@
 interface:
   display_name: "Excel"
-  short_description: "Create and edit spreadsheet or excel files"
+  short_description: "Rust-first XLSX-aware spreadsheet creation, editing, and render QA"
   icon_small: "./assets/file-spreadsheet.png"
   icon_large: "./assets/file-spreadsheet.png"
   brand_color: "#107C41"
-  default_prompt: "Use $Excel to build or update a spreadsheet artifact with formulas, formatting, and verification."
+  default_prompt: "Use $spreadsheets to build or update spreadsheet artifacts with formulas, formatting, Rust OOXML CLI inspection when needed, and render verification."

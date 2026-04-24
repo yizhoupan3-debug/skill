@@ -58,7 +58,7 @@ artifact_outputs:
 
 At every-conversation-start / first turn, check this artifact gate early whenever the primary artifact is an Excel workbook or spreadsheet-like file and the workflow should stay spreadsheet-native.
 
-This skill owns the canonical workbook entry gate. Use it to absorb generic Excel / spreadsheet asks first, then either keep the default `@oai/artifact-tool` path or reroute to a narrower lane when the user explicitly wants Python/openpyxl/pandas/LibreOffice-style handling.
+This skill owns the canonical workbook entry gate. Use it to absorb generic Excel / spreadsheet asks first, then either keep the default `@oai/artifact-tool` path or use the XLSX Rust workflow reference when the user explicitly wants workbook-structure or render-based handling.
 
 ## When to use
 
@@ -71,14 +71,13 @@ This skill owns the canonical workbook entry gate. Use it to absorb generic Exce
 ## Do not use
 
 - The task is plain data wrangling with no workbook artifact requirement
-- The user explicitly wants an `openpyxl` / `pandas` / LibreOffice-driven compatibility workflow; hand off to `$xlsx`
 - The user only wants narrative analysis without a spreadsheet deliverable
 - The artifact is primarily a document, slide deck, or PDF
 
 ## Core contract
 
 - Treat this as the canonical first check for generic Excel / spreadsheet requests before any narrower workbook owner claims the task.
-- If the user explicitly asks for `openpyxl`, `pandas`, workbook-structure audit scripts, or LibreOffice render-based repair, reroute to `$xlsx`.
+- If the user explicitly asks for workbook-structure audit scripts, formula/style repair, or render-based repair, use the XLSX Rust workflow reference under this gate.
 - Use the installed `@oai/artifact-tool` JS workflow for workbook authoring, editing, rendering, and `.xlsx` export by default.
 - Keep calculations auditable: prefer spreadsheet formulas for workbook logic that users may edit later.
 - Use real spreadsheet structures when they add value: tables, filters, freeze panes, validation, conditional formats, and charts.
@@ -88,7 +87,7 @@ This skill owns the canonical workbook entry gate. Use it to absorb generic Exce
 ## Required workflow
 
 1. Confirm the workbook goal, target audience, and whether the implementation lane is still undecided.
-2. If the user explicitly wants Python/openpyxl/pandas/LibreOffice handling, reroute to `$xlsx` and stop this gate there.
+2. If the user explicitly wants workbook-structure or render-based repair, use [references/xlsx-rust-workflow.md](./references/xlsx-rust-workflow.md).
 3. Otherwise create or import the workbook through the artifact-tool path.
 4. Build inputs, structure, formulas, and formatting in that order.
 5. Add charts or KPI visuals when the prompt implies summary analysis or presentation-ready output.
@@ -114,5 +113,6 @@ This skill owns the canonical workbook entry gate. Use it to absorb generic Exce
 
 - [references/workflow.md](./references/workflow.md) for the compact build/verify loop
 - [references/api-surface.md](./references/api-surface.md) for the high-value artifact-tool workbook surface
+- [references/xlsx-rust-workflow.md](./references/xlsx-rust-workflow.md) for workbook-native Rust inspection and rendering
 - [style_guidelines.md](./style_guidelines.md) for spreadsheet presentation conventions
 - [templates/financial_models.md](./templates/financial_models.md) for finance/model-specific guidance

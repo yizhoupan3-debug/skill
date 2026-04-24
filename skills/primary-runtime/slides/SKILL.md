@@ -59,7 +59,10 @@ artifact_outputs:
 
 At every-conversation-start / first turn, check this artifact gate early whenever the primary artifact is a slide deck, presentation, or editable `.pptx` file, or when the user asks for a generic PPT-style deliverable before the source format is fixed.
 
-This skill owns the presentation entry gate for artifact-first slide work. Use it to absorb generic PPT / presentation asks first, then either keep the native editable `.pptx` path or reroute to the narrower owner when the source format is explicit.
+This skill owns the presentation entry gate for artifact-first slide work. Use it
+to absorb generic PPT / presentation asks first, then either keep the native
+editable `.pptx` path or reroute to a source-format owner when the source format
+is explicit.
 
 ## When to use
 
@@ -71,8 +74,7 @@ This skill owns the presentation entry gate for artifact-first slide work. Use i
 
 ## Do not use
 
-- The user explicitly wants Markdown-authored slides instead of editable PowerPoint; hand off to `$ppt-markdown`
-- The user explicitly wants HTML slides plus browser-matched PDF; hand off to `$ppt-html-export`
+- The user explicitly wants Markdown, Slidev, Marp, or HTML/CSS source slides; hand off to `$source-slide-formats`
 - The user explicitly wants LaTeX Beamer source plus PDF; hand off to `$ppt-beamer`
 - The request is for a PDF/document rather than a presentation artifact
 - The task is only about static screenshots or image collage output
@@ -91,7 +93,7 @@ This skill owns the presentation entry gate for artifact-first slide work. Use i
 ## Required workflow
 
 1. Confirm the deck goal, target audience, visual bar, and whether the format is still undecided.
-2. If the user explicitly wants Markdown / HTML / Beamer source, reroute to the matching owner and stop this gate there.
+2. If the user explicitly wants Markdown / HTML source, reroute to `$source-slide-formats`; if they want Beamer, reroute to `$ppt-beamer`.
 3. Otherwise create or load the deck through the artifact-tool Node flow.
 4. Build slides quickly with editable objects first: text, shapes, tables, and native charts.
 5. Render previews and run a compact verification pass for layout, editability, and chart sanity.

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Excel XLSX"
-  short_description: "Rust-first XLSX inspection, editing, and render QA"
-  default_prompt: "Use $xlsx to inspect, create, edit, or audit this `.xlsx` workbook with the Rust OOXML CLI first; preserve formulas, styles, sheet structure, and layout-sensitive elements."

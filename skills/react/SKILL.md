@@ -9,7 +9,7 @@ description: |
   phrases like "React 组件", "状态管理", "自定义 hook", "React 性能优化".
 metadata:
   version: "2.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - react
     - hooks

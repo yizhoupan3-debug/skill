@@ -2,7 +2,7 @@
 name: auth-implementation
 description: |
   Produce server-enforced auth flows with clean separation between authentication, session lifecycle, and authorization.
-  Covers login/signup/logout, token expiry, refresh, revocation, JWT, sessions, OAuth, RBAC/ABAC, route guards, middleware, cookies, and CSRF. Use when the user asks for auth, 登录, 注册, 鉴权, 权限控制, token refresh, JWT vs session, 做登录, 加权限控制, or route guard.
+  Covers login/signup/logout, token expiry, refresh, revocation, JWT, sessions, OAuth, RBAC/ABAC, route guards, middleware, cookies, CSRF, and webhook callback implementation. Use when the user asks for auth, 登录, 注册, 鉴权, 权限控制, token refresh, JWT vs session, 做登录, 加权限控制, route guard, or implementing provider callbacks.
 metadata:
   version: "1.1.0"
   platforms: [codex]
@@ -29,6 +29,7 @@ trigger_hints:
   - 做登录
   - 加权限控制
   - route guard
+  - webhook callback
 ---
 
 # auth-implementation
@@ -50,7 +51,7 @@ This skill owns application-level authentication and authorization implementatio
 ## Do not use
 
 - The main task is security auditing of existing auth code for exploitable flaws → use `$security-audit`
-- The task is webhook signature verification rather than user auth → use `$webhook-security`
+- The task is exploit-focused review of an existing webhook handler → use `$security-audit`
 - The task is a high-level threat model rather than auth implementation → use `$security-threat-model`
 - The task is generic backend structure with little auth-specific logic → use `$node-backend`
 
@@ -66,14 +67,13 @@ This skill owns:
 
 This skill does not own:
 - exploit-focused security auditing by itself
-- provider webhook verification
+- exploit-focused provider webhook review
 - full threat modeling
 - generic backend refactors with no auth focus
 
 If the task shifts to adjacent skill territory, route to:
 - `$security-audit`
 - `$security-threat-model`
-- `$webhook-security`
 - `$node-backend`
 - `$nextjs`
 
@@ -141,6 +141,10 @@ Recommended structure:
 - Do not mix authentication and authorization into one vague middleware concept.
 - If a security-sensitive assumption remains unverified, say so explicitly.
 - **Superior Quality Audit**: For auth-critical flows, trigger `$execution-audit` to verify against [Superior Quality Bar](../execution-audit/references/superior-quality-bar.md).
+
+## References
+
+- [references/webhook-callbacks.md](references/webhook-callbacks.md)
 
 ## Trigger examples
 

@@ -4,7 +4,7 @@ description: |
   Deliver type-safe TypeScript 5.x+ code. Enforces strict mode, encodes domain constraints, and handles complex generics.
 metadata:
   version: "2.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - typescript
     - type-system

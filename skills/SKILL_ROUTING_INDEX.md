@@ -37,7 +37,7 @@
 | Git 流程 / 合并 / 推送 | `gitx` | Run the safe Git review-fix-tidy-commit-merge-push workf |
 | 多轮调研 / 对比 / 检索 | `information-retrieval` | Run multi-round research before acting or recommending |
 | 科研项目 / 课题下一步 | `research-workbench` | Unified front door for non-manuscript research-project w |
-| 文献梳理 / 搜论文 / novelty check | `literature-synthesis` | Systematically screen, cluster, compare, and synthesize  |
+| 文献梳理 / 搜论文 / novelty check | `literature-synthesis` | Screen, cluster, compare, and synthesize academic litera |
 | skill 库 / 路由框架自身 | `skill-framework-developer` | Design and tune Codex skill routing/framework behavior |
 
 ## Optional overlays

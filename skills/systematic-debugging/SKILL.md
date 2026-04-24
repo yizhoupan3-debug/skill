@@ -14,7 +14,7 @@ trigger_hints:
   - prod issue
 metadata:
   version: "2.5.0"
-  platforms: [codex, antigravity]
+  platforms: [codex]
   tags:
     - debugging
     - root-cause-analysis

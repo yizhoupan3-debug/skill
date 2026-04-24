@@ -1,17 +1,43 @@
 {
   "schema_version": "framework-runtime-registry-v1",
-  "default_host_peer_set": [
-    "codex_desktop_adapter",
-    "codex_cli_adapter",
-    "claude_code_adapter",
-    "gemini_cli_adapter"
-  ],
-  "shared_project_mcp_servers": [
-    "framework-mcp"
-  ],
+  "codex_host": {
+    "adapter_id": "codex_adapter",
+    "host_id": "codex",
+    "transport": "native-codex",
+    "context_files": [
+      "AGENTS.md"
+    ],
+    "settings_paths": [
+      "~/.codex/config.toml",
+      ".codex/config.toml"
+    ],
+    "mcp_config_paths": [
+      ".codex/config.toml"
+    ],
+    "session_supervisor_driver": "codex_driver",
+    "resume_command_examples": [
+      "codex resume --last",
+      "codex resume <session_id>"
+    ],
+    "capabilities": [
+      "artifact_contract",
+      "memory_mounts",
+      "mcp_servers",
+      "workspace_bootstrap",
+      "batch_execution",
+      "cron_execution",
+      "ci_runner",
+      "non_interactive_entrypoint",
+      "external_session_supervisor",
+      "rate_limit_auto_resume",
+      "host_resume_entrypoint",
+      "host_tmux_worker_management",
+      "framework_alias_entrypoints"
+    ]
+  },
   "workspace_bootstrap_defaults": {
     "skill_bridge": {
-      "source_rel": "skills",
+      "source_rel": ".codex/skills",
       "project_dir": ".codex/skills",
       "user_dir": "~/.codex/skills",
       "bridge_dir": ".codex/skills"
@@ -69,9 +95,7 @@
         "resume_when": [
           "continuity state is active and recovery anchors are present"
         ],
-        "refresh_when": [
-          "continuity state is stale"
-        ],
+        "refresh_when": [],
         "repair_when": [
           "continuity state is inconsistent"
         ],
@@ -84,8 +108,7 @@
         ]
       },
       "host_entrypoints": {
-        "codex-cli": "$autopilot",
-        "claude-code": "/autopilot"
+        "codex-cli": "$autopilot"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -131,8 +154,7 @@
         "execution-audit"
       ],
       "host_entrypoints": {
-        "codex-cli": "$deepinterview",
-        "claude-code": "/deepinterview"
+        "codex-cli": "$deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -282,8 +304,7 @@
         "verification_evidence_required_before_cleanup": true
       },
       "host_entrypoints": {
-        "codex-cli": "$team",
-        "claude-code": "/team"
+        "codex-cli": "$team"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -308,596 +329,13 @@
       "external_runtime_dependency": false
     }
   },
-  "retired_plugin_contract": {
-    "replaced_object": "retired-third-party-claude-plugin",
-    "runtime_authority": "rust-session-supervisor",
-    "steady_state_forbidden_roots": [
-      "legacy-plugin-state"
-    ],
-    "replacement_capabilities": [
-      "external_session_supervisor",
-      "rate_limit_auto_resume",
-      "host_resume_entrypoint",
-      "host_tmux_worker_management"
-    ],
-    "framework_native_alias_guarantees": {
-      "autopilot": {
-        "inherits_retired_plugin_core_capabilities": false,
-        "implementation_bar": [
-          "root-cause-first-when-unknown",
-          "verification-evidence-required",
-          "resume-and-recovery-required",
-          "converge-until-bounded-scope-clean"
-        ]
-      },
-      "deepinterview": {
-        "inherits_retired_plugin_core_capabilities": false,
-        "implementation_bar": [
-          "root-cause-first-when-unknown",
-          "findings-first-with-severity-order",
-          "verification-evidence-required",
-          "fix-verify-loop-until-bounded-scope-clean"
-        ]
-      },
-      "team": {
-        "inherits_retired_plugin_core_capabilities": false,
-        "implementation_bar": [
-          "worker-boundaries-required",
-          "verification-evidence-required",
-          "resume-and-recovery-required",
-          "supervisor-owned-continuity"
-        ]
-      }
-    },
-    "retired_plugin_is_runtime_dependency": false
-  },
-  "plugins": [
-    {
-      "plugin_name": "skill-framework-native",
-      "source_rel": "plugins/skill-framework-native",
-      "home_subpath": ".codex/plugins/skill-framework-native",
-      "marketplace_name": "skill-framework-native",
-      "marketplace_category": "Developer Tools"
-    }
-  ],
-  "host_adapters": [
-    {
-      "adapter_id": "cli_common_adapter",
-      "registry_lane": "default",
-      "host_id": "cli-family-shared",
-      "transport": "host-neutral-contract",
-      "required_capabilities": [
-        "runtime",
-        "memory",
-        "artifact",
-        "orchestration"
-      ],
-      "optional_capabilities": [],
-      "host_capabilities": [
-        "artifact_contract",
-        "memory_mounts",
-        "mcp_servers",
-        "tool_policy",
-        "approval_policy",
-        "loadout_policy",
-        "framework_surface_policy",
-        "workspace_bootstrap",
-        "session_contract"
-      ],
-      "emits_artifacts": true,
-      "supports_memory_mounts": true,
-      "supports_orchestration": true,
-      "upgrade_zone": "upstream-safe-zone",
-      "thin_patch_surfaces": [],
-      "fork_danger_surfaces": [
-        "host_session_protocol",
-        "host_event_grammar",
-        "host_resume_semantics",
-        "host_tool_approval_semantics",
-        "host_provider_plumbing"
-      ],
-      "protocol_hints": {
-        "single_framework_truth": true,
-        "shared_between_hosts": [
-          "codex_desktop_adapter",
-          "codex_cli_adapter",
-          "claude_code_adapter",
-          "gemini_cli_adapter"
-        ],
-        "codexcli_is_controller": false,
-        "cli_family_projection": true
-      },
-      "notes": "Shared outer contract projection reused by Codex Desktop and the multi-host CLI family without forking framework truth."
-    },
-    {
-      "adapter_id": "codex_common_adapter",
-      "registry_lane": "default",
-      "host_id": "codex-shared",
-      "transport": "host-neutral-contract",
-      "required_capabilities": [
-        "runtime",
-        "memory",
-        "artifact",
-        "orchestration"
-      ],
-      "optional_capabilities": [],
-      "host_capabilities": [
-        "artifact_contract",
-        "memory_mounts",
-        "mcp_servers",
-        "tool_policy",
-        "approval_policy",
-        "loadout_policy",
-        "framework_surface_policy",
-        "workspace_bootstrap",
-        "session_contract"
-      ],
-      "emits_artifacts": true,
-      "supports_memory_mounts": true,
-      "supports_orchestration": true,
-      "upgrade_zone": "upstream-safe-zone",
-      "thin_patch_surfaces": [],
-      "fork_danger_surfaces": [
-        "host_session_protocol",
-        "host_event_grammar",
-        "host_resume_semantics",
-        "host_tool_approval_semantics",
-        "host_provider_plumbing"
-      ],
-      "protocol_hints": {
-        "single_framework_truth": true,
-        "shared_between_hosts": [
-          "codex_desktop_adapter",
-          "codex_cli_adapter",
-          "claude_code_adapter",
-          "gemini_cli_adapter"
-        ],
-        "codexcli_is_controller": false,
-        "cli_family_projection": true,
-        "canonical_adapter_id": "cli_common_adapter"
-      },
-      "notes": "Codex-flavored view of the shared CLI-family contract; cli_common_adapter is canonical."
-    },
-    {
-      "adapter_id": "codex_desktop_adapter",
-      "registry_lane": "default",
-      "host_id": "codex-desktop",
-      "transport": "local-bridge",
-      "required_capabilities": [
-        "runtime",
-        "memory",
-        "artifact",
-        "orchestration"
-      ],
-      "optional_capabilities": [],
-      "host_capabilities": [
-        "local_runtime",
-        "artifact_contract",
-        "memory_mounts",
-        "mcp_servers",
-        "automation_bridge",
-        "orchestration_control"
-      ],
-      "emits_artifacts": true,
-      "supports_memory_mounts": true,
-      "supports_orchestration": true,
-      "upgrade_zone": "upstream-safe-zone",
-      "thin_patch_surfaces": [
-        "desktop_metadata_injection"
-      ],
-      "fork_danger_surfaces": [
-        "host_session_protocol",
-        "host_event_grammar",
-        "host_resume_semantics",
-        "host_tool_approval_semantics",
-        "host_provider_plumbing"
-      ],
-      "protocol_hints": {
-        "desktop_mode": true,
-        "state_source": "framework_profile"
-      },
-      "notes": "Primary Codex Desktop host path for preserving portable framework core."
-    },
-    {
-      "adapter_id": "codex_cli_adapter",
-      "registry_lane": "default",
-      "host_id": "codex-cli",
-      "transport": "headless-exec",
-      "required_capabilities": [
-        "runtime",
-        "memory",
-        "artifact",
-        "orchestration"
-      ],
-      "optional_capabilities": [],
-      "host_capabilities": [
-        "artifact_contract",
-        "memory_mounts",
-        "mcp_servers",
-        "workspace_bootstrap",
-        "batch_execution",
-        "cron_execution",
-        "ci_runner",
-        "non_interactive_entrypoint",
-        "external_session_supervisor",
-        "rate_limit_auto_resume",
-        "host_resume_entrypoint",
-        "host_tmux_worker_management",
-        "framework_alias_entrypoints"
-      ],
-      "emits_artifacts": true,
-      "supports_memory_mounts": true,
-      "supports_orchestration": true,
-      "upgrade_zone": "upstream-safe-zone",
-      "thin_patch_surfaces": [
-        "cli_metadata_injection"
-      ],
-      "fork_danger_surfaces": [
-        "host_session_protocol",
-        "host_event_grammar",
-        "host_resume_semantics",
-        "host_tool_approval_semantics",
-        "host_provider_plumbing"
-      ],
-      "protocol_hints": {
-        "headless_mode": true,
-        "state_source": "framework_profile",
-        "codexcli_is_controller": false,
-        "context_files": [
-          "AGENTS.md"
-        ],
-        "settings_paths": [
-          "~/.codex/config.toml",
-          ".codex/config.toml"
-        ],
-        "mcp_config_paths": [
-          ".codex/config.toml"
-        ],
-        "session_supervisor_driver": "codex_driver",
-        "resume_command_examples": [
-          "codex resume --last",
-          "codex resume <session_id>"
-        ],
-        "framework_alias_entrypoints": {
-          "autopilot": "$autopilot",
-          "deepinterview": "$deepinterview",
-          "team": "$team"
-        }
-      },
-      "notes": "Formal headless Codex entrypoint that consumes the shared framework contract."
-    },
-    {
-      "adapter_id": "claude_code_adapter",
-      "registry_lane": "default",
-      "host_id": "claude-code",
-      "transport": "headless-exec",
-      "required_capabilities": [
-        "runtime",
-        "memory",
-        "artifact",
-        "orchestration"
-      ],
-      "optional_capabilities": [],
-      "host_capabilities": [
-        "artifact_contract",
-        "memory_mounts",
-        "mcp_servers",
-        "workspace_bootstrap",
-        "batch_execution",
-        "ci_runner",
-        "non_interactive_entrypoint",
-        "context_file",
-        "settings_json",
-        "settings_scope_hierarchy",
-        "subagent_registry",
-        "managed_policy",
-        "hook_registry",
-        "hook_policy",
-        "hook_browser",
-        "checkpoint_restore",
-        "external_session_supervisor",
-        "rate_limit_auto_resume",
-        "host_resume_entrypoint",
-        "host_tmux_worker_management",
-        "framework_alias_entrypoints"
-      ],
-      "emits_artifacts": true,
-      "supports_memory_mounts": true,
-      "supports_orchestration": true,
-      "upgrade_zone": "upstream-safe-zone",
-      "thin_patch_surfaces": [
-        "cli_metadata_injection",
-        "settings_bridge_projection"
-      ],
-      "fork_danger_surfaces": [
-        "host_session_protocol",
-        "host_event_grammar",
-        "host_resume_semantics",
-        "host_tool_approval_semantics",
-        "host_provider_plumbing"
-      ],
-      "protocol_hints": {
-        "headless_mode": true,
-        "state_source": "framework_profile",
-        "config_root_env_var": "CLAUDE_CONFIG_DIR",
-        "context_files": [
-          "CLAUDE.md",
-          "CLAUDE.local.md"
-        ],
-        "settings_paths": [
-          "~/.claude/settings.json",
-          ".claude/settings.json",
-          ".claude/settings.local.json"
-        ],
-        "mcp_config_paths": [
-          "~/.claude.json"
-        ],
-        "settings_scope_order": [
-          "managed",
-          "command_line",
-          "local",
-          "project",
-          "user"
-        ],
-        "settings_scopes": [
-          {
-            "scope": "managed",
-            "locations": [
-              "server-managed",
-              "managed-settings.json",
-              "managed-settings.d/*.json",
-              "managed-mcp.json"
-            ],
-            "shared_with_team": true
-          },
-          {
-            "scope": "user",
-            "locations": [
-              "~/.claude/settings.json",
-              "~/.claude/CLAUDE.md",
-              "~/.claude/agents/"
-            ],
-            "shared_with_team": false
-          },
-          {
-            "scope": "project",
-            "locations": [
-              ".claude/settings.json",
-              "CLAUDE.md",
-              ".claude/agents/"
-            ],
-            "shared_with_team": true
-          },
-          {
-            "scope": "local",
-            "locations": [
-              ".claude/settings.local.json",
-              "CLAUDE.local.md"
-            ],
-            "shared_with_team": false
-          }
-        ],
-        "subagent_paths": [
-          "~/.claude/agents/",
-          ".claude/agents/"
-        ],
-        "claude_directory_features": [
-          ".claude/settings.json",
-          ".claude/settings.local.json",
-          ".claude/hooks/",
-          ".claude/agents/",
-          ".claude/commands/",
-          ".claude/rules/",
-          ".claude/output-styles/"
-        ],
-        "hook_event_names": [
-          "PreToolUse",
-          "PostToolUse",
-          "PostToolUseFailure",
-          "PostToolBatch",
-          "Notification",
-          "Stop",
-          "SubagentStart",
-          "SubagentStop",
-          "PreCompact",
-          "PostCompact",
-          "SessionStart",
-          "SessionEnd",
-          "UserPromptSubmit",
-          "UserPromptExpansion",
-          "StopFailure",
-          "PermissionRequest",
-          "PermissionDenied",
-          "InstructionsLoaded",
-          "ConfigChange",
-          "CwdChanged",
-          "FileChanged",
-          "TaskCreated",
-          "TaskCompleted",
-          "WorktreeCreate",
-          "WorktreeRemove",
-          "TeammateIdle",
-          "Elicitation",
-          "ElicitationResult"
-        ],
-        "hook_handler_types": [
-          "command",
-          "prompt",
-          "agent",
-          "http",
-          "mcp_tool"
-        ],
-        "hook_control_settings": [
-          "disableAllHooks",
-          "allowManagedHooksOnly",
-          "allowedHttpHookUrls",
-          "httpHookAllowedEnvVars"
-        ],
-        "hook_execution_features": [
-          "async",
-          "asyncRewake",
-          "timeout",
-          "matcher",
-          "if"
-        ],
-        "hook_definition_sources": [
-          {
-            "source": "managed_settings",
-            "locations": [
-              "/Library/Application Support/ClaudeCode/managed-settings.json",
-              "/etc/claude-code/managed-settings.json",
-              "C:/Program Files/ClaudeCode/managed-settings.json"
-            ]
-          },
-          {
-            "source": "user_settings",
-            "locations": [
-              "~/.claude/settings.json"
-            ]
-          },
-          {
-            "source": "project_settings",
-            "locations": [
-              ".claude/settings.json"
-            ]
-          },
-          {
-            "source": "local_settings",
-            "locations": [
-              ".claude/settings.local.json"
-            ]
-          },
-          {
-            "source": "plugin_manifest",
-            "locations": [
-              "hooks/hooks.json"
-            ]
-          },
-          {
-            "source": "agent_frontmatter",
-            "locations": [
-              "~/.claude/agents/*.md",
-              ".claude/agents/*.md"
-            ]
-          },
-          {
-            "source": "skill_frontmatter",
-            "locations": [
-              ".claude/skills/*.md"
-            ]
-          },
-          {
-            "source": "session",
-            "locations": [
-              "/hooks"
-            ]
-          },
-          {
-            "source": "built_in",
-            "locations": [
-              "/hooks"
-            ]
-          },
-          {
-            "source": "sdk",
-            "locations": [
-              "sdk_message_stream"
-            ]
-          }
-        ],
-        "hook_inspection_commands": [
-          "/hooks"
-        ],
-        "plugin_hook_manifest_paths": [
-          "hooks/hooks.json"
-        ],
-        "hook_environment_markers": [
-          "CLAUDE_ENV_FILE",
-          "CLAUDE_PROJECT_DIR",
-          "CLAUDE_PLUGIN_ROOT",
-          "CLAUDE_PLUGIN_DATA",
-          "CLAUDE_CODE_REMOTE"
-        ],
-        "managed_settings_paths": [
-          "/Library/Application Support/ClaudeCode/managed-settings.json",
-          "/etc/claude-code/managed-settings.json",
-          "C:/Program Files/ClaudeCode/managed-settings.json"
-        ],
-        "managed_mcp_paths": [
-          "/Library/Application Support/ClaudeCode/managed-mcp.json",
-          "/etc/claude-code/managed-mcp.json",
-          "C:/Program Files/ClaudeCode/managed-mcp.json"
-        ],
-        "checkpointing_supported": true,
-        "session_supervisor_driver": "claude_driver",
-        "resume_command_examples": [
-          "claude --continue",
-          "claude --resume <session_id>"
-        ],
-        "framework_alias_entrypoints": {
-          "autopilot": "/autopilot",
-          "deepinterview": "/deepinterview",
-          "team": "/team"
-        }
-      },
-      "notes": "Headless Claude Code projection that stays host-specific only at the projection layer."
-    },
-    {
-      "adapter_id": "gemini_cli_adapter",
-      "registry_lane": "default",
-      "host_id": "gemini-cli",
-      "transport": "headless-exec",
-      "required_capabilities": [
-        "runtime",
-        "memory",
-        "artifact",
-        "orchestration"
-      ],
-      "optional_capabilities": [],
-      "host_capabilities": [
-        "artifact_contract",
-        "memory_mounts",
-        "mcp_servers",
-        "workspace_bootstrap",
-        "batch_execution",
-        "ci_runner",
-        "non_interactive_entrypoint",
-        "context_file",
-        "settings_json"
-      ],
-      "emits_artifacts": true,
-      "supports_memory_mounts": true,
-      "supports_orchestration": true,
-      "upgrade_zone": "upstream-safe-zone",
-      "thin_patch_surfaces": [
-        "cli_metadata_injection"
-      ],
-      "fork_danger_surfaces": [
-        "host_session_protocol",
-        "host_event_grammar",
-        "host_resume_semantics",
-        "host_tool_approval_semantics",
-        "host_provider_plumbing"
-      ],
-      "protocol_hints": {
-        "headless_mode": true,
-        "state_source": "framework_profile",
-        "context_files": [
-          "GEMINI.md"
-        ],
-        "settings_paths": [
-          "~/.gemini/settings.json"
-        ],
-        "mcp_config_paths": [
-          "~/.gemini/settings.json"
-        ],
-        "structured_output_modes": [
-          "json",
-          "stream-json"
-        ],
-        "checkpointing_supported": true
-      },
-      "notes": "Headless Gemini CLI projection that consumes the shared framework contract."
-    }
+  "retired_surfaces": [
+    "non-codex-host-projections",
+    "generic-host-adapter",
+    "cli-common-adapter",
+    "codex-desktop-adapter",
+    "codex-cli-adapter",
+    "cli-family-parity-snapshot",
+    "non-codex-plugin-runtime"
   ]
 }

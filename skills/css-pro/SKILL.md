@@ -9,7 +9,7 @@ description: |
   explanations to `$web-platform-basics`.
 metadata:
   version: "1.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - css
     - layout

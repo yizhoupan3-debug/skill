@@ -146,14 +146,14 @@ function writeManifest(outputDir, promptPaths, titles, deckSize) {
   const manifest = {
     reference_dir: outputDir,
     deck_size: deckSize,
-    generation_mode: "platform-native-imagegen",
+    generation_mode: "platform-native-image-generation",
     instructions: [
-      "Use the platform-native imagegen tool once per prompt.",
+      "Use the platform-native image generation tool once per prompt.",
       "Do not display generated images in chat unless the user explicitly asks to review them.",
       "Generate slide 1 first as the visual style setter.",
       "For slides 2..N, use slide 1 as a style reference when the platform supports image context.",
       "Move or copy each selected generated image to its expected_image_path.",
-      "Before finalizing the response, delete temporary imagegen files created during the run unless the user explicitly requested those image files as deliverables.",
+      "Before finalizing the response, delete temporary image generation files created during the run unless the user explicitly requested those image files as deliverables.",
     ],
     slides,
   };
@@ -166,9 +166,9 @@ function writeMarkdown(outputDir, slides) {
   const lines = [
     "# Native Imagegen Prompts",
     "",
-    "Use the platform-native imagegen tool for each prompt below. Save selected outputs to the listed filenames.",
+    "Use the platform-native image generation tool for each prompt below. Save selected outputs to the listed filenames.",
     "Do not display generated images in chat unless the user explicitly asks to review them.",
-    "Before finalizing the response, delete temporary imagegen files created during the run unless the user explicitly requested those image files as deliverables.",
+    "Before finalizing the response, delete temporary image generation files created during the run unless the user explicitly requested those image files as deliverables.",
     "",
   ];
   for (const slide of slides) {

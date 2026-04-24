@@ -141,5 +141,5 @@ When the user has fixed only part of the work:
 - image-based requirements → `$visual-review`
 - paper deliverables → `$paper-reviewer`, `$paper-writing`, `$paper-visuals`
 - code deliverables → `$coding-standards`, `$test-engineering`
-- slides → `$slides` first, then `$ppt-beamer` / `$ppt-pptx` / `$ppt-html-export` / `$ppt-markdown` as needed
+- slides -> `$slides` first, then `$ppt-beamer` / `$ppt-pptx` / `$source-slide-formats` as needed
 - notation / symbols → `$paper-notation-audit`

@@ -9,7 +9,7 @@ description: |
   Actions", "自动测试自动发布".
 metadata:
   version: "1.1.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - github-actions
     - ci

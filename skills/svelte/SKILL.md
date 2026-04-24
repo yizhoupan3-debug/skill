@@ -9,7 +9,7 @@ description: |
   怎么用", "Svelte 5 迁移".
 metadata:
   version: "2.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - svelte
     - sveltekit

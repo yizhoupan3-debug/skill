@@ -16,13 +16,12 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use strsim::jaro_winkler;
 
 mod background_state;
 mod browser_mcp;
-mod claude_hooks;
+mod cli_modes;
+mod codex_hooks;
 mod execution_contract;
-mod framework_mcp;
 mod framework_profile;
 mod framework_runtime;
 mod host_integration;
@@ -34,10 +33,11 @@ use background_state::handle_background_state_operation;
 use browser_mcp::{
     resolve_browser_mcp_attach_artifact, run_browser_mcp_stdio_loop, BrowserAttachConfig,
 };
-use claude_hooks::{
-    build_claude_hook_manifest, build_claude_hook_projection, build_claude_project_settings,
-    run_claude_audit_hook, run_claude_lifecycle_hook, run_codex_audit_hook, sync_host_entrypoints,
+use cli_modes::{
+    dispatch_runtime_output_mode_stdio, enabled_runtime_output_mode_count,
+    handles_runtime_output_stdio_op, run_runtime_output_mode_cli,
 };
+use codex_hooks::{build_codex_hook_projection, run_codex_audit_hook, sync_host_entrypoints};
 use execution_contract::{
     build_execution_contract_bundle, build_execution_kernel_contracts_by_mode,
     build_execution_kernel_metadata_contract, build_steady_state_execution_kernel_metadata,
@@ -47,7 +47,6 @@ use execution_contract::{
     EXECUTION_MODEL_ID_SOURCE, EXECUTION_RESPONSE_SHAPE_DRY_RUN,
     EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY, EXECUTION_SCHEMA_VERSION,
 };
-use framework_mcp::run_framework_mcp_stdio_loop;
 use framework_profile::{
     build_codex_artifact_bundle, build_control_plane_contract_descriptors, build_profile_bundle,
     load_framework_profile,
@@ -125,12 +124,7 @@ const RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION: &str = "runtime-observabil
 const RUNTIME_OBSERVABILITY_HEALTH_SNAPSHOT_SCHEMA_VERSION: &str =
     "runtime-observability-health-snapshot-v1";
 const RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY: &str = "shared-runtime-v1";
-const OVERLAY_ONLY_SKILLS: [&str; 4] = [
-    "execution-audit",
-    "humanizer",
-    "i18n-l10n",
-    "iterative-optimizer",
-];
+const OVERLAY_ONLY_SKILLS: [&str; 3] = ["execution-audit", "humanizer", "i18n-l10n"];
 const ARTIFACT_GATE_PHRASES: [&str; 12] = [
     "pdf",
     "docx",
@@ -185,8 +179,6 @@ struct Cli {
     #[arg(long)]
     compute_threads: Option<usize>,
     #[arg(long)]
-    framework_mcp_stdio: bool,
-    #[arg(long)]
     browser_mcp_stdio: bool,
     #[arg(long)]
     browser_mcp_resolve_attach_artifact: bool,
@@ -198,14 +190,6 @@ struct Cli {
     runtime_attach_artifact_path: Option<String>,
     #[arg(long)]
     runtime_attach_descriptor_path: Option<String>,
-    #[arg(long)]
-    runtime_binding_artifact_path: Option<String>,
-    #[arg(long)]
-    runtime_handoff_path: Option<String>,
-    #[arg(long)]
-    runtime_resume_manifest_path: Option<String>,
-    #[arg(long)]
-    framework_mcp_output_dir: Option<PathBuf>,
     #[arg(long)]
     route_json: bool,
     #[arg(long)]
@@ -305,11 +289,7 @@ struct Cli {
     #[arg(long)]
     runtime_storage_json: bool,
     #[arg(long)]
-    claude_hook_manifest_json: bool,
-    #[arg(long)]
-    claude_hook_projection_json: bool,
-    #[arg(long)]
-    claude_project_settings_json: bool,
+    codex_hook_projection_json: bool,
     #[arg(long)]
     sync_host_entrypoints_json: bool,
     #[arg(long)]
@@ -317,15 +297,9 @@ struct Cli {
     #[arg(long, num_args = 1.., trailing_var_arg = true, allow_hyphen_values = true)]
     host_integration: Option<Vec<String>>,
     #[arg(long)]
-    claude_hook_command: Option<String>,
-    #[arg(long)]
-    claude_hook_audit_command: Option<String>,
-    #[arg(long)]
-    claude_host_hook_command: Option<String>,
-    #[arg(long)]
     codex_hook_command: Option<String>,
     #[arg(long, default_value_t = 4)]
-    claude_hook_max_lines: usize,
+    framework_max_lines: usize,
     #[arg(long, default_value = "stable")]
     framework_memory_mode: String,
     #[arg(long)]
@@ -342,8 +316,6 @@ struct Cli {
     framework_prompt_compression_input_json: Option<String>,
     #[arg(long)]
     cases: Option<PathBuf>,
-    #[arg(long)]
-    include_compatibility_inventory: bool,
     #[arg(long)]
     route_mode: Option<String>,
     #[arg(long)]
@@ -415,14 +387,10 @@ struct SkillRecord {
     priority: String,
     session_start: String,
     summary: String,
-    health: f64,
     slug_lower: String,
     owner_lower: String,
     gate_lower: String,
     session_start_lower: String,
-    summary_lower: String,
-    trigger_hints_lower: String,
-    fuzzy_tokens: Vec<String>,
     gate_phrases: Vec<String>,
     trigger_hints: Vec<String>,
     name_tokens: HashSet<String>,
@@ -641,6 +609,134 @@ struct RoutingEvalMetricsPayload {
     overtrigger: usize,
     owner_correct: usize,
     overlay_correct: usize,
+}
+
+fn enabled_cli_output_modes(args: &Cli) -> Vec<&'static str> {
+    let mut modes = Vec::new();
+    macro_rules! push_mode {
+        ($enabled:expr, $name:literal) => {
+            if $enabled {
+                modes.push($name);
+            }
+        };
+    }
+
+    push_mode!(args.json, "--json");
+    push_mode!(args.stdio_json, "--stdio-json");
+    push_mode!(args.browser_mcp_stdio, "--browser-mcp-stdio");
+    push_mode!(
+        args.browser_mcp_resolve_attach_artifact,
+        "--browser-mcp-resolve-attach-artifact"
+    );
+    push_mode!(args.route_json, "--route-json");
+    push_mode!(args.route_policy_json, "--route-policy-json");
+    push_mode!(args.route_snapshot_json, "--route-snapshot-json");
+    push_mode!(args.execute_json, "--execute-json");
+    push_mode!(args.sandbox_control_json, "--sandbox-control-json");
+    push_mode!(args.background_control_json, "--background-control-json");
+    push_mode!(args.background_state_json, "--background-state-json");
+    push_mode!(args.session_supervisor_json, "--session-supervisor-json");
+    push_mode!(args.describe_transport_json, "--describe-transport-json");
+    push_mode!(args.describe_handoff_json, "--describe-handoff-json");
+    push_mode!(
+        args.checkpoint_resume_manifest_json,
+        "--checkpoint-resume-manifest-json"
+    );
+    push_mode!(
+        args.runtime_checkpoint_control_plane_json,
+        "--runtime-checkpoint-control-plane-json"
+    );
+    push_mode!(
+        args.write_transport_binding_json,
+        "--write-transport-binding-json"
+    );
+    push_mode!(
+        args.write_checkpoint_resume_manifest_json,
+        "--write-checkpoint-resume-manifest-json"
+    );
+    push_mode!(
+        args.attach_runtime_event_transport_json,
+        "--attach-runtime-event-transport-json"
+    );
+    push_mode!(
+        args.subscribe_attached_runtime_events_json,
+        "--subscribe-attached-runtime-events-json"
+    );
+    push_mode!(
+        args.cleanup_attached_runtime_event_transport_json,
+        "--cleanup-attached-runtime-event-transport-json"
+    );
+    push_mode!(args.trace_record_event_json, "--trace-record-event-json");
+    push_mode!(args.trace_stream_replay_json, "--trace-stream-replay-json");
+    push_mode!(
+        args.trace_stream_inspect_json,
+        "--trace-stream-inspect-json"
+    );
+    push_mode!(args.trace_compact_json, "--trace-compact-json");
+    push_mode!(
+        args.write_trace_compaction_delta_json,
+        "--write-trace-compaction-delta-json"
+    );
+    push_mode!(
+        args.write_trace_metadata_json,
+        "--write-trace-metadata-json"
+    );
+    push_mode!(
+        args.framework_runtime_snapshot_json,
+        "--framework-runtime-snapshot-json"
+    );
+    push_mode!(
+        args.framework_contract_summary_json,
+        "--framework-contract-summary-json"
+    );
+    push_mode!(
+        args.framework_memory_recall_json,
+        "--framework-memory-recall-json"
+    );
+    push_mode!(
+        args.framework_memory_policy_json,
+        "--framework-memory-policy-json"
+    );
+    push_mode!(
+        args.framework_prompt_compression_json,
+        "--framework-prompt-compression-json"
+    );
+    push_mode!(args.framework_refresh_json, "--framework-refresh-json");
+    push_mode!(args.framework_statusline, "--framework-statusline");
+    push_mode!(
+        args.framework_session_artifact_write_json,
+        "--framework-session-artifact-write-json"
+    );
+    push_mode!(args.framework_alias_json, "--framework-alias-json");
+    push_mode!(
+        args.control_plane_contracts_json,
+        "--control-plane-contracts-json"
+    );
+    push_mode!(args.profile_json, "--profile-json");
+    push_mode!(args.profile_artifacts_json, "--profile-artifacts-json");
+    push_mode!(args.routing_eval_json, "--routing-eval-json");
+    push_mode!(args.route_report_json, "--route-report-json");
+    push_mode!(args.route_resolution_json, "--route-resolution-json");
+    push_mode!(args.runtime_storage_json, "--runtime-storage-json");
+    push_mode!(
+        args.codex_hook_projection_json,
+        "--codex-hook-projection-json"
+    );
+    push_mode!(
+        args.sync_host_entrypoints_json,
+        "--sync-host-entrypoints-json"
+    );
+    push_mode!(
+        args.check_host_entrypoints_json,
+        "--check-host-entrypoints-json"
+    );
+    push_mode!(args.host_integration.is_some(), "--host-integration");
+    push_mode!(args.codex_hook_command.is_some(), "--codex-hook-command");
+
+    for _ in 0..enabled_runtime_output_mode_count(args) {
+        modes.push("--runtime-output-json");
+    }
+    modes
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1012,6 +1108,14 @@ struct RuntimeConcurrencyDefaultsPayload {
     subagent_timeout_seconds: u64,
 }
 
+fn print_json_value<T: Serialize>(payload: &T) -> Result<(), String> {
+    println!(
+        "{}",
+        serde_json::to_string(payload).map_err(|err| format!("serialize output failed: {err}"))?
+    );
+    Ok(())
+}
+
 fn background_effect_plan(next_step: &str) -> BackgroundControlEffectPlanPayload {
     BackgroundControlEffectPlanPayload {
         next_step: next_step.to_string(),
@@ -1042,14 +1146,12 @@ impl SkillRecord {
             do_not_use,
             tags,
             trigger_hints,
-            health,
+            _health: _,
         } = raw;
         let slug_lower = normalize_text(&slug);
         let owner_lower = normalize_text(&owner);
         let gate_lower = normalize_text(&gate);
         let session_start_lower = normalize_text(&session_start);
-        let summary_lower = normalize_text(&summary);
-        let trigger_hints_lower = normalize_text(&trigger_hints.join(" "));
         let alias_tokens = tags
             .iter()
             .flat_map(|tag| tokenize_query(tag))
@@ -1060,15 +1162,6 @@ impl SkillRecord {
                 !common_route_stop_tokens().contains(&token.as_str()) && token.len() > 2
             })
             .collect::<HashSet<_>>();
-        let mut fuzzy_source = String::with_capacity(
-            slug_lower.len() + summary_lower.len() + trigger_hints_lower.len() + 2,
-        );
-        fuzzy_source.push_str(&slug_lower);
-        fuzzy_source.push(' ');
-        fuzzy_source.push_str(&trigger_hints_lower);
-        fuzzy_source.push(' ');
-        fuzzy_source.push_str(&summary_lower);
-
         let gate_phrases = gate_hint_phrases(&gate);
         let name_tokens = tokenize_query(&slug.replace('-', " "))
             .into_iter()
@@ -1089,14 +1182,10 @@ impl SkillRecord {
             priority,
             session_start,
             summary,
-            health,
             slug_lower,
             owner_lower,
             gate_lower,
             session_start_lower,
-            summary_lower,
-            trigger_hints_lower,
-            fuzzy_tokens: tokenize_query(&fuzzy_source),
             gate_phrases,
             trigger_hints,
             name_tokens,
@@ -1107,7 +1196,6 @@ impl SkillRecord {
     }
 }
 
-#[derive(Debug)]
 struct RawSkillRecord {
     slug: String,
     layer: String,
@@ -1121,7 +1209,7 @@ struct RawSkillRecord {
     do_not_use: String,
     tags: Vec<String>,
     trigger_hints: Vec<String>,
-    health: f64,
+    _health: f64,
 }
 
 fn default_skill_layer() -> String {
@@ -1333,77 +1421,12 @@ fn write_trace_metadata(
 fn main() -> Result<(), String> {
     let args = Cli::parse();
     configure_compute_parallelism(args.compute_threads)?;
-    if [
-        args.json,
-        args.stdio_json,
-        args.framework_mcp_stdio,
-        args.browser_mcp_stdio,
-        args.browser_mcp_resolve_attach_artifact,
-        args.route_json,
-        args.route_policy_json,
-        args.route_snapshot_json,
-        args.execute_json,
-        args.runtime_integrator_json,
-        args.runtime_control_plane_json,
-        args.sandbox_control_json,
-        args.background_control_json,
-        args.background_state_json,
-        args.session_supervisor_json,
-        args.describe_transport_json,
-        args.describe_handoff_json,
-        args.checkpoint_resume_manifest_json,
-        args.runtime_checkpoint_control_plane_json,
-        args.write_transport_binding_json,
-        args.write_checkpoint_resume_manifest_json,
-        args.attach_runtime_event_transport_json,
-        args.subscribe_attached_runtime_events_json,
-        args.cleanup_attached_runtime_event_transport_json,
-        args.runtime_observability_exporter_json,
-        args.runtime_observability_metric_catalog_json,
-        args.runtime_observability_dashboard_json,
-        args.runtime_metric_record_json,
-        args.trace_record_event_json,
-        args.trace_stream_replay_json,
-        args.trace_stream_inspect_json,
-        args.trace_compact_json,
-        args.write_trace_compaction_delta_json,
-        args.write_trace_metadata_json,
-        args.framework_runtime_snapshot_json,
-        args.framework_contract_summary_json,
-        args.framework_memory_recall_json,
-        args.framework_memory_policy_json,
-        args.framework_prompt_compression_json,
-        args.framework_refresh_json,
-        args.framework_statusline,
-        args.framework_session_artifact_write_json,
-        args.framework_alias_json,
-        args.control_plane_contracts_json,
-        args.profile_json,
-        args.profile_artifacts_json,
-        args.routing_eval_json,
-        args.route_report_json,
-        args.route_resolution_json,
-        args.runtime_storage_json,
-        args.claude_hook_manifest_json,
-        args.claude_hook_projection_json,
-        args.claude_project_settings_json,
-        args.sync_host_entrypoints_json,
-        args.check_host_entrypoints_json,
-        args.host_integration.is_some(),
-        args.claude_hook_command.is_some(),
-        args.claude_hook_audit_command.is_some(),
-        args.claude_host_hook_command.is_some(),
-        args.codex_hook_command.is_some(),
-    ]
-    .into_iter()
-    .filter(|enabled| *enabled)
-    .count()
-        > 1
-    {
-        return Err(
-            "choose only one output mode among --json, --stdio-json, --framework-mcp-stdio, --browser-mcp-stdio, --browser-mcp-resolve-attach-artifact, --route-json, --route-policy-json, --route-snapshot-json, --execute-json, --runtime-integrator-json, --runtime-control-plane-json, --sandbox-control-json, --background-control-json, --background-state-json, --session-supervisor-json, --describe-transport-json, --describe-handoff-json, --checkpoint-resume-manifest-json, --runtime-checkpoint-control-plane-json, --write-transport-binding-json, --write-checkpoint-resume-manifest-json, --attach-runtime-event-transport-json, --subscribe-attached-runtime-events-json, --cleanup-attached-runtime-event-transport-json, --runtime-observability-exporter-json, --runtime-observability-metric-catalog-json, --runtime-observability-dashboard-json, --runtime-metric-record-json, --trace-record-event-json, --trace-stream-replay-json, --trace-stream-inspect-json, --trace-compact-json, --write-trace-compaction-delta-json, --write-trace-metadata-json, --framework-runtime-snapshot-json, --framework-contract-summary-json, --framework-memory-recall-json, --framework-memory-policy-json, --framework-prompt-compression-json, --framework-refresh-json, --framework-statusline, --framework-session-artifact-write-json, --framework-alias-json, --control-plane-contracts-json, --route-report-json, --route-resolution-json, --runtime-storage-json, --claude-hook-manifest-json, --claude-hook-projection-json, --claude-project-settings-json, --sync-host-entrypoints-json, --check-host-entrypoints-json, --host-integration, --claude-hook-command, --claude-hook-audit-command, --claude-host-hook-command, --codex-hook-command, --profile-json, --profile-artifacts-json, and --routing-eval-json"
-                .to_string(),
-        );
+    let enabled_modes = enabled_cli_output_modes(&args);
+    if enabled_modes.len() > 1 {
+        return Err(format!(
+            "choose only one output mode; enabled: {}",
+            enabled_modes.join(", ")
+        ));
     }
 
     if args.stdio_json {
@@ -1412,19 +1435,8 @@ fn main() -> Result<(), String> {
 
     if let Some(host_args) = args.host_integration.as_ref() {
         let payload = run_host_integration_from_args(host_args)?;
-        println!(
-            "{}",
-            serde_json::to_string(&payload)
-                .map_err(|err| format!("serialize host-integration output failed: {err}"))?
-        );
+        print_json_value(&payload)?;
         return Ok(());
-    }
-
-    if args.framework_mcp_stdio {
-        return run_framework_mcp_stdio_loop(
-            args.repo_root.as_deref(),
-            args.framework_mcp_output_dir.as_deref(),
-        );
     }
 
     if args.browser_mcp_stdio {
@@ -1433,9 +1445,6 @@ fn main() -> Result<(), String> {
             BrowserAttachConfig::from_cli_and_env(
                 args.runtime_attach_descriptor_path,
                 args.runtime_attach_artifact_path,
-                args.runtime_binding_artifact_path,
-                args.runtime_handoff_path,
-                args.runtime_resume_manifest_path,
                 args.headless,
             ),
         );
@@ -1460,11 +1469,7 @@ fn main() -> Result<(), String> {
             })?,
         )
         .map_err(|err| format!("parse sandbox control input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_sandbox_control_response(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&build_sandbox_control_response(payload)?)?;
         return Ok(());
     }
 
@@ -1478,11 +1483,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse background control input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_background_control_response(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&build_background_control_response(payload)?)?;
         return Ok(());
     }
 
@@ -1493,11 +1494,7 @@ fn main() -> Result<(), String> {
             })?,
         )
         .map_err(|err| format!("parse background state input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&handle_background_state_operation(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&handle_background_state_operation(payload)?)?;
         return Ok(());
     }
 
@@ -1511,11 +1508,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse session supervisor input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&handle_session_supervisor_operation(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&handle_session_supervisor_operation(payload)?)?;
         return Ok(());
     }
 
@@ -1529,11 +1522,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse describe transport input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_trace_transport_descriptor(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&build_trace_transport_descriptor(payload)?)?;
         return Ok(());
     }
 
@@ -1544,11 +1533,7 @@ fn main() -> Result<(), String> {
             })?,
         )
         .map_err(|err| format!("parse describe handoff input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_trace_handoff_descriptor(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&build_trace_handoff_descriptor(payload)?)?;
         return Ok(());
     }
 
@@ -1562,11 +1547,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse checkpoint resume manifest input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_checkpoint_resume_manifest(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&build_checkpoint_resume_manifest(payload)?)?;
         return Ok(());
     }
 
@@ -1580,11 +1561,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse runtime checkpoint control plane input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_checkpoint_control_plane_compiler_payload(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&build_checkpoint_control_plane_compiler_payload(payload)?)?;
         return Ok(());
     }
 
@@ -1598,11 +1575,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse write transport binding input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&write_transport_binding_payload(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&write_transport_binding_payload(payload)?)?;
         return Ok(());
     }
 
@@ -1616,11 +1589,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse write checkpoint resume manifest input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&write_checkpoint_resume_manifest_payload(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&write_checkpoint_resume_manifest_payload(payload)?)?;
         return Ok(());
     }
 
@@ -1634,11 +1603,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse attach runtime event transport input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&attach_runtime_event_transport(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&attach_runtime_event_transport(payload)?)?;
         return Ok(());
     }
 
@@ -1652,11 +1617,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse subscribe attached runtime events input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&subscribe_attached_runtime_events(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&subscribe_attached_runtime_events(payload)?)?;
         return Ok(());
     }
 
@@ -1670,74 +1631,11 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse attached runtime event cleanup input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&cleanup_attached_runtime_event_transport(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&cleanup_attached_runtime_event_transport(payload)?)?;
         return Ok(());
     }
 
-    if args.runtime_control_plane_json {
-        println!(
-            "{}",
-            serde_json::to_string(&build_runtime_control_plane_payload())
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
-        return Ok(());
-    }
-
-    if args.runtime_integrator_json {
-        println!(
-            "{}",
-            serde_json::to_string(&build_runtime_integrator_payload())
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
-        return Ok(());
-    }
-
-    if args.runtime_observability_exporter_json {
-        println!(
-            "{}",
-            serde_json::to_string(&build_runtime_observability_exporter_descriptor())
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
-        return Ok(());
-    }
-
-    if args.runtime_observability_metric_catalog_json {
-        println!(
-            "{}",
-            serde_json::to_string(&build_runtime_observability_metric_catalog_payload())
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
-        return Ok(());
-    }
-
-    if args.runtime_observability_dashboard_json {
-        println!(
-            "{}",
-            serde_json::to_string(&runtime_observability_dashboard_schema())
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
-        return Ok(());
-    }
-
-    if args.runtime_metric_record_json {
-        let payload = serde_json::from_str::<Value>(
-            args.runtime_metric_record_input_json
-                .as_deref()
-                .ok_or_else(|| {
-                    "--runtime-metric-record-input-json is required with --runtime-metric-record-json"
-                        .to_string()
-                })?,
-        )
-        .map_err(|err| format!("parse runtime metric record input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_runtime_metric_record(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+    if run_runtime_output_mode_cli(&args)? {
         return Ok(());
     }
 
@@ -1751,11 +1649,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse trace stream replay input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&replay_trace_stream(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&replay_trace_stream(payload)?)?;
         return Ok(());
     }
 
@@ -1768,11 +1662,7 @@ fn main() -> Result<(), String> {
                 },
             )?)
             .map_err(|err| format!("parse trace record event input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&record_trace_event(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&record_trace_event(payload)?)?;
         return Ok(());
     }
 
@@ -1786,11 +1676,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse trace stream inspect input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&inspect_trace_stream(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&inspect_trace_stream(payload)?)?;
         return Ok(());
     }
 
@@ -1800,11 +1686,7 @@ fn main() -> Result<(), String> {
                 "--trace-compact-input-json is required with --trace-compact-json".to_string()
             })?)
             .map_err(|err| format!("parse trace compact input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&compact_trace_stream(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&compact_trace_stream(payload)?)?;
         return Ok(());
     }
 
@@ -1818,11 +1700,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse trace compaction delta write input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&write_trace_compaction_delta(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&write_trace_compaction_delta(payload)?)?;
         return Ok(());
     }
 
@@ -1836,53 +1714,37 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse trace metadata write input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&write_trace_metadata(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&write_trace_metadata(payload)?)?;
         return Ok(());
     }
 
     if args.framework_runtime_snapshot_json {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_framework_runtime_snapshot_envelope(
-                &repo_root,
-                args.framework_artifact_source_dir.as_deref(),
-                args.framework_task_id.as_deref(),
-            )?)
-            .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&build_framework_runtime_snapshot_envelope(
+            &repo_root,
+            args.framework_artifact_source_dir.as_deref(),
+            args.framework_task_id.as_deref(),
+        )?)?;
         return Ok(());
     }
 
     if args.framework_contract_summary_json {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_framework_contract_summary_envelope(&repo_root)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&build_framework_contract_summary_envelope(&repo_root)?)?;
         return Ok(());
     }
 
     if args.framework_memory_recall_json {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_framework_memory_recall_envelope(
-                &repo_root,
-                args.query.as_deref().unwrap_or(""),
-                args.limit,
-                &args.framework_memory_mode,
-                args.framework_memory_root.as_deref(),
-                args.framework_artifact_source_dir.as_deref(),
-                args.framework_task_id.as_deref(),
-            )?)
-            .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&build_framework_memory_recall_envelope(
+            &repo_root,
+            args.query.as_deref().unwrap_or(""),
+            args.limit,
+            &args.framework_memory_mode,
+            args.framework_memory_root.as_deref(),
+            args.framework_artifact_source_dir.as_deref(),
+            args.framework_task_id.as_deref(),
+        )?)?;
         return Ok(());
     }
 
@@ -1896,11 +1758,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse framework memory policy input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_framework_memory_policy_envelope(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&build_framework_memory_policy_envelope(payload)?)?;
         return Ok(());
     }
 
@@ -1914,11 +1772,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse framework prompt compression input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_framework_prompt_compression_envelope(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&build_framework_prompt_compression_envelope(payload)?)?;
         return Ok(());
     }
 
@@ -1926,7 +1780,7 @@ fn main() -> Result<(), String> {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
         let refresh_payload = build_framework_refresh_payload(
             &repo_root,
-            args.claude_hook_max_lines,
+            args.framework_max_lines,
             args.framework_refresh_verbose,
         )?;
         let prompt = refresh_payload
@@ -1943,15 +1797,11 @@ fn main() -> Result<(), String> {
             Value::String(FRAMEWORK_REFRESH_CONFIRMATION.to_string()),
         );
         refresh.insert("clipboard".to_string(), clipboard);
-        println!(
-            "{}",
-            serde_json::to_string(&json!({
-                "schema_version": FRAMEWORK_REFRESH_SCHEMA_VERSION,
-                "authority": framework_runtime::FRAMEWORK_RUNTIME_AUTHORITY,
-                "refresh": Value::Object(refresh),
-            }))
-            .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&json!({
+            "schema_version": FRAMEWORK_REFRESH_SCHEMA_VERSION,
+            "authority": framework_runtime::FRAMEWORK_RUNTIME_AUTHORITY,
+            "refresh": Value::Object(refresh),
+        }))?;
         return Ok(());
     }
 
@@ -1971,11 +1821,7 @@ fn main() -> Result<(), String> {
                 })?,
         )
         .map_err(|err| format!("parse framework session artifact write input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&write_framework_session_artifacts(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&write_framework_session_artifacts(payload)?)?;
         return Ok(());
     }
 
@@ -1984,28 +1830,20 @@ fn main() -> Result<(), String> {
         let alias_name = args.framework_alias.as_deref().ok_or_else(|| {
             "--framework-alias is required with --framework-alias-json".to_string()
         })?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_framework_alias_envelope(
-                &repo_root,
-                alias_name,
-                FrameworkAliasBuildOptions {
-                    max_lines: args.claude_hook_max_lines,
-                    compact: args.compact_output,
-                    host_id: args.framework_host_id.as_deref(),
-                },
-            )?)
-            .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&build_framework_alias_envelope(
+            &repo_root,
+            alias_name,
+            FrameworkAliasBuildOptions {
+                max_lines: args.framework_max_lines,
+                compact: args.compact_output,
+                host_id: args.framework_host_id.as_deref(),
+            },
+        )?)?;
         return Ok(());
     }
 
     if args.control_plane_contracts_json {
-        println!(
-            "{}",
-            serde_json::to_string(&build_control_plane_contract_descriptors())
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&build_control_plane_contract_descriptors())?;
         return Ok(());
     }
 
@@ -2016,11 +1854,7 @@ fn main() -> Result<(), String> {
             .ok_or_else(|| "--framework-profile is required with --profile-json".to_string())?;
         let profile = load_framework_profile(profile_path)?;
         let bundle = build_profile_bundle(&profile)?;
-        println!(
-            "{}",
-            serde_json::to_string(&bundle)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&bundle)?;
         return Ok(());
     }
 
@@ -2028,20 +1862,9 @@ fn main() -> Result<(), String> {
         let profile_path = args.framework_profile.as_deref().ok_or_else(|| {
             "--framework-profile is required with --profile-artifacts-json".to_string()
         })?;
-        if args.include_compatibility_inventory {
-            return Err(
-                "compatibility inventory artifacts are retired; use canonical Rust outputs."
-                    .to_string(),
-            );
-        }
         let profile = load_framework_profile(profile_path)?;
-        let artifacts =
-            build_codex_artifact_bundle(&profile, args.include_compatibility_inventory)?;
-        println!(
-            "{}",
-            serde_json::to_string(&artifacts)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        let artifacts = build_codex_artifact_bundle(&profile)?;
+        print_json_value(&artifacts)?;
         return Ok(());
     }
 
@@ -2068,11 +1891,7 @@ fn main() -> Result<(), String> {
                 })?,
         };
         let report = build_route_diff_report(mode, rust_snapshot, route_decision.as_ref())?;
-        println!(
-            "{}",
-            serde_json::to_string(&report)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&report)?;
         return Ok(());
     }
 
@@ -2083,11 +1902,7 @@ fn main() -> Result<(), String> {
             })?,
         )
         .map_err(|err| format!("parse route resolution input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&dispatch_stdio_route_resolution(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&dispatch_stdio_route_resolution(payload)?)?;
         return Ok(());
     }
 
@@ -2098,93 +1913,28 @@ fn main() -> Result<(), String> {
             })?,
         )
         .map_err(|err| format!("parse runtime storage input failed: {err}"))?;
-        println!(
-            "{}",
-            serde_json::to_string(&runtime_storage_operation(payload)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&runtime_storage_operation(payload)?)?;
         return Ok(());
     }
 
-    if args.claude_hook_manifest_json {
-        println!(
-            "{}",
-            serde_json::to_string(&build_claude_hook_manifest())
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
-        return Ok(());
-    }
-
-    if args.claude_hook_projection_json {
-        println!(
-            "{}",
-            serde_json::to_string(&build_claude_hook_projection())
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
-        return Ok(());
-    }
-
-    if args.claude_project_settings_json {
-        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
-        println!(
-            "{}",
-            serde_json::to_string(&build_claude_project_settings(&repo_root))
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+    if args.codex_hook_projection_json {
+        print_json_value(&build_codex_hook_projection())?;
         return Ok(());
     }
 
     if args.sync_host_entrypoints_json || args.check_host_entrypoints_json {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
-        println!(
-            "{}",
-            serde_json::to_string(&sync_host_entrypoints(
-                &repo_root,
-                args.sync_host_entrypoints_json,
-            )?)
-            .map_err(|err| format!("serialize output failed: {err}"))?
-        );
-        return Ok(());
-    }
-
-    if let Some(command) = args.claude_hook_command.as_deref() {
-        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
-        println!(
-            "{}",
-            serde_json::to_string(&run_claude_lifecycle_hook(
-                command,
-                &repo_root,
-                args.claude_hook_max_lines,
-            )?)
-            .map_err(|err| format!("serialize output failed: {err}"))?
-        );
-        return Ok(());
-    }
-
-    if let Some(command) = args.claude_hook_audit_command.as_deref() {
-        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
-        println!(
-            "{}",
-            serde_json::to_string(&run_claude_audit_hook(command, &repo_root)?)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
-        return Ok(());
-    }
-
-    if let Some(command) = args.claude_host_hook_command.as_deref() {
-        let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
-        run_claude_host_hook(command, &repo_root, args.claude_hook_max_lines)?;
+        print_json_value(&sync_host_entrypoints(
+            &repo_root,
+            args.sync_host_entrypoints_json,
+        )?)?;
         return Ok(());
     }
 
     if let Some(command) = args.codex_hook_command.as_deref() {
         let repo_root = resolve_repo_root_arg(args.repo_root.as_deref())?;
         if let Some(payload) = run_codex_audit_hook(command, &repo_root)? {
-            println!(
-                "{}",
-                serde_json::to_string(&payload)
-                    .map_err(|err| format!("serialize output failed: {err}"))?
-            );
+            print_json_value(&payload)?;
         }
         return Ok(());
     }
@@ -2195,11 +1945,7 @@ fn main() -> Result<(), String> {
             .as_deref()
             .ok_or_else(|| "--route-mode is required with --route-policy-json".to_string())?;
         let policy = build_route_policy(mode)?;
-        println!(
-            "{}",
-            serde_json::to_string(&policy)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&policy)?;
         return Ok(());
     }
 
@@ -2223,11 +1969,7 @@ fn main() -> Result<(), String> {
             authority: ROUTE_AUTHORITY.to_string(),
             route_snapshot: snapshot,
         };
-        println!(
-            "{}",
-            serde_json::to_string(&envelope)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&envelope)?;
         return Ok(());
     }
 
@@ -2239,11 +1981,7 @@ fn main() -> Result<(), String> {
         )
         .map_err(|err| format!("parse execute input failed: {err}"))?;
         let response = execute_request(payload)?;
-        println!(
-            "{}",
-            serde_json::to_string(&response)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&response)?;
         return Ok(());
     }
 
@@ -2255,11 +1993,7 @@ fn main() -> Result<(), String> {
         let records = load_records(args.runtime.as_deref(), args.manifest.as_deref())?;
         let payload = load_routing_eval_cases(cases_path)?;
         let report = evaluate_routing_cases(&records, payload)?;
-        println!(
-            "{}",
-            serde_json::to_string(&report)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&report)?;
         return Ok(());
     }
 
@@ -2277,22 +2011,14 @@ fn main() -> Result<(), String> {
             args.allow_overlay,
             args.first_turn,
         )?;
-        println!(
-            "{}",
-            serde_json::to_string(&decision)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&decision)?;
         return Ok(());
     }
 
     let rows = search_skills(&records, query, args.limit);
     let payload = build_search_results_payload(query, rows.clone());
     if args.json {
-        println!(
-            "{}",
-            serde_json::to_string(&payload)
-                .map_err(|err| format!("serialize output failed: {err}"))?
-        );
+        print_json_value(&payload)?;
         return Ok(());
     }
 
@@ -2552,6 +2278,12 @@ fn dispatch_stdio_json_request_payload(
 }
 
 fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String> {
+    if handles_runtime_output_stdio_op(op) {
+        let Some(result) = dispatch_runtime_output_mode_stdio(op, payload) else {
+            return Err(format!("runtime output mode dispatch drifted for {op}"));
+        };
+        return result;
+    }
     match op {
         "route" => dispatch_stdio_route(payload),
         "search_skills" => dispatch_stdio_search_skills(payload),
@@ -2606,37 +2338,17 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
         "compile_codex_profile_artifacts" => {
             dispatch_stdio_compile_codex_profile_artifacts(payload)
         }
-        "runtime_integrator" => Ok(build_runtime_integrator_payload()),
-        "runtime_control_plane" => Ok(build_runtime_control_plane_payload()),
         "sandbox_control" => {
             let request = serde_json::from_value::<SandboxControlRequestPayload>(payload)
                 .map_err(|err| format!("parse sandbox control input failed: {err}"))?;
             serde_json::to_value(build_sandbox_control_response(request)?)
                 .map_err(|err| format!("serialize sandbox control output failed: {err}"))
         }
-        "runtime_observability_exporter_descriptor" => {
-            serde_json::to_value(build_runtime_observability_exporter_descriptor()).map_err(|err| {
-                format!("serialize runtime observability exporter output failed: {err}")
-            })
-        }
-        "runtime_observability_metric_catalog" => serde_json::to_value(
-            build_runtime_observability_metric_catalog_payload(),
-        )
-        .map_err(|err| {
-            format!("serialize runtime observability metric catalog output failed: {err}")
-        }),
-        "runtime_observability_dashboard_schema" => {
-            serde_json::to_value(runtime_observability_dashboard_schema()).map_err(|err| {
-                format!("serialize runtime observability dashboard output failed: {err}")
-            })
-        }
         "runtime_observability_health_snapshot" => {
             serde_json::to_value(build_runtime_observability_health_snapshot()).map_err(|err| {
                 format!("serialize runtime observability health snapshot output failed: {err}")
             })
         }
-        "runtime_metric_record" => serde_json::to_value(build_runtime_metric_record(payload)?)
-            .map_err(|err| format!("serialize runtime metric record output failed: {err}")),
         "background_control" => {
             let request = serde_json::from_value::<BackgroundControlRequestPayload>(payload)
                 .map_err(|err| format!("parse background control input failed: {err}"))?;
@@ -2712,69 +2424,8 @@ fn dispatch_stdio_json_request(op: &str, payload: Value) -> Result<Value, String
             serde_json::to_value(build_control_plane_contract_descriptors())
                 .map_err(|err| format!("serialize control plane contracts output failed: {err}"))
         }
-        "claude_lifecycle_hook" => dispatch_stdio_claude_lifecycle_hook(payload),
         _ => Err(format!("unsupported stdio operation: {op}")),
     }
-}
-
-fn dispatch_stdio_claude_lifecycle_hook(payload: Value) -> Result<Value, String> {
-    let command = required_non_empty_string(&payload, "command", "stdio Claude lifecycle hook")?;
-    let repo_root =
-        required_non_empty_string(&payload, "repo_root", "stdio Claude lifecycle hook")?;
-    let max_lines = payload
-        .get("max_lines")
-        .and_then(Value::as_u64)
-        .and_then(|value| usize::try_from(value).ok())
-        .unwrap_or(6);
-    run_claude_lifecycle_hook(&command, Path::new(&repo_root), max_lines)
-}
-
-fn run_claude_host_hook(command: &str, repo_root: &Path, max_lines: usize) -> Result<(), String> {
-    match command {
-        "session-end" => {
-            run_claude_lifecycle_hook(command, repo_root, max_lines)?;
-        }
-        "config-change" | "stop-failure" => {
-            run_claude_audit_hook(command, repo_root)?;
-        }
-        "pre-tool-use" => {
-            let payload = run_claude_audit_hook(command, repo_root)?;
-            if payload
-                .get("hookSpecificOutput")
-                .and_then(|hook| hook.get("permissionDecision"))
-                .and_then(Value::as_str)
-                == Some("deny")
-            {
-                println!(
-                    "{}",
-                    serde_json::to_string(&payload)
-                        .map_err(|err| format!("serialize output failed: {err}"))?
-                );
-            }
-        }
-        "user-prompt-submit" => {
-            let payload = run_claude_audit_hook(command, repo_root)?;
-            if payload.get("hookSpecificOutput").is_some() {
-                println!(
-                    "{}",
-                    serde_json::to_string(&payload)
-                        .map_err(|err| format!("serialize output failed: {err}"))?
-                );
-            }
-        }
-        "pre-tool-use-quality" | "post-tool-audit" | "post-tool-failure-audit" => {
-            let payload = run_claude_audit_hook(command, repo_root)?;
-            if payload.get("hookSpecificOutput").is_some() {
-                println!(
-                    "{}",
-                    serde_json::to_string(&payload)
-                        .map_err(|err| format!("serialize output failed: {err}"))?
-                );
-            }
-        }
-        _ => return Err(format!("Unsupported Claude host hook command: {command}")),
-    }
-    Ok(())
 }
 
 fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
@@ -2987,18 +2638,8 @@ fn dispatch_stdio_compile_profile_bundle(payload: Value) -> Result<Value, String
 fn dispatch_stdio_compile_codex_profile_artifacts(payload: Value) -> Result<Value, String> {
     let profile_path =
         required_non_empty_string(&payload, "profile_path", "stdio codex profile artifacts")?;
-    let include_compatibility_inventory = payload
-        .get("include_compatibility_inventory")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    if include_compatibility_inventory {
-        return Err(
-            "compatibility inventory artifacts are retired; use canonical Rust outputs."
-                .to_string(),
-        );
-    }
     let profile = load_framework_profile(Path::new(&profile_path))?;
-    let artifacts = build_codex_artifact_bundle(&profile, include_compatibility_inventory)?;
+    let artifacts = build_codex_artifact_bundle(&profile)?;
     serde_json::to_value(artifacts)
         .map_err(|err| format!("serialize codex profile artifacts output failed: {err}"))
 }
@@ -3115,7 +2756,7 @@ fn inline_skill_record(row: &Value) -> Result<SkillRecord, String> {
         do_not_use: skill.do_not_use,
         tags: skill.tags,
         trigger_hints: skill.trigger_hints,
-        health: skill.health,
+        _health: skill.health,
     }))
 }
 
@@ -3141,7 +2782,7 @@ fn build_skill_record_from_indexed_row(row: &[Value], indexes: &RecordRowIndexes
         do_not_use: String::new(),
         tags: Vec::new(),
         trigger_hints: value_to_string_list(&row[indexes.trigger_hints]),
-        health: value_to_f64(&row[indexes.health]).unwrap_or(100.0),
+        _health: value_to_f64(&row[indexes.health]).unwrap_or(100.0),
     })
 }
 
@@ -3662,69 +3303,31 @@ fn gate_hint_phrases(gate: &str) -> Vec<String> {
     }
 }
 
-fn term_score(term: &str, record: &SkillRecord) -> f64 {
-    if term == record.slug_lower {
-        return 16.0;
-    }
-    if record.slug_lower.contains(term) {
-        return 12.0;
-    }
-    if record.trigger_hints_lower.contains(term) {
-        return 9.0;
-    }
-    if record.summary_lower.contains(term) {
-        return 5.0;
-    }
-
-    if term.contains('-') || term.contains('_') || term.contains('/') {
-        return 0.0;
-    }
-
-    if term.chars().count() >= 4 {
-        let mut best: f64 = 0.0;
-        for token in &record.fuzzy_tokens {
-            let ratio = jaro_winkler(term, token);
-            if ratio >= 0.84 {
-                best = best.max(3.5 + ratio);
-            }
-        }
-        return best;
-    }
-
-    0.0
-}
-
 fn search_skills(records: &[SkillRecord], query: &str, limit: usize) -> Vec<MatchRow> {
     if limit == 0 {
         return Vec::new();
     }
-    let terms = tokenize_query(query);
-    if terms.is_empty() {
+    let normalized_query = normalize_text(query);
+    let query_token_list = tokenize_route_text(query);
+    let query_tokens = query_token_list
+        .iter()
+        .filter(|token| !common_route_stop_tokens().contains(&token.as_str()))
+        .cloned()
+        .collect::<HashSet<String>>();
+    if query_tokens.is_empty() && query_token_list.is_empty() {
         return Vec::new();
     }
 
-    let required_matches = if terms.len() <= 2 {
-        1
-    } else {
-        usize::max(2, ((terms.len() as f64) * 0.4).ceil() as usize)
-    };
-
-    let score_record = |record: &SkillRecord| -> Option<MatchRow> {
-        let mut matched_terms = 0usize;
-        let mut score = 0.0f64;
-        for term in &terms {
-            let current = term_score(term, record);
-            if current > 0.0 {
-                matched_terms += 1;
-                score += current;
-            }
-        }
-        if matched_terms < required_matches {
+    let score_record = |record: &SkillRecord| {
+        let candidate = score_route_candidate(
+            record,
+            &normalized_query,
+            &query_token_list,
+            &query_tokens,
+            true,
+        );
+        if candidate.score <= 0.0 {
             return None;
-        }
-        score += record.health.min(100.0) / 100.0;
-        if record.gate_lower != "none" {
-            score += 0.25;
         }
         Some(MatchRow {
             slug: record.slug.clone(),
@@ -3732,9 +3335,9 @@ fn search_skills(records: &[SkillRecord], query: &str, limit: usize) -> Vec<Matc
             owner: record.owner.clone(),
             gate: record.gate.clone(),
             description: record.summary.clone(),
-            score: round2(score),
-            matched_terms,
-            total_terms: terms.len(),
+            score: round2(candidate.score),
+            matched_terms: candidate.reasons.len(),
+            total_terms: query_tokens.len().max(query_token_list.len()),
         })
     };
     let mut rows = if records.len() < PARALLEL_RECORD_SCAN_MIN {
@@ -5296,7 +4899,7 @@ fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     }
     if payload.selected_skill == "idea-to-plan" {
         lines.push("Planning output: converge the strategy into outline.md, decision_log.md, assumptions.md, open_questions.md, plan_rubric.md, and code_list.md.".to_string());
-        lines.push("Switch to checklist-writting only after the direction is fixed and the remaining work is execution breakdown.".to_string());
+        lines.push("Switch to checklist-planner only after the direction is fixed and the remaining work is execution breakdown.".to_string());
     }
     lines.push("Use the selected skill to solve the user's actual task.".to_string());
     lines.join("\n")
@@ -6860,12 +6463,6 @@ pub(crate) fn build_runtime_control_plane_payload() -> Value {
                 "runtime_probe_dimensions": ["cpu", "memory", "wall_clock", "output_size"],
             },
         },
-        "agent_factory": {
-            "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-            "role": "retired-compatibility-agent-contract-handle",
-            "projection": "retired-request-surface",
-            "delegate_kind": "execution-kernel-compatibility-agent-v1",
-        },
         "background": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "role": "background-orchestration",
@@ -6928,25 +6525,9 @@ pub(crate) fn build_runtime_control_plane_payload() -> Value {
             "runtime_primary_owner": "rust-control-plane",
             "runtime_primary_owner_authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
             "hot_path_projection_mode": "descriptor-driven",
-            "framework_runtime_package_status": "retired",
             "framework_runtime_python_projection_required": false,
             "framework_runtime_replacement": "router-rs::framework_runtime",
             "framework_runtime_replacement_authority": framework_runtime::FRAMEWORK_RUNTIME_AUTHORITY,
-        },
-        "framework_runtime_package_retirement": {
-            "authority": framework_runtime::FRAMEWORK_RUNTIME_AUTHORITY,
-            "package_path": "framework_runtime/",
-            "steady_state_available": false,
-            "import_contract": "ModuleNotFoundError",
-            "replacement_surfaces": [
-                "router-rs --framework-runtime-snapshot-json",
-                "router-rs --framework-contract-summary-json",
-                "router-rs --framework-memory-recall-json",
-                "router-rs --framework-session-artifact-write-json",
-                "router-rs --framework-mcp-stdio"
-            ],
-            "python_wrapper_allowed": false,
-            "host_private_policy_exception": "outside-framework-runtime-only",
         },
         "runtime_host": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
@@ -7854,6 +7435,45 @@ fn has_live_browser_action_context(query_text: &str, query_token_list: &[String]
     })
 }
 
+fn artifact_gate_matches_query(query_token_list: &[String]) -> bool {
+    ARTIFACT_GATE_PHRASES
+        .iter()
+        .any(|phrase| text_matches_phrase(query_token_list, phrase))
+}
+
+fn should_defer_to_artifact_gate(
+    record: &SkillRecord,
+    query_text: &str,
+    query_token_list: &[String],
+) -> bool {
+    if record.gate_lower != "none" || !artifact_gate_matches_query(query_token_list) {
+        return false;
+    }
+    let explicit_entry = format!("${}", record.slug_lower);
+    if query_text.contains(&explicit_entry) {
+        return false;
+    }
+    record.session_start_lower == "n/a"
+        && (record
+            .name_tokens
+            .iter()
+            .any(|token| query_token_list.contains(token))
+            || record
+                .trigger_hints
+                .iter()
+                .any(|hint| text_matches_phrase(query_token_list, hint)))
+}
+
+fn should_prefer_canonical_artifact_gate(
+    record: &SkillRecord,
+    query_token_list: &[String],
+) -> bool {
+    if record.slug != "spreadsheets" || !artifact_gate_matches_query(query_token_list) {
+        return false;
+    }
+    true
+}
+
 fn build_route_policy(mode: &str) -> Result<RouteExecutionPolicyPayload, String> {
     let normalized_mode = mode.trim().to_ascii_lowercase();
     let base = RouteExecutionPolicyPayload {
@@ -8048,6 +7668,26 @@ fn score_route_candidate<'a>(
             score: 0.0,
             reasons: vec![
                 "Suppressed: generic browser-automation ecosystem research does not require a live browser evidence gate."
+                    .to_string(),
+            ],
+        };
+    }
+    if should_defer_to_artifact_gate(record, query_text, query_token_list) {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: generic artifact intake should hit the artifact gate before a narrower owner."
+                    .to_string(),
+            ],
+        };
+    }
+    if should_prefer_canonical_artifact_gate(record, query_token_list) {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: generic spreadsheet artifact intake should start at the canonical spreadsheets gate."
                     .to_string(),
             ],
         };
@@ -8572,7 +8212,6 @@ fn pick_owner<'a>(candidates: Vec<RouteCandidate<'a>>) -> RouteCandidate<'a> {
             .push("Prioritized via gate-before-owner precedence.".to_string());
         return top_gate;
     }
-
     let owner_pool = if owner_candidates.is_empty() {
         candidates.clone()
     } else {
@@ -10046,16 +9685,6 @@ mod tests {
             task_root.join("EVIDENCE_INDEX.json"),
             task_root.join("TRACE_METADATA.json"),
             task_root.join("CONTINUITY_JOURNAL.json"),
-            repo_root.join("SESSION_SUMMARY.md"),
-            repo_root.join("NEXT_ACTIONS.json"),
-            repo_root.join("EVIDENCE_INDEX.json"),
-            repo_root.join("TRACE_METADATA.json"),
-            repo_root.join("CONTINUITY_JOURNAL.json"),
-            repo_root.join("artifacts/current/SESSION_SUMMARY.md"),
-            repo_root.join("artifacts/current/NEXT_ACTIONS.json"),
-            repo_root.join("artifacts/current/EVIDENCE_INDEX.json"),
-            repo_root.join("artifacts/current/TRACE_METADATA.json"),
-            repo_root.join("artifacts/current/CONTINUITY_JOURNAL.json"),
             repo_root.join(".supervisor_state.json"),
             repo_root.join("artifacts/current/active_task.json"),
             repo_root.join("artifacts/current/focus_task.json"),
@@ -10089,6 +9718,29 @@ mod tests {
             supervisor["artifact_refs"]["task_root"],
             json!(task_root.display().to_string())
         );
+        let active_pointer = serde_json::from_str::<Value>(
+            &fs::read_to_string(repo_root.join("artifacts/current/active_task.json"))
+                .expect("read active pointer"),
+        )
+        .expect("parse active pointer");
+        assert_eq!(
+            active_pointer["session_summary"],
+            json!(task_root.join("SESSION_SUMMARY.md").display().to_string())
+        );
+        for path in [
+            repo_root.join("SESSION_SUMMARY.md"),
+            repo_root.join("NEXT_ACTIONS.json"),
+            repo_root.join("EVIDENCE_INDEX.json"),
+            repo_root.join("TRACE_METADATA.json"),
+            repo_root.join("CONTINUITY_JOURNAL.json"),
+            repo_root.join("artifacts/current/SESSION_SUMMARY.md"),
+            repo_root.join("artifacts/current/NEXT_ACTIONS.json"),
+            repo_root.join("artifacts/current/EVIDENCE_INDEX.json"),
+            repo_root.join("artifacts/current/TRACE_METADATA.json"),
+            repo_root.join("artifacts/current/CONTINUITY_JOURNAL.json"),
+        ] {
+            assert!(!path.exists(), "unexpected mirror {}", path.display());
+        }
         let journal = serde_json::from_str::<Value>(
             &fs::read_to_string(task_root.join("CONTINUITY_JOURNAL.json")).expect("read journal"),
         )
@@ -10639,19 +10291,20 @@ mod tests {
             .and_then(Value::as_object)
             .expect("memory recall payload");
 
+        let prompt_payload = &memory_recall["prompt_payload"];
         assert_eq!(
-            memory_recall["continuity"]["task"],
+            prompt_payload["continuity"]["task"],
             json!("isolated active task")
         );
         assert_eq!(
-            memory_recall["continuity"]["paths"]["supervisor_state"],
+            memory_recall["diagnostics"]["source_artifacts"]["root_anchor"]["supervisor_state"],
             json!(repo_root
                 .join(".supervisor_state.json")
                 .display()
                 .to_string())
         );
         assert_eq!(
-            memory_recall["source_artifacts"]["artifact_lanes"]["bootstrap"],
+            memory_recall["diagnostics"]["source_artifacts"]["artifact_lanes"]["bootstrap"],
             json!(isolated_artifacts
                 .join("bootstrap")
                 .join("<task_id>")
@@ -10660,64 +10313,6 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&repo_root);
-    }
-
-    #[test]
-    fn stdio_request_dispatches_claude_lifecycle_hook_payload() {
-        let repo_root = std::env::temp_dir().join(format!(
-            "router-rs-stdio-claude-hook-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("clock before epoch")
-                .as_nanos()
-        ));
-        fs::create_dir_all(repo_root.join("artifacts/current/task-1")).expect("create temp repo");
-        fs::create_dir_all(repo_root.join(".codex/memory")).expect("create memory dir");
-        fs::write(
-            repo_root.join(".codex/memory/MEMORY.md"),
-            "# 项目长期记忆\n",
-        )
-        .expect("write memory");
-        fs::write(
-            repo_root.join(".supervisor_state.json"),
-            serde_json::to_string_pretty(&json!({
-                "task_id": "task-1",
-                "task_summary": "repair claude hook",
-                "active_phase": "implementing",
-                "verification": {"verification_status": "in_progress"},
-                "continuity": {"story_state": "active", "resume_allowed": true},
-                "next_actions": ["finish rust hook"],
-                "execution_contract": {"scope": ["hooks"], "acceptance_criteria": ["smoke passes"]}
-            }))
-            .expect("serialize state"),
-        )
-        .expect("write state");
-        fs::write(
-            repo_root.join("artifacts/current/active_task.json"),
-            serde_json::to_string_pretty(&json!({"task_id": "task-1"})).expect("serialize pointer"),
-        )
-        .expect("write pointer");
-        fs::write(
-            repo_root.join("artifacts/current/task-1/SESSION_SUMMARY.md"),
-            "- task: repair claude hook\n- phase: implementing\n- status: in_progress\n",
-        )
-        .expect("write session summary");
-
-        let response = handle_stdio_json_line(&format!(
-            "{{\"id\":3,\"op\":\"claude_lifecycle_hook\",\"payload\":{{\"command\":\"session-end\",\"repo_root\":\"{}\",\"max_lines\":4}}}}",
-            repo_root.display()
-        ));
-        assert!(response.ok, "{:?}", response.error);
-        let payload = response.payload.expect("payload");
-        assert_eq!(
-            payload.get("schema_version").and_then(Value::as_str),
-            Some("router-rs-claude-hook-response-v1")
-        );
-        assert_eq!(
-            payload.get("authority").and_then(Value::as_str),
-            Some("rust-claude-hook")
-        );
-        fs::remove_dir_all(repo_root).expect("cleanup repo");
     }
 
     #[test]
@@ -11132,6 +10727,45 @@ mod tests {
     }
 
     #[test]
+    fn search_uses_route_scorer_for_framework_review() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let manifest_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
+        let records =
+            load_records(Some(&runtime_path), Some(&manifest_path)).expect("load routing records");
+
+        let rows = search_skills(&records, "现在的路由系统，用减法原理review一下", 5);
+
+        assert_eq!(
+            rows.first().map(|row| row.slug.as_str()),
+            Some("skill-framework-developer")
+        );
+        assert!(!rows.iter().any(|row| row.slug == "paper-reviewer"));
+    }
+
+    #[test]
+    fn generic_xlsx_intake_hits_spreadsheet_gate_first() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let manifest_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
+        let records =
+            load_records(Some(&runtime_path), Some(&manifest_path)).expect("load routing records");
+
+        let decision = route_task(
+            &records,
+            "整理这个 xlsx 表格",
+            "artifact-gate-test",
+            true,
+            true,
+        )
+        .expect("route task");
+
+        assert_eq!(decision.selected_skill, "spreadsheets");
+    }
+
+    #[test]
     fn route_diff_report_matches_shadow_compare_contract() {
         let rust_snapshot = build_route_snapshot(
             "rust",
@@ -11211,10 +10845,9 @@ mod tests {
             payload["rustification_status"]["hot_path_projection_mode"],
             Value::String("descriptor-driven".to_string())
         );
-        assert_eq!(
-            payload["rustification_status"]["framework_runtime_package_status"],
-            Value::String("retired".to_string())
-        );
+        assert!(payload["rustification_status"]
+            .get("framework_runtime_package_status")
+            .is_none());
         assert_eq!(
             payload["rustification_status"]["framework_runtime_python_projection_required"],
             Value::Bool(false)
@@ -11223,22 +10856,9 @@ mod tests {
             payload["rustification_status"]["framework_runtime_replacement"],
             Value::String("router-rs::framework_runtime".to_string())
         );
-        assert_eq!(
-            payload["framework_runtime_package_retirement"]["steady_state_available"],
-            Value::Bool(false)
-        );
-        assert_eq!(
-            payload["framework_runtime_package_retirement"]["import_contract"],
-            Value::String("ModuleNotFoundError".to_string())
-        );
-        assert_eq!(
-            payload["framework_runtime_package_retirement"]["replacement_surfaces"][0],
-            Value::String("router-rs --framework-runtime-snapshot-json".to_string())
-        );
-        assert_eq!(
-            payload["framework_runtime_package_retirement"]["python_wrapper_allowed"],
-            Value::Bool(false)
-        );
+        assert!(payload
+            .get("framework_runtime_package_retirement")
+            .is_none());
         assert_eq!(
             payload["runtime_host"]["role"],
             Value::String("runtime-orchestration".to_string())
@@ -11360,6 +10980,18 @@ mod tests {
                 ["strongest_local_backend_family"],
             Value::String("sqlite".to_string())
         );
+        assert!(
+            !payload["services"]["checkpoint"]["backend_family_catalog"]["families"]
+                .as_array()
+                .expect("backend family catalog")
+                .iter()
+                .any(|family| family["backend_family"] == "memory")
+        );
+        assert_eq!(
+            payload["services"]["checkpoint"]["backend_family_catalog"]
+                ["test_only_backend_families"][0],
+            Value::String("memory".to_string())
+        );
         assert_eq!(
             payload["services"]["checkpoint"]["backend_family_parity"]["aligned"],
             Value::Bool(true)
@@ -11388,6 +11020,7 @@ mod tests {
             payload["services"]["background"]["orchestration_contract"]["policy_operations"][5],
             Value::String("retry".to_string())
         );
+        assert!(payload["services"].get("agent_factory").is_none());
     }
 
     fn execution_kernel_contract_shape_fields(shape: &Value) -> Vec<String> {
@@ -12372,7 +12005,7 @@ mod tests {
         assert!(prompt.contains("outline.md"));
         assert!(prompt.contains("decision_log.md"));
         assert!(prompt.contains("code_list.md"));
-        assert!(prompt.contains("checklist-writting"));
+        assert!(prompt.contains("checklist-planner"));
         assert!(!prompt.contains("READ-ONLY planning route"));
         assert!(!prompt.contains("<proposed_plan>"));
     }

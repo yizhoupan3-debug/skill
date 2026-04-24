@@ -14,7 +14,7 @@ trigger_hints:
 
 # Refresh
 
-这是 Claude Code `/refresh` 在 Codex 侧的对应能力。
+这是 Codex 侧的 `$refresh` 能力。
 
 ## 何时使用
 
@@ -36,7 +36,7 @@ trigger_hints:
 1. 运行：
 
 ```bash
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/run_router_rs.sh "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --framework-refresh-json --claude-hook-max-lines 4 --repo-root "$PROJECT_DIR"
+PROJECT_DIR="${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; "$PROJECT_DIR"/scripts/router-rs/run_router_rs.sh "$PROJECT_DIR"/scripts/router-rs/Cargo.toml --framework-refresh-json --repo-root "$PROJECT_DIR"
 ```
 
 2. 然后严格回复：
@@ -53,9 +53,9 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null |
 ## 约束
 
 - 不要重写根目录 continuity 制品
-- 不要刷新 `.codex/memory/CLAUDE_MEMORY.md`
+- 不要刷新 host-specific memory projection
 - 面向用户的回复里，不要提 memory refresh、summary、`/clear` 或内部诊断
-- 行为要与全局 Claude `refresh` 命令保持一致
+- 行为要与 Codex `$refresh` 入口保持一致
 
 ## 用法
 

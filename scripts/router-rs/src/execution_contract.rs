@@ -494,7 +494,7 @@ pub fn build_execution_kernel_live_response_serialization_contract() -> Map<Stri
         Value::Bool(true),
     );
     guardrails.insert(
-        "claude_host_runtime_semantics_remain_host_owned".to_string(),
+        "codex_runtime_semantics_remain_host_owned".to_string(),
         Value::Bool(true),
     );
 

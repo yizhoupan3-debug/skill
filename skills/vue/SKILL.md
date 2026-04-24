@@ -9,7 +9,7 @@ description: |
   "Pinia", "Nuxt", "composable 怎么写".
 metadata:
   version: "2.0.0"
-  platforms: [codex, antigravity, claude-code]
+  platforms: [codex]
   tags:
     - vue
     - composition-api

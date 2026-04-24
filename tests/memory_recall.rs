@@ -41,14 +41,17 @@ fn render_context_active_mode_includes_matching_current_task_when_fresh() {
 }
 
 #[test]
-fn render_context_active_mode_refreshes_stale_memory_state() {
+fn render_context_active_mode_ignores_stale_continuity_cache() {
     let tmp = tempdir().unwrap();
     seed_runtime(tmp.path(), "active bootstrap repair");
     seed_stable_memory(tmp.path());
+    let state_path = tmp
+        .path()
+        .join("artifacts/current/active-bootstrap-repair-20260418210000/CONTINUITY_STATE.json");
     write_json(
-        &tmp.path().join(".codex/memory/state.json"),
+        &state_path,
         &json!({
-            "schema_version": "memory-state-v1",
+            "schema_version": "continuity-state-v1",
             "source_task_id": "older-task",
             "content_hash": "stale",
             "source_updated_at": "2026-04-18T20:00:00+08:00"
@@ -57,15 +60,12 @@ fn render_context_active_mode_refreshes_stale_memory_state() {
     let result = render_context(tmp.path(), "active bootstrap repair", "active", 8);
     assert_eq!(result["active_task_included"], true);
     assert_eq!(result["freshness"]["state"], "fresh");
-    let state = read_json(&tmp.path().join(".codex/memory/state.json"));
-    assert_eq!(
-        state["source_task_id"],
-        "active-bootstrap-repair-20260418210000"
-    );
+    let state = read_json(&state_path);
+    assert_eq!(state["source_task_id"], "older-task");
 }
 
 #[test]
-fn render_context_active_mode_self_heals_missing_memory_state() {
+fn render_context_active_mode_does_not_require_continuity_cache() {
     let tmp = tempdir().unwrap();
     seed_runtime(tmp.path(), "active bootstrap repair");
     write_text(
@@ -78,8 +78,26 @@ fn render_context_active_mode_self_heals_missing_memory_state() {
     );
     let result = render_context(tmp.path(), "active bootstrap repair", "active", 8);
     assert_eq!(result["active_task_included"], true);
-    assert!(tmp.path().join(".codex/memory/state.json").is_file());
+    assert!(!tmp
+        .path()
+        .join("artifacts/current/active-bootstrap-repair-20260418210000/CONTINUITY_STATE.json")
+        .exists());
     assert_eq!(result["freshness"]["state"], "fresh");
+}
+
+#[test]
+fn debug_mode_writes_continuity_cache_for_inspection_only() {
+    let tmp = tempdir().unwrap();
+    seed_runtime(tmp.path(), "active bootstrap repair");
+    seed_stable_memory(tmp.path());
+    let result = render_context(tmp.path(), "active bootstrap repair", "debug", 8);
+    assert!(items(&result)
+        .iter()
+        .any(|item| item["path"] == "runtime/CONTINUITY_STATE.json"));
+    assert!(tmp
+        .path()
+        .join("artifacts/current/active-bootstrap-repair-20260418210000/CONTINUITY_STATE.json")
+        .is_file());
 }
 
 #[test]
@@ -397,7 +415,7 @@ fn render_context(
         "--repo-root",
         repo_root.to_str().unwrap(),
     ]));
-    json_from_output(&output)["memory_recall"]["retrieval"].clone()
+    json_from_output(&output)["memory_recall"]["prompt_payload"]["retrieval"].clone()
 }
 
 fn seed_runtime(repo_root: &std::path::Path, task: &str) {
@@ -419,25 +437,17 @@ fn seed_runtime(repo_root: &std::path::Path, task: &str) {
         &task_root.join("TRACE_METADATA.json"),
         &json!({"task": task, "matched_skills": ["execution-controller-coding"]}),
     );
-    write_text(
-        &repo_root.join("artifacts/current/SESSION_SUMMARY.md"),
-        &format!("- task: {task}\n- phase: implementation\n- status: in_progress\n"),
-    );
-    write_json(
-        &repo_root.join("artifacts/current/NEXT_ACTIONS.json"),
-        &json!({"next_actions": ["Patch classifier", "Run pytest"]}),
-    );
-    write_json(
-        &repo_root.join("artifacts/current/EVIDENCE_INDEX.json"),
-        &json!({"artifacts": []}),
-    );
-    write_json(
-        &repo_root.join("artifacts/current/TRACE_METADATA.json"),
-        &json!({"task": task, "matched_skills": ["execution-controller-coding"]}),
-    );
     write_json(
         &repo_root.join("artifacts/current/active_task.json"),
-        &json!({"task_id": task_id, "task": task}),
+        &json!({
+            "task_id": task_id,
+            "task": task,
+            "task_root": task_root.display().to_string(),
+            "session_summary": task_root.join("SESSION_SUMMARY.md").display().to_string(),
+            "next_actions": task_root.join("NEXT_ACTIONS.json").display().to_string(),
+            "evidence_index": task_root.join("EVIDENCE_INDEX.json").display().to_string(),
+            "trace_metadata": task_root.join("TRACE_METADATA.json").display().to_string()
+        }),
     );
     write_json(
         &repo_root.join(".supervisor_state.json"),

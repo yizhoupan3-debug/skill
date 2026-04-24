@@ -45,7 +45,7 @@ Good sidecars usually have:
 - one role
 - one clear output contract
 - no hidden write overlap
-- no direct writes to shared global continuity artifacts
+- no direct writes to supervisor-owned continuity artifacts
 
 ### 3. Record the delegation plan
 

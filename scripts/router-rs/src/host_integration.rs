@@ -1,22 +1,17 @@
 use chrono::Local;
 use clap::{Parser, Subcommand};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
-#[cfg(unix)]
-use std::os::unix::fs as unix_fs;
 
 const CONFIG_SCHEMA_HEADER: &str =
     "#:schema https://developers.openai.com/codex/config-schema.json\n";
 const FRAMEWORK_START_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_START -->";
 const FRAMEWORK_END_MARKER: &str = "<!-- FRAMEWORK_DEFAULT_RUNTIME_END -->";
 const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v1";
-const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
 const RETIRED_CODEX_MODEL_INSTRUCTIONS_PATH: &str = ".codex/model_instructions.md";
 const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "model-with-reasoning",
@@ -24,59 +19,25 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "context-remaining",
     "git-branch",
 ];
-const DEFAULT_SHARED_PROJECT_MCP_SERVERS: [&str; 1] = ["framework-mcp"];
-const INSTALL_SKILLS_TOOLS: [&str; 3] = ["codex", "agents", "gemini"];
-const PERSONAL_PLUGIN_LIVE_PROJECTION_EXCLUDES: [&str; 2] = ["skills", ".mcp.json"];
-const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 7] = [
+const INSTALL_SKILLS_TOOLS: [&str; 1] = ["codex"];
+const CODEX_STUB_SKILLS: [&str; 3] = ["autopilot", "deepinterview", "gitx"];
+const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 3] =
+    ["active_task.json", "focus_task.json", "task_registry.json"];
+const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 6] = [
     "SESSION_SUMMARY.md",
     "NEXT_ACTIONS.json",
     "EVIDENCE_INDEX.json",
     "TRACE_METADATA.json",
-    "active_task.json",
-    "focus_task.json",
-    "task_registry.json",
-];
-const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 5] = [
-    "SESSION_SUMMARY.md",
-    "NEXT_ACTIONS.json",
-    "EVIDENCE_INDEX.json",
-    "TRACE_METADATA.json",
+    "CONTINUITY_JOURNAL.json",
     ".supervisor_state.json",
 ];
-
-#[derive(Deserialize)]
-struct SyncSectionManifest {
-    text_files: Vec<String>,
-    json_files: Vec<String>,
-    managed_directories: Vec<String>,
-    #[serde(default)]
-    retired_paths: Vec<String>,
-}
-
-#[derive(Deserialize)]
-struct SyncManifest {
-    full_sync: SyncSectionManifest,
-    partial_sync: SyncSectionManifest,
-}
 
 #[derive(Debug, Clone, Deserialize)]
 struct RuntimeRegistry {
     #[serde(rename = "schema_version")]
     _schema_version: String,
     #[serde(default)]
-    plugins: Vec<RuntimePluginRegistration>,
-    #[serde(default)]
     workspace_bootstrap_defaults: RuntimeWorkspaceBootstrapDefaults,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct RuntimePluginRegistration {
-    plugin_name: String,
-    source_rel: String,
-    #[serde(default)]
-    marketplace_name: Option<String>,
-    #[serde(default)]
-    marketplace_category: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -100,16 +61,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    SyncHostEntrypoints {
-        #[arg(long)]
-        template_root: PathBuf,
-        #[arg(long)]
-        repo_root: PathBuf,
-        #[arg(long, conflicts_with = "check")]
-        apply: bool,
-        #[arg(long, conflicts_with = "apply")]
-        check: bool,
-    },
     ExportRuntimeRegistry {
         #[arg(long)]
         repo_root: PathBuf,
@@ -121,24 +72,6 @@ enum Commands {
     ValidateDefaultBootstrap {
         #[arg(long)]
         bootstrap_path: PathBuf,
-        #[arg(long)]
-        repo_root: PathBuf,
-    },
-    ValidateMarketplacePlugin {
-        #[arg(long)]
-        marketplace_path: PathBuf,
-        #[arg(long)]
-        plugin_name: String,
-    },
-    ValidateHomeClaudeMcp {
-        #[arg(long)]
-        config_path: PathBuf,
-        #[arg(long)]
-        repo_root: PathBuf,
-    },
-    ValidatePersonalPluginMcp {
-        #[arg(long)]
-        config_path: PathBuf,
         #[arg(long)]
         repo_root: PathBuf,
     },
@@ -210,35 +143,13 @@ enum Commands {
         #[arg(long)]
         home_config_path: PathBuf,
         #[arg(long)]
-        home_plugin_root: PathBuf,
-        #[arg(long)]
-        home_marketplace_path: PathBuf,
-        #[arg(long)]
         home_codex_skills_path: PathBuf,
-        #[arg(long)]
-        home_claude_skills_path: PathBuf,
-        #[arg(long)]
-        home_claude_refresh_path: PathBuf,
-        #[arg(long)]
-        home_claude_mcp_config_path: PathBuf,
         #[arg(long)]
         bootstrap_output_dir: Option<PathBuf>,
         #[arg(long)]
-        with_browser_mcp: bool,
-        #[arg(long)]
         skip_framework_overlay_retirement: bool,
         #[arg(long)]
-        skip_personal_plugin: bool,
-        #[arg(long)]
-        skip_personal_marketplace: bool,
-        #[arg(long)]
         skip_home_codex_skills_link: bool,
-        #[arg(long)]
-        skip_home_claude_skills_link: bool,
-        #[arg(long)]
-        skip_home_claude_refresh: bool,
-        #[arg(long)]
-        skip_home_claude_mcp_sync: bool,
         #[arg(long)]
         skip_default_bootstrap: bool,
     },
@@ -258,22 +169,6 @@ enum Commands {
     },
 }
 
-#[derive(Default, Serialize)]
-struct SyncReport {
-    written: Vec<String>,
-    unchanged: Vec<String>,
-    created_dirs: Vec<String>,
-    synced_worktrees: Vec<String>,
-    skipped_worktrees: Vec<String>,
-}
-
-#[derive(Default)]
-struct SingleSyncReport {
-    written: Vec<String>,
-    unchanged: Vec<String>,
-    created_dirs: Vec<String>,
-}
-
 pub fn run_host_integration_from_args(args: &[String]) -> Result<Value, String> {
     let forwarded_args = if matches!(args.first().map(String::as_str), Some("--")) {
         &args[1..]
@@ -287,13 +182,6 @@ pub fn run_host_integration_from_args(args: &[String]) -> Result<Value, String> 
 
 fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
     let payload = match cli.command {
-        Commands::SyncHostEntrypoints {
-            template_root,
-            repo_root,
-            apply,
-            check: _,
-        } => serde_json::to_value(sync_host_entrypoints(&template_root, &repo_root, apply)?)
-            .map_err(|err| err.to_string())?,
         Commands::ExportRuntimeRegistry { repo_root } => {
             serde_json::to_value(load_runtime_registry_payload(&repo_root)?)
                 .map_err(|err| err.to_string())?
@@ -308,24 +196,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             repo_root,
         } => json!({
             "ok": validate_default_bootstrap(&bootstrap_path, &repo_root)?,
-        }),
-        Commands::ValidateMarketplacePlugin {
-            marketplace_path,
-            plugin_name,
-        } => json!({
-            "ok": validate_marketplace_plugin(&marketplace_path, &plugin_name)?,
-        }),
-        Commands::ValidateHomeClaudeMcp {
-            config_path,
-            repo_root,
-        } => json!({
-            "ok": validate_home_claude_mcp(&config_path, &repo_root)?,
-        }),
-        Commands::ValidatePersonalPluginMcp {
-            config_path,
-            repo_root,
-        } => json!({
-            "ok": validate_personal_plugin_mcp(&config_path, &repo_root)?,
         }),
         Commands::BuildDefaultBootstrap {
             repo_root,
@@ -394,40 +264,18 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             template_root: _,
             repo_root,
             home_config_path,
-            home_plugin_root,
-            home_marketplace_path,
             home_codex_skills_path,
-            home_claude_skills_path,
-            home_claude_refresh_path,
-            home_claude_mcp_config_path,
             bootstrap_output_dir,
-            with_browser_mcp,
             skip_framework_overlay_retirement,
-            skip_personal_plugin,
-            skip_personal_marketplace,
             skip_home_codex_skills_link,
-            skip_home_claude_skills_link,
-            skip_home_claude_refresh,
-            skip_home_claude_mcp_sync,
             skip_default_bootstrap,
         } => install_native_integration(
             &repo_root,
             &home_config_path,
-            &home_plugin_root,
-            &home_marketplace_path,
             &home_codex_skills_path,
-            &home_claude_skills_path,
-            &home_claude_refresh_path,
-            &home_claude_mcp_config_path,
             bootstrap_output_dir.as_deref(),
-            with_browser_mcp,
             !skip_framework_overlay_retirement,
-            !skip_personal_plugin,
-            !skip_personal_marketplace,
             !skip_home_codex_skills_link,
-            !skip_home_claude_skills_link,
-            !skip_home_claude_refresh,
-            !skip_home_claude_mcp_sync,
             !skip_default_bootstrap,
         )?,
         Commands::InstallSkills {
@@ -447,207 +295,6 @@ fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
         )?,
     };
     Ok(payload)
-}
-
-fn sync_host_entrypoints(
-    template_root: &Path,
-    repo_root: &Path,
-    apply: bool,
-) -> Result<SyncReport, String> {
-    let root = normalize_path(repo_root)?;
-    let template = normalize_path(template_root)?;
-    let sync_manifest = load_sync_manifest(&template)?;
-    let (matched_worktrees, skipped_worktrees) = discover_matching_worktrees(&root);
-    let mut report = SyncReport {
-        skipped_worktrees,
-        ..SyncReport::default()
-    };
-    let mut targets = vec![root.clone()];
-    targets.extend(matched_worktrees);
-
-    for target_root in targets {
-        let section = if target_root == root {
-            &sync_manifest.full_sync
-        } else {
-            &sync_manifest.partial_sync
-        };
-        let single = sync_single_root(&template, &target_root, &root, apply, section)?;
-        report.written.extend(single.written);
-        report.unchanged.extend(single.unchanged);
-        report.created_dirs.extend(single.created_dirs);
-        if target_root != root {
-            report
-                .synced_worktrees
-                .push(target_root.to_string_lossy().into_owned());
-        }
-    }
-
-    report.written.sort();
-    report.unchanged.sort();
-    report.created_dirs.sort();
-    report.synced_worktrees.sort();
-    report.skipped_worktrees.sort();
-    Ok(report)
-}
-
-fn sync_single_root(
-    template_root: &Path,
-    target_root: &Path,
-    report_root: &Path,
-    apply: bool,
-    section: &SyncSectionManifest,
-) -> Result<SingleSyncReport, String> {
-    let mut report = SingleSyncReport::default();
-    for relative in &section.managed_directories {
-        let directory = target_root.join(relative);
-        if !directory.exists() {
-            if apply {
-                fs::create_dir_all(&directory).map_err(|err| err.to_string())?;
-            }
-            report
-                .created_dirs
-                .push(describe_path(report_root, target_root, &directory));
-        }
-    }
-
-    for relative in &section.text_files {
-        sync_template_file(
-            &template_root.join(relative),
-            &target_root.join(relative),
-            report_root,
-            target_root,
-            apply,
-            &mut report,
-        )?;
-    }
-
-    for relative in &section.json_files {
-        sync_template_file(
-            &template_root.join(relative),
-            &target_root.join(relative),
-            report_root,
-            target_root,
-            apply,
-            &mut report,
-        )?;
-    }
-    for relative in &section.retired_paths {
-        let path = target_root.join(relative);
-        let exists = path.exists() || symlink_exists(&path);
-        if exists && apply {
-            remove_path(&path).map_err(|err| err.to_string())?;
-        }
-        if exists {
-            report
-                .written
-                .push(describe_path(report_root, target_root, &path));
-        }
-    }
-
-    Ok(report)
-}
-
-fn load_sync_manifest(template_root: &Path) -> Result<SyncManifest, String> {
-    let manifest_path = template_root.join(HOST_ENTRYPOINT_SYNC_MANIFEST_PATH);
-    let payload = fs::read_to_string(&manifest_path).map_err(|err| {
-        format!(
-            "failed to read host-entrypoint sync manifest {}: {}",
-            manifest_path.to_string_lossy(),
-            err
-        )
-    })?;
-    serde_json::from_str(&payload).map_err(|err| {
-        format!(
-            "failed to parse host-entrypoint sync manifest {}: {}",
-            manifest_path.to_string_lossy(),
-            err
-        )
-    })
-}
-
-fn sync_template_file(
-    source: &Path,
-    destination: &Path,
-    report_root: &Path,
-    target_root: &Path,
-    apply: bool,
-    report: &mut SingleSyncReport,
-) -> Result<(), String> {
-    let desired = fs::read(source).map_err(|err| err.to_string())?;
-    let existing = fs::read(destination).ok();
-    let changed = existing.as_ref() != Some(&desired);
-    if changed && apply {
-        if let Some(parent) = destination.parent() {
-            fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-        }
-        fs::write(destination, desired).map_err(|err| err.to_string())?;
-    }
-    let bucket = if changed {
-        &mut report.written
-    } else {
-        &mut report.unchanged
-    };
-    bucket.push(describe_path(report_root, target_root, destination));
-    Ok(())
-}
-
-fn discover_matching_worktrees(root: &Path) -> (Vec<PathBuf>, Vec<String>) {
-    let worktree_listing = read_git_stdout(root, &["worktree", "list", "--porcelain"]);
-    if worktree_listing.is_none() {
-        return (Vec::new(), Vec::new());
-    }
-
-    let mut current: BTreeMap<String, String> = BTreeMap::new();
-    let mut worktrees: Vec<BTreeMap<String, String>> = Vec::new();
-    for raw_line in worktree_listing.unwrap_or_default().lines() {
-        let line = raw_line.trim();
-        if line.is_empty() {
-            if !current.is_empty() {
-                worktrees.push(current);
-                current = BTreeMap::new();
-            }
-            continue;
-        }
-        let mut parts = line.splitn(2, ' ');
-        let key = parts.next().unwrap_or_default().to_string();
-        let value = parts.next().unwrap_or_default().to_string();
-        current.insert(key, value);
-    }
-    if !current.is_empty() {
-        worktrees.push(current);
-    }
-
-    let mut matches = Vec::new();
-    let mut skipped = Vec::new();
-    for entry in worktrees {
-        let Some(worktree_path) = entry.get("worktree") else {
-            continue;
-        };
-        let candidate = normalize_path(Path::new(worktree_path))
-            .unwrap_or_else(|_| PathBuf::from(worktree_path));
-        if candidate == root {
-            continue;
-        }
-        if !candidate.exists() {
-            skipped.push(format!("{} (missing)", candidate.to_string_lossy()));
-            continue;
-        }
-        matches.push(candidate);
-    }
-    (matches, skipped)
-}
-
-fn read_git_stdout(root: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(args)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    String::from_utf8(output.stdout).ok()
 }
 
 fn normalize_path(path: &Path) -> Result<PathBuf, String> {
@@ -696,22 +343,13 @@ fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, String> {
     serde_json::from_value::<RuntimeRegistry>(payload).map_err(|err| err.to_string())
 }
 
-fn primary_plugin_registration(repo_root: &Path) -> Result<RuntimePluginRegistration, String> {
-    let registry = load_runtime_registry(repo_root)?;
-    registry
-        .plugins
-        .into_iter()
-        .next()
-        .ok_or_else(|| "Runtime registry must define at least one plugin.".to_string())
-}
-
 fn skill_bridge_source_rel(repo_root: &Path) -> Result<String, String> {
     let registry = load_runtime_registry(repo_root)?;
     Ok(registry
         .workspace_bootstrap_defaults
         .skill_bridge
         .source_rel
-        .unwrap_or_else(|| "skills".to_string()))
+        .unwrap_or_else(|| ".codex/skills".to_string()))
 }
 
 fn router_rs_crate_root() -> PathBuf {
@@ -763,126 +401,26 @@ fn run_router_rs_json(repo_root: &Path, args: &[String]) -> Result<Value, String
     }))
 }
 
-fn load_claude_refresh_command_text(repo_root: &Path) -> Result<String, String> {
-    let args = vec!["--claude-hook-projection-json".to_string()];
-    let payload = run_router_rs_json(repo_root, &args)?;
-    payload
-        .get("claude_commands")
-        .and_then(Value::as_object)
-        .and_then(|commands| commands.get("refresh"))
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| "router-rs hook projection missing claude_commands.refresh".to_string())
-}
-
-fn describe_path(report_root: &Path, target_root: &Path, path: &Path) -> String {
-    if let Ok(relative) = path.strip_prefix(report_root) {
-        return relative.to_string_lossy().into_owned();
-    }
-    if let Ok(relative) = path.strip_prefix(target_root) {
-        return format!(
-            "{}::{}",
-            target_root.to_string_lossy(),
-            relative.to_string_lossy()
-        );
-    }
-    path.to_string_lossy().into_owned()
-}
-
 #[allow(clippy::too_many_arguments)]
 fn install_native_integration(
     repo_root: &Path,
     home_config_path: &Path,
-    home_plugin_root: &Path,
-    home_marketplace_path: &Path,
     home_codex_skills_path: &Path,
-    home_claude_skills_path: &Path,
-    home_claude_refresh_path: &Path,
-    home_claude_mcp_config_path: &Path,
     bootstrap_output_dir: Option<&Path>,
-    install_browser_mcp: bool,
     retire_framework_overlay_file: bool,
-    install_personal_plugin: bool,
-    install_personal_marketplace_entry: bool,
     install_home_codex_skills_link: bool,
-    install_home_claude_skills_link: bool,
-    install_home_claude_refresh_command: bool,
-    install_home_claude_mcp_sync: bool,
     install_default_bootstrap: bool,
 ) -> Result<Value, String> {
     let repo_root = normalize_path(repo_root)?;
-    let plugin_registration = primary_plugin_registration(&repo_root)?;
-    let plugin_name = plugin_registration
-        .marketplace_name
-        .clone()
-        .unwrap_or_else(|| plugin_registration.plugin_name.clone());
-    let plugin_category = plugin_registration
-        .marketplace_category
-        .clone()
-        .unwrap_or_else(|| "Developer Tools".to_string());
     let home_config_path = normalize_path(home_config_path)?;
-    let home_plugin_root = normalize_path(home_plugin_root)?;
-    let home_marketplace_path = normalize_path(home_marketplace_path)?;
     let home_codex_skills_path = normalize_path(home_codex_skills_path)?;
-    let home_claude_skills_path = normalize_path(home_claude_skills_path)?;
-    let home_claude_refresh_path = normalize_path(home_claude_refresh_path)?;
-    let home_claude_mcp_config_path = normalize_path(home_claude_mcp_config_path)?;
     let bootstrap_output_dir = bootstrap_output_dir.map(normalize_path).transpose()?;
-    let claude_refresh_command = load_claude_refresh_command_text(&repo_root)?;
 
     let created_config = ensure_config_file(&home_config_path)?;
     let codex_hooks_feature_changed = ensure_codex_hooks_feature(&home_config_path)?;
-    let browser_changed = if install_browser_mcp {
-        install_mcp_block(
-            &home_config_path,
-            "[mcp_servers.browser-mcp]",
-            &build_browser_server_block(&repo_root),
-        )?
-    } else {
-        false
-    };
-    let framework_changed = install_mcp_block(
-        &home_config_path,
-        "[mcp_servers.framework-mcp]",
-        &build_framework_server_block(&repo_root),
-    )?;
     let tui_changed = ensure_tui_status_line(&home_config_path)?;
-    let personal_plugin_changed = if install_personal_plugin {
-        ensure_personal_plugin_live_projection(
-            &repo_root,
-            &repo_root.join(&plugin_registration.source_rel),
-            &home_plugin_root,
-        )?
-    } else {
-        false
-    };
-    let personal_marketplace_changed = if install_personal_marketplace_entry {
-        install_personal_marketplace(
-            &home_marketplace_path,
-            &home_plugin_root,
-            &plugin_name,
-            &plugin_category,
-        )?
-    } else {
-        false
-    };
     let home_codex_skills_link_changed = if install_home_codex_skills_link {
         ensure_home_skills_link(&repo_root, &home_codex_skills_path)?
-    } else {
-        false
-    };
-    let home_claude_skills_link_changed = if install_home_claude_skills_link {
-        ensure_home_skills_link(&repo_root, &home_claude_skills_path)?
-    } else {
-        retire_home_skills_link(&repo_root, &home_claude_skills_path)?
-    };
-    let home_claude_refresh_changed = if install_home_claude_refresh_command {
-        ensure_home_claude_refresh_command(&claude_refresh_command, &home_claude_refresh_path)?
-    } else {
-        retire_home_claude_refresh_command(&claude_refresh_command, &home_claude_refresh_path)?
-    };
-    let home_claude_mcp_config_changed = if install_home_claude_mcp_sync {
-        ensure_home_claude_mcp_servers(&repo_root, &home_claude_mcp_config_path)?
     } else {
         false
     };
@@ -901,24 +439,11 @@ fn install_native_integration(
         "success": true,
         "repo_root": repo_root.to_string_lossy(),
         "home_config_path": home_config_path.to_string_lossy(),
-        "home_plugin_root": home_plugin_root.to_string_lossy(),
-        "home_marketplace_path": home_marketplace_path.to_string_lossy(),
         "home_codex_skills_path": home_codex_skills_path.to_string_lossy(),
-        "home_claude_skills_path": home_claude_skills_path.to_string_lossy(),
-        "home_claude_refresh_path": home_claude_refresh_path.to_string_lossy(),
-        "home_claude_mcp_config_path": home_claude_mcp_config_path.to_string_lossy(),
-        "repo_marketplace_path": repo_root.join(".agents/plugins/marketplace.json").to_string_lossy(),
         "created_config": created_config,
         "codex_hooks_feature_changed": codex_hooks_feature_changed,
-        "browser_mcp_changed": browser_changed,
-        "framework_mcp_changed": framework_changed,
         "tui_status_line_changed": tui_changed,
-        "personal_plugin_changed": personal_plugin_changed,
-        "personal_marketplace_changed": personal_marketplace_changed,
         "home_codex_skills_link_changed": home_codex_skills_link_changed,
-        "home_claude_skills_link_changed": home_claude_skills_link_changed,
-        "home_claude_refresh_changed": home_claude_refresh_changed,
-        "home_claude_mcp_config_changed": home_claude_mcp_config_changed,
         "framework_overlay_retirement": framework_overlay_result,
         "default_bootstrap": default_bootstrap,
     }))
@@ -1060,12 +585,6 @@ fn selected_install_tools(
 fn canonical_tool_name(raw: &str) -> Result<&'static str, String> {
     match raw.trim().to_lowercase().as_str() {
         "codex" => Ok("codex"),
-        "agents" => Ok("agents"),
-        "gemini" => Ok("gemini"),
-        "claude" => Err(
-            "Claude Code uses repo-local .claude commands and project skills by default."
-                .to_string(),
-        ),
         other => Err(format!(
             "Unknown tool: {other}. Supported tools: {}",
             INSTALL_SKILLS_TOOLS.join(" ")
@@ -1084,20 +603,9 @@ fn install_skill_tool(
         let payload = install_native_integration(
             repo_root,
             &home.join(".codex").join("config.toml"),
-            &home.join(".codex/plugins").join("skill-framework-native"),
-            &home.join(".agents/plugins").join("marketplace.json"),
             &home.join(".codex").join("skills"),
-            &home.join(".claude").join("skills"),
-            &home.join(".claude/commands").join("refresh.md"),
-            &home.join(".claude.json"),
             bootstrap_output_dir,
-            false,
             true,
-            true,
-            true,
-            true,
-            false,
-            false,
             true,
             !skip_default_bootstrap,
         )?;
@@ -1108,29 +616,15 @@ fn install_skill_tool(
         }));
     }
 
-    let target = tool_skill_path(home, tool)?;
-    let changed = ensure_home_skills_link(repo_root, &target)?;
-    Ok(json!({
-        "status": if changed { "linked" } else { "already-linked" },
-        "changed": changed,
-        "target": target.to_string_lossy(),
-        "source": shared_skills_source(repo_root)?.to_string_lossy(),
-    }))
+    Err(format!("Unsupported tool: {tool}"))
 }
 
 fn install_native_integration_changed(payload: &Value) -> bool {
     [
         "created_config",
         "codex_hooks_feature_changed",
-        "browser_mcp_changed",
-        "framework_mcp_changed",
         "tui_status_line_changed",
-        "personal_plugin_changed",
-        "personal_marketplace_changed",
         "home_codex_skills_link_changed",
-        "home_claude_skills_link_changed",
-        "home_claude_refresh_changed",
-        "home_claude_mcp_config_changed",
     ]
     .iter()
     .any(|key| payload.get(*key).and_then(Value::as_bool) == Some(true))
@@ -1157,13 +651,7 @@ fn remove_skill_tool(repo_root: &Path, home: &Path, tool: &str) -> Result<Value,
         }));
     }
 
-    let target = tool_skill_path(home, tool)?;
-    let changed = retire_home_skills_link(repo_root, &target)?;
-    Ok(json!({
-        "status": if changed { "removed-link" } else { "not-installed-or-unmanaged" },
-        "changed": changed,
-        "target": target.to_string_lossy(),
-    }))
+    Err(format!("Unsupported tool: {tool}"))
 }
 
 fn skill_tool_status_with_bootstrap(
@@ -1176,21 +664,7 @@ fn skill_tool_status_with_bootstrap(
         return codex_install_status_with_bootstrap(repo_root, home, bootstrap_output_dir);
     }
 
-    let target = tool_skill_path(home, tool)?;
-    let source = shared_skills_source(repo_root)?;
-    let link_ok = skills_link_matches_source(&target, &source)?;
-    Ok(json!({
-        "ready": link_ok,
-        "target": target.to_string_lossy(),
-        "source": source.to_string_lossy(),
-        "status": if link_ok {
-            "linked"
-        } else if target.exists() || symlink_exists(&target) {
-            "unmanaged"
-        } else {
-            "not-installed"
-        },
-    }))
+    Err(format!("Unsupported tool: {tool}"))
 }
 
 fn codex_install_status_with_bootstrap(
@@ -1199,11 +673,7 @@ fn codex_install_status_with_bootstrap(
     bootstrap_output_dir: Option<&Path>,
 ) -> Result<Value, String> {
     let config_path = home.join(".codex").join("config.toml");
-    let plugin_root = home.join(".codex/plugins").join("skill-framework-native");
-    let marketplace_path = home.join(".agents/plugins").join("marketplace.json");
     let codex_skills_path = home.join(".codex").join("skills");
-    let claude_skills_path = home.join(".claude").join("skills");
-    let claude_mcp_config_path = home.join(".claude.json");
     let bootstrap_path = bootstrap_output_dir
         .map(default_bootstrap_mirror_path)
         .unwrap_or_else(|| {
@@ -1213,25 +683,9 @@ fn codex_install_status_with_bootstrap(
 
     let config_ok = codex_config_matches_contract(&config_path)?;
     let bootstrap_ok = validate_default_bootstrap(&bootstrap_path, repo_root)?;
-    let plugin_ok = plugin_root.join(".codex-plugin/plugin.json").is_file();
-    let plugin_skills_ok = skills_link_matches_source(&plugin_root.join("skills"), &source)?;
-    let plugin_mcp_ok = validate_personal_plugin_mcp(&plugin_root.join(".mcp.json"), repo_root)?;
-    let marketplace_ok = validate_marketplace_plugin(&marketplace_path, "skill-framework-native")?;
-    let codex_skills_ok = skills_link_matches_source(&codex_skills_path, &source)?;
-    let claude_skills_ok = !path_or_symlink_exists(&claude_skills_path)
-        || skills_link_matches_source(&claude_skills_path, &source)?;
-    let claude_mcp_ok = validate_home_claude_mcp(&claude_mcp_config_path, repo_root)?;
+    let codex_skills_ok = skills_stub_dir_matches_source(&codex_skills_path, &source)?;
     let overlay_ok = retired_overlay_ok(&repo_root.join(RETIRED_CODEX_MODEL_INSTRUCTIONS_PATH))?;
-    let ready = config_ok
-        && bootstrap_ok
-        && plugin_ok
-        && plugin_skills_ok
-        && plugin_mcp_ok
-        && marketplace_ok
-        && codex_skills_ok
-        && claude_skills_ok
-        && claude_mcp_ok
-        && overlay_ok;
+    let ready = config_ok && bootstrap_ok && codex_skills_ok && overlay_ok;
 
     Ok(json!({
         "ready": ready,
@@ -1241,13 +695,7 @@ fn codex_install_status_with_bootstrap(
         "checks": {
             "config": config_ok,
             "bootstrap": bootstrap_ok,
-            "plugin": plugin_ok,
-            "plugin_skills": plugin_skills_ok,
-            "plugin_mcp": plugin_mcp_ok,
-            "marketplace": marketplace_ok,
             "codex_skills": codex_skills_ok,
-            "claude_skills": claude_skills_ok,
-            "claude_mcp": claude_mcp_ok,
             "overlay": overlay_ok,
         },
     }))
@@ -1257,9 +705,7 @@ fn codex_config_matches_contract(config_path: &Path) -> Result<bool, String> {
     let Some(content) = read_text_if_exists(config_path)? else {
         return Ok(false);
     };
-    Ok(content.contains("[mcp_servers.framework-mcp]")
-        && content.contains("[tui]")
-        && content.lines().any(is_status_line))
+    Ok(content.contains("[tui]") && content.lines().any(is_status_line))
 }
 
 fn retired_overlay_ok(path: &Path) -> Result<bool, String> {
@@ -1269,33 +715,37 @@ fn retired_overlay_ok(path: &Path) -> Result<bool, String> {
     Ok(!content.contains(FRAMEWORK_START_MARKER))
 }
 
-fn tool_skill_path(home: &Path, tool: &str) -> Result<PathBuf, String> {
-    match tool {
-        "codex" => Ok(home.join(".codex").join("skills")),
-        "agents" => Ok(home.join(".agents").join("skills")),
-        "gemini" => Ok(home.join(".gemini").join("skills")),
-        other => Err(format!("Unsupported tool: {other}")),
-    }
-}
-
 fn shared_skills_source(repo_root: &Path) -> Result<PathBuf, String> {
     Ok(repo_root.join(skill_bridge_source_rel(repo_root)?))
 }
 
-fn skills_link_matches_source(target_path: &Path, expected_source: &Path) -> Result<bool, String> {
+fn skills_stub_dir_matches_source(
+    target_path: &Path,
+    expected_source: &Path,
+) -> Result<bool, String> {
     let metadata = match fs::symlink_metadata(target_path) {
         Ok(metadata) => metadata,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
         Err(err) => return Err(err.to_string()),
     };
-    if !metadata.file_type().is_symlink() {
+    if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
         return Ok(false);
     }
-    let resolved_target = target_path.canonicalize().map_err(|err| err.to_string())?;
-    let resolved_source = expected_source
-        .canonicalize()
-        .map_err(|err| err.to_string())?;
-    Ok(resolved_target == resolved_source)
+    for entry in fs::read_dir(target_path).map_err(|err| err.to_string())? {
+        let entry = entry.map_err(|err| err.to_string())?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !CODEX_STUB_SKILLS.contains(&name.as_str()) {
+            return Ok(false);
+        }
+    }
+    for skill in CODEX_STUB_SKILLS {
+        let source = expected_source.join(skill).join("SKILL.md");
+        let target = target_path.join(skill).join("SKILL.md");
+        if fs::read(&source).ok() != fs::read(&target).ok() {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 fn count_top_level_skills(skills_root: &Path) -> Result<usize, String> {
@@ -1598,9 +1048,9 @@ fn run_memory_automation(
     let consolidation = run_router_rs_json(
         &repo_root,
         &[
-            "--claude-hook-command".to_string(),
+            "--codex-hook-command".to_string(),
             "session-end".to_string(),
-            "--claude-hook-max-lines".to_string(),
+            "--framework-max-lines".to_string(),
             "4".to_string(),
         ],
     )?;
@@ -2287,36 +1737,8 @@ fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
-fn build_framework_server_block(repo_root: &Path) -> String {
-    format!(
-        "[mcp_servers.framework-mcp]\ncommand = \"{}\"\nargs = [\"{}\", \"--framework-mcp-stdio\", \"--repo-root\", \"{}\"]\ncwd = \"{}\"",
-        router_rs_launcher_command(repo_root).to_string_lossy(),
-        router_rs_launcher_arg(repo_root),
-        repo_root.to_string_lossy(),
-        repo_root.to_string_lossy(),
-    )
-}
-
-fn build_browser_server_block(repo_root: &Path) -> String {
-    format!(
-        "[mcp_servers.browser-mcp]\ncommand = \"{}\"\nargs = [\"{}\", \"--browser-mcp-stdio\", \"--repo-root\", \"{}\"]\ncwd = \"{}\"",
-        router_rs_launcher_command(repo_root).to_string_lossy(),
-        router_rs_launcher_arg(repo_root),
-        repo_root.to_string_lossy(),
-        repo_root.to_string_lossy(),
-    )
-}
-
 fn router_rs_launcher_command(repo_root: &Path) -> PathBuf {
     repo_root.join("scripts/router-rs/run_router_rs.sh")
-}
-
-fn router_rs_launcher_arg(repo_root: &Path) -> String {
-    repo_root
-        .join("scripts/router-rs")
-        .join("Cargo.toml")
-        .to_string_lossy()
-        .into_owned()
 }
 
 fn ensure_codex_hooks_feature(config_path: &Path) -> Result<bool, String> {
@@ -2382,25 +1804,6 @@ fn find_named_block_bounds(content: &str, marker: &str) -> Option<(usize, usize)
         offset += line.len();
     }
     start.map(|value| (value, content.len()))
-}
-
-fn install_mcp_block(config_path: &Path, marker: &str, block: &str) -> Result<bool, String> {
-    let content = read_text_if_exists(config_path)?;
-    let existing = content.unwrap_or_default();
-    if let Some((start, end)) = find_named_block_bounds(&existing, marker) {
-        let current_block = existing[start..end].trim_end_matches('\n');
-        if current_block == block {
-            return Ok(false);
-        }
-        let updated = format!("{}{}\n{}", &existing[..start], block, &existing[end..]);
-        return write_text_if_changed(config_path, &updated);
-    }
-    let updated = if existing.trim().is_empty() {
-        format!("{block}\n")
-    } else {
-        format!("{}\n\n{block}\n", existing.trim_end())
-    };
-    write_text_if_changed(config_path, &updated)
 }
 
 fn ensure_tui_status_line(config_path: &Path) -> Result<bool, String> {
@@ -2471,119 +1874,62 @@ fn format_status_line() -> String {
     format!("status_line = [{items}]")
 }
 
-fn sync_directory(source: &Path, destination: &Path, skip_names: &[&str]) -> Result<bool, String> {
-    if !source.is_dir() {
-        return Err(format!(
-            "Plugin source directory not found: {}",
-            source.to_string_lossy()
-        ));
+fn ensure_stub_skill_directory(source: &Path, target_path: &Path) -> Result<bool, String> {
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
-    fs::create_dir_all(destination).map_err(|err| err.to_string())?;
+
     let mut changed = false;
-
-    let source_children = read_dir_map(source)?;
-    let destination_children = read_dir_map(destination)?;
-
-    for (name, stale_path) in destination_children {
-        if skip_names.contains(&name.as_str()) {
-            continue;
-        }
-        if source_children.contains_key(&name) {
-            continue;
-        }
-        remove_path(&stale_path).map_err(|err| err.to_string())?;
+    if symlink_exists(target_path) {
+        remove_path(target_path).map_err(|err| err.to_string())?;
         changed = true;
+    } else if target_path.exists() {
+        let metadata = fs::symlink_metadata(target_path).map_err(|err| err.to_string())?;
+        if !metadata.file_type().is_dir() {
+            let backup_path = target_path.with_file_name(format!(
+                "{}.bak",
+                target_path
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("skills")
+            ));
+            if backup_path.exists() || symlink_exists(&backup_path) {
+                remove_path(&backup_path).map_err(|err| err.to_string())?;
+            }
+            fs::rename(target_path, &backup_path).map_err(|err| err.to_string())?;
+            changed = true;
+        }
     }
 
-    for (name, source_path) in source_children {
-        if skip_names.contains(&name.as_str()) {
-            continue;
+    fs::create_dir_all(target_path).map_err(|err| err.to_string())?;
+    for entry in fs::read_dir(target_path).map_err(|err| err.to_string())? {
+        let entry = entry.map_err(|err| err.to_string())?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !CODEX_STUB_SKILLS.contains(&name.as_str()) {
+            remove_path(&entry.path()).map_err(|err| err.to_string())?;
+            changed = true;
         }
-        let destination_path = destination.join(name);
-        if source_path.is_dir() {
-            if destination_path.exists() && !destination_path.is_dir() {
-                remove_path(&destination_path).map_err(|err| err.to_string())?;
-                changed = true;
-            }
-            changed = sync_directory(&source_path, &destination_path, skip_names)? || changed;
-            continue;
-        }
-        let source_bytes = fs::read(&source_path).map_err(|err| err.to_string())?;
-        let destination_bytes = fs::read(&destination_path).ok();
-        if destination_bytes.as_ref() == Some(&source_bytes) {
-            continue;
-        }
-        if let Some(parent) = destination_path.parent() {
+    }
+
+    for skill in CODEX_STUB_SKILLS {
+        let source_file = source.join(skill).join("SKILL.md");
+        let target_file = target_path.join(skill).join("SKILL.md");
+        if let Some(parent) = target_file.parent() {
             fs::create_dir_all(parent).map_err(|err| err.to_string())?;
         }
-        fs::copy(&source_path, &destination_path).map_err(|err| err.to_string())?;
-        changed = true;
+        let desired = fs::read(&source_file).map_err(|err| err.to_string())?;
+        if fs::read(&target_file).ok().as_deref() != Some(desired.as_slice()) {
+            fs::write(&target_file, desired).map_err(|err| err.to_string())?;
+            changed = true;
+        }
     }
 
     Ok(changed)
 }
 
-fn read_dir_map(root: &Path) -> Result<BTreeMap<String, PathBuf>, String> {
-    let mut entries = BTreeMap::new();
-    for entry in fs::read_dir(root).map_err(|err| err.to_string())? {
-        let entry = entry.map_err(|err| err.to_string())?;
-        entries.insert(
-            entry.file_name().to_string_lossy().into_owned(),
-            entry.path(),
-        );
-    }
-    Ok(entries)
-}
-
-fn ensure_directory_symlink(source: &Path, target_path: &Path) -> Result<bool, String> {
-    if let Some(parent) = target_path.parent() {
-        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-    }
-
-    if symlink_exists(target_path) {
-        let current_target = fs::read_link(target_path).map_err(|err| err.to_string())?;
-        let resolved_target = if current_target.is_absolute() {
-            current_target
-        } else {
-            target_path
-                .parent()
-                .unwrap_or_else(|| Path::new("/"))
-                .join(current_target)
-        };
-        if resolved_target == source {
-            return Ok(false);
-        }
-        remove_path(target_path).map_err(|err| err.to_string())?;
-    } else if target_path.exists() {
-        let backup_path = target_path.with_file_name(format!(
-            "{}.bak",
-            target_path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or("skills")
-        ));
-        if backup_path.exists() || symlink_exists(&backup_path) {
-            remove_path(&backup_path).map_err(|err| err.to_string())?;
-        }
-        fs::rename(target_path, &backup_path).map_err(|err| err.to_string())?;
-    }
-
-    #[cfg(unix)]
-    {
-        unix_fs::symlink(source, target_path).map_err(|err| err.to_string())?;
-        Ok(true)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = source;
-        let _ = target_path;
-        Err("home codex skills link requires unix symlink support".to_string())
-    }
-}
-
 fn ensure_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool, String> {
     let source = repo_root.join(skill_bridge_source_rel(repo_root)?);
-    ensure_directory_symlink(&source, target_path)
+    ensure_stub_skill_directory(&source, target_path)
 }
 
 fn retire_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool, String> {
@@ -2605,254 +1951,6 @@ fn retire_home_skills_link(repo_root: &Path, target_path: &Path) -> Result<bool,
     }
     remove_path(target_path).map_err(|err| err.to_string())?;
     Ok(true)
-}
-
-fn ensure_home_claude_refresh_command(content: &str, command_path: &Path) -> Result<bool, String> {
-    write_text_if_changed(command_path, content)
-}
-
-fn retire_home_claude_refresh_command(content: &str, command_path: &Path) -> Result<bool, String> {
-    let Some(existing) = read_text_if_exists(command_path)? else {
-        return Ok(false);
-    };
-    if existing != content {
-        return Ok(false);
-    }
-    remove_path(command_path).map_err(|err| err.to_string())?;
-    Ok(true)
-}
-
-fn ensure_home_claude_mcp_servers(repo_root: &Path, config_path: &Path) -> Result<bool, String> {
-    let mut payload = read_json_map_if_exists(config_path)?.unwrap_or_default();
-    let mcp_value = payload
-        .remove("mcpServers")
-        .unwrap_or_else(|| Value::Object(Map::new()));
-    let mut mcp_servers = match mcp_value {
-        Value::Object(map) => map,
-        _ => Map::new(),
-    };
-
-    for server_name in DEFAULT_SHARED_PROJECT_MCP_SERVERS {
-        mcp_servers.insert(
-            server_name.to_string(),
-            managed_home_claude_mcp_server(repo_root, server_name)?,
-        );
-    }
-
-    payload.insert("mcpServers".to_string(), Value::Object(mcp_servers));
-    write_json_if_changed(config_path, &Value::Object(payload))
-}
-
-fn validate_marketplace_plugin(marketplace_path: &Path, plugin_name: &str) -> Result<bool, String> {
-    let path = normalize_path(marketplace_path)?;
-    let Some(Value::Object(payload)) = read_json_value_if_exists(&path)? else {
-        return Ok(false);
-    };
-    let Some(Value::Array(plugins)) = payload.get("plugins") else {
-        return Ok(false);
-    };
-    Ok(plugins.iter().any(|plugin| {
-        plugin
-            .get("name")
-            .and_then(Value::as_str)
-            .is_some_and(|name| name == plugin_name)
-    }))
-}
-
-fn validate_home_claude_mcp(config_path: &Path, repo_root: &Path) -> Result<bool, String> {
-    let path = normalize_path(config_path)?;
-    let repo_root = normalize_path(repo_root)?;
-    let Some(Value::Object(payload)) = read_json_value_if_exists(&path)? else {
-        return Ok(false);
-    };
-    let Some(Value::Object(servers)) = payload.get("mcpServers") else {
-        return Ok(false);
-    };
-
-    let mut expected = Map::new();
-    for server_name in DEFAULT_SHARED_PROJECT_MCP_SERVERS {
-        expected.insert(
-            server_name.to_string(),
-            managed_home_claude_mcp_server(&repo_root, server_name)?,
-        );
-    }
-    Ok(servers == &expected)
-}
-
-fn validate_personal_plugin_mcp(config_path: &Path, repo_root: &Path) -> Result<bool, String> {
-    let path = normalize_path(config_path)?;
-    let repo_root = normalize_path(repo_root)?;
-    let Some(payload) = read_json_value_if_exists(&path)? else {
-        return Ok(false);
-    };
-    Ok(payload == build_personal_plugin_mcp_payload(&repo_root))
-}
-
-fn managed_home_claude_mcp_server(repo_root: &Path, server_name: &str) -> Result<Value, String> {
-    let repo_root_value = repo_root.to_string_lossy().into_owned();
-    match server_name {
-        "framework-mcp" => Ok(json!({
-            "type": "stdio",
-            "command": router_rs_launcher_command(repo_root).to_string_lossy(),
-            "args": [router_rs_launcher_arg(repo_root), "--framework-mcp-stdio", "--repo-root", repo_root_value],
-            "cwd": repo_root_value,
-            "env": {},
-        })),
-        other => Err(format!(
-            "Unsupported shared project MCP server for Claude global sync: {other}"
-        )),
-    }
-}
-
-fn build_personal_plugin_mcp_payload(repo_root: &Path) -> Value {
-    let repo_root_value = repo_root.to_string_lossy().into_owned();
-    json!({
-        "mcpServers": {
-            "framework-mcp": {
-                "command": router_rs_launcher_command(repo_root).to_string_lossy(),
-                "args": [router_rs_launcher_arg(repo_root), "--framework-mcp-stdio", "--repo-root", repo_root_value],
-                "cwd": repo_root_value,
-            },
-        }
-    })
-}
-
-fn ensure_personal_plugin_live_projection(
-    repo_root: &Path,
-    plugin_source: &Path,
-    plugin_root: &Path,
-) -> Result<bool, String> {
-    let mut changed = sync_directory(
-        plugin_source,
-        plugin_root,
-        &PERSONAL_PLUGIN_LIVE_PROJECTION_EXCLUDES,
-    )?;
-    changed = ensure_directory_symlink(
-        &repo_root.join(skill_bridge_source_rel(repo_root)?),
-        &plugin_root.join("skills"),
-    )? || changed;
-    changed = write_json_if_changed(
-        &plugin_root.join(".mcp.json"),
-        &build_personal_plugin_mcp_payload(repo_root),
-    )? || changed;
-    Ok(changed)
-}
-
-fn install_personal_marketplace(
-    marketplace_path: &Path,
-    plugin_root: &Path,
-    plugin_name: &str,
-    plugin_category: &str,
-) -> Result<bool, String> {
-    let existing = read_json_map_if_exists(marketplace_path)?;
-    let relative_base = marketplace_root(marketplace_path)?;
-    let payload = build_personal_marketplace_payload(
-        plugin_root,
-        &relative_base,
-        existing,
-        plugin_name,
-        plugin_category,
-    )?;
-    write_json_if_changed(marketplace_path, &Value::Object(payload))
-}
-
-fn marketplace_root(path: &Path) -> Result<PathBuf, String> {
-    let absolute = normalize_path(path)?;
-    absolute
-        .parent()
-        .and_then(Path::parent)
-        .and_then(Path::parent)
-        .map(Path::to_path_buf)
-        .ok_or_else(|| {
-            format!(
-                "Could not derive marketplace root from {}",
-                absolute.to_string_lossy()
-            )
-        })
-}
-
-fn build_personal_marketplace_payload(
-    plugin_root: &Path,
-    marketplace_root: &Path,
-    existing: Option<Map<String, Value>>,
-    plugin_name: &str,
-    plugin_category: &str,
-) -> Result<Map<String, Value>, String> {
-    let mut payload = existing.unwrap_or_default();
-    let plugin_relative = plugin_root
-        .strip_prefix(marketplace_root)
-        .map_err(|_| {
-            format!(
-                "Plugin root {} is not under marketplace root {}",
-                plugin_root.to_string_lossy(),
-                marketplace_root.to_string_lossy()
-            )
-        })?
-        .to_string_lossy()
-        .into_owned();
-    let plugin_path = format!("./{plugin_relative}");
-
-    payload
-        .entry("name".to_string())
-        .or_insert_with(|| Value::String("skill-personal-marketplace".to_string()));
-
-    let interface_value = payload
-        .remove("interface")
-        .unwrap_or_else(|| Value::Object(Map::new()));
-    let mut interface = match interface_value {
-        Value::Object(map) => map,
-        _ => Map::new(),
-    };
-    if !interface.contains_key("displayName") {
-        interface.insert(
-            "displayName".to_string(),
-            Value::String("Skill Personal Marketplace".to_string()),
-        );
-    }
-    payload.insert("interface".to_string(), Value::Object(interface));
-
-    let plugins_value = payload
-        .remove("plugins")
-        .unwrap_or_else(|| Value::Array(Vec::new()));
-    let existing_plugins = match plugins_value {
-        Value::Array(items) => items,
-        _ => Vec::new(),
-    };
-
-    let mut updated_plugins = Vec::new();
-    let mut replaced = false;
-    for row in existing_plugins {
-        let Value::Object(mut row_map) = row else {
-            continue;
-        };
-        if row_map.get("name").and_then(Value::as_str) != Some(plugin_name) {
-            updated_plugins.push(Value::Object(row_map));
-            continue;
-        }
-        replaced = true;
-        let category = row_map
-            .remove("category")
-            .unwrap_or_else(|| Value::String(plugin_category.to_string()));
-        updated_plugins.push(plugin_marketplace_row(plugin_name, &plugin_path, category));
-    }
-    if !replaced {
-        updated_plugins.push(plugin_marketplace_row(
-            plugin_name,
-            &plugin_path,
-            Value::String(plugin_category.to_string()),
-        ));
-    }
-    payload.insert("plugins".to_string(), Value::Array(updated_plugins));
-    Ok(payload)
-}
-
-fn plugin_marketplace_row(plugin_name: &str, plugin_path: &str, category: Value) -> Value {
-    json!({
-        "name": plugin_name,
-        "source": {"source": "local", "path": plugin_path},
-        "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
-        "category": category,
-    })
 }
 
 fn retire_overlay(path: &Path) -> Result<Value, String> {
@@ -2937,26 +2035,6 @@ fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
     write_text_if_changed(path, &formatted)
 }
 
-fn read_json_map_if_exists(path: &Path) -> Result<Option<Map<String, Value>>, String> {
-    let Some(content) = read_text_if_exists(path)? else {
-        return Ok(None);
-    };
-    let parsed: Value = serde_json::from_str(&content).map_err(|err| err.to_string())?;
-    match parsed {
-        Value::Object(map) => Ok(Some(map)),
-        _ => Ok(None),
-    }
-}
-
-fn read_json_value_if_exists(path: &Path) -> Result<Option<Value>, String> {
-    let Some(content) = read_text_if_exists(path)? else {
-        return Ok(None);
-    };
-    serde_json::from_str(&content)
-        .map(Some)
-        .map_err(|err| err.to_string())
-}
-
 fn remove_path(path: &Path) -> io::Result<()> {
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() {
@@ -2970,8 +2048,4 @@ fn symlink_exists(path: &Path) -> bool {
     fs::symlink_metadata(path)
         .map(|metadata| metadata.file_type().is_symlink())
         .unwrap_or(false)
-}
-
-fn path_or_symlink_exists(path: &Path) -> bool {
-    path.exists() || symlink_exists(path)
 }

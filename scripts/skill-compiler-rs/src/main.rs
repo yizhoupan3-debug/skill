@@ -84,7 +84,7 @@ const INDEX_COMMON_LANES: [(&str, &str); 12] = [
 const INDEX_OVERLAY_SHORTCUTS: [(&str, &str); 3] = [
     ("需要审查问题清单", "code-review"),
     ("需要统一编码规范", "coding-standards"),
-    ("需要多轮优化直到收敛", "iterative-optimizer"),
+    ("需要多轮优化直到收敛", "execution-audit"),
 ];
 
 fn main() -> Result<(), String> {
@@ -1150,8 +1150,8 @@ mod tests {
     #[test]
     fn compiler_manifest_keeps_only_highest_precedence_duplicate_slug() {
         let skills_root = temp_skills_root("duplicate-slug");
-        write_skill(&skills_root.join(".system").join("imagegen"), "imagegen");
-        write_skill(&skills_root.join("imagegen"), "imagegen");
+        write_skill(&skills_root.join(".system").join("skill-a"), "skill-a");
+        write_skill(&skills_root.join("skill-a"), "skill-a");
 
         let docs = load_skill_documents(&skills_root).expect("load skill docs");
         let source_manifest = json!({
@@ -1168,7 +1168,7 @@ mod tests {
             build_registry_and_manifest(&docs, &entries, &HashMap::new()).expect("manifest");
 
         assert_eq!(manifest["skills"].as_array().map(Vec::len), Some(1));
-        assert_eq!(manifest["skills"][0][0], json!("imagegen"));
+        assert_eq!(manifest["skills"][0][0], json!("skill-a"));
         assert_eq!(manifest["skills"][0][9], json!("project"));
         assert_eq!(manifest["skills"][0][10], json!(3));
     }

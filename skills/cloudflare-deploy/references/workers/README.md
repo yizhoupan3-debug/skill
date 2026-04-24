@@ -79,30 +79,6 @@ async tail(events: TraceItem[], env: Env, ctx: ExecutionContext): Promise<void>
 **Examples**: https://developers.cloudflare.com/workers/examples/  
 **Runtime APIs**: https://developers.cloudflare.com/workers/runtime-apis/
 
-## In This Reference
+## Local Scope
 
-- [Configuration](./configuration.md) - wrangler.jsonc setup, bindings, environments
-- [API](./api.md) - Runtime APIs, bindings, execution context
-- [Patterns](./patterns.md) - Common workflows, testing, optimization
-- [Frameworks](./frameworks.md) - Hono, routing, validation
-- [Gotchas](./gotchas.md) - Common issues, limits, troubleshooting
-
-## Reading Order
-
-| Task | Start With | Then Read |
-|------|------------|-----------|
-| First Worker | README → Configuration → API | Patterns |
-| Add framework | Frameworks | Configuration (bindings) |
-| Add storage/bindings | Configuration → API (binding usage) | See Also links |
-| Debug issues | Gotchas | API (specific binding docs) |
-| Production optimization | Patterns | API (caching, streaming) |
-| Type safety | Configuration (TypeScript) | Frameworks (Hono typing) |
-
-## See Also
-
-- [KV](../kv/README.md) - Key-value storage
-- [D1](../d1/README.md) - SQL database
-- [R2](../r2/README.md) - Object storage
-- [Durable Objects](../durable-objects/README.md) - Stateful coordination
-- [Queues](../queues/README.md) - Message queues
-- [Wrangler](../wrangler/README.md) - CLI tool reference
+This is a quick card only. Use official Cloudflare docs for framework guides, current runtime APIs, limits, and troubleshooting.
