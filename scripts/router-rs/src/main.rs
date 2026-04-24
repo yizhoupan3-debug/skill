@@ -7465,6 +7465,48 @@ fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[String
     })
 }
 
+fn has_paper_review_judgment_context(query_text: &str, query_token_list: &[String]) -> bool {
+    if !has_paper_context(query_text, query_token_list) {
+        return false;
+    }
+    [
+        "paper review",
+        "review paper",
+        "审稿",
+        "审一下",
+        "严审",
+        "投稿前",
+        "能不能投",
+        "投稿判断",
+        "reviewer-style",
+        "reviewer style",
+        "外部调研",
+        "查文献后审",
+    ]
+    .iter()
+    .any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
+fn has_paper_figure_layout_review_context(query_text: &str, query_token_list: &[String]) -> bool {
+    if !has_paper_context(query_text, query_token_list) {
+        return false;
+    }
+    let visual_markers = [
+        "图表", "排版", "figure", "figures", "table", "tables", "layout",
+    ];
+    let review_markers = ["只看", "审", "review", "检查", "别检查别的维度"];
+    visual_markers.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    }) && review_markers.iter().any(|marker| {
+        query_text.contains(&normalize_text(marker))
+            || text_matches_phrase(query_token_list, marker)
+    })
+}
+
 fn has_paper_ref_first_workflow_context(query_text: &str, query_token_list: &[String]) -> bool {
     if !has_paper_context(query_text, query_token_list) {
         return false;
@@ -7712,6 +7754,18 @@ fn score_route_candidate<'a>(
             ],
         };
     }
+    if record.slug == "paper-logic"
+        && has_paper_figure_layout_review_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: figure/layout-only paper review should stay on reviewer/visual lanes, not claim-evidence logic."
+                    .to_string(),
+            ],
+        };
+    }
     if record.slug == "literature-synthesis"
         && has_paper_ref_first_workflow_context(query_text, query_token_list)
     {
@@ -7785,6 +7839,18 @@ fn score_route_candidate<'a>(
             ],
         };
     }
+    if record.slug == "information-retrieval"
+        && has_paper_review_judgment_context(query_text, query_token_list)
+    {
+        return RouteCandidate {
+            record,
+            score: 0.0,
+            reasons: vec![
+                "Suppressed: external research inside paper-review judgment should stay on paper-workbench/paper-reviewer."
+                    .to_string(),
+            ],
+        };
+    }
     if record.slug == "architect-review"
         && has_external_retrieval_context(query_text, query_token_list)
         && !query_text.contains("架构")
@@ -7823,6 +7889,24 @@ fn score_route_candidate<'a>(
         score += 42.0;
         reasons.push(
             "Paper-workbench boost applied: target-journal ref-first manuscript workflow detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "paper-workbench"
+        && has_paper_review_judgment_context(query_text, query_token_list)
+    {
+        score += 36.0;
+        reasons.push(
+            "Paper-workbench boost applied: paper review judgment with optional external calibration detected."
+                .to_string(),
+        );
+    }
+    if record.slug == "paper-reviewer"
+        && has_paper_figure_layout_review_context(query_text, query_token_list)
+    {
+        score += 38.0;
+        reasons.push(
+            "Paper-reviewer boost applied: figure/layout-only paper review slice detected."
                 .to_string(),
         );
     }

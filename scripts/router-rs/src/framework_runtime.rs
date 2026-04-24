@@ -3387,6 +3387,8 @@ pub fn build_framework_memory_policy_envelope(payload: Value) -> Result<Value, S
             "ok": true,
             "policy_owner": "rust",
             "policy_kind": "deterministic-memory-extraction",
+            "source_count": sources.len(),
+            "fact_count": extracted.len(),
             "pattern_set": FACT_EXTRACTION_PATTERNS
                 .iter()
                 .map(|(name, pattern)| json!({"name": name, "pattern": pattern}))
@@ -3615,6 +3617,11 @@ fn persist_memory_policy_items_if_requested(
         .unwrap_or("workspace");
     fs::create_dir_all(&memory_root)
         .map_err(|err| format!("create memory policy root failed: {err}"))?;
+    let stable_journal = payload
+        .get("stable_journal")
+        .or_else(|| payload.get("write_stable_journal"))
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
     let sqlite_path = memory_root.join("memory.sqlite3");
     let conn = Connection::open(&sqlite_path)
         .map_err(|err| format!("open memory policy sqlite failed: {err}"))?;
@@ -3622,6 +3629,7 @@ fn persist_memory_policy_items_if_requested(
     let now = current_local_timestamp();
     let mut item_ids = Vec::new();
     let mut changed_count = 0usize;
+    let mut journal_lines = Vec::new();
     for item in items {
         let item_id = memory_policy_item_id(workspace, &item.fact);
         let evidence_json = serde_json::to_string(&json!([{
@@ -3664,16 +3672,71 @@ fn persist_memory_policy_items_if_requested(
             )
             .map_err(|err| format!("persist memory policy item failed: {err}"))?;
         item_ids.push(item_id);
+        journal_lines.push(format!(
+            "- [{}] {}",
+            memory_category_for_pattern(&item.source_pattern),
+            item.fact
+        ));
     }
+    let journal_path = if stable_journal && !items.is_empty() {
+        let path = memory_root.join("decisions.md");
+        append_memory_policy_journal(&path, &now, &journal_lines)?;
+        Value::String(path.display().to_string())
+    } else {
+        Value::Null
+    };
     Ok(json!({
         "requested": true,
         "persisted": true,
         "memory_root": memory_root.display().to_string(),
         "sqlite_path": sqlite_path.display().to_string(),
+        "stable_journal_path": journal_path,
         "item_count": items.len(),
         "changed_count": changed_count,
         "item_ids": item_ids,
     }))
+}
+
+fn append_memory_policy_journal(
+    path: &Path,
+    timestamp: &str,
+    lines: &[String],
+) -> Result<(), String> {
+    if lines.is_empty() {
+        return Ok(());
+    }
+    let mut existing = read_text_if_exists(path);
+    if existing.trim().is_empty() {
+        existing = "# decisions\n".to_string();
+    }
+    let existing_keys = existing
+        .lines()
+        .filter_map(|line| {
+            line.split_once(']')
+                .map(|(_, fact)| fact.trim().to_lowercase())
+        })
+        .collect::<HashSet<_>>();
+    let new_lines = lines
+        .iter()
+        .filter(|line| {
+            line.split_once(']')
+                .map(|(_, fact)| !existing_keys.contains(&fact.trim().to_lowercase()))
+                .unwrap_or(true)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if new_lines.is_empty() {
+        return Ok(());
+    }
+    let mut output = existing.trim_end().to_string();
+    if !output.contains("## Rust memory policy facts") {
+        output.push_str("\n\n## Rust memory policy facts\n");
+    }
+    output.push_str(&format!("\n### {timestamp}\n"));
+    output.push_str(&new_lines.join("\n"));
+    output.push('\n');
+    write_text_if_changed(path, &output)?;
+    Ok(())
 }
 
 fn ensure_memory_items_table(conn: &Connection) -> Result<(), String> {

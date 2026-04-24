@@ -25,6 +25,7 @@ Rust owns the default runtime and contract path.
 - `router-rs --framework-runtime-snapshot-json`, `--framework-contract-summary-json`, `--framework-memory-recall-json`, `--framework-session-artifact-write-json`, `--framework-memory-policy-json`, and `--framework-prompt-compression-json` own framework runtime read/write/policy surfaces.
 - `router-rs --sync-host-entrypoints-json` owns repo host-entrypoint materialization.
 - `router-rs --host-integration ...` owns native install, bootstrap, skill install, memory automation, and related host integration flows.
+- Rust memory policy persistence writes SQLite rows and, by default, appends deduped stable facts to `decisions.md`; `stable_journal: false` is the explicit opt-out.
 
 Retired surfaces stay retired:
 
@@ -44,6 +45,7 @@ Retired surfaces stay retired:
 - Compatibility live fallback request surface has been removed; historical fallback metadata may appear only as retired legacy evidence.
 - Runtime control plane publishes Rust-owned authority for `router`, `state`, `trace`, `memory`, and `background`.
 - `framework_runtime/` Python package is retired; framework snapshot, contract summary, memory recall, session artifact writing, prompt/memory policy, and framework MCP use `router-rs` surfaces.
+- Memory policy extraction reports source/fact counts and can persist to both `memory.sqlite3` and the stable `decisions.md` journal without introducing a Python writer.
 - Host entrypoint sync and native integration are Rust-owned through `router-rs`.
 - Runtime traces expose resumable `seq` / `cursor` metadata, transport binding artifacts, handoff descriptors, and process-external attach resolution.
 - Runtime storage exposes backend-family capability discovery, digest verification, and fail-closed parity between store/checkpointer/trace/state families.
@@ -69,7 +71,7 @@ Retired surfaces stay retired:
 
 ### 下一 safe slice
 
-- Harden attach/handoff/binding/replay semantics so every consumer uses the same descriptor contract.
+- Harden remote-capable attach/handoff/binding/replay semantics so every consumer uses the same descriptor contract.
 - Deepen backend-family compaction and snapshot-delta behavior without changing logical state meaning.
 - Expand sandbox lifecycle enforcement without claiming a remote sandbox backend before it exists.
 - Keep host integration Rust-only and fail if generated entrypoints drift.

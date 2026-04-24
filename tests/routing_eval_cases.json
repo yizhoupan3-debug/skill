@@ -176,7 +176,7 @@
       "focus_skill": "paper-workbench",
       "expected_owner": "paper-workbench",
       "expected_overlay": null,
-      "forbidden_owners": ["literature-synthesis", "paper-writing", "architect-review"],
+      "forbidden_owners": ["literature-synthesis", "paper-writing", "architect-review", "information-retrieval"],
       "first_turn": true
     },
     {
@@ -367,6 +367,16 @@
       "expected_owner": "paper-reviewer",
       "expected_overlay": null,
       "forbidden_owners": ["paper-logic", "visual-review"],
+      "first_turn": true
+    },
+    {
+      "id": "paper-workbench-review-before-ref-first-writing-case",
+      "category": "wrong-owner-near-miss",
+      "task": "这篇论文审完发现故事线弱，先按目标期刊 ref 学习写作套路，再重写摘要和引言。",
+      "focus_skill": "paper-workbench",
+      "expected_owner": "paper-workbench",
+      "expected_overlay": null,
+      "forbidden_owners": ["information-retrieval", "literature-synthesis", "paper-reviewer", "paper-writing"],
       "first_turn": true
     },
     {

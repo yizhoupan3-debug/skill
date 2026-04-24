@@ -3,6 +3,7 @@ mod common;
 use common::{json_from_output, read_json, router_rs_command, write_json, write_text};
 use rusqlite::Connection;
 use serde_json::json;
+use std::fs;
 use tempfile::tempdir;
 
 #[test]
@@ -294,6 +295,10 @@ fn rust_memory_policy_can_persist_to_sqlite_store() {
     let persistence = &result["memory_policy"]["persistence"];
     assert_eq!(persistence["persisted"], true);
     assert_eq!(persistence["item_count"], 1);
+    assert_eq!(
+        persistence["stable_journal_path"],
+        json!(memory_root.join("decisions.md").display().to_string())
+    );
 
     let conn = Connection::open(tmp.path().join(".codex/memory/memory.sqlite3")).unwrap();
     let mut stmt = conn
@@ -317,6 +322,37 @@ fn rust_memory_policy_can_persist_to_sqlite_store() {
     assert_eq!(row.2, "framework_memory_policy");
     assert_eq!(row.3, "persisted Rust memory policy row");
     assert_eq!(row.4, "active");
+
+    let journal = fs::read_to_string(memory_root.join("decisions.md")).unwrap();
+    assert!(journal.contains("## Rust memory policy facts"));
+    assert!(journal.contains("- [fact] persisted Rust memory policy row"));
+}
+
+#[test]
+fn rust_memory_policy_can_skip_stable_journal_when_requested() {
+    let tmp = tempdir().unwrap();
+    let memory_root = tmp.path().join(".codex/memory");
+    let payload = json!({
+        "workspace": "skill",
+        "memory_root": memory_root,
+        "persist": true,
+        "stable_journal": false,
+        "messages": [
+            {"role": "user", "content": "remember: sqlite-only Rust memory policy row."}
+        ],
+        "limit": 8
+    });
+    let payload_text = payload.to_string();
+    let output = common::run(router_rs_command([
+        "--framework-memory-policy-json",
+        "--framework-memory-policy-input-json",
+        &payload_text,
+    ]));
+    let result = json_from_output(&output);
+    let persistence = &result["memory_policy"]["persistence"];
+    assert_eq!(persistence["persisted"], true);
+    assert_eq!(persistence["stable_journal_path"], json!(null));
+    assert!(!memory_root.join("decisions.md").exists());
 }
 
 #[test]

@@ -76,6 +76,8 @@
 - runtime control-plane authority：Rust
 - steady-state fallback：已退休，不再是默认 runtime 能力
 - memory extraction / prompt compression policy：Rust
+- memory policy persistence：Rust writes SQLite rows and the stable `decisions.md`
+  journal; Python must not add a second writer
 - Python host role：thin projection / compatibility host
 - host adapters：继续是 shared contract 的消费方，不再是 framework truth 的私造源头
 
