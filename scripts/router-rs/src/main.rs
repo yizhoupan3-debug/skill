@@ -12,6 +12,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -98,6 +99,7 @@ use route::{ROUTE_POLICY_SCHEMA_VERSION, ROUTE_REPORT_SCHEMA_VERSION};
 
 const RUNTIME_CONTROL_PLANE_SCHEMA_VERSION: &str = "router-rs-runtime-control-plane-v1";
 const RUNTIME_CONTROL_PLANE_AUTHORITY: &str = "rust-runtime-control-plane";
+static WRITE_TEXT_PAYLOAD_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 const RUNTIME_INTEGRATOR_SCHEMA_VERSION: &str = "router-rs-runtime-integrator-v1";
 const RUNTIME_INTEGRATOR_AUTHORITY: &str = "rust-runtime-integrator";
 const SANDBOX_CONTROL_SCHEMA_VERSION: &str = "router-rs-sandbox-control-v1";
@@ -1587,6 +1589,13 @@ fn load_trace_routing_runtime_version(runtime_path: Option<&str>) -> u64 {
     }
 }
 
+fn trace_source_explicitly_provided(payload: &TraceMetadataWriteRequestPayload) -> bool {
+    payload.event_stream_path.is_some()
+        || payload.event_stream_text.is_some()
+        || payload.compaction_manifest_path.is_some()
+        || payload.compaction_manifest_text.is_some()
+}
+
 fn write_trace_metadata(
     payload: TraceMetadataWriteRequestPayload,
 ) -> Result<TraceMetadataWriteResponsePayload, String> {
@@ -1604,11 +1613,15 @@ fn write_trace_metadata(
         .map(str::to_string)
         .unwrap_or_else(default_trace_framework_version);
     let timestamp = payload.ts.clone().unwrap_or_else(timestamp_now);
-    let resolved_trace = if payload.events.is_none()
+    let should_resolve_trace = payload.events.is_none()
         || payload.stream.is_none()
         || payload.reroute_count.is_none()
-        || payload.retry_count.is_none()
-    {
+        || payload.retry_count.is_none();
+    let resolved_trace = if trace_source_explicitly_provided(&payload) {
+        Some(resolve_trace_source(
+            TraceSourceRequest::from_metadata_payload(&payload),
+        )?)
+    } else if should_resolve_trace {
         resolve_trace_source(TraceSourceRequest::from_metadata_payload(&payload)).ok()
     } else {
         None
@@ -4252,11 +4265,28 @@ pub(crate) fn write_text_payload(path: &Path, payload: &str) -> Result<usize, St
         .file_name()
         .and_then(|value| value.to_str())
         .ok_or_else(|| format!("persist path {} has no file name", path.display()))?;
-    let tmp_path = path.with_file_name(format!("{file_name}.tmp"));
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let sequence = WRITE_TEXT_PAYLOAD_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let thread_id = format!("{:?}", std::thread::current().id())
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .collect::<String>();
+    let tmp_path = path.with_file_name(format!(
+        "{file_name}.{}.{}.{}.{}.tmp",
+        std::process::id(),
+        thread_id,
+        nonce,
+        sequence
+    ));
     fs::write(&tmp_path, payload.as_bytes())
         .map_err(|err| format!("write temp payload {} failed: {err}", tmp_path.display()))?;
-    fs::rename(&tmp_path, path)
-        .map_err(|err| format!("replace payload {} failed: {err}", path.display()))?;
+    fs::rename(&tmp_path, path).map_err(|err| {
+        let _ = fs::remove_file(&tmp_path);
+        format!("replace payload {} failed: {err}", path.display())
+    })?;
     Ok(payload.len())
 }
 
@@ -5010,15 +5040,8 @@ fn subscribe_attached_runtime_events(payload: Value) -> Result<Value, String> {
     let heartbeat = optional_bool(&payload, "heartbeat").unwrap_or(false);
     let events = replay.events.clone();
     let has_more = replay.has_more;
-    let next_cursor = replay.next_cursor.as_ref().and_then(|cursor| {
-        let event_id = cursor.event_id.as_ref()?;
-        events
-            .iter()
-            .find(|payload| {
-                payload.get("event_id").and_then(Value::as_str) == Some(event_id.as_str())
-            })
-            .cloned()
-    });
+    let next_cursor = serde_json::to_value(&replay.next_cursor)
+        .map_err(|err| format!("serialize attached runtime cursor failed: {err}"))?;
     Ok(json!({
         "schema_version": "runtime-event-stream-v1",
         "session_id": session_id,
@@ -10805,5 +10828,144 @@ mod tests {
         let persisted = fs::read_to_string(&output_path).expect("read stdio trace metadata");
         assert!(persisted.contains("\"routing_runtime_version\": 11"));
         fs::remove_file(&output_path).expect("cleanup stdio trace metadata");
+    }
+
+    #[test]
+    fn write_trace_metadata_fails_closed_for_explicit_bad_trace_source() {
+        let output_path = temp_json_path("trace-metadata-bad-source");
+        let missing_trace_path = temp_trace_path("trace-metadata-missing-source");
+        let response = write_trace_metadata(TraceMetadataWriteRequestPayload {
+            output_path: output_path.display().to_string(),
+            mirror_paths: Vec::new(),
+            write_outputs: true,
+            task: "trace metadata missing source".to_string(),
+            matched_skills: Vec::new(),
+            owner: "execution-controller-coding".to_string(),
+            gate: "none".to_string(),
+            overlay: None,
+            reroute_count: Some(0),
+            retry_count: Some(0),
+            artifact_paths: Vec::new(),
+            verification_status: "passed".to_string(),
+            session_id: None,
+            job_id: None,
+            event_stream_path: Some(missing_trace_path.display().to_string()),
+            event_stream_text: None,
+            compaction_manifest_path: None,
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
+            stream_scope_fields: None,
+            framework_version: None,
+            metadata_schema_version: Some("trace-metadata-v2".to_string()),
+            routing_runtime_version: Some(11),
+            runtime_path: None,
+            ts: Some("2026-04-23T00:00:00Z".to_string()),
+            trace_event_schema_version: None,
+            trace_event_sink_schema_version: None,
+            parallel_group: None,
+            supervisor_projection: None,
+            control_plane: None,
+            stream: None,
+            events: Some(Vec::new()),
+        });
+
+        assert!(response.is_err());
+        assert!(!output_path.exists());
+    }
+
+    #[test]
+    fn write_text_payload_uses_unique_temp_paths_under_concurrency() {
+        let output_path = temp_json_path("atomic-write-concurrent");
+        let mut workers = Vec::new();
+        for index in 0..32 {
+            let path = output_path.clone();
+            workers.push(spawn(move || {
+                write_text_payload(&path, &format!("payload-{index}"))
+                    .expect("concurrent atomic write");
+            }));
+        }
+        for worker in workers {
+            worker.join().expect("join writer");
+        }
+
+        let persisted = fs::read_to_string(&output_path).expect("read final payload");
+        assert!(persisted.starts_with("payload-"));
+        let tmp_entries = fs::read_dir(output_path.parent().expect("output parent"))
+            .expect("read temp dir")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry.file_name().to_string_lossy().starts_with(
+                    output_path
+                        .file_name()
+                        .expect("file name")
+                        .to_string_lossy()
+                        .as_ref(),
+                ) && entry.file_name().to_string_lossy().ends_with(".tmp")
+            })
+            .count();
+        assert_eq!(tmp_entries, 0);
+
+        fs::remove_file(&output_path).expect("cleanup concurrent write output");
+    }
+
+    #[test]
+    fn subscribe_attached_runtime_events_returns_cursor_not_event_payload() {
+        let binding_artifact_path = temp_json_path("subscribe-transport");
+        let resume_manifest_path = temp_json_path("subscribe-resume-manifest");
+        let trace_stream_path = temp_trace_path("subscribe-trace-stream");
+
+        fs::write(
+            &binding_artifact_path,
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "runtime-event-transport-v1",
+                "stream_id": "stream::job-subscribe",
+                "session_id": "session-subscribe",
+                "job_id": "job-subscribe",
+                "binding_backend_family": "filesystem",
+                "resume_mode": "after_event_id"
+            }))
+            .expect("serialize binding artifact"),
+        )
+        .expect("write binding artifact");
+        fs::write(
+            &resume_manifest_path,
+            serde_json::to_string_pretty(&json!({
+                "schema_version": "runtime-resume-manifest-v1",
+                "session_id": "session-subscribe",
+                "job_id": "job-subscribe",
+                "event_transport_path": binding_artifact_path.display().to_string(),
+                "trace_stream_path": trace_stream_path.display().to_string()
+            }))
+            .expect("serialize resume manifest"),
+        )
+        .expect("write resume manifest");
+        fs::write(
+            &trace_stream_path,
+            concat!(
+                "{\"event_id\":\"evt-1\",\"kind\":\"job.started\",\"session_id\":\"session-subscribe\",\"job_id\":\"job-subscribe\"}\n",
+                "{\"event_id\":\"evt-2\",\"kind\":\"job.completed\",\"session_id\":\"session-subscribe\",\"job_id\":\"job-subscribe\"}\n"
+            ),
+        )
+        .expect("write trace stream");
+
+        let response = subscribe_attached_runtime_events(json!({
+            "resume_manifest_path": resume_manifest_path.display().to_string(),
+            "after_event_id": "evt-1",
+            "limit": 1
+        }))
+        .expect("subscribe attached events");
+
+        assert_eq!(response["events"].as_array().expect("events").len(), 1);
+        assert_eq!(
+            response["next_cursor"],
+            json!({"event_id": "evt-2", "event_index": 1})
+        );
+        assert_eq!(response["next_cursor"]["kind"], Value::Null);
+
+        fs::remove_file(&binding_artifact_path).expect("cleanup binding artifact");
+        fs::remove_file(&resume_manifest_path).expect("cleanup resume manifest");
+        fs::remove_file(&trace_stream_path).expect("cleanup trace stream");
     }
 }
