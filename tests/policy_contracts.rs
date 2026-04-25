@@ -51,7 +51,8 @@ fn gitx_skill_exposes_codex_shortcut_and_closeout_flow() {
 fn refresh_skill_is_not_projected_as_codex_entrypoint() {
     assert!(!project_root().join(".codex/skills/refresh").exists());
     let controller = read_text(&project_root().join("skills/execution-controller-coding/SKILL.md"));
-    assert!(controller.contains("$autopilot"));
+    assert!(!controller.contains("$autopilot"));
+    assert!(!controller.contains("autopilot"));
 }
 
 #[test]
@@ -207,6 +208,50 @@ fn ooxml_cli_help_lists_docx_and_xlsx_render_commands() {
 }
 
 #[test]
+fn router_rs_top_level_help_exposes_only_canonical_subcommands() {
+    let output = common::run_ok(cargo_manifest_command(
+        &project_root().join("scripts/router-rs/Cargo.toml"),
+        &["--help"],
+    ));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for command in [
+        "route",
+        "search",
+        "framework",
+        "codex",
+        "trace",
+        "storage",
+        "browser",
+        "profile",
+        "migrate",
+    ] {
+        assert!(stdout.contains(command), "missing command: {command}");
+    }
+    for retired in [
+        "route-json",
+        "framework-runtime-snapshot-json",
+        "host-integration",
+        "browser-mcp-stdio",
+        "profile-json",
+    ] {
+        assert!(!stdout.contains(retired), "retired flag leaked: {retired}");
+    }
+}
+
+#[test]
+fn router_rs_retired_top_level_flags_return_migration_guidance() {
+    let output = run(cargo_manifest_command(
+        &project_root().join("scripts/router-rs/Cargo.toml"),
+        &["--browser-mcp-stdio"],
+    ));
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("retired top-level flag"));
+    assert!(stderr.contains("browser mcp-stdio"));
+    assert!(!stderr.contains("unexpected argument"));
+}
+
+#[test]
 fn github_source_gate_python_helpers_are_retired() {
     for skill in ["skills/gh-fix-ci", "skills/gh-address-comments"] {
         let skill_path = project_root().join(skill);
@@ -291,7 +336,7 @@ fn github_source_gate_help_lists_commands() {
 
 #[test]
 fn retired_python_adapter_bridges_stay_removed() {
-    let retired_paths = [
+    let removed_legacy_files = [
         "scripts/route.py",
         "scripts/router_rs_runner.py",
         "scripts/codex_omx_hook_bridge.py",
@@ -307,7 +352,7 @@ fn retired_python_adapter_bridges_stay_removed() {
         "skills/autoresearch/scripts/research_ctl.py",
         "skills/autoresearch/scripts/init_research.py",
     ];
-    let existing: Vec<_> = retired_paths
+    let existing: Vec<_> = removed_legacy_files
         .iter()
         .map(|path| project_root().join(path))
         .filter(|path| path.exists())
@@ -334,25 +379,13 @@ fn autoresearch_uses_rust_only_controller() {
 }
 
 #[test]
-fn installed_project_hooks_use_router_rs_only() {
-    for surface in [".codex/hooks.json"] {
-        let payload = read_json(&project_root().join(surface));
-        let mut commands = Vec::new();
-        for entries in payload["hooks"].as_object().unwrap().values() {
-            for entry in entries.as_array().unwrap() {
-                for hook in entry["hooks"].as_array().unwrap() {
-                    commands.push(hook["command"].as_str().unwrap().to_string());
-                }
-            }
-        }
-        assert!(!commands.is_empty());
-        assert!(commands.iter().all(|command| command.contains("router-rs")));
-        assert!(commands.iter().all(|command| !command.contains("python3")));
-        assert!(commands.iter().all(|command| !command.contains(".py")));
-        assert!(commands
-            .iter()
-            .all(|command| !command.contains("host-integration-rs")));
-    }
+fn installed_project_hooks_stay_disabled() {
+    assert!(!project_root().join(".codex/hooks.json").exists());
+    let config = read_text(&project_root().join(".codex/config.toml"));
+    assert!(config.contains("codex_hooks = false"));
+    assert!(!config.contains("codex_hooks = true"));
+    let manifest = read_json(&project_root().join(".codex/host_entrypoints_sync_manifest.json"));
+    assert!(!manifest.to_string().contains(".codex/hooks.json"));
 }
 
 #[test]
@@ -363,6 +396,27 @@ fn repo_local_codex_omits_framework_mcp_entrypoint() {
     assert!(!source.contains(r#"command = "cargo""#));
     assert!(!source.contains("[mcp_servers.framework-mcp]"));
     assert!(!source.contains("--framework-mcp-stdio"));
+}
+
+#[test]
+fn browser_mcp_live_config_never_points_to_node_runtime() {
+    let surfaces = [
+        ".codex/config.toml",
+        ".codex/README.md",
+        "tools/browser-mcp/scripts/start_browser_mcp.sh",
+        "tools/browser-mcp/README.md",
+    ];
+    let joined = surfaces
+        .iter()
+        .map(|path| read_text(&project_root().join(path)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let dist_entrypoint = format!("{}/{}.{}", "dist", "index", "js");
+    let node_entrypoint = ["node".to_string(), dist_entrypoint.clone()].join(" ");
+    let quoted_dist_entrypoint = [dist_entrypoint, "\"".to_string()].concat();
+    assert!(!joined.contains(&node_entrypoint));
+    assert!(!joined.contains(&quoted_dist_entrypoint));
+    assert!(!joined.contains("npm run dev"));
 }
 
 #[test]

@@ -242,8 +242,9 @@ fn rust_memory_policy_extracts_and_dedupes_facts() {
     });
     let payload_text = payload.to_string();
     let output = common::run(router_rs_command([
-        "--framework-memory-policy-json",
-        "--framework-memory-policy-input-json",
+        "framework",
+        "memory-policy",
+        "--input-json",
         &payload_text,
     ]));
     let result = json_from_output(&output);
@@ -276,8 +277,9 @@ fn rust_memory_policy_ignores_assistant_text_and_part_arrays() {
     });
     let payload_text = payload.to_string();
     let output = common::run(router_rs_command([
-        "--framework-memory-policy-json",
-        "--framework-memory-policy-input-json",
+        "framework",
+        "memory-policy",
+        "--input-json",
         &payload_text,
     ]));
     let result = json_from_output(&output);
@@ -305,8 +307,9 @@ fn rust_memory_policy_can_persist_to_sqlite_store() {
     });
     let payload_text = payload.to_string();
     let output = common::run(router_rs_command([
-        "--framework-memory-policy-json",
-        "--framework-memory-policy-input-json",
+        "framework",
+        "memory-policy",
+        "--input-json",
         &payload_text,
     ]));
     let result = json_from_output(&output);
@@ -360,8 +363,9 @@ fn rust_memory_policy_can_skip_stable_journal_when_requested() {
     });
     let payload_text = payload.to_string();
     let output = common::run(router_rs_command([
-        "--framework-memory-policy-json",
-        "--framework-memory-policy-input-json",
+        "framework",
+        "memory-policy",
+        "--input-json",
         &payload_text,
     ]));
     let result = json_from_output(&output);
@@ -380,8 +384,9 @@ fn rust_prompt_compression_policy_owns_prompt_wording() {
     let payload = json!({"prompt": prompt, "token_budget": 64});
     let payload_text = payload.to_string();
     let output = common::run(router_rs_command([
-        "--framework-prompt-compression-json",
-        "--framework-prompt-compression-input-json",
+        "framework",
+        "prompt-compression",
+        "--input-json",
         &payload_text,
     ]));
     let result = json_from_output(&output);
@@ -405,13 +410,13 @@ fn render_context(
 ) -> serde_json::Value {
     let top_value = top.to_string();
     let output = common::run(router_rs_command([
-        "--framework-memory-recall-json",
-        "--framework-memory-mode",
+        "framework",
+        "memory-recall",
+        topic,
+        "--mode",
         mode,
         "--limit",
         &top_value,
-        "--query",
-        topic,
         "--repo-root",
         repo_root.to_str().unwrap(),
     ]));

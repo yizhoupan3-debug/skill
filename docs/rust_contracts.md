@@ -19,12 +19,12 @@ It is the contract source of truth for:
 
 Rust owns the default runtime and contract path.
 
-- `router-rs --route-json`, `--route-policy-json`, `--route-report-json` own route decisions.
-- `router-rs --profile-json` and `--profile-artifacts-json` own the Codex-only profile and `codex_profile` artifact.
+- `router-rs route <query>` owns route decisions; route diagnostics use the Rust stdio route policy/report operations.
+- `router-rs profile emit` and `router-rs profile artifacts` own the Codex-only profile and `codex_profile` artifact.
 - `router-rs --execute-json` owns the live/dry-run execution response contract.
-- `router-rs --framework-runtime-snapshot-json`, `--framework-contract-summary-json`, `--framework-memory-recall-json`, `--framework-session-artifact-write-json`, `--framework-memory-policy-json`, and `--framework-prompt-compression-json` own framework runtime read/write/policy surfaces.
-- `router-rs --sync-host-entrypoints-json` owns repo host-entrypoint materialization.
-- `router-rs --host-integration ...` owns native install, bootstrap, skill install, memory automation, and related host integration flows.
+- `router-rs framework snapshot`, `contract-summary`, `memory-recall`, `session-artifact-write`, `memory-policy`, and `prompt-compression` own framework runtime read/write/policy surfaces.
+- `router-rs codex sync` owns repo host-entrypoint materialization.
+- `router-rs codex host-integration ...` owns native install, bootstrap, skill install, memory automation, and related host integration flows.
 - Rust memory policy persistence writes SQLite rows and, by default, appends deduped stable facts to `decisions.md`; `stable_journal: false` is the explicit opt-out.
 
 Retired surfaces stay retired:

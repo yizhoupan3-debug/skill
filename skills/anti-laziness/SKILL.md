@@ -3,15 +3,14 @@ name: anti-laziness
 description: |
   Use proactively to block weak execution patterns such as guessing, bloat,
   scope drift, repeated failed retries, and unverified "done" claims.
-  Triggers on failures, excuses, passive declarations, and explicit gsd / get
-  shit done posture requests.
+  Triggers on failures, excuses, passive declarations, and explicit quality-risk
+  or evidence-enforcement requests.
   Forces evidence-based execution and verification.
-  At 每轮对话开始 / first-turn / conversation start, check whether there is any laziness signal before proceeding.
 routing_layer: L1
 routing_owner: overlay
 routing_gate: none
 routing_priority: P1
-session_start: preferred
+session_start: n/a
 short_description: Evidence-first overlay that blocks guessing, bloat, and unverified completion claims.
 trigger_hints:
   - anti-laziness
@@ -19,10 +18,10 @@ trigger_hints:
   - 质量防偷懒
   - empirical verification
   - anti laziness
-  - gsd
-  - get shit done
-  - 推进到底
-  - 别停
+  - 别糊弄
+  - 严格落实
+  - 没有验证
+  - 无证据完成
 allowed_tools:
   - shell
   - python
@@ -39,12 +38,12 @@ framework_contracts:
 metadata:
   version: "2.5.0"
   platforms: [codex]
-  tags: [anti-laziness, quality-enforcement, empirical-verification, gsd, get-shit-done]
+  tags: [anti-laziness, quality-enforcement, empirical-verification]
 ---
 
 # anti-laziness
 
-Cross-domain enforcement overlay. Activates when dodging work, repeating failures, claiming unverified success, or the user explicitly asks for a get-shit-done execution posture. Never replaces the domain owner.
+Cross-domain verification-quality overlay. Activates when dodging work, repeating failures, claiming unverified success, or the user explicitly flags quality/evidence risk. Never replaces the domain owner.
 
 ## When to use
 
@@ -56,7 +55,7 @@ Cross-domain enforcement overlay. Activates when dodging work, repeating failure
 - **Manual offload**: telling the user to do ordinary local checks before exhausting available tools.
 - **Passive finish**: saying "done" or "should work" without evidence.
 - **Partial delivery**: using placeholders, truncated snippets, or "rest unchanged" style output as if complete.
-- **User signals**: "别糊弄", "严格落实", "推进到底", "别停", `gsd`, `get shit done`.
+- **User signals**: "别糊弄", "严格落实", "没有验证", "别猜", "要证据".
 
 ## Do not use
 
@@ -67,11 +66,10 @@ Cross-domain enforcement overlay. Activates when dodging work, repeating failure
 - Strategic planning or brainstorming sessions before any execution attempt has been made.
 - Requests for pure creative writing or philosophical discussion where empirical evidence doesn't apply.
 
-## GSD posture
+## Verification-Quality Posture
 
-- Treat explicit `gsd` / `get shit done` wording as a demand for stronger execution ownership, not as permission to skip verification.
-- Strong execution does not permit silent guessing, speculative design, or wider diffs than the task requires.
-- Keep pushing through safe local steps without handing routine work back to the user.
+- Treat explicit quality-risk wording as a demand for stronger verification, not as permission to change owner.
+- Verification pressure does not permit silent guessing, speculative design, or wider diffs than the task requires.
 - Convert "done" claims into evidence: command output, test result, or artifact path.
 - If blocked, change the approach before narrating defeat.
 

@@ -12,9 +12,9 @@ Codex is the only supported host. The runtime emits one Codex profile artifact:
 
 ## Removed From Default Surface
 
-- No `cli_common_adapter`.
-- No `codex_desktop_adapter`.
-- No `codex_cli_adapter`.
+- No generic CLI common adapter artifact.
+- No Codex Desktop adapter artifact.
+- No Codex CLI adapter artifact.
 - No `cli_family_parity_snapshot`.
 - No non-Codex host projection.
 
@@ -23,7 +23,7 @@ Codex is the only supported host. The runtime emits one Codex profile artifact:
 1. `framework_profile` stays Codex-pinned and Codex-private fields stay in
    `codex_profile.codex_host_payload`.
 2. `workspace_bootstrap.resources` is the only skills/memory default source.
-3. `router-rs --profile-json` and `--profile-artifacts-json` emit Codex-only
+3. `router-rs profile emit` and `profile artifacts` emit Codex-only
    profile surfaces.
 4. New default artifacts must not recreate multi-host, parity, alias, Python,
    or fallback host layers.

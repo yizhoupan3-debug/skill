@@ -4,12 +4,12 @@
 > Only open `skills/SKILL_MANIFEST.json` or `skills/SKILL_ROUTING_LAYERS.md` when the first two still leave owner/reroute ambiguity.
 
 ## Quick gate checklist
-1. Extract object / action / constraints / deliverable first.
-2. Check source gates before owners when the task starts from external evidence or official docs.
-3. Check artifact gates when the primary object is a PDF, DOCX, XLSX, or similar file artifact.
-4. Check evidence gates when screenshots, rendered pages, browser interaction, or root-cause debugging are central.
-5. Check delegation gate before owner selection when the task is complex and parallel sidecars would help.
-6. Only then choose the narrowest owner and add at most one overlay.
+1. 规范: extract object / action / constraints / deliverable / success criteria first.
+2. 计划: check source, artifact, evidence, and delegation gates before owner selection.
+3. 计划: choose the narrowest domain owner and add at most one overlay.
+4. 实施: take the smallest route delta and do not widen the abstraction.
+5. 验证: close with tests, commands, screenshots, artifacts, or an explicit blocker.
+6. Completion pressure changes route context only; it must not change selected owner.
 
 ## Gate shortcuts
 | If the task starts with... | Route first | Why |

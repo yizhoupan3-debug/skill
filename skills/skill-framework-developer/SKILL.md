@@ -18,12 +18,17 @@ trigger_hints:
   - 路由系统
   - skill 边界
   - framework review
-  - framework-review
   - 路由 review
   - routing framework
   - 边界重叠
   - 减少 token 消耗
   - framework 自优化
+  - skill系统
+  - 行为驱动
+  - 多余入口
+  - 不必要抽象
+  - 减法视角
+  - 第一性原理
   - skill 维护
   - sync health checks
   - registry drift cleanup

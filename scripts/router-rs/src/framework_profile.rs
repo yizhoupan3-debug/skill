@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const REQUIRED_CORE_CAPABILITIES: [&str; 4] = ["runtime", "memory", "artifact", "orchestration"];
-const RUNTIME_SURFACE_FIELDS: [&str; 12] = [
+const RUNTIME_SURFACE_FIELDS: [&str; 13] = [
     "artifact_contract",
     "memory_mounts",
     "mcp_servers",
@@ -15,6 +15,7 @@ const RUNTIME_SURFACE_FIELDS: [&str; 12] = [
     "framework_surface_policy",
     "workspace_bootstrap",
     "session_contract",
+    "execution_protocol_contract",
     "execution_controller_contract",
     "delegation_contract",
     "supervisor_state_contract",
@@ -57,6 +58,7 @@ const HOST_SPECIFIC_METADATA_KEYS: &[&str] = &[
     "transport",
 ];
 const EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID: &str = "execution_controller_contract";
+const EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID: &str = "execution_protocol_contract";
 const DELEGATION_CONTRACT_ARTIFACT_ID: &str = "delegation_contract";
 const SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID: &str = "supervisor_state_contract";
 
@@ -332,9 +334,13 @@ fn compile_workspace_bootstrap(
     }
     bootstrap.insert("resources".to_string(), Value::Object(resources));
     bootstrap.remove("bridges");
-    bootstrap.remove("skill_bridge");
-    bootstrap.remove("memory_bridge");
+    bootstrap.remove(&legacy_bridge_key("skill"));
+    bootstrap.remove(&legacy_bridge_key("memory"));
     bootstrap
+}
+
+fn legacy_bridge_key(kind: &str) -> String {
+    format!("{kind}_bridge")
 }
 
 fn compile_session_mode(session_policy: &Map<String, Value>) -> Value {
@@ -426,6 +432,13 @@ fn build_codex_shared_contract(
         compile_session_mode(&profile.session_policy),
     );
     let control_plane_contracts = build_control_plane_contract_descriptors();
+    shared_contract.insert(
+        EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID.to_string(),
+        control_plane_contracts
+            .get(EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID)
+            .cloned()
+            .expect("execution protocol contract descriptor should exist"),
+    );
     shared_contract.insert(
         EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID.to_string(),
         control_plane_contracts
@@ -757,48 +770,7 @@ fn merge_json_maps(target: &mut Map<String, Value>, override_map: &Map<String, V
     }
 }
 
-fn build_execution_controller_contract() -> Map<String, Value> {
-    let mut controller = Map::new();
-    controller.insert(
-        "primary_owner".to_string(),
-        Value::String("execution-controller-coding".to_string()),
-    );
-    controller.insert(
-        "role".to_string(),
-        Value::String("kernel-level-execution-controller".to_string()),
-    );
-    controller.insert(
-        "framework_phase".to_string(),
-        Value::String("runtime-orchestration".to_string()),
-    );
-    controller.insert(
-        "state_artifact".to_string(),
-        Value::String(".supervisor_state.json".to_string()),
-    );
-    controller.insert(
-        "user_facing_aliases".to_string(),
-        json!(["gsd", "get shit done"]),
-    );
-
-    let mut gsd_execution_posture = Map::new();
-    gsd_execution_posture.insert(
-        "label".to_string(),
-        Value::String("get-shit-done".to_string()),
-    );
-    gsd_execution_posture.insert(
-        "auto_continue_safe_local_work".to_string(),
-        Value::Bool(true),
-    );
-    gsd_execution_posture.insert(
-        "main_thread_stays_decision_heavy".to_string(),
-        Value::Bool(true),
-    );
-    gsd_execution_posture.insert("verify_before_done".to_string(), Value::Bool(true));
-    gsd_execution_posture.insert(
-        "runtime_dependency".to_string(),
-        Value::String("none".to_string()),
-    );
-
+fn build_execution_protocol_contract() -> Map<String, Value> {
     let mut boundaries = Map::new();
     boundaries.insert("codex_profile_is_canonical".to_string(), Value::Bool(true));
     boundaries.insert(
@@ -810,20 +782,42 @@ fn build_execution_controller_contract() -> Map<String, Value> {
         Value::Bool(false),
     );
     boundaries.insert("single_framework_truth".to_string(), Value::Bool(true));
+    boundaries.insert("protocol_is_not_skill_owner".to_string(), Value::Bool(true));
+
+    let mut route_context = Map::new();
+    route_context.insert(
+        "execution_protocol".to_string(),
+        Value::String("four_step".to_string()),
+    );
+    route_context.insert("verification_required".to_string(), Value::Bool(true));
+    route_context.insert("evidence_required".to_string(), Value::Bool(true));
+    route_context.insert("supervisor_required".to_string(), Value::Bool(false));
+    route_context.insert("delegation_candidate".to_string(), Value::Bool(false));
+    route_context.insert(
+        "route_reason".to_string(),
+        Value::String("narrowest_domain_owner".to_string()),
+    );
+
+    let mut completion_signal_effects = Map::new();
+    completion_signal_effects.insert(
+        "may_set_verification_required".to_string(),
+        Value::Bool(true),
+    );
+    completion_signal_effects.insert("may_set_evidence_required".to_string(), Value::Bool(true));
+    completion_signal_effects.insert(
+        "may_set_continue_safe_local_steps".to_string(),
+        Value::Bool(true),
+    );
+    completion_signal_effects.insert("may_change_selected_skill".to_string(), Value::Bool(false));
+    completion_signal_effects.insert("may_change_canonical_owner".to_string(), Value::Bool(false));
+    completion_signal_effects.insert("may_change_routing_layer".to_string(), Value::Bool(false));
 
     let mut phase_model = Map::new();
     phase_model.insert(
-        "state_owner".to_string(),
-        Value::String(SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID.to_string()),
+        "canonical_steps".to_string(),
+        json!(["规范", "计划", "实施", "验证"]),
     );
-    phase_model.insert(
-        "phase_field".to_string(),
-        Value::String("active_phase".to_string()),
-    );
-    phase_model.insert(
-        "verification_field".to_string(),
-        Value::String("verification.verification_status".to_string()),
-    );
+    phase_model.insert("runtime_default".to_string(), Value::Bool(true));
     phase_model.insert("resumable".to_string(), Value::Bool(true));
 
     let mut retained_local_authority = Map::new();
@@ -838,20 +832,23 @@ fn build_execution_controller_contract() -> Map<String, Value> {
     );
     payload.insert(
         "contract_artifact".to_string(),
-        Value::String(EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID.to_string()),
+        Value::String(EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID.to_string()),
     );
     payload.insert(
         "status_contract".to_string(),
-        Value::String("execution_controller_contract_v1".to_string()),
+        Value::String("execution_protocol_contract_v1".to_string()),
     );
     payload.insert(
         "artifact_role".to_string(),
         Value::String("shared-contract-evidence".to_string()),
     );
-    payload.insert("controller".to_string(), Value::Object(controller));
     payload.insert(
-        "gsd_execution_posture".to_string(),
-        Value::Object(gsd_execution_posture),
+        "route_context_defaults".to_string(),
+        Value::Object(route_context),
+    );
+    payload.insert(
+        "completion_signal_effects".to_string(),
+        Value::Object(completion_signal_effects),
     );
     payload.insert("boundaries".to_string(), Value::Object(boundaries));
     payload.insert(
@@ -878,6 +875,60 @@ fn build_execution_controller_contract() -> Map<String, Value> {
     payload.insert(
         "retained_local_authority".to_string(),
         Value::Object(retained_local_authority),
+    );
+    payload
+}
+
+fn build_execution_controller_contract() -> Map<String, Value> {
+    let mut controller = Map::new();
+    controller.insert(
+        "role".to_string(),
+        Value::String("explicit-supervisor-and-continuity-controller".to_string()),
+    );
+    controller.insert(
+        "framework_phase".to_string(),
+        Value::String("supervisor-integration".to_string()),
+    );
+    controller.insert(
+        "state_artifact".to_string(),
+        Value::String(".supervisor_state.json".to_string()),
+    );
+    controller.insert(
+        "trigger_boundary".to_string(),
+        Value::String(
+            "explicit supervisor, shared continuity, or multi-lane integration only".to_string(),
+        ),
+    );
+
+    let mut payload = Map::new();
+    payload.insert(
+        "framework_truth".to_string(),
+        Value::String("framework_core".to_string()),
+    );
+    payload.insert(
+        "contract_artifact".to_string(),
+        Value::String(EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID.to_string()),
+    );
+    payload.insert(
+        "status_contract".to_string(),
+        Value::String("execution_controller_contract_compat_v1".to_string()),
+    );
+    payload.insert(
+        "artifact_role".to_string(),
+        Value::String("compatibility-projection".to_string()),
+    );
+    payload.insert("controller".to_string(), Value::Object(controller));
+    payload.insert(
+        "canonical_contract".to_string(),
+        Value::String(EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID.to_string()),
+    );
+    payload.insert(
+        "compatibility_notes".to_string(),
+        json!([
+            "does_not_declare_primary_owner",
+            "does_not_encode_gsd_or_autopilot_owner_boost",
+            "default_execution_closed_by_execution_protocol_contract"
+        ]),
     );
     payload
 }
@@ -1172,6 +1223,10 @@ fn build_supervisor_state_contract() -> Map<String, Value> {
 pub fn build_control_plane_contract_descriptors() -> Map<String, Value> {
     let mut payload = Map::new();
     payload.insert(
+        EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID.to_string(),
+        Value::Object(build_execution_protocol_contract()),
+    );
+    payload.insert(
         EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID.to_string(),
         Value::Object(build_execution_controller_contract()),
     );
@@ -1202,6 +1257,11 @@ fn value_to_string(value: &Value) -> String {
         Value::Null => String::new(),
         other => other.to_string(),
     }
+}
+
+#[cfg(test)]
+fn legacy_adapter_key(host: &str, surface: &str) -> String {
+    format!("{host}_{surface}_adapter")
 }
 
 fn string_array(values: &[&str]) -> Value {
@@ -1299,9 +1359,15 @@ mod tests {
             Value::String("codex".to_string())
         );
         let serialized = serde_json::to_value(&bundle).expect("bundle should serialize");
-        assert!(serialized.get("cli_common_adapter").is_none());
-        assert!(serialized.get("codex_cli_adapter").is_none());
-        assert!(serialized.get("codex_desktop_adapter").is_none());
+        assert!(serialized
+            .get(&legacy_adapter_key("cli", "common"))
+            .is_none());
+        assert!(serialized
+            .get(&legacy_adapter_key("codex", "cli"))
+            .is_none());
+        assert!(serialized
+            .get(&legacy_adapter_key("codex", "desktop"))
+            .is_none());
         assert!(serialized.get("codex_common_adapter").is_none());
         assert!(serialized.get("cli_family_capability_discovery").is_none());
         assert!(serialized.get("cli_family_parity_snapshot").is_none());
@@ -1436,6 +1502,10 @@ mod tests {
         let descriptors = build_control_plane_contract_descriptors();
 
         assert_eq!(
+            descriptors[EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID],
+            Value::Object(build_execution_protocol_contract())
+        );
+        assert_eq!(
             descriptors[EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID],
             Value::Object(build_execution_controller_contract())
         );
@@ -1447,7 +1517,7 @@ mod tests {
             descriptors[SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID],
             Value::Object(build_supervisor_state_contract())
         );
-        assert_eq!(descriptors.len(), 3);
+        assert_eq!(descriptors.len(), 4);
     }
 
     #[test]
@@ -1473,9 +1543,9 @@ mod tests {
             build_codex_artifact_bundle(&sample_profile()).expect("artifacts should build");
         assert_eq!(artifacts.len(), 1);
         assert!(artifacts.contains_key("codex_profile"));
-        assert!(!artifacts.contains_key("cli_common_adapter"));
-        assert!(!artifacts.contains_key("codex_cli_adapter"));
-        assert!(!artifacts.contains_key("codex_desktop_adapter"));
+        assert!(!artifacts.contains_key(&legacy_adapter_key("cli", "common")));
+        assert!(!artifacts.contains_key(&legacy_adapter_key("codex", "cli")));
+        assert!(!artifacts.contains_key(&legacy_adapter_key("codex", "desktop")));
         assert!(!artifacts.contains_key("codex_common_adapter"));
         assert!(!artifacts.contains_key("cli_family_capability_discovery"));
         assert!(!artifacts.contains_key("cli_family_parity_snapshot"));

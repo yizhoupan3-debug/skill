@@ -1001,12 +1001,12 @@ fn repo_relative_path(path: &Path) -> String {
 
 fn index_checklist() -> Vec<&'static str> {
     vec![
-        "Extract object / action / constraints / deliverable first.",
-        "Check source gates before owners when the task starts from external evidence or official docs.",
-        "Check artifact gates when the primary object is a PDF, DOCX, XLSX, or similar file artifact.",
-        "Check evidence gates when screenshots, rendered pages, browser interaction, or root-cause debugging are central.",
-        "Check delegation gate before owner selection when the task is complex and parallel sidecars would help.",
-        "Only then choose the narrowest owner and add at most one overlay.",
+        "规范: extract object / action / constraints / deliverable / success criteria first.",
+        "计划: check source, artifact, evidence, and delegation gates before owner selection.",
+        "计划: choose the narrowest domain owner and add at most one overlay.",
+        "实施: take the smallest route delta and do not widen the abstraction.",
+        "验证: close with tests, commands, screenshots, artifacts, or an explicit blocker.",
+        "Completion pressure changes route context only; it must not change selected owner.",
     ]
 }
 

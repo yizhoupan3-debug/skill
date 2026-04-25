@@ -1,5 +1,6 @@
 use chrono::Local;
 use clap::{Parser, Subcommand};
+use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::fs;
@@ -390,7 +391,7 @@ fn install_native_integration(
     let bootstrap_output_dir = bootstrap_output_dir.map(normalize_path).transpose()?;
 
     let created_config = ensure_config_file(&home_config_path)?;
-    let codex_hooks_feature_changed = ensure_codex_hooks_feature(&home_config_path)?;
+    let codex_hooks_disabled_changed = ensure_codex_hooks_disabled(&home_config_path)?;
     let tui_changed = ensure_tui_status_line(&home_config_path)?;
     let home_codex_skills_link_changed = if install_home_codex_skills_link {
         ensure_home_skills_link(&repo_root, &home_codex_skills_path)?
@@ -409,7 +410,7 @@ fn install_native_integration(
         "home_config_path": home_config_path.to_string_lossy(),
         "home_codex_skills_path": home_codex_skills_path.to_string_lossy(),
         "created_config": created_config,
-        "codex_hooks_feature_changed": codex_hooks_feature_changed,
+        "codex_hooks_disabled_changed": codex_hooks_disabled_changed,
         "tui_status_line_changed": tui_changed,
         "home_codex_skills_link_changed": home_codex_skills_link_changed,
         "default_bootstrap": default_bootstrap,
@@ -588,7 +589,7 @@ fn install_skill_tool(
 fn install_native_integration_changed(payload: &Value) -> bool {
     [
         "created_config",
-        "codex_hooks_feature_changed",
+        "codex_hooks_disabled_changed",
         "tui_status_line_changed",
         "home_codex_skills_link_changed",
     ]
@@ -816,22 +817,20 @@ fn build_default_bootstrap_payload(
         .unwrap_or_else(|| default_bootstrap_output_dir(&repo_root));
     fs::create_dir_all(&resolved_output_dir).map_err(|err| err.to_string())?;
     let mut memory_args = vec![
-        "--framework-memory-recall-json".to_string(),
-        "--framework-memory-mode".to_string(),
+        "framework".to_string(),
+        "memory-recall".to_string(),
+        query.to_string(),
+        "--mode".to_string(),
         "active".to_string(),
         "--limit".to_string(),
         top.to_string(),
     ];
-    if !query.trim().is_empty() {
-        memory_args.push("--query".to_string());
-        memory_args.push(query.to_string());
-    }
     if let Some(path) = memory_root {
-        memory_args.push("--framework-memory-root".to_string());
+        memory_args.push("--memory-root".to_string());
         memory_args.push(path.to_string_lossy().into_owned());
     }
     if let Some(path) = artifact_source_dir {
-        memory_args.push("--framework-artifact-source-dir".to_string());
+        memory_args.push("--artifact-source-dir".to_string());
         memory_args.push(path.to_string_lossy().into_owned());
     }
     let memory = run_router_rs_json(&repo_root, &memory_args)?;
@@ -958,9 +957,9 @@ fn run_memory_automation(
         .map(str::to_owned)
         .unwrap_or_else(|| workspace_name_from_root(&repo_root));
 
-    let mut runtime_args = vec!["--framework-runtime-snapshot-json".to_string()];
+    let mut runtime_args = vec!["framework".to_string(), "snapshot".to_string()];
     if let Some(path) = resolved_artifact_source_dir.as_ref() {
-        runtime_args.push("--framework-artifact-source-dir".to_string());
+        runtime_args.push("--artifact-source-dir".to_string());
         runtime_args.push(path.to_string_lossy().into_owned());
     }
     let runtime_payload = run_router_rs_json(&repo_root, &runtime_args)?;
@@ -986,29 +985,17 @@ fn run_memory_automation(
             Vec::new()
         };
 
-    let consolidation = run_router_rs_json(
-        &repo_root,
-        &[
-            "--codex-hook-command".to_string(),
-            "session-end".to_string(),
-            "--framework-max-lines".to_string(),
-            "4".to_string(),
-        ],
-    )?;
-    let consolidation_payload = consolidation
-        .get("consolidation")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "router-rs session-end payload missing consolidation object".to_string())?;
-    let changed_files = consolidation_payload
+    let consolidation = build_memory_automation_consolidation(&resolved_memory_root)?;
+    let changed_files = consolidation
         .get("changed_files")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let archive = consolidation_payload
+    let archive = consolidation
         .get("archive")
         .cloned()
         .unwrap_or_else(|| json!({}));
-    let sqlite_result = consolidation_payload
+    let sqlite_result = consolidation
         .get("sqlite_result")
         .cloned()
         .unwrap_or_else(|| json!({}));
@@ -1116,6 +1103,57 @@ fn run_memory_automation(
         "retrieval": retrieval,
         "bootstrap": bootstrap,
         "output_dir": resolved_output_dir.to_string_lossy(),
+        "consolidation": consolidation,
+    }))
+}
+
+fn build_memory_automation_consolidation(memory_root: &Path) -> Result<Value, String> {
+    fs::create_dir_all(memory_root)
+        .map_err(|err| format!("create framework memory root failed: {err}"))?;
+    let memory_md = memory_root.join("MEMORY.md");
+    let changed_files = if write_text_if_changed(&memory_md, &default_memory_summary())? {
+        vec![Value::String(memory_md.display().to_string())]
+    } else {
+        Vec::new()
+    };
+    let sqlite_result = inspect_memory_sqlite(memory_root)?;
+    Ok(json!({
+        "changed_files": changed_files,
+        "archive": {
+            "ok": true,
+            "status": "explicit-migration-only",
+            "legacy_memory_item_count": 0,
+        },
+        "sqlite_result": sqlite_result,
+    }))
+}
+
+fn default_memory_summary() -> String {
+    "# MEMORY\n\nProject-local memory is managed by the Rust framework runtime.\n".to_string()
+}
+
+fn inspect_memory_sqlite(memory_root: &Path) -> Result<Value, String> {
+    let db_path = memory_root.join("memory.sqlite3");
+    if !db_path.is_file() {
+        return Ok(json!({
+            "db_path": db_path.display().to_string(),
+            "exists": false,
+            "memory_items": 0,
+        }));
+    }
+    let conn = Connection::open(&db_path)
+        .map_err(|err| format!("open memory sqlite failed for {}: {err}", db_path.display()))?;
+    let memory_items = conn
+        .query_row(
+            "SELECT COUNT(*) FROM memory_items WHERE status = 'active'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap_or(0);
+    Ok(json!({
+        "db_path": db_path.display().to_string(),
+        "exists": true,
+        "memory_items": memory_items,
     }))
 }
 
@@ -1285,22 +1323,20 @@ fn run_framework_memory_recall(
     artifact_source_dir: Option<&Path>,
 ) -> Result<Value, String> {
     let mut args = vec![
-        "--framework-memory-recall-json".to_string(),
-        "--framework-memory-mode".to_string(),
+        "framework".to_string(),
+        "memory-recall".to_string(),
+        query.to_string(),
+        "--mode".to_string(),
         mode.to_string(),
         "--limit".to_string(),
         top.to_string(),
     ];
-    if !query.trim().is_empty() {
-        args.push("--query".to_string());
-        args.push(query.to_string());
-    }
     if let Some(path) = memory_root {
-        args.push("--framework-memory-root".to_string());
+        args.push("--memory-root".to_string());
         args.push(path.to_string_lossy().into_owned());
     }
     if let Some(path) = artifact_source_dir {
-        args.push("--framework-artifact-source-dir".to_string());
+        args.push("--artifact-source-dir".to_string());
         args.push(path.to_string_lossy().into_owned());
     }
     let payload = run_router_rs_json(repo_root, &args)?;
@@ -1622,9 +1658,9 @@ fn router_rs_launcher_command(repo_root: &Path) -> PathBuf {
     repo_root.join("scripts/router-rs/run_router_rs.sh")
 }
 
-fn ensure_codex_hooks_feature(config_path: &Path) -> Result<bool, String> {
+fn ensure_codex_hooks_disabled(config_path: &Path) -> Result<bool, String> {
     let content = read_text_if_exists(config_path)?.unwrap_or_default();
-    let feature_line = "codex_hooks = true";
+    let feature_line = "codex_hooks = false";
     if let Some((start, end)) = find_named_block_bounds(&content, "[features]") {
         let block = content[start..end].trim_end_matches('\n');
         let mut codex_hooks_found = false;
@@ -1663,9 +1699,12 @@ fn ensure_codex_hooks_feature(config_path: &Path) -> Result<bool, String> {
     }
 
     let updated = if content.trim().is_empty() {
-        "[features]\ncodex_hooks = true\n".to_string()
+        "[features]\ncodex_hooks = false\n".to_string()
     } else {
-        format!("{}\n\n[features]\ncodex_hooks = true\n", content.trim_end())
+        format!(
+            "{}\n\n[features]\ncodex_hooks = false\n",
+            content.trim_end()
+        )
     };
     write_text_if_changed(config_path, &updated)
 }

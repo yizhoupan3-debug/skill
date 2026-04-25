@@ -42,7 +42,7 @@ fn install_native_integration_is_idempotent() {
     assert_eq!(first["success"], true);
     assert_eq!(second["success"], true);
     assert_eq!(content.matches("[features]").count(), 1);
-    assert_eq!(content.matches("codex_hooks = true").count(), 1);
+    assert_eq!(content.matches("codex_hooks = false").count(), 1);
     assert_eq!(content.matches("[mcp_servers.browser-mcp]").count(), 0);
     assert_eq!(content.matches("[mcp_servers.framework-mcp]").count(), 0);
     assert_eq!(
