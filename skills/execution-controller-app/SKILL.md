@@ -1,13 +1,16 @@
 ---
 name: execution-controller-app
 description: |
-  内核级应用总控 (L0 Kernel App Controller)：面向生产级 APP 的全栈体检、深度重构与自动化一键优化编排中心。
-  适用于“APP 一键优化 / 全栈重构 / 跨栈逻辑对齐 / 前后端联调优化 / 自动化测试闭环 / SCR 状态持久化”。每轮对话开始 / first-turn / conversation start，凡涉及 APP 全局任务必须优先挂载。
-routing_layer: L0
-routing_owner: "@app-controller"
-routing_gate: delegation
-routing_priority: P0
-session_start: required
+  Explicit APP-wide orchestration lane for production-grade full-stack app audits,
+  contract/UI/test synchronization, and `.app_supervisor_state.json` continuity.
+  Use only when the user asks for whole-app orchestration across frontend, backend,
+  and verification surfaces. Single-stack app work should route to the narrowest
+  domain owner instead.
+routing_layer: L2
+routing_owner: owner
+routing_gate: none
+routing_priority: P2
+session_start: n/a
 short_description: Master orchestrator for production-grade app optimization, refactor, and full-stack verification
 trigger_hints:
   - APP一键优化
@@ -66,13 +69,13 @@ bridge_behavior: mobile_complete_once
 
 # execution-controller-app
 
-`execution-controller-app` is the APP-wide master controller for production-grade optimization work. It owns tasks where frontend quality, backend contracts, and test closure must move together under one orchestration layer.
+`execution-controller-app` is an explicit APP-wide orchestration lane for production-grade optimization work. It owns tasks where frontend quality, backend contracts, and test closure must move together under one orchestration layer.
 
-This skill is the **APP ecosystem command layer**, not a generic coding controller.
+This skill is **not** part of the default route surface. It is the APP ecosystem orchestration lane when the request explicitly needs whole-app coordination.
 
 ## When to use
 
-- 每轮对话开始 / first-turn / conversation start，任务是 **APP 全局治理 / 全栈体检 / 跨栈一致性修复 / 一键优化**
+- 用户明确要求 **APP 全局治理 / 全栈体检 / 跨栈一致性修复 / 一键优化**
 - 如果 APP 全局优化信号与通用复杂执行信号同时出现，优先使用本 skill，而不是 [`$execution-controller-coding`](/Users/joe/Documents/skill/skills/execution-controller-coding/SKILL.md)
 - 需要同时协调 Frontend、Backend、Testing，而不是只改单层
 - 需要把 UI 升级到 Premium / WOW，同时同步后端 contract 与测试闭环
@@ -83,6 +86,7 @@ This skill is the **APP ecosystem command layer**, not a generic coding controll
 ## Do not use
 
 - 只是单一前端视觉优化 → use [`$frontend-design`](/Users/joe/Documents/skill/skills/frontend-design/SKILL.md)
+- 只是普通 APP 单层任务，或只说“做完/推进/验证” → route to the narrowest domain owner plus runtime verification context
 - 只是前端代码规范/组件重构 → use [`$coding-standards`](/Users/joe/Documents/skill/skills/coding-standards/SKILL.md) frontend-quality reference
 - 只是后端分层或接口实现 → use [`$node-backend`](/Users/joe/Documents/skill/skills/node-backend/SKILL.md)
 - 只是 API / OpenAPI 设计 → use [`$api-design`](/Users/joe/Documents/skill/skills/api-design/SKILL.md)
