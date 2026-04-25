@@ -97,7 +97,7 @@ pub fn router_rs_json(args: &[&str]) -> Value {
 }
 
 pub fn host_integration_json(args: &[&str]) -> Value {
-    let mut full_args = vec!["--host-integration"];
+    let mut full_args = vec!["codex", "host-integration"];
     full_args.extend_from_slice(args);
     router_rs_json(&full_args)
 }

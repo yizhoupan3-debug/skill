@@ -41,7 +41,7 @@
 - [x] `framework_runtime.rs` 的 supervisor fallback route 仍保留：trace 不匹配时回落到 supervisor controller 字段。
 - [x] `framework_profile.rs` 的 `compatibility_rules.python_may_continue_to_author = true` 与当前“Rust 真源，不恢复 Python”目标冲突。
 - [x] `codex_hooks.rs` 仍显式清理 Claude/Gemini/Cursor/AionUI 等 retired entrypoint。
-- [x] `.codex/hooks.json` 存在 PreToolUse hook，但 `.codex/config.toml` 中 `codex_hooks = false`，说明 hook 文件已生成但默认不生效。
+- [x] `.codex/hooks.json` 不再由 host-entrypoint sync 生成，`.codex/config.toml` 保持 `codex_hooks = false`，默认不安装/启用 hook。
 - [x] `tools/browser-mcp/scripts/start_browser_mcp.sh` 是 shell wrapper，实际只是转发到 router-rs 的 `--browser-mcp-stdio`。
 - [x] `tools/browser-mcp/src/index.ts` 仍支持 HTTP transport；如果只在 Codex MCP stdio 下使用，可降为开发调试路径或删除。
 
@@ -83,7 +83,7 @@
 - [x] 第四步：把 `codex_adapter` 命名收敛成 `codex_profile`，仅在输出兼容层保留旧 key 一版。
 - [x] 第五步：把 `autopilot/team/deepinterview` 从普通 skill 和 alias registry 中抽出来，明确成 Codex command mode。
 - [x] 第六步：精简 runtime storage，只保留 filesystem 默认；sqlite 作为显式 opt-in，memory 只在测试启用。
-- [x] 第七步：清理 `.codex/hooks.json` 与 `.codex/config.toml` 的不一致，要么启用 hook，要么不生成 hook。
+- [x] 第七步：清理 `.codex/hooks.json` 与 `.codex/config.toml` 的不一致，采用“不生成 hook + 强制关闭 codex_hooks”的方向。
 - [x] 第八步：重新生成 `skills/SKILL_ROUTING_RUNTIME.json`、`SKILL_TIERS.json`、`SKILL_LOADOUTS.json`，并跑 routing eval。
 
 ## 8. 验收标准
@@ -102,5 +102,5 @@
 - [x] 已从默认 steady-state 移除 legacy memory 自动 archive、legacy artifact root 自动迁移、retired host path 默认清理、sqlite legacy absolute-key fallback、delegate kind legacy coercion。
 - [x] 已把 `codex_adapter` / `host_adapter_payload` 内部命名收敛为 `codex_profile` / `codex_host_payload`，并把 `python_may_continue_to_author` 改为 Rust-only authority 规则。
 - [x] 已把 browser MCP wrapper 改为 `router-rs browser mcp-stdio` dev shim，并移除 TypeScript HTTP transport 入口。
-- [x] 已修正 `.codex/config.toml` 与 `.codex/hooks.json` 的 hook 启用状态不一致。
+- [x] 已修正 `.codex/config.toml` 与 `.codex/hooks.json` 的 hook 启用状态不一致：默认关闭 hook，sync manifest 不再管理 `.codex/hooks.json`。
 - [x] 已验证：`cargo test --manifest-path scripts/router-rs/Cargo.toml --quiet`、`cargo test --quiet`、`cargo test --manifest-path scripts/router-rs/Cargo.toml --quiet --no-run`、`cargo test --quiet --no-run`、`cd tools/browser-mcp && npm test -- --run`。

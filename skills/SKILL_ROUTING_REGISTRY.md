@@ -46,7 +46,7 @@
 | `error-handling-patterns` | Active | P2 | L1 | overlay | none | project | ✓ 97.2 | Design cross-language error-handling architectures such as custom errors, retry/ |
 | `execution-audit` | Active | P1 | L1 | overlay | none | project | ✓ 100.0 | Audit execution quality with evidence, sidecar-first collection, and compressed  |
 | `execution-controller-app` | Active | P0 | L0 | @app-controller | delegation | project | ✓ 100.0 | Master orchestrator for production-grade app optimization, refactor, and full-st |
-| `execution-controller-coding` | Active | P0 | L0 | @kernel-controller | delegation | project | ✓ 100.0 | Orchestrate complex execution with clear scope, state, delegation, and verificat |
+| `execution-controller-coding` | Active | P2 | L0 | @kernel-controller | delegation | project | ✓ 100.0 | Orchestrate explicit supervisor, shared continuity, and multi-lane integration w |
 | `experiment-reproducibility` | Active | P2 | L3 | owner | none | project | ✓ 96.2 | Ensure and manage research experiment reproducibility: environment capture, rand |
 | `financial-data-fetching` | Active | P2 | L4 | owner | none | project | ✓ 97.2 | Fetch, validate, normalize, and export real financial market data: OHLCV, OHLCV, |
 | `frontend-debugging` | Active | P2 | L1 | owner | none | project | ✓ 95.8 | Diagnose frontend runtime bugs with a five-layer model (component → state → rend |

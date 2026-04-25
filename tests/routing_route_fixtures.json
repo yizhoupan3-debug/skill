@@ -4,11 +4,11 @@
     "layer",
     "owner",
     "gate",
-    "priority",
     "description",
-    "session_start",
     "trigger_hints",
-    "health"
+    "health",
+    "priority",
+    "session_start"
   ],
   "skills": [
     [
@@ -16,247 +16,233 @@
       "L0",
       "@kernel-controller",
       "高负载,跨文件,sidecar,delegation",
-      "P0",
       "Kernel orchestrator for high-load, cross-file execution.",
-      "required",
       [
         "高负载",
         "跨文件",
         "sidecar",
         "delegation"
       ],
-      100.0
+      100,
+      "P0",
+      "required"
     ],
     [
       "subagent-delegation",
       "L0",
       "gate",
       "delegation",
-      "P1",
       "Split complex tasks into bounded sidecars.",
-      "required",
       [
         "delegation",
         "sidecar",
         "并行"
       ],
-      94.5
+      94.5,
+      "P1",
+      "required"
     ],
     [
       "plan-to-code",
       "L2",
       "owner",
       "none",
-      "P1",
       "Implement a concrete plan directly into code.",
-      "n/a",
       [
         "按方案实现",
         "直接做代码",
         "实现"
       ],
-      96.0
+      96,
+      "P1",
+      "n/a"
     ],
     [
       "python-pro",
       "L4",
       "owner",
       "none",
-      "P2",
       "Deliver production-grade Python code with tests.",
-      "n/a",
       [
         "python 脚本",
         "pytest",
         "fastapi"
       ],
-      98.0
+      98,
+      "P2",
+      "n/a"
     ],
     [
       "anti-laziness",
       "L1",
       "overlay",
       "none",
-      "P1",
       "Overlay to enforce evidence and prevent lazy execution.",
-      "preferred",
       [
         "别偷懒",
         "严格落实"
       ],
-      95.0
+      95,
+      "P1",
+      "preferred"
     ],
     [
       "checklist-planner",
       "L1",
       "owner",
       "none",
-      "P1",
       "Write execution-ready checklists before implementation or review.",
-      "n/a",
       [
         "先写 checklist",
         "写成 checklist md",
         "review checklist"
       ],
-      95.5
+      95.5,
+      "P1",
+      "n/a"
     ],
     [
       "checklist-planner",
       "L2",
       "owner",
       "none",
-      "P1",
       "Rewrite messy checklists with explicit serial and parallel boundaries.",
-      "n/a",
       [
         "规范化 checklist",
         "串行的写在一点",
         "并行的拆开"
       ],
-      95.5
+      95.5,
+      "P1",
+      "n/a"
     ],
     [
       "checklist-fixer",
       "L2",
       "owner",
       "none",
-      "P1",
       "Execute a known checklist or fix list with per-item verification.",
-      "n/a",
       [
         "逐项修复",
         "按 checklist 执行",
         "先做 1-3"
       ],
-      95.5
+      95.5,
+      "P1",
+      "n/a"
     ],
     [
       "skill-framework-developer",
       "L0",
       "owner",
       "none",
-      "P1",
-      "Patch a routing miss after a task with the smallest safe skill fix.",
-      "n/a",
+      "Skill framework governance owner for routing miss repair, wording cleanup, and SKILL.md standardization.",
       [
         "为什么没有触发",
         "是不是路由问题",
-        "顺手修一下 skill"
+        "顺手修一下 skill",
+        "wording cleanup",
+        "措辞",
+        "模板"
       ],
-      95.5
+      97.5,
+      "P1",
+      "n/a"
     ],
     [
       "execution-audit",
       "L0",
       "overlay",
       "none",
-      "P2",
       "N-round iterative optimizer overlay.",
-      "n/a",
       [
         "自迭代",
         "10轮",
         "优化"
       ],
-      96.4
+      96.4,
+      "P2",
+      "n/a"
     ],
     [
       "code-review",
       "L1",
       "overlay",
       "none",
-      "P1",
       "Structured code review overlay for audit and review requests.",
-      "n/a",
       [
         "code review",
         "code-review"
       ],
-      95.0
+      95,
+      "P1",
+      "n/a"
     ],
     [
       "repo-review-owner",
       "L2",
       "owner",
       "none",
-      "P1",
       "Repository-wide review owner for audit and code review requests.",
-      "n/a",
       [
         "全面 review",
         "review 这个仓库",
         "仓库 review"
       ],
-      94.0
+      94,
+      "P1",
+      "n/a"
     ],
     [
       "bug-implementation-owner",
       "L2",
       "owner",
       "none",
-      "P1",
       "Owner for bug fixes and implementation tasks with regression coverage.",
-      "n/a",
       [
         "修 bug",
         "bug fix",
         "补回归测试"
       ],
-      93.0
+      93,
+      "P1",
+      "n/a"
     ],
     [
       "tdd-workflow",
       "L1",
       "overlay",
       "none",
-      "P1",
       "TDD workflow overlay for failing-tests-first execution.",
-      "n/a",
       [
         "tdd workflow",
         "tdd",
         "先写测试"
       ],
-      95.0
+      95,
+      "P1",
+      "n/a"
     ],
     [
       "doc",
       "L3",
       "owner",
       "artifact",
-      "P1",
       "Word document artifact owner for docx-oriented tasks.",
-      "n/a",
       [
         "word 文档",
         "docx"
       ],
-      92.0
-    ],
-    [
-      "skill-framework-developer",
-      "L2",
-      "owner",
-      "none",
+      92,
       "P1",
-      "Skill framework governance owner for wording cleanup and SKILL.md standardization.",
-      "n/a",
-      [
-        "wording cleanup",
-        "措辞",
-        "模板"
-      ],
-      96.0
+      "n/a"
     ],
     [
       "design-agent",
       "L3",
       "gate",
       "none",
-      "P2",
       "Route named-product design references and brand-plus-motion source grounding.",
-      "n/a",
       [
         "像 Linear 一样",
         "参考源",
@@ -264,16 +250,16 @@
         "品牌 token",
         "liquid glass motion"
       ],
-      95.5
+      95.5,
+      "P2",
+      "n/a"
     ],
     [
       "design-md",
       "L3",
       "owner",
       "none",
-      "P1",
       "Synthesize a reusable DESIGN.md from existing UI assets and product surfaces.",
-      "n/a",
       [
         "design.md",
         "DESIGN.md",
@@ -281,16 +267,16 @@
         "设计语言",
         "先沉淀 DESIGN.md"
       ],
-      95.6
+      95.6,
+      "P1",
+      "n/a"
     ],
     [
       "design-prompt-enhancer",
       "L3",
       "owner",
       "none",
-      "P1",
       "Rewrite vague UI requests into structured generation or edit prompts with design-system blocks.",
-      "n/a",
       [
         "设计 prompt",
         "UI 提示词",
@@ -298,16 +284,16 @@
         "结构化设计提示词",
         "design system block"
       ],
-      95.7
+      95.7,
+      "P1",
+      "n/a"
     ],
     [
       "design-output-auditor",
       "L3",
       "owner",
       "none",
-      "P1",
       "Audit produced UI outputs against DESIGN.md, anti-pattern bans, and drift constraints.",
-      "n/a",
       [
         "设计审计",
         "设计验收",
@@ -315,16 +301,16 @@
         "AI 味",
         "design drift"
       ],
-      95.8
+      95.8,
+      "P1",
+      "n/a"
     ],
     [
       "design-workflow-protocol",
       "L3",
       "owner",
       "none",
-      "P1",
       "Establish a durable file-backed design workflow connecting DESIGN.md, prompts, evidence, and verdicts.",
-      "n/a",
       [
         "设计工件协议",
         "设计工作流",
@@ -334,96 +320,98 @@
         "prompt 到 screenshot 到 verdict",
         "每轮都按这个工作流跑"
       ],
-      95.9
+      95.9,
+      "P1",
+      "n/a"
     ],
     [
       "frontend-design",
       "L3",
       "owner",
       "none",
-      "P2",
       "Own UI redesign and visual direction for premium-feeling interfaces.",
-      "n/a",
       [
         "改UI",
         "品牌感",
         "视觉层级",
         "Bento UI"
       ],
-      95.2
+      95.2,
+      "P2",
+      "n/a"
     ],
     [
       "motion-design",
       "L3",
       "owner",
       "none",
-      "P2",
       "Own motion-first UI work such as Framer Motion, transitions, and micro-interactions.",
-      "n/a",
       [
         "Framer Motion",
         "micro-interactions",
         "smooth transitions"
       ],
-      95.0
+      95,
+      "P2",
+      "n/a"
     ],
     [
       "css-pro",
       "L2",
       "owner",
       "none",
-      "P2",
       "Own CSS engineering, responsive layout mechanics, and token systems.",
-      "n/a",
       [
         "Grid",
         "responsive",
         "CSS tokens"
       ],
-      97.0
+      97,
+      "P2",
+      "n/a"
     ],
     [
       "visual-review",
       "L3",
       "gate",
       "evidence",
-      "P1",
       "Own screenshot-grounded visual review and visible-defect audits.",
-      "required",
       [
         "screenshot",
         "visual review",
         "UI audit"
       ],
-      95.0
+      95,
+      "P1",
+      "required"
     ],
     [
       "tie-skill-a",
       "L2",
       "owner",
       "none",
-      "P2",
       "Shared tie-break candidate.",
-      "n/a",
       [
         "并发构建",
         "toolchain"
       ],
-      90.0
+      90,
+      "P2",
+      "n/a"
     ],
     [
       "tie-skill-b",
       "L2",
       "owner",
       "none",
-      "P1",
       "Shared tie-break candidate.",
-      "n/a",
       [
         "并发构建",
         "toolchain"
       ],
-      90.0
+      90,
+      "P1",
+      "n/a"
     ]
   ],
   "cases": [
@@ -441,17 +429,26 @@
       "query": "这是高负载跨文件任务，需要 sidecar delegation 并行处理",
       "expected": {
         "selected_skill": "subagent-delegation",
-        "overlay_skill": "anti-laziness",
+        "overlay_skill": null,
         "layer": "L0"
       }
     },
     {
-      "name": "gsd-controller-routing",
-      "query": "这个仓库的修复你直接 gsd，推进到底，别停，主线程保持简短并给我验证证据",
+      "name": "completion-context-keeps-domain-owner",
+      "query": "按方案实现这个仓库修复，直接做代码，推进到底，别停，并给我验证证据",
       "expected": {
-        "selected_skill": "execution-controller-coding",
-        "overlay_skill": "anti-laziness",
-        "layer": "L0"
+        "selected_skill": "plan-to-code",
+        "overlay_skill": null,
+        "layer": "L2",
+        "route_context": {
+          "execution_protocol": "four_step",
+          "verification_required": true,
+          "evidence_required": true,
+          "supervisor_required": false,
+          "delegation_candidate": false,
+          "continue_safe_local_steps": true,
+          "route_reason": "completion_signal_context"
+        }
       }
     },
     {
@@ -460,7 +457,7 @@
       "expected": {
         "selected_skill": "plan-to-code",
         "overlay_skill": "execution-audit",
-        "layer": "L0"
+        "layer": "L2"
       }
     },
     {
@@ -468,7 +465,7 @@
       "query": "review checklist 看这轮是否结束",
       "expected": {
         "selected_skill": "checklist-planner",
-        "overlay_skill": "anti-laziness",
+        "overlay_skill": null,
         "layer": "L1"
       }
     },
@@ -477,7 +474,7 @@
       "query": "把这份 checklist 规范一下，串行的写在一点，并行的拆开",
       "expected": {
         "selected_skill": "checklist-planner",
-        "overlay_skill": "anti-laziness",
+        "overlay_skill": null,
         "layer": "L1"
       }
     },
@@ -495,7 +492,7 @@
       "query": "这次为什么没触发，顺手修一下 skill，以后别再选错",
       "expected": {
         "selected_skill": "skill-framework-developer",
-        "overlay_skill": "anti-laziness",
+        "overlay_skill": null,
         "layer": "L0"
       }
     },
@@ -504,7 +501,16 @@
       "query": "这个 skill 的路由没触发，帮我修复这次 miss",
       "expected": {
         "selected_skill": "skill-framework-developer",
-        "overlay_skill": "anti-laziness",
+        "overlay_skill": null,
+        "layer": "L0"
+      }
+    },
+    {
+      "name": "skill-framework-subtraction-behavior-review",
+      "query": "减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象",
+      "expected": {
+        "selected_skill": "skill-framework-developer",
+        "overlay_skill": null,
         "layer": "L0"
       }
     },

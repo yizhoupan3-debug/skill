@@ -574,18 +574,20 @@ fn launcher_never_falls_back_to_node_runtime() {
         fs::read_to_string(output_path).unwrap().trim(),
         "rust-launcher-only"
     );
-    assert!(!String::from_utf8_lossy(&result.stderr).contains("dist/index.js"));
+    let node_entrypoint = ["dist", "index.js"].join("/");
+    assert!(!String::from_utf8_lossy(&result.stderr).contains(&node_entrypoint));
 }
 
 fn run_resolver_cli(search_root: &std::path::Path) -> Output {
-    let mut command = router_rs_command(std::iter::empty::<&str>());
-    command
-        .arg("--browser-mcp-resolve-attach-artifact")
-        .arg("--repo-root")
-        .arg(project_root())
-        .arg("--browser-mcp-search-root")
-        .arg(search_root);
-    run(command)
+    let repo_root = project_root();
+    run(router_rs_command([
+        "browser",
+        "resolve-attach-artifact",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+        "--search-root",
+        search_root.to_str().unwrap(),
+    ]))
 }
 
 fn sqlite_payload_locator(search_root: &std::path::Path, payload_key: &str) -> String {

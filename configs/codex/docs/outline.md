@@ -1126,7 +1126,7 @@ omniroute --version   # 确认版本
 ```bash
 git clone https://github.com/diegosouzapw/OmniRoute.git
 cd OmniRoute && npm ci && npm run build
-node dist/index.js    # 替代 omniroute 命令
+node <built CLI entrypoint>    # 替代 omniroute 命令
 ```
 
 **路径 C（Docker，备备选）**:
@@ -1150,7 +1150,7 @@ else
   echo "⚠️  npm package not found, cloning from GitHub..."
   git clone https://github.com/diegosouzapw/OmniRoute.git omniroute-src
   cd omniroute-src && npm ci && npm run build
-  ln -sf "$(pwd)/dist/index.js" /usr/local/bin/omniroute
+  ln -sf "$(pwd)/<built CLI entrypoint>" /usr/local/bin/omniroute
   echo "✅ OmniRoute installed from source"
 fi
 ```

@@ -2,27 +2,21 @@
 name: execution-controller-coding
 description: |
   内核级执行控制器：负责高负载、跨文件、长运行任务的编排、状态维护、subagent 派发与结果集成。
-  它也是仓库内 get-shit-done / gsd 执行姿态的主 owner：自动推进安全本地步骤，直到有真实验证证据。
-  适用于复杂执行任务的统一收口，而不是普通单点实现。
+  适用于显式 supervisor、shared continuity、多 lane 集成和长运行任务的统一收口，而不是普通单点实现。
 routing_layer: L0
 routing_owner: "@kernel-controller"
 routing_gate: delegation
-routing_priority: P0
-session_start: required
-short_description: Orchestrate complex execution with clear scope, state, delegation, and verification.
+routing_priority: P2
+session_start: n/a
+short_description: Orchestrate explicit supervisor, shared continuity, and multi-lane integration work.
 trigger_hints:
-  - 高负载
-  - 跨文件
   - 长运行周期
   - 状态持久化
-  - gsd
-  - get shit done
-  - 推进到底
-  - $autopilot
-  - autopilot
-  - 一路执行到底
-  - 持续跑到收敛
-  - 直接干完
+  - .supervisor_state.json
+  - 共享 continuity
+  - 多 lane 集成
+  - 主线程集成
+  - integration supervisor
 framework_roles:
   - orchestrator
   - supervisor
@@ -43,8 +37,6 @@ metadata:
     - routing
     - subagent
     - checkpoint
-    - gsd
-    - get-shit-done
 risk: high
 source: local
 allowed_tools:
@@ -76,11 +68,10 @@ bridge_behavior: mobile_complete_once
 
 ## When to use
 
-- 每轮对话开始 / first-turn / conversation start，任务已经进入执行主导阶段
-- 高负载、跨文件、长运行、多阶段集成、多验证面并存
+- 显式要求 supervisor、shared continuity、主线程集成或多 lane 集成收口
+- 长运行、多阶段集成、多验证面并存，且需要单一控制器维护状态
 - 需要显式维护 `.supervisor_state.json`、task registry 和 continuity artifacts
 - 并行 lane 存在共享状态冲突风险，需要由单一控制器收口 focus projection 写入
-- 用户明确要求 `gsd` / `get shit done` / `$autopilot` / `autopilot` / “推进到底” / “一路执行到底” / “别停”
 
 ## Do not use
 
@@ -89,15 +80,11 @@ bridge_behavior: mobile_complete_once
 - 根因未知且第一任务是取证 → [`$systematic-debugging`](/Users/joe/Documents/skill/skills/systematic-debugging/SKILL.md)
 - APP 全局协调优先 → [`$execution-controller-app`](/Users/joe/Documents/skill/skills/execution-controller-app/SKILL.md)
 
-## GSD posture
+## Runtime Context Boundary
 
-- `gsd` 不是独立运行时，而是这个 controller 的强执行姿态。
-- `$autopilot` 是这个 controller 的 alias mode，不是独立 owner。
-- 默认自动继续清晰、低风险、可逆的本地 edit/test/verify 链路，不做无意义权限交还。
-- 不盲猜，不做大，不放大 diff；改动必须能追溯到当前目标。
-- 主线程只报告决策、证据和 blocker，不复述大量过程。
-- 没有验证证据就不宣告完成。
-- 卡住时优先换招，不优先请求人工代劳。
+Completion-pressure wording is runtime route context, not this controller's owner trigger.
+
+本 controller 只在真实 supervisor / shared continuity / 多 lane 集成信号出现时接管。默认执行闭环由 runtime protocol 保证，不靠本 skill 常驻。
 
 ## Output Contract
 
@@ -140,4 +127,3 @@ bridge_behavior: mobile_complete_once
 ## References
 
 - [references/runtime-playbook.md](references/runtime-playbook.md)
-- [references/autopilot-mode.md](references/autopilot-mode.md)

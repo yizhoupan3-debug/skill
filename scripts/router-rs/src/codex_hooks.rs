@@ -7,18 +7,15 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const CODEX_HOOK_AUTHORITY: &str = "rust-codex-hook";
+const CODEX_HOOK_AUTHORITY: &str = "rust-codex-audit";
 const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
-    "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --sync-host-entrypoints-json --repo-root \"$PWD\"";
+    "./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"";
 const HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES: [&str; 1] = [".codex/skills"];
 const HOST_ENTRYPOINT_PARTIAL_SYNC_TEXT_FILES: [&str; 2] = ["AGENTS.md", CODEX_HOOK_README_PATH];
-const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 1] = [".codex/hooks.json"];
-const PROTECTED_GENERATED_PATH_BYTES: [&[u8]; 4] = [
+const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 0] = [];
+const PROTECTED_GENERATED_PATH_BYTES: [&[u8]; 3] = [
     &[65, 71, 69, 78, 84, 83, 46, 109, 100],
-    &[
-        46, 99, 111, 100, 101, 120, 47, 104, 111, 111, 107, 115, 46, 106, 115, 111, 110,
-    ],
     &[
         46, 99, 111, 100, 101, 120, 47, 82, 69, 65, 68, 77, 69, 46, 109, 100,
     ],
@@ -32,11 +29,7 @@ const PROTECTED_GENERATED_PREFIXES: [&str; 0] = [];
 const CODEX_HOOK_README_PATH: &str = ".codex/README.md";
 pub fn build_codex_hook_manifest() -> Value {
     json!({
-        "hooks": {
-            "PreToolUse": [
-                build_codex_command_hook("pre-tool-use", "Bash"),
-            ],
-        }
+        "hooks": {}
     })
 }
 
@@ -88,10 +81,7 @@ pub(crate) fn sync_host_entrypoints(repo_root: &Path, apply: bool) -> Result<Val
         .filter(|path| !HOST_ENTRYPOINT_JSON_RELATIVE_PATHS.contains(&path.as_str()))
         .cloned()
         .collect::<Vec<_>>();
-    let full_json_files = vec![
-        HOST_ENTRYPOINT_JSON_RELATIVE_PATHS[0],
-        HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
-    ];
+    let full_json_files = vec![HOST_ENTRYPOINT_SYNC_MANIFEST_PATH];
     let full_section = HostEntrypointSyncSection {
         text_files: full_text_files
             .into_iter()
@@ -143,10 +133,6 @@ fn build_host_entrypoint_files(_repo_root: &Path) -> Result<BTreeMap<String, Vec
         "AGENTS.md".to_string(),
         build_codex_agent_policy().into_bytes(),
     );
-    files.insert(
-        ".codex/hooks.json".to_string(),
-        serialize_pretty_json_bytes(&build_codex_hook_manifest())?,
-    );
     for (slug, body) in build_codex_skill_stubs() {
         files.insert(format!(".codex/skills/{slug}/SKILL.md"), body.into_bytes());
     }
@@ -173,9 +159,8 @@ fn build_host_entrypoint_sync_manifest(desired_files: &BTreeMap<String, Vec<u8>>
         "full_sync": {
             "text_files": full_text_files,
             "json_files": [
-                HOST_ENTRYPOINT_JSON_RELATIVE_PATHS[0],
-            HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
-        ],
+                HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
+            ],
         "managed_directories": HOST_ENTRYPOINT_FULL_SYNC_MANAGED_DIRECTORIES,
     },
         "partial_sync": {
@@ -400,6 +385,9 @@ pub fn build_codex_hook_projection() -> Value {
         "codex_agent_policy": build_codex_agent_policy(),
         "codex_hooks_readme": build_codex_hooks_readme(),
         "codex_hooks": build_codex_hook_manifest(),
+        "codex_audit_commands": {
+            "pre_tool_use": build_codex_hook_command("pre-tool-use"),
+        },
     })
 }
 
@@ -424,7 +412,7 @@ Use when the user explicitly asks for `$autopilot` / `autopilot`, full auto, aut
 
 Do not load the whole skill library. For full workflow details, read only:
 
-`skills/autopilot/SKILL.md`
+`skills/execution-controller-coding/SKILL.md`
 
 Default shape:
 
@@ -495,31 +483,14 @@ Default shape:
 
 fn build_codex_hooks_readme() -> String {
     "# Codex Hooks Projection\n\n\
-Codex hook config for this repo is generated from `scripts/router-rs/`.\n\n\
-Active hooks:\n\n\
-| Event | Runner | Purpose |\n\
-| --- | --- | --- |\n\
-| `PreToolUse` | `router-rs --codex-hook-command pre-tool-use` | Guard Bash writes to generated host outputs before they run. |\n\
-\n\
-Codex only installs Bash `PreToolUse`; behavior rules live in `AGENTS.md`.\n\n\
+Codex hooks are intentionally disabled for this repo.\n\n\
+Host-entrypoint sync does not generate `.codex/hooks.json`, and native install keeps `codex_hooks = false`.\n\n\
+The Rust hook command remains available only for explicit one-off audits; it is not installed as an active Codex hook.\n\n\
 Regenerate with:\n\n\
 ```sh\n\
-./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml --sync-host-entrypoints-json --repo-root \"$PWD\"\n\
+./scripts/router-rs/run_router_rs.sh ./scripts/router-rs/Cargo.toml codex sync --repo-root \"$PWD\"\n\
 ```\n"
         .to_string()
-}
-
-fn build_codex_command_hook(event: &str, matcher: &str) -> Value {
-    json!({
-        "matcher": matcher,
-        "hooks": [
-            {
-                "type": "command",
-                "command": build_codex_hook_command(event),
-                "timeout": 8,
-            }
-        ]
-    })
 }
 
 fn build_hook_binary_preamble(
@@ -547,7 +518,7 @@ fn build_codex_hook_command(event: &str) -> String {
     let mut command =
         build_hook_binary_preamble("CODEX_PROJECT_ROOT", "CODEX_PROJECT_ROOT", "exit 0");
     command.push_str(&format!(
-        "\"$ROUTER_RS_LAUNCHER\" \"$ROUTER_RS_MANIFEST\" --codex-hook-command {event} --repo-root \"$CODEX_PROJECT_ROOT\""
+        "\"$ROUTER_RS_LAUNCHER\" \"$ROUTER_RS_MANIFEST\" codex hook {event} --repo-root \"$CODEX_PROJECT_ROOT\""
     ));
     command
 }

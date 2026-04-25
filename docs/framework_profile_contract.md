@@ -27,7 +27,8 @@
 - `workspace_bootstrap`
 - `host_capability_requirements`
 - `metadata`
-- `execution_controller_contract`
+- `execution_protocol_contract`
+- `execution_controller_contract` (compatibility projection only)
 - `delegation_contract`
 - `supervisor_state_contract`
 
@@ -42,6 +43,12 @@
 ## Surface Policy
 
 默认面只保留 `routing / memory / continuity / host_projection` 四轴；research、implementation、audit、framework、ops 和 ops 都必须显式 opt-in。机器可读真源在 `configs/framework/FRAMEWORK_SURFACE_POLICY.json`，并由 `skills/SKILL_LOADOUTS.json` 与 `skills/SKILL_TIERS.json` 支撑。
+
+## Execution Protocol
+
+默认执行闭环是 `规范 -> 计划 -> 实施 -> 验证`。它是 runtime / route 的协议，不是 skill owner，也不把 `execution-controller-coding` 设为默认主 owner。
+
+`execution_protocol_contract` 只表达协议阶段、证据要求和 continuity 边界；`execution_controller_contract` 仅作为旧宿主兼容投影保留，不能重新引入 `primary_owner: execution-controller-coding` 或 `gsd` owner boost 语义。
 
 ## History
 

@@ -4,6 +4,10 @@ A lean MCP browser server optimized for agent use. The stdio server is the Rust
 implementation in `router-rs`; the launcher no longer falls back to the legacy
 TypeScript runtime.
 
+Rust stdio is the only supported live Codex path. The TypeScript package under
+this directory is a development harness for parity tests only; do not configure
+Codex or MCP live startup to execute the Node build.
+
 ## Rust-first Highlights
 
 - **Rust stdio entrypoint** — `router-rs browser mcp-stdio` is the default runtime path
@@ -99,5 +103,5 @@ through that same attach descriptor; replay results now include a lighter
 re-parsing the full diagnostics block.
 
 The legacy `start_browser_mcp.sh` launcher delegates directly to the Rust
-launcher and does not require `dist/index.js`, `node`, or `npm`; MCP config can
-call the same Rust-owned launcher directly.
+launcher and does not require the TypeScript build output, Node, or npm; MCP
+config can call the same Rust-owned launcher directly.

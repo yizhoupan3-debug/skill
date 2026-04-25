@@ -38,18 +38,26 @@
 | `evidence` | no | 命令输出、截图、人工检查等 |
 | `regression` | no | 新引入问题 |
 
-## 4. Round Contract
+## 4. Runtime Protocol
 
-多轮任务统一按：
+所有 runtime / route 默认按以下四步闭环执行：
 
-`Detect → Plan → Execute → Verify`
+`规范 -> 计划 -> 实施 -> 验证`
 
 规则：
 
-1. 只携带 **delta**，不要整轮重述。
-2. 已执行项必须有验证状态。
-3. 若出现 regression，作为下一轮 finding。
-4. `execution-audit` iteration loop 只编排验收轮次，不替代 domain owner。
+1. `规范`: 先收敛对象、动作、约束、交付物和成功标准。
+2. `计划`: 选择最窄 owner、必要 gate / overlay、最小路径和验证路径。
+3. `实施`: 按最小 delta 执行，不扩大抽象或替代 domain owner。
+4. `验证`: 用测试、命令、截图、产物或明确 blocker 关闭任务。
+
+补充约束：
+
+1. 该协议默认存在，不靠 `gsd`、`推进到底` 或 controller trigger 启动。
+2. 只携带 **delta**，不要整轮重述。
+3. 已执行项必须有验证状态。
+4. 若出现 regression，作为下一轮 finding。
+5. `execution-audit` iteration loop 只编排验收轮次，不替代 domain owner。
 
 ## 5. Stop Rules
 
